@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Digital Person - Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1 class="app-title">Digital Person</h1>
+    <div class="system-status" id="systemStatus">
+      <span class="status-dot status-idle"></span>
+      <span id="systemStatusText">接続中...</span>
+    </div>
+  </header>
+
+  <main class="app-layout">
+    <!-- Left Panel: Person Selection + Chat -->
+    <aside class="panel panel-left">
+      <section class="person-list-section">
+        <h2 class="panel-heading">パーソン一覧</h2>
+        <div class="person-list" id="personList">
+          <div class="loading-placeholder">読み込み中...</div>
+        </div>
+      </section>
+
+      <section class="chat-section">
+        <h2 class="panel-heading">チャット</h2>
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-empty">パーソンを選択してチャットを開始</div>
+        </div>
+        <form class="chat-input-form" id="chatForm">
+          <input
+            type="text"
+            class="chat-input"
+            id="chatInput"
+            placeholder="メッセージを入力..."
+            autocomplete="off"
+            disabled
+          >
+          <button type="submit" class="chat-send-btn" id="chatSendBtn" disabled>送信</button>
+        </form>
+      </section>
+    </aside>
+
+    <!-- Center Panel: Activity Feed -->
+    <section class="panel panel-center">
+      <h2 class="panel-heading">アクティビティ</h2>
+      <div class="activity-feed" id="activityFeed">
+        <div class="activity-empty">イベントを待機中...</div>
+      </div>
+    </section>
+
+    <!-- Right Panel: Memory Browser -->
+    <aside class="panel panel-right">
+      <section class="person-state-section" id="personStateSection" style="display:none;">
+        <h2 class="panel-heading">現在の状態</h2>
+        <pre class="state-content" id="personStateContent"></pre>
+      </section>
+
+      <section class="memory-browser">
+        <nav class="memory-tabs">
+          <button class="memory-tab active" data-tab="episodes">エピソード</button>
+          <button class="memory-tab" data-tab="knowledge">知識</button>
+          <button class="memory-tab" data-tab="procedures">手順書</button>
+        </nav>
+        <div class="memory-file-list" id="memoryFileList">
+          <div class="loading-placeholder">パーソンを選択してください</div>
+        </div>
+        <div class="memory-content-area" id="memoryContentArea" style="display:none;">
+          <button class="memory-back-btn" id="memoryBackBtn">&larr; 一覧に戻る</button>
+          <h3 class="memory-content-title" id="memoryContentTitle"></h3>
+          <pre class="memory-content-body" id="memoryContentBody"></pre>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

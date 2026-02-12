@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Runtime data (managed separately in ~/.animaworks/)
+persons/*/episodes/
+persons/*/knowledge/
+persons/*/procedures/
+persons/*/state/
+shared/inbox/*/
+tmp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

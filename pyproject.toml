@@ -1,0 +1,21 @@
+[project]
+name = "animaworks"
+version = "0.1.0"
+description = "AnimaWorks - Digital Person Framework with library-type memory"
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk>=0.1.35",
+    "anthropic>=0.42.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "apscheduler>=3.10.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+]
+
+[tool.setuptools]
+py-modules = ["main"]
+packages = ["core", "server"]
+
+[project.scripts]
+animaworks = "main:cli_main"
