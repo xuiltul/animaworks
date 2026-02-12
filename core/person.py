@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from pathlib import Path
 
@@ -78,6 +79,43 @@ class DigitalPerson:
             except Exception:
                 logger.exception("[%s] process_message FAILED", self.name)
                 raise
+            finally:
+                self._status = "idle"
+                self._current_task = ""
+
+    async def process_message_stream(
+        self, content: str, from_person: str = "human"
+    ) -> AsyncGenerator[dict, None]:
+        """Streaming version of process_message.
+
+        Yields stream event dicts. The lock is held for the entire duration.
+        """
+        logger.info(
+            "[%s] process_message_stream START from=%s content_len=%d",
+            self.name, from_person, len(content),
+        )
+        async with self._lock:
+            self._status = "thinking"
+            self._current_task = f"Responding to {from_person}"
+
+            prompt = load_prompt(
+                "chat_message", from_person=from_person, content=content
+            )
+
+            try:
+                async for chunk in self.agent.run_cycle_streaming(
+                    prompt, trigger=f"message:{from_person}"
+                ):
+                    if chunk.get("type") == "cycle_done":
+                        self._last_activity = datetime.now()
+                        logger.info(
+                            "[%s] process_message_stream END",
+                            self.name,
+                        )
+                    yield chunk
+            except Exception:
+                logger.exception("[%s] process_message_stream FAILED", self.name)
+                yield {"type": "error", "message": "Internal error"}
             finally:
                 self._status = "idle"
                 self._current_task = ""

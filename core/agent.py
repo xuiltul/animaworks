@@ -5,6 +5,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from core.context_tracker import ContextTracker
@@ -288,6 +289,287 @@ class AgentCore:
             message_count, len(response_text),
         )
         return "\n".join(response_text) or "(no response)", result_message
+
+    # ── Agent SDK streaming path ─────────────────────────────
+
+    async def _run_with_agent_sdk_streaming(
+        self,
+        system_prompt: str,
+        prompt: str,
+        tracker: ContextTracker,
+    ) -> AsyncGenerator[dict, None]:
+        """Stream events from Claude Agent SDK.
+
+        Yields dicts:
+            {"type": "text_delta", "text": "..."}
+            {"type": "tool_start", "tool_name": "...", "tool_id": "..."}
+            {"type": "tool_end", "tool_id": "...", "tool_name": "..."}
+            {"type": "done", "full_text": "...", "result_message": ...}
+        """
+        from claude_agent_sdk import (
+            AssistantMessage,
+            ClaudeAgentOptions,
+            HookMatcher,
+            ResultMessage,
+            TextBlock,
+            ToolUseBlock,
+            query,
+        )
+        from claude_agent_sdk.types import (
+            HookContext,
+            HookInput,
+            PostToolUseHookSpecificOutput,
+            StreamEvent,
+            SyncHookJSONOutput,
+        )
+
+        threshold = self.model_config.context_threshold
+        _hook_fired = False
+
+        async def _post_tool_hook(
+            input_data: HookInput,
+            tool_use_id: str | None,
+            context: HookContext,
+        ) -> SyncHookJSONOutput:
+            nonlocal _hook_fired
+            transcript_path = input_data.get("transcript_path", "")
+            ratio = tracker.estimate_from_transcript(transcript_path)
+
+            if ratio >= threshold and not _hook_fired:
+                _hook_fired = True
+                logger.info(
+                    "PostToolUse hook (stream): context at %.1f%%",
+                    ratio * 100,
+                )
+                return SyncHookJSONOutput(
+                    hookSpecificOutput=PostToolUseHookSpecificOutput(
+                        hookEventName="PostToolUse",
+                        additionalContext=(
+                            f"コンテキスト使用率が{ratio:.0%}に達しました。"
+                            "shortterm/session_state.md に現在の作業状態を書き出してください。"
+                            "内容: 何をしていたか、どこまで進んだか、次に何をすべきか。"
+                            "書き出し後、作業を中断してその旨を報告してください。"
+                        ),
+                    )
+                )
+            return SyncHookJSONOutput()
+
+        env: dict[str, str] = {}
+        api_key = self._resolve_api_key()
+        if api_key:
+            env["ANTHROPIC_API_KEY"] = api_key
+        if self.model_config.api_base_url:
+            env["ANTHROPIC_BASE_URL"] = self.model_config.api_base_url
+
+        options = ClaudeAgentOptions(
+            system_prompt=system_prompt,
+            allowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+            permission_mode="acceptEdits",
+            cwd=str(self.person_dir),
+            max_turns=self.model_config.max_turns,
+            model=self.model_config.model,
+            env=env,
+            include_partial_messages=True,
+            hooks={
+                "PostToolUse": [HookMatcher(matcher=None, hooks=[_post_tool_hook])],
+            },
+        )
+
+        response_text: list[str] = []
+        result_message: ResultMessage | None = None
+        active_tool_ids: set[str] = set()
+        message_count = 0
+
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, StreamEvent):
+                event = message.event
+                event_type = event.get("type", "")
+
+                if event_type == "content_block_start":
+                    block = event.get("content_block", {})
+                    if block.get("type") == "tool_use":
+                        tool_id = block.get("id", "")
+                        active_tool_ids.add(tool_id)
+                        yield {
+                            "type": "tool_start",
+                            "tool_name": block.get("name", ""),
+                            "tool_id": tool_id,
+                        }
+
+                elif event_type == "content_block_delta":
+                    delta = event.get("delta", {})
+                    if delta.get("type") == "text_delta":
+                        text = delta.get("text", "")
+                        if text:
+                            yield {"type": "text_delta", "text": text}
+
+            elif isinstance(message, AssistantMessage):
+                message_count += 1
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        response_text.append(block.text)
+                    elif isinstance(block, ToolUseBlock):
+                        if block.id in active_tool_ids:
+                            active_tool_ids.discard(block.id)
+                            yield {
+                                "type": "tool_end",
+                                "tool_id": block.id,
+                                "tool_name": block.name,
+                            }
+
+            elif isinstance(message, ResultMessage):
+                result_message = message
+                tracker.update_from_result_message(message.usage)
+
+        logger.debug(
+            "Agent SDK streaming completed, messages=%d text_blocks=%d",
+            message_count, len(response_text),
+        )
+        full_text = "\n".join(response_text) or "(no response)"
+        yield {
+            "type": "done",
+            "full_text": full_text,
+            "result_message": result_message,
+        }
+
+    async def run_cycle_streaming(
+        self, prompt: str, trigger: str = "manual"
+    ) -> AsyncGenerator[dict, None]:
+        """Streaming version of run_cycle.
+
+        Yields stream chunks. Session chaining is handled seamlessly.
+        Final event is ``{"type": "cycle_done", "cycle_result": {...}}``.
+        """
+        start = time.monotonic()
+        sdk_label = "agent-sdk" if self._sdk_available else "anthropic"
+        logger.info(
+            "run_cycle_streaming START trigger=%s prompt_len=%d sdk=%s",
+            trigger, len(prompt), sdk_label,
+        )
+
+        shortterm = ShortTermMemory(self.person_dir)
+        tracker = ContextTracker(
+            model=self.model_config.model,
+            threshold=self.model_config.context_threshold,
+        )
+
+        system_prompt = build_system_prompt(self.memory)
+        if shortterm.has_pending():
+            system_prompt = inject_shortterm(system_prompt, shortterm)
+
+        # Fallback: no streaming, yield complete text
+        if not self._sdk_available:
+            result = await self._run_with_anthropic_sdk(
+                system_prompt, prompt, tracker, shortterm
+            )
+            yield {"type": "text_delta", "text": result}
+            duration_ms = int((time.monotonic() - start) * 1000)
+            yield {
+                "type": "cycle_done",
+                "cycle_result": CycleResult(
+                    trigger=trigger,
+                    action="responded",
+                    summary=result,
+                    duration_ms=duration_ms,
+                    context_usage_ratio=tracker.usage_ratio,
+                    session_chained=False,
+                    total_turns=0,
+                ).model_dump(),
+            }
+            return
+
+        # Primary session
+        full_text_parts: list[str] = []
+        result_message: Any = None
+
+        async for chunk in self._run_with_agent_sdk_streaming(
+            system_prompt, prompt, tracker
+        ):
+            if chunk["type"] == "done":
+                full_text_parts.append(chunk["full_text"])
+                result_message = chunk["result_message"]
+            else:
+                yield chunk
+
+        # Session chaining
+        session_chained = False
+        total_turns = result_message.num_turns if result_message else 0
+        chain_count = 0
+
+        while (
+            tracker.threshold_exceeded
+            and chain_count < self.model_config.max_chains
+        ):
+            session_chained = True
+            chain_count += 1
+            logger.info(
+                "Session chain (stream) %d/%d: context at %.1f%%",
+                chain_count,
+                self.model_config.max_chains,
+                tracker.usage_ratio * 100,
+            )
+
+            yield {"type": "chain_start", "chain": chain_count}
+
+            shortterm.clear()
+            shortterm.save(
+                SessionState(
+                    session_id=result_message.session_id if result_message else "",
+                    timestamp=datetime.now().isoformat(),
+                    trigger=trigger,
+                    original_prompt=prompt,
+                    accumulated_response="\n".join(full_text_parts),
+                    context_usage_ratio=tracker.usage_ratio,
+                    turn_count=result_message.num_turns if result_message else 0,
+                )
+            )
+
+            tracker.reset()
+            system_prompt_2 = inject_shortterm(
+                build_system_prompt(self.memory),
+                shortterm,
+            )
+            continuation_prompt = load_prompt("session_continuation")
+
+            try:
+                async for chunk in self._run_with_agent_sdk_streaming(
+                    system_prompt_2, continuation_prompt, tracker
+                ):
+                    if chunk["type"] == "done":
+                        full_text_parts.append(chunk["full_text"])
+                        result_message = chunk["result_message"]
+                        if result_message:
+                            total_turns += result_message.num_turns
+                    else:
+                        yield chunk
+            except Exception:
+                logger.exception(
+                    "Chained session (stream) %d failed", chain_count,
+                )
+                yield {"type": "error", "message": f"Session chain {chain_count} failed"}
+                break
+
+        shortterm.clear()
+
+        full_text = "\n".join(full_text_parts)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "run_cycle_streaming END trigger=%s duration_ms=%d response_len=%d chained=%s",
+            trigger, duration_ms, len(full_text), session_chained,
+        )
+
+        yield {
+            "type": "cycle_done",
+            "cycle_result": CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=full_text,
+                duration_ms=duration_ms,
+                context_usage_ratio=tracker.usage_ratio,
+                session_chained=session_chained,
+                total_turns=total_turns,
+            ).model_dump(),
+        }
 
     # ── Anthropic SDK fallback path ─────────────────────────
 

@@ -178,10 +178,74 @@
         return `<div class="chat-bubble thinking"><span class="thinking-animation">考え中</span></div>`;
       }
       if (m.role === "assistant") {
-        return `<div class="chat-bubble assistant">${renderMarkdown(m.text)}</div>`;
+        const streamClass = m.streaming ? " streaming" : "";
+        let content = "";
+        if (m.text) {
+          content = renderMarkdown(m.text);
+        } else if (m.streaming) {
+          content = '<span class="cursor-blink"></span>';
+        }
+        const toolHtml = m.activeTool
+          ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(m.activeTool)} を実行中...</div>`
+          : "";
+        return `<div class="chat-bubble assistant${streamClass}">${content}${toolHtml}</div>`;
       }
       return `<div class="chat-bubble user">${escapeHtml(m.text)}</div>`;
     }).join("");
+    dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
+  }
+
+  // ── SSE Streaming ─────────────────────────
+
+  function parseSSEEvents(buffer) {
+    const parsed = [];
+    // Split by double newline (SSE event boundary)
+    const parts = buffer.split("\n\n");
+    // Last part may be incomplete
+    const remaining = parts.pop() || "";
+
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      let eventName = "message";
+      let dataLines = [];
+      for (const line of part.split("\n")) {
+        if (line.startsWith("event: ")) {
+          eventName = line.slice(7);
+        } else if (line.startsWith("data: ")) {
+          dataLines.push(line.slice(6));
+        }
+      }
+      if (dataLines.length > 0) {
+        try {
+          parsed.push({ event: eventName, data: JSON.parse(dataLines.join("\n")) });
+        } catch (e) {
+          console.warn("SSE parse error:", e, dataLines);
+        }
+      }
+    }
+    return { parsed, remaining };
+  }
+
+  function renderStreamingBubble(msg) {
+    const bubble = dom.chatMessages.querySelector(".chat-bubble.assistant.streaming");
+    if (!bubble) return;
+
+    let html = "";
+    if (msg.text) {
+      try {
+        html = marked.parse(msg.text, { breaks: true });
+      } catch {
+        html = escapeHtml(msg.text);
+      }
+    } else {
+      html = '<span class="cursor-blink"></span>';
+    }
+
+    if (msg.activeTool) {
+      html += `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(msg.activeTool)} を実行中...</div>`;
+    }
+
+    bubble.innerHTML = html;
     dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
   }
 
@@ -189,45 +253,93 @@
     const name = state.selectedPerson;
     if (!name || !message.trim()) return;
 
-    // Init history
     if (!state.chatHistories[name]) state.chatHistories[name] = [];
     const history = state.chatHistories[name];
 
-    // Add user message
+    // Add user message + empty streaming bubble
     history.push({ role: "user", text: message });
-    // Add thinking placeholder
-    history.push({ role: "thinking", text: "" });
+    const streamingMsg = { role: "assistant", text: "", streaming: true, activeTool: null };
+    history.push(streamingMsg);
     renderChat();
 
-    // Disable input while processing
     dom.chatInput.disabled = true;
     dom.chatSendBtn.disabled = true;
-
-    // Add activity
     addActivity("chat", name, `ユーザー: ${message}`);
 
     try {
-      const data = await api(`/api/persons/${encodeURIComponent(name)}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
+      const response = await fetch(
+        `/api/persons/${encodeURIComponent(name)}/chat/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        }
+      );
 
-      // Remove thinking, add response (skip if WebSocket already delivered it)
-      const thinkIdx = history.findIndex((m) => m.role === "thinking");
-      if (thinkIdx !== -1) history.splice(thinkIdx, 1);
-      const responseText = data.response || "(空の応答)";
-      const last = history[history.length - 1];
-      if (!last || last.role !== "assistant" || last.text !== responseText) {
-        history.push({ role: "assistant", text: responseText });
-        addActivity("chat", name, `応答: ${(data.response || "").slice(0, 100)}`);
+      if (!response.ok) throw new Error(`API ${response.status}: ${response.statusText}`);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const { parsed, remaining } = parseSSEEvents(buffer);
+        buffer = remaining;
+
+        for (const evt of parsed) {
+          switch (evt.event) {
+            case "text_delta":
+              streamingMsg.text += evt.data.text;
+              renderStreamingBubble(streamingMsg);
+              break;
+
+            case "tool_start":
+              streamingMsg.activeTool = evt.data.tool_name;
+              renderStreamingBubble(streamingMsg);
+              break;
+
+            case "tool_end":
+              streamingMsg.activeTool = null;
+              renderStreamingBubble(streamingMsg);
+              break;
+
+            case "chain_start":
+              // Session continuation — stream continues seamlessly
+              break;
+
+            case "error":
+              streamingMsg.text += `\n[エラー] ${evt.data.message}`;
+              streamingMsg.streaming = false;
+              renderChat();
+              break;
+
+            case "done": {
+              const summary = (evt.data && evt.data.summary) || streamingMsg.text;
+              streamingMsg.text = summary || "(空の応答)";
+              streamingMsg.streaming = false;
+              streamingMsg.activeTool = null;
+              renderChat();
+              addActivity("chat", name, `応答: ${streamingMsg.text.slice(0, 100)}`);
+              break;
+            }
+          }
+        }
       }
-      renderChat();
+
+      // Ensure streaming is finalized
+      if (streamingMsg.streaming) {
+        streamingMsg.streaming = false;
+        if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
+        renderChat();
+      }
     } catch (err) {
-      // Remove thinking, add error
-      const thinkIdx = history.findIndex((m) => m.role === "thinking");
-      if (thinkIdx !== -1) history.splice(thinkIdx, 1);
-      history.push({ role: "assistant", text: `[エラー] ${err.message}` });
+      streamingMsg.text = `[エラー] ${err.message}`;
+      streamingMsg.streaming = false;
+      streamingMsg.activeTool = null;
       renderChat();
     } finally {
       dom.chatInput.disabled = false;
@@ -445,13 +557,15 @@
         const personName = data.person || data.name;
         const response = data.response || data.message;
         if (personName && response) {
-          // Update chat history if this person is selected
           if (state.chatHistories[personName]) {
             const history = state.chatHistories[personName];
+            // Skip if we're currently streaming for this person (SSE handles display)
+            const isStreaming = history.some((m) => m.streaming);
+            if (isStreaming) break;
             // Remove any lingering thinking bubble
             const thinkIdx = history.findIndex((m) => m.role === "thinking");
             if (thinkIdx !== -1) history.splice(thinkIdx, 1);
-            // Only add if not already the last message (avoid duplicates from REST response)
+            // Only add if not already the last message (avoid duplicates)
             const last = history[history.length - 1];
             if (!last || last.text !== response) {
               history.push({ role: "assistant", text: response });
