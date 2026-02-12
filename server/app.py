@@ -43,6 +43,8 @@ def create_app(persons_dir: Path, shared_dir: Path) -> FastAPI:
     app.state.persons = persons
     app.state.lifecycle = lifecycle
     app.state.ws_manager = ws_manager
+    app.state.persons_dir = persons_dir
+    app.state.shared_dir = shared_dir
 
     app.include_router(create_router())
 

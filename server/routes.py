@@ -225,6 +225,62 @@ def create_router() -> APIRouter:
             ],
         }
 
+    @api.post("/system/reload")
+    async def reload_persons(request: Request):
+        """Full sync: add new persons, refresh existing, remove deleted."""
+        from core.person import DigitalPerson
+
+        persons = request.app.state.persons
+        lifecycle = request.app.state.lifecycle
+        persons_dir = request.app.state.persons_dir
+        shared_dir = request.app.state.shared_dir
+
+        added: list[str] = []
+        refreshed: list[str] = []
+        removed: list[str] = []
+
+        # Discover current persons on disk
+        on_disk: set[str] = set()
+        if persons_dir.exists():
+            for person_dir in sorted(persons_dir.iterdir()):
+                if not person_dir.is_dir():
+                    continue
+                if not (person_dir / "identity.md").exists():
+                    continue
+                name = person_dir.name
+                on_disk.add(name)
+
+                if name not in persons:
+                    # New person
+                    person = DigitalPerson(person_dir, shared_dir)
+                    persons[name] = person
+                    lifecycle.register_person(person)
+                    added.append(name)
+                    logger.info("Hot-loaded person: %s", name)
+                else:
+                    # Existing person — re-initialize to pick up file changes
+                    lifecycle.unregister_person(name)
+                    person = DigitalPerson(person_dir, shared_dir)
+                    persons[name] = person
+                    lifecycle.register_person(person)
+                    refreshed.append(name)
+                    logger.info("Refreshed person: %s", name)
+
+        # Remove persons whose directories no longer exist
+        for name in list(persons.keys()):
+            if name not in on_disk:
+                lifecycle.unregister_person(name)
+                del persons[name]
+                removed.append(name)
+                logger.info("Unloaded person: %s", name)
+
+        return {
+            "added": added,
+            "refreshed": refreshed,
+            "removed": removed,
+            "total": len(persons),
+        }
+
     # ── WebSocket ─────────────────────────────────────────
 
     @router.websocket("/ws")

@@ -12,6 +12,7 @@
     personDetail: null,     // full detail object
     chatHistories: {},      // { [name]: [{role, text}] }
     activeMemoryTab: "episodes",
+    activeRightTab: "state",
     wsConnected: false,
   };
 
@@ -22,14 +23,16 @@
   const dom = {
     systemStatus: $id("systemStatus"),
     systemStatusText: $id("systemStatusText"),
-    personList: $id("personList"),
+    personDropdown: $id("personDropdown"),
     chatMessages: $id("chatMessages"),
     chatForm: $id("chatForm"),
     chatInput: $id("chatInput"),
     chatSendBtn: $id("chatSendBtn"),
     activityFeed: $id("activityFeed"),
-    personStateSection: $id("personStateSection"),
     personStateContent: $id("personStateContent"),
+    rightTabContent: $id("rightTabContent"),
+    tabState: $id("tabState"),
+    tabActivity: $id("tabActivity"),
     memoryFileList: $id("memoryFileList"),
     memoryContentArea: $id("memoryContentArea"),
     memoryContentTitle: $id("memoryContentTitle"),
@@ -70,59 +73,39 @@
     return res.json();
   }
 
-  // ── Person List ────────────────────────────
+  // ── Person Dropdown ────────────────────────
   async function loadPersons() {
     try {
       state.persons = await api("/api/persons");
-      renderPersonList();
+      renderPersonDropdown();
       if (state.persons.length > 0 && !state.selectedPerson) {
         selectPerson(state.persons[0].name);
       }
     } catch (err) {
       console.error("Failed to load persons:", err);
-      dom.personList.innerHTML = '<div class="loading-placeholder">読み込み失敗</div>';
     }
   }
 
-  function renderPersonList() {
-    if (state.persons.length === 0) {
-      dom.personList.innerHTML = '<div class="loading-placeholder">パーソンが見つかりません</div>';
-      return;
-    }
-    dom.personList.innerHTML = state.persons.map((p) => {
-      const selected = p.name === state.selectedPerson ? " selected" : "";
-      const sc = statusClass(p.status);
-      const task = p.current_task ? escapeHtml(p.current_task) : "待機中";
-      const badge = (p.pending_messages && p.pending_messages > 0)
-        ? `<span class="person-card-badge" data-count="${p.pending_messages}">${p.pending_messages}</span>`
-        : "";
-      return `
-        <div class="person-card${selected}" data-name="${escapeHtml(p.name)}">
-          <span class="status-dot ${sc}"></span>
-          <div class="person-card-info">
-            <div class="person-card-name">${escapeHtml(p.name)}</div>
-            <div class="person-card-task">${task}</div>
-          </div>
-          ${badge}
-        </div>`;
-    }).join("");
+  function renderPersonDropdown() {
+    const dropdown = dom.personDropdown;
+    const currentValue = dropdown.value;
 
-    // Click handlers
-    dom.personList.querySelectorAll(".person-card").forEach((card) => {
-      card.addEventListener("click", () => {
-        selectPerson(card.dataset.name);
-      });
-    });
+    // Build options
+    let html = '<option value="" disabled>パーソンを選択...</option>';
+    for (const p of state.persons) {
+      const statusLabel = p.status ? ` (${p.status})` : "";
+      const selected = p.name === state.selectedPerson ? " selected" : "";
+      html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${statusLabel}</option>`;
+    }
+    dropdown.innerHTML = html;
   }
 
   // ── Person Selection ───────────────────────
   async function selectPerson(name) {
     state.selectedPerson = name;
 
-    // Highlight in list
-    dom.personList.querySelectorAll(".person-card").forEach((c) => {
-      c.classList.toggle("selected", c.dataset.name === name);
-    });
+    // Update dropdown
+    dom.personDropdown.value = name;
 
     // Enable chat
     dom.chatInput.disabled = false;
@@ -140,7 +123,7 @@
     } catch (err) {
       console.error("Failed to load person detail:", err);
       state.personDetail = null;
-      dom.personStateSection.style.display = "none";
+      dom.personStateContent.textContent = "詳細の読み込み失敗";
       dom.memoryFileList.innerHTML = '<div class="loading-placeholder">詳細の読み込み失敗</div>';
     }
   }
@@ -149,12 +132,22 @@
   function renderPersonState() {
     const d = state.personDetail;
     if (!d || !d.state) {
-      dom.personStateSection.style.display = "none";
+      dom.personStateContent.textContent = "状態情報なし";
       return;
     }
-    dom.personStateSection.style.display = "";
     const stateText = typeof d.state === "string" ? d.state : JSON.stringify(d.state, null, 2);
     dom.personStateContent.textContent = stateText;
+  }
+
+  // ── Right Panel Tab Switching ──────────────
+  function activateRightTab(tab) {
+    state.activeRightTab = tab;
+    document.querySelectorAll(".right-tab").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    document.querySelectorAll(".tab-pane").forEach((pane) => {
+      pane.classList.toggle("active", pane.dataset.tab === tab);
+    });
   }
 
   // ── Chat ───────────────────────────────────
@@ -527,7 +520,7 @@
             existing.status = statusVal;
             if (data.current_task !== undefined) existing.current_task = data.current_task;
           }
-          renderPersonList();
+          renderPersonDropdown();
           addActivity("system", personName, `ステータス: ${statusVal || "不明"}`);
         }
         break;
@@ -627,15 +620,50 @@
     }
   }
 
+  // ── Textarea Auto-Resize ────────────────────
+  function autoResizeTextarea() {
+    const el = dom.chatInput;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  }
+
+  function submitChat() {
+    const msg = dom.chatInput.value.trim();
+    if (!msg) return;
+    dom.chatInput.value = "";
+    dom.chatInput.style.height = "auto";
+    sendChat(msg);
+  }
+
   // ── Event Bindings ─────────────────────────
   function bindEvents() {
-    // Chat form submit
+    // Person dropdown change
+    dom.personDropdown.addEventListener("change", (e) => {
+      const name = e.target.value;
+      if (name) selectPerson(name);
+    });
+
+    // Chat form submit (button click or programmatic)
     dom.chatForm.addEventListener("submit", (e) => {
       e.preventDefault();
-      const msg = dom.chatInput.value.trim();
-      if (!msg) return;
-      dom.chatInput.value = "";
-      sendChat(msg);
+      submitChat();
+    });
+
+    // Textarea: Ctrl+Enter to send, Enter for newline, auto-resize
+    dom.chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        submitChat();
+      }
+    });
+
+    dom.chatInput.addEventListener("input", autoResizeTextarea);
+
+    // Right panel tabs (State / Activity)
+    document.querySelectorAll(".right-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activateRightTab(btn.dataset.tab);
+      });
     });
 
     // Memory tabs
@@ -663,7 +691,7 @@
     setInterval(async () => {
       try {
         state.persons = await api("/api/persons");
-        renderPersonList();
+        renderPersonDropdown();
       } catch { /* ignore */ }
     }, 30000);
 

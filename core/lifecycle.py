@@ -47,6 +47,16 @@ class LifecycleManager:
         self._setup_cron_tasks(person)
         logger.info("Registered '%s' with lifecycle manager", person.name)
 
+    def unregister_person(self, name: str) -> None:
+        """Remove a person and all their scheduled jobs."""
+        self.persons.pop(name, None)
+        self._pending_triggers.discard(name)
+        # Remove all scheduler jobs belonging to this person
+        for job in self.scheduler.get_jobs():
+            if job.id.startswith(f"{name}_"):
+                job.remove()
+        logger.info("Unregistered '%s' from lifecycle manager", name)
+
     # ── Heartbeat ─────────────────────────────────────────
 
     def _setup_heartbeat(self, person: DigitalPerson) -> None:

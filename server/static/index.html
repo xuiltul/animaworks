@@ -10,6 +10,11 @@
 <body>
   <header class="app-header">
     <h1 class="app-title">Digital Person</h1>
+    <div class="person-selector">
+      <select class="person-dropdown" id="personDropdown">
+        <option value="" disabled selected>パーソンを選択...</option>
+      </select>
+    </div>
     <div class="system-status" id="systemStatus">
       <span class="status-dot status-idle"></span>
       <span id="systemStatusText">接続中...</span>
@@ -17,48 +22,42 @@
   </header>
 
   <main class="app-layout">
-    <!-- Left Panel: Person Selection + Chat -->
-    <aside class="panel panel-left">
-      <section class="person-list-section">
-        <h2 class="panel-heading">パーソン一覧</h2>
-        <div class="person-list" id="personList">
-          <div class="loading-placeholder">読み込み中...</div>
-        </div>
-      </section>
-
-      <section class="chat-section">
-        <h2 class="panel-heading">チャット</h2>
-        <div class="chat-messages" id="chatMessages">
-          <div class="chat-empty">パーソンを選択してチャットを開始</div>
-        </div>
-        <form class="chat-input-form" id="chatForm">
-          <input
-            type="text"
-            class="chat-input"
-            id="chatInput"
-            placeholder="メッセージを入力..."
-            autocomplete="off"
-            disabled
-          >
-          <button type="submit" class="chat-send-btn" id="chatSendBtn" disabled>送信</button>
-        </form>
-      </section>
-    </aside>
-
-    <!-- Center Panel: Activity Feed -->
-    <section class="panel panel-center">
-      <h2 class="panel-heading">アクティビティ</h2>
-      <div class="activity-feed" id="activityFeed">
-        <div class="activity-empty">イベントを待機中...</div>
+    <!-- Main Panel: Chat -->
+    <section class="panel panel-main">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-empty">パーソンを選択してチャットを開始</div>
       </div>
+      <form class="chat-input-form" id="chatForm">
+        <textarea
+          class="chat-input"
+          id="chatInput"
+          placeholder="メッセージを入力... (Ctrl+Enter で送信)"
+          autocomplete="off"
+          rows="1"
+          disabled
+        ></textarea>
+        <button type="submit" class="chat-send-btn" id="chatSendBtn" disabled>送信</button>
+      </form>
     </section>
 
-    <!-- Right Panel: Memory Browser -->
+    <!-- Right Panel: State/Activity Tabs + Memory Browser -->
     <aside class="panel panel-right">
-      <section class="person-state-section" id="personStateSection" style="display:none;">
-        <h2 class="panel-heading">現在の状態</h2>
-        <pre class="state-content" id="personStateContent"></pre>
-      </section>
+      <nav class="right-tabs">
+        <button class="right-tab active" data-tab="state">現在の状態</button>
+        <button class="right-tab" data-tab="activity">アクティビティ</button>
+      </nav>
+      <div class="right-tab-content" id="rightTabContent">
+        <!-- State tab -->
+        <div class="tab-pane active" id="tabState" data-tab="state">
+          <pre class="state-content" id="personStateContent">パーソンを選択してください</pre>
+        </div>
+        <!-- Activity tab -->
+        <div class="tab-pane" id="tabActivity" data-tab="activity">
+          <div class="activity-feed" id="activityFeed">
+            <div class="activity-empty">イベントを待機中...</div>
+          </div>
+        </div>
+      </div>
 
       <section class="memory-browser">
         <nav class="memory-tabs">
