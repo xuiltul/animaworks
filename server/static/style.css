@@ -27,6 +27,123 @@ body {
   flex-direction: column;
 }
 
+/* --- Login Screen --- */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f5;
+}
+
+.login-screen.hidden {
+  display: none;
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  padding: 40px 36px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+}
+
+.login-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #2563eb;
+  margin-bottom: 4px;
+}
+
+.login-subtitle {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.user-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-btn:hover {
+  background: #1d4ed8;
+}
+
+.login-guest {
+  border-top: 1px solid #e5e5e5;
+  padding-top: 16px;
+}
+
+.btn-guest {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.15s;
+}
+
+.btn-guest:hover {
+  color: #555;
+}
+
+/* --- User Info (header) --- */
+.header-spacer {
+  flex: 1;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.user-label {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.btn-logout {
+  padding: 4px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.78rem;
+  font-family: inherit;
+  color: #888;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-logout:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
 /* --- Header --- */
 .app-header {
   display: flex;

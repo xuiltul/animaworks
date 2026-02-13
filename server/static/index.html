@@ -8,12 +8,29 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <h2 class="login-title">Digital Person</h2>
+      <p class="login-subtitle">ユーザーを選択してログイン</p>
+      <div id="userList" class="user-list"></div>
+      <div class="login-guest">
+        <button id="guestLoginBtn" class="btn-guest">ゲストとして続ける</button>
+      </div>
+    </div>
+  </div>
+
   <header class="app-header">
     <h1 class="app-title">Digital Person</h1>
     <div class="person-selector">
       <select class="person-dropdown" id="personDropdown">
         <option value="" disabled selected>パーソンを選択...</option>
       </select>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="user-info" id="userInfo">
+      <span class="user-label" id="currentUserLabel"></span>
+      <button class="btn-logout" id="logoutBtn">ログアウト</button>
     </div>
     <div class="system-status" id="systemStatus">
       <span class="status-dot status-idle"></span>

@@ -7,6 +7,7 @@
 
   // ── State ──────────────────────────────────
   const state = {
+    currentUser: localStorage.getItem("animaworks_user") || null,
     persons: [],            // PersonStatus[]
     selectedPerson: null,   // string (name)
     personDetail: null,     // full detail object
@@ -45,6 +46,12 @@
     historyBackBtn: $id("historyBackBtn"),
     historyDetailTitle: $id("historyDetailTitle"),
     historyConversation: $id("historyConversation"),
+    loginScreen: $id("loginScreen"),
+    userList: $id("userList"),
+    guestLoginBtn: $id("guestLoginBtn"),
+    userInfo: $id("userInfo"),
+    currentUserLabel: $id("currentUserLabel"),
+    logoutBtn: $id("logoutBtn"),
   };
 
   // ── Helpers ────────────────────────────────
@@ -296,7 +303,7 @@
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ message, from_person: state.currentUser || "human" }),
         }
       );
 
@@ -928,17 +935,80 @@
 
     // History back button
     dom.historyBackBtn.addEventListener("click", hideHistoryDetail);
+
+    // Login: guest button
+    dom.guestLoginBtn.addEventListener("click", () => loginAs("human"));
+
+    // Login: logout button
+    dom.logoutBtn.addEventListener("click", logout);
+  }
+
+  // ── Login ─────────────────────────────────
+  async function loadSharedUsers() {
+    try {
+      const users = await api("/api/shared/users");
+      let html = "";
+      for (const name of users) {
+        html += `<button class="user-btn" data-user="${escapeHtml(name)}">${escapeHtml(name)}</button>`;
+      }
+      if (!users.length) {
+        html = '<p style="color:#999;font-size:0.85rem;">登録ユーザーがありません</p>';
+      }
+      dom.userList.innerHTML = html;
+
+      // Bind click events on user buttons
+      dom.userList.querySelectorAll(".user-btn").forEach((btn) => {
+        btn.addEventListener("click", () => loginAs(btn.dataset.user));
+      });
+    } catch (err) {
+      dom.userList.innerHTML = '<p style="color:#ef4444;">ユーザー一覧の取得に失敗しました</p>';
+    }
+  }
+
+  function loginAs(username) {
+    state.currentUser = username;
+    localStorage.setItem("animaworks_user", username);
+    hideLoginScreen();
+    startDashboard();
+  }
+
+  function logout() {
+    state.currentUser = null;
+    localStorage.removeItem("animaworks_user");
+    showLoginScreen();
+  }
+
+  function showLoginScreen() {
+    dom.loginScreen.classList.remove("hidden");
+    loadSharedUsers();
+  }
+
+  function hideLoginScreen() {
+    dom.loginScreen.classList.add("hidden");
+    const label = state.currentUser === "human" ? "ゲスト" : state.currentUser;
+    dom.currentUserLabel.textContent = label;
   }
 
   // ── Init ───────────────────────────────────
-  async function init() {
-    bindEvents();
+  async function startDashboard() {
     await loadPersons();
     loadSystemStatus();
     connectWebSocket();
+  }
+
+  async function init() {
+    bindEvents();
+
+    if (state.currentUser) {
+      hideLoginScreen();
+      await startDashboard();
+    } else {
+      showLoginScreen();
+    }
 
     // Periodic refresh: person list every 30s, system status every 60s
     setInterval(async () => {
+      if (!state.currentUser) return;
       try {
         state.persons = await api("/api/persons");
         renderPersonDropdown();

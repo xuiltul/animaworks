@@ -27,6 +27,14 @@ def create_router() -> APIRouter:
 
     api = APIRouter(prefix="/api")
 
+    @api.get("/shared/users")
+    async def list_shared_users(request: Request):
+        """List registered user names from shared/users/."""
+        users_dir = request.app.state.shared_dir / "users"
+        if not users_dir.is_dir():
+            return []
+        return [d.name for d in sorted(users_dir.iterdir()) if d.is_dir()]
+
     @api.get("/persons")
     async def list_persons(request: Request):
         persons = request.app.state.persons
