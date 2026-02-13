@@ -85,7 +85,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         ensure_runtime_dir(skip_persons=True)
         persons_dir.mkdir(parents=True, exist_ok=True)
         person_dir = create_from_template(persons_dir, args.template)
-        _register_person_in_config(data_dir, person_dir.name)
+        _register_person_in_config(data_dir, person_dir.name, role="commander")
         print(f"Created person '{person_dir.name}' from template '{args.template}'")
         return
 
@@ -96,7 +96,7 @@ def cmd_init(args: argparse.Namespace) -> None:
         person_dir = create_from_md(
             persons_dir, md_path, name=getattr(args, "name", None)
         )
-        _register_person_in_config(data_dir, person_dir.name)
+        _register_person_in_config(data_dir, person_dir.name, role="commander")
         print(f"Created person '{person_dir.name}' from {md_path.name}")
         return
 
@@ -108,7 +108,7 @@ def cmd_init(args: argparse.Namespace) -> None:
             print(f"Error: {err}")
             sys.exit(1)
         person_dir = create_blank(persons_dir, args.blank)
-        _register_person_in_config(data_dir, person_dir.name)
+        _register_person_in_config(data_dir, person_dir.name, role="commander")
         print(f"Created blank person '{person_dir.name}'")
         return
 
@@ -165,8 +165,8 @@ def _interactive_person_setup(data_dir) -> None:
         elif len(templates) == 1:
             tpl = templates[0]
             person_dir = create_from_template(persons_dir, tpl)
-            _register_person_in_config(data_dir, person_dir.name)
-            print(f"\n{person_dir.name} を作成しました。")
+            _register_person_in_config(data_dir, person_dir.name, role="commander")
+            print(f"\n{person_dir.name} を作成しました（commander）。")
             return
         else:
             print(f"\n利用可能なテンプレート:")
@@ -178,8 +178,8 @@ def _interactive_person_setup(data_dir) -> None:
             except (ValueError, IndexError):
                 tpl = templates[0]
             person_dir = create_from_template(persons_dir, tpl)
-            _register_person_in_config(data_dir, person_dir.name)
-            print(f"\n{person_dir.name} を作成しました。")
+            _register_person_in_config(data_dir, person_dir.name, role="commander")
+            print(f"\n{person_dir.name} を作成しました（commander）。")
             return
 
     if choice == "2":
@@ -199,8 +199,8 @@ def _interactive_person_setup(data_dir) -> None:
                 return
         try:
             person_dir = create_from_md(persons_dir, md_path, name=name)
-            _register_person_in_config(data_dir, person_dir.name)
-            print(f"\n{person_dir.name} を作成しました。")
+            _register_person_in_config(data_dir, person_dir.name, role="commander")
+            print(f"\n{person_dir.name} を作成しました（commander）。")
         except ValueError as e:
             print(f"Error: {e}")
         return
@@ -215,8 +215,8 @@ def _interactive_person_setup(data_dir) -> None:
             print(f"Error: {err}")
             return
         person_dir = create_blank(persons_dir, name)
-        _register_person_in_config(data_dir, person_dir.name)
-        print(f"\n{person_dir.name} を作成しました。")
+        _register_person_in_config(data_dir, person_dir.name, role="commander")
+        print(f"\n{person_dir.name} を作成しました（commander）。")
         return
 
     # choice == "4" or anything else
@@ -259,7 +259,9 @@ def _interactive_user_setup(data_dir) -> None:
     print(f"\nユーザー情報を保存しました: {user_dir}/index.md")
 
 
-def _register_person_in_config(data_dir, person_name: str) -> None:
+def _register_person_in_config(
+    data_dir, person_name: str, *, role: str | None = None
+) -> None:
     """Register a newly created person in config.json."""
     from core.config import PersonModelConfig, load_config, save_config
 
@@ -268,7 +270,7 @@ def _register_person_in_config(data_dir, person_name: str) -> None:
         return
     config = load_config(config_path)
     if person_name not in config.persons:
-        config.persons[person_name] = PersonModelConfig()
+        config.persons[person_name] = PersonModelConfig(role=role)
         save_config(config, config_path)
 
 

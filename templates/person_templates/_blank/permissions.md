@@ -17,4 +17,4 @@ Read, Write, Edit, Bash, Grep, Glob
 rm -rf, システム設定の変更
 
 ## 外部ツール
-- image_gen: NO
+- image_gen: yes

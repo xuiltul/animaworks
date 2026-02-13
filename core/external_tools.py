@@ -317,6 +317,7 @@ def _execute(mod: Any, *, schema_name: str, args: dict[str, Any]) -> Any:
             negative_prompt=args.get("negative_prompt", ""),
             skip_existing=args.get("skip_existing", True),
             steps=args.get("steps"),
+            animations=args.get("animations"),
         )
         return result.to_dict()
     if schema_name == "generate_fullbody":
@@ -381,5 +382,75 @@ def _execute(mod: Any, *, schema_name: str, args: dict[str, Any]) -> Any:
         out = assets_dir / "avatar_chibi.glb"
         out.write_bytes(glb)
         return {"path": str(out), "size": len(glb), "task_id": task_id}
+    if schema_name == "generate_rigged_model":
+        person_dir = Path(args.pop("person_dir", ""))
+        assets_dir = person_dir / "assets"
+        glb_path = assets_dir / "avatar_chibi.glb"
+        if not glb_path.exists():
+            return {"error": "No 3D model found for rigging"}
+        client = mod.MeshyClient()
+        data_uri = mod._image_to_data_uri(
+            glb_path.read_bytes(), mime="model/gltf-binary",
+        )
+        body = {
+            "model_url": data_uri,
+            "height_meters": args.get("height_meters", 1.0),
+        }
+        import httpx as _httpx
+        resp = _httpx.post(
+            mod.MESHY_RIGGING_URL,
+            json=body,
+            headers=client._headers(),
+            timeout=mod._HTTP_TIMEOUT,
+        )
+        resp.raise_for_status()
+        rig_task_id = resp.json()["result"]
+        rig_task = client.poll_rigging_task(rig_task_id)
+        rigged = client.download_rigged_model(rig_task, fmt="glb")
+        rigged_path = assets_dir / "avatar_chibi_rigged.glb"
+        rigged_path.write_bytes(rigged)
+        # Download built-in walking/running
+        basic_anims = client.download_rigging_animations(rig_task)
+        anim_results: dict[str, str] = {}
+        for name, anim_bytes in basic_anims.items():
+            anim_path = assets_dir / f"anim_{name}.glb"
+            anim_path.write_bytes(anim_bytes)
+            anim_results[name] = str(anim_path)
+        return {
+            "rigged_model": str(rigged_path),
+            "animations": anim_results,
+            "rig_task_id": rig_task_id,
+        }
+    if schema_name == "generate_animations":
+        person_dir = Path(args.pop("person_dir", ""))
+        assets_dir = person_dir / "assets"
+        glb_path = assets_dir / "avatar_chibi.glb"
+        if not glb_path.exists():
+            return {"error": "No 3D model found for animation"}
+        client = mod.MeshyClient()
+        data_uri = mod._image_to_data_uri(
+            glb_path.read_bytes(), mime="model/gltf-binary",
+        )
+        body = {"model_url": data_uri, "height_meters": 1.0}
+        import httpx as _httpx
+        resp = _httpx.post(
+            mod.MESHY_RIGGING_URL,
+            json=body,
+            headers=client._headers(),
+            timeout=mod._HTTP_TIMEOUT,
+        )
+        resp.raise_for_status()
+        rig_task_id = resp.json()["result"]
+        client.poll_rigging_task(rig_task_id)
+        anim_map = args.get("animations") or mod._DEFAULT_ANIMATIONS
+        anim_results_gen: dict[str, str] = {}
+        for name, action_id in anim_map.items():
+            anim_task_id = client.create_animation_task(rig_task_id, action_id)
+            anim_task = client.poll_animation_task(anim_task_id)
+            anim_bytes = client.download_animation(anim_task, fmt="glb")
+            anim_path = assets_dir / f"anim_{name}.glb"
+            anim_path.write_bytes(anim_bytes)
+            anim_results_gen[name] = str(anim_path)
+        return {"animations": anim_results_gen, "rig_task_id": rig_task_id}
 
     raise ValueError(f"No handler for tool schema: {schema_name}")

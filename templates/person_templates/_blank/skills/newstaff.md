@@ -52,42 +52,9 @@
 ### 2. キャラクター設計（自動生成）
 
 ヒアリングで得た最小限の情報から、**一貫性のある深いキャラクター設定**を創造する。
-以下のルールに従ってキャラクターを肉付けすること:
 
-#### 生成ルール
-
-**名前の設計:**
-- 日本語名が未指定なら、役割・イメージに合った姓名を創作する
-- 姓名は漢字 + ふりがな。姓と名に統一した世界観を持たせる
-- 英名との響きの関連があると良い（例: 英名 Sakura → 桜庭 咲良）
-
-**外見の設計:**
-- 役割・性格から連想される外見を設計する
-- 髪型・髪色・瞳の色は性格やイメージカラーと調和させる
-- 顔タイプは「可愛い系」「美人系」「クール系」「ミステリアス系」等から性格に合うものを選ぶ
-- 身長・体重は年齢相応に自然な範囲で設定
-
-**性格の設計:**
-- 「一言で」は短いキャッチコピー。役割と性格の本質を一文で表現
-- 性格は2〜3文で。長所と短所（愛嬌ある弱点）を含める
-- 口調は具体的なセリフ例を3つ以上。一人称・語尾の特徴も明確に
-- 趣味・特技は役割と性格から自然に導かれるものを3つずつ
-- 好き/苦手は役割での「理想状態」と「ストレス源」から導く
-- モチベーションは「」付きの決め台詞形式
-
-**AI社員としての個性:**
-- 実際の業務でどう動くかの具体的な行動パターンを3〜4個
-- 最後に決め台詞を1つ（「」付き）
-
-**イメージカラー:**
-- 性格・役割から連想される色を選ぶ
-- 日本語の色名 + HEXコード（例: 桜色 (#FFB7C5)）
-
-**内部整合性チェック:**
-- 誕生日→星座が正しいか
-- 性格→口調→趣味→好き/苦手が矛盾していないか
-- 役割→AI社員としての個性が自然に繋がっているか
-- イメージカラーと髪色・瞳の色の全体的なカラーバランス
+**キャラクター設計ガイド**（`prompts/character_design_guide.md`）を Read し、そのルールに従ってキャラクターを肉付けすること。
+ガイドには名前・外見・性格・AI社員としての個性・イメージカラーの設計ルールと、内部整合性チェックの手順が記載されている。
 
 ### 3. ディレクトリ作成
 
@@ -107,13 +74,25 @@
 - `episodes/`
 - `knowledge/`
 - `procedures/`
-- `skills/`
+- `skills/`（空ディレクトリ。スキルは統括 commander のみが持つ）
 - `state/current_task.md`（内容: `status: idle`）
 - `state/pending.md`（空ファイル）
 - `shortterm/`
 - `shortterm/archive/`
 
-### 6. ブートストラップファイル配置
+### 6. アバター画像生成
+
+自分の permissions.md で `image_gen` が使用可能（`yes`）な場合、新社員のアバター画像を生成する。
+
+1. キャラクター設計ガイドの「アバター画像の生成」セクションに従う
+2. identity.md の外見設定を NovelAI 互換のアニメタグに変換する
+3. `generate_character_assets` ツールを呼び出す（`person_dir` に新社員のディレクトリを指定）
+4. 全4ステップ（fullbody → bustup → chibi → 3d）を実行
+5. 失敗したステップがあればエラーを記録し、成功分だけ使用する
+
+`image_gen` が使用不可の場合、このステップをスキップする。
+
+### 7. ブートストラップファイル配置
 
 プロジェクトの `templates/bootstrap.md` を新社員ディレクトリに `bootstrap.md` としてコピーする。
 
@@ -121,7 +100,7 @@
 cp {プロジェクトルート}/templates/bootstrap.md ../{英名}/bootstrap.md
 ```
 
-### 7. credential（APIキー）の確認・登録
+### 8. credential（APIキー）の確認・登録
 
 **anthropic 以外のプロバイダを使う場合、先にAPIキーが登録されているか確認する。**
 
@@ -154,7 +133,7 @@ python main.py config list --section credentials.{プロバイダ名}
 ※ anthropic の credential はデフォルトで登録済み。Ollama はローカル実行なのでAPIキー不要（base_url のみ）。
 ※ APIキーは config.json に保存される（パーミッション 0600）。チャットログにAPIキーが残らないよう注意すること。
 
-### 8. config.json にモデル設定を追加
+### 9. config.json にモデル設定を追加
 
 新社員の設定を統合設定ファイル（config.json）に追加する。
 **デフォルト（claude-sonnet-4 / autonomous / worker）から変える項目のみ設定すればよい。**
@@ -186,7 +165,7 @@ python main.py config set persons.{英名}.credential {openai|google|ollama}
 python main.py config list --section persons.{英名}
 ```
 
-### 9. 依頼者に報告
+### 10. 依頼者に報告
 
 作成したキャラクター設定と技術設定を依頼者に報告し、修正があれば対応する。
 特に以下を明示して確認を取る:
@@ -194,8 +173,9 @@ python main.py config list --section persons.{英名}
 - 実行モード（A1/A2/B のどれになるか）
 - 階層（誰の部下か）
 - 使用モデルと credential
+- アバター画像の生成結果（生成した場合）
 
-### 10. サーバーに反映
+### 11. サーバーに反映
 
 ```bash
 curl -s -X POST http://localhost:18500/api/system/reload | python3 -m json.tool
@@ -204,7 +184,7 @@ curl -s -X POST http://localhost:18500/api/system/reload | python3 -m json.tool
 `added` リストに新社員名が含まれていれば成功。サーバー再起動は不要。
 サーバーが停止中の場合はファイルを作成しただけでは起動しない。依頼者に「サーバーを起動してください」と伝えること。
 
-### 11. エピソード記録
+### 12. エピソード記録
 
 自分の `episodes/` に「新社員{名前}を作成した（モデル: {モデル名}, モード: {A1/A2/B}, 役割: {role}）」とログを残す。
 
@@ -342,6 +322,7 @@ rm -rf, システム設定の変更
 - transcribe: {yes/no}
 - aws_collector: {yes/no}
 - local_llm: {yes/no}
+- image_gen: no
 ```
 
 ### permissions.md（A2: LiteLLM + tool_use 用）
@@ -369,7 +350,7 @@ read_file, write_file, edit_file, execute_command
 rm -rf, システム設定の変更
 
 ## 外部ツール
-{A1 と同じ形式}
+{A1 と同じ形式。image_gen は常に no}
 ```
 
 ### permissions.md（B: assisted 用）
@@ -454,6 +435,8 @@ assisted（フレームワーク補助）
 - 社員の英名はディレクトリ名になるため、半角英数小文字のみを使用すること
 - commander は delegate_task ツールが自動的に有効になる。permissions.md への記載は不要
 - worker の supervisor を未定義にすると、エスカレーション先が「人間」になる
-- credential が未登録の場合は手順7でチャット内で依頼者にAPIキーを聞いて登録する。ターミナル操作を依頼者に求めないこと
+- credential が未登録の場合は手順8でチャット内で依頼者にAPIキーを聞いて登録する。ターミナル操作を依頼者に求めないこと
 - Mode B（assisted）の社員はツールを使えないため、外部ツール欄は不要
 - キャラクター設定は依頼者の簡単な入力から自動生成してよい。ただし依頼者が明示的に指定した項目は必ず反映すること
+- **権限の階層**: `newstaff`（雇用）と `worker_management`（管理）スキルは統括 commander のみが持つ。新規作成する worker にはスキルを付与しない（`skills/` は空）
+- **image_gen は commander 専用**: アバター画像の生成は統括 commander が雇用時に行う。worker には `image_gen` 権限を付与しない

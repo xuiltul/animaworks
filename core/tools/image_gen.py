@@ -12,6 +12,8 @@ Pipeline:
   2. Flux Kontext [pro] (fal.ai) → bust-up from reference
   3. Flux Kontext [pro] (fal.ai) → chibi from reference
   4. Meshy Image-to-3D → GLB model from chibi image
+  5. Meshy Rigging → rigged GLB + walking/running animations
+  6. Meshy Animations → idle/sitting/waving/talking GLBs
 """
 from __future__ import annotations
 
@@ -44,6 +46,8 @@ MESHY_IMAGE_TO_3D_URL = "https://api.meshy.ai/openapi/v1/image-to-3d"
 MESHY_TASK_URL_TPL = "https://api.meshy.ai/openapi/v1/image-to-3d/{task_id}"
 MESHY_RIGGING_URL = "https://api.meshy.ai/openapi/v1/rigging"
 MESHY_RIGGING_TASK_TPL = "https://api.meshy.ai/openapi/v1/rigging/{task_id}"
+MESHY_ANIMATION_URL = "https://api.meshy.ai/openapi/v1/animations"
+MESHY_ANIMATION_TASK_TPL = "https://api.meshy.ai/openapi/v1/animations/{task_id}"
 
 # Default prompts for Kontext derivation
 _BUSTUP_PROMPT = (
@@ -56,6 +60,15 @@ _CHIBI_PROMPT = (
     "2.5-head proportion, cute big eyes, simplified body. "
     "Same outfit colors and features. White background, full body, anime style."
 )
+
+# Default animation presets for office digital persons
+# See https://docs.meshy.ai/api/animation-library for full catalog
+_DEFAULT_ANIMATIONS: dict[str, int] = {
+    "idle": 0,           # Standing idle
+    "sitting": 32,       # Chair sit idle (female)
+    "waving": 28,        # Big wave hello
+    "talking": 307,      # Talking gesture
+}
 
 _HTTP_TIMEOUT = httpx.Timeout(30.0, read=120.0)
 _DOWNLOAD_TIMEOUT = httpx.Timeout(60.0, read=300.0)
@@ -464,11 +477,124 @@ class MeshyClient:
             if status in ("FAILED", "CANCELED"):
                 err = task.get("task_error", {}).get("message", "unknown")
                 raise RuntimeError(f"Meshy rigging {task_id} {status}: {err}")
+            logger.debug(
+                "Meshy rigging %s: %s (%d%%)",
+                task_id, status, task.get("progress", 0),
+            )
             time.sleep(self.POLL_INTERVAL)
 
         raise TimeoutError(
             f"Meshy rigging {task_id} timed out after {self.POLL_TIMEOUT}s"
         )
+
+    def download_rigged_model(self, task: dict[str, Any], fmt: str = "glb") -> bytes:
+        """Download the rigged character model.
+
+        Args:
+            task: Completed rigging task dict.
+            fmt: Format (``glb`` or ``fbx``).
+
+        Returns:
+            Raw model bytes.
+        """
+        result = task.get("result", {})
+        key = f"rigged_character_{fmt}_url"
+        url = result.get(key)
+        if not url:
+            raise ValueError(f"Rigging result missing '{key}'")
+        resp = httpx.get(url, timeout=_DOWNLOAD_TIMEOUT)
+        resp.raise_for_status()
+        return resp.content
+
+    def download_rigging_animations(self, task: dict[str, Any]) -> dict[str, bytes]:
+        """Download built-in walking/running animations from rigging task.
+
+        Returns:
+            Dict mapping animation name to GLB bytes.
+        """
+        result = task.get("result", {})
+        basic = result.get("basic_animations", {})
+        animations: dict[str, bytes] = {}
+        for name in ("walking", "running"):
+            url = basic.get(f"{name}_glb_url")
+            if url:
+                logger.debug("Downloading %s animation …", name)
+                resp = httpx.get(url, timeout=_DOWNLOAD_TIMEOUT)
+                resp.raise_for_status()
+                animations[name] = resp.content
+        return animations
+
+    # ── Animation API ──
+
+    def create_animation_task(self, rig_task_id: str, action_id: int) -> str:
+        """Submit an animation task for a rigged character.
+
+        Args:
+            rig_task_id: Completed rigging task ID.
+            action_id: Animation preset ID (see Meshy animation library).
+
+        Returns:
+            Animation task ID.
+        """
+        body: dict[str, Any] = {
+            "rig_task_id": rig_task_id,
+            "action_id": action_id,
+        }
+
+        def _call() -> str:
+            resp = httpx.post(
+                MESHY_ANIMATION_URL,
+                json=body,
+                headers=self._headers(),
+                timeout=_HTTP_TIMEOUT,
+            )
+            resp.raise_for_status()
+            return resp.json()["result"]
+
+        return _retry(_call, max_retries=1, delay=10.0)
+
+    def poll_animation_task(self, task_id: str) -> dict[str, Any]:
+        """Poll until an animation task completes."""
+        url = MESHY_ANIMATION_TASK_TPL.format(task_id=task_id)
+        deadline = time.monotonic() + self.POLL_TIMEOUT
+
+        while time.monotonic() < deadline:
+            resp = httpx.get(url, headers=self._headers(), timeout=_HTTP_TIMEOUT)
+            resp.raise_for_status()
+            task = resp.json()
+            status = task.get("status", "")
+            if status == "SUCCEEDED":
+                return task
+            if status in ("FAILED", "CANCELED"):
+                err = task.get("task_error", {}).get("message", "unknown")
+                raise RuntimeError(f"Meshy animation {task_id} {status}: {err}")
+            logger.debug(
+                "Meshy animation %s: %s (%d%%)",
+                task_id, status, task.get("progress", 0),
+            )
+            time.sleep(self.POLL_INTERVAL)
+
+        raise TimeoutError(
+            f"Meshy animation {task_id} timed out after {self.POLL_TIMEOUT}s"
+        )
+
+    def download_animation(self, task: dict[str, Any], fmt: str = "glb") -> bytes:
+        """Download generated animation file.
+
+        Args:
+            task: Completed animation task dict.
+            fmt: Format (``glb`` or ``fbx``).
+
+        Returns:
+            Raw animation bytes.
+        """
+        result = task.get("result", {})
+        url = result.get(f"animation_{fmt}_url")
+        if not url:
+            raise ValueError(f"Animation result missing 'animation_{fmt}_url'")
+        resp = httpx.get(url, timeout=_DOWNLOAD_TIMEOUT)
+        resp.raise_for_status()
+        return resp.content
 
 
 # ── PipelineResult ─────────────────────────────────────────
@@ -482,6 +608,8 @@ class PipelineResult:
     bustup_path: Path | None = None
     chibi_path: Path | None = None
     model_path: Path | None = None
+    rigged_model_path: Path | None = None
+    animation_paths: dict[str, Path] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
 
@@ -491,6 +619,8 @@ class PipelineResult:
             "bustup": str(self.bustup_path) if self.bustup_path else None,
             "chibi": str(self.chibi_path) if self.chibi_path else None,
             "model": str(self.model_path) if self.model_path else None,
+            "rigged_model": str(self.rigged_model_path) if self.rigged_model_path else None,
+            "animations": {k: str(v) for k, v in self.animation_paths.items()},
             "errors": self.errors,
             "skipped": self.skipped,
         }
@@ -507,6 +637,8 @@ class ImageGenPipeline:
       2. Flux Kontext  → bust-up from reference  ─┐ independent
       3. Flux Kontext  → chibi from reference     ─┘
       4. Meshy Image-to-3D → GLB from chibi
+      5. Meshy Rigging → rigged GLB + walking/running animations
+      6. Meshy Animations → idle/sitting/waving/talking GLBs
     """
 
     ASSET_NAMES = {
@@ -514,7 +646,9 @@ class ImageGenPipeline:
         "bustup": "avatar_bustup.png",
         "chibi": "avatar_chibi.png",
         "model": "avatar_chibi.glb",
+        "rigged_model": "avatar_chibi_rigged.glb",
     }
+    # Animation files use pattern: anim_{name}.glb
 
     def __init__(self, person_dir: Path) -> None:
         self._person_dir = person_dir
@@ -526,20 +660,26 @@ class ImageGenPipeline:
         negative_prompt: str = "",
         skip_existing: bool = True,
         steps: list[str] | None = None,
+        animations: dict[str, int] | None = None,
     ) -> PipelineResult:
-        """Run the 4-step pipeline synchronously.
+        """Run the 6-step pipeline synchronously.
 
         Args:
             prompt: Character appearance tags for NovelAI.
             negative_prompt: Negative prompt for NovelAI.
             skip_existing: Skip steps whose output file already exists.
             steps: Subset of steps to run (default: all).
+            animations: Dict of {name: action_id} to generate.
+                Default: idle, sitting, waving, talking.
 
         Returns:
             PipelineResult with paths and error info.
         """
         self._assets_dir.mkdir(parents=True, exist_ok=True)
-        enabled = set(steps) if steps else {"fullbody", "bustup", "chibi", "3d"}
+        enabled = set(steps) if steps else {
+            "fullbody", "bustup", "chibi", "3d", "rigging", "animations",
+        }
+        anim_map = animations if animations is not None else _DEFAULT_ANIMATIONS
         result = PipelineResult()
 
         # ── Step 1: Full-body ──
@@ -624,6 +764,9 @@ class ImageGenPipeline:
                     logger.error("Step 3 failed: %s", exc)
 
         # ── Step 4: 3-D model from chibi ──
+        meshy_task_id: str | None = None  # tracked for rigging input
+        meshy: MeshyClient | None = None
+
         if "3d" in enabled:
             if chibi_bytes is None:
                 chibi_path = self._assets_dir / self.ASSET_NAMES["chibi"]
@@ -640,9 +783,9 @@ class ImageGenPipeline:
                 try:
                     logger.info("Step 4: Generating 3D model with Meshy …")
                     meshy = MeshyClient()
-                    task_id = meshy.create_task(chibi_bytes)
-                    logger.info("Meshy task created: %s", task_id)
-                    task = meshy.poll_task(task_id)
+                    meshy_task_id = meshy.create_task(chibi_bytes)
+                    logger.info("Meshy task created: %s", meshy_task_id)
+                    task = meshy.poll_task(meshy_task_id)
                     glb_bytes = meshy.download_model(task, fmt="glb")
                     model_path.write_bytes(glb_bytes)
                     result.model_path = model_path
@@ -650,6 +793,91 @@ class ImageGenPipeline:
                 except Exception as exc:
                     result.errors.append(f"3d: {exc}")
                     logger.error("Step 4 failed: %s", exc)
+
+        # ── Step 5: Rigging ──
+        rig_task_id: str | None = None
+
+        if "rigging" in enabled:
+            rigged_path = self._assets_dir / self.ASSET_NAMES["rigged_model"]
+            if skip_existing and rigged_path.exists():
+                result.skipped.append("rigging")
+                result.rigged_model_path = rigged_path
+            elif meshy_task_id is None:
+                result.errors.append(
+                    "rigging: No Meshy task_id available "
+                    "(run 3d step first or provide model)"
+                )
+            else:
+                try:
+                    logger.info("Step 5: Rigging 3D model with Meshy …")
+                    if meshy is None:
+                        meshy = MeshyClient()
+                    rig_task_id = meshy.create_rigging_task(meshy_task_id)
+                    logger.info("Meshy rigging task created: %s", rig_task_id)
+                    rig_task = meshy.poll_rigging_task(rig_task_id)
+
+                    # Download rigged model
+                    rigged_bytes = meshy.download_rigged_model(rig_task, fmt="glb")
+                    rigged_path.write_bytes(rigged_bytes)
+                    result.rigged_model_path = rigged_path
+                    logger.info("Rigged model saved: %s", rigged_path)
+
+                    # Download built-in walking/running animations
+                    basic_anims = meshy.download_rigging_animations(rig_task)
+                    for anim_name, anim_bytes in basic_anims.items():
+                        anim_path = self._assets_dir / f"anim_{anim_name}.glb"
+                        anim_path.write_bytes(anim_bytes)
+                        result.animation_paths[anim_name] = anim_path
+                        logger.info(
+                            "Animation '%s' saved: %s (%d bytes)",
+                            anim_name, anim_path, len(anim_bytes),
+                        )
+                    logger.info("Step 5 complete: rigged + %d animations", len(basic_anims))
+                except Exception as exc:
+                    result.errors.append(f"rigging: {exc}")
+                    logger.error("Step 5 failed: %s", exc)
+
+        # ── Step 6: Additional animations ──
+        if "animations" in enabled and anim_map:
+            if rig_task_id is None:
+                result.errors.append(
+                    "animations: No rigging task_id available "
+                    "(run rigging step first)"
+                )
+            else:
+                if meshy is None:
+                    meshy = MeshyClient()
+                for anim_name, action_id in anim_map.items():
+                    anim_path = self._assets_dir / f"anim_{anim_name}.glb"
+                    if skip_existing and anim_path.exists():
+                        result.skipped.append(f"anim_{anim_name}")
+                        result.animation_paths[anim_name] = anim_path
+                        continue
+                    try:
+                        logger.info(
+                            "Step 6: Generating '%s' animation (action_id=%d) …",
+                            anim_name, action_id,
+                        )
+                        anim_task_id = meshy.create_animation_task(
+                            rig_task_id, action_id,
+                        )
+                        logger.info(
+                            "Animation task '%s' created: %s",
+                            anim_name, anim_task_id,
+                        )
+                        anim_task = meshy.poll_animation_task(anim_task_id)
+                        anim_bytes = meshy.download_animation(anim_task, fmt="glb")
+                        anim_path.write_bytes(anim_bytes)
+                        result.animation_paths[anim_name] = anim_path
+                        logger.info(
+                            "Animation '%s' saved: %s (%d bytes)",
+                            anim_name, anim_path, len(anim_bytes),
+                        )
+                    except Exception as exc:
+                        result.errors.append(f"anim_{anim_name}: {exc}")
+                        logger.error(
+                            "Animation '%s' failed: %s", anim_name, exc,
+                        )
 
         return result
 
@@ -664,7 +892,9 @@ def get_tool_schemas() -> list[dict]:
             "name": "generate_character_assets",
             "description": (
                 "Generate a complete set of character avatar assets: "
-                "full-body image, bust-up image, chibi image, and a 3D model. "
+                "full-body image, bust-up image, chibi image, 3D model, "
+                "rigged model with skeleton, and animations "
+                "(idle, sitting, waving, talking, walking, running). "
                 "Requires NOVELAI_TOKEN, FAL_KEY, and MESHY_API_KEY."
             ),
             "input_schema": {
@@ -687,11 +917,14 @@ def get_tool_schemas() -> list[dict]:
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["fullbody", "bustup", "chibi", "3d"],
+                            "enum": [
+                                "fullbody", "bustup", "chibi",
+                                "3d", "rigging", "animations",
+                            ],
                         },
                         "description": (
                             "Which pipeline steps to run. "
-                            "Default: all four steps."
+                            "Default: all six steps."
                         ),
                     },
                     "skip_existing": {
@@ -809,6 +1042,53 @@ def get_tool_schemas() -> list[dict]:
                 "required": [],
             },
         },
+        {
+            "name": "generate_rigged_model",
+            "description": (
+                "Rig a 3D model with a humanoid skeleton using Meshy. "
+                "Also downloads built-in walking/running animations. "
+                "Saves rigged model to assets/avatar_chibi_rigged.glb "
+                "and animations to assets/anim_walking.glb, anim_running.glb. "
+                "Requires MESHY_API_KEY and an existing 3D model."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "height_meters": {
+                        "type": "number",
+                        "description": (
+                            "Approximate character height in meters. "
+                            "Aids in scaling and rigging accuracy."
+                        ),
+                        "default": 1.0,
+                    },
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "generate_animations",
+            "description": (
+                "Generate animation GLBs for a rigged character using "
+                "Meshy's animation library. Default: idle, sitting, waving, "
+                "talking. Requires MESHY_API_KEY and a completed rigging step."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "animations": {
+                        "type": "object",
+                        "description": (
+                            "Dict of {name: action_id}. "
+                            "Default: {idle: 0, sitting: 32, waving: 28, talking: 307}. "
+                            "See Meshy animation library for all available action_ids."
+                        ),
+                        "additionalProperties": {"type": "integer"},
+                    },
+                },
+                "required": [],
+            },
+        },
     ]
 
 
@@ -823,7 +1103,7 @@ def cli_main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     # -- pipeline --
-    p_pipe = sub.add_parser("pipeline", help="Run full 4-step pipeline")
+    p_pipe = sub.add_parser("pipeline", help="Run full 6-step pipeline")
     p_pipe.add_argument("prompt", help="Character appearance tags")
     p_pipe.add_argument("-n", "--negative", default="", help="Negative prompt")
     p_pipe.add_argument(
@@ -831,7 +1111,7 @@ def cli_main(argv: list[str] | None = None) -> None:
     )
     p_pipe.add_argument(
         "--steps", nargs="*",
-        choices=["fullbody", "bustup", "chibi", "3d"],
+        choices=["fullbody", "bustup", "chibi", "3d", "rigging", "animations"],
         help="Steps to run (default: all)",
     )
     p_pipe.add_argument(
@@ -870,6 +1150,30 @@ def cli_main(argv: list[str] | None = None) -> None:
     p_3d.add_argument("--ai-model", default="meshy-6")
     p_3d.add_argument("--polycount", type=int, default=30000)
     p_3d.add_argument("-j", "--json", action="store_true")
+
+    # -- rigging --
+    p_rig = sub.add_parser("rigging", help="Rig a 3D model with skeleton")
+    p_rig.add_argument("model", help="Path to GLB model file")
+    p_rig.add_argument("-o", "--output-dir", default=".", help="Output directory")
+    p_rig.add_argument(
+        "--height", type=float, default=1.0,
+        help="Character height in meters (default: 1.0 for chibi)",
+    )
+    p_rig.add_argument("-j", "--json", action="store_true")
+
+    # -- animations --
+    p_anim = sub.add_parser("animations", help="Generate animations for rigged model")
+    p_anim.add_argument("model", help="Path to GLB model file")
+    p_anim.add_argument("-o", "--output-dir", default=".", help="Output directory")
+    p_anim.add_argument(
+        "--height", type=float, default=1.0,
+        help="Character height in meters (default: 1.0 for chibi)",
+    )
+    p_anim.add_argument(
+        "--actions", nargs="*",
+        help="Animation names to generate (default: idle sitting waving talking)",
+    )
+    p_anim.add_argument("-j", "--json", action="store_true")
 
     args = parser.parse_args(argv)
 
@@ -950,3 +1254,105 @@ def cli_main(argv: list[str] | None = None) -> None:
             print(json.dumps(out))
         else:
             print(f"Saved: {args.output} ({len(glb)} bytes)")
+
+    elif args.command == "rigging":
+        model_bytes = Path(args.model).read_bytes()
+        data_uri = _image_to_data_uri(model_bytes, mime="model/gltf-binary")
+        client = MeshyClient()
+
+        # Submit rigging with model_url (data URI)
+        body: dict[str, Any] = {
+            "model_url": data_uri,
+            "height_meters": args.height,
+        }
+
+        def _rig_call() -> str:
+            resp = httpx.post(
+                MESHY_RIGGING_URL,
+                json=body,
+                headers=client._headers(),
+                timeout=_HTTP_TIMEOUT,
+            )
+            resp.raise_for_status()
+            return resp.json()["result"]
+
+        rig_task_id = _retry(_rig_call, max_retries=1, delay=10.0)
+        print(f"Rigging task: {rig_task_id}", file=sys.stderr)
+        rig_task = client.poll_rigging_task(rig_task_id)
+
+        out_dir = Path(args.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        outputs: dict[str, Any] = {"rig_task_id": rig_task_id}
+
+        # Download rigged model
+        rigged = client.download_rigged_model(rig_task, fmt="glb")
+        rigged_path = out_dir / "avatar_chibi_rigged.glb"
+        rigged_path.write_bytes(rigged)
+        outputs["rigged_model"] = str(rigged_path)
+
+        # Download built-in animations
+        basic_anims = client.download_rigging_animations(rig_task)
+        outputs["animations"] = {}
+        for name, anim_bytes in basic_anims.items():
+            anim_path = out_dir / f"anim_{name}.glb"
+            anim_path.write_bytes(anim_bytes)
+            outputs["animations"][name] = str(anim_path)
+
+        if args.json:
+            print(json.dumps(outputs, ensure_ascii=False, indent=2))
+        else:
+            print(f"Rigged model: {outputs['rigged_model']}")
+            for name, path in outputs.get("animations", {}).items():
+                print(f"Animation '{name}': {path}")
+
+    elif args.command == "animations":
+        model_bytes = Path(args.model).read_bytes()
+        data_uri = _image_to_data_uri(model_bytes, mime="model/gltf-binary")
+        client = MeshyClient()
+
+        # First rig the model
+        rig_body: dict[str, Any] = {
+            "model_url": data_uri,
+            "height_meters": args.height,
+        }
+
+        def _rig_call2() -> str:
+            resp = httpx.post(
+                MESHY_RIGGING_URL,
+                json=rig_body,
+                headers=client._headers(),
+                timeout=_HTTP_TIMEOUT,
+            )
+            resp.raise_for_status()
+            return resp.json()["result"]
+
+        rig_task_id = _retry(_rig_call2, max_retries=1, delay=10.0)
+        print(f"Rigging task: {rig_task_id}", file=sys.stderr)
+        client.poll_rigging_task(rig_task_id)
+
+        # Determine animations to generate
+        anim_map = _DEFAULT_ANIMATIONS.copy()
+        if args.actions:
+            anim_map = {
+                name: _DEFAULT_ANIMATIONS.get(name, 0)
+                for name in args.actions
+            }
+
+        out_dir = Path(args.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        outputs_anim: dict[str, Any] = {"rig_task_id": rig_task_id, "animations": {}}
+
+        for name, action_id in anim_map.items():
+            print(f"Generating '{name}' (action_id={action_id}) …", file=sys.stderr)
+            anim_task_id = client.create_animation_task(rig_task_id, action_id)
+            anim_task = client.poll_animation_task(anim_task_id)
+            anim_bytes = client.download_animation(anim_task, fmt="glb")
+            anim_path = out_dir / f"anim_{name}.glb"
+            anim_path.write_bytes(anim_bytes)
+            outputs_anim["animations"][name] = str(anim_path)
+
+        if args.json:
+            print(json.dumps(outputs_anim, ensure_ascii=False, indent=2))
+        else:
+            for name, path in outputs_anim["animations"].items():
+                print(f"Animation '{name}': {path}")
