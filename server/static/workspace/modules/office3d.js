@@ -426,13 +426,14 @@ function createDesk(personName, pos) {
   // Desk surface
   const surfaceGeo = box(1.2, 0.05, 0.6);
   const surface = new THREE.Mesh(surfaceGeo, deskMat);
-  surface.position.y = 0.75;
+  surface.position.y = 0.4;
   surface.castShadow = true;
   surface.receiveShadow = true;
   group.add(surface);
 
-  // Desk legs (4)
-  const legGeo = box(0.03, 0.35, 0.03);
+  // Desk legs (4) — from floor (y=0) to underside of surface
+  const legH = 0.4 - 0.05 / 2;  // 0.725
+  const legGeo = box(0.03, legH, 0.03);
   const legOffsets = [
     { x: -0.55, z: -0.25 },
     { x:  0.55, z: -0.25 },
@@ -441,7 +442,7 @@ function createDesk(personName, pos) {
   ];
   for (const off of legOffsets) {
     const leg = new THREE.Mesh(legGeo, legMat);
-    leg.position.set(off.x, 0.75 - 0.05 / 2 - 0.35 / 2, off.z);
+    leg.position.set(off.x, legH / 2, off.z);
     leg.castShadow = true;
     group.add(leg);
   }
@@ -454,14 +455,14 @@ function createDesk(personName, pos) {
   });
   const screenGeo = box(0.4, 0.3, 0.02);
   const screen = new THREE.Mesh(screenGeo, monitorMat);
-  screen.position.set(0, 0.75 + 0.05 / 2 + 0.15 + 0.02, -0.15);
+  screen.position.set(0, 0.4 + 0.05 / 2 + 0.15 + 0.02, -0.15);
   screen.castShadow = true;
   group.add(screen);
 
   // Monitor stand
   const standGeo = box(0.03, 0.15, 0.03);
   const stand = new THREE.Mesh(standGeo, legMat);
-  stand.position.set(0, 0.75 + 0.05 / 2 + 0.075, -0.15);
+  stand.position.set(0, 0.4 + 0.05 / 2 + 0.075, -0.15);
   group.add(stand);
 
   // Name label

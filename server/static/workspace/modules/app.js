@@ -131,7 +131,7 @@ async function initOfficeIfNeeded() {
     for (const p of persons) {
       const deskPos = desks[p.name];
       if (deskPos) {
-        const group = await createCharacter(p.name, { x: deskPos.x, y: deskPos.y + 0.4, z: deskPos.z - 0.3 });
+        const group = await createCharacter(p.name, { x: deskPos.x, y: 0, z: deskPos.z - 0.55 });
         if (group) {
           group.traverse((child) => {
             if (child.isMesh) {
