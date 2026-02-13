@@ -86,21 +86,13 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, cro
 
 ### 生成手順
 
-実行モードに応じて以下のいずれかで呼び出す:
+システムプロンプトの「外部ツール」セクションに記載された **image_gen**（`generate_character_assets`）の使用方法に従って呼び出す。
 
-**A1モード（Bash経由CLI）:**
-```bash
-animaworks-tool image_gen pipeline "{プロンプト}" --negative "{ネガティブプロンプト}" --person-dir {対象のpersonディレクトリ} -j
-```
-
-**A2モード（ツール呼び出し）:**
-`generate_character_assets` ツールを呼び出す:
+引数:
 - `prompt`: 上記ルールで変換したアニメタグ
 - `negative_prompt`: 推奨ネガティブプロンプト
+- `person_dir`: 対象 Person のディレクトリ（自分自身なら自分の、他者なら他者の）
 - `steps` は**指定しない**（デフォルトで全6ステップが実行される）
-
-※ どちらのモードでも `person_dir` には対象 Person のディレクトリを指定すること。
-※ 自分自身のアバター生成なら自分のディレクトリ、他者のアバター生成ならその Person のディレクトリ。
 
 生成結果は `assets/` ディレクトリに保存される:
    - `avatar_fullbody.png` — 全身立ち絵（NovelAI V4.5）
