@@ -1,5 +1,6 @@
-# Experiment results (generated data)
-results/
+# Generated datasets (large, not committed)
+_datasets/
+_experiment_data/
 
 # Python cache
 __pycache__/
