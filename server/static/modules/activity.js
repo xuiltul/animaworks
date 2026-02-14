@@ -12,8 +12,11 @@ const TYPE_ICONS = {
 let activityEmpty = true;
 
 export function addActivity(type, personName, summary) {
+  const feed = dom.activityFeed || document.getElementById("activityFeed");
+  if (!feed) return; // Activity feed not in DOM (page not active)
+
   if (activityEmpty) {
-    dom.activityFeed.innerHTML = "";
+    feed.innerHTML = "";
     activityEmpty = false;
   }
 
@@ -27,11 +30,11 @@ export function addActivity(type, personName, summary) {
       <span class="activity-person">${escapeHtml(personName)}</span>
       <span class="activity-summary"> ${escapeHtml(summary)}</span>
     </div>`;
-  dom.activityFeed.appendChild(entry);
-  dom.activityFeed.scrollTop = dom.activityFeed.scrollHeight;
+  feed.appendChild(entry);
+  feed.scrollTop = feed.scrollHeight;
 
   // Cap at 200 entries
-  while (dom.activityFeed.children.length > 200) {
-    dom.activityFeed.removeChild(dom.activityFeed.firstChild);
+  while (feed.children.length > 200) {
+    feed.removeChild(feed.firstChild);
   }
 }

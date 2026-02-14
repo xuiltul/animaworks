@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Digital Person - Dashboard</title>
+  <title>AnimaWorks — Dashboard</title>
   <link rel="stylesheet" href="/styles/base.css">
+  <link rel="stylesheet" href="/styles/layout.css">
+  <link rel="stylesheet" href="/styles/sidebar-nav.css">
+  <link rel="stylesheet" href="/styles/dashboard.css">
   <link rel="stylesheet" href="/styles/chat.css">
   <link rel="stylesheet" href="/styles/sidebar.css">
   <link rel="stylesheet" href="/styles/activity.css">
@@ -18,7 +21,7 @@
   <!-- Login Screen -->
   <div id="loginScreen" class="login-screen">
     <div class="login-card">
-      <h2 class="login-title">Digital Person</h2>
+      <h2 class="login-title">AnimaWorks</h2>
       <p class="login-subtitle">ユーザーを選択してログイン</p>
       <div id="userList" class="user-list"></div>
       <div class="login-guest">
@@ -28,13 +31,7 @@
   </div>
 
   <header class="app-header">
-    <h1 class="app-title">Digital Person</h1>
-    <div class="person-selector">
-      <div id="personAvatar" class="person-avatar-container"></div>
-      <select class="person-dropdown" id="personDropdown">
-        <option value="" disabled selected>パーソンを選択...</option>
-      </select>
-    </div>
+    <h1 class="app-title">AnimaWorks</h1>
     <div class="header-spacer"></div>
     <div class="user-info" id="userInfo">
       <span class="user-label" id="currentUserLabel"></span>
@@ -46,75 +43,40 @@
     </div>
   </header>
 
-  <main class="app-layout">
-    <!-- Main Panel: Chat -->
-    <section class="panel panel-main">
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-empty">パーソンを選択してチャットを開始</div>
-      </div>
-      <form class="chat-input-form" id="chatForm">
-        <textarea
-          class="chat-input"
-          id="chatInput"
-          placeholder="メッセージを入力... (Ctrl+Enter で送信)"
-          autocomplete="off"
-          rows="1"
-          disabled
-        ></textarea>
-        <button type="submit" class="chat-send-btn" id="chatSendBtn" disabled>送信</button>
-      </form>
-    </section>
+  <div class="app-shell">
+    <!-- Left Sidebar Navigation -->
+    <nav class="sidebar-nav" id="sidebarNav">
+      <div class="sidebar-brand">AnimaWorks</div>
+      <ul class="nav-list">
+        <li><a href="#/" class="nav-item active" data-route="/">
+          <span class="nav-icon">&#x1F3E0;</span>ホーム</a></li>
+        <li><a href="#/chat" class="nav-item" data-route="/chat">
+          <span class="nav-icon">&#x1F4AC;</span>チャット</a></li>
+        <li><a href="#/setup" class="nav-item" data-route="/setup">
+          <span class="nav-icon">&#x2699;</span>セットアップ</a></li>
+        <li><a href="#/users" class="nav-item" data-route="/users">
+          <span class="nav-icon">&#x1F465;</span>ユーザー</a></li>
+        <li><a href="#/persons" class="nav-item" data-route="/persons">
+          <span class="nav-icon">&#x1F9D1;</span>Person管理</a></li>
+        <li><a href="#/processes" class="nav-item" data-route="/processes">
+          <span class="nav-icon">&#x1F4BB;</span>プロセス監視</a></li>
+        <li><a href="#/server" class="nav-item" data-route="/server">
+          <span class="nav-icon">&#x1F310;</span>サーバー通信</a></li>
+        <li><a href="#/memory" class="nav-item" data-route="/memory">
+          <span class="nav-icon">&#x1F4DA;</span>記憶ブラウザ</a></li>
+        <li><a href="#/logs" class="nav-item" data-route="/logs">
+          <span class="nav-icon">&#x1F4C4;</span>ログ</a></li>
+        <li class="nav-divider"></li>
+        <li><a href="/workspace/" class="nav-item nav-external" target="_blank">
+          <span class="nav-icon">&#x1F3AE;</span>Workspace &#x2197;</a></li>
+      </ul>
+    </nav>
 
-    <!-- Right Panel: State/Activity Tabs + Memory Browser -->
-    <aside class="panel panel-right">
-      <nav class="right-tabs">
-        <button class="right-tab active" data-tab="state">現在の状態</button>
-        <button class="right-tab" data-tab="activity">アクティビティ</button>
-        <button class="right-tab" data-tab="history">会話履歴</button>
-      </nav>
-      <div class="right-tab-content" id="rightTabContent">
-        <!-- State tab -->
-        <div class="tab-pane active" id="tabState" data-tab="state">
-          <pre class="state-content" id="personStateContent">パーソンを選択してください</pre>
-        </div>
-        <!-- Activity tab -->
-        <div class="tab-pane" id="tabActivity" data-tab="activity">
-          <div class="activity-feed" id="activityFeed">
-            <div class="activity-empty">イベントを待機中...</div>
-          </div>
-        </div>
-        <!-- History tab -->
-        <div class="tab-pane" id="tabHistory" data-tab="history">
-          <div class="history-panel" id="historyPanel">
-            <div class="history-session-list" id="historySessionList">
-              <div class="loading-placeholder">パーソンを選択してください</div>
-            </div>
-            <div class="history-detail" id="historyDetail" style="display:none;">
-              <button class="memory-back-btn" id="historyBackBtn">&larr; 一覧に戻る</button>
-              <h3 class="history-detail-title" id="historyDetailTitle"></h3>
-              <div class="history-conversation" id="historyConversation"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <section class="memory-browser">
-        <nav class="memory-tabs">
-          <button class="memory-tab active" data-tab="episodes">エピソード</button>
-          <button class="memory-tab" data-tab="knowledge">知識</button>
-          <button class="memory-tab" data-tab="procedures">手順書</button>
-        </nav>
-        <div class="memory-file-list" id="memoryFileList">
-          <div class="loading-placeholder">パーソンを選択してください</div>
-        </div>
-        <div class="memory-content-area" id="memoryContentArea" style="display:none;">
-          <button class="memory-back-btn" id="memoryBackBtn">&larr; 一覧に戻る</button>
-          <h3 class="memory-content-title" id="memoryContentTitle"></h3>
-          <pre class="memory-content-body" id="memoryContentBody"></pre>
-        </div>
-      </section>
-    </aside>
-  </main>
+    <!-- Main Content Area -->
+    <div class="main-content" id="pageContent">
+      <!-- Pages are rendered here by the router -->
+    </div>
+  </div>
 
   <script type="module" src="/modules/app.js"></script>
 </body>

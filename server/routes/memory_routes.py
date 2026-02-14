@@ -211,4 +211,32 @@ def create_memory_router() -> APIRouter:
             "total_token_estimate": state.total_token_estimate,
         }
 
+    # ── Stats ─────────────────────────────────────────────
+
+    @router.get("/persons/{name}/memory/stats")
+    async def memory_stats(name: str, request: Request):
+        """Return memory storage statistics for a person."""
+        persons_dir = request.app.state.persons_dir
+        person_dir = persons_dir / name
+        if not person_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Person not found: {name}")
+
+        memory = MemoryManager(person_dir)
+
+        def dir_stats(directory):
+            if not directory.exists():
+                return {"count": 0, "total_bytes": 0}
+            files = list(directory.glob("*.md"))
+            return {
+                "count": len(files),
+                "total_bytes": sum(f.stat().st_size for f in files),
+            }
+
+        return {
+            "person": name,
+            "episodes": dir_stats(memory.episodes_dir),
+            "knowledge": dir_stats(memory.knowledge_dir),
+            "procedures": dir_stats(memory.procedures_dir),
+        }
+
     return router

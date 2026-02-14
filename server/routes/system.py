@@ -84,6 +84,53 @@ def create_system_router() -> APIRouter:
             "total": len(request.app.state.person_names),
         }
 
+    # ── Connections ─────────────────────────────────────────
+
+    @router.get("/system/connections")
+    async def system_connections(request: Request):
+        """Return WebSocket and process connection info."""
+        ws_manager = request.app.state.ws_manager
+        supervisor = request.app.state.supervisor
+
+        return {
+            "websocket": {
+                "connected_clients": (
+                    len(ws_manager.active_connections)
+                    if hasattr(ws_manager, "active_connections")
+                    else 0
+                ),
+            },
+            "processes": {
+                name: supervisor.get_process_status(name)
+                for name in request.app.state.person_names
+            },
+        }
+
+    # ── Scheduler ──────────────────────────────────────────
+
+    @router.get("/system/scheduler")
+    async def system_scheduler(request: Request):
+        """Return scheduler job information."""
+        supervisor = request.app.state.supervisor
+
+        jobs: list[dict] = []
+        scheduler = getattr(supervisor, "scheduler", None)
+        if scheduler is not None:
+            for job in scheduler.get_jobs():
+                jobs.append({
+                    "id": job.id,
+                    "name": job.name,
+                    "next_run": (
+                        str(job.next_run_time) if job.next_run_time else None
+                    ),
+                    "trigger": str(job.trigger),
+                })
+
+        return {
+            "running": scheduler is not None,
+            "jobs": jobs,
+        }
+
     # ── Activity ───────────────────────────────────────────
 
     @router.get("/activity/recent")

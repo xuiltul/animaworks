@@ -12,34 +12,11 @@ export const state = {
   sessionList: null,      // cached session list for selected person
 };
 
-const $ = (sel) => document.querySelector(sel);
 const $id = (id) => document.getElementById(id);
 
 export const dom = {
   systemStatus: $id("systemStatus"),
   systemStatusText: $id("systemStatusText"),
-  personDropdown: $id("personDropdown"),
-  personAvatar: $id("personAvatar"),
-  chatMessages: $id("chatMessages"),
-  chatForm: $id("chatForm"),
-  chatInput: $id("chatInput"),
-  chatSendBtn: $id("chatSendBtn"),
-  activityFeed: $id("activityFeed"),
-  personStateContent: $id("personStateContent"),
-  rightTabContent: $id("rightTabContent"),
-  tabState: $id("tabState"),
-  tabActivity: $id("tabActivity"),
-  memoryFileList: $id("memoryFileList"),
-  memoryContentArea: $id("memoryContentArea"),
-  memoryContentTitle: $id("memoryContentTitle"),
-  memoryContentBody: $id("memoryContentBody"),
-  memoryBackBtn: $id("memoryBackBtn"),
-  historyPanel: $id("historyPanel"),
-  historySessionList: $id("historySessionList"),
-  historyDetail: $id("historyDetail"),
-  historyBackBtn: $id("historyBackBtn"),
-  historyDetailTitle: $id("historyDetailTitle"),
-  historyConversation: $id("historyConversation"),
   loginScreen: $id("loginScreen"),
   userList: $id("userList"),
   guestLoginBtn: $id("guestLoginBtn"),

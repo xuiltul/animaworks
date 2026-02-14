@@ -6,13 +6,16 @@ import { addActivity } from "./activity.js";
 // ── Render ─────────────────────────────────
 
 export function renderChat() {
+  const chatMessages = dom.chatMessages || document.getElementById("chatMessages");
+  if (!chatMessages) return; // Chat not in DOM (page not active)
+
   const name = state.selectedPerson;
   const history = state.chatHistories[name] || [];
   if (history.length === 0) {
-    dom.chatMessages.innerHTML = '<div class="chat-empty">メッセージはまだありません</div>';
+    chatMessages.innerHTML = '<div class="chat-empty">メッセージはまだありません</div>';
     return;
   }
-  dom.chatMessages.innerHTML = history.map((m) => {
+  chatMessages.innerHTML = history.map((m) => {
     if (m.role === "thinking") {
       return `<div class="chat-bubble thinking"><span class="thinking-animation">考え中</span></div>`;
     }
@@ -31,7 +34,7 @@ export function renderChat() {
     }
     return `<div class="chat-bubble user">${escapeHtml(m.text)}</div>`;
   }).join("");
-  dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 // ── SSE Streaming ─────────────────────────
@@ -64,7 +67,9 @@ function parseSSEEvents(buffer) {
 }
 
 function renderStreamingBubble(msg) {
-  const bubble = dom.chatMessages.querySelector(".chat-bubble.assistant.streaming");
+  const chatMessages = dom.chatMessages || document.getElementById("chatMessages");
+  if (!chatMessages) return;
+  const bubble = chatMessages.querySelector(".chat-bubble.assistant.streaming");
   if (!bubble) return;
 
   let html = "";
@@ -83,7 +88,7 @@ function renderStreamingBubble(msg) {
   }
 
   bubble.innerHTML = html;
-  dom.chatMessages.scrollTop = dom.chatMessages.scrollHeight;
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 export async function sendChat(message) {
@@ -99,8 +104,10 @@ export async function sendChat(message) {
   history.push(streamingMsg);
   renderChat();
 
-  dom.chatInput.disabled = true;
-  dom.chatSendBtn.disabled = true;
+  const chatInput = dom.chatInput || document.getElementById("chatInput");
+  const chatSendBtn = dom.chatSendBtn || document.getElementById("chatSendBtn");
+  if (chatInput) chatInput.disabled = true;
+  if (chatSendBtn) chatSendBtn.disabled = true;
   addActivity("chat", name, `ユーザー: ${message}`);
 
   try {
@@ -178,8 +185,12 @@ export async function sendChat(message) {
     streamingMsg.activeTool = null;
     renderChat();
   } finally {
-    dom.chatInput.disabled = false;
-    dom.chatSendBtn.disabled = false;
-    dom.chatInput.focus();
+    const chatInput = dom.chatInput || document.getElementById("chatInput");
+    const chatSendBtn = dom.chatSendBtn || document.getElementById("chatSendBtn");
+    if (chatInput) {
+      chatInput.disabled = false;
+      chatInput.focus();
+    }
+    if (chatSendBtn) chatSendBtn.disabled = false;
   }
 }

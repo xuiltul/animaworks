@@ -14,47 +14,26 @@ from server.routes.persons import _read_appearance
 # ── Helper to build a minimal FastAPI app with persons router ──
 
 
-def _make_test_app(persons: dict | None = None):
+def _make_test_app(
+    persons_dir: Path | None = None,
+    person_names: list[str] | None = None,
+):
     from fastapi import FastAPI
     from server.routes.persons import create_persons_router
 
     app = FastAPI()
-    app.state.persons = persons or {}
+    app.state.persons_dir = persons_dir or Path("/tmp/fake/persons")
+    app.state.person_names = person_names or []
+
+    # Mock supervisor
+    supervisor = MagicMock()
+    supervisor.get_process_status.return_value = {"status": "running", "pid": 1234}
+    supervisor.send_request = AsyncMock(return_value={"action": "skip", "summary": "ok"})
+    app.state.supervisor = supervisor
+
     router = create_persons_router()
     app.include_router(router, prefix="/api")
     return app
-
-
-def _make_mock_person(
-    name: str = "alice",
-    supervisor: str | None = None,
-    person_dir: Path | None = None,
-):
-    person = MagicMock()
-    person.name = name
-    person.person_dir = person_dir or Path("/tmp/fake/persons") / name
-
-    status = MagicMock()
-    status.model_dump.return_value = {"name": name, "status": "idle"}
-    person.status = status
-
-    mc = MagicMock()
-    mc.supervisor = supervisor
-    person.model_config = mc
-
-    memory = MagicMock()
-    memory.read_identity.return_value = "# Identity"
-    memory.read_injection.return_value = ""
-    memory.read_current_state.return_value = "idle"
-    memory.read_pending.return_value = ""
-    memory.list_knowledge_files.return_value = ["topic1.md"]
-    memory.list_episode_files.return_value = ["2026-01-01.md"]
-    memory.list_procedure_files.return_value = []
-    person.memory = memory
-
-    person.run_heartbeat = AsyncMock()
-
-    return person
 
 
 # ── _read_appearance ─────────────────────────────────────
@@ -88,42 +67,65 @@ class TestReadAppearance:
 
 class TestListPersons:
     async def test_list_empty(self):
-        app = _make_test_app({})
+        app = _make_test_app(person_names=[])
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_list_with_persons(self):
-        alice = _make_mock_person("alice")
-        app = _make_test_app({"alice": alice})
+    async def test_list_with_persons(self, tmp_path):
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
+
+        app = _make_test_app(
+            persons_dir=persons_dir,
+            person_names=["alice"],
+        )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons")
         data = resp.json()
         assert len(data) == 1
         assert data[0]["name"] == "alice"
-        assert data[0]["supervisor"] is None
+        assert data[0]["status"] == "running"
 
 
 # ── GET /persons/{name} ─────────────────────────────────
 
 
 class TestGetPerson:
-    async def test_found(self):
-        alice = _make_mock_person("alice")
-        app = _make_test_app({"alice": alice})
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/persons/alice")
+    async def test_found(self, tmp_path):
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
+
+        with patch("core.memory.manager.MemoryManager") as MockMM:
+            mock_mm = MagicMock()
+            mock_mm.read_identity.return_value = "# Identity"
+            mock_mm.read_injection.return_value = ""
+            mock_mm.read_current_state.return_value = "idle"
+            mock_mm.read_pending.return_value = ""
+            mock_mm.list_knowledge_files.return_value = ["topic1.md"]
+            mock_mm.list_episode_files.return_value = ["2026-01-01.md"]
+            mock_mm.list_procedure_files.return_value = []
+            MockMM.return_value = mock_mm
+
+            app = _make_test_app(
+                persons_dir=persons_dir,
+                person_names=["alice"],
+            )
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/persons/alice")
         data = resp.json()
         assert "status" in data
         assert "identity" in data
         assert data["knowledge_files"] == ["topic1.md"]
 
     async def test_not_found(self):
-        app = _make_test_app({})
+        app = _make_test_app(person_names=[])
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/nonexistent")
@@ -135,13 +137,15 @@ class TestGetPerson:
 
 
 class TestTriggerHeartbeat:
-    async def test_success(self):
-        alice = _make_mock_person("alice")
-        mock_result = MagicMock()
-        mock_result.model_dump.return_value = {"action": "skip", "summary": "ok"}
-        alice.run_heartbeat.return_value = mock_result
+    async def test_success(self, tmp_path):
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
 
-        app = _make_test_app({"alice": alice})
+        app = _make_test_app(
+            persons_dir=persons_dir,
+            person_names=["alice"],
+        )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/api/persons/alice/trigger")
@@ -149,9 +153,63 @@ class TestTriggerHeartbeat:
         assert data["action"] == "skip"
 
     async def test_not_found(self):
-        app = _make_test_app({})
+        app = _make_test_app(person_names=[])
+        # Make supervisor raise KeyError for unknown person
+        app.state.supervisor.send_request = AsyncMock(
+            side_effect=KeyError("nobody")
+        )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/api/persons/nobody/trigger")
         assert resp.status_code == 404
+        assert "Person not found" in resp.json()["detail"]
+
+
+# ── GET /persons/{name}/config ───────────────────────────
+
+
+class TestGetPersonConfig:
+    async def test_person_not_found(self):
+        app = _make_test_app(person_names=[])
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/persons/nobody/config")
+        assert resp.status_code == 404
         assert resp.json()["detail"] == "Person not found: nobody"
+
+    async def test_success(self, tmp_path):
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
+
+        mock_resolved = MagicMock()
+        mock_resolved.model = "claude-sonnet-4-20250514"
+        mock_resolved.execution_mode = "a1"
+        mock_resolved.model_dump.return_value = {
+            "model": "claude-sonnet-4-20250514",
+            "execution_mode": "a1",
+        }
+
+        with patch(
+            "core.config.models.load_config",
+            return_value=MagicMock(),
+        ), patch(
+            "core.config.models.resolve_person_config",
+            return_value=(mock_resolved, "anthropic"),
+        ):
+            app = _make_test_app(
+                persons_dir=persons_dir,
+                person_names=["alice"],
+            )
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                resp = await client.get("/api/persons/alice/config")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["person"] == "alice"
+        assert data["model"] == "claude-sonnet-4-20250514"
+        assert data["execution_mode"] == "a1"
+        assert "config" in data

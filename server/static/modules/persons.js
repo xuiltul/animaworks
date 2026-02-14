@@ -19,7 +19,8 @@ export async function loadPersons() {
 }
 
 export function renderPersonDropdown() {
-  const dropdown = dom.personDropdown;
+  const dropdown = dom.personDropdown || document.getElementById("personDropdown");
+  if (!dropdown) return; // Person dropdown not in DOM (page not active)
 
   let html = '<option value="" disabled>パーソンを選択...</option>';
   for (const p of state.persons) {
@@ -34,12 +35,17 @@ export async function selectPerson(name) {
   state.selectedPerson = name;
 
   // Update dropdown
-  dom.personDropdown.value = name;
+  const dropdown = dom.personDropdown || document.getElementById("personDropdown");
+  if (dropdown) dropdown.value = name;
 
   // Enable chat
-  dom.chatInput.disabled = false;
-  dom.chatSendBtn.disabled = false;
-  dom.chatInput.placeholder = `${name} にメッセージ...`;
+  const chatInput = dom.chatInput || document.getElementById("chatInput");
+  const chatSendBtn = dom.chatSendBtn || document.getElementById("chatSendBtn");
+  if (chatInput) {
+    chatInput.disabled = false;
+    chatInput.placeholder = `${name} にメッセージ...`;
+  }
+  if (chatSendBtn) chatSendBtn.disabled = false;
 
   // Pre-populate chat with server-side conversation history if empty
   if (!state.chatHistories[name] || state.chatHistories[name].length === 0) {
@@ -65,8 +71,10 @@ export async function selectPerson(name) {
   } catch (err) {
     console.error("Failed to load person detail:", err);
     state.personDetail = null;
-    dom.personStateContent.textContent = "詳細の読み込み失敗";
-    dom.memoryFileList.innerHTML = '<div class="loading-placeholder">詳細の読み込み失敗</div>';
+    const stateContent = dom.personStateContent || document.getElementById("personStateContent");
+    if (stateContent) stateContent.textContent = "詳細の読み込み失敗";
+    const memoryList = dom.memoryFileList || document.getElementById("memoryFileList");
+    if (memoryList) memoryList.innerHTML = '<div class="loading-placeholder">詳細の読み込み失敗</div>';
   }
 
   // Load session list if history tab is active
@@ -82,7 +90,7 @@ export async function selectPerson(name) {
 // ── Person Avatar ───────────────────────────
 
 export async function updatePersonAvatar() {
-  const container = dom.personAvatar;
+  const container = dom.personAvatar || document.getElementById("personAvatar");
   if (!container) return;
 
   const name = state.selectedPerson;
@@ -111,13 +119,16 @@ export async function updatePersonAvatar() {
 // ── Person State ───────────────────────────
 
 export function renderPersonState() {
+  const stateContent = dom.personStateContent || document.getElementById("personStateContent");
+  if (!stateContent) return; // State panel not in DOM
+
   const d = state.personDetail;
   if (!d || !d.state) {
-    dom.personStateContent.textContent = "状態情報なし";
+    stateContent.textContent = "状態情報なし";
     return;
   }
   const stateText = typeof d.state === "string" ? d.state : JSON.stringify(d.state, null, 2);
-  dom.personStateContent.textContent = stateText;
+  stateContent.textContent = stateText;
 }
 
 export async function refreshSelectedPerson() {

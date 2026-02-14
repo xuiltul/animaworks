@@ -108,4 +108,27 @@ def create_persons_router() -> APIRouter:
             from fastapi import HTTPException
             raise HTTPException(status_code=500, detail=str(e))
 
+    # ── Person Config ─────────────────────────────────────
+
+    @router.get("/persons/{name}/config")
+    async def get_person_config(name: str, request: Request):
+        """Return resolved model configuration for a person."""
+        persons_dir = request.app.state.persons_dir
+        person_dir = persons_dir / name
+        if not person_dir.exists():
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"Person not found: {name}")
+
+        from core.config.models import load_config, resolve_person_config
+
+        config = load_config()
+        resolved, credential = resolve_person_config(config, name)
+
+        return {
+            "person": name,
+            "model": resolved.model,
+            "execution_mode": resolved.execution_mode,
+            "config": resolved.model_dump(),
+        }
+
     return router

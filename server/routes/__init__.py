@@ -7,7 +7,9 @@ from fastapi import APIRouter
 
 from server.routes.assets import create_assets_router
 from server.routes.chat import create_chat_router
+from server.routes.config_routes import create_config_router
 from server.routes.internal import create_internal_router
+from server.routes.logs_routes import create_logs_router
 from server.routes.memory_routes import create_memory_router
 from server.routes.persons import create_persons_router
 from server.routes.sessions import create_sessions_router
@@ -24,6 +26,8 @@ def create_router() -> APIRouter:
     api.include_router(create_memory_router())
     api.include_router(create_sessions_router())
     api.include_router(create_system_router())
+    api.include_router(create_config_router())
+    api.include_router(create_logs_router())
     api.include_router(create_assets_router())
     api.include_router(create_internal_router())
 

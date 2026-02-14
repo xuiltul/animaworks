@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -12,6 +12,7 @@ def _make_test_app(
     persons: dict | None = None,
     persons_dir: Path | None = None,
     shared_dir: Path | None = None,
+    person_names: list[str] | None = None,
 ):
     from fastapi import FastAPI
     from server.routes.system import create_system_router
@@ -20,14 +21,24 @@ def _make_test_app(
     app.state.persons = persons or {}
     app.state.persons_dir = persons_dir or Path("/tmp/fake/persons")
     app.state.shared_dir = shared_dir or Path("/tmp/fake/shared")
+    app.state.person_names = (
+        person_names if person_names is not None
+        else list((persons or {}).keys())
+    )
 
-    # Mock lifecycle with scheduler
-    lifecycle = MagicMock()
-    scheduler = MagicMock()
-    scheduler.running = True
-    scheduler.get_jobs.return_value = []
-    lifecycle.scheduler = scheduler
-    app.state.lifecycle = lifecycle
+    # Mock supervisor
+    supervisor = MagicMock()
+    supervisor.get_all_status.return_value = {}
+    supervisor.get_process_status.return_value = {"status": "running", "pid": 1234}
+    supervisor.start_person = AsyncMock()
+    supervisor.stop_person = AsyncMock()
+    supervisor.restart_person = AsyncMock()
+    app.state.supervisor = supervisor
+
+    # Mock ws_manager
+    ws_manager = MagicMock()
+    ws_manager.active_connections = []
+    app.state.ws_manager = ws_manager
 
     router = create_system_router()
     app.include_router(router, prefix="/api")
@@ -72,39 +83,31 @@ class TestListSharedUsers:
 
 class TestSystemStatus:
     async def test_status(self):
-        alice = MagicMock()
-        app = _make_test_app(persons={"alice": alice})
+        app = _make_test_app(person_names=["alice"])
+        app.state.supervisor.get_all_status.return_value = {
+            "alice": {"status": "running", "pid": 1234},
+        }
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/system/status")
         data = resp.json()
         assert data["persons"] == 1
-        assert data["scheduler_running"] is True
-        assert data["jobs"] == []
+        assert "processes" in data
 
-    async def test_status_with_jobs(self):
-        mock_job = MagicMock()
-        mock_job.id = "hb-alice"
-        mock_job.name = "heartbeat:alice"
-        mock_job.next_run_time = "2026-01-01T12:00:00"
-
-        app = _make_test_app()
-        app.state.lifecycle.scheduler.get_jobs.return_value = [mock_job]
-
+    async def test_status_empty(self):
+        app = _make_test_app(person_names=[])
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/system/status")
         data = resp.json()
-        assert len(data["jobs"]) == 1
-        assert data["jobs"][0]["id"] == "hb-alice"
+        assert data["persons"] == 0
 
 
 # ── POST /system/reload ─────────────────────────────────
 
 
 class TestReloadPersons:
-    @patch("server.routes.system.DigitalPerson", create=True)
-    async def test_reload_adds_new_persons(self, mock_dp_cls, tmp_path):
+    async def test_reload_adds_new_persons(self, tmp_path):
         persons_dir = tmp_path / "persons"
         persons_dir.mkdir()
         shared_dir = tmp_path / "shared"
@@ -114,14 +117,11 @@ class TestReloadPersons:
         alice_dir.mkdir()
         (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
 
-        mock_person = MagicMock()
-        mock_person.name = "alice"
-        mock_dp_cls.return_value = mock_person
-
         app = _make_test_app(
             persons={},
             persons_dir=persons_dir,
             shared_dir=shared_dir,
+            person_names=[],
         )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -136,11 +136,11 @@ class TestReloadPersons:
         persons_dir.mkdir()
         shared_dir = tmp_path / "shared"
 
-        old_person = MagicMock()
         app = _make_test_app(
-            persons={"deleted": old_person},
+            persons={},
             persons_dir=persons_dir,
             shared_dir=shared_dir,
+            person_names=["deleted"],
         )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -150,8 +150,7 @@ class TestReloadPersons:
         assert "deleted" in data["removed"]
         assert data["total"] == 0
 
-    @patch("server.routes.system.DigitalPerson", create=True)
-    async def test_reload_refreshes_existing(self, mock_dp_cls, tmp_path):
+    async def test_reload_refreshes_existing(self, tmp_path):
         persons_dir = tmp_path / "persons"
         persons_dir.mkdir()
         shared_dir = tmp_path / "shared"
@@ -160,15 +159,11 @@ class TestReloadPersons:
         alice_dir.mkdir()
         (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
 
-        mock_person = MagicMock()
-        mock_person.name = "alice"
-        mock_dp_cls.return_value = mock_person
-
-        old_person = MagicMock()
         app = _make_test_app(
-            persons={"alice": old_person},
+            persons={},
             persons_dir=persons_dir,
             shared_dir=shared_dir,
+            person_names=["alice"],
         )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -185,6 +180,7 @@ class TestReloadPersons:
             persons={},
             persons_dir=persons_dir,
             shared_dir=shared_dir,
+            person_names=[],
         )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -225,3 +221,117 @@ class TestRecentActivity:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/activity/recent?person=alice")
         assert resp.status_code == 200
+
+
+# ── GET /system/connections ──────────────────────────────
+
+
+class TestSystemConnections:
+    async def test_connections_with_active_clients(self):
+        app = _make_test_app(person_names=["alice", "bob"])
+        # Simulate 3 active websocket connections
+        app.state.ws_manager.active_connections = [
+            MagicMock(), MagicMock(), MagicMock(),
+        ]
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/system/connections")
+        data = resp.json()
+        assert data["websocket"]["connected_clients"] == 3
+        assert "alice" in data["processes"]
+        assert "bob" in data["processes"]
+
+    async def test_connections_without_active_connections_attr(self):
+        app = _make_test_app(person_names=["alice"])
+        # Remove active_connections attribute
+        del app.state.ws_manager.active_connections
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/system/connections")
+        data = resp.json()
+        assert data["websocket"]["connected_clients"] == 0
+
+    async def test_connections_empty(self):
+        app = _make_test_app(person_names=[])
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/system/connections")
+        data = resp.json()
+        assert data["websocket"]["connected_clients"] == 0
+        assert data["processes"] == {}
+
+
+# ── GET /system/scheduler ────────────────────────────────
+
+
+class TestSystemScheduler:
+    async def test_no_scheduler(self):
+        app = _make_test_app()
+        # Supervisor has no scheduler attribute
+        del app.state.supervisor.scheduler
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/system/scheduler")
+        data = resp.json()
+        assert data["running"] is False
+        assert data["jobs"] == []
+
+    async def test_scheduler_with_jobs(self):
+        app = _make_test_app()
+
+        mock_job = MagicMock()
+        mock_job.id = "hb-alice"
+        mock_job.name = "heartbeat:alice"
+        mock_job.next_run_time = "2026-01-01T12:00:00"
+        mock_job.trigger = "interval[0:05:00]"
+
+        scheduler = MagicMock()
+        scheduler.get_jobs.return_value = [mock_job]
+        app.state.supervisor.scheduler = scheduler
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/system/scheduler")
+        data = resp.json()
+        assert data["running"] is True
+        assert len(data["jobs"]) == 1
+        assert data["jobs"][0]["id"] == "hb-alice"
+        assert data["jobs"][0]["name"] == "heartbeat:alice"
+        assert data["jobs"][0]["next_run"] == "2026-01-01T12:00:00"
+        assert "interval" in data["jobs"][0]["trigger"]
+
+    async def test_scheduler_with_no_jobs(self):
+        app = _make_test_app()
+
+        scheduler = MagicMock()
+        scheduler.get_jobs.return_value = []
+        app.state.supervisor.scheduler = scheduler
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/system/scheduler")
+        data = resp.json()
+        assert data["running"] is True
+        assert data["jobs"] == []
+
+    async def test_scheduler_job_without_next_run(self):
+        app = _make_test_app()
+
+        mock_job = MagicMock()
+        mock_job.id = "cron-bob"
+        mock_job.name = "cron:bob"
+        mock_job.next_run_time = None
+        mock_job.trigger = "cron[hour=9]"
+
+        scheduler = MagicMock()
+        scheduler.get_jobs.return_value = [mock_job]
+        app.state.supervisor.scheduler = scheduler
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/system/scheduler")
+        data = resp.json()
+        assert data["jobs"][0]["next_run"] is None
