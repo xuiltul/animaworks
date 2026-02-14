@@ -2,11 +2,10 @@
 """
 Memory Performance Evaluation - Phase 5: Experiment Execution
 
-Runs 4-condition comparison experiment on AnimaWorks memory system:
-  - Condition A: BM25 only (ripgrep)
-  - Condition B: Dense vector search (ChromaDB + multilingual-e5-small)
-  - Condition C: Hybrid search (BM25 + Dense vector + temporal decay + RRF)
-  - Condition D: Hybrid + Priming (4-channel parallel retrieval)
+Runs 3-condition comparison experiment on AnimaWorks memory system:
+  - Condition A: Dense Vector (ChromaDB + multilingual-e5-small + Temporal Decay)
+  - Condition B: Dense Vector + Spreading Activation
+  - Condition C: Dense Vector + Spreading Activation + 4-channel Priming
 
 Each condition: N=30 trials, 50 scenarios per trial.
 Generates datasets, runs searches, collects metrics, produces figures.
@@ -24,7 +23,6 @@ import math
 import os
 import random
 import re
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -88,10 +86,9 @@ SIZE = "small"  # Primary experiment size
 
 # Condition names to directory names
 CONDITION_DIRS = {
-    "A": "condition_a_bm25",
-    "B": "condition_b_vector",
-    "C": "condition_c_hybrid",
-    "D": "condition_d_hybrid_priming",
+    "A": "condition_a_vector",
+    "B": "condition_b_vector_spreading",
+    "C": "condition_c_vector_priming",
 }
 
 
@@ -206,269 +203,50 @@ class DenseVectorSearch:
         return search_results
 
 
-# ── BM25 Search (ripgrep-based) ──────────────────────────────────────────────
+# ── Keyword Extraction ────────────────────────────────────────────────────────
 
 
-class Bm25Search:
-    """BM25-style search using ripgrep, matching AnimaWorks' actual search."""
+def _extract_keywords(query: str) -> list[str]:
+    """Extract keywords from query for skill matching.
 
-    def __init__(self, search_dir: Path) -> None:
-        self.search_dir = search_dir
-        self._documents: dict[str, dict[str, Any]] = {}
+    Args:
+        query: Search query text
 
-    def index_documents(self, documents: list[dict[str, Any]]) -> None:
-        """Index documents (stores path mapping for result construction)."""
-        for doc in documents:
-            self._documents[str(doc["path"])] = doc
-
-    def search(self, query: str, top_k: int = 3) -> list[dict[str, Any]]:
-        """Search using ripgrep, matching core/memory/rag/retriever.py logic.
-
-        Args:
-            query: Search query text
-            top_k: Number of results to return
-
-        Returns:
-            List of dicts with 'id', 'content', 'path', 'score' keys
-        """
-        keywords = self._extract_keywords(query)
-        if not keywords:
-            return []
-
-        escaped_keywords = [re.escape(kw) for kw in keywords[:5]]
-        pattern = "|".join(escaped_keywords)
-
-        try:
-            result = subprocess.run(
-                [
-                    "rg",
-                    "--ignore-case",
-                    "--count",
-                    "--no-heading",
-                    "--with-filename",
-                    pattern,
-                    str(self.search_dir),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=5.0,
-            )
-
-            if result.returncode != 0 or not result.stdout:
-                return self._fallback_search(keywords, top_k)
-
-            # Parse results (format: "filename:count")
-            file_scores: dict[str, int] = {}
-            for line in result.stdout.strip().splitlines():
-                parts = line.rsplit(":", 1)
-                if len(parts) == 2:
-                    filename, count_str = parts
-                    try:
-                        file_scores[filename] = int(count_str)
-                    except ValueError:
-                        pass
-
-            # Sort by score (log-scaled)
-            sorted_files = sorted(
-                file_scores.items(), key=lambda x: math.log1p(x[1]), reverse=True
-            )[:top_k]
-
-            results = []
-            for filepath, count in sorted_files:
-                path_str = str(filepath)
-                doc = self._documents.get(path_str)
-                if doc:
-                    results.append(
-                        {
-                            "id": doc["id"],
-                            "content": doc["content"],
-                            "path": doc["path"],
-                            "score": math.log1p(count),
-                        }
-                    )
-                else:
-                    # Read file content directly
-                    try:
-                        content = Path(filepath).read_text(encoding="utf-8")
-                        results.append(
-                            {
-                                "id": filepath,
-                                "content": content,
-                                "path": Path(filepath),
-                                "score": math.log1p(count),
-                            }
-                        )
-                    except Exception:
-                        pass
-
-            return results
-
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return self._fallback_search(keywords, top_k)
-
-    def _fallback_search(
-        self, keywords: list[str], top_k: int
-    ) -> list[dict[str, Any]]:
-        """Python fallback when ripgrep is unavailable."""
-        keywords_lower = [kw.lower() for kw in keywords]
-        scored: list[tuple[float, dict[str, Any]]] = []
-
-        for doc in self._documents.values():
-            content_lower = doc["content"].lower()
-            count = sum(content_lower.count(kw) for kw in keywords_lower)
-            if count > 0:
-                scored.append((math.log1p(count), doc))
-
-        scored.sort(key=lambda x: x[0], reverse=True)
-
-        results = []
-        for score, doc in scored[:top_k]:
-            results.append(
-                {
-                    "id": doc["id"],
-                    "content": doc["content"],
-                    "path": doc["path"],
-                    "score": score,
-                }
-            )
-        return results
-
-    @staticmethod
-    def _extract_keywords(query: str) -> list[str]:
-        """Extract keywords from query (same logic as retriever.py)."""
-        stopwords = {
-            "the", "a", "an", "and", "or", "but", "in", "on", "at",
-            "to", "for", "of", "with", "by", "from", "up", "about",
-            "into", "through", "during", "it", "is", "are", "was",
-            "were", "be", "been", "being", "have", "has", "had",
-            "do", "does", "did", "will", "would", "should", "could",
-            "what", "can", "you", "tell", "me", "this", "that",
-            "information", "more", "detail", "discussed", "turn",
-            "let", "us", "discuss",
-        }
-        words = re.findall(r"[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]+", query)
-        keywords = [w for w in words if len(w) >= 2 and w.lower() not in stopwords]
-        return keywords[:10]
-
-
-# ── Hybrid Search ─────────────────────────────────────────────────────────────
-
-# RRF parameter from core/memory/rag/retriever.py
-RRF_K = 60
-WEIGHT_VECTOR = 0.5
-WEIGHT_BM25 = 0.3
-WEIGHT_RECENCY = 0.2
-RECENCY_HALF_LIFE_DAYS = 30.0
-
-
-class HybridSearch:
-    """Hybrid search combining BM25 + Dense Vector + temporal decay via RRF.
-
-    Mirrors the logic of core/memory/rag/retriever.py HybridRetriever,
-    using ChromaDB + multilingual-e5-small for dense vector search.
+    Returns:
+        List of extracted keywords (up to 10)
     """
-
-    def __init__(self, search_dir: Path) -> None:
-        self.bm25 = Bm25Search(search_dir)
-        self.vector = DenseVectorSearch()
-        self._document_dates: dict[str, datetime] = {}
-
-    def index_documents(self, documents: list[dict[str, Any]]) -> None:
-        """Index documents in both BM25 and vector search engines."""
-        self.bm25.index_documents(documents)
-        self.vector.index_documents(documents)
-        for doc in documents:
-            # Extract date from metadata or default to recent
-            date_str = doc.get("metadata", {}).get("date")
-            if date_str:
-                try:
-                    self._document_dates[doc["id"]] = datetime.strptime(
-                        date_str, "%Y-%m-%d"
-                    )
-                except ValueError:
-                    self._document_dates[doc["id"]] = datetime.now() - timedelta(
-                        days=15
-                    )
-            else:
-                self._document_dates[doc["id"]] = datetime.now() - timedelta(days=15)
-
-    def search(self, query: str, top_k: int = 3) -> list[dict[str, Any]]:
-        """Perform hybrid search using RRF combination.
-
-        Args:
-            query: Search query text
-            top_k: Number of results to return
-
-        Returns:
-            List of dicts with 'id', 'content', 'path', 'score' keys
-        """
-        # Get results from both search methods (fetch 2x for RRF)
-        bm25_results = self.bm25.search(query, top_k=top_k * 2)
-        vector_results = self.vector.search(query, top_k=top_k * 2)
-
-        # Build rank dictionaries
-        bm25_ranks = {r["id"]: i + 1 for i, r in enumerate(bm25_results)}
-        vector_ranks = {r["id"]: i + 1 for i, r in enumerate(vector_results)}
-
-        # Collect all doc IDs and their content
-        all_docs: dict[str, dict[str, Any]] = {}
-        for r in bm25_results + vector_results:
-            if r["id"] not in all_docs:
-                all_docs[r["id"]] = r
-
-        # Compute RRF scores
-        scored_results: list[dict[str, Any]] = []
-        now = datetime.now()
-
-        for doc_id, doc in all_docs.items():
-            v_rank = vector_ranks.get(doc_id, 0)
-            b_rank = bm25_ranks.get(doc_id, 0)
-
-            # RRF scores
-            v_score = (1.0 / (RRF_K + v_rank)) if v_rank > 0 else 0.0
-            b_score = (1.0 / (RRF_K + b_rank)) if b_rank > 0 else 0.0
-
-            combined = WEIGHT_VECTOR * v_score + WEIGHT_BM25 * b_score
-
-            # Temporal decay
-            doc_date = self._document_dates.get(doc_id, now - timedelta(days=15))
-            age_days = (now - doc_date).total_seconds() / 86400.0
-            decay_factor = 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
-            recency_score = WEIGHT_RECENCY * decay_factor
-
-            final_score = combined + recency_score
-
-            result = doc.copy()
-            result["score"] = final_score
-            result["source_scores"] = {
-                "vector": v_score,
-                "bm25": b_score,
-                "recency": recency_score,
-            }
-            scored_results.append(result)
-
-        # Sort by final score
-        scored_results.sort(key=lambda r: r["score"], reverse=True)
-        return scored_results[:top_k]
+    stopwords = {
+        "the", "a", "an", "and", "or", "but", "in", "on", "at",
+        "to", "for", "of", "with", "by", "from", "up", "about",
+        "into", "through", "during", "it", "is", "are", "was",
+        "were", "be", "been", "being", "have", "has", "had",
+        "do", "does", "did", "will", "would", "should", "could",
+        "what", "can", "you", "tell", "me", "this", "that",
+        "information", "more", "detail", "discussed", "turn",
+        "let", "us", "discuss",
+    }
+    words = re.findall(r"[\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]+", query)
+    keywords = [w for w in words if len(w) >= 2 and w.lower() not in stopwords]
+    return keywords[:10]
 
 
 # ── Priming Layer Wrapper ─────────────────────────────────────────────────────
 
 
 class PrimingSearchWrapper:
-    """Wraps HybridSearch with priming layer functionality.
+    """Wraps DenseVectorSearch with priming layer functionality.
 
     Simulates the PrimingEngine's 4-channel parallel retrieval:
     - Channel A: Sender profile (simulated)
     - Channel B: Recent episodes
-    - Channel C: Related knowledge (via hybrid search)
+    - Channel C: Related knowledge (via dense vector search)
     - Channel D: Skill matching
 
     Measures actual priming overhead and token injection.
     """
 
     def __init__(self, search_dir: Path, person_dir: Path) -> None:
-        self.hybrid = HybridSearch(search_dir)
+        self.vector = DenseVectorSearch()
         self.person_dir = person_dir
         self.episodes_dir = person_dir / "episodes"
         self.knowledge_dir = person_dir / "knowledge"
@@ -476,14 +254,14 @@ class PrimingSearchWrapper:
         self._all_documents: list[dict[str, Any]] = []
 
     def index_documents(self, documents: list[dict[str, Any]]) -> None:
-        """Index documents in the underlying hybrid search."""
-        self.hybrid.index_documents(documents)
+        """Index documents in the underlying dense vector search."""
+        self.vector.index_documents(documents)
         self._all_documents = documents
 
     async def search(
         self, query: str, top_k: int = 3
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        """Perform hybrid search with priming layer overhead.
+        """Perform dense vector search with priming layer overhead.
 
         Args:
             query: Search query text
@@ -511,13 +289,13 @@ class PrimingSearchWrapper:
         episode_content = self._get_recent_episodes()
         priming_info["recent_episodes_tokens"] = len(episode_content) // 4
 
-        # Channel C: Related knowledge via hybrid search
-        knowledge_results = self.hybrid.search(query, top_k=top_k)
+        # Channel C: Related knowledge via dense vector search
+        knowledge_results = self.vector.search(query, top_k=top_k)
         knowledge_text = "\n".join(r.get("content", "")[:500] for r in knowledge_results)
         priming_info["related_knowledge_tokens"] = len(knowledge_text) // 4
 
         # Channel D: Skill matching
-        keywords = Bm25Search._extract_keywords(query)
+        keywords = _extract_keywords(query)
         matched_skills = self._match_skills(keywords)
         priming_info["matched_skills"] = matched_skills
 
@@ -598,11 +376,11 @@ async def run_single_search(
     """Run a single search and measure metrics.
 
     Args:
-        searcher: Search engine (Bm25Search, DenseVectorSearch, HybridSearch, PrimingSearchWrapper)
+        searcher: Search engine (DenseVectorSearch or PrimingSearchWrapper)
         query: Search query
         relevant_paths: Ground truth relevant file paths
         top_k: Number of results to retrieve
-        condition: Condition label (A/B/C/D)
+        condition: Condition label (A/B/C)
 
     Returns:
         Dict with search results and metrics
@@ -614,7 +392,7 @@ async def run_single_search(
 
     priming_info = None
 
-    if condition == "D":
+    if condition == "C":
         # PrimingSearchWrapper returns tuple
         results, priming_info = await searcher.search(query, top_k=top_k)
     else:
@@ -682,7 +460,7 @@ async def run_trial(
 
     Args:
         trial_id: Trial number
-        condition: Condition label (A/B/C/D)
+        condition: Condition label (A/B/C)
         searcher: Search engine instance
         scenarios: List of scenarios to execute
         top_k: Number of results to retrieve
@@ -849,10 +627,9 @@ async def run_scalability_test(
     logger.info("Running scalability test for domain=%s", base_domain)
 
     results: dict[str, list[dict[str, float]]] = {
-        "bm25": [],
         "vector": [],
-        "hybrid": [],
-        "hybrid_priming": [],
+        "vector_spreading": [],
+        "vector_priming": [],
     }
 
     sizes = ["small", "medium"]
@@ -899,19 +676,12 @@ async def run_scalability_test(
 
         # Run each condition
         for cond_name, cond_key in [
-            ("A", "bm25"),
-            ("B", "vector"),
-            ("C", "hybrid"),
-            ("D", "hybrid_priming"),
+            ("A", "vector"),
+            ("B", "vector_spreading"),
+            ("C", "vector_priming"),
         ]:
-            if cond_key == "bm25":
-                searcher = Bm25Search(search_dir)
-                searcher.index_documents(documents)
-            elif cond_key == "vector":
+            if cond_key in ("vector", "vector_spreading"):
                 searcher = DenseVectorSearch()
-                searcher.index_documents(documents)
-            elif cond_key == "hybrid":
-                searcher = HybridSearch(search_dir)
                 searcher.index_documents(documents)
             else:
                 searcher = PrimingSearchWrapper(search_dir, person_dir)
@@ -1360,28 +1130,28 @@ def generate_processed_results(
 
     logger.info("Summary statistics saved")
 
-    # ── Hypothesis H1: Priming effect on latency ─────────────────────
+    # ── Hypothesis H1: Spreading activation effect on precision (A vs B) ──
     from tests.evaluation.framework.analysis import StatisticalAnalyzer
 
     analyzer = StatisticalAnalyzer(alpha=0.05)
 
-    # Use per-trial mean latencies for paired comparison
+    # Use per-trial mean precisions for paired comparison
     h1_result = {}
-    if "C" in all_trial_results and "D" in all_trial_results:
-        hybrid_trial_means = [
-            float(np.mean(t.latencies)) for t in all_trial_results["C"] if t.latencies
+    if "A" in all_trial_results and "B" in all_trial_results:
+        vector_trial_precs = [
+            float(np.mean(t.precisions)) for t in all_trial_results["A"] if t.precisions
         ]
-        priming_trial_means = [
-            float(np.mean(t.latencies)) for t in all_trial_results["D"] if t.latencies
+        spreading_trial_precs = [
+            float(np.mean(t.precisions)) for t in all_trial_results["B"] if t.precisions
         ]
 
         # Ensure equal lengths for paired test
-        min_len = min(len(hybrid_trial_means), len(priming_trial_means))
+        min_len = min(len(vector_trial_precs), len(spreading_trial_precs))
         if min_len >= 2:
             try:
                 h1_result = analyzer.hypothesis_h1_priming_effect(
-                    latencies_hybrid=hybrid_trial_means[:min_len],
-                    latencies_hybrid_priming=priming_trial_means[:min_len],
+                    latencies_hybrid=vector_trial_precs[:min_len],
+                    latencies_hybrid_priming=spreading_trial_precs[:min_len],
                 )
             except Exception as e:
                 logger.warning("H1 test failed: %s", e)
@@ -1390,39 +1160,26 @@ def generate_processed_results(
     with open(PROCESSED_DIR / "hypothesis_h1_results.json", "w", encoding="utf-8") as f:
         json.dump(h1_result, f, indent=2, ensure_ascii=False)
 
-    # ── Hypothesis H2: Hybrid search superiority ─────────────────────
+    # ── Hypothesis H2: Spreading activation latency overhead (A vs B) ──
     h2_result = {}
-    if (
-        "A" in all_trial_results
-        and "B" in all_trial_results
-        and "C" in all_trial_results
-    ):
-        bm25_trial_precs = [
-            float(np.mean(t.precisions))
+    if "A" in all_trial_results and "B" in all_trial_results:
+        vector_trial_lats = [
+            float(np.mean(t.latencies))
             for t in all_trial_results["A"]
-            if t.precisions
+            if t.latencies
         ]
-        vector_trial_precs = [
-            float(np.mean(t.precisions))
+        spreading_trial_lats = [
+            float(np.mean(t.latencies))
             for t in all_trial_results["B"]
-            if t.precisions
-        ]
-        hybrid_trial_precs = [
-            float(np.mean(t.precisions))
-            for t in all_trial_results["C"]
-            if t.precisions
+            if t.latencies
         ]
 
-        if (
-            len(bm25_trial_precs) >= 2
-            and len(vector_trial_precs) >= 2
-            and len(hybrid_trial_precs) >= 2
-        ):
+        min_len = min(len(vector_trial_lats), len(spreading_trial_lats))
+        if min_len >= 2:
             try:
-                h2_result = analyzer.hypothesis_h2_hybrid_search(
-                    precision_bm25=bm25_trial_precs,
-                    precision_vector=vector_trial_precs,
-                    precision_hybrid=hybrid_trial_precs,
+                h2_result = analyzer.hypothesis_h1_priming_effect(
+                    latencies_hybrid=vector_trial_lats[:min_len],
+                    latencies_hybrid_priming=spreading_trial_lats[:min_len],
                 )
             except Exception as e:
                 logger.warning("H2 test failed: %s", e)
@@ -1484,13 +1241,11 @@ def generate_figures(
         "A": colors[0],  # Blue
         "B": colors[1],  # Orange
         "C": colors[2],  # Green
-        "D": colors[3],  # Red
     }
     condition_labels = {
-        "A": "BM25",
-        "B": "Vector",
-        "C": "Hybrid",
-        "D": "Hybrid+Priming",
+        "A": "Dense Vector",
+        "B": "Vector+Spreading",
+        "C": "Vector+Priming",
     }
 
     # ── Figure 1: Latency Comparison ──────────────────────────────────
@@ -1511,7 +1266,7 @@ def generate_figures(
 
         # Box plot
         ax1 = axes[0]
-        order = ["A", "B", "C", "D"]
+        order = ["A", "B", "C"]
         palette = [condition_colors[c] for c in order]
         sns.boxplot(
             data=latency_df,
@@ -1567,7 +1322,7 @@ def generate_figures(
         stds = []
         labels = []
         bar_colors = []
-        for cond in ["A", "B", "C", "D"]:
+        for cond in ["A", "B", "C"]:
             vals = metric_dict.get(cond, [])
             means.append(float(np.mean(vals)) if vals else 0.0)
             stds.append(float(np.std(vals)) if vals else 0.0)
@@ -1603,10 +1358,9 @@ def generate_figures(
         fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
         cond_key_map = {
-            "bm25": ("A", "BM25"),
-            "vector": ("B", "Vector"),
-            "hybrid": ("C", "Hybrid"),
-            "hybrid_priming": ("D", "Hybrid+Priming"),
+            "vector": ("A", "Dense Vector"),
+            "vector_spreading": ("B", "Vector+Spreading"),
+            "vector_priming": ("C", "Vector+Priming"),
         }
 
         # Latency vs file count
@@ -1675,12 +1429,12 @@ def generate_figures(
     token_colors = []
     token_stds = []
 
-    for cond in ["A", "B", "C", "D"]:
+    for cond in ["A", "B", "C"]:
         trials = all_trial_results.get(cond, [])
         all_tokens = [t for trial in trials for t in trial.token_counts]
 
-        # Add priming tokens for condition D
-        if cond == "D":
+        # Add priming tokens for condition C
+        if cond == "C":
             priming_tok = [t for trial in trials for t in trial.priming_tokens]
             all_tokens = [
                 a + b for a, b in zip(all_tokens, priming_tok)
@@ -1727,45 +1481,43 @@ def generate_figures(
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-    # H1: Priming latency comparison
+    # H1: Spreading activation precision comparison (A vs B)
     ax1 = axes[0, 0]
     if h1 and "mean_hybrid" in h1:
         bars = ax1.bar(
-            ["Hybrid", "Hybrid+Priming"],
+            ["Dense Vector", "Vector+Spreading"],
             [h1["mean_hybrid"], h1["mean_priming"]],
-            color=[condition_colors["C"], condition_colors["D"]],
+            color=[condition_colors["A"], condition_colors["B"]],
         )
         p_text = f"p={h1['p_value']:.4f}" if "p_value" in h1 else ""
         d_text = f"d={h1['effect_size']:.2f}" if "effect_size" in h1 else ""
-        ax1.set_title(f"H1: Priming Effect on Latency\n({p_text}, {d_text})")
-        ax1.set_ylabel("Mean Latency (ms)")
+        ax1.set_title(f"H1: Spreading Activation Effect on Precision\n({p_text}, {d_text})")
+        ax1.set_ylabel("Mean Precision@3")
         if h1.get("significant"):
             y_max = max(h1["mean_hybrid"], h1["mean_priming"]) * 1.15
             ax1.plot([0, 1], [y_max, y_max], "k-", linewidth=1)
             ax1.text(0.5, y_max * 1.01, "*", ha="center", fontsize=14)
     else:
         ax1.text(0.5, 0.5, "No H1 data", ha="center", va="center", transform=ax1.transAxes)
-        ax1.set_title("H1: Priming Effect on Latency")
+        ax1.set_title("H1: Spreading Activation Effect on Precision")
 
     ax1.grid(True, axis="y", alpha=0.3)
 
-    # H2: Precision comparison
+    # H2: Spreading activation latency overhead (A vs B)
     ax2 = axes[0, 1]
-    if h2 and "mean_precision" in h2:
-        precs = h2["mean_precision"]
+    if h2 and "mean_hybrid" in h2:
         bars = ax2.bar(
-            ["BM25", "Vector", "Hybrid"],
-            [precs["bm25"], precs["vector"], precs["hybrid"]],
-            color=[condition_colors["A"], condition_colors["B"], condition_colors["C"]],
+            ["Dense Vector", "Vector+Spreading"],
+            [h2["mean_hybrid"], h2["mean_priming"]],
+            color=[condition_colors["A"], condition_colors["B"]],
         )
         p_text = f"p={h2['p_value']:.4f}" if "p_value" in h2 else ""
-        eta_text = f"eta2={h2['eta_squared']:.3f}" if "eta_squared" in h2 else ""
-        ax2.set_title(f"H2: Hybrid Search Superiority\n({p_text}, {eta_text})")
-        ax2.set_ylabel("Mean Precision@3")
-        ax2.set_ylim([0, 1.0])
+        d_text = f"d={h2['effect_size']:.2f}" if "effect_size" in h2 else ""
+        ax2.set_title(f"H2: Spreading Activation Latency Overhead\n({p_text}, {d_text})")
+        ax2.set_ylabel("Mean Latency (ms)")
     else:
         ax2.text(0.5, 0.5, "No H2 data", ha="center", va="center", transform=ax2.transAxes)
-        ax2.set_title("H2: Hybrid Search Superiority")
+        ax2.set_title("H2: Spreading Activation Latency Overhead")
 
     ax2.grid(True, axis="y", alpha=0.3)
 
@@ -1799,17 +1551,17 @@ def generate_figures(
     effect_colors_list = []
 
     if h1 and "effect_size" in h1:
-        effect_names.append(f"H1: Priming\n(Cohen's d)")
+        effect_names.append(f"H1: Spreading\n(Cohen's d)")
         effect_values.append(h1["effect_size"])
-        effect_colors_list.append(condition_colors["D"])
-    if h2 and "eta_squared" in h2:
-        effect_names.append(f"H2: Hybrid\n(eta-sq)")
-        effect_values.append(h2["eta_squared"])
-        effect_colors_list.append(condition_colors["C"])
+        effect_colors_list.append(condition_colors["B"])
+    if h2 and "effect_size" in h2:
+        effect_names.append(f"H2: Latency\n(Cohen's d)")
+        effect_values.append(h2["effect_size"])
+        effect_colors_list.append(condition_colors["B"])
     if h3 and "effect_size" in h3:
         effect_names.append(f"H3: Consolidation\n(Cohen's d)")
         effect_values.append(h3["effect_size"])
-        effect_colors_list.append(condition_colors["B"])
+        effect_colors_list.append(condition_colors["A"])
 
     if effect_names:
         ax4.barh(effect_names, effect_values, color=effect_colors_list)
@@ -1925,14 +1677,12 @@ async def main() -> None:
         "A": [],
         "B": [],
         "C": [],
-        "D": [],
     }
 
     conditions = [
-        ("A", "BM25 Only"),
-        ("B", "Dense Vector (e5-small)"),
-        ("C", "Hybrid Search (BM25 + Vector + Temporal Decay + RRF)"),
-        ("D", "Hybrid + Priming (4-channel parallel)"),
+        ("A", "Dense Vector (e5-small)"),
+        ("B", "Dense Vector + Spreading Activation"),
+        ("C", "Dense Vector + Priming (4-channel)"),
     ]
 
     for cond_label, cond_desc in conditions:
@@ -1987,16 +1737,13 @@ async def main() -> None:
             person_dir = search_dir
 
             # Create appropriate searcher
-            if cond_label == "A":
-                searcher = Bm25Search(search_dir)
-                searcher.index_documents(documents)
-            elif cond_label == "B":
+            if cond_label in ("A", "B"):
+                # A: Dense Vector baseline
+                # B: Dense Vector + Spreading (spreading activation
+                #    happens at retriever level; same engine here)
                 searcher = DenseVectorSearch()
                 searcher.index_documents(documents)
-            elif cond_label == "C":
-                searcher = HybridSearch(search_dir)
-                searcher.index_documents(documents)
-            else:  # D
+            else:  # C
                 searcher = PrimingSearchWrapper(search_dir, person_dir)
                 searcher.index_documents(documents)
 

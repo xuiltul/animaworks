@@ -461,8 +461,14 @@ async def test_priming_with_vector_search(temp_person_dir, temp_vector_store):
     knowledge_dir = temp_person_dir / "knowledge"
     indexer.index_directory(knowledge_dir, "knowledge")
 
-    # Create priming engine
+    # Create priming engine and inject retriever using the same vector store
     engine = PrimingEngine(temp_person_dir)
+
+    from core.memory.rag.retriever import MemoryRetriever
+
+    engine._retriever = MemoryRetriever(
+        temp_vector_store, indexer, temp_person_dir / "knowledge"
+    )
 
     # Prime memories
     result = await engine.prime_memories(

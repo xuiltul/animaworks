@@ -51,8 +51,8 @@ def temp_person_dir():
         knowledge_file.write_text(
             "# プライミングレイヤー\n\n"
             "自動想起メカニズムを実装する。\n"
-            "BM25とベクトル検索のハイブリッドを使用する。\n"
-            "Phase 1ではBM25のみ実装。\n",
+            "Dense Vectorベースの意味検索を使用する。\n"
+            "ChromaDBとmultilingual-e5-smallで実装。\n",
             encoding="utf-8",
         )
 
@@ -210,9 +210,9 @@ def test_keyword_extraction(temp_person_dir, temp_shared_dir):
     assert "search" in keywords2 or "information" in keywords2 or "RAG" in keywords2
 
     # Mixed text with spaces
-    keywords3 = engine._extract_keywords("BM25 ベクトル 検索")
+    keywords3 = engine._extract_keywords("ChromaDB ベクトル 検索")
     print(f"\nMixed keywords: {keywords3}")
-    assert "BM25" in keywords3
+    assert "ChromaDB" in keywords3
     assert "ベクトル" in keywords3 or "検索" in keywords3
 
     # Web search - extracts as single token

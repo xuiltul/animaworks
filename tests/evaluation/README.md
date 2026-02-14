@@ -7,10 +7,9 @@ This directory contains the implementation of the memory performance evaluation 
 
 The framework provides a comprehensive system for evaluating the performance of AnimaWorks' memory system across four experimental conditions:
 
-- **Condition A**: BM25 search only (baseline)
-- **Condition B**: Vector search only
-- **Condition C**: Hybrid search (BM25 + Vector + Recency)
-- **Condition D**: Hybrid search + Priming layer
+- **Condition A**: Dense Vector search (baseline)
+- **Condition B**: Dense Vector + Spreading Activation
+- **Condition C**: Dense Vector + Spreading Activation + Priming layer
 
 ## Directory Structure
 

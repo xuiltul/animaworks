@@ -78,14 +78,14 @@ def person_dir(tmp_path: Path) -> Path:
         """# プライミングレイヤー設計
 
 ## Phase 1: 自動想起
-- BM25ベースのキーワード検索
+- Dense Vectorベースの意味検索
 - 4チャネル並列実行
 - 200ms以内の応答
 
 ## Phase 2: RAG統合
-- ベクトル検索とBM25のハイブリッド
-- RRF (Reciprocal Rank Fusion) で統合
-- ChromaDB使用
+- ChromaDB + multilingual-e5-small による密ベクトル検索
+- 時間減衰による新しい記憶の優先
+- 拡散活性化による関連記憶の発見
 
 ## Phase 3: 拡散活性化
 - 知識グラフによる関連記憶の発見
