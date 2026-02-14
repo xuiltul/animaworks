@@ -38,7 +38,7 @@ class TestListAssets:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/nobody/assets")
         assert resp.status_code == 404
-        assert resp.json()["error"] == "Person not found"
+        assert resp.json()["detail"] == "Person not found: nobody"
 
     async def test_no_assets_dir(self, tmp_path):
         person_dir = tmp_path / "alice"
@@ -239,7 +239,7 @@ class TestGenerateAssets:
                 json={},
             )
         assert resp.status_code == 400
-        assert "prompt is required" in resp.json()["error"]
+        assert "prompt is required" in resp.json()["detail"]
 
     @patch("core.tools.image_gen.ImageGenPipeline")
     async def test_generate_success(self, mock_pipeline_cls, tmp_path):

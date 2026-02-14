@@ -101,8 +101,8 @@ class TestCmdList:
         cmd_list(args)
         mock_local.assert_called_once()
 
-    @patch("httpx.get")
-    def test_list_remote(self, mock_get, capsys):
+    @patch("httpx.request")
+    def test_list_remote(self, mock_request, capsys):
         from cli.commands.messaging import cmd_list
 
         mock_resp = MagicMock()
@@ -110,7 +110,7 @@ class TestCmdList:
             {"name": "alice", "status": "idle"},
             {"name": "bob", "status": "busy"},
         ]
-        mock_get.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         args = argparse.Namespace(
             local=False, gateway_url="http://localhost:18500"
@@ -173,8 +173,8 @@ class TestListLocal:
 
 
 class TestCmdStatus:
-    @patch("httpx.get")
-    def test_status_success(self, mock_get, capsys):
+    @patch("httpx.request")
+    def test_status_success(self, mock_request, capsys):
         from cli.commands.messaging import cmd_status
 
         mock_resp = MagicMock()
@@ -183,7 +183,7 @@ class TestCmdStatus:
             "scheduler_running": True,
             "jobs": [{"id": "hb1", "name": "heartbeat", "next_run": "2026-01-01"}],
         }
-        mock_get.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         args = argparse.Namespace(gateway_url="http://localhost:18500")
         cmd_status(args)

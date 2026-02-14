@@ -281,8 +281,8 @@ class TestExecuteContextTracking:
 
         with patch("anthropic.AsyncAnthropic") as mock_cls, \
              patch("core.execution.anthropic_fallback.build_system_prompt", return_value="sys"), \
-             patch("core.execution.anthropic_fallback.inject_shortterm", return_value="sys+st"), \
-             patch("core.execution.anthropic_fallback.load_prompt", return_value="continue"):
+             patch("core.execution._session.inject_shortterm", return_value="sys+st"), \
+             patch("core.execution._session.load_prompt", return_value="continue"):
             mock_client = MagicMock()
             mock_client.messages = MagicMock()
             mock_client.messages.create = AsyncMock(

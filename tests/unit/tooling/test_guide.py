@@ -106,57 +106,52 @@ class TestLoadToolSchemas:
         mock_ext.assert_called_once_with(["web_search"])
         assert len(result) == 1
 
-    @patch("core.tooling.guide._import_file")
+    @patch("core.tooling.schemas.load_personal_tool_schemas")
     @patch("core.tooling.schemas.load_external_schemas")
-    def test_includes_personal_tool_schemas(self, mock_ext, mock_import):
+    def test_includes_personal_tool_schemas(self, mock_ext, mock_personal):
         mock_ext.return_value = []
-        mock_mod = MagicMock()
-        mock_mod.get_tool_schemas.return_value = [
+        mock_personal.return_value = [
             {
                 "name": "my_tool",
                 "description": "My personal tool",
-                "input_schema": {"type": "object", "properties": {}},
+                "parameters": {"type": "object", "properties": {}},
             }
         ]
-        mock_import.return_value = mock_mod
 
         result = load_tool_schemas([], {"my_tool": "/path/to/tool.py"})
         assert len(result) == 1
         assert result[0]["name"] == "my_tool"
         assert result[0]["parameters"] == {"type": "object", "properties": {}}
 
-    @patch("core.tooling.guide._import_file")
+    @patch("core.tooling.schemas.load_personal_tool_schemas")
     @patch("core.tooling.schemas.load_external_schemas")
-    def test_personal_tool_without_get_tool_schemas(self, mock_ext, mock_import):
+    def test_personal_tool_without_get_tool_schemas(self, mock_ext, mock_personal):
         mock_ext.return_value = []
-        mock_mod = MagicMock(spec=[])  # No get_tool_schemas
-        mock_import.return_value = mock_mod
+        mock_personal.return_value = []
 
         result = load_tool_schemas([], {"my_tool": "/path/to/tool.py"})
         assert result == []
 
-    @patch("core.tooling.guide._import_file")
+    @patch("core.tooling.schemas.load_personal_tool_schemas")
     @patch("core.tooling.schemas.load_external_schemas")
-    def test_personal_tool_import_error(self, mock_ext, mock_import):
+    def test_personal_tool_import_error(self, mock_ext, mock_personal):
         mock_ext.return_value = []
-        mock_import.side_effect = ImportError("no module")
+        mock_personal.return_value = []
 
         result = load_tool_schemas([], {"my_tool": "/path/to/tool.py"})
         assert result == []
 
-    @patch("core.tooling.guide._import_file")
+    @patch("core.tooling.schemas.load_personal_tool_schemas")
     @patch("core.tooling.schemas.load_external_schemas")
-    def test_personal_tool_uses_parameters_fallback(self, mock_ext, mock_import):
+    def test_personal_tool_uses_parameters_fallback(self, mock_ext, mock_personal):
         mock_ext.return_value = []
-        mock_mod = MagicMock()
-        mock_mod.get_tool_schemas.return_value = [
+        mock_personal.return_value = [
             {
                 "name": "my_tool",
                 "description": "Tool",
                 "parameters": {"type": "object"},
             }
         ]
-        mock_import.return_value = mock_mod
 
         result = load_tool_schemas([], {"my_tool": "/path/to/tool.py"})
         assert result[0]["parameters"] == {"type": "object"}

@@ -61,7 +61,8 @@ class TestEpisodes:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/nobody/episodes")
-        assert resp.json()["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"
 
     async def test_get_episode_success(self, tmp_path):
         person_dir = tmp_path / "alice"
@@ -90,7 +91,8 @@ class TestEpisodes:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/alice/episodes/9999-01-01")
-        assert resp.json()["error"] == "Episode not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Episode not found"
 
 
 # ── Knowledge ────────────────────────────────────────────
@@ -132,7 +134,8 @@ class TestKnowledge:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/alice/knowledge/nonexistent")
-        assert resp.json()["error"] == "Knowledge not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Knowledge not found"
 
 
 # ── Procedures ───────────────────────────────────────────
@@ -174,7 +177,8 @@ class TestProcedures:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/alice/procedures/nonexistent")
-        assert resp.json()["error"] == "Procedure not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Procedure not found"
 
 
 # ── Conversation ─────────────────────────────────────────
@@ -186,7 +190,8 @@ class TestConversation:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/nobody/conversation")
-        assert resp.json()["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"
 
     @patch("server.routes.memory_routes.ConversationMemory", create=True)
     async def test_get_conversation_success(self, mock_conv_cls):
@@ -228,11 +233,13 @@ class TestConversation:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.delete("/api/persons/nobody/conversation")
-        assert resp.json()["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"
 
     async def test_compress_conversation_person_not_found(self):
         app = _make_test_app({})
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/api/persons/nobody/conversation/compress")
-        assert resp.json()["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"

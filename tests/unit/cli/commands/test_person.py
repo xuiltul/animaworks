@@ -204,13 +204,13 @@ class TestCmdChat:
         with pytest.raises(SystemExit):
             cmd_chat(args)
 
-    @patch("httpx.post")
-    def test_chat_remote(self, mock_post, capsys):
+    @patch("httpx.request")
+    def test_chat_remote(self, mock_request, capsys):
         from cli.commands.person import cmd_chat
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"response": "Remote reply"}
-        mock_post.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         args = argparse.Namespace(
             local=False, person="alice", message="Hi",
@@ -283,13 +283,13 @@ class TestCmdHeartbeat:
         with pytest.raises(SystemExit):
             cmd_heartbeat(args)
 
-    @patch("httpx.post")
-    def test_heartbeat_remote(self, mock_post, capsys):
+    @patch("httpx.request")
+    def test_heartbeat_remote(self, mock_request, capsys):
         from cli.commands.person import cmd_heartbeat
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"action": "skip"}
-        mock_post.return_value = mock_resp
+        mock_request.return_value = mock_resp
 
         args = argparse.Namespace(
             local=False, person="alice", gateway_url="http://localhost:18500",

@@ -227,10 +227,11 @@ class TestExecuteContextTracking:
         resp_final = make_litellm_response(content="Continued", prompt_tokens=1000)
 
         mock = AsyncMock(side_effect=[resp_threshold, resp_final])
+        _install_litellm_mock(mock)
         with patch("litellm.acompletion", mock), \
              patch("core.execution.litellm_loop.build_system_prompt", return_value="sys"), \
-             patch("core.execution.litellm_loop.inject_shortterm", return_value="sys+st"), \
-             patch("core.execution.litellm_loop.load_prompt", return_value="continue"):
+             patch("core.execution._session.inject_shortterm", return_value="sys+st"), \
+             patch("core.execution._session.load_prompt", return_value="continue"):
             result = await executor.execute(
                 "test", system_prompt="sys", tracker=tracker, shortterm=shortterm,
             )

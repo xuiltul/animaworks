@@ -45,10 +45,11 @@ class TestListSessions:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/nobody/sessions")
-        assert resp.json()["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"
 
-    @patch("core.memory.conversation.ConversationMemory")
-    @patch("core.memory.shortterm.ShortTermMemory")
+    @patch("server.routes.sessions.ConversationMemory")
+    @patch("server.routes.sessions.ShortTermMemory")
     async def test_list_sessions_empty(self, mock_stm_cls, mock_conv_cls, tmp_path):
         person_dir = tmp_path / "alice"
         person_dir.mkdir()
@@ -82,8 +83,8 @@ class TestListSessions:
         assert data["episodes"] == []
         assert data["transcripts"] == []
 
-    @patch("core.memory.conversation.ConversationMemory")
-    @patch("core.memory.shortterm.ShortTermMemory")
+    @patch("server.routes.sessions.ConversationMemory")
+    @patch("server.routes.sessions.ShortTermMemory")
     async def test_list_sessions_with_active_conversation(
         self, mock_stm_cls, mock_conv_cls, tmp_path
     ):
@@ -130,9 +131,10 @@ class TestGetSessionDetail:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/nobody/sessions/123")
-        assert resp.json()["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"
 
-    @patch("core.memory.shortterm.ShortTermMemory")
+    @patch("server.routes.sessions.ShortTermMemory")
     async def test_session_not_found(self, mock_stm_cls, tmp_path):
         person_dir = tmp_path / "alice"
         person_dir.mkdir()
@@ -149,9 +151,10 @@ class TestGetSessionDetail:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/alice/sessions/nonexistent")
-        assert resp.json()["error"] == "Session not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Session not found"
 
-    @patch("core.memory.shortterm.ShortTermMemory")
+    @patch("server.routes.sessions.ShortTermMemory")
     async def test_session_detail_success(self, mock_stm_cls, tmp_path):
         person_dir = tmp_path / "alice"
         person_dir.mkdir()
@@ -181,7 +184,7 @@ class TestGetSessionDetail:
         assert data["data"]["trigger"] == "heartbeat"
         assert data["markdown"] == "# Session log"
 
-    @patch("core.memory.shortterm.ShortTermMemory")
+    @patch("server.routes.sessions.ShortTermMemory")
     async def test_session_corrupted_json(self, mock_stm_cls, tmp_path):
         person_dir = tmp_path / "alice"
         person_dir.mkdir()
@@ -200,7 +203,8 @@ class TestGetSessionDetail:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/alice/sessions/bad")
-        assert resp.json()["error"] == "Session data corrupted"
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "Session data corrupted"
 
 
 # ── GET /persons/{name}/transcripts/{date} ───────────────
@@ -212,9 +216,10 @@ class TestGetTranscript:
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/api/persons/nobody/transcripts/2026-01-01")
-        assert resp.json()["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"
 
-    @patch("core.memory.conversation.ConversationMemory")
+    @patch("server.routes.sessions.ConversationMemory")
     async def test_get_transcript_success(self, mock_conv_cls):
         alice = _make_mock_person("alice")
 

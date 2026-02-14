@@ -76,8 +76,8 @@ class TestChat:
                 "/api/persons/nobody/chat",
                 json={"message": "Hi"},
             )
-        data = resp.json()
-        assert data["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"
 
     async def test_chat_broadcasts_status(self):
         alice = _make_mock_person("alice")
@@ -117,8 +117,8 @@ class TestChatStream:
                 "/api/persons/nobody/chat/stream",
                 json={"message": "Hi"},
             )
-        data = resp.json()
-        assert data["error"] == "Person not found"
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Person not found: nobody"
 
     async def test_stream_success(self):
         alice = _make_mock_person("alice")
