@@ -387,3 +387,107 @@ class ConversationMemory:
         )
 
         return "\n".join(b.text for b in response.content if b.type == "text")
+
+    # ── Session finalization (automatic episode recording) ─────
+
+    async def finalize_session(
+        self,
+        min_turns: int = 2,
+    ) -> bool:
+        """Finalize the current conversation session.
+
+        Summarizes the conversation using LLM and appends to episodes/{date}.md.
+        This implements immediate encoding (即時符号化) from the design.
+
+        Args:
+            min_turns: Minimum number of turns to trigger summarization.
+                       Short conversations (greetings) are skipped.
+
+        Returns:
+            True if session was finalized and written to episodes/, False if skipped.
+        """
+        state = self.load()
+
+        # Skip if conversation is too short
+        if len(state.turns) < min_turns:
+            logger.debug(
+                "Session finalization skipped: only %d turns (min %d)",
+                len(state.turns),
+                min_turns,
+            )
+            return False
+
+        # Generate summary
+        try:
+            summary = await self._summarize_session(state.turns)
+        except Exception:
+            logger.exception("Failed to summarize session; skipping episode write")
+            return False
+
+        # Write to episodes/{date}.md
+        from core.memory.manager import MemoryManager
+
+        memory_mgr = MemoryManager(self.person_dir)
+        timestamp = datetime.now()
+        time_str = timestamp.strftime("%H:%M")
+
+        # Extract title from summary (first line, up to 50 chars)
+        summary_lines = summary.strip().splitlines()
+        title = summary_lines[0][:50] if summary_lines else "会話"
+
+        episode_entry = f"## {time_str} — {title}\n\n{summary}\n"
+        memory_mgr.append_episode(episode_entry)
+
+        logger.info(
+            "Session finalized: %d turns summarized and written to episodes/%s.md",
+            len(state.turns),
+            date.today().isoformat(),
+        )
+
+        return True
+
+    async def _summarize_session(self, turns: list[ConversationTurn]) -> str:
+        """Summarize a conversation session for episode recording.
+
+        Uses a cheap model (fallback_model or main model) to generate
+        a structured summary of the conversation.
+        """
+        import anthropic
+
+        model = self.model_config.fallback_model or self.model_config.model
+        api_key = self.model_config.api_key
+        if not api_key:
+            api_key = os.environ.get(self.model_config.api_key_env)
+
+        client_kwargs: dict[str, str] = {}
+        if api_key:
+            client_kwargs["api_key"] = api_key
+        if self.model_config.api_base_url:
+            client_kwargs["base_url"] = self.model_config.api_base_url
+
+        client = anthropic.AsyncAnthropic(**client_kwargs)
+
+        # Format turns for summarization
+        conversation_text = self._format_turns_for_compression(turns)
+
+        system = (
+            "あなたは会話記録の要約者です。以下の会話をエピソード記憶として記録するための要約を作成してください。\n\n"
+            "出力形式:\n"
+            "**相手**: {相手の名前}\n"
+            "**トピック**: {主なトピック、カンマ区切り}\n"
+            "**要点**:\n"
+            "- {要点1}\n"
+            "- {要点2}\n"
+            "**決定事項**: {決定事項があれば}\n"
+            "**未解決**: {未解決事項があれば}\n\n"
+            "日本語で、簡潔に、事実を中心に記述してください。"
+        )
+
+        response = await client.messages.create(
+            model=model,
+            max_tokens=1000,
+            system=system,
+            messages=[{"role": "user", "content": conversation_text}],
+        )
+
+        return "\n".join(b.text for b in response.content if b.type == "text")

@@ -46,6 +46,7 @@ def build_system_prompt(
     memory: MemoryManager,
     tool_registry: list[str] | None = None,
     personal_tools: dict[str, str] | None = None,
+    priming_section: str = "",
 ) -> str:
     """Construct the full system prompt from Markdown files.
 
@@ -56,6 +57,7 @@ def build_system_prompt(
         + injection.md (role/philosophy)
         + permissions.md (what you can do)
         + state/current_task.md (what you're doing now)
+        + priming memories (automatic recall) ← NEW
         + memory directory guide
         + personal skills + common skills
         + behavior rules (search-before-decide)
@@ -100,6 +102,10 @@ def build_system_prompt(
     pending = memory.read_pending()
     if pending:
         parts.append(f"## 未完了タスク\n\n{pending}")
+
+    # Priming section (automatic memory recall)
+    if priming_section:
+        parts.append(priming_section)
 
     # Memory directory guide
     knowledge_list = ", ".join(memory.list_knowledge_files()) or "(なし)"

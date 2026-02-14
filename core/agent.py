@@ -252,6 +252,76 @@ class AgentCore:
             return self.model_config.api_key
         return os.environ.get(self.model_config.api_key_env)
 
+    async def _run_priming(self, prompt: str, trigger: str) -> str:
+        """Run priming layer to automatically retrieve relevant memories.
+
+        Args:
+            prompt: The user message (may include conversation history)
+            trigger: Trigger type (e.g., "message:山田")
+
+        Returns:
+            Formatted priming section for system prompt injection, or empty string.
+        """
+        from core.memory.priming import PrimingEngine, format_priming_section
+
+        # Extract sender name from trigger (format: "message:sender_name")
+        sender_name = "human"
+        if trigger.startswith("message:"):
+            sender_name = trigger.split(":", 1)[1]
+
+        # Extract the actual message content from prompt
+        # The prompt may contain conversation history, so we need to extract the latest message
+        message = self._extract_message_from_prompt(prompt)
+
+        try:
+            engine = PrimingEngine(self.person_dir)
+            result = await engine.prime_memories(message, sender_name)
+
+            if result.is_empty():
+                logger.debug("Priming: No memories found")
+                return ""
+
+            formatted = format_priming_section(result, sender_name)
+            logger.info(
+                "Priming: Retrieved %d tokens of memories",
+                result.estimated_tokens(),
+            )
+            return formatted
+
+        except Exception:
+            logger.exception("Priming failed; continuing without primed memories")
+            return ""
+
+    def _extract_message_from_prompt(self, prompt: str) -> str:
+        """Extract the latest message content from a chat prompt.
+
+        The prompt from ConversationMemory.build_chat_prompt() has format:
+        - If no history: just the message content
+        - If history: conversation history + separator + latest message
+
+        We want to extract just the latest message for keyword extraction.
+        """
+        # Look for the pattern "**[HH:MM] from_person:**" which marks conversation history
+        # The actual message is typically after the last history entry
+        lines = prompt.strip().splitlines()
+
+        # If there's no history marker, the whole prompt is the message
+        if not any("**[" in line and "]" in line and ":**" in line for line in lines):
+            return prompt
+
+        # Find the last content block after history
+        # Heuristic: take last paragraph that doesn't look like a history entry
+        in_content = False
+        content_lines = []
+        for line in reversed(lines):
+            if line.startswith("**[") and "]" in line and ":**" in line:
+                # Hit a history entry, stop
+                break
+            if line.strip():
+                content_lines.insert(0, line)
+
+        return "\n".join(content_lines) if content_lines else prompt
+
     # ── Public API ─────────────────────────────────────────
 
     async def run_cycle(
@@ -280,6 +350,9 @@ class AgentCore:
             trigger, len(prompt), mode,
         )
 
+        # ── Priming: Automatic memory retrieval ────────────────
+        priming_section = await self._run_priming(prompt, trigger)
+
         # ── Mode B: assisted (1-shot, no tools) ──────────
         if mode == "b":
             result = await self._executor.execute(prompt=prompt, trigger=trigger)
@@ -301,8 +374,13 @@ class AgentCore:
             threshold=self.model_config.context_threshold,
         )
 
-        # Build system prompt; inject short-term memory from prior session
-        system_prompt = build_system_prompt(self.memory, tool_registry=self._tool_registry, personal_tools=self._personal_tools)
+        # Build system prompt with priming; inject short-term memory from prior session
+        system_prompt = build_system_prompt(
+            self.memory,
+            tool_registry=self._tool_registry,
+            personal_tools=self._personal_tools,
+            priming_section=priming_section,
+        )
         logger.debug("System prompt assembled, length=%d", len(system_prompt))
         if shortterm.has_pending():
             system_prompt = inject_shortterm(system_prompt, shortterm)
@@ -376,7 +454,12 @@ class AgentCore:
 
             tracker.reset()
             system_prompt_2 = inject_shortterm(
-                build_system_prompt(self.memory, tool_registry=self._tool_registry, personal_tools=self._personal_tools),
+                build_system_prompt(
+                    self.memory,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                    priming_section=priming_section,  # Reuse priming from initial session
+                ),
                 shortterm,
             )
             continuation_prompt = load_prompt("session_continuation")
@@ -446,13 +529,21 @@ class AgentCore:
             return
 
         # ── Streaming executor (A1 Agent SDK) ─────────────
+        # Priming: Automatic memory retrieval
+        priming_section = await self._run_priming(prompt, trigger)
+
         shortterm = ShortTermMemory(self.person_dir)
         tracker = ContextTracker(
             model=self.model_config.model,
             threshold=self.model_config.context_threshold,
         )
 
-        system_prompt = build_system_prompt(self.memory, tool_registry=self._tool_registry, personal_tools=self._personal_tools)
+        system_prompt = build_system_prompt(
+            self.memory,
+            tool_registry=self._tool_registry,
+            personal_tools=self._personal_tools,
+            priming_section=priming_section,
+        )
         if shortterm.has_pending():
             system_prompt = inject_shortterm(system_prompt, shortterm)
 
@@ -508,7 +599,12 @@ class AgentCore:
 
             tracker.reset()
             system_prompt_2 = inject_shortterm(
-                build_system_prompt(self.memory, tool_registry=self._tool_registry, personal_tools=self._personal_tools),
+                build_system_prompt(
+                    self.memory,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                    priming_section=priming_section,  # Reuse priming from initial session
+                ),
                 shortterm,
             )
             continuation_prompt = load_prompt("session_continuation")
