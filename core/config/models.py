@@ -90,6 +90,40 @@ class PersonDefaults(BaseModel):
     speciality: str | None = None
 
 
+class RAGConfig(BaseModel):
+    """Configuration for RAG (Retrieval-Augmented Generation) system."""
+
+    enabled: bool = True
+    embedding_model: str = "intfloat/multilingual-e5-small"
+    use_gpu: bool = False
+    enable_spreading_activation: bool = True
+    max_graph_hops: int = 2
+    enable_file_watcher: bool = True
+
+
+class PrimingConfig(BaseModel):
+    """Configuration for priming layer (automatic memory retrieval)."""
+
+    dynamic_budget: bool = True
+    budget_greeting: int = 500
+    budget_question: int = 1500
+    budget_request: int = 3000
+    budget_heartbeat: int = 200
+
+
+class ConsolidationConfig(BaseModel):
+    """Configuration for memory consolidation processes."""
+
+    daily_enabled: bool = True
+    daily_time: str = "02:00"  # Format: HH:MM
+    min_episodes_threshold: int = 1
+    llm_model: str = "anthropic/claude-sonnet-4-20250514"
+    weekly_enabled: bool = True  # Phase 3 implementation
+    weekly_time: str = "sun:03:00"  # Format: day:HH:MM
+    duplicate_threshold: float = 0.85  # Similarity threshold for duplicate detection
+    episode_retention_days: int = 30  # Days to retain uncompressed episodes
+
+
 class AnimaWorksConfig(BaseModel):
     version: int = 1
     system: SystemConfig = SystemConfig()
@@ -97,6 +131,9 @@ class AnimaWorksConfig(BaseModel):
     model_modes: dict[str, str] = {}  # モデル名 → "A1"/"A2"/"B"
     person_defaults: PersonDefaults = PersonDefaults()
     persons: dict[str, PersonModelConfig] = {}
+    consolidation: ConsolidationConfig = ConsolidationConfig()
+    rag: RAGConfig = RAGConfig()
+    priming: PrimingConfig = PrimingConfig()
 
 
 # ---------------------------------------------------------------------------

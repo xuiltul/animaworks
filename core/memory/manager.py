@@ -44,6 +44,27 @@ class MemoryManager:
         ):
             d.mkdir(parents=True, exist_ok=True)
 
+        # Initialize RAG indexer (Phase 2) if available
+        self._indexer = None
+        self._init_indexer()
+
+    # ── RAG indexer initialization ────────────────────────
+
+    def _init_indexer(self) -> None:
+        """Initialize RAG indexer if dependencies are available."""
+        try:
+            from core.memory.rag import MemoryIndexer
+            from core.memory.rag.store import ChromaVectorStore
+
+            vector_store = ChromaVectorStore()
+            person_name = self.person_dir.name
+            self._indexer = MemoryIndexer(vector_store, person_name, self.person_dir)
+            logger.debug("RAG indexer initialized for person=%s", person_name)
+        except ImportError:
+            logger.debug("RAG dependencies not installed, indexing disabled")
+        except Exception as e:
+            logger.warning("Failed to initialize RAG indexer: %s", e)
+
     # ── Read ──────────────────────────────────────────────
 
     def _read(self, path: Path) -> str:
@@ -285,6 +306,13 @@ class MemoryManager:
             f.write(f"\n{entry}\n")
         logger.debug("Episode appended, length=%d", len(entry))
 
+        # Index the updated episode file (incremental)
+        if self._indexer:
+            try:
+                self._indexer.index_file(path, "episodes")
+            except Exception as e:
+                logger.warning("Failed to index episode file: %s", e)
+
     def update_state(self, content: str) -> None:
         (self.state_dir / "current_task.md").write_text(content, encoding="utf-8")
 
@@ -293,8 +321,16 @@ class MemoryManager:
 
     def write_knowledge(self, topic: str, content: str) -> None:
         safe = re.sub(r"[^\w\-_]", "_", topic)
-        (self.knowledge_dir / f"{safe}.md").write_text(content, encoding="utf-8")
+        path = self.knowledge_dir / f"{safe}.md"
+        path.write_text(content, encoding="utf-8")
         logger.debug("Knowledge written topic='%s' length=%d", topic, len(content))
+
+        # Index the new/updated knowledge file
+        if self._indexer:
+            try:
+                self._indexer.index_file(path, "knowledge")
+            except Exception as e:
+                logger.warning("Failed to index knowledge file: %s", e)
 
     # ── Read helpers for Mode B (assisted) ──────────────────
 

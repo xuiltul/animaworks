@@ -26,10 +26,16 @@ logger = logging.getLogger("animaworks.priming")
 
 # ── Token budget configuration ────────────────────────────────
 
-# Maximum tokens for entire priming injection
-_MAX_PRIMING_TOKENS = 2000
+# Default maximum tokens for entire priming injection
+_DEFAULT_MAX_PRIMING_TOKENS = 2000
 
-# Channel-specific token budgets
+# Message type budgets (Phase 3: dynamic budget adjustment)
+_BUDGET_GREETING = 500
+_BUDGET_QUESTION = 1500
+_BUDGET_REQUEST = 3000
+_BUDGET_HEARTBEAT = 200
+
+# Channel-specific token budgets (default distribution)
 _BUDGET_SENDER_PROFILE = 500
 _BUDGET_RECENT_EPISODES = 600
 _BUDGET_RELATED_KNOWLEDGE = 700
@@ -99,21 +105,34 @@ class PrimingEngine:
         self,
         message: str,
         sender_name: str = "human",
+        channel: str = "chat",
+        enable_dynamic_budget: bool = True,
     ) -> PrimingResult:
         """Prime memories based on incoming message.
 
         Args:
             message: The incoming message text
             sender_name: Name of the sender (for sender profile lookup)
+            channel: Message channel (chat, heartbeat, cron, etc.)
+            enable_dynamic_budget: Enable dynamic budget adjustment (Phase 3)
 
         Returns:
             PrimingResult containing primed memories from all channels
         """
         logger.debug(
-            "Priming memories: sender=%s, message_len=%d",
+            "Priming memories: sender=%s, message_len=%d, channel=%s",
             sender_name,
             len(message),
+            channel,
         )
+
+        # Phase 3: Adjust token budget based on message type
+        if enable_dynamic_budget:
+            token_budget = self._adjust_token_budget(message, channel)
+        else:
+            token_budget = _DEFAULT_MAX_PRIMING_TOKENS
+
+        logger.debug("Token budget: %d", token_budget)
 
         # Extract keywords for search (simple rule-based for Phase 1)
         keywords = self._extract_keywords(message)
@@ -138,14 +157,17 @@ class PrimingEngine:
             if isinstance(r, Exception):
                 logger.warning("Priming channel %d failed: %s", i, r)
 
-        # Apply token budget limits
+        # Apply token budget limits (distribute based on budget)
+        budget_profile = int(_BUDGET_SENDER_PROFILE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
+        budget_episodes = int(_BUDGET_RECENT_EPISODES * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
+        budget_knowledge = int(_BUDGET_RELATED_KNOWLEDGE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
+        budget_skills = int(_BUDGET_SKILL_MATCH * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
+
         result = PrimingResult(
-            sender_profile=self._truncate(sender_profile, _BUDGET_SENDER_PROFILE),
-            recent_episodes=self._truncate(recent_episodes, _BUDGET_RECENT_EPISODES),
-            related_knowledge=self._truncate(
-                related_knowledge, _BUDGET_RELATED_KNOWLEDGE
-            ),
-            matched_skills=matched_skills,
+            sender_profile=self._truncate(sender_profile, budget_profile),
+            recent_episodes=self._truncate(recent_episodes, budget_episodes),
+            related_knowledge=self._truncate(related_knowledge, budget_knowledge),
+            matched_skills=matched_skills[:max(1, budget_skills // 50)],  # ~50 tokens per skill name
         )
 
         logger.info(
@@ -229,14 +251,71 @@ class PrimingEngine:
         return result
 
     async def _channel_c_related_knowledge(self, keywords: list[str]) -> str:
-        """Channel C: Related knowledge search (BM25 only for Phase 1).
+        """Channel C: Related knowledge search (Hybrid search for Phase 2).
 
-        Uses ripgrep to search knowledge/ directory for keywords.
+        Uses hybrid retrieval (vector + BM25 + RRF) if available,
+        falls back to BM25-only (ripgrep) if RAG not initialized.
         """
         if not self.knowledge_dir.is_dir() or not keywords:
             logger.debug("Channel C: No knowledge dir or no keywords")
             return ""
 
+        # Try hybrid search first (Phase 2)
+        try:
+            from core.memory.rag import HybridRetriever
+            from core.memory.rag.store import ChromaVectorStore
+            from core.memory.rag.indexer import MemoryIndexer
+
+            # Initialize RAG components if not already done
+            if not hasattr(self, "_hybrid_retriever"):
+                vector_store = ChromaVectorStore()
+                person_name = self.person_dir.name
+                indexer = MemoryIndexer(vector_store, person_name, self.person_dir)
+                self._hybrid_retriever = HybridRetriever(
+                    vector_store, indexer, self.knowledge_dir
+                )
+
+            # Build query from keywords
+            query = " ".join(keywords[:5])
+            person_name = self.person_dir.name
+
+            # Perform hybrid search
+            results = self._hybrid_retriever.search(
+                query=query,
+                person_name=person_name,
+                memory_type="knowledge",
+                top_k=3,
+            )
+
+            if results:
+                # Format results
+                parts = []
+                for i, result in enumerate(results):
+                    parts.append(f"--- Result {i + 1} (score: {result.score:.3f}) ---")
+                    parts.append(result.content)
+                    parts.append("")
+
+                output = "\n".join(parts)
+                logger.debug(
+                    "Channel C: Hybrid search returned %d results (%d chars)",
+                    len(results),
+                    len(output),
+                )
+                return output
+            else:
+                logger.debug("Channel C: Hybrid search found no results")
+                return ""
+
+        except ImportError:
+            logger.debug("Channel C: RAG not installed, falling back to BM25-only")
+        except Exception as e:
+            logger.warning("Channel C: Hybrid search failed, falling back to BM25: %s", e)
+
+        # Fallback to BM25-only (Phase 1 implementation)
+        return await self._bm25_only_search(keywords)
+
+    async def _bm25_only_search(self, keywords: list[str]) -> str:
+        """BM25-only search using ripgrep (Phase 1 fallback)."""
         # Build ripgrep pattern (OR of all keywords)
         # Escape special regex chars
         escaped_keywords = [re.escape(kw) for kw in keywords[:5]]  # Limit to top 5
@@ -262,11 +341,11 @@ class PrimingEngine:
 
             if result.returncode == 0 and result.stdout:
                 logger.debug(
-                    "Channel C: Found knowledge matches (%d chars)", len(result.stdout)
+                    "Channel C: Found BM25 matches (%d chars)", len(result.stdout)
                 )
                 return result.stdout
             else:
-                logger.debug("Channel C: No knowledge matches found")
+                logger.debug("Channel C: No BM25 matches found")
                 return ""
 
         except subprocess.TimeoutExpired:
@@ -357,6 +436,70 @@ class PrimingEngine:
             logger.debug("Channel D: Matched %d skills: %s", len(matched), matched)
 
         return matched
+
+    # ── Dynamic budget adjustment (Phase 3) ─────────────────────
+
+    def _classify_message_type(self, message: str, channel: str) -> str:
+        """Classify message type for budget adjustment.
+
+        Args:
+            message: Message text
+            channel: Message channel
+
+        Returns:
+            Message type: "greeting", "question", "request", "heartbeat"
+        """
+        # Heartbeat channel has fixed budget
+        if channel == "heartbeat":
+            return "heartbeat"
+
+        message_lower = message.lower()
+
+        # Simple greeting patterns
+        greeting_patterns = [
+            "こんにちは", "おはよう", "こんばんは", "よろしく",
+            "hello", "hi", "hey", "good morning", "good evening",
+        ]
+        if any(p in message_lower for p in greeting_patterns) and len(message) < 50:
+            return "greeting"
+
+        # Question patterns
+        question_patterns = [
+            "?", "？", "教えて", "どう", "なぜ", "いつ", "どこ", "誰",
+            "what", "why", "when", "where", "who", "how", "can you",
+        ]
+        if any(p in message_lower for p in question_patterns):
+            return "question"
+
+        # Default to request for longer messages
+        if len(message) > 100:
+            return "request"
+
+        # Default to question
+        return "question"
+
+    def _adjust_token_budget(self, message: str, channel: str) -> int:
+        """Adjust token budget based on message type.
+
+        Args:
+            message: Message text
+            channel: Message channel
+
+        Returns:
+            Adjusted token budget
+        """
+        msg_type = self._classify_message_type(message, channel)
+
+        budget_map = {
+            "greeting": _BUDGET_GREETING,
+            "question": _BUDGET_QUESTION,
+            "request": _BUDGET_REQUEST,
+            "heartbeat": _BUDGET_HEARTBEAT,
+        }
+
+        budget = budget_map.get(msg_type, _DEFAULT_MAX_PRIMING_TOKENS)
+        logger.debug("Message type: %s -> budget: %d", msg_type, budget)
+        return budget
 
     # ── Helpers ──────────────────────────────────────────────────
 

@@ -298,14 +298,169 @@ class LifecycleManager:
             if senders:
                 self._record_pair_heartbeat(name, senders)
 
+    # ── System Crons ──────────────────────────────────────
+
+    def _setup_system_crons(self) -> None:
+        """Set up system-wide cron tasks for memory consolidation."""
+        # Daily consolidation: Every day at 02:00 JST
+        self.scheduler.add_job(
+            self._handle_daily_consolidation,
+            CronTrigger(hour=2, minute=0),
+            id="system_daily_consolidation",
+            name="System: Daily Consolidation",
+            replace_existing=True,
+        )
+        logger.info("System cron: Daily consolidation at 02:00 JST")
+
+        # Weekly integration: Every Sunday at 03:00 JST
+        self.scheduler.add_job(
+            self._handle_weekly_integration,
+            CronTrigger(day_of_week="sun", hour=3, minute=0),
+            id="system_weekly_integration",
+            name="System: Weekly Integration",
+            replace_existing=True,
+        )
+        logger.info("System cron: Weekly integration on Sunday at 03:00 JST")
+
+    async def _handle_daily_consolidation(self) -> None:
+        """Run daily consolidation for all persons."""
+        logger.info("Starting system-wide daily consolidation")
+
+        # Load consolidation config
+        from core.config import load_config
+        config = load_config()
+        consolidation_cfg = getattr(config, "consolidation", None)
+
+        # Default config if not present
+        enabled = True
+        model = "anthropic/claude-sonnet-4-20250514"
+        min_episodes = 1
+
+        if consolidation_cfg:
+            enabled = getattr(consolidation_cfg, "daily_enabled", True)
+            model = getattr(consolidation_cfg, "llm_model", model)
+            min_episodes = getattr(consolidation_cfg, "min_episodes_threshold", 1)
+
+        if not enabled:
+            logger.info("Daily consolidation is disabled in config")
+            return
+
+        # Run consolidation for each person
+        for person_name, person in self.persons.items():
+            try:
+                from core.memory.consolidation import ConsolidationEngine
+
+                engine = ConsolidationEngine(
+                    person_dir=person.memory.person_dir,
+                    person_name=person_name,
+                )
+
+                result = await engine.daily_consolidate(
+                    model=model,
+                    min_episodes=min_episodes,
+                )
+
+                logger.info(
+                    "Daily consolidation for %s: %s",
+                    person_name,
+                    result
+                )
+
+                # Broadcast result via WebSocket
+                if self._ws_broadcast and not result.get("skipped"):
+                    await self._ws_broadcast(
+                        {
+                            "type": "system.consolidation",
+                            "data": {
+                                "person": person_name,
+                                "type": "daily",
+                                "result": result,
+                            },
+                        }
+                    )
+
+            except Exception:
+                logger.exception(
+                    "Daily consolidation failed for person=%s",
+                    person_name
+                )
+
+    async def _handle_weekly_integration(self) -> None:
+        """Run weekly integration for all persons."""
+        logger.info("Starting system-wide weekly integration")
+
+        # Load config
+        from core.config import load_config
+        config = load_config()
+        consolidation_cfg = getattr(config, "consolidation", None)
+
+        # Default config
+        enabled = True  # Phase 3 implementation
+        model = "anthropic/claude-sonnet-4-20250514"
+        duplicate_threshold = 0.85
+        episode_retention_days = 30
+
+        if consolidation_cfg:
+            enabled = getattr(consolidation_cfg, "weekly_enabled", True)
+            model = getattr(consolidation_cfg, "llm_model", model)
+            duplicate_threshold = getattr(consolidation_cfg, "duplicate_threshold", 0.85)
+            episode_retention_days = getattr(consolidation_cfg, "episode_retention_days", 30)
+
+        if not enabled:
+            logger.info("Weekly integration is disabled in config")
+            return
+
+        # Run integration for each person
+        for person_name, person in self.persons.items():
+            try:
+                from core.memory.consolidation import ConsolidationEngine
+
+                engine = ConsolidationEngine(
+                    person_dir=person.memory.person_dir,
+                    person_name=person_name,
+                )
+
+                result = await engine.weekly_integrate(
+                    model=model,
+                    duplicate_threshold=duplicate_threshold,
+                    episode_retention_days=episode_retention_days,
+                )
+
+                logger.info(
+                    "Weekly integration for %s: merged=%d compressed=%d",
+                    person_name,
+                    len(result.get("knowledge_files_merged", [])),
+                    result.get("episodes_compressed", 0)
+                )
+
+                # Broadcast result
+                if self._ws_broadcast and not result.get("skipped"):
+                    await self._ws_broadcast(
+                        {
+                            "type": "system.consolidation",
+                            "data": {
+                                "person": person_name,
+                                "type": "weekly",
+                                "result": result,
+                            },
+                        }
+                    )
+
+            except Exception:
+                logger.exception(
+                    "Weekly integration failed for person=%s",
+                    person_name
+                )
+
     # ── Lifecycle ─────────────────────────────────────────
 
     def start(self) -> None:
         self.scheduler.start()
+        self._setup_system_crons()
         self._inbox_watcher_task = asyncio.create_task(
             self._inbox_watcher_loop()
         )
-        logger.info("Lifecycle manager started (scheduler + inbox watcher)")
+        logger.info("Lifecycle manager started (scheduler + inbox watcher + system crons)")
 
     def shutdown(self) -> None:
         if self._inbox_watcher_task:

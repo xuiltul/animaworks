@@ -150,6 +150,11 @@ def cli_main() -> None:
     p_status = sub.add_parser("status", help="Show system status from gateway")
     p_status.set_defaults(func=_lazy_status)
 
+    # ── Index ─────────────────────────────────────────────
+    from cli.commands.index_cmd import setup_index_command
+
+    setup_index_command(sub)
+
     # ── Config ────────────────────────────────────────────
     from core.config.cli import (
         cmd_config_dispatch,
