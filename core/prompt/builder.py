@@ -56,11 +56,95 @@ def _discover_other_persons(person_dir: Path) -> list[str]:
     return others
 
 
-def _build_messaging_section(person_dir: Path, other_persons: list[str]) -> str:
+# ── Organisation Context ─────────────────────────────────
+
+
+def _format_person_entry(name: str, speciality: str | None) -> str:
+    """Format a person name with optional speciality annotation."""
+    if speciality:
+        return f"{name} ({speciality})"
+    return name
+
+
+def _build_org_context(person_name: str, other_persons: list[str]) -> str:
+    """Build organisation context section from supervisor chain.
+
+    Reads config.json to derive each Person's relationship
+    (supervisor / subordinate / peer) relative to *person_name*
+    and returns a formatted prompt section.
+    """
+    from core.config import load_config
+
+    try:
+        config = load_config()
+    except Exception:
+        logger.debug("Could not load config for org context", exc_info=True)
+        return ""
+
+    all_persons = config.persons
+    my_config = all_persons.get(person_name)
+    my_supervisor = my_config.supervisor if my_config else None
+    my_speciality = my_config.speciality if my_config else None
+
+    # Supervisor
+    if my_supervisor:
+        sup_spec = None
+        if my_supervisor in all_persons:
+            sup_spec = all_persons[my_supervisor].speciality
+        supervisor_line = _format_person_entry(my_supervisor, sup_spec)
+    else:
+        supervisor_line = "(なし — あなたがトップです)"
+
+    # Subordinates: persons whose supervisor is me
+    subordinates: list[str] = []
+    for name in sorted(all_persons):
+        if name == person_name:
+            continue
+        pcfg = all_persons[name]
+        if pcfg.supervisor == person_name:
+            subordinates.append(_format_person_entry(name, pcfg.speciality))
+
+    # Peers: persons with the same supervisor (excluding self)
+    peers: list[str] = []
+    if my_supervisor is not None:
+        for name in sorted(all_persons):
+            if name == person_name:
+                continue
+            pcfg = all_persons[name]
+            if pcfg.supervisor == my_supervisor:
+                peers.append(_format_person_entry(name, pcfg.speciality))
+
+    subordinates_line = ", ".join(subordinates) if subordinates else "(なし)"
+    peers_line = ", ".join(peers) if peers else "(なし)"
+    person_speciality = my_speciality or "(未設定)"
+
+    parts = [
+        load_prompt(
+            "org_context",
+            supervisor_line=supervisor_line,
+            subordinates_line=subordinates_line,
+            peers_line=peers_line,
+            person_speciality=person_speciality,
+        ),
+    ]
+
+    # Communication rules: only when there are other persons
+    if other_persons:
+        parts.append(load_prompt("communication_rules"))
+
+    return "\n\n".join(parts)
+
+
+def _build_messaging_section(
+    person_dir: Path,
+    other_persons: list[str],
+) -> str:
     """Build the messaging instructions with resolved paths."""
     self_name = person_dir.name
     main_py = PROJECT_DIR / "main.py"
-    persons_line = ", ".join(other_persons) if other_persons else "(まだ他の社員はいません)"
+    persons_line = (
+        ", ".join(other_persons) if other_persons else "(まだ他の社員はいません)"
+    )
 
     return load_prompt(
         "messaging",
@@ -224,8 +308,13 @@ def build_system_prompt(
 
     parts.append(load_prompt("behavior_rules"))
 
-    # Messaging instructions
+    # Organisation context (supervisor / subordinates / peers)
     other_persons = _discover_other_persons(pd)
+    org_context = _build_org_context(pd.name, other_persons)
+    if org_context:
+        parts.append(org_context)
+
+    # Messaging instructions
     parts.append(_build_messaging_section(pd, other_persons))
 
     # Hiring context: suggest team building when top-level person has no peers
