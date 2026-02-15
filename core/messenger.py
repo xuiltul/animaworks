@@ -90,6 +90,11 @@ class Messenger:
         for f in self.inbox_dir.glob("*.json"):
             f.rename(processed_dir / f.name)
             count += 1
+        # Clean up non-JSON files that may have been left by Agent SDK
+        for f in self.inbox_dir.iterdir():
+            if f.is_file() and f.suffix != ".json" and not f.name.startswith("."):
+                logger.warning("Cleaning up non-JSON file in inbox: %s", f.name)
+                f.rename(processed_dir / f.name)
         return count
 
     def archive_from(self, sender: str) -> int:

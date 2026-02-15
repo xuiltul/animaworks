@@ -267,7 +267,11 @@ function closeConversation() {
 
 // ── Greeting on Character Click ──────────────────────
 
+let _greetingInFlight = false;
+
 async function triggerGreeting(personName) {
+  if (_greetingInFlight) return;
+  _greetingInFlight = true;
   try {
     const data = await greetPerson(personName);
     if (!data.response) return;
@@ -286,6 +290,8 @@ async function triggerGreeting(personName) {
     }
   } catch (err) {
     console.error("[greeting] Failed to greet:", err);
+  } finally {
+    _greetingInFlight = false;
   }
 }
 
