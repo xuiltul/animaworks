@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from core.tools._async_compat import run_sync
-from core.tools._base import ToolConfigError, get_env_or_fail, logger
+from core.tools._base import ToolConfigError, get_credential, logger
 from core.tools._cache import BaseMessageCache
 from core.tools._retry import retry_on_rate_limit
 
@@ -141,7 +141,7 @@ class SlackClient:
     def __init__(self, token: str | None = None):
         _require_slack_sdk()
         if token is None:
-            token = get_env_or_fail("SLACK_BOT_TOKEN", "slack")
+            token = get_credential("slack", "slack", env_var="SLACK_BOT_TOKEN")
         self.client = WebClient(token=token)
         self.my_user_id: str | None = None
         self.my_name: str | None = None

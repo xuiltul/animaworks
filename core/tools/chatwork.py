@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from core.tools._async_compat import run_sync
-from core.tools._base import ToolConfigError, get_env_or_fail, logger
+from core.tools._base import ToolConfigError, get_credential, logger
 from core.tools._cache import BaseMessageCache
 from core.tools._retry import retry_on_rate_limit
 
@@ -83,7 +83,7 @@ class ChatworkClient:
     def __init__(self, api_token: str | None = None):
         _require_requests()
         if api_token is None:
-            api_token = get_env_or_fail("CHATWORK_API_TOKEN", "chatwork")
+            api_token = get_credential("chatwork", "chatwork", env_var="CHATWORK_API_TOKEN")
         self.api_token = api_token
         self.session = requests.Session()
         self.session.headers.update({

@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from core.tools._base import ToolConfigError, get_env_or_fail, logger
+from core.tools._base import ToolConfigError, get_credential, logger
 
 
 # ---------------------------------------------------------------------------
@@ -33,8 +33,8 @@ class XSearchClient:
     BASE_URL = "https://api.twitter.com/2"
 
     def __init__(self, bearer_token: str | None = None) -> None:
-        self.bearer_token = bearer_token or get_env_or_fail(
-            "TWITTER_BEARER_TOKEN", "x_search"
+        self.bearer_token = bearer_token or get_credential(
+            "x_twitter", "x_search", env_var="TWITTER_BEARER_TOKEN"
         )
 
     # -- internal helpers ---------------------------------------------------

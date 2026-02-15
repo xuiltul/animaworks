@@ -21,7 +21,7 @@ from typing import Any
 
 import httpx
 
-from core.tools._base import ToolConfigError, get_env_or_fail, logger
+from core.tools._base import ToolConfigError, get_credential, logger
 
 # ---------------------------------------------------------------------------
 # Brave Search API endpoint
@@ -61,7 +61,7 @@ def search(
         ToolConfigError: If BRAVE_API_KEY is not set.
         httpx.HTTPStatusError: On non-2xx API responses.
     """
-    api_key = get_env_or_fail("BRAVE_API_KEY", "web_search")
+    api_key = get_credential("brave", "web_search", env_var="BRAVE_API_KEY")
 
     # Normalize language code for Brave API
     search_lang = _LANG_MAP.get(lang, lang)

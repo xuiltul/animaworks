@@ -40,6 +40,74 @@ def get_env_or_fail(key: str, tool_name: str) -> str:
     return val
 
 
+# ── Unified Credential Resolution ────────────────────────────
+
+
+def get_credential(
+    credential_name: str,
+    tool_name: str,
+    key_name: str = "api_key",
+    env_var: str | None = None,
+) -> str:
+    """Resolve a credential via config.json → environment variable cascade.
+
+    Args:
+        credential_name: Key in config.json ``credentials`` dict
+            (e.g. ``"chatwork"``).
+        tool_name: Human-readable tool name for error messages.
+        key_name: Which key to retrieve.  ``"api_key"`` reads the primary
+            ``api_key`` field; anything else reads from ``keys[key_name]``.
+        env_var: Fallback environment variable name.
+
+    Returns:
+        The resolved credential string.
+
+    Raises:
+        ToolConfigError: If neither config.json nor the environment variable
+            provides a value.
+    """
+    from core.config.models import load_config
+
+    # 1. config.json
+    config = load_config()
+    cred = config.credentials.get(credential_name)
+    if cred:
+        if key_name == "api_key" and cred.api_key:
+            _log_resolved(credential_name, key_name, "config.json", cred.api_key)
+            return cred.api_key
+        if key_name != "api_key" and key_name in cred.keys and cred.keys[key_name]:
+            val = cred.keys[key_name]
+            _log_resolved(credential_name, key_name, "config.json", val)
+            return val
+
+    # 2. Environment variable fallback
+    if env_var:
+        val = os.environ.get(env_var)
+        if val:
+            _log_resolved(credential_name, key_name, f"env:{env_var}", val)
+            return val
+
+    # 3. Error with guidance
+    sources = [f"config.json credentials.{credential_name}.{key_name}"]
+    if env_var:
+        sources.append(f"environment variable {env_var}")
+    raise ToolConfigError(
+        f"Tool '{tool_name}' requires credential '{credential_name}'. "
+        f"Set it in: {' or '.join(sources)}"
+    )
+
+
+def _log_resolved(
+    credential_name: str, key_name: str, source: str, value: str,
+) -> None:
+    """Log credential resolution with masked value."""
+    masked = value[:4] + "****" if len(value) > 4 else "****"
+    logger.debug(
+        "Credential '%s.%s' resolved from %s: %s",
+        credential_name, key_name, source, masked,
+    )
+
+
 # ── CLI Guide Auto-Generation ────────────────────────────────
 
 

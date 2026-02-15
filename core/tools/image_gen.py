@@ -32,7 +32,7 @@ from typing import Any
 
 import httpx
 
-from core.tools._base import ToolConfigError, get_env_or_fail, logger
+from core.tools._base import ToolConfigError, get_credential, logger
 from core.tools._retry import retry_with_backoff
 
 # ── Constants ──────────────────────────────────────────────
@@ -192,7 +192,7 @@ class NovelAIClient:
     """NovelAI V4.5 API client for anime full-body image generation."""
 
     def __init__(self) -> None:
-        self._token = get_env_or_fail("NOVELAI_TOKEN", "image_gen")
+        self._token = get_credential("novelai", "image_gen", env_var="NOVELAI_TOKEN")
 
     def generate_fullbody(
         self,
@@ -304,7 +304,7 @@ class FluxKontextClient:
     POLL_TIMEOUT = 120.0  # seconds
 
     def __init__(self) -> None:
-        self._key = get_env_or_fail("FAL_KEY", "image_gen")
+        self._key = get_credential("fal", "image_gen", env_var="FAL_KEY")
 
     def generate_from_reference(
         self,
@@ -409,7 +409,7 @@ class FalTextToImageClient:
     POLL_TIMEOUT = 120.0  # seconds
 
     def __init__(self) -> None:
-        self._key = get_env_or_fail("FAL_KEY", "image_gen")
+        self._key = get_credential("fal", "image_gen", env_var="FAL_KEY")
 
     def generate_fullbody(
         self,
@@ -524,7 +524,7 @@ class MeshyClient:
     POLL_TIMEOUT = 600.0  # seconds (10 min)
 
     def __init__(self) -> None:
-        self._key = get_env_or_fail("MESHY_API_KEY", "image_gen")
+        self._key = get_credential("meshy", "image_gen", env_var="MESHY_API_KEY")
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._key}"}

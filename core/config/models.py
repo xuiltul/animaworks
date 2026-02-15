@@ -55,7 +55,9 @@ class SystemConfig(BaseModel):
 
 
 class CredentialConfig(BaseModel):
+    type: str = "api_key"
     api_key: str = ""
+    keys: dict[str, str] = {}
     base_url: str | None = None
 
 
