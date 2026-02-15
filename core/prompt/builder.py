@@ -252,6 +252,16 @@ def build_system_prompt(
         shared_users_list=shared_users_list,
     ))
 
+    # Common knowledge reference hint
+    common_knowledge_dir = data_dir / "common_knowledge"
+    if common_knowledge_dir.exists() and any(common_knowledge_dir.rglob("*.md")):
+        parts.append(
+            "## 共有リファレンス\n\n"
+            "困ったとき・手順が不明なときは `common_knowledge/` を "
+            "`search_memory` で検索するか、`read_memory_file` で直接読んでください。\n"
+            "目次: `common_knowledge/00_index.md`"
+        )
+
     # Personal skills
     if skill_summaries:
         skill_lines = "\n".join(

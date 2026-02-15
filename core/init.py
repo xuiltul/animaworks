@@ -19,7 +19,7 @@ logger = logging.getLogger("animaworks.init")
 
 # Directories under templates/ that are infrastructure (always copied).
 # person_templates/ is NOT included — persons are created separately.
-_INFRASTRUCTURE_DIRS = {"prompts", "company", "common_skills"}
+_INFRASTRUCTURE_DIRS = {"prompts", "company", "common_skills", "common_knowledge"}
 
 
 def ensure_runtime_dir(*, skip_persons: bool = False) -> Path:
@@ -54,7 +54,7 @@ def ensure_runtime_dir(*, skip_persons: bool = False) -> Path:
 
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy infrastructure templates only (prompts, company, common_skills)
+    # Copy infrastructure templates (prompts, company, common_skills, common_knowledge)
     _copy_infrastructure(data_dir)
 
     # Create runtime-only directories that have no template
