@@ -339,10 +339,21 @@ def build_system_prompt(
     # Emotion metadata instruction for bustup expression
     parts.append(EMOTION_INSTRUCTION)
 
-    parts.append(load_prompt("behavior_rules"))
-
     # Organisation context (supervisor / subordinates / peers)
     other_persons = _discover_other_persons(pd)
+
+    # Hiring context: suggest team building when top-level person has no peers
+    # Placed before behavior_rules so the directive is not buried at the end.
+    if not other_persons:
+        try:
+            model_config = memory.read_model_config()
+            if model_config.supervisor is None:
+                parts.append(load_prompt("hiring_context"))
+        except Exception:
+            logger.debug("Skipped hiring context injection", exc_info=True)
+
+    parts.append(load_prompt("behavior_rules"))
+
     org_context = _build_org_context(pd.name, other_persons)
     if org_context:
         parts.append(org_context)
@@ -360,15 +371,6 @@ def build_system_prompt(
             parts.append(_build_human_notification_guidance())
     except Exception:
         logger.debug("Skipped human notification guidance injection", exc_info=True)
-
-    # Hiring context: suggest team building when top-level person has no peers
-    if not other_persons:
-        try:
-            model_config = memory.read_model_config()
-            if model_config.supervisor is None:
-                parts.append(load_prompt("hiring_context"))
-        except Exception:
-            logger.debug("Skipped hiring context injection", exc_info=True)
 
     logger.debug(
         "System prompt built: %d sections, total_len=%d",

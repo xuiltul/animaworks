@@ -430,6 +430,98 @@ class TestBuildOrgContext:
         assert "あなたがトップです" in result
 
 
+# ── hiring_context placement ─────────────────────────────
+
+
+class TestHiringContextPlacement:
+    """Verify hiring_context is injected before behavior_rules."""
+
+    def _build_solo_prompt(self, tmp_path, data_dir):
+        """Helper: build system prompt for a solo person with no supervisor."""
+        person_dir = tmp_path / "persons" / "solo"
+        person_dir.mkdir(parents=True)
+        (person_dir / "identity.md").write_text("I am Solo", encoding="utf-8")
+
+        memory = MagicMock()
+        memory.person_dir = person_dir
+        memory.read_company_vision.return_value = ""
+        memory.read_identity.return_value = "I am Solo"
+        memory.read_injection.return_value = ""
+        memory.read_permissions.return_value = ""
+        memory.read_current_state.return_value = ""
+        memory.read_pending.return_value = ""
+        memory.read_bootstrap.return_value = ""
+        memory.list_knowledge_files.return_value = []
+        memory.list_episode_files.return_value = []
+        memory.list_procedure_files.return_value = []
+        memory.list_skill_summaries.return_value = []
+        memory.list_common_skill_summaries.return_value = []
+        memory.common_skills_dir = data_dir / "common_skills"
+        memory.list_shared_users.return_value = []
+
+        # read_model_config returns a ModelConfig with supervisor=None
+        from core.schemas import ModelConfig
+        memory.read_model_config.return_value = ModelConfig()
+
+        return memory
+
+    def test_hiring_context_before_behavior_rules(self, tmp_path, data_dir):
+        """hiring_context must appear before behavior_rules in the prompt."""
+        memory = self._build_solo_prompt(tmp_path, data_dir)
+
+        # Use real load_prompt so both templates are loaded with real content
+        result = build_system_prompt(memory)
+
+        # hiring_context contains "チーム構成について"
+        # behavior_rules contains "行動ルール"
+        assert "チーム構成について" in result
+        assert "行動ルール" in result
+        assert result.index("チーム構成について") < result.index("行動ルール")
+
+    def test_hiring_context_not_injected_with_peers(self, tmp_path, data_dir):
+        """hiring_context must NOT be injected when other persons exist."""
+        persons_root = tmp_path / "persons"
+        persons_root.mkdir(parents=True, exist_ok=True)
+        solo = persons_root / "solo"
+        solo.mkdir()
+        (solo / "identity.md").write_text("I am Solo", encoding="utf-8")
+        peer = persons_root / "peer"
+        peer.mkdir()
+        (peer / "identity.md").write_text("I am Peer", encoding="utf-8")
+
+        memory = MagicMock()
+        memory.person_dir = solo
+        memory.read_company_vision.return_value = ""
+        memory.read_identity.return_value = "I am Solo"
+        memory.read_injection.return_value = ""
+        memory.read_permissions.return_value = ""
+        memory.read_current_state.return_value = ""
+        memory.read_pending.return_value = ""
+        memory.read_bootstrap.return_value = ""
+        memory.list_knowledge_files.return_value = []
+        memory.list_episode_files.return_value = []
+        memory.list_procedure_files.return_value = []
+        memory.list_skill_summaries.return_value = []
+        memory.list_common_skill_summaries.return_value = []
+        memory.common_skills_dir = data_dir / "common_skills"
+        memory.list_shared_users.return_value = []
+
+        result = build_system_prompt(memory)
+
+        assert "チーム構成について" not in result
+
+    def test_hiring_context_not_injected_with_supervisor(self, tmp_path, data_dir):
+        """hiring_context must NOT be injected when person has a supervisor."""
+        memory = self._build_solo_prompt(tmp_path, data_dir)
+
+        from core.schemas import ModelConfig
+        memory.read_model_config.return_value = ModelConfig(supervisor="boss")
+
+        result = build_system_prompt(memory)
+
+        assert "チーム構成について" not in result
+
+
 # ── inject_shortterm ──────────────────────────────────────
 
 
