@@ -717,7 +717,7 @@ class TestProcessMessageStreamConversationSave:
             assert len(assistant_calls) == 1
             error_content = assistant_calls[0].args[1]
             assert "partial response" in error_content
-            assert "[ERROR: ストリーミング中にエラーが発生しました]" in error_content
+            assert "[応答が中断されました]" in error_content
 
             # save() called at least twice: pre-save + error save
             assert MockConv.return_value.save.call_count >= 2
@@ -761,7 +761,7 @@ class TestProcessMessageStreamConversationSave:
             assistant_calls = [c for c in append_calls if c.args[0] == "assistant"]
             assert len(assistant_calls) == 1
             error_content = assistant_calls[0].args[1]
-            assert error_content == "[ERROR: ストリーミング中にエラーが発生しました]"
+            assert error_content == "[応答が中断されました]"
 
     async def test_stream_success_saves_normally(self, data_dir, make_person):
         """Normal streaming save still works (cycle_done path)."""

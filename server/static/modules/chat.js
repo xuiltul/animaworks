@@ -2,6 +2,7 @@
 
 import { state, dom, escapeHtml, renderMarkdown } from "./state.js";
 import { addActivity } from "./activity.js";
+import { parseConvSSE as parseSSEEvents, getErrorMessage } from "../shared/sse-parser.js";
 
 // ── Render ─────────────────────────────────
 
@@ -41,33 +42,6 @@ export function renderChat() {
 }
 
 // ── SSE Streaming ─────────────────────────
-
-function parseSSEEvents(buffer) {
-  const parsed = [];
-  const parts = buffer.split("\n\n");
-  const remaining = parts.pop() || "";
-
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    let eventName = "message";
-    let dataLines = [];
-    for (const line of part.split("\n")) {
-      if (line.startsWith("event: ")) {
-        eventName = line.slice(7);
-      } else if (line.startsWith("data: ")) {
-        dataLines.push(line.slice(6));
-      }
-    }
-    if (dataLines.length > 0) {
-      try {
-        parsed.push({ event: eventName, data: JSON.parse(dataLines.join("\n")) });
-      } catch (e) {
-        console.warn("SSE parse error:", e, dataLines);
-      }
-    }
-  }
-  return { parsed, remaining };
-}
 
 function renderStreamingBubble(msg) {
   const chatMessages = dom.chatMessages || document.getElementById("chatMessages");
@@ -191,7 +165,7 @@ export async function sendChat(message) {
             break;
 
           case "error":
-            streamingMsg.text += `\n[エラー] ${evt.data.message}`;
+            streamingMsg.text += `\n[エラー] ${getErrorMessage(evt.data)}`;
             streamingMsg.streaming = false;
             renderChat();
             break;

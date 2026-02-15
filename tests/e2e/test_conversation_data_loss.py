@@ -182,7 +182,7 @@ class TestConversationDataLossProtection:
         assistant_turns = [t for t in turns if t["role"] == "assistant"]
         assert len(assistant_turns) == 1
         assert "Partial response" in assistant_turns[0]["content"]
-        assert "ERROR" in assistant_turns[0]["content"]
+        assert "応答が中断されました" in assistant_turns[0]["content"]
 
     async def test_process_greet_error_preserves_data(
         self, make_person, data_dir,

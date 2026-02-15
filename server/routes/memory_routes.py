@@ -39,7 +39,11 @@ def create_memory_router() -> APIRouter:
         path = memory.episodes_dir / f"{date}.md"
         if not path.exists():
             raise HTTPException(status_code=404, detail="Episode not found")
-        return {"date": date, "content": path.read_text(encoding="utf-8")}
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            raise HTTPException(status_code=500, detail=f"Failed to read file: {e}")
+        return {"date": date, "content": content}
 
     # ── Knowledge ─────────────────────────────────────────
 
@@ -64,7 +68,11 @@ def create_memory_router() -> APIRouter:
         path = memory.knowledge_dir / f"{topic}.md"
         if not path.exists():
             raise HTTPException(status_code=404, detail="Knowledge not found")
-        return {"topic": topic, "content": path.read_text(encoding="utf-8")}
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            raise HTTPException(status_code=500, detail=f"Failed to read file: {e}")
+        return {"topic": topic, "content": content}
 
     # ── Procedures ────────────────────────────────────────
 
@@ -89,7 +97,11 @@ def create_memory_router() -> APIRouter:
         path = memory.procedures_dir / f"{proc}.md"
         if not path.exists():
             raise HTTPException(status_code=404, detail="Procedure not found")
-        return {"name": proc, "content": path.read_text(encoding="utf-8")}
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            raise HTTPException(status_code=500, detail=f"Failed to read file: {e}")
+        return {"name": proc, "content": content}
 
     # ── Conversation ──────────────────────────────────────
 

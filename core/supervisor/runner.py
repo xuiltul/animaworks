@@ -462,6 +462,15 @@ class PersonRunner:
                 }
             )
 
+        except TimeoutError as e:
+            logger.error("Timeout in streaming process_message: %s", e)
+            yield IPCResponse(
+                id=request.id,
+                error={
+                    "code": "IPC_TIMEOUT",
+                    "message": str(e) or "Stream processing timed out",
+                }
+            )
         except Exception as e:
             logger.exception("Error in streaming process_message: %s", e)
             yield IPCResponse(

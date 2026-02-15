@@ -4,6 +4,7 @@
 import { getState, setState } from "./state.js";
 import { sendChatStream, fetchConversationFull } from "./api.js";
 import { escapeHtml, renderSimpleMarkdown } from "./utils.js";
+import { parseConvSSE as parseSSEEvents, getErrorMessage } from "../../shared/sse-parser.js";
 
 // ── Constants ──────────────────────────────────
 
@@ -15,36 +16,6 @@ const PLACEHOLDER_DEFAULT = "パーソンを選択してください";
 let messagesEl = null;
 let inputEl = null;
 let sendBtnEl = null;
-
-// ── SSE Parser ──────────────────────────────────
-
-function parseSSEEvents(buffer) {
-  const parsed = [];
-  const parts = buffer.split("\n\n");
-  // Last part may be incomplete
-  const remaining = parts.pop() || "";
-
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    let eventName = "message";
-    const dataLines = [];
-    for (const line of part.split("\n")) {
-      if (line.startsWith("event: ")) {
-        eventName = line.slice(7);
-      } else if (line.startsWith("data: ")) {
-        dataLines.push(line.slice(6));
-      }
-    }
-    if (dataLines.length > 0) {
-      try {
-        parsed.push({ event: eventName, data: JSON.parse(dataLines.join("\n")) });
-      } catch (e) {
-        console.warn("SSE parse error:", e, dataLines);
-      }
-    }
-  }
-  return { parsed, remaining };
-}
 
 // ── Render Helpers ──────────────────────────────
 
@@ -257,7 +228,7 @@ export async function sendMessage(text) {
             break;
 
           case "error":
-            streamingMsg.text += `\n[エラー] ${evt.data.message}`;
+            streamingMsg.text += `\n[エラー] ${getErrorMessage(evt.data)}`;
             streamingMsg.streaming = false;
             streamingMsg.activeTool = null;
             setState({ chatMessages: [...getState().chatMessages] });

@@ -3,6 +3,7 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import asyncio
 import json
 import logging
 import re
@@ -143,9 +144,12 @@ def _handle_chunk(
         return _format_sse("done", cycle_result), clean_text
 
     if event_type == "error":
-        return _format_sse("error", {
+        error_payload: dict[str, Any] = {
             "message": chunk.get("message", "Unknown error"),
-        }), ""
+        }
+        if "code" in chunk:
+            error_payload["code"] = chunk["code"]
+        return _format_sse("error", error_payload), ""
 
     return None, ""
 
@@ -174,7 +178,7 @@ async def _stream_events(
 
     except Exception:
         logger.exception("SSE stream error for person=%s", name)
-        yield _format_sse("error", {"message": "Internal server error"})
+        yield _format_sse("error", {"code": "STREAM_ERROR", "message": "Internal server error"})
 
     finally:
         await emit(request, "person.status", {"name": name, "status": "idle"})
@@ -223,6 +227,16 @@ def create_chat_router() -> APIRouter:
         except ValueError as e:
             from fastapi import HTTPException
             raise HTTPException(status_code=500, detail=str(e))
+        except asyncio.TimeoutError:
+            logger.error("Timeout waiting for chat response from person=%s", name)
+            return JSONResponse(
+                {"error": "Request timed out"}, status_code=504,
+            )
+        except RuntimeError as e:
+            logger.exception("Runtime error in chat for person=%s", name)
+            return JSONResponse(
+                {"error": f"Internal server error: {e}"}, status_code=500,
+            )
 
     @router.post("/persons/{name}/greet")
     async def greet(name: str, request: Request):
@@ -261,6 +275,16 @@ def create_chat_router() -> APIRouter:
         except ValueError as e:
             from fastapi import HTTPException
             raise HTTPException(status_code=500, detail=str(e))
+        except asyncio.TimeoutError:
+            logger.error("Timeout waiting for greet response from person=%s", name)
+            return JSONResponse(
+                {"error": "Request timed out"}, status_code=504,
+            )
+        except RuntimeError as e:
+            logger.exception("Runtime error in greet for person=%s", name)
+            return JSONResponse(
+                {"error": f"Internal server error: {e}"}, status_code=500,
+            )
 
     @router.post("/persons/{name}/chat/stream")
     async def chat_stream(name: str, body: ChatRequest, request: Request):
@@ -340,10 +364,13 @@ def create_chat_router() -> APIRouter:
 
             except KeyError:
                 logger.error("Person not found during stream: %s", name)
-                yield _format_sse("error", {"message": f"Person not found: {name}"})
+                yield _format_sse("error", {"code": "PERSON_NOT_FOUND", "message": f"Person not found: {name}"})
+            except TimeoutError:
+                logger.error("IPC stream timeout for person=%s", name)
+                yield _format_sse("error", {"code": "IPC_TIMEOUT", "message": "応答がタイムアウトしました"})
             except Exception:
                 logger.exception("IPC stream error for person=%s", name)
-                yield _format_sse("error", {"message": "Internal server error"})
+                yield _format_sse("error", {"code": "STREAM_ERROR", "message": "Internal server error"})
             finally:
                 await emit(request, "person.status", {"name": name, "status": "idle"})
 

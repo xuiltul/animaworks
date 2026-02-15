@@ -98,13 +98,17 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 "API call iteration=%d messages_count=%d",
                 iteration, len(messages),
             )
-            response = await client.messages.create(
-                model=self._model_config.model,
-                max_tokens=self._model_config.max_tokens,
-                system=system_prompt,
-                messages=messages,
-                tools=tools,
-            )
+            try:
+                response = await client.messages.create(
+                    model=self._model_config.model,
+                    max_tokens=self._model_config.max_tokens,
+                    system=system_prompt,
+                    messages=messages,
+                    tools=tools,
+                )
+            except Exception as e:
+                logger.exception("Anthropic API error")
+                return ExecutionResult(text=f"[LLM API Error: {e}]")
 
             # ── Context tracking + session chaining ───────────
             if tracker:

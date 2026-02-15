@@ -121,6 +121,18 @@ def create_persons_router() -> APIRouter:
         except ValueError as e:
             from fastapi import HTTPException
             raise HTTPException(status_code=500, detail=str(e))
+        except asyncio.TimeoutError:
+            logger.error("Timeout waiting for heartbeat from person=%s", name)
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                {"error": "Request timed out"}, status_code=504,
+            )
+        except RuntimeError as e:
+            logger.exception("Runtime error in trigger for person=%s", name)
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                {"error": f"Internal server error: {e}"}, status_code=500,
+            )
 
     # ── Person Config ─────────────────────────────────────
 

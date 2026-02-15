@@ -18,6 +18,7 @@ import { computePOIs, initIdleBehaviors, updateIdleBehaviors, cancelBehavior } f
 import { initInteractions, showMessageEffect, showConversation, updateInteractions } from "./interactions.js";
 import { initTimeline, addTimelineEvent, loadHistory } from "./timeline.js";
 import { playReveal } from "./reveal.js";
+import { parseConvSSE, getErrorMessage } from "../../shared/sse-parser.js";
 
 // ── DOM References ──────────────────────
 
@@ -343,35 +344,6 @@ async function loadAndRenderConvMessages(personName) {
 
 // ── SSE Streaming for Conversation ──────────────────────
 
-/**
- * Parse SSE events from a buffer, properly associating event types with data payloads.
- * Uses "\n\n" as the block delimiter (standard SSE format).
- */
-function parseConvSSE(buffer) {
-  const parsed = [];
-  const parts = buffer.split("\n\n");
-  const remaining = parts.pop() || "";
-
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    let eventName = "message";
-    const dataLines = [];
-    for (const line of part.split("\n")) {
-      if (line.startsWith("event: ")) {
-        eventName = line.slice(7).trim();
-      } else if (line.startsWith("data: ")) {
-        dataLines.push(line.slice(6));
-      }
-    }
-    if (dataLines.length > 0) {
-      try {
-        parsed.push({ event: eventName, data: JSON.parse(dataLines.join("\n")) });
-      } catch { /* skip non-JSON data */ }
-    }
-  }
-  return { parsed, remaining };
-}
-
 async function sendConversationMessage() {
   const text = dom.convInput?.value?.trim();
   if (!text) return;
@@ -443,10 +415,9 @@ async function sendConversationMessage() {
           setTimeout(() => setExpression("neutral"), 3000);
         } else if (evt === "error") {
           setExpression("troubled");
-          if (data.error || data.message) {
-            streamingMsg.text += `\n[エラー: ${data.error || data.message}]`;
-            updateStreamingBubble(streamingMsg);
-          }
+          const errorMsg = getErrorMessage(data);
+          streamingMsg.text += `\n[エラー: ${errorMsg}]`;
+          updateStreamingBubble(streamingMsg);
         }
       }
     }

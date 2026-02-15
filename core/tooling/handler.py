@@ -123,64 +123,92 @@ class ToolHandler:
 
     # ── Main dispatch ────────────────────────────────────────
 
+    # Maximum tool output size before truncation (500KB)
+    _MAX_TOOL_OUTPUT_BYTES = 512_000
+
     def handle(self, name: str, args: dict[str, Any]) -> str:
         """Synchronous tool call dispatch.
 
         Routes by tool name to the appropriate handler method.
-        Returns the tool result as a string.
+        Returns the tool result as a string (truncated if >500KB).
         """
-        logger.debug("tool_call name=%s args_keys=%s", name, list(args.keys()))
+        try:
+            logger.debug("tool_call name=%s args_keys=%s", name, list(args.keys()))
 
-        # Memory tools
-        if name == "search_memory":
-            return self._handle_search_memory(args)
-        if name == "read_memory_file":
-            return self._handle_read_memory_file(args)
-        if name == "write_memory_file":
-            return self._handle_write_memory_file(args)
-        if name == "send_message":
-            return self._handle_send_message(args)
+            result: str | None = None
 
-        # File operation tools
-        if name == "read_file":
-            return self._handle_read_file(args)
-        if name == "write_file":
-            return self._handle_write_file(args)
-        if name == "edit_file":
-            return self._handle_edit_file(args)
-        if name == "execute_command":
-            return self._handle_execute_command(args)
+            # Memory tools
+            if name == "search_memory":
+                result = self._handle_search_memory(args)
+            elif name == "read_memory_file":
+                result = self._handle_read_memory_file(args)
+            elif name == "write_memory_file":
+                result = self._handle_write_memory_file(args)
+            elif name == "send_message":
+                result = self._handle_send_message(args)
+            # File operation tools
+            elif name == "read_file":
+                result = self._handle_read_file(args)
+            elif name == "write_file":
+                result = self._handle_write_file(args)
+            elif name == "edit_file":
+                result = self._handle_edit_file(args)
+            elif name == "execute_command":
+                result = self._handle_execute_command(args)
+            # Search tools
+            elif name == "search_code":
+                result = self._handle_search_code(args)
+            elif name == "list_directory":
+                result = self._handle_list_directory(args)
+            # Human notification
+            elif name == "notify_human":
+                result = self._handle_notify_human(args)
+            else:
+                # ── Background execution for eligible external tools ──
+                if self._background_manager and self._background_manager.is_eligible(name):
+                    ext_args = {**args, "person_dir": str(self._person_dir)}
+                    task_id = self._background_manager.submit(
+                        name, ext_args, self._external.dispatch,
+                    )
+                    result = _json.dumps({
+                        "status": "background",
+                        "task_id": task_id,
+                        "message": f"タスクをバックグラウンドで実行開始しました (task_id: {task_id})",
+                    }, ensure_ascii=False)
+                else:
+                    # External tool dispatch -- inject person_dir for tools that need it
+                    ext_args = {**args, "person_dir": str(self._person_dir)}
+                    result = self._external.dispatch(name, ext_args)
+                    if result is None:
+                        logger.warning("Unknown tool requested: %s", name)
+                        result = f"Unknown tool: {name}"
 
-        # Search tools
-        if name == "search_code":
-            return self._handle_search_code(args)
-        if name == "list_directory":
-            return self._handle_list_directory(args)
+            return self._truncate_output(result)
 
-        # Human notification
-        if name == "notify_human":
-            return self._handle_notify_human(args)
-
-        # ── Background execution for eligible external tools ──
-        if self._background_manager and self._background_manager.is_eligible(name):
-            ext_args = {**args, "person_dir": str(self._person_dir)}
-            task_id = self._background_manager.submit(
-                name, ext_args, self._external.dispatch,
+        except Exception as e:
+            logger.exception("Unhandled tool error in %s", name)
+            return _error_result(
+                "UnhandledError", f"Tool execution failed: {name}: {e}",
             )
-            return _json.dumps({
-                "status": "background",
-                "task_id": task_id,
-                "message": f"タスクをバックグラウンドで実行開始しました (task_id: {task_id})",
-            }, ensure_ascii=False)
 
-        # External tool dispatch -- inject person_dir for tools that need it
-        ext_args = {**args, "person_dir": str(self._person_dir)}
-        result = self._external.dispatch(name, ext_args)
-        if result is not None:
-            return result
-
-        logger.warning("Unknown tool requested: %s", name)
-        return f"Unknown tool: {name}"
+    def _truncate_output(self, output: str) -> str:
+        """Truncate tool output if it exceeds the size limit."""
+        size = len(output.encode("utf-8"))
+        if size <= self._MAX_TOOL_OUTPUT_BYTES:
+            return output
+        # Truncate by character estimate (UTF-8 can be multi-byte)
+        # Use a conservative ratio to ensure we stay under the byte limit
+        truncated = output[:self._MAX_TOOL_OUTPUT_BYTES]
+        while len(truncated.encode("utf-8")) > self._MAX_TOOL_OUTPUT_BYTES:
+            truncated = truncated[:-1000]
+        logger.warning(
+            "Tool output truncated: original=%d bytes, limit=%d bytes",
+            size, self._MAX_TOOL_OUTPUT_BYTES,
+        )
+        return (
+            truncated
+            + f"\n\n[出力が500KBを超えたためトランケーションしました。元のサイズ: {size}]"
+        )
 
     # ── Memory tool handlers ─────────────────────────────────
 

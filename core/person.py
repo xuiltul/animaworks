@@ -385,18 +385,34 @@ class DigitalPerson:
                                 self.name,
                             )
                         yield chunk
-                except Exception:
+                except Exception as exc:
                     logger.exception("[%s] process_message_stream FAILED", self.name)
-                    # Save partial response if available and cycle not completed
-                    if not cycle_done:
-                        error_content = partial_response or ""
-                        if error_content:
-                            error_content += "\n"
-                        error_content += "[ERROR: ストリーミング中にエラーが発生しました]"
-                        conv_memory.append_turn("assistant", error_content)
-                        conv_memory.save()
-                    yield {"type": "error", "message": "Internal error"}
+                    # Determine error code from exception type
+                    exc_module = type(exc).__module__ or ""
+                    exc_name = type(exc).__qualname__
+                    if "tool" in exc_module.lower() or "tool" in exc_name.lower():
+                        error_code = "TOOL_ERROR"
+                    elif any(
+                        k in exc_module.lower()
+                        for k in ("anthropic", "openai", "litellm", "llm")
+                    ):
+                        error_code = "LLM_ERROR"
+                    else:
+                        error_code = "STREAM_ERROR"
+                    yield {
+                        "type": "error",
+                        "code": error_code,
+                        "message": "Internal error",
+                    }
                 finally:
+                    # Save partial response if cycle_done was never received
+                    if not cycle_done:
+                        if partial_response:
+                            saved_text = partial_response + "\n[応答が中断されました]"
+                        else:
+                            saved_text = "[応答が中断されました]"
+                        conv_memory.append_turn("assistant", saved_text)
+                        conv_memory.save()
                     self._status = "idle"
                     self._current_task = ""
         finally:

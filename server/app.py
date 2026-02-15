@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
+from starlette.responses import JSONResponse as StarletteJSONResponse
 
 from core.config import load_config
 from core.supervisor import ProcessSupervisor
@@ -96,6 +97,14 @@ def create_app(persons_dir: Path, shared_dir: Path) -> FastAPI:
     app.state.persons_dir = persons_dir
     app.state.shared_dir = shared_dir
     app.state.setup_complete = config.setup_complete
+
+    # ── Global exception handler ────────────────────────────
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        logger.exception("Unhandled exception: %s", exc)
+        return StarletteJSONResponse(
+            {"error": "Internal server error"}, status_code=500,
+        )
 
     # ── Setup guard middleware ──────────────────────────────
     @app.middleware("http")

@@ -206,11 +206,15 @@ class LiteLLMExecutor(BaseExecutor):
                 "A2 tool loop iteration=%d messages=%d",
                 iteration, len(messages),
             )
-            response = await litellm.acompletion(
-                messages=messages,
-                tools=tools,
-                **llm_kwargs,
-            )
+            try:
+                response = await litellm.acompletion(
+                    messages=messages,
+                    tools=tools,
+                    **llm_kwargs,
+                )
+            except Exception as e:
+                logger.exception("LiteLLM API error")
+                return ExecutionResult(text=f"[LLM API Error: {e}]")
 
             choice = response.choices[0]
             message = choice.message

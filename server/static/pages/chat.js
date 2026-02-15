@@ -1,6 +1,7 @@
 // ── Chat Page (Self-Contained) ──────────────
 import { api } from "../modules/api.js";
 import { escapeHtml, renderMarkdown, timeStr, statusClass } from "../modules/state.js";
+import { parseConvSSE, getErrorMessage } from "../shared/sse-parser.js";
 
 // ── Local State ────────────────────────────
 
@@ -358,33 +359,6 @@ function _renderChat() {
 
 // ── SSE Streaming Chat ─────────────────────
 
-function _parseSSEEvents(buffer) {
-  const parsed = [];
-  const parts = buffer.split("\n\n");
-  const remaining = parts.pop() || "";
-
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    let eventName = "message";
-    let dataLines = [];
-    for (const line of part.split("\n")) {
-      if (line.startsWith("event: ")) {
-        eventName = line.slice(7);
-      } else if (line.startsWith("data: ")) {
-        dataLines.push(line.slice(6));
-      }
-    }
-    if (dataLines.length > 0) {
-      try {
-        parsed.push({ event: eventName, data: JSON.parse(dataLines.join("\n")) });
-      } catch (e) {
-        console.warn("SSE parse error:", e, dataLines);
-      }
-    }
-  }
-  return { parsed, remaining };
-}
-
 function _renderStreamingBubble(msg) {
   const messagesEl = _$("chatPageMessages");
   if (!messagesEl) return;
@@ -472,7 +446,7 @@ async function _sendChat(message) {
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const { parsed, remaining } = _parseSSEEvents(buffer);
+      const { parsed, remaining } = parseConvSSE(buffer);
       buffer = remaining;
 
       for (const evt of parsed) {
@@ -492,7 +466,7 @@ async function _sendChat(message) {
           case "chain_start":
             break;
           case "error":
-            streamingMsg.text += `\n[エラー] ${evt.data.message}`;
+            streamingMsg.text += `\n[エラー] ${getErrorMessage(evt.data)}`;
             streamingMsg.streaming = false;
             _renderChat();
             break;

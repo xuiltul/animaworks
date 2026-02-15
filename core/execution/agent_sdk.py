@@ -182,16 +182,22 @@ class AgentSDKExecutor(BaseExecutor):
         result_message: ResultMessage | None = None
         message_count = 0
 
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, ResultMessage):
-                result_message = message
-                if tracker:
-                    tracker.update_from_result_message(message.usage)
-            elif isinstance(message, AssistantMessage):
-                message_count += 1
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        response_text.append(block.text)
+        try:
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, ResultMessage):
+                    result_message = message
+                    if tracker:
+                        tracker.update_from_result_message(message.usage)
+                elif isinstance(message, AssistantMessage):
+                    message_count += 1
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            response_text.append(block.text)
+        except Exception as e:
+            logger.exception("Agent SDK execution error")
+            return ExecutionResult(
+                text="\n".join(response_text) or f"[Agent SDK Error: {e}]",
+            )
 
         logger.debug(
             "Agent SDK completed, messages=%d text_blocks=%d",
@@ -288,46 +294,54 @@ class AgentSDKExecutor(BaseExecutor):
         active_tool_ids: set[str] = set()
         message_count = 0
 
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, StreamEvent):
-                event = message.event
-                event_type = event.get("type", "")
+        try:
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, StreamEvent):
+                    event = message.event
+                    event_type = event.get("type", "")
 
-                if event_type == "content_block_start":
-                    block = event.get("content_block", {})
-                    if block.get("type") == "tool_use":
-                        tool_id = block.get("id", "")
-                        active_tool_ids.add(tool_id)
-                        yield {
-                            "type": "tool_start",
-                            "tool_name": block.get("name", ""),
-                            "tool_id": tool_id,
-                        }
-
-                elif event_type == "content_block_delta":
-                    delta = event.get("delta", {})
-                    if delta.get("type") == "text_delta":
-                        text = delta.get("text", "")
-                        if text:
-                            yield {"type": "text_delta", "text": text}
-
-            elif isinstance(message, AssistantMessage):
-                message_count += 1
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        response_text.append(block.text)
-                    elif isinstance(block, ToolUseBlock):
-                        if block.id in active_tool_ids:
-                            active_tool_ids.discard(block.id)
+                    if event_type == "content_block_start":
+                        block = event.get("content_block", {})
+                        if block.get("type") == "tool_use":
+                            tool_id = block.get("id", "")
+                            active_tool_ids.add(tool_id)
                             yield {
-                                "type": "tool_end",
-                                "tool_id": block.id,
-                                "tool_name": block.name,
+                                "type": "tool_start",
+                                "tool_name": block.get("name", ""),
+                                "tool_id": tool_id,
                             }
 
-            elif isinstance(message, ResultMessage):
-                result_message = message
-                tracker.update_from_result_message(message.usage)
+                    elif event_type == "content_block_delta":
+                        delta = event.get("delta", {})
+                        if delta.get("type") == "text_delta":
+                            text = delta.get("text", "")
+                            if text:
+                                yield {"type": "text_delta", "text": text}
+
+                elif isinstance(message, AssistantMessage):
+                    message_count += 1
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            response_text.append(block.text)
+                        elif isinstance(block, ToolUseBlock):
+                            if block.id in active_tool_ids:
+                                active_tool_ids.discard(block.id)
+                                yield {
+                                    "type": "tool_end",
+                                    "tool_id": block.id,
+                                    "tool_name": block.name,
+                                }
+
+                elif isinstance(message, ResultMessage):
+                    result_message = message
+                    tracker.update_from_result_message(message.usage)
+        except Exception as e:
+            logger.exception("Agent SDK streaming error")
+            yield {
+                "type": "error",
+                "message": f"[Agent SDK Error: {e}]",
+            }
+            return
 
         logger.debug(
             "Agent SDK streaming completed, messages=%d text_blocks=%d",
