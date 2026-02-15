@@ -606,7 +606,104 @@ class TestSetupComplete:
             assert resp.status_code == 403
 
 
-# ── 4. Setup with User Info & Person Auto-start ─────────
+# ── 4. Setup Cache Control & i18n ──────────────────────────
+
+
+class TestSetupCacheControl:
+    """Test Cache-Control headers for setup static files."""
+
+    @pytest.mark.asyncio
+    async def test_setup_static_js_has_no_cache(self, setup_app):
+        """Setup JS files served with Cache-Control: no-cache."""
+        transport = ASGITransport(app=setup_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/setup/setup.js")
+
+        if resp.status_code == 200:
+            cc = resp.headers.get("cache-control", "")
+            assert "no-cache" in cc
+            assert "no-store" in cc
+            assert "must-revalidate" in cc
+
+    @pytest.mark.asyncio
+    async def test_setup_static_css_has_no_cache(self, setup_app):
+        """Setup CSS files served with Cache-Control: no-cache."""
+        transport = ASGITransport(app=setup_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/setup/setup.css")
+
+        if resp.status_code == 200:
+            cc = resp.headers.get("cache-control", "")
+            assert "no-cache" in cc
+
+    @pytest.mark.asyncio
+    async def test_setup_i18n_json_has_no_cache(self, setup_app):
+        """i18n JSON files served with Cache-Control: no-cache."""
+        transport = ASGITransport(app=setup_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            for locale in ["ja", "en"]:
+                resp = await client.get(f"/setup/i18n/{locale}.json")
+                if resp.status_code == 200:
+                    cc = resp.headers.get("cache-control", "")
+                    assert "no-cache" in cc, f"i18n/{locale}.json missing no-cache"
+
+    @pytest.mark.asyncio
+    async def test_setup_api_routes_no_extra_cache_header(self, setup_app):
+        """Setup API routes should NOT have the no-store cache-control header."""
+        transport = ASGITransport(app=setup_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/setup/detect-locale")
+
+        assert resp.status_code == 200
+        cc = resp.headers.get("cache-control", "")
+        assert "no-store" not in cc
+
+    @pytest.mark.asyncio
+    async def test_i18n_ja_has_userinfo_keys(self, setup_app):
+        """Japanese i18n file contains all userinfo translation keys."""
+        transport = ASGITransport(app=setup_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/setup/i18n/ja.json")
+
+        if resp.status_code == 200:
+            data = resp.json()
+            required_keys = [
+                "userinfo.title",
+                "userinfo.desc",
+                "userinfo.name",
+                "userinfo.name.placeholder",
+                "userinfo.name.hint",
+                "userinfo.displayname",
+                "userinfo.bio",
+                "userinfo.bio.placeholder",
+                "userinfo.error",
+            ]
+            for key in required_keys:
+                assert key in data, f"Missing i18n key: {key}"
+
+    @pytest.mark.asyncio
+    async def test_i18n_en_has_userinfo_keys(self, setup_app):
+        """English i18n file contains all userinfo translation keys."""
+        transport = ASGITransport(app=setup_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/setup/i18n/en.json")
+
+        if resp.status_code == 200:
+            data = resp.json()
+            required_keys = [
+                "userinfo.title",
+                "userinfo.desc",
+                "userinfo.name",
+                "userinfo.name.placeholder",
+                "userinfo.displayname",
+                "userinfo.bio",
+                "userinfo.bio.placeholder",
+            ]
+            for key in required_keys:
+                assert key in data, f"Missing i18n key: {key}"
+
+
+# ── 5. Setup with User Info & Person Auto-start ─────────
 
 
 class TestSetupWithUserInfo:

@@ -12,6 +12,7 @@ export function initLeaderStep(panel) {
       <label class="form-label" data-i18n="leader.label">${t("leader.label")}</label>
       <input type="text" class="form-input" id="leaderNameInput"
         pattern="[a-zA-Z]+"
+        data-i18n-placeholder="leader.placeholder"
         placeholder="${t("leader.placeholder")}"
         value="${leaderName}"
         autocomplete="off" />

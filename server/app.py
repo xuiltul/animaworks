@@ -81,7 +81,12 @@ def create_app(persons_dir: Path, shared_dir: Path) -> FastAPI:
         if not setup_complete:
             # During setup: only /api/setup/* and setup static files are accessible
             if path.startswith("/api/setup") or path.startswith("/setup"):
-                return await call_next(request)
+                response = await call_next(request)
+                # Prevent browser caching of setup static files so code
+                # updates are picked up immediately without a hard refresh.
+                if path.startswith("/setup") and not path.startswith("/api/setup"):
+                    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                return response
             # Root redirects to setup wizard
             if path == "/":
                 return RedirectResponse("/setup/")

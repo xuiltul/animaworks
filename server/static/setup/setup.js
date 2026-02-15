@@ -35,6 +35,13 @@ function applyTranslations() {
     const val = state.translations[key];
     if (val) el.textContent = val;
   });
+
+  // Update placeholder attributes
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    const val = state.translations[key];
+    if (val) el.placeholder = val;
+  });
 }
 
 export function t(key) {
@@ -45,9 +52,9 @@ export function getLocale() {
   return state.locale;
 }
 
-export function setLocale(locale) {
+export async function setLocale(locale) {
   state.locale = locale;
-  loadTranslations(locale);
+  await loadTranslations(locale);
 }
 
 // ── Step Navigation ─────────────────────────

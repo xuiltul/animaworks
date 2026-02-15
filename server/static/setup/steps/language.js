@@ -69,7 +69,7 @@ async function detectLocale() {
       const data = await res.json();
       if (data.detected && LANGUAGES.some((l) => l.code === data.detected)) {
         selectedLang = data.detected;
-        setLocale(selectedLang);
+        await setLocale(selectedLang);
         render();
       }
     }
@@ -179,12 +179,12 @@ function renderOptions() {
 
 function bindOptionClicks() {
   container.querySelectorAll(".lang-option").forEach((opt) => {
-    opt.addEventListener("click", (e) => {
+    opt.addEventListener("click", async (e) => {
       e.stopPropagation();
       selectedLang = opt.dataset.lang;
       dropdownOpen = false;
       filterText = "";
-      setLocale(selectedLang);
+      await setLocale(selectedLang);
       render();
     });
   });

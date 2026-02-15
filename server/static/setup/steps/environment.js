@@ -138,6 +138,7 @@ function renderApiKeyInput() {
       <label class="form-label" data-i18n="env.apikey">${t("env.apikey")}</label>
       <div class="api-key-row">
         <input type="password" class="api-key-input" id="apiKeyInput"
+               data-i18n-placeholder="env.apikey.placeholder"
                placeholder="${t("env.apikey.placeholder")}" value="${escapeAttr(apiKey)}">
         <button class="btn-validate" id="btnValidateKey" data-i18n="btn.validate">${t("btn.validate")}</button>
       </div>
@@ -152,6 +153,7 @@ function renderOllamaInput() {
       <label class="form-label" data-i18n="env.ollama.url">${t("env.ollama.url")}</label>
       <div class="api-key-row">
         <input type="text" class="api-key-input" id="ollamaUrlInput"
+               data-i18n-placeholder="env.ollama.url.placeholder"
                placeholder="${t("env.ollama.url.placeholder")}" value="${escapeAttr(ollamaUrl)}">
         <button class="btn-validate" id="btnValidateOllama" data-i18n="btn.validate">${t("btn.validate")}</button>
       </div>
@@ -180,6 +182,7 @@ function renderImageKey(id, label, hint, badge) {
       <div class="form-hint">${hint}</div>
       <div class="api-key-row" style="margin-top: 4px;">
         <input type="password" class="api-key-input" data-image-key="${id}"
+               data-i18n-placeholder="env.apikey.placeholder"
                placeholder="${t("env.apikey.placeholder")}" value="${escapeAttr(val)}">
       </div>
       <div class="image-key-status" data-image-status="${id}">${statusHtml}</div>

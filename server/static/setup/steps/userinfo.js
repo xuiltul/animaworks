@@ -21,6 +21,7 @@ function render() {
       <label class="form-label" data-i18n="userinfo.name">${t("userinfo.name")}</label>
       <input type="text" class="form-input" id="userinfoName"
         pattern="[a-zA-Z0-9_]+"
+        data-i18n-placeholder="userinfo.name.placeholder"
         placeholder="${t("userinfo.name.placeholder")}"
         value="${escapeAttr(username)}"
         autocomplete="off" />
@@ -31,6 +32,7 @@ function render() {
     <div class="form-group">
       <label class="form-label" data-i18n="userinfo.displayname">${t("userinfo.displayname")}</label>
       <input type="text" class="form-input" id="userinfoDisplayName"
+        data-i18n-placeholder="userinfo.displayname.placeholder"
         placeholder="${t("userinfo.displayname.placeholder")}"
         value="${escapeAttr(displayName)}"
         autocomplete="off" />
@@ -39,6 +41,7 @@ function render() {
     <div class="form-group">
       <label class="form-label" data-i18n="userinfo.bio">${t("userinfo.bio")}</label>
       <textarea class="form-input userinfo-bio" id="userinfoBio"
+        data-i18n-placeholder="userinfo.bio.placeholder"
         placeholder="${t("userinfo.bio.placeholder")}"
         rows="4">${escapeAttr(bio)}</textarea>
     </div>

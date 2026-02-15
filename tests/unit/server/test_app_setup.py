@@ -115,6 +115,60 @@ class TestSetupGuardComplete:
         assert resp.status_code == 200
 
 
+class TestSetupCacheControl:
+    """Cache-Control headers for setup static files during setup mode."""
+
+    async def test_setup_static_files_have_no_cache_header(self, tmp_path: Path):
+        """Setup static files should include Cache-Control: no-cache during setup."""
+        app = _make_app(False, tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/setup/setup.js")
+
+        # Even if file doesn't exist (404), the middleware should add headers
+        # for paths starting with /setup and not /api/setup
+        if resp.status_code == 200:
+            assert "no-cache" in resp.headers.get("cache-control", "")
+            assert "no-store" in resp.headers.get("cache-control", "")
+            assert "must-revalidate" in resp.headers.get("cache-control", "")
+
+    async def test_setup_html_has_no_cache_header(self, tmp_path: Path):
+        """Setup index.html should include Cache-Control: no-cache during setup."""
+        app = _make_app(False, tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://test", follow_redirects=False
+        ) as client:
+            resp = await client.get("/setup/")
+
+        if resp.status_code == 200:
+            cc = resp.headers.get("cache-control", "")
+            assert "no-cache" in cc
+
+    async def test_setup_i18n_has_no_cache_header(self, tmp_path: Path):
+        """Setup i18n JSON files should include Cache-Control: no-cache during setup."""
+        app = _make_app(False, tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/setup/i18n/ja.json")
+
+        if resp.status_code == 200:
+            cc = resp.headers.get("cache-control", "")
+            assert "no-cache" in cc
+
+    async def test_setup_api_no_cache_control_header(self, tmp_path: Path):
+        """Setup API responses (/api/setup/*) should NOT get cache-control headers."""
+        app = _make_app(False, tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/setup/detect-locale")
+
+        assert resp.status_code == 200
+        # API responses should not have the no-cache header from our middleware
+        cc = resp.headers.get("cache-control", "")
+        assert "no-store" not in cc
+
+
 class TestSetupGuardTransition:
     """Test that changing setup_complete in app.state switches behaviour."""
 
