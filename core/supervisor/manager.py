@@ -5,12 +5,13 @@ Process Supervisor - Manages lifecycle of Person child processes.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from core.supervisor.ipc import IPCResponse
 from core.supervisor.process_handle import ProcessHandle, ProcessState
@@ -38,6 +39,12 @@ class HealthConfig:
     startup_grace_sec: float = 30.0        # Grace period after startup
 
 
+@dataclass
+class ReconciliationConfig:
+    """Reconciliation loop configuration."""
+    interval_sec: float = 30.0             # Scan interval
+
+
 # ── Process Supervisor ─────────────────────────────────────────────
 
 class ProcessSupervisor:
@@ -59,7 +66,8 @@ class ProcessSupervisor:
         run_dir: Path,
         log_dir: Path | None = None,
         restart_policy: RestartPolicy | None = None,
-        health_config: HealthConfig | None = None
+        health_config: HealthConfig | None = None,
+        reconciliation_config: ReconciliationConfig | None = None,
     ):
         self.persons_dir = persons_dir
         self.shared_dir = shared_dir
@@ -68,12 +76,18 @@ class ProcessSupervisor:
 
         self.restart_policy = restart_policy or RestartPolicy()
         self.health_config = health_config or HealthConfig()
+        self.reconciliation_config = reconciliation_config or ReconciliationConfig()
 
         self.processes: dict[str, ProcessHandle] = {}
         self._health_check_task: asyncio.Task | None = None
+        self._reconciliation_task: asyncio.Task | None = None
         self._shutdown = False
         self._restart_counts: dict[str, int] = {}
         self._restarting: set[str] = set()
+
+        # Callbacks for person lifecycle events (set by server/app.py)
+        self.on_person_added: Callable[[str], None] | None = None
+        self.on_person_removed: Callable[[str], None] | None = None
 
     async def start_all(self, person_names: list[str]) -> None:
         """
@@ -95,6 +109,11 @@ class ProcessSupervisor:
         # Start health check loop
         self._health_check_task = asyncio.create_task(
             self._health_check_loop()
+        )
+
+        # Start reconciliation loop
+        self._reconciliation_task = asyncio.create_task(
+            self._reconciliation_loop()
         )
 
         logger.info("All processes started")
@@ -158,6 +177,14 @@ class ProcessSupervisor:
             self._health_check_task.cancel()
             try:
                 await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+
+        # Stop reconciliation loop
+        if self._reconciliation_task:
+            self._reconciliation_task.cancel()
+            try:
+                await self._reconciliation_task
             except asyncio.CancelledError:
                 pass
 
@@ -394,6 +421,105 @@ class ProcessSupervisor:
 
         # Restart
         await self._handle_process_failure(person_name, handle)
+
+    # ── Reconciliation ─────────────────────────────────────────────
+
+    @staticmethod
+    def read_person_enabled(person_dir: Path) -> bool:
+        """Read the enabled flag from a person's status.json.
+
+        Returns True (enabled) when:
+        - status.json does not exist (backward compatibility)
+        - status.json exists with ``enabled: true``
+
+        Returns False when status.json exists with ``enabled: false``.
+        """
+        status_file = person_dir / "status.json"
+        if not status_file.exists():
+            return True  # Backward compatibility: no file = enabled
+        try:
+            data = json.loads(status_file.read_text(encoding="utf-8"))
+            return bool(data.get("enabled", True))
+        except (json.JSONDecodeError, OSError):
+            return True  # Treat unreadable file as enabled
+
+    async def _reconciliation_loop(self) -> None:
+        """Periodically reconcile desired state (disk) with actual state (processes)."""
+        logger.info("Reconciliation loop started (interval=%.0fs)",
+                     self.reconciliation_config.interval_sec)
+
+        while not self._shutdown:
+            try:
+                await asyncio.sleep(self.reconciliation_config.interval_sec)
+                await self._reconcile()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("Reconciliation failed")
+
+        logger.info("Reconciliation loop stopped")
+
+    async def _reconcile(self) -> None:
+        """Scan persons_dir and sync desired state with actual process state."""
+        if not self.persons_dir.exists():
+            return
+
+        # Build desired state from disk
+        on_disk: dict[str, bool] = {}  # name -> enabled
+        for person_dir in sorted(self.persons_dir.iterdir()):
+            if not person_dir.is_dir():
+                continue
+            if not (person_dir / "identity.md").exists():
+                continue
+            on_disk[person_dir.name] = self.read_person_enabled(person_dir)
+
+        running = set(self.processes.keys())
+
+        # enabled + not running → start
+        for name, enabled in on_disk.items():
+            if enabled and name not in running:
+                logger.info("Reconciliation: starting person %s", name)
+                try:
+                    await self.start_person(name)
+                    if self.on_person_added:
+                        self.on_person_added(name)
+                except Exception:
+                    logger.exception(
+                        "Reconciliation: failed to start %s", name
+                    )
+
+        # disabled + running → stop
+        for name, enabled in on_disk.items():
+            if not enabled and name in running:
+                logger.info(
+                    "Reconciliation: stopping person %s (disabled)", name
+                )
+                try:
+                    await self.stop_person(name)
+                    if self.on_person_removed:
+                        self.on_person_removed(name)
+                except Exception:
+                    logger.exception(
+                        "Reconciliation: failed to stop %s", name
+                    )
+
+        # removed from disk + running → stop
+        for name in list(running):
+            if name not in on_disk:
+                logger.info(
+                    "Reconciliation: stopping person %s (removed from disk)",
+                    name,
+                )
+                try:
+                    await self.stop_person(name)
+                    if self.on_person_removed:
+                        self.on_person_removed(name)
+                except Exception:
+                    logger.exception(
+                        "Reconciliation: failed to stop %s", name
+                    )
+
+    # ── Status ───────────────────────────────────────────────────
 
     def get_process_status(self, person_name: str) -> dict:
         """

@@ -60,6 +60,19 @@
 
 `../{英名}/` ディレクトリを作成する（自分と同じ階層＝ランタイムのpersons/配下）。
 
+### 3.5. status.json 作成
+
+ディレクトリ作成直後、`status.json` を作成する:
+
+```bash
+echo '{"enabled": true}' > ../{英名}/status.json
+```
+
+これにより、たとえ後続ステップ（画像生成、reload API呼び出し等）が中断しても、
+Supervisorの定期リコンシリエーションで新規Personが自動検出・起動される。
+**identity.md の作成（Step 4）後に初めてSupervisorがPersonとして認識する**ため、
+status.json だけでは起動されない（安全）。
+
 ### 4. ファイル作成
 
 以下のテンプレートに基づいてファイルを作成する:

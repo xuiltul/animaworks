@@ -213,3 +213,175 @@ class TestGetPersonConfig:
         assert data["model"] == "claude-sonnet-4-20250514"
         assert data["execution_mode"] == "a1"
         assert "config" in data
+
+
+# ── POST /persons/{name}/enable ─────────────────────────
+
+
+class TestEnablePerson:
+    async def test_enable_success(self, tmp_path):
+        """Enable a person: status.json written, process started, name added."""
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+
+        app = _make_test_app(persons_dir=persons_dir, person_names=[])
+        supervisor = app.state.supervisor
+        supervisor.processes = {}
+        supervisor.start_person = AsyncMock()
+        supervisor.stop_person = AsyncMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/persons/alice/enable")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "alice"
+        assert data["enabled"] is True
+
+        # Verify status.json was written
+        status_file = alice_dir / "status.json"
+        assert status_file.exists()
+        status_data = json.loads(status_file.read_text(encoding="utf-8"))
+        assert status_data["enabled"] is True
+
+        # Process was started and name was added
+        supervisor.start_person.assert_awaited_once_with("alice")
+        assert "alice" in app.state.person_names
+
+    async def test_enable_already_running(self, tmp_path):
+        """When person is already running, status.json is written but start_person is NOT called."""
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+
+        app = _make_test_app(persons_dir=persons_dir, person_names=["alice"])
+        supervisor = app.state.supervisor
+        supervisor.processes = {"alice": MagicMock()}
+        supervisor.start_person = AsyncMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/persons/alice/enable")
+
+        assert resp.status_code == 200
+
+        # status.json still written
+        status_file = alice_dir / "status.json"
+        assert status_file.exists()
+        status_data = json.loads(status_file.read_text(encoding="utf-8"))
+        assert status_data["enabled"] is True
+
+        # start_person NOT called because already running
+        supervisor.start_person.assert_not_awaited()
+
+    async def test_enable_not_found(self):
+        """Enable a nonexistent person returns 404."""
+        app = _make_test_app(person_names=[])
+        supervisor = app.state.supervisor
+        supervisor.processes = {}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/persons/nonexistent/enable")
+
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"]
+
+    async def test_enable_no_identity(self, tmp_path):
+        """Directory exists but no identity.md returns 404."""
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        # No identity.md created
+
+        app = _make_test_app(persons_dir=persons_dir, person_names=[])
+        supervisor = app.state.supervisor
+        supervisor.processes = {}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/persons/alice/enable")
+
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"]
+
+
+# ── POST /persons/{name}/disable ────────────────────────
+
+
+class TestDisablePerson:
+    async def test_disable_success(self, tmp_path):
+        """Disable a running person: status.json written, process stopped, name removed."""
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+
+        app = _make_test_app(persons_dir=persons_dir, person_names=["alice"])
+        supervisor = app.state.supervisor
+        supervisor.processes = {"alice": MagicMock()}
+        supervisor.start_person = AsyncMock()
+        supervisor.stop_person = AsyncMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/persons/alice/disable")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "alice"
+        assert data["enabled"] is False
+
+        # Verify status.json was written
+        status_file = alice_dir / "status.json"
+        assert status_file.exists()
+        status_data = json.loads(status_file.read_text(encoding="utf-8"))
+        assert status_data["enabled"] is False
+
+        # Process was stopped and name was removed
+        supervisor.stop_person.assert_awaited_once_with("alice")
+        assert "alice" not in app.state.person_names
+
+    async def test_disable_not_running(self, tmp_path):
+        """When person is not running, status.json is written but stop_person is NOT called."""
+        persons_dir = tmp_path / "persons"
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+
+        app = _make_test_app(persons_dir=persons_dir, person_names=[])
+        supervisor = app.state.supervisor
+        supervisor.processes = {}
+        supervisor.stop_person = AsyncMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/persons/alice/disable")
+
+        assert resp.status_code == 200
+
+        # status.json still written
+        status_file = alice_dir / "status.json"
+        assert status_file.exists()
+        status_data = json.loads(status_file.read_text(encoding="utf-8"))
+        assert status_data["enabled"] is False
+
+        # stop_person NOT called because not running
+        supervisor.stop_person.assert_not_awaited()
+
+    async def test_disable_not_found(self):
+        """Disable a nonexistent person returns 404."""
+        app = _make_test_app(person_names=[])
+        supervisor = app.state.supervisor
+        supervisor.processes = {}
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/persons/nonexistent/disable")
+
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"]

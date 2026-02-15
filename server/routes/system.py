@@ -50,6 +50,8 @@ def create_system_router() -> APIRouter:
         removed: list[str] = []
 
         # Discover current persons on disk
+        from core.supervisor.manager import ProcessSupervisor
+
         on_disk: set[str] = set()
         if persons_dir.exists():
             for person_dir in sorted(persons_dir.iterdir()):
@@ -58,6 +60,12 @@ def create_system_router() -> APIRouter:
                 if not (person_dir / "identity.md").exists():
                     continue
                 name = person_dir.name
+
+                # Respect status.json: skip disabled persons
+                if not ProcessSupervisor.read_person_enabled(person_dir):
+                    on_disk.add(name)
+                    continue
+
                 on_disk.add(name)
 
                 if name not in current_names:

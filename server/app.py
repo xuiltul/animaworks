@@ -29,6 +29,20 @@ logger = logging.getLogger("animaworks.server")
 async def lifespan(app: FastAPI):
     # Only start person processes when setup is complete
     if app.state.setup_complete:
+        # Register person lifecycle callbacks for reconciliation
+        def _on_person_added(name: str) -> None:
+            if name not in app.state.person_names:
+                app.state.person_names.append(name)
+                logger.info("Person added via reconciliation: %s", name)
+
+        def _on_person_removed(name: str) -> None:
+            if name in app.state.person_names:
+                app.state.person_names.remove(name)
+                logger.info("Person removed via reconciliation: %s", name)
+
+        app.state.supervisor.on_person_added = _on_person_added
+        app.state.supervisor.on_person_removed = _on_person_removed
+
         await app.state.supervisor.start_all(app.state.person_names)
         logger.info("Server started with process isolation")
     else:

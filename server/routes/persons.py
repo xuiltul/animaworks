@@ -8,7 +8,7 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.dependencies import get_person
 
@@ -143,5 +143,55 @@ def create_persons_router() -> APIRouter:
             "execution_mode": resolved.execution_mode,
             "config": resolved.model_dump(),
         }
+
+    # ── Enable / Disable ─────────────────────────────────────
+
+    @router.post("/persons/{name}/enable")
+    async def enable_person(name: str, request: Request):
+        """Enable a Person (set status.json to enabled: true)."""
+        persons_dir = request.app.state.persons_dir
+        person_dir = persons_dir / name
+        if not person_dir.exists() or not (person_dir / "identity.md").exists():
+            raise HTTPException(
+                status_code=404, detail=f"Person '{name}' not found"
+            )
+
+        status_file = person_dir / "status.json"
+        status_file.write_text(
+            json.dumps({"enabled": True}, indent=2), encoding="utf-8"
+        )
+
+        # Start immediately (don't wait for reconciliation)
+        supervisor = request.app.state.supervisor
+        if name not in supervisor.processes:
+            await supervisor.start_person(name)
+            if name not in request.app.state.person_names:
+                request.app.state.person_names.append(name)
+
+        return {"name": name, "enabled": True}
+
+    @router.post("/persons/{name}/disable")
+    async def disable_person(name: str, request: Request):
+        """Disable a Person (set status.json to enabled: false and stop process)."""
+        persons_dir = request.app.state.persons_dir
+        person_dir = persons_dir / name
+        if not person_dir.exists() or not (person_dir / "identity.md").exists():
+            raise HTTPException(
+                status_code=404, detail=f"Person '{name}' not found"
+            )
+
+        status_file = person_dir / "status.json"
+        status_file.write_text(
+            json.dumps({"enabled": False}, indent=2), encoding="utf-8"
+        )
+
+        # Stop immediately
+        supervisor = request.app.state.supervisor
+        if name in supervisor.processes:
+            await supervisor.stop_person(name)
+            if name in request.app.state.person_names:
+                request.app.state.person_names.remove(name)
+
+        return {"name": name, "enabled": False}
 
     return router

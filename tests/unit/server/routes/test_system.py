@@ -1,6 +1,7 @@
 """Unit tests for server/routes/system.py — System endpoints."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -186,6 +187,39 @@ class TestReloadPersons:
             resp = await client.post("/api/system/reload")
         data = resp.json()
         assert data["total"] == 0
+
+    async def test_reload_skips_disabled_person(self, tmp_path):
+        """A person with status.json {enabled: false} is NOT added or started on reload."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+        shared_dir = tmp_path / "shared"
+
+        # Create person on disk with identity.md but disabled via status.json
+        alice_dir = persons_dir / "alice"
+        alice_dir.mkdir()
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "status.json").write_text(
+            json.dumps({"enabled": False}), encoding="utf-8"
+        )
+
+        app = _make_test_app(
+            persons={},
+            persons_dir=persons_dir,
+            shared_dir=shared_dir,
+            person_names=[],
+        )
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/system/reload")
+
+        data = resp.json()
+        # Disabled person should NOT be added
+        assert "alice" not in data["added"]
+        assert "alice" not in data["refreshed"]
+        assert data["total"] == 0
+
+        # start_person should NOT have been called
+        app.state.supervisor.start_person.assert_not_awaited()
 
 
 # ── GET /activity/recent ─────────────────────────────────
