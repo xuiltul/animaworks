@@ -67,7 +67,7 @@ class TestModeBMock:
             content="The capital of France is Paris."
         )
         extract_resp = make_litellm_response(
-            content="France's capital is Paris — useful geographic fact."
+            content="## 知識抽出\nFrance's capital is Paris — useful geographic fact.\n\n## 返信判定\n返信不要"
         )
 
         with patch_litellm(main_resp, extract_resp):

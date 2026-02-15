@@ -75,7 +75,7 @@ def test_scenario_type_distribution():
     assert counts["episodic"] == 30
     assert counts["multihop"] == 20
     assert counts["long"] == 10
-    assert sum(counts.values()) == 90  # Due to int rounding
+    assert sum(counts.values()) == 100
 
 
 # ── Knowledge File Generation Tests ──────────────────────────────────────────

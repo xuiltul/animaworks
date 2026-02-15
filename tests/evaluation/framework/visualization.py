@@ -108,6 +108,18 @@ class ExperimentVisualizer:
 
         fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
+        # Determine conditions from data
+        conditions = data["condition"].unique().tolist()
+
+        # Build labels for tick marks
+        label_map = {
+            "bm25": "BM25",
+            "vector": "Vector",
+            "hybrid": "Hybrid",
+            "hybrid_priming": "Hybrid+Priming",
+        }
+        tick_labels = [label_map.get(c, c) for c in conditions]
+
         # Box plot
         ax1 = axes[0]
         sns.boxplot(
@@ -121,11 +133,14 @@ class ExperimentVisualizer:
         ax1.set_xlabel("Search Strategy")
         ax1.set_ylabel("Response Latency (seconds)")
         ax1.set_title("Response Latency Distribution")
-        ax1.set_xticklabels(["BM25", "Vector", "Hybrid", "Hybrid+Priming"])
+        ax1.set_xticks(range(len(conditions)))
+        ax1.set_xticklabels(tick_labels)
 
         # Add percentile markers
-        for i, condition in enumerate(["bm25", "vector", "hybrid", "hybrid_priming"]):
+        for i, condition in enumerate(conditions):
             cond_data = data[data["condition"] == condition]["latency"]
+            if len(cond_data) == 0:
+                continue
             p95 = np.percentile(cond_data, 95)
             p99 = np.percentile(cond_data, 99)
             ax1.plot(i, p95, "r^", markersize=6, label="P95" if i == 0 else "")
@@ -146,11 +161,13 @@ class ExperimentVisualizer:
         ax2.set_xlabel("Search Strategy")
         ax2.set_ylabel("Response Latency (seconds)")
         ax2.set_title("Latency Density Distribution")
-        ax2.set_xticklabels(["BM25", "Vector", "Hybrid", "Hybrid+Priming"])
+        ax2.set_xticks(range(len(conditions)))
+        ax2.set_xticklabels(tick_labels)
 
         plt.tight_layout()
 
         # Save in multiple formats
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         for fmt in formats:
             output_file = output_path.with_suffix(f".{fmt}")
             plt.savefig(output_file, format=fmt)
@@ -203,6 +220,7 @@ class ExperimentVisualizer:
 
         plt.tight_layout()
 
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         for fmt in formats:
             output_file = output_path.with_suffix(f".{fmt}")
             plt.savefig(output_file, format=fmt)
@@ -271,6 +289,7 @@ class ExperimentVisualizer:
 
         plt.tight_layout()
 
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         for fmt in formats:
             output_file = output_path.with_suffix(f".{fmt}")
             plt.savefig(output_file, format=fmt)
@@ -341,6 +360,7 @@ class ExperimentVisualizer:
 
         plt.tight_layout()
 
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         for fmt in formats:
             output_file = output_path.with_suffix(f".{fmt}")
             plt.savefig(output_file, format=fmt)
@@ -399,6 +419,7 @@ class ExperimentVisualizer:
 
         plt.tight_layout()
 
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         for fmt in formats:
             output_file = output_path.with_suffix(f".{fmt}")
             plt.savefig(output_file, format=fmt)
@@ -508,6 +529,7 @@ class ExperimentVisualizer:
 
         plt.tight_layout()
 
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         for fmt in formats:
             output_file = output_path.with_suffix(f".{fmt}")
             plt.savefig(output_file, format=fmt)

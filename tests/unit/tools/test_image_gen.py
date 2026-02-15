@@ -281,7 +281,8 @@ class TestImageGenPipeline:
         assert pipe._config.style_prefix == ""
         assert pipe._config.vibe_strength == 0.6
 
-    def test_generate_all_applies_style_prefix_suffix(self, tmp_path: Path):
+    def test_generate_all_applies_style_prefix_suffix(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("NOVELAI_TOKEN", "test-token")
         from core.config.models import ImageGenConfig
 
         cfg = ImageGenConfig(
@@ -304,7 +305,8 @@ class TestImageGenPipeline:
             call_kwargs = mock_client.generate_fullbody.call_args[1]
             assert call_kwargs["prompt"] == "anime coloring, 1girl, black hair, high quality"
 
-    def test_generate_all_applies_negative_prompt_extra(self, tmp_path: Path):
+    def test_generate_all_applies_negative_prompt_extra(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("NOVELAI_TOKEN", "test-token")
         from core.config.models import ImageGenConfig
 
         cfg = ImageGenConfig(negative_prompt_extra="realistic, 3d render")
@@ -325,7 +327,8 @@ class TestImageGenPipeline:
             call_kwargs = mock_client.generate_fullbody.call_args[1]
             assert call_kwargs["negative_prompt"] == "lowres, bad anatomy, realistic, 3d render"
 
-    def test_generate_all_applies_negative_prompt_extra_empty(self, tmp_path: Path):
+    def test_generate_all_applies_negative_prompt_extra_empty(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("NOVELAI_TOKEN", "test-token")
         from core.config.models import ImageGenConfig
 
         cfg = ImageGenConfig(negative_prompt_extra="realistic")
@@ -346,7 +349,8 @@ class TestImageGenPipeline:
             call_kwargs = mock_client.generate_fullbody.call_args[1]
             assert call_kwargs["negative_prompt"] == "realistic"
 
-    def test_generate_all_loads_style_reference(self, tmp_path: Path):
+    def test_generate_all_loads_style_reference(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("NOVELAI_TOKEN", "test-token")
         from core.config.models import ImageGenConfig
 
         style_ref = tmp_path / "style_ref.png"
@@ -369,7 +373,8 @@ class TestImageGenPipeline:
             call_kwargs = mock_client.generate_fullbody.call_args[1]
             assert call_kwargs["vibe_image"] == b"STYLE-IMAGE-DATA"
 
-    def test_generate_all_warns_missing_style_reference(self, tmp_path: Path, caplog):
+    def test_generate_all_warns_missing_style_reference(self, tmp_path: Path, monkeypatch, caplog):
+        monkeypatch.setenv("NOVELAI_TOKEN", "test-token")
         import logging
         from core.config.models import ImageGenConfig
 
@@ -392,7 +397,8 @@ class TestImageGenPipeline:
             assert call_kwargs["vibe_image"] is None
             assert any("Style reference not found" in r.message for r in caplog.records)
 
-    def test_generate_all_passes_vibe_params(self, tmp_path: Path):
+    def test_generate_all_passes_vibe_params(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setenv("NOVELAI_TOKEN", "test-token")
         from core.config.models import ImageGenConfig
 
         cfg = ImageGenConfig(vibe_strength=0.3, vibe_info_extracted=0.5)

@@ -209,94 +209,90 @@ class StatisticalAnalyzer:
 
     def hypothesis_h3_consolidation(
         self,
-        precision_before: list[float],
-        precision_after: list[float],
-        recall_before: list[float] | None = None,
-        recall_after: list[float] | None = None,
+        data: pd.DataFrame,
     ) -> dict[str, Any]:
-        """Test H3: Consolidation effect on search precision.
+        """Test H3: Consolidation effect on memory retention.
 
-        Uses paired t-test to compare search precision before and after
-        consolidation (episode -> knowledge extraction).
+        Uses logistic regression to model retention probability as a function
+        of auto-consolidation, days elapsed, importance, and optionally
+        memory type.
 
-        H0: No difference in precision before/after consolidation
-        H1: Consolidation improves search precision
+        H0: Auto-consolidation does not affect retention
+        H1: Auto-consolidation improves retention
 
         Args:
-            precision_before: Precision@k per query before consolidation
-            precision_after: Precision@k per query after consolidation
-            recall_before: Optional recall@k per query before consolidation
-            recall_after: Optional recall@k per query after consolidation
+            data: DataFrame with columns:
+                - recalled: Binary outcome (0/1)
+                - auto_consolidation: Whether auto-consolidation was applied (0/1)
+                - days_elapsed: Days since encoding
+                - importance: Importance score (1-5)
+                - memory_type: (optional) Type of memory
 
         Returns:
-            Dictionary with paired t-test results
+            Dictionary with logistic regression results:
+                - significant: Whether auto_consolidation is significant
+                - significant_predictors: List of significant predictor names
+                - coefficients: Dict of predictor -> coefficient
+                - odds_ratios: Dict of predictor -> odds ratio
+                - p_values: Dict of predictor -> p-value
+                - accuracy: Classification accuracy
+                - sample_size: Number of observations
+                - aic: Akaike Information Criterion (if statsmodels available)
+                - bic: Bayesian Information Criterion (if statsmodels available)
         """
-        if len(precision_before) != len(precision_after):
-            raise ValueError("Paired t-test requires equal sample sizes")
+        import statsmodels.api as sm
 
-        if len(precision_before) < 2:
-            raise ValueError("Need at least 2 samples for t-test")
+        # Build feature matrix
+        feature_cols = ["auto_consolidation", "days_elapsed", "importance"]
 
-        before = np.array(precision_before)
-        after = np.array(precision_after)
-
-        # Paired t-test
-        t_stat, p_value = stats.ttest_rel(after, before)
-
-        # Cohen's d (paired samples)
-        differences = after - before
-        pooled_std = np.std(differences, ddof=1)
-        effect_size = float(np.mean(differences) / pooled_std) if pooled_std > 0 else 0.0
-
-        # Effect size interpretation (Cohen, 1988)
-        abs_d = abs(effect_size)
-        if abs_d < 0.2:
-            interpretation = "negligible"
-        elif abs_d < 0.5:
-            interpretation = "small"
-        elif abs_d < 0.8:
-            interpretation = "medium"
+        # Handle memory_type via dummy encoding if present
+        if "memory_type" in data.columns:
+            dummies = pd.get_dummies(data["memory_type"], prefix="type", drop_first=True).astype(int)
+            X = pd.concat([data[feature_cols], dummies], axis=1)
         else:
-            interpretation = "large"
+            X = data[feature_cols].copy()
 
-        # Mean improvement
-        mean_before = float(np.mean(before))
-        mean_after = float(np.mean(after))
-        improvement_pct = (
-            ((mean_after - mean_before) / mean_before) * 100
-            if mean_before > 0
-            else 0.0
-        )
+        y = data["recalled"]
 
-        # 95% Confidence interval for mean difference
-        se_diff = stats.sem(differences)
-        df = len(differences) - 1
-        ci = stats.t.interval(0.95, df, loc=np.mean(differences), scale=se_diff)
+        # Add constant for intercept
+        X_with_const = sm.add_constant(X)
 
-        result: dict[str, Any] = {
-            "t_statistic": float(t_stat),
-            "p_value": float(p_value),
-            "effect_size": float(effect_size),
-            "interpretation": interpretation,
-            "significant": bool(p_value < self.alpha),
-            "mean_precision_before": mean_before,
-            "mean_precision_after": mean_after,
-            "improvement_pct": float(improvement_pct),
-            "confidence_interval": (float(ci[0]), float(ci[1])),
-            "sample_size": len(precision_before),
+        # Fit logistic regression
+        model = sm.Logit(y, X_with_const)
+        result = model.fit(disp=0)
+
+        # Extract coefficients (exclude constant)
+        predictor_names = [c for c in X_with_const.columns if c != "const"]
+        coefficients: dict[str, float] = {}
+        odds_ratios: dict[str, float] = {}
+        p_values: dict[str, float] = {}
+        significant_predictors: list[str] = []
+
+        for name in predictor_names:
+            coef = float(result.params[name])
+            pval = float(result.pvalues[name])
+            coefficients[name] = coef
+            odds_ratios[name] = float(np.exp(coef))
+            p_values[name] = pval
+            if pval < self.alpha:
+                significant_predictors.append(name)
+
+        # Calculate accuracy
+        predicted_probs = result.predict(X_with_const)
+        predicted_classes = (predicted_probs >= 0.5).astype(int)
+        accuracy = float((predicted_classes == y).mean())
+
+        return {
+            "significant": "auto_consolidation" in significant_predictors,
+            "significant_predictors": significant_predictors,
+            "coefficients": coefficients,
+            "odds_ratios": odds_ratios,
+            "p_values": p_values,
+            "accuracy": accuracy,
+            "sample_size": len(data),
+            "aic": float(result.aic),
+            "bic": float(result.bic),
         }
-
-        # Add recall stats if provided
-        if recall_before is not None and recall_after is not None:
-            r_before = np.array(recall_before)
-            r_after = np.array(recall_after)
-            r_t_stat, r_p_value = stats.ttest_rel(r_after, r_before)
-            result["recall_t_statistic"] = float(r_t_stat)
-            result["recall_p_value"] = float(r_p_value)
-            result["mean_recall_before"] = float(np.mean(r_before))
-            result["mean_recall_after"] = float(np.mean(r_after))
-
-        return result
 
     # ── Power Analysis ──────────────────────────────────────────────────
 

@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+psutil = pytest.importorskip("psutil")
+
 from core.supervisor.manager import ProcessSupervisor
 from core.supervisor.process_handle import ProcessState
 
@@ -72,7 +74,6 @@ async def test_stop_person_process(data_dir: Path, make_person):
         assert handle.state == ProcessState.STOPPED
 
         # Verify process actually exited
-        import psutil
         assert not psutil.pid_exists(pid)
 
     finally:
@@ -170,6 +171,5 @@ async def test_graceful_shutdown_all(data_dir: Path, make_person):
     assert len(supervisor.processes) == 0
 
     # Verify processes actually exited
-    import psutil
     for pid in pids:
         assert not psutil.pid_exists(pid)

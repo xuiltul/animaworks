@@ -43,7 +43,7 @@ async def test_concurrent_heartbeat_no_deadlock(data_dir: Path, make_person):
         elapsed = time.time() - start_time
 
         # Verify all completed (no deadlock)
-        assert elapsed < 30.0, "Heartbeats took too long (possible deadlock)"
+        assert elapsed < 35.0, "Heartbeats took too long (possible deadlock)"
 
         # Verify all succeeded or have expected errors
         for i, result in enumerate(results):

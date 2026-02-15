@@ -257,9 +257,14 @@ def test_calculate_agreement_disjoint(gt_manager, sample_scenarios, sample_memor
 
     # Manually swap relevant/irrelevant for all annotations
     for query_id, gt in annotation_set2.annotations.items():
-        # Swap relevant and irrelevant
-        gt.relevant_memories = []
-        # (irrelevant stays as is)
+        # Swap relevant and irrelevant: what was relevant becomes irrelevant and vice versa
+        original_relevant = gt.relevant_memories
+        original_irrelevant = gt.irrelevant_memories
+        gt.relevant_memories = [
+            RelevantMemory(file_path=p, relevance="high")
+            for p in original_irrelevant
+        ]
+        gt.irrelevant_memories = [rm.file_path for rm in original_relevant]
 
     agreement = gt_manager.calculate_agreement(annotation_set1, annotation_set2)
 

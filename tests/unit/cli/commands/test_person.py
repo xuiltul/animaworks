@@ -221,8 +221,8 @@ class TestCmdChat:
         captured = capsys.readouterr()
         assert "Remote reply" in captured.out
 
-    @patch("httpx.post", side_effect=__import__("httpx").ConnectError("fail"))
-    def test_chat_remote_connection_error(self, mock_post):
+    @patch("httpx.request", side_effect=__import__("httpx").ConnectError("fail"))
+    def test_chat_remote_connection_error(self, mock_request):
         from cli.commands.person import cmd_chat
 
         args = argparse.Namespace(
@@ -299,8 +299,8 @@ class TestCmdHeartbeat:
         captured = capsys.readouterr()
         assert "skip" in captured.out
 
-    @patch("httpx.post", side_effect=__import__("httpx").ConnectError("fail"))
-    def test_heartbeat_remote_error(self, mock_post):
+    @patch("httpx.request", side_effect=__import__("httpx").ConnectError("fail"))
+    def test_heartbeat_remote_error(self, mock_request):
         from cli.commands.person import cmd_heartbeat
 
         args = argparse.Namespace(

@@ -122,8 +122,8 @@ class TestCmdList:
         assert "bob" in captured.out
 
     @patch("cli.commands.messaging._list_local")
-    @patch("httpx.get", side_effect=__import__("httpx").ConnectError("fail"))
-    def test_list_remote_fallback(self, mock_get, mock_local, capsys):
+    @patch("httpx.request", side_effect=__import__("httpx").ConnectError("fail"))
+    def test_list_remote_fallback(self, mock_request, mock_local, capsys):
         from cli.commands.messaging import cmd_list
 
         args = argparse.Namespace(
@@ -192,8 +192,8 @@ class TestCmdStatus:
         assert "Persons: 2" in captured.out
         assert "running" in captured.out
 
-    @patch("httpx.get", side_effect=__import__("httpx").ConnectError("fail"))
-    def test_status_connection_error(self, mock_get):
+    @patch("httpx.request", side_effect=__import__("httpx").ConnectError("fail"))
+    def test_status_connection_error(self, mock_request):
         from cli.commands.messaging import cmd_status
 
         args = argparse.Namespace(gateway_url="http://localhost:18500")
