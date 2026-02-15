@@ -581,30 +581,6 @@ function setupWebSocket() {
     });
   }));
 
-  wsUnsubscribers.push(onEvent("chat.response", (data) => {
-    const personName = data.person || data.name;
-    const msg = data.response || data.message || "";
-    // If conversation panel is open for this person, add message there
-    if (getState().conversationPerson === personName) {
-      const { chatMessages } = getState();
-      if (!chatMessages.some((m) => m.streaming)) {
-        const last = chatMessages[chatMessages.length - 1];
-        if (!(last && last.role === "assistant" && last.text === msg)) {
-          setState({ chatMessages: [...chatMessages, { role: "assistant", text: msg }] });
-          renderConvMessages();
-        }
-      }
-    }
-    addActivity("chat", personName, msg.slice(0, 60));
-    addTimelineEvent({
-      id: Date.now().toString(),
-      type: "chat",
-      persons: [personName],
-      timestamp: new Date().toISOString(),
-      summary: msg.slice(0, 80),
-    });
-  }));
-
   wsUnsubscribers.push(onEvent("person.assets_updated", async (data) => {
     const personName = data.name;
     addActivity("system", personName, `アセット更新: ${(data.assets || []).join(", ")}`);

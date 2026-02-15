@@ -136,13 +136,6 @@ async def _stream_events(
             if frame:
                 yield frame
 
-        if full_response:
-            clean_text, _ = extract_emotion(full_response)
-            await emit(
-                request, "chat.response",
-                {"name": name, "message": clean_text},
-            )
-
     except Exception:
         logger.exception("SSE stream error for person=%s", name)
         yield _format_sse("error", {"message": "Internal server error"})
@@ -178,7 +171,6 @@ def create_chat_router() -> APIRouter:
             clean_response, _ = extract_emotion(response)
 
             await emit(request, "person.status", {"name": name, "status": "idle"})
-            await emit(request, "chat.response", {"name": name, "message": clean_response})
 
             return ChatResponse(response=clean_response, person=name)
 
@@ -273,13 +265,6 @@ def create_chat_router() -> APIRouter:
                             # Raw text chunk fallback
                             full_response += ipc_response.chunk
                             yield _format_sse("text_delta", {"text": ipc_response.chunk})
-
-                if full_response:
-                    clean_text, _ = extract_emotion(full_response)
-                    await emit(
-                        request, "chat.response",
-                        {"name": name, "message": clean_text},
-                    )
 
             except KeyError:
                 logger.error("Person not found during stream: %s", name)

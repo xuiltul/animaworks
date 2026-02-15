@@ -196,8 +196,8 @@ class TestBustupExpressionE2E:
                 assert data["emotion"] == "neutral"
                 break
 
-    async def test_emotion_stripped_from_chat_response_broadcast(self):
-        """Test that the chat.response WebSocket broadcast does not contain emotion metadata."""
+    async def test_no_chat_response_broadcast_on_stream(self):
+        """Test that chat.response WebSocket broadcast is NOT emitted during streaming."""
         app = _make_test_app_with_supervisor()
 
         async def mock_stream(*args, **kwargs):
@@ -221,14 +221,13 @@ class TestBustupExpressionE2E:
                 json={"message": "Hi"},
             )
 
-        # Check WebSocket broadcasts - chat.response should have clean text
+        # Verify no chat.response broadcast was sent
         ws = app.state.ws_manager
         for call in ws.broadcast.call_args_list:
             payload = call[0][0] if call[0] else call[1].get("message", {})
-            if isinstance(payload, dict) and payload.get("type") == "chat.response":
-                message_text = payload.get("data", {}).get("message", "")
-                assert "<!-- emotion" not in message_text
-                assert message_text == "Hello!"
+            if isinstance(payload, dict):
+                assert payload.get("type") != "chat.response", \
+                    "chat.response should not be broadcast during streaming"
 
     @pytest.mark.parametrize("emotion", [
         "smile", "laugh", "troubled", "surprised", "thinking", "embarrassed",

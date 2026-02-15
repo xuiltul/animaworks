@@ -2,7 +2,6 @@
 
 import { state, dom } from "./state.js";
 import { addActivity } from "./activity.js";
-import { renderChat } from "./chat.js";
 import { renderPersonDropdown, updatePersonAvatar, refreshSelectedPerson } from "./persons.js";
 import { updateSystemStatus } from "./status.js";
 
@@ -99,27 +98,6 @@ function handleWsMessage(raw) {
       const personName = data.name || data.person;
       if (personName) {
         addActivity("cron", personName, data.summary || data.job || "スケジュール実行");
-      }
-      break;
-    }
-
-    case "chat.response": {
-      const personName = data.person || data.name;
-      const response = data.response || data.message;
-      if (personName && response) {
-        if (state.chatHistories[personName]) {
-          const history = state.chatHistories[personName];
-          const isStreaming = history.some((m) => m.streaming);
-          if (isStreaming) break;
-          const thinkIdx = history.findIndex((m) => m.role === "thinking");
-          if (thinkIdx !== -1) history.splice(thinkIdx, 1);
-          const last = history[history.length - 1];
-          if (!last || last.text !== response) {
-            history.push({ role: "assistant", text: response });
-          }
-          if (personName === state.selectedPerson) renderChat();
-        }
-        addActivity("chat", personName, `応答: ${response.slice(0, 100)}`);
       }
       break;
     }

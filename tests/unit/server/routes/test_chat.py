@@ -145,8 +145,13 @@ class TestChat:
             )
 
         ws = app.state.ws_manager
-        # At least 3 broadcasts: thinking status, idle status, chat.response
-        assert ws.broadcast.await_count >= 3
+        # 2 broadcasts: thinking status + idle status
+        assert ws.broadcast.await_count >= 2
+        broadcast_types = [
+            call[0][0]["type"] for call in ws.broadcast.call_args_list
+        ]
+        assert "person.status" in broadcast_types
+        assert "chat.response" not in broadcast_types
 
     async def test_chat_missing_message_field(self):
         app = _make_test_app({"alice": _make_mock_person()})
