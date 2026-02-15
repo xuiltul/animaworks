@@ -179,6 +179,49 @@ class TestArchiveAll:
         count = messenger.archive_all()
         assert count == 0
 
+    def test_cleans_non_json_files(self, shared_dir, messenger):
+        """A .txt file in inbox is moved to processed/ by archive_all()."""
+        inbox = shared_dir / "inbox" / "alice"
+        (inbox / "stray.txt").write_text("not json", encoding="utf-8")
+
+        count = messenger.archive_all()
+        # Return value counts only .json files
+        assert count == 0
+        # The .txt file should have been moved to processed/
+        processed = inbox / "processed"
+        assert (processed / "stray.txt").exists()
+        assert not (inbox / "stray.txt").exists()
+
+    def test_ignores_hidden_files(self, shared_dir, messenger):
+        """Files starting with '.' are left untouched by archive_all()."""
+        inbox = shared_dir / "inbox" / "alice"
+        (inbox / ".tmp").write_text("hidden", encoding="utf-8")
+
+        count = messenger.archive_all()
+        assert count == 0
+        # Hidden file should remain in inbox, not moved
+        assert (inbox / ".tmp").exists()
+        processed = inbox / "processed"
+        assert not (processed / ".tmp").exists()
+
+    def test_cleans_non_json_alongside_json(self, shared_dir, messenger):
+        """.json and .txt coexist — both are correctly processed."""
+        bob = Messenger(shared_dir, "bob")
+        bob.send("alice", "real message")
+        inbox = shared_dir / "inbox" / "alice"
+        (inbox / "leftover.txt").write_text("stray", encoding="utf-8")
+
+        count = messenger.archive_all()
+        # Only the .json file is counted
+        assert count == 1
+        processed = inbox / "processed"
+        # Both files should be in processed/
+        assert (processed / "leftover.txt").exists()
+        assert len(list(processed.glob("*.json"))) == 1
+        # Inbox should have neither
+        assert not (inbox / "leftover.txt").exists()
+        assert len(list(inbox.glob("*.json"))) == 0
+
 
 # ── archive_from ──────────────────────────────────────────
 
