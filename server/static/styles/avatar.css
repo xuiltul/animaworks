@@ -29,4 +29,5 @@
   font-size: 16px;
   font-weight: 600;
   line-height: 1;
+  transition: filter 0.4s ease, opacity 0.4s ease;
 }

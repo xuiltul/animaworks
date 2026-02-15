@@ -50,6 +50,7 @@ def create_persons_router() -> APIRouter:
             data = {
                 "name": name,
                 "status": proc_status.get("status", "unknown"),
+                "bootstrapping": proc_status.get("bootstrapping", False),
                 "pid": proc_status.get("pid"),
                 "uptime_sec": proc_status.get("uptime_sec"),
                 "appearance": appearance,
@@ -143,5 +144,23 @@ def create_persons_router() -> APIRouter:
             "execution_mode": resolved.execution_mode,
             "config": resolved.model_dump(),
         }
+
+    @router.post("/persons/{name}/start")
+    async def start_person(name: str, request: Request):
+        """Start a stopped person process."""
+        supervisor = request.app.state.supervisor
+        person_names = request.app.state.person_names
+
+        if name not in person_names:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail=f"Person not found: {name}")
+
+        proc_status = supervisor.get_process_status(name)
+        current = proc_status.get("status", "unknown")
+        if current not in ("not_found", "stopped", "unknown"):
+            return {"status": "already_running", "current_status": current}
+
+        await supervisor.start_person(name)
+        return {"status": "started", "name": name}
 
     return router

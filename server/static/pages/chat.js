@@ -237,9 +237,15 @@ function _renderPersonDropdown() {
 
   let html = '<option value="" disabled>パーソンを選択...</option>';
   for (const p of _persons) {
-    const statusLabel = p.status ? ` (${p.status})` : "";
     const selected = p.name === _selectedPerson ? " selected" : "";
-    html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${statusLabel}</option>`;
+    if (p.status === "bootstrapping" || p.bootstrapping) {
+      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>\u23F3 ${escapeHtml(p.name)} (制作中...)</option>`;
+    } else if (p.status === "not_found" || p.status === "stopped") {
+      html += `<option value="${escapeHtml(p.name)}"${selected}>\uD83D\uDCA4 ${escapeHtml(p.name)} (停止中)</option>`;
+    } else {
+      const statusLabel = p.status ? ` (${p.status})` : "";
+      html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${statusLabel}</option>`;
+    }
   }
   select.innerHTML = html;
 }
@@ -414,6 +420,20 @@ function _submitChat() {
 async function _sendChat(message) {
   const name = _selectedPerson;
   if (!name || !message.trim()) return;
+
+  // Guard: block sending to bootstrapping persons
+  const currentPerson = _persons.find((p) => p.name === name);
+  if (currentPerson?.status === "bootstrapping" || currentPerson?.bootstrapping) {
+    const msgs = _$("chatPageMessages");
+    if (msgs) {
+      const systemMsg = document.createElement("div");
+      systemMsg.className = "chat-bubble assistant";
+      systemMsg.textContent = "このキャラクターは現在制作中です。完了までお待ちください。";
+      msgs.appendChild(systemMsg);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+    return;
+  }
 
   if (!_chatHistories[name]) _chatHistories[name] = [];
   const history = _chatHistories[name];

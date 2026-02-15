@@ -18,20 +18,51 @@ export async function loadPersons() {
   }
 }
 
+// ── Person State Class Helper ──────────────────
+export function personStateClass(person) {
+  if (person.status === "bootstrapping" || person.bootstrapping) {
+    return "person-item--loading";
+  }
+  if (person.status === "not_found" || person.status === "stopped") {
+    return "person-item--sleeping";
+  }
+  return "";
+}
+
 export function renderPersonDropdown() {
   const dropdown = dom.personDropdown || document.getElementById("personDropdown");
   if (!dropdown) return; // Person dropdown not in DOM (page not active)
 
   let html = '<option value="" disabled>パーソンを選択...</option>';
   for (const p of state.persons) {
-    const statusLabel = p.status ? ` (${p.status})` : "";
     const selected = p.name === state.selectedPerson ? " selected" : "";
-    html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${statusLabel}</option>`;
+    if (p.status === "bootstrapping" || p.bootstrapping) {
+      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>\u23F3 ${escapeHtml(p.name)} (制作中...)</option>`;
+    } else if (p.status === "not_found" || p.status === "stopped") {
+      html += `<option value="${escapeHtml(p.name)}"${selected}>\uD83D\uDCA4 ${escapeHtml(p.name)} (停止中)</option>`;
+    } else {
+      const statusLabel = p.status ? ` (${p.status})` : "";
+      html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${statusLabel}</option>`;
+    }
   }
   dropdown.innerHTML = html;
 }
 
 export async function selectPerson(name) {
+  // Check if person is sleeping — offer to start
+  const person = state.persons.find((p) => p.name === name);
+  if (person && (person.status === "not_found" || person.status === "stopped")) {
+    const ok = confirm(`${name} は現在停止中です。起動しますか？`);
+    if (!ok) return;
+    try {
+      await api(`/api/persons/${encodeURIComponent(name)}/start`, { method: "POST" });
+    } catch (err) {
+      console.error("Failed to start person:", err);
+    }
+    // Status update will come via WebSocket
+    return;
+  }
+
   state.selectedPerson = name;
 
   // Update dropdown

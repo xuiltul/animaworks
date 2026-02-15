@@ -1254,6 +1254,51 @@ html, body {
   }
 }
 
+/* ── Person Visual States ────────────────────── */
+
+.person-item--sleeping {
+    opacity: 0.45;
+    filter: grayscale(0.85) brightness(0.8);
+}
+
+.person-item--sleeping .person-avatar-placeholder {
+    filter: grayscale(1);
+    opacity: 0.4;
+}
+
+.person-item--loading {
+    opacity: 0.75;
+    pointer-events: none;
+}
+
+.person-item--loading .person-status {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+}
+
+.person-item {
+    transition: opacity 0.4s ease, filter 0.4s ease, transform 0.3s ease;
+}
+
+.person-item--just-activated {
+    animation: activate-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes activate-pop {
+    0%   { transform: scale(0.97); opacity: 0.75; }
+    50%  { transform: scale(1.02); }
+    100% { transform: scale(1);    opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .person-item--sleeping .person-avatar-img {
+        animation: none;
+    }
+    .person-item--just-activated {
+        animation: none;
+    }
+}
+
 /* ── Timeline Panel ────────────────────────── */
 
 .ws-timeline {

@@ -20,7 +20,7 @@ function statusClassName(status) {
   if (!status) return "status-offline";
   const s = status.toLowerCase();
   if (s === "idle" || s === "running") return "status-idle";
-  if (s === "thinking" || s === "processing" || s === "busy") return "status-thinking";
+  if (s === "thinking" || s === "processing" || s === "busy" || s === "bootstrapping") return "status-thinking";
   if (s === "error") return "status-error";
   return "status-offline";
 }
@@ -44,9 +44,15 @@ function renderDropdown() {
   html += '<option value="" disabled>Select a person...</option>';
 
   for (const p of persons) {
-    const st = p.status ? ` (${p.status})` : "";
     const selected = p.name === selectedPerson ? " selected" : "";
-    html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${st}</option>`;
+    if (p.status === "bootstrapping" || p.bootstrapping) {
+      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>\u23F3 ${escapeHtml(p.name)} (制作中...)</option>`;
+    } else if (p.status === "not_found" || p.status === "stopped") {
+      html += `<option value="${escapeHtml(p.name)}"${selected}>\uD83D\uDCA4 ${escapeHtml(p.name)} (停止中)</option>`;
+    } else {
+      const st = p.status ? ` (${p.status})` : "";
+      html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${st}</option>`;
+    }
   }
 
   html += "</select>";

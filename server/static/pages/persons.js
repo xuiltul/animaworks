@@ -66,7 +66,19 @@ async function _renderList() {
       const uptime = p.uptime_sec ? _formatUptime(p.uptime_sec) : "--";
       const pid = p.pid || "--";
 
+      // Determine visual state class
+      let stateClass = "";
+      if (p.status === "bootstrapping" || p.bootstrapping) {
+        stateClass = "person-item person-item--loading";
+      } else if (p.status === "not_found" || p.status === "stopped") {
+        stateClass = "person-item person-item--sleeping";
+      } else {
+        stateClass = "person-item";
+      }
+
       const tr = document.createElement("tr");
+      tr.className = stateClass;
+      tr.dataset.person = p.name;
       tr.style.cursor = "pointer";
       tr.innerHTML = `
         <td style="font-weight:600;">${escapeHtml(p.name)}</td>

@@ -196,6 +196,8 @@ function mapPersonStatusToAnim(status) {
   if (!status) return "idle";
   const s = typeof status === "object" ? status.state || status.status || "idle" : String(status);
   const lower = s.toLowerCase();
+  if (lower === "not_found" || lower === "stopped") return "sleeping";
+  if (lower.includes("bootstrap")) return "thinking";
   if (lower.includes("think") || lower.includes("process")) return "thinking";
   if (lower.includes("work") || lower.includes("busy") || lower.includes("running")) return "working";
   if (lower.includes("error") || lower.includes("fail")) return "error";
@@ -589,6 +591,47 @@ function setupWebSocket() {
       timestamp: new Date().toISOString(),
       summary: data.summary || `cron: ${data.job || ""}`,
     });
+  }));
+
+  wsUnsubscribers.push(onEvent("person.bootstrap", (data) => {
+    const { name, status: bsStatus } = data;
+    if (bsStatus === "started") {
+      const { persons } = getState();
+      const idx = persons.findIndex((p) => p.name === name);
+      if (idx >= 0) {
+        persons[idx] = { ...persons[idx], status: "bootstrapping", bootstrapping: true };
+        setState({ persons: [...persons] });
+        renderPersonSelector(dom.personSelector);
+      }
+      if (getState().officeInitialized) {
+        updateCharacterState(name, "thinking");
+      }
+      addActivity("system", name, "ブートストラップ開始");
+    } else if (bsStatus === "completed") {
+      const { persons } = getState();
+      const idx = persons.findIndex((p) => p.name === name);
+      if (idx >= 0) {
+        persons[idx] = { ...persons[idx], status: "idle", bootstrapping: false };
+        setState({ persons: [...persons] });
+        renderPersonSelector(dom.personSelector);
+      }
+      if (getState().officeInitialized) {
+        updateCharacterState(name, "idle");
+      }
+      addActivity("system", name, "ブートストラップ完了");
+    } else if (bsStatus === "failed") {
+      const { persons } = getState();
+      const idx = persons.findIndex((p) => p.name === name);
+      if (idx >= 0) {
+        persons[idx] = { ...persons[idx], status: "error", bootstrapping: false };
+        setState({ persons: [...persons] });
+        renderPersonSelector(dom.personSelector);
+      }
+      if (getState().officeInitialized) {
+        updateCharacterState(name, "error");
+      }
+      addActivity("system", name, "ブートストラップ失敗");
+    }
   }));
 
   wsUnsubscribers.push(onEvent("person.assets_updated", async (data) => {

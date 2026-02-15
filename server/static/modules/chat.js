@@ -102,6 +102,20 @@ export async function sendChat(message) {
   const name = state.selectedPerson;
   if (!name || !message.trim()) return;
 
+  // Guard: block sending to bootstrapping persons
+  const currentPerson = state.persons.find((p) => p.name === name);
+  if (currentPerson?.status === "bootstrapping" || currentPerson?.bootstrapping) {
+    const chatMessages = dom.chatMessages || document.getElementById("chatMessages");
+    if (chatMessages) {
+      const systemMsg = document.createElement("div");
+      systemMsg.className = "chat-bubble assistant";
+      systemMsg.textContent = "このキャラクターは現在制作中です。完了までお待ちください。";
+      chatMessages.appendChild(systemMsg);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    return;
+  }
+
   if (!state.chatHistories[name]) state.chatHistories[name] = [];
   const history = state.chatHistories[name];
 

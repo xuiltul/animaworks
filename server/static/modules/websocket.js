@@ -129,17 +129,39 @@ function handleWsMessage(raw) {
       if (personName) {
         if (bsStatus === "started") {
           const existing = state.persons.find((p) => p.name === personName);
-          if (existing) existing.status = "bootstrapping";
+          if (existing) {
+            existing.status = "bootstrapping";
+            existing.bootstrapping = true;
+          }
           renderPersonDropdown();
           addActivity("system", personName, "ブートストラップ開始");
         } else if (bsStatus === "completed") {
           const existing = state.persons.find((p) => p.name === personName);
-          if (existing) existing.status = "idle";
+          if (existing) {
+            existing.status = "idle";
+            existing.bootstrapping = false;
+          }
           renderPersonDropdown();
           addActivity("system", personName, "ブートストラップ完了");
+          // Pop-in animation for activated person
+          const el = document.querySelector(`[data-person="${personName}"]`);
+          if (el) {
+            el.classList.add("person-item--just-activated");
+            el.addEventListener("animationend", () => {
+              el.classList.remove("person-item--just-activated");
+            }, { once: true });
+          }
           if (personName === state.selectedPerson) {
             refreshSelectedPerson();
           }
+        } else if (bsStatus === "failed") {
+          const existing = state.persons.find((p) => p.name === personName);
+          if (existing) {
+            existing.status = "error";
+            existing.bootstrapping = false;
+          }
+          renderPersonDropdown();
+          addActivity("system", personName, "ブートストラップ失敗");
         }
       }
       break;
