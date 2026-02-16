@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import shutil
@@ -116,10 +117,14 @@ def create_blank(persons_dir: Path, name: str) -> Path:
 
 
 def create_from_md(persons_dir: Path, md_path: Path, name: str | None = None) -> Path:
-    """Create a person from an MD file.
+    """Create a person from an MD character-sheet file.
 
-    The MD file is placed as character_sheet.md in the new person directory.
-    During bootstrap, the agent reads it and populates identity.md/injection.md.
+    The MD file is validated, then placed as ``character_sheet.md`` in the new
+    person directory.  Sections in the sheet are applied to identity.md,
+    injection.md, permissions.md, and status.json.
+
+    On any failure after the person directory has been created the directory
+    is rolled back (removed) so no partial state is left behind.
 
     Args:
         persons_dir: Runtime persons directory.
@@ -128,11 +133,19 @@ def create_from_md(persons_dir: Path, md_path: Path, name: str | None = None) ->
 
     Returns:
         Path to the created person directory.
+
+    Raises:
+        FileNotFoundError: If *md_path* does not exist.
+        ValueError: If the character sheet is invalid or the name cannot be
+            determined.
     """
     if not md_path.exists():
         raise FileNotFoundError(f"MD file not found: {md_path}")
 
     md_content = md_path.read_text(encoding="utf-8")
+
+    # Validate before creating anything on disk
+    _validate_character_sheet(md_content)
 
     if not name:
         name = _extract_name_from_md(md_content)
@@ -142,9 +155,18 @@ def create_from_md(persons_dir: Path, md_path: Path, name: str | None = None) ->
             "Add a '# Character: name' heading or specify --name."
         )
 
-    # Create blank skeleton first, then add character_sheet.md
+    # Create blank skeleton first, then layer character sheet on top
     person_dir = create_blank(persons_dir, name)
-    (person_dir / "character_sheet.md").write_text(md_content, encoding="utf-8")
+    try:
+        (person_dir / "character_sheet.md").write_text(md_content, encoding="utf-8")
+        _apply_defaults_from_sheet(person_dir, md_content)
+        _create_status_json(person_dir, _parse_character_sheet_info(md_content))
+    except Exception:
+        logger.error(
+            "Failed to set up person '%s' from MD file; rolling back", name
+        )
+        shutil.rmtree(person_dir, ignore_errors=True)
+        raise
 
     logger.info("Created person '%s' from MD file '%s'", name, md_path)
     return person_dir
@@ -163,12 +185,193 @@ def _extract_name_from_md(content: str) -> str | None:
     if m:
         return m.group(1).lower()
 
+    # Try "| 英名 | Name |" table row format
+    m = re.search(r"\|\s*英名\s*\|\s*(\w+)\s*\|", content)
+    if m:
+        return m.group(1).lower()
+
     # Try "英名 Name"
     m = re.search(r"英名\s+(\w+)", content)
     if m:
         return m.group(1).lower()
 
     return None
+
+
+# ── CharacterSheet Helpers ──────────
+
+
+def _parse_character_sheet_info(content: str) -> dict[str, str]:
+    """Parse the markdown table in the '基本情報' section of a character sheet.
+
+    Expects rows like ``| 英名 | sakura |`` and returns a dict mapping
+    the first column to the second, e.g. ``{"英名": "sakura", ...}``.
+
+    Args:
+        content: Full markdown content of the character sheet.
+
+    Returns:
+        Mapping of item name to value parsed from the table.
+    """
+    info: dict[str, str] = {}
+    in_section = False
+    for line in content.splitlines():
+        if re.match(r"^##\s+基本情報", line):
+            in_section = True
+            continue
+        if in_section and line.startswith("## "):
+            break
+        if not in_section:
+            continue
+        # Match table data rows (skip header / separator rows)
+        m = re.match(r"\|\s*(.+?)\s*\|\s*(.+?)\s*\|", line)
+        if m:
+            key = m.group(1).strip()
+            value = m.group(2).strip()
+            # Skip header row and separator row
+            if key in ("項目", "---", "------") or value in ("設定", "---", "------"):
+                continue
+            if set(key) <= {"-", " "} or set(value) <= {"-", " "}:
+                continue
+            info[key] = value
+    return info
+
+
+def _validate_character_sheet(content: str) -> None:
+    """Validate that a character sheet contains all required sections.
+
+    Required sections:
+        - ``## 基本情報``
+        - ``## 人格`` (or ``→ identity.md``)
+        - ``## 役割・行動方針`` (or ``→ injection.md``)
+
+    Args:
+        content: Full markdown content of the character sheet.
+
+    Raises:
+        ValueError: If any required section is missing.
+    """
+    missing: list[str] = []
+
+    if not re.search(r"^##\s+基本情報", content, re.MULTILINE):
+        missing.append("基本情報")
+
+    has_personality = (
+        re.search(r"^##\s+人格", content, re.MULTILINE) is not None
+        or "→ identity.md" in content
+    )
+    if not has_personality:
+        missing.append("人格 (or '→ identity.md')")
+
+    has_injection = (
+        re.search(r"^##\s+役割・行動方針", content, re.MULTILINE) is not None
+        or "→ injection.md" in content
+    )
+    if not has_injection:
+        missing.append("役割・行動方針 (or '→ injection.md')")
+
+    if missing:
+        raise ValueError(
+            "Character sheet is missing required sections: "
+            + ", ".join(missing)
+        )
+
+
+def _create_status_json(person_dir: Path, info: dict[str, str]) -> None:
+    """Create status.json in *person_dir* from parsed character-sheet info.
+
+    The JSON contains supervisor, role, execution mode, model, and credential
+    extracted from the ``基本情報`` table.
+
+    Args:
+        person_dir: Target person directory.
+        info: Dict returned by :func:`_parse_character_sheet_info`.
+    """
+    supervisor_raw = info.get("上司", "")
+    supervisor = "" if supervisor_raw in ("(なし)", "なし", "-", "") else supervisor_raw
+
+    status = {
+        "supervisor": supervisor,
+        "role": info.get("役割", "worker"),
+        "execution_mode": info.get("実行モード", "autonomous"),
+        "model": info.get("モデル", ""),
+        "credential": info.get("credential", ""),
+    }
+    (person_dir / "status.json").write_text(
+        json.dumps(status, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    logger.debug("Created status.json in %s", person_dir)
+
+
+def _extract_section_content(md_content: str, heading: str) -> str | None:
+    """Extract the body text under a ``## heading`` section.
+
+    Returns the content between the heading and the next ``##`` heading
+    (or end-of-file), stripped.  Returns ``None`` if the heading is not
+    found or the section body is empty / only contains a redirect marker
+    like ``→ identity.md``.
+
+    Args:
+        md_content: Full markdown text.
+        heading: Section heading text (without ``## ``).
+
+    Returns:
+        Section body text, or ``None``.
+    """
+    pattern = rf"^##\s+{re.escape(heading)}\s*\n(.*?)(?=^##\s|\Z)"
+    m = re.search(pattern, md_content, re.MULTILINE | re.DOTALL)
+    if not m:
+        return None
+    body = m.group(1).strip()
+    # Treat redirect markers as "no content"
+    if not body or body.startswith("→"):
+        return None
+    return body
+
+
+def _apply_defaults_from_sheet(person_dir: Path, md_content: str) -> None:
+    """Apply character-sheet sections to person files, keeping template defaults.
+
+    For sections marked ``[省略可]`` in the sheet, if they are omitted or
+    empty the existing template files (heartbeat.md, cron.md, permissions.md)
+    are left untouched.
+
+    Sections that **are** present overwrite the corresponding file:
+        - ``## 人格``          → ``identity.md``
+        - ``## 役割・行動方針`` → ``injection.md``
+        - ``## 権限``          → ``permissions.md``
+
+    Args:
+        person_dir: Target person directory (already populated by create_blank).
+        md_content: Full markdown content of the character sheet.
+    """
+    # Identity
+    personality = _extract_section_content(md_content, "人格")
+    if personality:
+        (person_dir / "identity.md").write_text(
+            personality + "\n", encoding="utf-8"
+        )
+        logger.debug("Wrote identity.md from character sheet for %s", person_dir.name)
+
+    # Injection
+    injection = _extract_section_content(md_content, "役割・行動方針")
+    if injection:
+        (person_dir / "injection.md").write_text(
+            injection + "\n", encoding="utf-8"
+        )
+        logger.debug("Wrote injection.md from character sheet for %s", person_dir.name)
+
+    # Permissions
+    permissions = _extract_section_content(md_content, "権限")
+    if permissions:
+        (person_dir / "permissions.md").write_text(
+            permissions + "\n", encoding="utf-8"
+        )
+        logger.debug("Wrote permissions.md from character sheet for %s", person_dir.name)
+
+
+# ── Runtime Helpers ──────────
 
 
 def _ensure_runtime_subdirs(person_dir: Path) -> None:

@@ -1,6 +1,7 @@
 """Unit tests for core/person_factory.py — person creation factory."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,12 +12,17 @@ from core.person_factory import (
     BOOTSTRAP_TEMPLATE,
     PERSON_TEMPLATES_DIR,
     _RUNTIME_SUBDIRS,
+    _apply_defaults_from_sheet,
+    _create_status_json,
     _ensure_runtime_subdirs,
     _extract_name_from_md,
+    _extract_section_content,
     _init_state_files,
+    _parse_character_sheet_info,
     _place_bootstrap,
     _place_send_script,
     _should_create_bootstrap,
+    _validate_character_sheet,
     create_blank,
     create_from_md,
     create_from_template,
@@ -303,11 +309,19 @@ class TestCreateBlank:
 
 
 class TestCreateFromMd:
+    _VALID_SHEET = (
+        "# Character: Alice\n\n"
+        "## 基本情報\n\n"
+        "| 項目 | 設定 |\n|------|------|\n| 英名 | alice |\n\n"
+        "## 人格\n\nDetails here\n\n"
+        "## 役割・行動方針\n\nRole details\n"
+    )
+
     def test_creates_from_md(self, tmp_path):
         persons_dir = tmp_path / "persons"
         persons_dir.mkdir()
         md_file = tmp_path / "char.md"
-        md_file.write_text("# Character: Alice\nDetails here", encoding="utf-8")
+        md_file.write_text(self._VALID_SHEET, encoding="utf-8")
 
         with patch("core.person_factory.BLANK_TEMPLATE_DIR", tmp_path / "no_blank"), \
              patch("core.person_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
@@ -320,7 +334,7 @@ class TestCreateFromMd:
         persons_dir = tmp_path / "persons"
         persons_dir.mkdir()
         md_file = tmp_path / "char.md"
-        md_file.write_text("Some content", encoding="utf-8")
+        md_file.write_text(self._VALID_SHEET, encoding="utf-8")
 
         with patch("core.person_factory.BLANK_TEMPLATE_DIR", tmp_path / "no_blank"), \
              patch("core.person_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
@@ -334,10 +348,17 @@ class TestCreateFromMd:
             create_from_md(persons_dir, tmp_path / "nonexistent.md")
 
     def test_raises_for_unextractable_name(self, tmp_path):
+        """Sheet with required sections but no extractable name raises ValueError."""
         persons_dir = tmp_path / "persons"
         persons_dir.mkdir()
         md_file = tmp_path / "char.md"
-        md_file.write_text("No heading here at all", encoding="utf-8")
+        # Valid sections but no name pattern anywhere
+        md_file.write_text(
+            "## 基本情報\n\n| 項目 | 設定 |\n|------|------|\n\n"
+            "## 人格\n\nSome personality\n\n"
+            "## 役割・行動方針\n\nSome role\n",
+            encoding="utf-8",
+        )
 
         with patch("core.person_factory.BLANK_TEMPLATE_DIR", tmp_path / "no_blank"), \
              patch("core.person_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
@@ -433,3 +454,326 @@ class TestPlaceSendScript:
             person_dir = create_from_template(persons_dir, "dev")
 
         assert (person_dir / "send").exists()
+
+
+# ── _parse_character_sheet_info ──────────────────────────
+
+
+class TestParseCharacterSheetInfo:
+    def test_valid_basic_info_table(self):
+        content = """\
+## 基本情報
+
+| 項目 | 設定 |
+|------|------|
+| 英名 | sakura |
+| 役割 | developer |
+| 上司 | tanaka |
+| モデル | claude-sonnet |
+
+## 人格
+"""
+        info = _parse_character_sheet_info(content)
+        assert info["英名"] == "sakura"
+        assert info["役割"] == "developer"
+        assert info["上司"] == "tanaka"
+        assert info["モデル"] == "claude-sonnet"
+
+    def test_empty_content(self):
+        info = _parse_character_sheet_info("No 基本情報 section here")
+        assert info == {}
+
+    def test_skips_header_and_separator_rows(self):
+        content = """\
+## 基本情報
+
+| 項目 | 設定 |
+|------|------|
+| 英名 | hinata |
+"""
+        info = _parse_character_sheet_info(content)
+        assert "項目" not in info
+        assert "---" not in info
+        assert info["英名"] == "hinata"
+
+
+# ── _validate_character_sheet ────────────────────────────
+
+
+class TestValidateCharacterSheet:
+    def test_valid_sheet(self):
+        content = """\
+## 基本情報
+
+| 英名 | sakura |
+
+## 人格
+
+Friendly and thoughtful.
+
+## 役割・行動方針
+
+Backend development.
+"""
+        # Should not raise
+        _validate_character_sheet(content)
+
+    def test_missing_basic_info(self):
+        content = """\
+## 人格
+
+Friendly.
+
+## 役割・行動方針
+
+Development.
+"""
+        with pytest.raises(ValueError, match="基本情報"):
+            _validate_character_sheet(content)
+
+    def test_missing_personality(self):
+        content = """\
+## 基本情報
+
+| 英名 | sakura |
+
+## 役割・行動方針
+
+Development.
+"""
+        with pytest.raises(ValueError, match="人格"):
+            _validate_character_sheet(content)
+
+    def test_missing_injection(self):
+        content = """\
+## 基本情報
+
+| 英名 | sakura |
+
+## 人格
+
+Friendly.
+"""
+        with pytest.raises(ValueError, match="役割・行動方針"):
+            _validate_character_sheet(content)
+
+    def test_identity_md_redirect_counts_as_valid(self):
+        content = """\
+## 基本情報
+
+| 英名 | sakura |
+
+→ identity.md
+
+→ injection.md
+"""
+        # Both 人格 and 役割・行動方針 are satisfied by redirect markers
+        _validate_character_sheet(content)
+
+
+# ── _create_status_json ──────────────────────────────────
+
+
+class TestCreateStatusJson:
+    def test_creates_status_json_with_correct_fields(self, tmp_path):
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        info = {
+            "英名": "sakura",
+            "役割": "developer",
+            "上司": "tanaka",
+            "実行モード": "assisted",
+            "モデル": "openai/gpt-4o",
+            "credential": "openai_key",
+        }
+        _create_status_json(person_dir, info)
+        status = json.loads((person_dir / "status.json").read_text(encoding="utf-8"))
+        assert status["supervisor"] == "tanaka"
+        assert status["role"] == "developer"
+        assert status["execution_mode"] == "assisted"
+        assert status["model"] == "openai/gpt-4o"
+        assert status["credential"] == "openai_key"
+
+    def test_supervisor_nashi_normalized(self, tmp_path):
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        info = {"上司": "(なし)"}
+        _create_status_json(person_dir, info)
+        status = json.loads((person_dir / "status.json").read_text(encoding="utf-8"))
+        assert status["supervisor"] == ""
+
+
+# ── _extract_section_content ─────────────────────────────
+
+
+class TestExtractSectionContent:
+    def test_extracts_content(self):
+        md = """\
+## 人格
+
+Friendly and thoughtful.
+Loves coding.
+
+## 役割・行動方針
+
+Backend development.
+"""
+        result = _extract_section_content(md, "人格")
+        assert result is not None
+        assert "Friendly and thoughtful." in result
+        assert "Loves coding." in result
+
+    def test_returns_none_for_missing_section(self):
+        md = """\
+## 基本情報
+
+| 英名 | sakura |
+"""
+        result = _extract_section_content(md, "人格")
+        assert result is None
+
+    def test_returns_none_for_redirect_only(self):
+        md = """\
+## 人格
+
+→ identity.md
+
+## 役割・行動方針
+
+Development.
+"""
+        result = _extract_section_content(md, "人格")
+        assert result is None
+
+
+# ── _apply_defaults_from_sheet ───────────────────────────
+
+
+class TestApplyDefaultsFromSheet:
+    def test_writes_identity_md(self, tmp_path):
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        md = """\
+## 人格
+
+Friendly and thoughtful.
+
+## 役割・行動方針
+
+Backend development.
+"""
+        _apply_defaults_from_sheet(person_dir, md)
+        identity = person_dir / "identity.md"
+        assert identity.exists()
+        assert "Friendly and thoughtful." in identity.read_text(encoding="utf-8")
+
+    def test_writes_injection_md(self, tmp_path):
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        md = """\
+## 人格
+
+Personality here.
+
+## 役割・行動方針
+
+Backend development focus.
+"""
+        _apply_defaults_from_sheet(person_dir, md)
+        injection = person_dir / "injection.md"
+        assert injection.exists()
+        assert "Backend development focus." in injection.read_text(encoding="utf-8")
+
+    def test_writes_permissions_md(self, tmp_path):
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        md = """\
+## 人格
+
+Personality.
+
+## 役割・行動方針
+
+Development.
+
+## 権限
+
+- read_file: OK
+- write_file: OK
+"""
+        _apply_defaults_from_sheet(person_dir, md)
+        permissions = person_dir / "permissions.md"
+        assert permissions.exists()
+        content = permissions.read_text(encoding="utf-8")
+        assert "read_file" in content
+        assert "write_file" in content
+
+    def test_does_not_overwrite_when_section_missing(self, tmp_path):
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        (person_dir / "identity.md").write_text("Original identity", encoding="utf-8")
+        # MD with no 人格 section
+        md = """\
+## 役割・行動方針
+
+Development.
+"""
+        _apply_defaults_from_sheet(person_dir, md)
+        assert (person_dir / "identity.md").read_text(encoding="utf-8") == "Original identity"
+
+
+# ── create_from_md rollback ──────────────────────────────
+
+
+class TestCreateFromMdRollback:
+    def test_rollback_on_failure(self, tmp_path):
+        """On failure after directory creation, the directory is cleaned up."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+        md_file = tmp_path / "char.md"
+        md_file.write_text(
+            """\
+# Character: Sakura
+
+## 基本情報
+
+| 英名 | sakura |
+
+## 人格
+
+Friendly.
+
+## 役割・行動方針
+
+Development.
+""",
+            encoding="utf-8",
+        )
+
+        with patch("core.person_factory.BLANK_TEMPLATE_DIR", tmp_path / "no_blank"), \
+             patch("core.person_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"), \
+             patch(
+                 "core.person_factory._apply_defaults_from_sheet",
+                 side_effect=RuntimeError("simulated failure"),
+             ):
+            with pytest.raises(RuntimeError, match="simulated failure"):
+                create_from_md(persons_dir, md_file)
+
+        # Directory should be cleaned up after rollback
+        assert not (persons_dir / "sakura").exists()
+
+
+# ── _extract_name_from_md (table format) ─────────────────
+
+
+class TestExtractNameFromMdTable:
+    def test_table_format(self):
+        content = """\
+## 基本情報
+
+| 項目 | 設定 |
+|------|------|
+| 英名 | hinata |
+| 役割 | developer |
+"""
+        assert _extract_name_from_md(content) == "hinata"

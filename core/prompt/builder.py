@@ -309,6 +309,17 @@ def build_system_prompt(
             f"| スキル名 | 概要 |\n|---------|------|\n{common_skill_lines}"
         )
 
+    # Commander hiring guardrail: force create_person tool usage
+    if skill_summaries:
+        has_newstaff = any(name == "newstaff" for name, _ in skill_summaries)
+        if has_newstaff:
+            parts.append(
+                "## 雇用ルール\n\n"
+                "新しいPersonを雇用する際は、必ず `create_person` ツールを使用してください。\n"
+                "手動で identity.md 等のファイルを個別に作成してはいけません。\n"
+                "キャラクターシートを1ファイルで作成し、create_person に渡してください。"
+            )
+
     # Inject dynamically generated external tools guide (filtered by registry)
     if permissions and "外部ツール" in permissions and (tool_registry or personal_tools):
         if execution_mode == "a2":

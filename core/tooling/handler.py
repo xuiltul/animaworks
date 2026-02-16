@@ -171,6 +171,9 @@ class ToolHandler:
             # Human notification
             elif name == "notify_human":
                 result = self._handle_notify_human(args)
+            # Admin tools
+            elif name == "create_person":
+                result = self._handle_create_person(args)
             else:
                 # ── Background execution for eligible external tools ──
                 if self._background_manager and self._background_manager.is_eligible(name):
@@ -354,6 +357,46 @@ class ToolHandler:
             {"status": "sent", "results": results},
             ensure_ascii=False,
         )
+
+    # ── Admin tool handlers ────────────────────────────────
+
+    def _handle_create_person(self, args: dict[str, Any]) -> str:
+        """Create a new person from a character sheet via person_factory."""
+        from core.person_factory import create_from_md
+        from core.paths import get_data_dir, get_persons_dir
+
+        sheet_path = Path(args["character_sheet_path"]).expanduser()
+        if not sheet_path.is_absolute():
+            sheet_path = self._person_dir / sheet_path
+
+        if not sheet_path.exists():
+            return _error_result(
+                "FileNotFound",
+                f"Character sheet not found: {sheet_path}",
+                suggestion="Write the character_sheet.md first, then call create_person",
+            )
+
+        name = args.get("name")
+        try:
+            person_dir = create_from_md(get_persons_dir(), sheet_path, name=name)
+        except FileExistsError:
+            return _error_result(
+                "PersonExists",
+                f"Person '{name}' already exists",
+                suggestion="Choose a different name",
+            )
+        except ValueError as e:
+            return _error_result("InvalidCharacterSheet", str(e))
+
+        # Register in config.json
+        try:
+            from cli.commands.init_cmd import _register_person_in_config
+            _register_person_in_config(get_data_dir(), person_dir.name)
+        except Exception:
+            logger.warning("Failed to register person in config.json", exc_info=True)
+
+        logger.info("create_person: created '%s' at %s", person_dir.name, person_dir)
+        return f"Person '{person_dir.name}' created successfully at {person_dir}. Reload the server to activate."
 
     # ── File operation handlers ──────────────────────────────
 

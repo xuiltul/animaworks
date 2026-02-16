@@ -250,6 +250,32 @@ DISCOVERY_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+ADMIN_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "create_person",
+        "description": (
+            "Create a new Digital Person from a character sheet. "
+            "Write the character_sheet.md first, then call this tool. "
+            "The factory creates the directory structure atomically, "
+            "and the new person self-configures via bootstrap on first startup."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "character_sheet_path": {
+                    "type": "string",
+                    "description": "Path to the character_sheet.md file (absolute or relative to person_dir)",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Person name (lowercase alphanumeric). If omitted, extracted from sheet.",
+                },
+            },
+            "required": ["character_sheet_path"],
+        },
+    },
+]
+
 # ── Format converters ────────────────────────────────────────
 
 
@@ -289,6 +315,7 @@ def build_tool_list(
     include_search_tools: bool = False,
     include_discovery_tools: bool = False,
     include_notification_tools: bool = False,
+    include_admin_tools: bool = False,
     external_schemas: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Assemble a tool list from canonical definitions.
@@ -298,6 +325,7 @@ def build_tool_list(
         include_search_tools: Include search_code/list_directory tools.
         include_discovery_tools: Include discover_tools tool.
         include_notification_tools: Include notify_human tool (for top-level Persons).
+        include_admin_tools: Include admin tools (create_person etc.).
         external_schemas: Additional tool schemas in canonical format.
 
     Returns:
@@ -312,6 +340,8 @@ def build_tool_list(
         tools.extend(DISCOVERY_TOOLS)
     if include_notification_tools:
         tools.extend(NOTIFICATION_TOOLS)
+    if include_admin_tools:
+        tools.extend(ADMIN_TOOLS)
     if external_schemas:
         tools.extend(external_schemas)
     return tools
