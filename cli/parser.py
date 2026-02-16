@@ -245,6 +245,11 @@ def cli_main() -> None:
 
     optimize_assets.register(sub)
 
+    # ── Remake Assets ─────────────────────────────────────────
+    from cli.commands import remake_cmd
+
+    remake_cmd.register(sub)
+
     args = parser.parse_args()
 
     # Apply --data-dir override before any command

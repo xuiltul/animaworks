@@ -50,6 +50,7 @@ function registerRoutes() {
   routes["/server"] = () => import("../pages/server-page.js");
   routes["/memory"] = () => import("../pages/memory.js");
   routes["/logs"] = () => import("../pages/logs.js");
+  routes["/assets"] = () => import("../pages/assets.js");
 }
 
 // ── Route Handler ───────────────────────────

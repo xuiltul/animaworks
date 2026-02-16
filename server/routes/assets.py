@@ -43,6 +43,35 @@ class ExpressionGenerateRequest(BaseModel):
         return v
 
 
+class RemakePreviewRequest(BaseModel):
+    style_from: str
+    vibe_strength: float = 0.6
+    vibe_info_extracted: float = 0.8
+    prompt: str | None = None
+    seed: int | None = None
+
+    @field_validator("vibe_strength", "vibe_info_extracted")
+    @classmethod
+    def validate_range(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"Value must be between 0.0 and 1.0 (got {v})")
+        return v
+
+
+class RemakeConfirmRequest(BaseModel):
+    backup_id: str
+
+    @field_validator("backup_id")
+    @classmethod
+    def validate_backup_id(cls, v: str) -> str:
+        if not re.match(r"^assets_backup_\d{8}_\d{6}$", v):
+            raise ValueError(
+                f"Invalid backup_id format: {v}. "
+                "Expected: assets_backup_YYYYMMDD_HHMMSS"
+            )
+        return v
+
+
 def create_assets_router() -> APIRouter:
     router = APIRouter()
 
@@ -271,5 +300,237 @@ def create_assets_router() -> APIRouter:
             "expression": body.expression,
             "path": str(result_path) if result_path else None,
         }
+
+    # ── Remake Preview / Confirm / Cancel ──────────────────
+
+    @router.post("/persons/{name}/assets/remake-preview")
+    async def remake_preview(
+        name: str, body: RemakePreviewRequest, request: Request,
+    ):
+        """Generate a fullbody preview using Vibe Transfer from another person."""
+        import asyncio
+        import shutil
+        from datetime import datetime
+
+        persons_dir = request.app.state.persons_dir
+        person_dir = persons_dir / name
+        if not person_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Person not found: {name}")
+
+        style_dir = persons_dir / body.style_from
+        if not style_dir.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Style reference person not found: {body.style_from}",
+            )
+
+        style_fullbody = style_dir / "assets" / "avatar_fullbody.png"
+        if not style_fullbody.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Style reference has no avatar_fullbody.png: {body.style_from}",
+            )
+
+        # Resolve prompt
+        prompt = body.prompt
+        if not prompt:
+            prompt_file = person_dir / "assets" / "prompt.txt"
+            if prompt_file.exists():
+                prompt = prompt_file.read_text(encoding="utf-8").strip()
+            if not prompt:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No prompt available. Provide prompt or create assets/prompt.txt.",
+                )
+
+        # Create backup
+        assets_dir = person_dir / "assets"
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_id = f"assets_backup_{ts}"
+        backup_dir = person_dir / backup_id
+        if assets_dir.exists():
+            shutil.copytree(assets_dir, backup_dir)
+            logger.info("Backup created: %s", backup_dir)
+
+        vibe_image = style_fullbody.read_bytes()
+
+        from core.tools.image_gen import ImageGenPipeline
+
+        pipeline = ImageGenPipeline(person_dir)
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: pipeline.generate_all(
+                prompt=prompt,
+                skip_existing=False,
+                steps=["fullbody"],
+                vibe_image=vibe_image,
+                vibe_strength=body.vibe_strength,
+                vibe_info_extracted=body.vibe_info_extracted,
+                seed=body.seed,
+            ),
+        )
+
+        if result.errors:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Preview generation failed: {'; '.join(result.errors)}",
+            )
+
+        preview_url = f"/api/persons/{name}/assets/avatar_fullbody.png"
+
+        await emit(request, "person.remake_preview_ready", {
+            "name": name,
+            "preview_url": preview_url,
+            "seed_used": body.seed,
+            "backup_id": backup_id,
+        })
+
+        return {
+            "preview_url": preview_url,
+            "seed_used": body.seed,
+            "backup_id": backup_id,
+        }
+
+    @router.post("/persons/{name}/assets/remake-confirm")
+    async def remake_confirm(
+        name: str, body: RemakeConfirmRequest, request: Request,
+    ):
+        """Accept the preview and cascade-rebuild all remaining assets."""
+        import asyncio
+
+        persons_dir = request.app.state.persons_dir
+        person_dir = persons_dir / name
+        if not person_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Person not found: {name}")
+
+        # Verify backup exists
+        backup_dir = person_dir / body.backup_id
+        if not backup_dir.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Backup not found: {body.backup_id}",
+            )
+
+        # Verify fullbody was already generated (from preview step)
+        fullbody_path = person_dir / "assets" / "avatar_fullbody.png"
+        if not fullbody_path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail="No fullbody preview found. Run remake-preview first.",
+            )
+
+        # Resolve prompt
+        prompt_file = person_dir / "assets" / "prompt.txt"
+        prompt = ""
+        if prompt_file.exists():
+            prompt = prompt_file.read_text(encoding="utf-8").strip()
+        if not prompt:
+            raise HTTPException(
+                status_code=400,
+                detail="No prompt.txt found in assets. Cannot cascade rebuild.",
+            )
+
+        remaining_steps = ["bustup", "chibi", "3d", "rigging", "animations"]
+
+        from core.tools.image_gen import ImageGenPipeline
+
+        pipeline = ImageGenPipeline(person_dir)
+
+        app = request.app  # Capture app ref, not request (request lifecycle ends)
+
+        async def _run_cascade() -> None:
+            try:
+                loop = asyncio.get_running_loop()
+
+                def _progress(step: str, status: str, pct: int) -> None:
+                    asyncio.run_coroutine_threadsafe(
+                        _emit_ws("person.remake_progress", {
+                            "name": name,
+                            "step": step,
+                            "status": status,
+                            "progress_pct": pct,
+                        }),
+                        loop,
+                    )
+
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: pipeline.generate_all(
+                        prompt=prompt,
+                        skip_existing=False,
+                        steps=remaining_steps,
+                        progress_callback=_progress,
+                    ),
+                )
+
+                completed = []
+                if result.bustup_paths:
+                    completed.append("bustup")
+                if result.chibi_path:
+                    completed.append("chibi")
+                if result.model_path:
+                    completed.append("3d")
+                if result.rigged_model_path:
+                    completed.append("rigging")
+                if result.animation_paths:
+                    completed.append("animations")
+
+                await _emit_ws("person.remake_complete", {
+                    "name": name,
+                    "steps_completed": completed,
+                    "errors": result.errors,
+                })
+            except Exception:
+                logger.exception("Cascade rebuild failed for %s", name)
+                await _emit_ws("person.remake_complete", {
+                    "name": name,
+                    "steps_completed": [],
+                    "errors": ["Internal error during cascade rebuild"],
+                })
+
+        async def _emit_ws(event_type: str, data: dict) -> None:
+            ws = getattr(app.state, "ws_manager", None)
+            if ws:
+                await ws.broadcast({"type": event_type, "data": data})
+
+        # Run cascade in background so the HTTP response returns immediately
+        asyncio.create_task(_run_cascade())
+
+        return {
+            "status": "started",
+            "steps": remaining_steps,
+        }
+
+    @router.delete("/persons/{name}/assets/remake-preview")
+    async def cancel_remake_preview(name: str, request: Request):
+        """Cancel a remake preview by restoring from the most recent backup."""
+        import shutil
+
+        persons_dir = request.app.state.persons_dir
+        person_dir = persons_dir / name
+        if not person_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Person not found: {name}")
+
+        # Find the most recent backup
+        backups = sorted(
+            (d for d in person_dir.iterdir()
+             if d.is_dir() and d.name.startswith("assets_backup_")),
+            reverse=True,
+        )
+        if not backups:
+            raise HTTPException(status_code=404, detail="No backup found to restore")
+
+        latest_backup = backups[0]
+        assets_dir = person_dir / "assets"
+
+        # Restore from backup
+        if assets_dir.exists():
+            shutil.rmtree(assets_dir)
+        latest_backup.rename(assets_dir)
+        logger.info("Restored assets from backup: %s", latest_backup.name)
+
+        return {"status": "restored", "backup_used": latest_backup.name}
 
     return router

@@ -189,6 +189,20 @@ function handleWsMessage(raw) {
       break;
     }
 
+    case "person.remake_preview_ready":
+    case "person.remake_progress":
+    case "person.remake_complete": {
+      // Delegate to assets page handler if registered
+      if (typeof window.__assetsWsHandler === "function") {
+        window.__assetsWsHandler(eventType, data);
+      }
+      if (eventType === "person.remake_complete" && data.name) {
+        const steps = (data.steps_completed || []).join(", ");
+        addActivity("system", data.name, `アセットリメイク完了: ${steps}`);
+      }
+      break;
+    }
+
     case "person.notification": {
       const personName = data.person || data.name;
       const subject = data.subject || "";
