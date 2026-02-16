@@ -143,7 +143,8 @@ class TestFindPersonsWithMissingAssets:
 class TestExtractPrompt:
     """Tests for _extract_prompt() helper."""
 
-    def test_extracts_image_prompt(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_extracts_image_prompt(self, tmp_path: Path) -> None:
         """Extracts prompt from image_prompt field."""
         from core.asset_reconciler import _extract_prompt
 
@@ -153,10 +154,11 @@ class TestExtractPrompt:
             "# Alice\nimage_prompt: 1girl, black hair, red eyes\n",
             encoding="utf-8",
         )
-        result = _extract_prompt(person_dir)
+        result = await _extract_prompt(person_dir)
         assert result == "1girl, black hair, red eyes"
 
-    def test_extracts_japanese_prompt(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_extracts_japanese_prompt(self, tmp_path: Path) -> None:
         """Extracts prompt from 外見 field."""
         from core.asset_reconciler import _extract_prompt
 
@@ -166,11 +168,12 @@ class TestExtractPrompt:
             "# Alice\n外見: 1girl, blue hair\n",
             encoding="utf-8",
         )
-        result = _extract_prompt(person_dir)
+        result = await _extract_prompt(person_dir)
         assert result == "1girl, blue hair"
 
-    def test_returns_none_no_prompt(self, tmp_path: Path) -> None:
-        """Returns None when no prompt field found."""
+    @pytest.mark.asyncio
+    async def test_returns_none_no_prompt(self, tmp_path: Path) -> None:
+        """Returns None when no prompt field and no appearance table found."""
         from core.asset_reconciler import _extract_prompt
 
         person_dir = tmp_path / "person"
@@ -179,16 +182,183 @@ class TestExtractPrompt:
             "# Alice\nJust a person.\n",
             encoding="utf-8",
         )
-        result = _extract_prompt(person_dir)
+        result = await _extract_prompt(person_dir)
         assert result is None
 
-    def test_returns_none_no_identity(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_returns_none_no_identity(self, tmp_path: Path) -> None:
         """Returns None when identity.md doesn't exist."""
         from core.asset_reconciler import _extract_prompt
 
         person_dir = tmp_path / "person"
         person_dir.mkdir()
-        result = _extract_prompt(person_dir)
+        result = await _extract_prompt(person_dir)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_reads_cached_prompt_txt(self, tmp_path: Path) -> None:
+        """Reads prompt from assets/prompt.txt when no regex match."""
+        from core.asset_reconciler import _extract_prompt
+
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        (person_dir / "identity.md").write_text(
+            "# Alice\nNo prompt field here.\n",
+            encoding="utf-8",
+        )
+        assets_dir = person_dir / "assets"
+        assets_dir.mkdir()
+        (assets_dir / "prompt.txt").write_text(
+            "1girl, cached prompt\n", encoding="utf-8",
+        )
+        result = await _extract_prompt(person_dir)
+        assert result == "1girl, cached prompt"
+
+    @pytest.mark.asyncio
+    async def test_synthesizes_via_llm(self, tmp_path: Path) -> None:
+        """Calls LLM when no regex match and no cache, with appearance table."""
+        from core.asset_reconciler import _extract_prompt
+
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        (person_dir / "identity.md").write_text(
+            "# Test\n\n"
+            "| 項目 | 設定 |\n"
+            "|------|------|\n"
+            "| 髪色 | 黒 |\n"
+            "| 瞳の色 | 赤 |\n",
+            encoding="utf-8",
+        )
+
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(message=MagicMock(content="1girl, black hair, red eyes, full body, standing, white background"))
+        ]
+
+        mock_model_config = MagicMock()
+        mock_model_config.model = "anthropic/claude-sonnet-4-20250514"
+        mock_model_config.api_key = "test-key"
+        mock_model_config.api_key_env = "ANTHROPIC_API_KEY"
+        mock_model_config.api_base_url = None
+
+        with patch("core.config.models.load_model_config", return_value=mock_model_config), \
+             patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
+            result = await _extract_prompt(person_dir)
+
+        assert result == "1girl, black hair, red eyes, full body, standing, white background"
+
+    @pytest.mark.asyncio
+    async def test_saves_to_prompt_txt(self, tmp_path: Path) -> None:
+        """LLM synthesis result is saved to assets/prompt.txt."""
+        from core.asset_reconciler import _extract_prompt
+
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        (person_dir / "identity.md").write_text(
+            "# Test\n| 髪色 | 青 |\n",
+            encoding="utf-8",
+        )
+
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(message=MagicMock(content="1girl, blue hair, full body, standing, white background"))
+        ]
+
+        mock_model_config = MagicMock()
+        mock_model_config.model = "anthropic/claude-sonnet-4-20250514"
+        mock_model_config.api_key = "test-key"
+        mock_model_config.api_key_env = "ANTHROPIC_API_KEY"
+        mock_model_config.api_base_url = None
+
+        with patch("core.config.models.load_model_config", return_value=mock_model_config), \
+             patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
+            await _extract_prompt(person_dir)
+
+        cache_file = person_dir / "assets" / "prompt.txt"
+        assert cache_file.exists()
+        assert "1girl, blue hair" in cache_file.read_text(encoding="utf-8")
+
+    @pytest.mark.asyncio
+    async def test_llm_failure_returns_none(self, tmp_path: Path) -> None:
+        """Returns None when LLM call fails (graceful degradation)."""
+        from core.asset_reconciler import _extract_prompt
+
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        (person_dir / "identity.md").write_text(
+            "# Test\n| 髪色 | 黒 |\n",
+            encoding="utf-8",
+        )
+
+        mock_model_config = MagicMock()
+        mock_model_config.model = "anthropic/claude-sonnet-4-20250514"
+        mock_model_config.api_key = "test-key"
+        mock_model_config.api_key_env = "ANTHROPIC_API_KEY"
+        mock_model_config.api_base_url = None
+
+        with patch("core.config.models.load_model_config", return_value=mock_model_config), \
+             patch("litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("API error")):
+            result = await _extract_prompt(person_dir)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_no_appearance_table_returns_none(self, tmp_path: Path) -> None:
+        """Returns None when identity.md has no appearance table."""
+        from core.asset_reconciler import _extract_prompt
+
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        (person_dir / "identity.md").write_text(
+            "# Test\n\nJust personality description, no table.\n",
+            encoding="utf-8",
+        )
+        result = await _extract_prompt(person_dir)
+        assert result is None
+
+
+# ── _extract_appearance_table ────────────────────────────────────
+
+
+class TestExtractAppearanceTable:
+    """Tests for _extract_appearance_table() helper."""
+
+    def test_extracts_known_fields(self) -> None:
+        """Extracts rows matching known appearance fields."""
+        from core.asset_reconciler import _extract_appearance_table
+
+        text = (
+            "# Identity\n"
+            "| 項目 | 設定 |\n"
+            "|------|------|\n"
+            "| 誕生日 | 7月20日 |\n"
+            "| 髪型 | ショートボブ |\n"
+            "| 髪色 | ネイビーブルー |\n"
+            "| 瞳の色 | サファイアブルー |\n"
+            "| 上司 | rin |\n"
+        )
+        result = _extract_appearance_table(text)
+        assert result is not None
+        assert "髪型: ショートボブ" in result
+        assert "髪色: ネイビーブルー" in result
+        assert "瞳の色: サファイアブルー" in result
+        # Non-appearance fields should be excluded
+        assert "誕生日" not in result
+        assert "上司" not in result
+
+    def test_returns_none_no_table(self) -> None:
+        """Returns None when no table rows are found."""
+        from core.asset_reconciler import _extract_appearance_table
+
+        result = _extract_appearance_table("# Test\nJust text.\n")
+        assert result is None
+
+    def test_returns_none_no_appearance_fields(self) -> None:
+        """Returns None when table has no appearance-related fields."""
+        from core.asset_reconciler import _extract_appearance_table
+
+        text = "| 誕生日 | 7月20日 |\n| 星座 | 蟹座 |\n"
+        result = _extract_appearance_table(text)
         assert result is None
 
 

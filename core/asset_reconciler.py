@@ -13,6 +13,8 @@ assets using the ImageGenPipeline with ``skip_existing=True``.
 
 import asyncio
 import logging
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -140,7 +142,7 @@ async def reconcile_person_assets(
             check["missing"],
         )
 
-        resolved_prompt = prompt or _extract_prompt(person_dir)
+        resolved_prompt = prompt or await _extract_prompt(person_dir)
         if not resolved_prompt:
             logger.warning(
                 "No prompt available for %s — cannot generate assets",
@@ -234,17 +236,21 @@ async def reconcile_all_assets(
 # ── Helpers ───────────────────────────────────────────────────────
 
 
-def _extract_prompt(person_dir: Path) -> str | None:
-    """Try to extract a generation prompt from the person's identity.md."""
-    import re
+async def _extract_prompt(person_dir: Path) -> str | None:
+    """Try to extract a generation prompt from the person's identity.md.
 
+    Fallback chain:
+      1. Regex match for explicit ``image_prompt:`` / ``外見:`` fields
+      2. Cached ``assets/prompt.txt`` from a previous LLM synthesis
+      3. LLM synthesis from the appearance table in identity.md
+    """
     identity_path = person_dir / "identity.md"
     if not identity_path.exists():
         return None
 
     text = identity_path.read_text(encoding="utf-8")
 
-    # Look for a dedicated image_prompt / appearance section
+    # Step 1: Look for a dedicated image_prompt / appearance field
     patterns = [
         r"(?:image[_ ]?prompt|画像プロンプト|外見|appearance)\s*[:\uff1a]\s*(.+)",
         r"(?:キャラクターデザイン|character[_ ]?design)\s*[:\uff1a]\s*(.+)",
@@ -254,7 +260,154 @@ def _extract_prompt(person_dir: Path) -> str | None:
         if match:
             return match.group(1).strip()
 
-    return None
+    # Step 2: Check cached prompt from previous LLM synthesis
+    prompt_cache = person_dir / "assets" / "prompt.txt"
+    if prompt_cache.exists():
+        cached = prompt_cache.read_text(encoding="utf-8").strip()
+        if cached:
+            logger.debug(
+                "Using cached prompt for %s from assets/prompt.txt",
+                person_dir.name,
+            )
+            return cached
+
+    # Step 3: Extract appearance table and synthesize via LLM
+    appearance = _extract_appearance_table(text)
+    if not appearance:
+        return None
+
+    return await _synthesize_prompt_via_llm(person_dir, appearance)
+
+
+# ── Appearance extraction ─────────────────────────────────────
+
+# Fields in the identity.md profile table that describe visual appearance.
+_APPEARANCE_FIELDS: frozenset[str] = frozenset({
+    "髪型", "髪色", "瞳の色", "顔タイプ", "身長", "体重",
+    "スリーサイズ", "イメージカラー",
+})
+
+
+def _extract_appearance_table(text: str) -> str | None:
+    """Extract appearance-related rows from the profile table in identity.md.
+
+    Looks for Markdown table rows (``| key | value |``) where the key
+    matches a known appearance field.  Returns the matching rows as a
+    single string, or ``None`` if no appearance data is found.
+    """
+    rows: list[str] = []
+    for line in text.splitlines():
+        m = re.match(r"\|\s*(.+?)\s*\|\s*(.+?)\s*\|", line)
+        if not m:
+            continue
+        key = m.group(1).strip()
+        if key in _APPEARANCE_FIELDS:
+            rows.append(f"{key}: {m.group(2).strip()}")
+    return "\n".join(rows) if rows else None
+
+
+# ── LLM prompt synthesis ──────────────────────────────────────
+
+_SYNTHESIS_SYSTEM_PROMPT = """\
+You are an expert at converting Japanese character appearance descriptions \
+into NovelAI-compatible anime image generation tags.
+
+Rules:
+- Output ONLY a comma-separated tag string, nothing else.
+- Start with 1girl or 1boy.
+- Use plain English color names, NOT gemstone metaphors \
+  (サファイアブルー → blue, エメラルドグリーン → green).
+- Decompose compound descriptions into atomic tags \
+  (ショートボブ、前髪ぱっつん → short hair, bob cut, blunt bangs).
+- Translate hair accessories (ピン → hair clip, リボン → hair ribbon).
+- Omit non-visual traits (personality, hobbies).
+- Height/weight: omit unless notably tall/short (use tall or petite).
+- Always end with: full body, standing, white background
+- All tags lowercase, separated by comma + space.
+
+Example input:
+髪型: ロングヘア、ツインテール
+髪色: 黒
+瞳の色: 赤
+顔タイプ: クール系
+
+Example output:
+1girl, black hair, long hair, twintails, red eyes, cool expression, \
+full body, standing, white background"""
+
+
+async def _synthesize_prompt_via_llm(
+    person_dir: Path,
+    appearance: str,
+) -> str | None:
+    """Call the Person's LLM to convert appearance text into NovelAI tags.
+
+    On success the result is cached to ``assets/prompt.txt``.
+    On failure returns ``None`` (logs the error, does not raise).
+    """
+    person_name = person_dir.name
+
+    try:
+        from core.config.models import load_model_config
+
+        model_config = load_model_config(person_dir)
+    except Exception:
+        logger.warning(
+            "Cannot load model config for %s — skipping LLM synthesis",
+            person_name,
+        )
+        return None
+
+    api_key = model_config.api_key or os.environ.get(model_config.api_key_env)
+    kwargs: dict[str, Any] = {
+        "model": model_config.model,
+        "messages": [
+            {"role": "system", "content": _SYNTHESIS_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    "以下の外見情報を NovelAI 互換タグに変換してください:\n\n"
+                    + appearance
+                ),
+            },
+        ],
+        "max_tokens": 256,
+    }
+    if api_key:
+        kwargs["api_key"] = api_key
+    if model_config.api_base_url:
+        kwargs["api_base"] = model_config.api_base_url
+
+    try:
+        import litellm
+
+        response = await litellm.acompletion(**kwargs)
+        result = (response.choices[0].message.content or "").strip()
+    except Exception as exc:
+        logger.warning(
+            "LLM prompt synthesis failed for %s: %s",
+            person_name,
+            exc,
+        )
+        return None
+
+    if not result:
+        return None
+
+    # Cache result to assets/prompt.txt
+    try:
+        cache_dir = person_dir / "assets"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        (cache_dir / "prompt.txt").write_text(result + "\n", encoding="utf-8")
+        logger.info(
+            "Synthesized and cached prompt for %s: %.200s",
+            person_name,
+            result,
+        )
+    except OSError:
+        logger.debug("Failed to cache prompt.txt for %s", person_name)
+
+    return result
 
 
 def _summarise_result(result: Any) -> dict[str, list[str]]:
