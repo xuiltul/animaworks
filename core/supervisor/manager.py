@@ -661,6 +661,33 @@ class ProcessSupervisor:
                         "Reconciliation: failed to stop %s", name
                     )
 
+        # Check for missing person assets (fallback generation)
+        await self._reconcile_assets()
+
+    async def _reconcile_assets(self) -> None:
+        """Check for and generate missing person assets during reconciliation."""
+        try:
+            from core.asset_reconciler import find_persons_with_missing_assets, reconcile_person_assets
+
+            incomplete = find_persons_with_missing_assets(self.persons_dir)
+            if not incomplete:
+                return
+
+            logger.info(
+                "Asset reconciliation: %d person(s) with missing assets",
+                len(incomplete),
+            )
+            for person_name, _check in incomplete:
+                person_dir = self.persons_dir / person_name
+                result = await reconcile_person_assets(person_dir)
+                if not result.get("skipped"):
+                    await self._broadcast_event(
+                        "person.assets_updated",
+                        {"name": person_name, "source": "reconciliation"},
+                    )
+        except Exception:
+            logger.exception("Asset reconciliation failed")
+
     # ── System Scheduler ────────────────────────────────────────
 
     def _start_system_scheduler(self) -> None:

@@ -26,6 +26,18 @@ from server.websocket import WebSocketManager
 logger = logging.getLogger("animaworks.server")
 
 
+async def _reconcile_assets_at_startup(persons_dir: Path) -> None:
+    """Background task: generate missing person assets after startup."""
+    try:
+        from core.asset_reconciler import reconcile_all_assets
+
+        results = await reconcile_all_assets(persons_dir)
+        if results:
+            logger.info("Startup asset reconciliation: %d person(s) processed", len(results))
+    except Exception:
+        logger.exception("Startup asset reconciliation failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Only start person processes when setup is complete
@@ -57,6 +69,11 @@ async def lifespan(app: FastAPI):
             sync_org_structure(app.state.persons_dir)
         except Exception:
             logger.exception("Org structure sync failed at startup")
+
+        # Reconcile missing person assets (fallback for failed bootstrap)
+        import asyncio
+
+        asyncio.create_task(_reconcile_assets_at_startup(app.state.persons_dir))
 
         logger.info("Server started with process isolation")
     else:
