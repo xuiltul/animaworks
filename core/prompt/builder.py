@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from core.memory import MemoryManager
 from core.paths import PROJECT_DIR, get_data_dir, load_prompt
@@ -66,6 +67,47 @@ def _format_person_entry(name: str, speciality: str | None) -> str:
     return name
 
 
+def _build_full_org_tree(
+    person_name: str,
+    all_persons: dict[str, Any],
+) -> str:
+    """Build an indented full organization tree for top-level persons."""
+    # Build children map: parent -> list of children
+    children: dict[str | None, list[str]] = {}
+    for name, pcfg in all_persons.items():
+        parent = pcfg.supervisor
+        children.setdefault(parent, []).append(name)
+    for k in children:
+        children[k].sort()
+
+    lines: list[str] = []
+
+    def _render(name: str, prefix: str, is_last: bool, is_root: bool) -> None:
+        spec = all_persons[name].speciality if name in all_persons else None
+        label = _format_person_entry(name, spec)
+        if is_root:
+            marker = ""
+            suffix = "  ← あなた" if name == person_name else ""
+        else:
+            marker = "└── " if is_last else "├── "
+            suffix = "  ← あなた" if name == person_name else ""
+        lines.append(f"{prefix}{marker}{label}{suffix}")
+        kids = children.get(name, [])
+        for i, child in enumerate(kids):
+            child_is_last = (i == len(kids) - 1)
+            if is_root:
+                child_prefix = prefix
+            else:
+                child_prefix = prefix + ("    " if is_last else "│   ")
+            _render(child, child_prefix, child_is_last, False)
+
+    roots = children.get(None, [])
+    for i, root in enumerate(roots):
+        _render(root, "", i == len(roots) - 1, True)
+
+    return "\n".join(lines)
+
+
 def _build_org_context(person_name: str, other_persons: list[str]) -> str:
     """Build organisation context section from supervisor chain.
 
@@ -85,7 +127,23 @@ def _build_org_context(person_name: str, other_persons: list[str]) -> str:
     my_config = all_persons.get(person_name)
     my_supervisor = my_config.supervisor if my_config else None
     my_speciality = my_config.speciality if my_config else None
+    is_top_level = my_supervisor is None
 
+    # Top-level person with subordinates: show full org tree
+    if is_top_level and len(all_persons) > 1:
+        person_speciality = my_speciality or "(未設定)"
+        tree_text = _build_full_org_tree(person_name, all_persons)
+        parts = [
+            f"## あなたの組織上の位置\n\n"
+            f"あなたの専門: {person_speciality}\n\n"
+            f"あなたはトップレベルです（上司なし）。以下が組織全体の構成です：\n\n"
+            f"```\n{tree_text}\n```",
+        ]
+        if other_persons:
+            parts.append(load_prompt("communication_rules"))
+        return "\n\n".join(parts)
+
+    # Non-top-level: existing logic
     # Supervisor
     if my_supervisor:
         sup_spec = None

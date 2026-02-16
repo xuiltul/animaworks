@@ -44,7 +44,7 @@ class TestOrgContextE2E:
     def test_top_level_sees_subordinates(self, org_team: Path):
         prompt = self._build_prompt_for(org_team, "sakura")
 
-        assert "あなたがトップです" in prompt
+        assert "あなたはトップレベルです" in prompt
         assert "rin (development)" in prompt
         assert "kotoha (communication)" in prompt
         # Top has no peers

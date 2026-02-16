@@ -94,6 +94,24 @@ async def lifespan(app: FastAPI):
             name="System: Message Log Reconciliation",
             replace_existing=True,
         )
+
+        # ── Orphan person detection ───────────────────────
+        from core.org_sync import detect_orphan_persons
+
+        def _detect_orphans_task() -> None:
+            try:
+                detect_orphan_persons(app.state.persons_dir, shared_dir)
+            except Exception:
+                logger.exception("Orphan detection failed")
+
+        msg_log_scheduler.add_job(
+            _detect_orphans_task,
+            IntervalTrigger(minutes=10),
+            id="orphan_person_detection",
+            name="System: Orphan Person Detection",
+            replace_existing=True,
+        )
+
         msg_log_scheduler.start()
         app.state.msg_log_scheduler = msg_log_scheduler
 

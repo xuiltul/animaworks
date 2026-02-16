@@ -344,13 +344,13 @@ class TestBuildOrgContext:
     """Test organisation context derivation from supervisor chain."""
 
     def test_top_level_person(self, data_dir, make_person):
-        """Top-level person (no supervisor) sees subordinates."""
+        """Top-level person (no supervisor) sees full org tree."""
         make_person("sakura")
         make_person("rin", supervisor="sakura", speciality="development")
         make_person("kotoha", supervisor="sakura", speciality="communication")
 
         result = _build_org_context("sakura", ["rin", "kotoha"])
-        assert "あなたがトップです" in result
+        assert "あなたはトップレベルです" in result
         assert "rin (development)" in result
         assert "kotoha (communication)" in result
 

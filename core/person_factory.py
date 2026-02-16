@@ -95,22 +95,27 @@ def create_blank(persons_dir: Path, name: str) -> Path:
     if person_dir.exists():
         raise FileExistsError(f"Person already exists: {name}")
 
-    if BLANK_TEMPLATE_DIR.exists():
-        shutil.copytree(BLANK_TEMPLATE_DIR, person_dir)
-        # Replace {name} placeholder in all markdown files
-        for md_file in person_dir.rglob("*.md"):
-            content = md_file.read_text(encoding="utf-8")
-            if "{name}" in content:
-                md_file.write_text(
-                    content.replace("{name}", name), encoding="utf-8"
-                )
-    else:
-        person_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        if BLANK_TEMPLATE_DIR.exists():
+            shutil.copytree(BLANK_TEMPLATE_DIR, person_dir)
+            # Replace {name} placeholder in all markdown files
+            for md_file in person_dir.rglob("*.md"):
+                content = md_file.read_text(encoding="utf-8")
+                if "{name}" in content:
+                    md_file.write_text(
+                        content.replace("{name}", name), encoding="utf-8"
+                    )
+        else:
+            person_dir.mkdir(parents=True, exist_ok=True)
 
-    _ensure_runtime_subdirs(person_dir)
-    _init_state_files(person_dir)
-    _place_bootstrap(person_dir)
-    _place_send_script(person_dir)
+        _ensure_runtime_subdirs(person_dir)
+        _init_state_files(person_dir)
+        _place_bootstrap(person_dir)
+        _place_send_script(person_dir)
+    except Exception:
+        logger.error("Failed to create blank person '%s'; rolling back", name)
+        shutil.rmtree(person_dir, ignore_errors=True)
+        raise
 
     logger.info("Created blank person '%s'", name)
     return person_dir

@@ -83,6 +83,10 @@ class PersonRunner:
         self._last_msg_heartbeat_end: float = 0.0
         self._pair_heartbeat_times: dict[tuple[str, str], list[float]] = {}
 
+        # Overlap prevention flags
+        self._heartbeat_running: bool = False
+        self._cron_running: set[str] = set()
+
     async def run(self) -> None:
         """
         Run the person process.
@@ -197,6 +201,7 @@ class PersonRunner:
             name=f"{self.person_name} heartbeat",
             replace_existing=True,
             misfire_grace_time=300,
+            max_instances=1,
         )
         logger.info(
             "Heartbeat registered: %s every %dmin, active %d:00-%d:00",
@@ -207,6 +212,10 @@ class PersonRunner:
         """Execute a scheduled heartbeat."""
         if not self.person:
             return
+        if self._heartbeat_running:
+            logger.info("Scheduled heartbeat SKIPPED (already running): %s", self.person_name)
+            return
+        self._heartbeat_running = True
         try:
             logger.info("Scheduled heartbeat: %s", self.person_name)
             result = await self.person.run_heartbeat()
@@ -217,6 +226,8 @@ class PersonRunner:
             })
         except Exception:
             logger.exception("Scheduled heartbeat failed: %s", self.person_name)
+        finally:
+            self._heartbeat_running = False
 
     def _setup_cron_tasks(self) -> None:
         """Register cron jobs from cron.md."""
@@ -245,6 +256,7 @@ class PersonRunner:
                 args=[task],
                 replace_existing=True,
                 misfire_grace_time=300,
+                max_instances=1,
             )
             logger.info(
                 "Cron registered: %s -> %s (%s) [%s]",
@@ -254,6 +266,13 @@ class PersonRunner:
     async def _cron_tick(self, task: CronTask) -> None:
         """Execute a scheduled cron task."""
         if not self.person:
+            return
+
+        if task.name in self._cron_running:
+            logger.info(
+                "Scheduled cron SKIPPED (already running): %s -> %s",
+                self.person_name, task.name,
+            )
             return
 
         logger.info("Scheduled cron: %s -> %s [%s]", self.person_name, task.name, task.type)
@@ -267,6 +286,7 @@ class PersonRunner:
         """Run a single cron task (LLM or command type)."""
         if not self.person:
             return
+        self._cron_running.add(task.name)
         try:
             if task.type == "llm":
                 result = await self.person.run_cron_task(task.name, task.description)
@@ -289,10 +309,42 @@ class PersonRunner:
                     "task_type": "command",
                     "result": result,
                 })
+                # If command produced non-empty output, write to
+                # pending.md and trigger a heartbeat so the LLM can
+                # review and act on the results.
+                stdout = result.get("stdout", "").strip()
+                if stdout and result.get("exit_code", 0) == 0:
+                    # Check skip_pattern: if stdout matches, suppress heartbeat
+                    if task.skip_pattern:
+                        import re as _re
+                        if _re.search(task.skip_pattern, stdout):
+                            logger.info(
+                                "Cron command '%s' output matched skip_pattern, "
+                                "suppressing heartbeat for %s",
+                                task.name, self.person_name,
+                            )
+                            return
+
+                    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    pending = (
+                        f"## cron結果: {task.name} ({ts})\n\n"
+                        f"{stdout}\n"
+                    )
+                    self.person.memory.update_pending(pending)
+                    logger.info(
+                        "Cron command '%s' produced output, triggering heartbeat for %s",
+                        task.name, self.person_name,
+                    )
+                    asyncio.create_task(
+                        self._heartbeat_tick(),
+                        name=f"cron-triggered-heartbeat-{self.person_name}",
+                    )
             else:
                 logger.warning("Unknown cron type '%s' for task '%s'", task.type, task.name)
         except Exception:
             logger.exception("Cron task failed: %s -> %s", self.person_name, task.name)
+        finally:
+            self._cron_running.discard(task.name)
 
     def _reload_schedule(self, name: str) -> dict[str, Any]:
         """Reload heartbeat and cron schedules from disk (hot-reload callback)."""
@@ -759,12 +811,18 @@ class PersonRunner:
             self._pending_trigger = False
             return
 
+        if self._heartbeat_running:
+            logger.info("Message-triggered heartbeat SKIPPED (already running): %s", self.person_name)
+            self._pending_trigger = False
+            return
+
         # Peek at inbox senders for cascade detection
         senders = {m.from_person for m in self.person.messenger.receive()}
         if senders and self._check_cascade(senders):
             self._pending_trigger = False
             return
 
+        self._heartbeat_running = True
         try:
             logger.info("Message-triggered heartbeat: %s", self.person_name)
             await self.person.run_heartbeat()
@@ -773,6 +831,7 @@ class PersonRunner:
                 "Message-triggered heartbeat failed: %s", self.person_name,
             )
         finally:
+            self._heartbeat_running = False
             self._pending_trigger = False
             self._last_msg_heartbeat_end = time.monotonic()
             if senders:
