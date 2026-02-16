@@ -28,7 +28,7 @@ import time
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -1003,6 +1003,11 @@ class ImageGenPipeline:
         steps: list[str] | None = None,
         animations: dict[str, int] | None = None,
         expressions: list[str] | None = None,
+        vibe_image: bytes | None = None,
+        vibe_strength: float | None = None,
+        vibe_info_extracted: float | None = None,
+        seed: int | None = None,
+        progress_callback: "Callable[[str, str, int], None] | None" = None,
     ) -> PipelineResult:
         """Run the 6-step pipeline synchronously.
 
@@ -1013,6 +1018,16 @@ class ImageGenPipeline:
             steps: Subset of steps to run (default: all).
             animations: Dict of {name: action_id} to generate.
                 Default: idle, sitting, waving, talking.
+            expressions: Subset of expressions to generate.
+            vibe_image: Override Vibe Transfer reference image bytes.
+                When provided, takes precedence over config.style_reference.
+            vibe_strength: Override Vibe Transfer strength (0.0-1.0).
+                Falls back to config.vibe_strength.
+            vibe_info_extracted: Override Vibe Transfer info extraction (0.0-1.0).
+                Falls back to config.vibe_info_extracted.
+            seed: Seed for reproducibility (fullbody generation only).
+            progress_callback: Optional callback ``(step, status, pct)`` for
+                real-time progress reporting.
 
         Returns:
             PipelineResult with paths and error info.
@@ -1023,6 +1038,13 @@ class ImageGenPipeline:
         }
         anim_map = animations if animations is not None else _DEFAULT_ANIMATIONS
         result = PipelineResult()
+
+        def _notify(step: str, status: str, pct: int = 0) -> None:
+            if progress_callback is not None:
+                try:
+                    progress_callback(step, status, pct)
+                except Exception:
+                    logger.debug("progress_callback error (ignored)", exc_info=True)
 
         # ── Step 1: Full-body ──
         fullbody_bytes: bytes | None = None
@@ -1035,6 +1057,7 @@ class ImageGenPipeline:
                 result.fullbody_path = fullbody_path
             else:
                 try:
+                    _notify("fullbody", "generating", 0)
                     # Select text-to-image backend: NovelAI (primary) or Fal (fallback)
                     if os.environ.get("NOVELAI_TOKEN"):
                         logger.info("Step 1: Generating full-body with NovelAI …")
@@ -1051,16 +1074,28 @@ class ImageGenPipeline:
                         )
 
                     # ── A: Load style reference for Vibe Transfer ──
-                    vibe_image: bytes | None = None
-                    if self._config.style_reference:
+                    # Direct vibe_image parameter takes precedence over config
+                    effective_vibe: bytes | None = vibe_image
+                    if effective_vibe is None and self._config.style_reference:
                         style_path = Path(self._config.style_reference).expanduser()
                         if style_path.exists():
-                            vibe_image = style_path.read_bytes()
+                            effective_vibe = style_path.read_bytes()
                             logger.debug("Loaded style reference: %s", style_path)
                         else:
                             logger.warning(
                                 "Style reference not found: %s", style_path
                             )
+
+                    effective_vibe_strength = (
+                        vibe_strength
+                        if vibe_strength is not None
+                        else self._config.vibe_strength
+                    )
+                    effective_vibe_info = (
+                        vibe_info_extracted
+                        if vibe_info_extracted is not None
+                        else self._config.vibe_info_extracted
+                    )
 
                     # ── B: Apply style prefix/suffix to prompt ──
                     styled_prompt = prompt
@@ -1079,16 +1114,19 @@ class ImageGenPipeline:
                     fullbody_bytes = client.generate_fullbody(
                         prompt=styled_prompt,
                         negative_prompt=styled_negative,
-                        vibe_image=vibe_image,
-                        vibe_strength=self._config.vibe_strength,
-                        vibe_info_extracted=self._config.vibe_info_extracted,
+                        seed=seed,
+                        vibe_image=effective_vibe,
+                        vibe_strength=effective_vibe_strength,
+                        vibe_info_extracted=effective_vibe_info,
                     )
                     fullbody_path.write_bytes(fullbody_bytes)
                     result.fullbody_path = fullbody_path
                     logger.info("Step 1 complete: %s", fullbody_path)
+                    _notify("fullbody", "completed", 100)
                 except Exception as exc:
                     result.errors.append(f"fullbody: {exc}")
                     logger.error("Step 1 failed: %s", exc)
+                    _notify("fullbody", "error", 0)
         elif fullbody_path.exists():
             fullbody_bytes = fullbody_path.read_bytes()
             result.fullbody_path = fullbody_path
@@ -1105,6 +1143,7 @@ class ImageGenPipeline:
         chibi_bytes: bytes | None = None
 
         if "bustup" in enabled:
+            _notify("bustup", "generating", 0)
             expr_list = expressions or ["neutral", "smile", "laugh", "troubled", "surprised"]
             logger.info("Step 2: Generating bustup expressions: %s", expr_list)
             for expr in expr_list:
@@ -1124,6 +1163,7 @@ class ImageGenPipeline:
             if not result.bustup_path and result.bustup_paths:
                 result.bustup_path = next(iter(result.bustup_paths.values()))
             logger.info("Step 2 complete: %d expressions generated", len(result.bustup_paths))
+            _notify("bustup", "completed", 100)
 
         if "chibi" in enabled:
             chibi_path = self._assets_dir / self.ASSET_NAMES["chibi"]
@@ -1133,6 +1173,7 @@ class ImageGenPipeline:
                 result.chibi_path = chibi_path
             else:
                 try:
+                    _notify("chibi", "generating", 0)
                     logger.info("Step 3: Generating chibi with Flux Kontext …")
                     kontext = FluxKontextClient()
                     chibi_bytes = kontext.generate_from_reference(
@@ -1143,9 +1184,11 @@ class ImageGenPipeline:
                     chibi_path.write_bytes(chibi_bytes)
                     result.chibi_path = chibi_path
                     logger.info("Step 3 complete: %s", chibi_path)
+                    _notify("chibi", "completed", 100)
                 except Exception as exc:
                     result.errors.append(f"chibi: {exc}")
                     logger.error("Step 3 failed: %s", exc)
+                    _notify("chibi", "error", 0)
 
         # ── Step 4: 3-D model from chibi ──
         meshy_task_id: str | None = None  # tracked for rigging input
@@ -1165,6 +1208,7 @@ class ImageGenPipeline:
                 result.errors.append("3d: No chibi image available for 3D conversion")
             else:
                 try:
+                    _notify("3d", "generating", 0)
                     logger.info("Step 4: Generating 3D model with Meshy …")
                     meshy = MeshyClient()
                     meshy_task_id = meshy.create_task(chibi_bytes)
@@ -1174,9 +1218,11 @@ class ImageGenPipeline:
                     model_path.write_bytes(glb_bytes)
                     result.model_path = model_path
                     logger.info("Step 4 complete: %s", model_path)
+                    _notify("3d", "completed", 100)
                 except Exception as exc:
                     result.errors.append(f"3d: {exc}")
                     logger.error("Step 4 failed: %s", exc)
+                    _notify("3d", "error", 0)
 
         # ── Step 5: Rigging ──
         rig_task_id: str | None = None
@@ -1193,6 +1239,7 @@ class ImageGenPipeline:
                 )
             else:
                 try:
+                    _notify("rigging", "generating", 0)
                     logger.info("Step 5: Rigging 3D model with Meshy …")
                     if meshy is None:
                         meshy = MeshyClient()
@@ -1219,9 +1266,11 @@ class ImageGenPipeline:
                             anim_name, anim_path, len(anim_bytes),
                         )
                     logger.info("Step 5 complete: rigged + %d animations", len(basic_anims))
+                    _notify("rigging", "completed", 100)
                 except Exception as exc:
                     result.errors.append(f"rigging: {exc}")
                     logger.error("Step 5 failed: %s", exc)
+                    _notify("rigging", "error", 0)
 
         # ── Step 6: Additional animations ──
         if "animations" in enabled and anim_map:
@@ -1231,6 +1280,7 @@ class ImageGenPipeline:
                     "(run rigging step first)"
                 )
             else:
+                _notify("animations", "generating", 0)
                 if meshy is None:
                     meshy = MeshyClient()
                 for anim_name, action_id in anim_map.items():
@@ -1265,6 +1315,7 @@ class ImageGenPipeline:
                         logger.error(
                             "Animation '%s' failed: %s", anim_name, exc,
                         )
+                _notify("animations", "completed", 100)
 
         return result
 
