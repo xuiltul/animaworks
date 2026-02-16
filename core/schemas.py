@@ -41,6 +41,7 @@ class CronTask(BaseModel):
     command: str | None = None  # Command型のbashコマンド
     tool: str | None = None  # Command型の内部ツール名
     args: dict[str, Any] | None = None  # toolの引数
+    skip_pattern: str | None = None  # stdoutがマッチしたらheartbeatをスキップ
 
 
 class ModelConfig(BaseModel):

@@ -88,6 +88,7 @@ def parse_cron_md(content: str) -> list[CronTask]:
         - ``command: <cmd>`` — for command type only
         - ``tool: <name>`` — for command type with tool
         - ``args:`` — YAML block for tool arguments
+        - ``skip_pattern: <regex>`` — stdout matching this skips heartbeat
         - Remaining text lines become the task description (LLM type)
         - HTML comments (``<!-- -->``) are stripped before parsing
     """
@@ -123,6 +124,7 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
     command = None
     tool = None
     args = None
+    skip_pattern = None
     description_lines: list[str] = []
 
     i = 0
@@ -138,6 +140,8 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
             command = stripped[8:].strip()
         elif stripped.startswith("tool:"):
             tool = stripped[5:].strip()
+        elif stripped.startswith("skip_pattern:"):
+            skip_pattern = stripped[len("skip_pattern:"):].strip()
         elif stripped.startswith("args:"):
             # Parse YAML args block (indented lines following "args:")
             yaml_lines = [line]
@@ -173,6 +177,7 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
         command=command,
         tool=tool,
         args=args,
+        skip_pattern=skip_pattern,
     )
 
 

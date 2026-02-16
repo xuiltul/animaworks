@@ -289,6 +289,36 @@ class PersonRunner:
                     "task_type": "command",
                     "result": result,
                 })
+                # If command produced non-empty output, write to
+                # pending.md and trigger a heartbeat so the LLM can
+                # review and act on the results.
+                stdout = result.get("stdout", "").strip()
+                if stdout and result.get("exit_code", 0) == 0:
+                    # Check skip_pattern: if stdout matches, suppress heartbeat
+                    if task.skip_pattern:
+                        import re as _re
+                        if _re.search(task.skip_pattern, stdout):
+                            logger.info(
+                                "Cron command '%s' output matched skip_pattern, "
+                                "suppressing heartbeat for %s",
+                                task.name, self.person_name,
+                            )
+                            return
+
+                    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    pending = (
+                        f"## cron結果: {task.name} ({ts})\n\n"
+                        f"{stdout}\n"
+                    )
+                    self.person.memory.update_pending(pending)
+                    logger.info(
+                        "Cron command '%s' produced output, triggering heartbeat for %s",
+                        task.name, self.person_name,
+                    )
+                    asyncio.create_task(
+                        self._heartbeat_tick(),
+                        name=f"cron-triggered-heartbeat-{self.person_name}",
+                    )
             else:
                 logger.warning("Unknown cron type '%s' for task '%s'", task.type, task.name)
         except Exception:
