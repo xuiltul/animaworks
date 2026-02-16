@@ -178,9 +178,9 @@ async function initOfficeIfNeeded() {
     loadHistory(24);
 
     // Handle character clicks → open conversation in right panel
+    // selectPerson → onPersonSelected → openConversation の一本化フロー
     setCharacterClickHandler((personName) => {
       selectPerson(personName);
-      openConversation(personName);
     });
 
     // Highlight selected person's desk
@@ -276,11 +276,14 @@ async function triggerGreeting(personName) {
     const data = await greetPerson(personName);
     if (!data.response) return;
 
-    // Add assistant-only greeting message to chat
+    // Add visit marker + greeting message to chat
     const { chatMessages } = getState();
-    setState({
-      chatMessages: [...chatMessages, { role: "assistant", text: data.response }],
-    });
+    const newMessages = [
+      ...chatMessages,
+      { role: "system", text: "デスクを訪問しました" },
+      { role: "assistant", text: data.response },
+    ];
+    setState({ chatMessages: newMessages });
     renderConvMessages();
 
     // Update bust-up expression
@@ -298,6 +301,9 @@ async function triggerGreeting(personName) {
 // ── Chat Rendering in Conversation Panel ──────────────────────
 
 function renderConvBubble(msg) {
+  if (msg.role === "system") {
+    return `<div class="chat-visit-marker">${escapeHtml(msg.text)}</div>`;
+  }
   if (msg.role === "user") {
     return `<div class="chat-bubble user">${escapeHtml(msg.text)}</div>`;
   }
@@ -334,7 +340,7 @@ async function loadAndRenderConvMessages(personName) {
     const data = await fetchConversationFull(personName);
     if (data.turns && data.turns.length > 0) {
       const messages = data.turns.map((t) => ({
-        role: t.role === "human" ? "user" : "assistant",
+        role: t.role === "human" ? "user" : t.role === "system" ? "system" : "assistant",
         text: t.content || "",
       }));
       setState({ chatMessages: messages });

@@ -500,6 +500,11 @@ class DigitalPerson:
 
             conv_memory = ConversationMemory(self.person_dir, self.model_config)
 
+            # Record visit marker (user turn) before greeting
+            visit_text = "[デスクを訪問]"
+            conv_memory.append_turn("system", visit_text)
+            conv_memory.save()
+
             try:
                 result = await self.agent.run_cycle(
                     prompt, trigger="greet:user",
@@ -523,7 +528,7 @@ class DigitalPerson:
                     clean_text = result.summary
                     emotion = "neutral"
 
-                # Record only assistant turn in conversation memory
+                # Record assistant turn in conversation memory
                 conv_memory.append_turn("assistant", clean_text)
                 conv_memory.save()
 

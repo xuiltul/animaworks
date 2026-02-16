@@ -477,6 +477,37 @@ html, body {
   font-size: 0.9rem;
 }
 
+/* ── Visit Marker ────────────────────── */
+
+.chat-visit-marker {
+  align-self: center;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  position: relative;
+}
+
+.chat-visit-marker::before,
+.chat-visit-marker::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 40px;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.chat-visit-marker::before {
+  right: calc(100%);
+  margin-right: 8px;
+}
+
+.chat-visit-marker::after {
+  left: calc(100%);
+  margin-left: 8px;
+}
+
 /* ── Chat Bubbles ────────────────────── */
 
 .chat-bubble {

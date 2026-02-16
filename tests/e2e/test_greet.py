@@ -78,8 +78,8 @@ class TestGreetE2E:
             assert result["cached"] is False
             assert mock_cycle.await_count == 2
 
-    async def test_greet_records_assistant_turn_only(self, make_digital_person):
-        """Test that only assistant turn is recorded, no human turn."""
+    async def test_greet_records_visit_and_assistant_turns(self, make_digital_person):
+        """Test that visit marker (system) and assistant turn are both recorded."""
         dp = make_digital_person("greeter")
 
         with patch.object(
@@ -95,9 +95,11 @@ class TestGreetE2E:
         import json
         conv_data = json.loads(conv_path.read_text(encoding="utf-8"))
         turns = conv_data.get("turns", [])
-        assert len(turns) == 1
-        assert turns[0]["role"] == "assistant"
-        assert turns[0]["content"] == "Hi there!"
+        assert len(turns) == 2
+        assert turns[0]["role"] == "system"
+        assert turns[0]["content"] == "[デスクを訪問]"
+        assert turns[1]["role"] == "assistant"
+        assert turns[1]["content"] == "Hi there!"
 
     async def test_greet_preserves_status(self, make_digital_person):
         """Test that greeting restores the previous status after completion."""
@@ -162,3 +164,44 @@ class TestGreetE2E:
 
         assert result["emotion"] == "neutral"
         assert result["response"] == "Plain greeting without emotion"
+
+    async def test_greet_prompt_includes_guidance(self, make_digital_person):
+        """Test that the greet prompt includes expanded guidance."""
+        dp = make_digital_person("greeter")
+
+        prompt_received = []
+
+        async def capture_prompt(prompt, trigger="manual"):
+            prompt_received.append(prompt)
+            return _make_cycle_result(summary="OK")
+
+        with patch.object(dp.agent, "run_cycle", new=capture_prompt):
+            await dp.process_greet()
+
+        assert len(prompt_received) == 1
+        prompt = prompt_received[0]
+        assert "困っていること" in prompt
+        assert "3〜4文" in prompt
+
+    async def test_greet_visit_marker_recorded_before_llm_call(self, make_digital_person):
+        """Test that visit marker is written before the LLM call."""
+        dp = make_digital_person("greeter")
+
+        import json
+        conv_path = dp.person_dir / "state" / "conversation.json"
+        turns_at_llm_call = []
+
+        async def capture_state(prompt, trigger="manual"):
+            # Read conv state at the moment LLM is called
+            if conv_path.exists():
+                data = json.loads(conv_path.read_text(encoding="utf-8"))
+                turns_at_llm_call.extend(data.get("turns", []))
+            return _make_cycle_result(summary="Hello!")
+
+        with patch.object(dp.agent, "run_cycle", new=capture_state):
+            await dp.process_greet()
+
+        # Visit marker should exist before LLM call
+        assert len(turns_at_llm_call) == 1
+        assert turns_at_llm_call[0]["role"] == "system"
+        assert turns_at_llm_call[0]["content"] == "[デスクを訪問]"

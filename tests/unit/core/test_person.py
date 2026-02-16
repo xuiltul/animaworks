@@ -390,7 +390,7 @@ class TestProcessGreet:
             assert result["cached"] is False
             assert dp.agent.run_cycle.await_count == 2
 
-    async def test_greet_records_assistant_turn_only(self, data_dir, make_person):
+    async def test_greet_records_visit_and_assistant_turns(self, data_dir, make_person):
         person_dir = make_person("alice")
         shared_dir = data_dir / "shared"
 
@@ -411,11 +411,14 @@ class TestProcessGreet:
 
             await dp.process_greet()
 
-            # Should only record assistant turn, no human turn
-            MockConv.return_value.append_turn.assert_called_once_with(
-                "assistant", "Hi there!"
-            )
-            MockConv.return_value.save.assert_called_once()
+            # Should record visit marker (system) + assistant turn
+            from unittest.mock import call
+            MockConv.return_value.append_turn.assert_has_calls([
+                call("system", "[デスクを訪問]"),
+                call("assistant", "Hi there!"),
+            ])
+            assert MockConv.return_value.append_turn.call_count == 2
+            assert MockConv.return_value.save.call_count == 2
 
     async def test_greet_restores_previous_status(self, data_dir, make_person):
         person_dir = make_person("alice")
@@ -816,7 +819,7 @@ class TestProcessGreetConversationSave:
     """Tests that process_greet saves error markers on failure."""
 
     async def test_greet_error_saves_error_marker(self, data_dir, make_person):
-        """When agent.run_cycle() raises during greet, error marker is saved as assistant turn."""
+        """When agent.run_cycle() raises during greet, visit marker + error marker are saved."""
         person_dir = make_person("alice")
         shared_dir = data_dir / "shared"
 
@@ -836,8 +839,11 @@ class TestProcessGreetConversationSave:
             with pytest.raises(RuntimeError):
                 await dp.process_greet()
 
-            # Verify error marker was saved as assistant turn
-            MockConv.return_value.append_turn.assert_called_once_with(
-                "assistant", "[ERROR: 挨拶生成中にエラーが発生しました]"
-            )
-            MockConv.return_value.save.assert_called_once()
+            # Verify visit marker + error marker were saved
+            from unittest.mock import call
+            MockConv.return_value.append_turn.assert_has_calls([
+                call("system", "[デスクを訪問]"),
+                call("assistant", "[ERROR: 挨拶生成中にエラーが発生しました]"),
+            ])
+            assert MockConv.return_value.append_turn.call_count == 2
+            assert MockConv.return_value.save.call_count == 2
