@@ -147,13 +147,17 @@ def create_assets_router() -> APIRouter:
 
         # Return 304 Not Modified if ETag matches
         if_none_match = request.headers.get("if-none-match")
-        if if_none_match and if_none_match == etag:
+        if if_none_match and (
+            if_none_match == etag
+            or etag in [t.strip() for t in if_none_match.split(",")]
+            or if_none_match.strip() == "*"
+        ):
             from starlette.responses import Response
             return Response(
                 status_code=304,
                 headers={
                     "ETag": etag,
-                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Cache-Control": "public, no-cache",
                 },
             )
 
@@ -161,7 +165,7 @@ def create_assets_router() -> APIRouter:
             file_path,
             media_type=content_type,
             headers={
-                "Cache-Control": "public, max-age=31536000, immutable",
+                "Cache-Control": "public, no-cache",
                 "ETag": etag,
             },
         )

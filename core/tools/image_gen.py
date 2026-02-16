@@ -796,7 +796,7 @@ def _run_gltf_transform(args: list[str], glb_path: Path) -> bool:
         logger.warning("gltf-transform not available; skipping for %s", glb_path)
         return False
     except subprocess.CalledProcessError as exc:
-        logger.warning("gltf-transform failed for %s: %s", glb_path, exc.stderr[:500] if exc.stderr else exc)
+        logger.warning("gltf-transform failed for %s: %s", glb_path, exc.stderr[:500].decode("utf-8", errors="replace") if exc.stderr else exc)
         return False
     except subprocess.TimeoutExpired:
         logger.warning("gltf-transform timed out for %s", glb_path)
@@ -841,15 +841,14 @@ const { prune } = require("@gltf-transform/functions");
 """.strip()
 
     try:
-        # Ensure packages are available
+        npx = shutil.which("npx") or "npx"
+        # Use npx to run the script with all required packages available
         subprocess.run(
-            [shutil.which("npx") or "npx", "--yes", "@gltf-transform/cli", "--help"],
-            check=True, capture_output=True, timeout=60,
-        )
-        subprocess.run(
-            [node, "-e", script, str(glb_path)],
+            [npx, "--yes",
+             "-p", "@gltf-transform/core",
+             "-p", "@gltf-transform/functions",
+             node, "-e", script, str(glb_path)],
             check=True, capture_output=True, timeout=120,
-            env={**os.environ, "NODE_PATH": ""},
         )
         logger.info("Stripped mesh from %s (now %d bytes)", glb_path, glb_path.stat().st_size)
         return True
@@ -864,17 +863,19 @@ def optimize_glb(glb_path: Path) -> bool:
     Returns True on success, False if skipped or failed.
     """
     tmp_path = glb_path.with_suffix(".opt.glb")
-    if _run_gltf_transform(["optimize", str(glb_path), str(tmp_path)], glb_path):
-        if _run_gltf_transform(["draco", str(tmp_path), str(glb_path)], glb_path):
-            tmp_path.unlink(missing_ok=True)
-            logger.info("Optimized %s (now %d bytes)", glb_path, glb_path.stat().st_size)
-            return True
-        else:
-            # optimize succeeded but draco failed; keep optimized version
-            tmp_path.rename(glb_path)
-            return True
-    tmp_path.unlink(missing_ok=True)
-    return False
+    try:
+        if _run_gltf_transform(["optimize", str(glb_path), str(tmp_path)], glb_path):
+            if _run_gltf_transform(["draco", str(tmp_path), str(glb_path)], glb_path):
+                tmp_path.unlink(missing_ok=True)
+                logger.info("Optimized %s (now %d bytes)", glb_path, glb_path.stat().st_size)
+                return True
+            else:
+                # optimize succeeded but draco failed; keep optimized version
+                tmp_path.rename(glb_path)
+                return True
+        return False
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 # ── PipelineResult ─────────────────────────────────────────

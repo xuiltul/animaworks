@@ -31,11 +31,11 @@ const _parsedCache = new Map();
 async function _loadGLTFCached(url) {
   if (_parsedCache.has(url)) {
     const cached = _parsedCache.get(url);
-    return { scene: cached.scene.clone(true), animations: cached.animations };
+    return { scene: cached.scene.clone(true), animations: cached.animations.map(c => c.clone()) };
   }
   const gltf = await modelCache.loadGLTF(url, _gltfLoader);
   _parsedCache.set(url, gltf);
-  return { scene: gltf.scene.clone(true), animations: gltf.animations };
+  return { scene: gltf.scene.clone(true), animations: gltf.animations.map(c => c.clone()) };
 }
 
 // ── Constants ──────────────────────
