@@ -38,6 +38,7 @@ from core.tools._retry import retry_with_backoff
 # ── Constants ──────────────────────────────────────────────
 
 NOVELAI_API_URL = "https://image.novelai.net/ai/generate-image"
+NOVELAI_ENCODE_URL = "https://image.novelai.net/ai/encode-vibe"
 NOVELAI_MODEL = "nai-diffusion-4-5-full"
 
 FAL_KONTEXT_SUBMIT_URL = "https://queue.fal.run/fal-ai/flux-pro/kontext"
@@ -194,6 +195,48 @@ class NovelAIClient:
     def __init__(self) -> None:
         self._token = get_credential("novelai", "image_gen", env_var="NOVELAI_TOKEN")
 
+    def encode_vibe(
+        self,
+        image: bytes,
+        information_extracted: float = 0.8,
+    ) -> bytes:
+        """Encode an image into V4+ vibe binary via /ai/encode-vibe.
+
+        The NovelAI V4/V4.5 API requires images to be pre-encoded into
+        vibe representations before they can be used as style references.
+        This costs 2 Anlas per encoding.
+
+        Returns:
+            Binary vibe data (~48 KB).
+        """
+        b64 = base64.b64encode(image).decode()
+        body = {
+            "image": b64,
+            "model": NOVELAI_MODEL,
+            "information_extracted": information_extracted,
+        }
+
+        def _call() -> bytes:
+            resp = httpx.post(
+                NOVELAI_ENCODE_URL,
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {self._token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=_HTTP_TIMEOUT,
+            )
+            if resp.status_code != 200:
+                logger.error(
+                    "NovelAI encode-vibe error %d: %s",
+                    resp.status_code,
+                    resp.text[:500],
+                )
+            resp.raise_for_status()
+            return resp.content
+
+        return _retry(_call)
+
     def generate_fullbody(
         self,
         prompt: str,
@@ -254,9 +297,10 @@ class NovelAIClient:
         if seed is not None:
             params["seed"] = seed
 
-        # Vibe Transfer
+        # Vibe Transfer – V4+ requires pre-encoded vibe data
         if vibe_image is not None:
-            b64 = base64.b64encode(vibe_image).decode()
+            encoded = self.encode_vibe(vibe_image, vibe_info_extracted)
+            b64 = base64.b64encode(encoded).decode()
             params["reference_image_multiple"] = [b64]
             params["reference_information_extracted_multiple"] = [vibe_info_extracted]
             params["reference_strength_multiple"] = [vibe_strength]
@@ -278,6 +322,12 @@ class NovelAIClient:
                 },
                 timeout=_HTTP_TIMEOUT,
             )
+            if resp.status_code != 200:
+                logger.error(
+                    "NovelAI generate error %d: %s",
+                    resp.status_code,
+                    resp.text[:500],
+                )
             resp.raise_for_status()
             return self._extract_png(resp.content)
 

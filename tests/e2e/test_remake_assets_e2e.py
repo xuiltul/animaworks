@@ -291,6 +291,80 @@ class TestRemakePreview:
         assert "preview_url" in event_data
         assert "backup_id" in event_data
 
+    @patch("core.tools.image_gen.ImageGenPipeline")
+    async def test_remake_preview_restores_backup_on_failure(
+        self, mock_pipeline_cls, tmp_path,
+    ):
+        """On generation failure, assets are restored from backup."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+
+        target_dir = _setup_person_with_assets(persons_dir, "target")
+        _setup_person_with_assets(persons_dir, "style-ref")
+
+        # Mark original assets with known content
+        original_content = b"original-fullbody-content"
+        (target_dir / "assets" / "avatar_fullbody.png").write_bytes(original_content)
+
+        # Mock pipeline to return errors
+        mock_result = _make_pipeline_result(errors=["fullbody: 500 Internal Server Error"])
+        mock_pipeline = MagicMock()
+        mock_pipeline.generate_all.return_value = mock_result
+        mock_pipeline_cls.return_value = mock_pipeline
+
+        app = _make_test_app(persons_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/persons/target/assets/remake-preview",
+                json={"style_from": "style-ref"},
+            )
+
+        assert resp.status_code == 500
+        assert "Preview generation failed" in resp.json()["detail"]
+
+        # Verify assets were restored (original content preserved)
+        restored = (target_dir / "assets" / "avatar_fullbody.png").read_bytes()
+        assert restored == original_content
+
+        # Verify no orphaned backup directories remain
+        backup_dirs = list(target_dir.glob("assets_backup_*"))
+        assert len(backup_dirs) == 0
+
+    @patch("core.tools.image_gen.ImageGenPipeline")
+    async def test_remake_preview_no_orphan_backups_on_pipeline_error(
+        self, mock_pipeline_cls, tmp_path,
+    ):
+        """Multiple failed attempts should not leave orphaned backup directories."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+
+        target_dir = _setup_person_with_assets(persons_dir, "target")
+        _setup_person_with_assets(persons_dir, "style-ref")
+
+        mock_result = _make_pipeline_result(errors=["fullbody: timeout"])
+        mock_pipeline = MagicMock()
+        mock_pipeline.generate_all.return_value = mock_result
+        mock_pipeline_cls.return_value = mock_pipeline
+
+        app = _make_test_app(persons_dir)
+        transport = ASGITransport(app=app)
+
+        # Two failed attempts
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post(
+                "/api/persons/target/assets/remake-preview",
+                json={"style_from": "style-ref"},
+            )
+            await client.post(
+                "/api/persons/target/assets/remake-preview",
+                json={"style_from": "style-ref"},
+            )
+
+        # No orphaned backups should remain
+        backup_dirs = list(target_dir.glob("assets_backup_*"))
+        assert len(backup_dirs) == 0
+
 
 # ── E2E: Remake Confirm ──────────────────────────────────
 

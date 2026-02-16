@@ -373,6 +373,12 @@ def create_assets_router() -> APIRouter:
         )
 
         if result.errors:
+            # Restore assets from backup on failure
+            if backup_dir.exists():
+                if assets_dir.exists():
+                    shutil.rmtree(assets_dir)
+                backup_dir.rename(assets_dir)
+                logger.info("Assets restored from backup after failure: %s", name)
             raise HTTPException(
                 status_code=500,
                 detail=f"Preview generation failed: {'; '.join(result.errors)}",
