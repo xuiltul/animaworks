@@ -160,6 +160,9 @@ class ServerConfig(BaseModel):
     """Server runtime configuration."""
 
     ipc_stream_timeout: int = 300  # seconds (default raised from 120)
+    stream_checkpoint_enabled: bool = True  # save tool results during streaming
+    stream_retry_max: int = 3  # max automatic retries on stream disconnect
+    stream_retry_delay_s: float = 5.0  # delay between retries (seconds)
 
 
 class BackgroundToolConfig(BaseModel):

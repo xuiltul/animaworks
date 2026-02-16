@@ -408,6 +408,26 @@ class AgentCore:
 
         return "\n".join(content_lines) if content_lines else prompt
 
+    # ── Stream retry config ─────────────────────────────────
+
+    def _load_stream_retry_config(self) -> dict[str, Any]:
+        """Load stream retry settings from config.json server section."""
+        try:
+            from core.config import load_config
+            config = load_config()
+            return {
+                "checkpoint_enabled": config.server.stream_checkpoint_enabled,
+                "retry_max": config.server.stream_retry_max,
+                "retry_delay_s": config.server.stream_retry_delay_s,
+            }
+        except Exception:
+            logger.debug("Failed to load stream retry config; using defaults")
+            return {
+                "checkpoint_enabled": True,
+                "retry_max": 3,
+                "retry_delay_s": 5.0,
+            }
+
     # ── Public API ─────────────────────────────────────────
 
     async def run_cycle(
@@ -637,22 +657,131 @@ class AgentCore:
         if shortterm.has_pending():
             system_prompt = inject_shortterm(system_prompt, shortterm)
 
-        # Primary session
+        # ── Stream retry configuration ────────────────────
+        retry_cfg = self._load_stream_retry_config()
+        checkpoint_enabled = retry_cfg["checkpoint_enabled"]
+        max_retries = retry_cfg["retry_max"]
+        retry_delay = retry_cfg["retry_delay_s"]
+
+        # Primary session with checkpoint + retry support
         full_text_parts: list[str] = []
         result_message: Any = None
+        current_prompt = prompt
+        current_system_prompt = system_prompt
+        retry_count = 0
 
-        async for chunk in self._executor.execute_streaming(
-            system_prompt, prompt, tracker
-        ):
-            if chunk["type"] == "done":
-                full_text_parts.append(chunk["full_text"])
-                result_message = chunk["result_message"]
-                # Merge transcript replied_to
-                transcript_replied = chunk.get("replied_to_from_transcript", set())
-                if transcript_replied:
-                    self._tool_handler.merge_replied_to(transcript_replied)
-            else:
-                yield chunk
+        while True:
+            completed_tools: list[dict[str, Any]] = []
+            text_parts_this_attempt: list[str] = []
+            stream_succeeded = False
+
+            try:
+                async for chunk in self._executor.execute_streaming(
+                    current_system_prompt, current_prompt, tracker
+                ):
+                    if chunk["type"] == "done":
+                        full_text_parts.append(chunk["full_text"])
+                        text_parts_this_attempt.append(chunk["full_text"])
+                        result_message = chunk["result_message"]
+                        # Merge transcript replied_to
+                        transcript_replied = chunk.get("replied_to_from_transcript", set())
+                        if transcript_replied:
+                            self._tool_handler.merge_replied_to(transcript_replied)
+                        stream_succeeded = True
+                    elif chunk["type"] == "tool_end" and checkpoint_enabled:
+                        completed_tools.append({
+                            "tool_name": chunk.get("tool_name", ""),
+                            "tool_id": chunk.get("tool_id", ""),
+                            "summary": chunk.get("tool_name", ""),
+                        })
+                        # Save checkpoint after each tool completion
+                        from core.memory.shortterm import StreamCheckpoint
+                        shortterm.save_checkpoint(StreamCheckpoint(
+                            timestamp=datetime.now().isoformat(),
+                            trigger=trigger,
+                            original_prompt=prompt,
+                            completed_tools=completed_tools,
+                            accumulated_text="\n".join(full_text_parts),
+                            retry_count=retry_count,
+                        ))
+                        yield chunk
+                    else:
+                        if chunk["type"] == "text_delta":
+                            text_parts_this_attempt.append(chunk.get("text", ""))
+                        yield chunk
+
+            except Exception as e:
+                from core.execution.agent_sdk import StreamDisconnectedError
+
+                is_stream_error = isinstance(e, StreamDisconnectedError)
+                if not is_stream_error:
+                    # Non-stream errors: log and break
+                    logger.exception("Agent SDK streaming error (non-retryable)")
+                    yield {"type": "error", "message": f"[Agent SDK Error: {e}]"}
+                    break
+
+                # ── Stream disconnect: attempt retry ──────────
+                partial_text = e.partial_text if is_stream_error else ""
+                if partial_text:
+                    full_text_parts.append(partial_text)
+
+                if retry_count >= max_retries:
+                    logger.error(
+                        "Stream retry exhausted (%d/%d)",
+                        retry_count, max_retries,
+                    )
+                    yield {
+                        "type": "error",
+                        "message": f"ストリームが{retry_count}回切断されました。最大リトライ回数に達しました。",
+                    }
+                    break
+
+                retry_count += 1
+                logger.warning(
+                    "Stream disconnected, retrying %d/%d after %.1fs",
+                    retry_count, max_retries, retry_delay,
+                )
+                yield {
+                    "type": "retry_start",
+                    "retry": retry_count,
+                    "max_retries": max_retries,
+                }
+
+                # Load checkpoint and build retry prompt
+                from core.execution._session import build_stream_retry_prompt
+                from core.memory.shortterm import StreamCheckpoint
+
+                checkpoint = shortterm.load_checkpoint()
+                if checkpoint is None:
+                    checkpoint = StreamCheckpoint(
+                        timestamp=datetime.now().isoformat(),
+                        trigger=trigger,
+                        original_prompt=prompt,
+                        completed_tools=completed_tools,
+                        accumulated_text="\n".join(full_text_parts),
+                        retry_count=retry_count,
+                    )
+
+                checkpoint.retry_count = retry_count
+                current_prompt = build_stream_retry_prompt(checkpoint)
+
+                # Reset tracker for fresh session
+                tracker.reset()
+                current_system_prompt = build_system_prompt(
+                    self.memory,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                    priming_section=priming_section,
+                    execution_mode=mode,
+                )
+
+                await asyncio.sleep(retry_delay)
+                continue
+
+            if stream_succeeded:
+                # Clear checkpoint on success
+                shortterm.clear_checkpoint()
+                break
 
         # Session chaining
         session_chained = False
@@ -727,8 +856,8 @@ class AgentCore:
         full_text = "\n".join(full_text_parts)
         duration_ms = int((time.monotonic() - start) * 1000)
         logger.info(
-            "run_cycle_streaming END trigger=%s duration_ms=%d response_len=%d chained=%s",
-            trigger, duration_ms, len(full_text), session_chained,
+            "run_cycle_streaming END trigger=%s duration_ms=%d response_len=%d chained=%s retries=%d",
+            trigger, duration_ms, len(full_text), session_chained, retry_count,
         )
 
         yield {

@@ -136,3 +136,50 @@ def build_continuation_prompt() -> str:
     Convenience wrapper so callers need not import ``core.paths`` directly.
     """
     return load_prompt("session_continuation")
+
+
+def build_stream_retry_prompt(checkpoint: "StreamCheckpoint") -> str:
+    """Build a continuation prompt from a stream checkpoint.
+
+    Summarises what was completed before the disconnect and instructs the
+    LLM to continue from where it left off.
+
+    Args:
+        checkpoint: The checkpoint recorded during the interrupted stream.
+
+    Returns:
+        A prompt string for the retry session.
+    """
+    from core.memory.shortterm import StreamCheckpoint  # avoid circular at module level
+
+    completed_lines: list[str] = []
+    for i, tool in enumerate(checkpoint.completed_tools, 1):
+        name = tool.get("tool_name", "unknown")
+        summary = tool.get("summary", "")
+        completed_lines.append(f"{i}. ✅ {name}: {summary}")
+
+    completed_section = "\n".join(completed_lines) if completed_lines else "(なし)"
+
+    # Truncate accumulated text to avoid oversized prompt
+    acc_text = checkpoint.accumulated_text
+    if len(acc_text) > 2000:
+        acc_text = "...(前半省略)...\n" + acc_text[-2000:]
+
+    return (
+        "あなたは以下のタスクを実行中でしたが、通信エラーで中断されました。\n"
+        "続きから実行してください。\n"
+        "\n"
+        "## 元の指示\n"
+        f"{checkpoint.original_prompt}\n"
+        "\n"
+        "## 完了済みステップ\n"
+        f"{completed_section}\n"
+        "\n"
+        "## これまでの出力\n"
+        f"{acc_text}\n"
+        "\n"
+        "## 注意\n"
+        "- 完了済みステップを繰り返さないでください\n"
+        "- ファイルが既に存在する場合はスキップまたは更新してください\n"
+        "- 中断前の作業の続きを実行してください\n"
+    )

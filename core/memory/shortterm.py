@@ -42,6 +42,22 @@ class SessionState:
     notes: str = ""
 
 
+@dataclass
+class StreamCheckpoint:
+    """Checkpoint captured during streaming execution for retry on disconnect.
+
+    Records completed tool calls and accumulated text so that a retry
+    can resume from where the stream was interrupted.
+    """
+
+    timestamp: str = ""
+    trigger: str = ""
+    original_prompt: str = ""
+    completed_tools: list[dict[str, Any]] = field(default_factory=list)
+    accumulated_text: str = ""
+    retry_count: int = 0
+
+
 class ShortTermMemory:
     """Manages the short-term memory folder for a DigitalPerson.
 
@@ -137,6 +153,44 @@ class ShortTermMemory:
             return
         self._archive_existing()
         logger.info("Short-term memory cleared")
+
+    # ── Stream checkpoint ─────────────────────────────────
+
+    _CHECKPOINT_FILE = "stream_checkpoint.json"
+
+    def save_checkpoint(self, checkpoint: StreamCheckpoint) -> Path:
+        """Persist a streaming checkpoint for retry-on-disconnect."""
+        self.shortterm_dir.mkdir(parents=True, exist_ok=True)
+        path = self.shortterm_dir / self._CHECKPOINT_FILE
+        path.write_text(
+            json.dumps(asdict(checkpoint), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        logger.debug(
+            "Stream checkpoint saved: %d completed tools, retry=%d",
+            len(checkpoint.completed_tools),
+            checkpoint.retry_count,
+        )
+        return path
+
+    def load_checkpoint(self) -> StreamCheckpoint | None:
+        """Load the current stream checkpoint, if any."""
+        path = self.shortterm_dir / self._CHECKPOINT_FILE
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return StreamCheckpoint(**data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Failed to parse stream checkpoint JSON")
+            return None
+
+    def clear_checkpoint(self) -> None:
+        """Remove the stream checkpoint file."""
+        path = self.shortterm_dir / self._CHECKPOINT_FILE
+        if path.exists():
+            path.unlink()
+            logger.debug("Stream checkpoint cleared")
 
     # ── Private ─────────────────────────────────────────────
 

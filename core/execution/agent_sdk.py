@@ -27,6 +27,24 @@ from pathlib import Path
 
 logger = logging.getLogger("animaworks.execution.agent_sdk")
 
+
+class StreamDisconnectedError(Exception):
+    """Raised when the Agent SDK stream is unexpectedly closed.
+
+    Carries partial response text and tool results accumulated before
+    the disconnect so callers can build a retry prompt.
+    """
+
+    def __init__(
+        self,
+        message: str = "Stream disconnected",
+        *,
+        partial_text: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.partial_text = partial_text
+
+
 _SEND_PATTERNS = [
     re.compile(r"Sent:\s+\S+\s+->\s+(\w+)"),           # CLI output: "Sent: sakura -> kotoha (...)"
     re.compile(r"Message sent to (\w+)"),                # ToolHandler: "Message sent to kotoha (...)"
@@ -338,11 +356,11 @@ class AgentSDKExecutor(BaseExecutor):
                     tracker.update_from_result_message(message.usage)
         except Exception as e:
             logger.exception("Agent SDK streaming error")
-            yield {
-                "type": "error",
-                "message": f"[Agent SDK Error: {e}]",
-            }
-            return
+            partial = "\n".join(response_text)
+            raise StreamDisconnectedError(
+                f"Agent SDK stream error: {e}",
+                partial_text=partial,
+            ) from e
 
         logger.debug(
             "Agent SDK streaming completed, messages=%d text_blocks=%d",
