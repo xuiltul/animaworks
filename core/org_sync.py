@@ -228,18 +228,13 @@ def _find_orphan_supervisor(
         except (json.JSONDecodeError, OSError):
             pass
 
-    # 2) config.json global entry
+    # 2) config.json global entry / 3) fallback to top-level person
     try:
         config = load_config()
         person_cfg = config.persons.get(name)
         if person_cfg and person_cfg.supervisor:
             return person_cfg.supervisor
-    except Exception:
-        pass
-
-    # 3) Fallback: first top-level person (supervisor=None, identity.md exists)
-    try:
-        config = load_config()
+        # Fallback: first top-level person (supervisor=None, identity.md exists)
         for pname, pcfg in config.persons.items():
             if pcfg.supervisor is None:
                 candidate_dir = persons_dir / pname
