@@ -52,16 +52,23 @@
 
 ランタイムデータディレクトリの **キャラクター設計ガイド**（`{data_dir}/prompts/character_design_guide.md`）を Read し、そのルールに従ってキャラクターを肉付けすること。
 
-### 3. キャラクターシートの作成
+### 3. キャラクターシートを作成し、create_person で一括作成
 
-ヒアリングと設計の結果を**キャラクターシート仕様**に従い、1ファイルにまとめて作成する:
+ヒアリングと設計の結果を**キャラクターシート仕様**に従い、`create_person` に直接渡す。
+`write_memory_file` でファイルを作る必要はない — コンテンツを直接渡せる:
 
 ```
-write_memory_file(
-  path="../{英名}/character_sheet.md",
-  content="{キャラクターシート全文}"
+create_person(
+  character_sheet_content="（下記仕様に従ったキャラクターシート全文）",
+  name="{英名}",
+  supervisor="{上司の英名}"
 )
 ```
+
+**supervisorの設定:**
+- `supervisor` パラメータで明示指定（推奨）
+- 省略した場合: キャラクターシートの `| 上司 |` 欄から取得
+- どちらもない場合: 自分（呼び出し元Person）がsupervisorになる
 
 **キャラクターシート仕様:**
 
@@ -105,40 +112,30 @@ write_memory_file(
 **必須セクション**: 基本情報、人格、役割・行動方針
 **省略可能セクション**: 権限、定期業務、初回起動指示
 
-### 4. create_person ツールでPerson作成
-
-```
-create_person(
-  character_sheet_path="../{英名}/character_sheet.md",
-  name="{英名}"
-)
-```
-
 これにより以下が自動実行される:
 - ディレクトリ構造の一括作成
 - skeleton ファイルの配置
 - bootstrap.md の配置
-- status.json の作成
+- status.json の作成（supervisor含む）
+- config.json への登録（model, supervisor等）
 - 省略セクションへのデフォルト適用
 
-### 5. config.json にモデル設定を追加
+### 4. config.json のモデル設定を確認
 
-config.json の `persons.{英名}` セクションにモデル設定を追加する。
-create_person ツールが自動で基本設定を登録するが、以下を確認・補完すること:
+create_person が自動でconfig.json に登録するが、以下を確認・補完すること:
 
 - `model`: ヒアリングで決定したモデル名
 - `credential`: 使用するcredential名
 - `execution_mode`: autonomous または assisted
-- `supervisor`: 上司の英名
 - `speciality`: 役職/専門
 
-### 6. サーバーに反映
+### 5. サーバーに反映
 
 ```
 execute_command(command="curl -s -X POST http://localhost:18500/api/system/reload")
 ```
 
-### 7. 依頼者に報告
+### 6. 依頼者に報告
 
 雇用完了を報告する:
 - 新しい社員の名前と役割

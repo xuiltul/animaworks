@@ -121,11 +121,18 @@ def create_blank(persons_dir: Path, name: str) -> Path:
     return person_dir
 
 
-def create_from_md(persons_dir: Path, md_path: Path, name: str | None = None) -> Path:
-    """Create a person from an MD character-sheet file.
+def create_from_md(
+    persons_dir: Path,
+    md_path: Path | None = None,
+    name: str | None = None,
+    *,
+    content: str | None = None,
+    supervisor: str | None = None,
+) -> Path:
+    """Create a person from an MD character-sheet file or content string.
 
-    The MD file is validated, then placed as ``character_sheet.md`` in the new
-    person directory.  Sections in the sheet are applied to identity.md,
+    The MD content is validated, then placed as ``character_sheet.md`` in the
+    new person directory.  Sections in the sheet are applied to identity.md,
     injection.md, permissions.md, and status.json.
 
     On any failure after the person directory has been created the directory
@@ -133,21 +140,30 @@ def create_from_md(persons_dir: Path, md_path: Path, name: str | None = None) ->
 
     Args:
         persons_dir: Runtime persons directory.
-        md_path: Path to the source MD file.
+        md_path: Path to the source MD file.  Either *md_path* or *content*
+            must be provided.
         name: Person name.  If None, extracted from MD content.
+        content: Character sheet content as a string.  If provided, *md_path*
+            is ignored.
+        supervisor: Explicit supervisor name.  If given, overrides the value
+            parsed from the character sheet's ``基本情報`` table.
 
     Returns:
         Path to the created person directory.
 
     Raises:
-        FileNotFoundError: If *md_path* does not exist.
-        ValueError: If the character sheet is invalid or the name cannot be
-            determined.
+        FileNotFoundError: If *md_path* is given but does not exist.
+        ValueError: If no content source is provided, the character sheet is
+            invalid, or the name cannot be determined.
     """
-    if not md_path.exists():
-        raise FileNotFoundError(f"MD file not found: {md_path}")
-
-    md_content = md_path.read_text(encoding="utf-8")
+    if content is not None:
+        md_content = content
+    elif md_path is not None:
+        if not md_path.exists():
+            raise FileNotFoundError(f"MD file not found: {md_path}")
+        md_content = md_path.read_text(encoding="utf-8")
+    else:
+        raise ValueError("Either md_path or content must be provided")
 
     # Validate before creating anything on disk
     _validate_character_sheet(md_content)
@@ -165,7 +181,11 @@ def create_from_md(persons_dir: Path, md_path: Path, name: str | None = None) ->
     try:
         (person_dir / "character_sheet.md").write_text(md_content, encoding="utf-8")
         _apply_defaults_from_sheet(person_dir, md_content)
-        _create_status_json(person_dir, _parse_character_sheet_info(md_content))
+        _create_status_json(
+            person_dir,
+            _parse_character_sheet_info(md_content),
+            supervisor_override=supervisor,
+        )
     except Exception:
         logger.error(
             "Failed to set up person '%s' from MD file; rolling back", name
@@ -282,7 +302,12 @@ def _validate_character_sheet(content: str) -> None:
         )
 
 
-def _create_status_json(person_dir: Path, info: dict[str, str]) -> None:
+def _create_status_json(
+    person_dir: Path,
+    info: dict[str, str],
+    *,
+    supervisor_override: str | None = None,
+) -> None:
     """Create status.json in *person_dir* from parsed character-sheet info.
 
     The JSON contains supervisor, role, execution mode, model, and credential
@@ -291,9 +316,14 @@ def _create_status_json(person_dir: Path, info: dict[str, str]) -> None:
     Args:
         person_dir: Target person directory.
         info: Dict returned by :func:`_parse_character_sheet_info`.
+        supervisor_override: If given, takes priority over the value in
+            *info* (the ``上司`` field from the character sheet).
     """
-    supervisor_raw = info.get("上司", "")
-    supervisor = "" if supervisor_raw in ("(なし)", "なし", "-", "") else supervisor_raw
+    if supervisor_override:
+        supervisor = supervisor_override
+    else:
+        supervisor_raw = info.get("上司", "")
+        supervisor = "" if supervisor_raw in ("(なし)", "なし", "-", "") else supervisor_raw
 
     status = {
         "supervisor": supervisor,

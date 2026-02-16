@@ -288,23 +288,45 @@ ADMIN_TOOLS: list[dict[str, Any]] = [
         "name": "create_person",
         "description": (
             "Create a new Digital Person from a character sheet. "
-            "Write the character_sheet.md first, then call this tool. "
+            "Pass the character sheet content directly via character_sheet_content, "
+            "or specify a path via character_sheet_path. "
             "The factory creates the directory structure atomically, "
             "and the new person self-configures via bootstrap on first startup."
         ),
         "parameters": {
             "type": "object",
             "properties": {
+                "character_sheet_content": {
+                    "type": "string",
+                    "description": (
+                        "Character sheet markdown content as a string. "
+                        "Preferred over character_sheet_path. "
+                        "Must include required sections: 基本情報, 人格, 役割・行動方針."
+                    ),
+                },
                 "character_sheet_path": {
                     "type": "string",
-                    "description": "Path to the character_sheet.md file (absolute or relative to person_dir)",
+                    "description": (
+                        "Path to the character_sheet.md file "
+                        "(absolute or relative to person_dir). "
+                        "Ignored if character_sheet_content is provided."
+                    ),
                 },
                 "name": {
                     "type": "string",
                     "description": "Person name (lowercase alphanumeric). If omitted, extracted from sheet.",
                 },
+                "supervisor": {
+                    "type": "string",
+                    "description": (
+                        "Supervisor person name (lowercase). "
+                        "Overrides the 上司 field in the character sheet. "
+                        "If omitted, falls back to the sheet value, "
+                        "then to the calling person."
+                    ),
+                },
             },
-            "required": ["character_sheet_path"],
+            "required": [],
         },
     },
 ]

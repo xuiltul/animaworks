@@ -420,24 +420,55 @@ class ToolHandler:
     # ── Admin tool handlers ────────────────────────────────
 
     def _handle_create_person(self, args: dict[str, Any]) -> str:
-        """Create a new person from a character sheet via person_factory."""
+        """Create a new person from a character sheet via person_factory.
+
+        Accepts either ``character_sheet_content`` (preferred) or
+        ``character_sheet_path``.  The ``supervisor`` parameter overrides the
+        character sheet's 上司 field; if omitted the sheet value is used, and
+        if the sheet also lacks a supervisor the calling person is used as
+        fallback.
+        """
+        import json as _json
+
         from core.person_factory import create_from_md
         from core.paths import get_data_dir, get_persons_dir
 
-        sheet_path = Path(args["character_sheet_path"]).expanduser()
-        if not sheet_path.is_absolute():
-            sheet_path = self._person_dir / sheet_path
+        content = args.get("character_sheet_content")
+        sheet_path_raw = args.get("character_sheet_path")
+        name = args.get("name")
+        explicit_supervisor = args.get("supervisor")
 
-        if not sheet_path.exists():
+        # Resolve content source
+        if content:
+            # Content provided directly — preferred path
+            md_path = None
+        elif sheet_path_raw:
+            md_path = Path(sheet_path_raw).expanduser()
+            if not md_path.is_absolute():
+                md_path = self._person_dir / md_path
+            if not md_path.exists():
+                return _error_result(
+                    "FileNotFound",
+                    f"Character sheet not found: {md_path}",
+                    suggestion=(
+                        "Use character_sheet_content to pass content directly, "
+                        "or ensure the file exists"
+                    ),
+                )
+        else:
             return _error_result(
-                "FileNotFound",
-                f"Character sheet not found: {sheet_path}",
-                suggestion="Write the character_sheet.md first, then call create_person",
+                "MissingParameter",
+                "Either character_sheet_content or character_sheet_path is required",
             )
 
-        name = args.get("name")
         try:
-            person_dir = create_from_md(get_persons_dir(), sheet_path, name=name)
+            person_dir = create_from_md(
+                get_persons_dir(),
+                md_path,
+                name=name,
+                content=content,
+                supervisor=explicit_supervisor,
+            )
         except FileExistsError as e:
             return _error_result(
                 "PersonExists",
@@ -446,6 +477,26 @@ class ToolHandler:
             )
         except ValueError as e:
             return _error_result("InvalidCharacterSheet", str(e))
+
+        # Supervisor fallback: if neither explicit param nor sheet provided
+        # a supervisor, use the calling person as default.
+        status_path = person_dir / "status.json"
+        if status_path.exists() and self._person_name:
+            try:
+                status_data = _json.loads(status_path.read_text(encoding="utf-8"))
+                if not status_data.get("supervisor"):
+                    status_data["supervisor"] = self._person_name
+                    status_path.write_text(
+                        _json.dumps(status_data, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
+                    )
+                    logger.debug(
+                        "Set fallback supervisor '%s' for '%s'",
+                        self._person_name,
+                        person_dir.name,
+                    )
+            except (OSError, _json.JSONDecodeError):
+                logger.warning("Failed to set fallback supervisor", exc_info=True)
 
         # Register in config.json
         try:

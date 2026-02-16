@@ -365,6 +365,82 @@ class TestCreateFromMd:
             with pytest.raises(ValueError, match="Could not extract"):
                 create_from_md(persons_dir, md_file)
 
+    def test_creates_from_content_string(self, tmp_path):
+        """create_from_md with content= creates person without a file."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+
+        with patch("core.person_factory.BLANK_TEMPLATE_DIR", tmp_path / "no_blank"), \
+             patch("core.person_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
+            person_dir = create_from_md(persons_dir, content=self._VALID_SHEET)
+            assert person_dir.name == "alice"
+            assert (person_dir / "character_sheet.md").exists()
+
+    def test_content_takes_priority_over_path(self, tmp_path):
+        """When both content and md_path are given, content wins."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+        md_file = tmp_path / "char.md"
+        md_file.write_text("invalid content", encoding="utf-8")
+
+        with patch("core.person_factory.BLANK_TEMPLATE_DIR", tmp_path / "no_blank"), \
+             patch("core.person_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
+            person_dir = create_from_md(persons_dir, md_file, content=self._VALID_SHEET)
+            assert person_dir.name == "alice"
+
+    def test_raises_when_neither_path_nor_content(self, tmp_path):
+        """Must provide either md_path or content."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+        with pytest.raises(ValueError, match="Either md_path or content"):
+            create_from_md(persons_dir)
+
+    def test_supervisor_override(self, tmp_path):
+        """Explicit supervisor parameter overrides sheet value."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+
+        sheet_with_supervisor = (
+            "# Character: Bob\n\n"
+            "## 基本情報\n\n"
+            "| 項目 | 設定 |\n|------|------|\n"
+            "| 英名 | bob |\n| 上司 | tanaka |\n\n"
+            "## 人格\n\nDetails\n\n"
+            "## 役割・行動方針\n\nRole\n"
+        )
+        with patch("core.person_factory.BLANK_TEMPLATE_DIR", tmp_path / "no_blank"), \
+             patch("core.person_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
+            person_dir = create_from_md(
+                persons_dir, content=sheet_with_supervisor, supervisor="rin"
+            )
+            status = json.loads(
+                (person_dir / "status.json").read_text(encoding="utf-8")
+            )
+            assert status["supervisor"] == "rin"
+
+    def test_supervisor_from_sheet_when_no_override(self, tmp_path):
+        """Without explicit supervisor, sheet value is used."""
+        persons_dir = tmp_path / "persons"
+        persons_dir.mkdir()
+
+        sheet_with_supervisor = (
+            "# Character: Carol\n\n"
+            "## 基本情報\n\n"
+            "| 項目 | 設定 |\n|------|------|\n"
+            "| 英名 | carol |\n| 上司 | tanaka |\n\n"
+            "## 人格\n\nDetails\n\n"
+            "## 役割・行動方針\n\nRole\n"
+        )
+        with patch("core.person_factory.BLANK_TEMPLATE_DIR", tmp_path / "no_blank"), \
+             patch("core.person_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
+            person_dir = create_from_md(
+                persons_dir, content=sheet_with_supervisor
+            )
+            status = json.loads(
+                (person_dir / "status.json").read_text(encoding="utf-8")
+            )
+            assert status["supervisor"] == "tanaka"
+
 
 # ── _place_send_script ───────────────────────────────────
 
@@ -601,6 +677,24 @@ class TestCreateStatusJson:
         _create_status_json(person_dir, info)
         status = json.loads((person_dir / "status.json").read_text(encoding="utf-8"))
         assert status["supervisor"] == ""
+
+    def test_supervisor_override(self, tmp_path):
+        """Explicit supervisor_override takes priority over sheet value."""
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        info = {"上司": "tanaka"}
+        _create_status_json(person_dir, info, supervisor_override="yamada")
+        status = json.loads((person_dir / "status.json").read_text(encoding="utf-8"))
+        assert status["supervisor"] == "yamada"
+
+    def test_supervisor_override_with_empty_sheet(self, tmp_path):
+        """supervisor_override works even when sheet has no supervisor."""
+        person_dir = tmp_path / "person"
+        person_dir.mkdir()
+        info = {}
+        _create_status_json(person_dir, info, supervisor_override="rin")
+        status = json.loads((person_dir / "status.json").read_text(encoding="utf-8"))
+        assert status["supervisor"] == "rin"
 
 
 # ── _extract_section_content ─────────────────────────────
