@@ -979,15 +979,51 @@ async function _createGLBCharacter(name, position, url, isRigged) {
   group.name = `character_${name}`;
 
   const model = gltf.scene;
-  // Normalise scale: fit model into ~0.7 units tall
-  const box = new THREE.Box3().setFromObject(model);
+  model.updateMatrixWorld(true);
+
+  // Normalise scale: fit model into ~0.7 units tall.
+  // For skinned (rigged) models, compute bounds from skeleton bone world
+  // positions.  GLB files exported from VRoid / Blender typically store
+  // geometry in centimetre units with a 100x scale on the Armature node
+  // (a *sibling* of the SkinnedMesh, not a parent).  Box3.setFromObject
+  // only propagates parent-child matrixWorld, so it misses the armature
+  // scale and returns a height that is 1/100 of the true value.
+  // Bone.getWorldPosition() incorporates the armature transform correctly.
+  const box = new THREE.Box3();
+  let hasBones = false;
+  model.traverse((child) => {
+    if (child.isSkinnedMesh && child.skeleton) {
+      for (const bone of child.skeleton.bones) {
+        box.expandByPoint(bone.getWorldPosition(new THREE.Vector3()));
+      }
+      hasBones = true;
+    }
+  });
+  if (!hasBones) {
+    box.setFromObject(model);
+  }
+
   const height = box.max.y - box.min.y;
   const targetHeight = 0.7;
   const scale = height > 0 ? targetHeight / height : 1;
   model.scale.setScalar(scale);
 
-  // Center the model horizontally & place feet at y=0
-  const scaledBox = new THREE.Box3().setFromObject(model);
+  // Center the model horizontally & place feet at y=0.
+  // After applying scale we must recompute the bounds using the same
+  // method (bone-based for skinned models) so that centering is correct.
+  model.updateMatrixWorld(true);
+  const scaledBox = new THREE.Box3();
+  if (hasBones) {
+    model.traverse((child) => {
+      if (child.isSkinnedMesh && child.skeleton) {
+        for (const bone of child.skeleton.bones) {
+          scaledBox.expandByPoint(bone.getWorldPosition(new THREE.Vector3()));
+        }
+      }
+    });
+  } else {
+    scaledBox.setFromObject(model);
+  }
   model.position.x -= (scaledBox.min.x + scaledBox.max.x) / 2;
   model.position.y -= scaledBox.min.y;
 
