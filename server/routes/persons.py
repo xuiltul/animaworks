@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from core.config.models import PersonModelConfig, load_config
 from server.dependencies import get_person
 
 logger = logging.getLogger("animaworks.routes.persons")
@@ -36,6 +37,8 @@ def create_persons_router() -> APIRouter:
         persons_dir = request.app.state.persons_dir
         person_names = request.app.state.person_names
 
+        config = load_config()
+
         result = []
         for name in person_names:
             person_dir = persons_dir / name
@@ -46,6 +49,9 @@ def create_persons_router() -> APIRouter:
             # Read static files
             appearance = _read_appearance(person_dir)
 
+            # Read supervisor from config
+            person_cfg = config.persons.get(name, PersonModelConfig())
+
             # Combine data
             data = {
                 "name": name,
@@ -54,6 +60,7 @@ def create_persons_router() -> APIRouter:
                 "pid": proc_status.get("pid"),
                 "uptime_sec": proc_status.get("uptime_sec"),
                 "appearance": appearance,
+                "supervisor": person_cfg.supervisor,
             }
             result.append(data)
 
