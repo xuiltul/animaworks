@@ -782,6 +782,28 @@ class ProcessSupervisor:
             )
             logger.info("System cron: Weekly integration on %s at %s:%s JST", day_of_week, time_parts[0], time_parts[1])
 
+    def _iter_consolidation_targets(self) -> list[tuple[str, Path]]:
+        """Return (anima_name, anima_dir) for all initialized and enabled animas.
+
+        Scans ``self.animas_dir`` on disk so that stopped / crashed animas are
+        still included.  Matches the guard pattern used by ``_reconcile()``.
+        """
+        if not self.animas_dir.exists():
+            return []
+
+        targets: list[tuple[str, Path]] = []
+        for anima_dir in sorted(self.animas_dir.iterdir()):
+            if not anima_dir.is_dir():
+                continue
+            if not (anima_dir / "identity.md").exists():
+                continue
+            if not (anima_dir / "status.json").exists():
+                continue
+            if not self.read_anima_enabled(anima_dir):
+                continue
+            targets.append((anima_dir.name, anima_dir))
+        return targets
+
     async def _run_daily_consolidation(self) -> None:
         """Run daily consolidation for all animas."""
         logger.info("Starting system-wide daily consolidation")
@@ -799,11 +821,10 @@ class ProcessSupervisor:
             model = getattr(consolidation_cfg, "llm_model", model)
             min_episodes = getattr(consolidation_cfg, "min_episodes_threshold", 1)
 
-        for anima_name in list(self.processes.keys()):
+        for anima_name, anima_dir in self._iter_consolidation_targets():
             try:
                 from core.memory.consolidation import ConsolidationEngine
 
-                anima_dir = self.animas_dir / anima_name
                 engine = ConsolidationEngine(
                     anima_dir=anima_dir,
                     anima_name=anima_name,
@@ -843,11 +864,10 @@ class ProcessSupervisor:
             duplicate_threshold = getattr(consolidation_cfg, "duplicate_threshold", 0.85)
             episode_retention_days = getattr(consolidation_cfg, "episode_retention_days", 30)
 
-        for anima_name in list(self.processes.keys()):
+        for anima_name, anima_dir in self._iter_consolidation_targets():
             try:
                 from core.memory.consolidation import ConsolidationEngine
 
-                anima_dir = self.animas_dir / anima_name
                 engine = ConsolidationEngine(
                     anima_dir=anima_dir,
                     anima_name=anima_name,
