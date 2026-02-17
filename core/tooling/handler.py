@@ -382,24 +382,86 @@ class ToolHandler:
     def _handle_send_message(self, args: dict[str, Any]) -> str:
         if not self._messenger:
             return "Error: messenger not configured"
+
+        to = args["to"]
+        content = args["content"]
+
+        # ── Resolve recipient: internal Anima or external user ──
+        try:
+            from core.outbound import resolve_recipient, send_external
+            from core.config.models import load_config
+            from core.paths import get_animas_dir
+
+            config = load_config()
+            animas_dir = get_animas_dir()
+            known_animas = {
+                d.name for d in animas_dir.iterdir() if d.is_dir()
+            } if animas_dir.exists() else set()
+
+            resolved = resolve_recipient(
+                to, known_animas, config.external_messaging,
+            )
+        except ValueError as e:
+            # Unknown recipient — return helpful error
+            return _error_result("UnknownRecipient", str(e))
+        except Exception:
+            # Fallback: treat as internal (preserve backward compatibility)
+            logger.debug(
+                "Recipient resolution failed for '%s', falling back to internal",
+                to, exc_info=True,
+            )
+            resolved = None
+
+        # ── External routing ──
+        if resolved is not None and not resolved.is_internal:
+            logger.info(
+                "send_message routed externally: to=%s channel=%s",
+                to, resolved.channel,
+            )
+            self._replied_to.add(to)
+
+            # Log to message_log via messenger (Activity Timeline)
+            msg = self._messenger.send(
+                to=to,
+                content=content,
+                thread_id=args.get("thread_id", ""),
+                reply_to=args.get("reply_to", ""),
+            )
+
+            if self._on_message_sent:
+                try:
+                    self._on_message_sent(
+                        self._messenger.anima_name, to, content,
+                    )
+                except Exception:
+                    logger.exception("on_message_sent callback failed")
+
+            # Dispatch to external platform
+            result = send_external(
+                resolved, content, sender_name=self._anima_name,
+            )
+            return result
+
+        # ── Internal messaging (existing behavior) ──
+        internal_to = resolved.name if resolved else to
         msg = self._messenger.send(
-            to=args["to"],
-            content=args["content"],
+            to=internal_to,
+            content=content,
             thread_id=args.get("thread_id", ""),
             reply_to=args.get("reply_to", ""),
         )
-        logger.info("send_message to=%s thread=%s", args["to"], msg.thread_id)
-        self._replied_to.add(args["to"])
+        logger.info("send_message to=%s thread=%s", internal_to, msg.thread_id)
+        self._replied_to.add(internal_to)
 
         if self._on_message_sent:
             try:
                 self._on_message_sent(
-                    self._messenger.anima_name, args["to"], args["content"],
+                    self._messenger.anima_name, internal_to, content,
                 )
             except Exception:
                 logger.exception("on_message_sent callback failed")
 
-        return f"Message sent to {args['to']} (id: {msg.id}, thread: {msg.thread_id})"
+        return f"Message sent to {internal_to} (id: {msg.id}, thread: {msg.thread_id})"
 
     # ── Human notification handler ────────────────────────────
 

@@ -83,9 +83,13 @@ class TestProperties:
     def test_replied_to(self, handler: ToolHandler):
         assert handler.replied_to == set()
 
-    def test_reset_replied_to(self, handler_with_messenger: ToolHandler):
+    def test_reset_replied_to(self, handler_with_messenger: ToolHandler, anima_dir: Path):
         h = handler_with_messenger
-        h.handle("send_message", {"to": "alice", "content": "hi"})
+        # Create "alice" directory so outbound resolver recognises it as internal
+        alice_dir = anima_dir.parent / "alice"
+        alice_dir.mkdir(exist_ok=True)
+        with patch("core.paths.get_animas_dir", return_value=anima_dir.parent):
+            h.handle("send_message", {"to": "alice", "content": "hi"})
         assert "alice" in h.replied_to
         h.reset_replied_to()
         assert h.replied_to == set()
@@ -171,32 +175,43 @@ class TestHandleRouting:
         result = handler.handle("send_message", {"to": "alice", "content": "hi"})
         assert "Error" in result
 
-    def test_send_message_with_messenger(self, handler_with_messenger: ToolHandler):
-        result = handler_with_messenger.handle(
-            "send_message", {"to": "alice", "content": "hello"},
-        )
+    def test_send_message_with_messenger(
+        self, handler_with_messenger: ToolHandler, anima_dir: Path,
+    ):
+        alice_dir = anima_dir.parent / "alice"
+        alice_dir.mkdir(exist_ok=True)
+        with patch("core.paths.get_animas_dir", return_value=anima_dir.parent):
+            result = handler_with_messenger.handle(
+                "send_message", {"to": "alice", "content": "hello"},
+            )
         assert "Message sent to alice" in result
         assert "alice" in handler_with_messenger.replied_to
 
     def test_send_message_calls_on_message_sent(
-        self, handler_with_messenger: ToolHandler,
+        self, handler_with_messenger: ToolHandler, anima_dir: Path,
     ):
         callback = MagicMock()
         handler_with_messenger.on_message_sent = callback
-        handler_with_messenger.handle(
-            "send_message", {"to": "alice", "content": "hello"},
-        )
+        alice_dir = anima_dir.parent / "alice"
+        alice_dir.mkdir(exist_ok=True)
+        with patch("core.paths.get_animas_dir", return_value=anima_dir.parent):
+            handler_with_messenger.handle(
+                "send_message", {"to": "alice", "content": "hello"},
+            )
         callback.assert_called_once_with("test-anima", "alice", "hello")
 
     def test_send_message_on_message_sent_error_swallowed(
-        self, handler_with_messenger: ToolHandler,
+        self, handler_with_messenger: ToolHandler, anima_dir: Path,
     ):
         callback = MagicMock(side_effect=RuntimeError("boom"))
         handler_with_messenger.on_message_sent = callback
-        # Should not raise
-        result = handler_with_messenger.handle(
-            "send_message", {"to": "alice", "content": "hello"},
-        )
+        alice_dir = anima_dir.parent / "alice"
+        alice_dir.mkdir(exist_ok=True)
+        with patch("core.paths.get_animas_dir", return_value=anima_dir.parent):
+            # Should not raise
+            result = handler_with_messenger.handle(
+                "send_message", {"to": "alice", "content": "hello"},
+            )
         assert "Message sent" in result
 
     def test_unknown_tool(self, handler: ToolHandler):

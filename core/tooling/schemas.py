@@ -75,11 +75,23 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "send_message",
-        "description": "Send a message to another anima.",
+        "description": (
+            "Send a message to another anima or a human user. "
+            "For human users, the message is automatically routed "
+            "to the configured preferred channel (e.g. Slack, Chatwork)."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
-                "to": {"type": "string", "description": "Recipient anima name"},
+                "to": {
+                    "type": "string",
+                    "description": (
+                        "Recipient name. Can be an anima name (e.g. 'sakura') "
+                        "or a human alias (e.g. 'user', 'taka'). "
+                        "Messages to human aliases are automatically delivered "
+                        "via the configured external channel."
+                    ),
+                },
                 "content": {"type": "string", "description": "Message content"},
                 "reply_to": {"type": "string", "description": "Message ID to reply to"},
                 "thread_id": {"type": "string", "description": "Thread ID"},

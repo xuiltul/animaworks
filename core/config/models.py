@@ -157,6 +157,13 @@ class HumanNotificationConfig(BaseModel):
     channels: list[NotificationChannelConfig] = []
 
 
+class UserAliasConfig(BaseModel):
+    """External user contact information for outbound message routing."""
+
+    slack_user_id: str = ""
+    chatwork_room_id: str = ""
+
+
 class ExternalMessagingChannelConfig(BaseModel):
     """Configuration for a single external messaging platform."""
 
@@ -166,8 +173,10 @@ class ExternalMessagingChannelConfig(BaseModel):
 
 
 class ExternalMessagingConfig(BaseModel):
-    """Configuration for external messaging webhook integration."""
+    """Configuration for external messaging integration (inbound + outbound)."""
 
+    preferred_channel: str = "slack"  # "slack" | "chatwork"
+    user_aliases: dict[str, UserAliasConfig] = {}  # alias → contact info
     slack: ExternalMessagingChannelConfig = ExternalMessagingChannelConfig()
     chatwork: ExternalMessagingChannelConfig = ExternalMessagingChannelConfig()
 
