@@ -979,16 +979,43 @@ async function _createGLBCharacter(name, position, url, isRigged) {
   group.name = `character_${name}`;
 
   const model = gltf.scene;
+
+  // ── Load animations BEFORE computing bounds ──────────────────────
+  // Bind-pose Hips bone rotations vary across characters (e.g. natsume's
+  // skeleton is tilted ~50° at bind pose, giving half the Y-extent of
+  // other characters).  By applying the idle animation frame 0 first,
+  // every skeleton is in a comparable upright pose for consistent scaling.
+  const mixer = new THREE.AnimationMixer(model);
+  const animClips = {};  // state name -> THREE.AnimationAction
+  if (isRigged) {
+    const rawClips = await _loadAnimationClips(name);
+    for (const [state, filename] of Object.entries(_STATE_ANIM_FILES)) {
+      const clip = rawClips[filename];
+      if (clip) {
+        animClips[state] = mixer.clipAction(clip);
+        animClips[state].setLoop(THREE.LoopRepeat);
+      }
+    }
+  }
+  // Use embedded animations as fallback idle
+  if (gltf.animations && gltf.animations.length > 0 && !animClips["idle"]) {
+    animClips["idle"] = mixer.clipAction(gltf.animations[0]);
+    animClips["idle"].setLoop(THREE.LoopRepeat);
+  }
+
+  // Apply idle animation frame 0 to put bones in the displayed pose
+  const idleAction = animClips["idle"] || null;
+  if (idleAction) {
+    idleAction.play();
+    mixer.setTime(0);
+  }
   model.updateMatrixWorld(true);
 
-  // Normalise scale: fit model into ~0.7 units tall.
+  // ── Normalise scale: fit model into ~0.7 units tall ──────────────
   // For skinned (rigged) models, compute bounds from skeleton bone world
-  // positions.  GLB files exported from VRoid / Blender typically store
-  // geometry in centimetre units with a 100x scale on the Armature node
-  // (a *sibling* of the SkinnedMesh, not a parent).  Box3.setFromObject
-  // only propagates parent-child matrixWorld, so it misses the armature
-  // scale and returns a height that is 1/100 of the true value.
-  // Bone.getWorldPosition() incorporates the armature transform correctly.
+  // positions.  Bone.getWorldPosition() incorporates the armature
+  // transform correctly, unlike Box3.setFromObject which misses the
+  // armature scale on sibling SkinnedMesh nodes.
   const box = new THREE.Box3();
   let hasBones = false;
   const _tmpVec = new THREE.Vector3();
@@ -1006,7 +1033,11 @@ async function _createGLBCharacter(name, position, url, isRigged) {
 
   const height = box.max.y - box.min.y;
   const targetHeight = 0.7;
-  const scale = height > 0 ? targetHeight / height : 1;
+  const maxHeight = 0.8;  // sanity cap to prevent oversized characters
+  const rawScale = height > 0 ? targetHeight / height : 1;
+  const scale = (height > 0 && height * rawScale > maxHeight)
+    ? maxHeight / height
+    : rawScale;
   model.scale.setScalar(scale);
 
   // Center the model horizontally & place feet at y=0.
@@ -1039,34 +1070,6 @@ async function _createGLBCharacter(name, position, url, isRigged) {
   group.userData._baseZ = position.z;
 
   _scene.add(group);
-
-  // Set up AnimationMixer
-  const mixer = new THREE.AnimationMixer(model);
-
-  // Load animation clips from separate GLB files (rigged models only)
-  const animClips = {};  // state name -> THREE.AnimationAction
-  if (isRigged) {
-    const rawClips = await _loadAnimationClips(name);
-    for (const [state, filename] of Object.entries(_STATE_ANIM_FILES)) {
-      const clip = rawClips[filename];
-      if (clip) {
-        animClips[state] = mixer.clipAction(clip);
-        animClips[state].setLoop(THREE.LoopRepeat);
-      }
-    }
-  }
-
-  // Use embedded animations as fallback idle
-  if (gltf.animations && gltf.animations.length > 0 && !animClips["idle"]) {
-    animClips["idle"] = mixer.clipAction(gltf.animations[0]);
-    animClips["idle"].setLoop(THREE.LoopRepeat);
-  }
-
-  // Play idle by default
-  const idleAction = animClips["idle"] || null;
-  if (idleAction) {
-    idleAction.play();
-  }
 
   const profile = _profileCache.get(name) || _generateProfile(name);
 

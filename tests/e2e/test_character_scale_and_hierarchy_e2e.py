@@ -1,6 +1,8 @@
 """E2E tests for workspace character scale and hierarchy bug fixes.
 
 Bug 1: Validates character.js bone-based bounding box via static file serving.
+Bug 1b: Validates animation-first scaling (idle animation frame 0 applied
+        before bounding box computation) and sanity cap (maxHeight=0.8).
 Bug 2: Validates /api/animas returns correct 3-level hierarchy with the
        expected supervisor relationships:
        sakura (root) -> kotoha -> chatwork_checker
@@ -123,6 +125,58 @@ class TestCharacterScaleFix:
         # for initial measurement (only as fallback for non-skinned models)
         assert "new THREE.Box3().setFromObject(model)" not in content, (
             "character.js must not use Box3().setFromObject(model) directly"
+        )
+
+
+@pytest.mark.e2e
+class TestAnimationFirstScaleFix:
+    """E2E: Verify character.js loads idle animation before computing bounds.
+
+    natsume's bind-pose Hips bone is rotated ~50° giving half the Y-extent
+    of other characters.  The fix loads animations and applies frame 0
+    before computing the bounding box, plus a sanity cap at 0.8 units.
+    """
+
+    def test_animation_before_bbox_via_static_serving(self) -> None:
+        """Fetch character.js and verify animation-first scaling pattern."""
+        from fastapi import FastAPI
+        from fastapi.staticfiles import StaticFiles
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+        static_dir = _PROJECT_ROOT / "server" / "static"
+        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+
+        client = TestClient(app)
+        resp = client.get("/workspace/modules/character.js")
+        assert resp.status_code == 200
+
+        content = resp.text
+
+        # AnimationMixer must appear before Box3
+        mixer_idx = content.find("new THREE.AnimationMixer")
+        box_idx = content.find("new THREE.Box3()")
+        assert mixer_idx != -1, "character.js must create AnimationMixer"
+        assert box_idx != -1, "character.js must create Box3"
+        assert mixer_idx < box_idx, (
+            "AnimationMixer must be created before Box3 for animation-first scaling"
+        )
+
+        # mixer.setTime(0) must appear before Box3
+        set_time_idx = content.find("mixer.setTime(0)")
+        assert set_time_idx != -1, (
+            "character.js must call mixer.setTime(0) to apply idle frame"
+        )
+        assert set_time_idx < box_idx, (
+            "mixer.setTime(0) must be called before Box3 computation"
+        )
+
+        # Sanity cap
+        assert "maxHeight" in content, (
+            "character.js must define maxHeight sanity cap"
+        )
+        assert "maxHeight = 0.8" in content, (
+            "maxHeight must be 0.8 to cap oversized characters"
         )
 
 
