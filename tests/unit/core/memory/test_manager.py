@@ -196,6 +196,24 @@ class TestListSkillSummaries:
         assert result[0][1] == "Write code efficiently"
 
 
+class TestListCommonSkillSummaries:
+    def test_summaries(self, mm, data_dir):
+        common_dir = data_dir / "common_skills"
+        common_dir.mkdir(exist_ok=True)
+        (common_dir / "cron-management.md").write_text(
+            "# cron-management\n## 概要\nManage cron.md format\n## 手順\n1. Read",
+            encoding="utf-8",
+        )
+        result = mm.list_common_skill_summaries()
+        assert len(result) >= 1
+        names = [r[0] for r in result]
+        assert "cron-management" in names
+
+    def test_empty_common_skills(self, mm):
+        result = mm.list_common_skill_summaries()
+        assert isinstance(result, list)
+
+
 class TestListSharedUsers:
     def test_no_users(self, mm, data_dir):
         result = mm.list_shared_users()

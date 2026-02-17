@@ -196,6 +196,31 @@ class AssistedExecutor(BaseExecutor):
             system_parts.append(f"## 直近の行動ログ\n\n{recent_episodes[:4000]}")
         if knowledge_context:
             system_parts.append(f"## 関連知識\n\n{knowledge_context[:4000]}")
+
+        # Skills injection (personal + common)
+        skill_summaries = self._memory.list_skill_summaries()
+        common_skill_summaries = self._memory.list_common_skill_summaries()
+        if skill_summaries:
+            skill_lines = "\n".join(
+                f"| {name} | {desc} |" for name, desc in skill_summaries
+            )
+            system_parts.append(
+                f"## 個人スキル\n\n"
+                f"使用する際は skills/{{スキル名}}.md をReadで読んでから実行してください。\n\n"
+                f"| スキル名 | 概要 |\n|---------|------|\n{skill_lines}"
+            )
+        if common_skill_summaries:
+            common_skill_lines = "\n".join(
+                f"| {name} | {desc} |" for name, desc in common_skill_summaries
+            )
+            common_skills_dir = self._memory.common_skills_dir
+            system_parts.append(
+                f"## 共通スキル\n\n"
+                f"以下は全社員共通のスキルです。使用する際は "
+                f"`{common_skills_dir}/{{スキル名}}.md` をReadで読んでから実行してください。\n\n"
+                f"| スキル名 | 概要 |\n|---------|------|\n{common_skill_lines}"
+            )
+
         system = "\n\n---\n\n".join(p for p in system_parts if p)
 
         # ── 2. LLM 1-shot call ───────────────────────────

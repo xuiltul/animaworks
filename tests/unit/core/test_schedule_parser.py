@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -397,3 +398,54 @@ args:
         assert tasks[0].tool == "chatwork_unreplied"
         assert tasks[0].skip_pattern == "^\\[\\s*\\]$"
         assert tasks[0].args == {"sync": True, "sync_limit": 10}
+
+
+# ── Blank template format tests ──────────────────────────
+
+
+class TestBlankTemplateFormat:
+    """Tests for the updated blank cron.md template."""
+
+    def test_blank_template_parses_correctly(self):
+        """Updated blank template with schedule: lines parses correctly."""
+        content = Path("/home/main/dev/animaworks-issue-20260217-144058/templates/anima_templates/_blank/cron.md").read_text()
+        # Replace {name} placeholder
+        content = content.replace("{name}", "test")
+        tasks = parse_cron_md(content)
+        # Active section has 2 tasks (commented-out ones are excluded)
+        assert len(tasks) == 2
+        assert tasks[0].name == "毎朝の業務計画"
+        assert tasks[0].schedule == "0 9 * * *"
+        assert tasks[0].type == "llm"
+        assert tasks[1].name == "週次振り返り"
+        assert tasks[1].schedule == "0 17 * * 4"
+        assert tasks[1].type == "llm"
+
+    def test_blank_template_schedules_are_valid(self):
+        """All schedules in the blank template are valid cron expressions."""
+        content = Path("/home/main/dev/animaworks-issue-20260217-144058/templates/anima_templates/_blank/cron.md").read_text()
+        content = content.replace("{name}", "test")
+        tasks = parse_cron_md(content)
+        for task in tasks:
+            if task.schedule:
+                trigger = parse_schedule(task.schedule)
+                assert trigger is not None, f"Invalid schedule for {task.name}: '{task.schedule}'"
+
+    def test_h3_heading_schedule_not_parsed(self):
+        """H3 heading with cron expression should NOT be parsed as schedule."""
+        content = """\
+## Bad Task
+### */5 * * * *
+type: command
+command: echo hello
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].schedule == ""  # Should NOT have schedule
+        assert tasks[0].name == "Bad Task"
+
+    def test_natural_language_schedule_not_parsed(self):
+        """Natural language time like '09:00' should NOT be a valid schedule."""
+        assert parse_schedule("09:00") is None
+        assert parse_schedule("毎週金曜 17:00") is None
+        assert parse_schedule("every 5 minutes") is None
