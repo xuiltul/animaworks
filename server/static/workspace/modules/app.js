@@ -17,6 +17,7 @@ import { initMovement, registerCharacter, updateMovements, moveTo, moveToHome, s
 import { computePOIs, initIdleBehaviors, updateIdleBehaviors, cancelBehavior } from "./idle_behavior.js";
 import { initInteractions, showMessageEffect, showConversation, updateInteractions } from "./interactions.js";
 import { initTimeline, addTimelineEvent, loadHistory } from "./timeline.js";
+import { initMessagePopup, isVisible as isMessagePopupVisible, hide as hideMessagePopup } from "./message-popup.js";
 import { playReveal } from "./reveal.js";
 import { streamChat } from "../../shared/chat-stream.js";
 import { SwipeHandler } from "../../modules/touch.js";
@@ -202,6 +203,7 @@ async function initOfficeIfNeeded() {
     initIdleBehaviors(characterMap, movementSystem, pois);
 
     initTimeline(dom.officePanel, { showMessageEffect, showConversation });
+    initMessagePopup(dom.officePanel);
     loadHistory(24);
 
     // Handle character clicks → open conversation in right panel
@@ -590,7 +592,12 @@ function setupWebSocket() {
       animas: [data.from_person, data.to_person],
       timestamp: new Date().toISOString(),
       summary: `${data.from_person} → ${data.to_person}: ${data.summary || ""}`,
-      metadata: { text: data.summary || "" },
+      metadata: {
+        text: data.summary || "",
+        message_id: data.message_id || "",
+        from_person: data.from_person,
+        to_person: data.to_person,
+      },
     });
   }));
 
@@ -921,10 +928,14 @@ async function startDashboard() {
     dom.convInput.style.height = Math.min(dom.convInput.scrollHeight, maxH) + "px";
   });
 
-  // Close conversation with Escape
+  // Close popups / conversation with Escape
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && getState().conversationOpen) {
-      closeConversation();
+    if (e.key === "Escape") {
+      if (isMessagePopupVisible()) {
+        hideMessagePopup();
+      } else if (getState().conversationOpen) {
+        closeConversation();
+      }
     }
   });
 

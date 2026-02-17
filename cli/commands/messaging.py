@@ -26,11 +26,11 @@ def cmd_send(args: argparse.Namespace) -> None:
         reply_to=args.reply_to or "",
     )
     print(f"Sent: {msg.from_person} -> {msg.to_person} (id: {msg.id}, thread: {msg.thread_id})")
-    _notify_server_message_sent(args.from_person, args.to_person, args.message)
+    _notify_server_message_sent(args.from_person, args.to_person, args.message, msg.id)
 
 
 def _notify_server_message_sent(
-    from_anima: str, to_anima: str, content: str
+    from_anima: str, to_anima: str, content: str, message_id: str = "",
 ) -> None:
     """Notify the running server about a CLI-sent message.
 
@@ -53,6 +53,7 @@ def _notify_server_message_sent(
                 "from_person": from_anima,
                 "to_person": to_anima,
                 "content": content[:200],
+                "message_id": message_id,
             },
             timeout=5.0,
         )

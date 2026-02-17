@@ -154,3 +154,9 @@ export async function probeAsset(name, filename) {
     return null;
   }
 }
+
+// ── Messages ──────────────────────
+
+export async function fetchMessage(messageId) {
+  return request(`/api/messages/${encodeURIComponent(messageId)}`);
+}

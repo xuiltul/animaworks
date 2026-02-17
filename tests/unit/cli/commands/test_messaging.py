@@ -44,7 +44,7 @@ class TestCmdSend:
         captured = capsys.readouterr()
         assert "alice" in captured.out
         assert "bob" in captured.out
-        mock_notify.assert_called_once_with("alice", "bob", "Hello Bob")
+        mock_notify.assert_called_once_with("alice", "bob", "Hello Bob", "msg001")
 
 
 # ── _notify_server_message_sent ──────────────────────────
@@ -78,6 +78,23 @@ class TestNotifyServer:
         _notify_server_message_sent("alice", "bob", "hello")
 
         mock_post.assert_called_once()
+
+    @patch("httpx.post")
+    @patch("cli.commands.server._is_process_alive", return_value=True)
+    @patch("cli.commands.server._read_pid", return_value=123)
+    def test_message_id_in_payload(self, mock_pid, mock_alive, mock_post):
+        from cli.commands.messaging import _notify_server_message_sent
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_post.return_value = mock_resp
+
+        _notify_server_message_sent("alice", "bob", "hello", "msg_123")
+
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args
+        payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
+        assert payload["message_id"] == "msg_123"
 
     @patch("httpx.post", side_effect=Exception("connection error"))
     @patch("cli.commands.server._is_process_alive", return_value=True)

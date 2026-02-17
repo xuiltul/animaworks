@@ -18,6 +18,8 @@
  * @property {Object}  [metadata] — extra data for replay
  */
 
+import { showMessage as showMessagePopup } from "./message-popup.js";
+
 // ── Type icons ─────────────────────────────────────
 
 const TYPE_ICONS = {
@@ -287,6 +289,9 @@ function _replayEvent(event, el) {
           animas[1],
           (metadata && metadata.text) || "",
         );
+      }
+      if (metadata && metadata.message_id) {
+        showMessagePopup(metadata.message_id);
       }
       break;
 
