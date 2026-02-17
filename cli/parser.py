@@ -222,6 +222,61 @@ def cli_main() -> None:
     )
     p_anima_status.set_defaults(func=_lazy_anima_status)
 
+    # anima create
+    p_anima_create = anima_sub.add_parser("create", help="Create a new anima")
+    p_anima_create.add_argument(
+        "--name", default=None,
+        help="Anima name (required for blank, optional for template/md)",
+    )
+    p_anima_create.add_argument(
+        "--template", default=None,
+        help="Create from a named template",
+    )
+    p_anima_create.add_argument(
+        "--from-md", default=None, metavar="PATH",
+        help="Create from an MD file",
+    )
+    p_anima_create.add_argument(
+        "--supervisor", default=None,
+        help="Supervisor anima name (overrides character sheet)",
+    )
+    p_anima_create.add_argument(
+        "--role", default=None,
+        choices=["engineer", "researcher", "manager", "writer", "ops", "general"],
+        help="Role template to apply (default: general)",
+    )
+    p_anima_create.set_defaults(func=_lazy_anima_create)
+
+    # anima delete
+    p_anima_delete = anima_sub.add_parser("delete", help="Delete an anima (with optional archive)")
+    p_anima_delete.add_argument("anima", help="Anima name to delete")
+    p_anima_delete.add_argument(
+        "--no-archive", action="store_true",
+        help="Skip creating a ZIP archive before deletion",
+    )
+    p_anima_delete.add_argument(
+        "--force", action="store_true",
+        help="Skip confirmation prompt",
+    )
+    p_anima_delete.set_defaults(func=_lazy_anima_delete)
+
+    # anima disable
+    p_anima_disable = anima_sub.add_parser("disable", help="Disable (休養) an anima")
+    p_anima_disable.add_argument("anima", help="Anima name to disable")
+    p_anima_disable.set_defaults(func=_lazy_anima_disable)
+
+    # anima enable
+    p_anima_enable = anima_sub.add_parser("enable", help="Enable (復帰) an anima")
+    p_anima_enable.add_argument("anima", help="Anima name to enable")
+    p_anima_enable.set_defaults(func=_lazy_anima_enable)
+
+    # anima list
+    p_anima_list = anima_sub.add_parser("list", help="List all animas with status")
+    p_anima_list.add_argument(
+        "--local", action="store_true", help="Scan filesystem directly"
+    )
+    p_anima_list.set_defaults(func=_lazy_anima_list)
+
     # ── Logs ──────────────────────────────────────────────────
     p_logs = sub.add_parser("logs", help="View anima logs")
     p_logs.add_argument(
@@ -281,6 +336,9 @@ def _lazy_init(args: argparse.Namespace) -> None:
 
 
 def _lazy_create_anima(args: argparse.Namespace) -> None:
+    import sys
+
+    print("Warning: 'create-anima' is deprecated. Use 'anima create' instead.", file=sys.stderr)
     from cli.commands.anima import cmd_create_anima
 
     cmd_create_anima(args)
@@ -347,6 +405,9 @@ def _lazy_send(args: argparse.Namespace) -> None:
 
 
 def _lazy_list(args: argparse.Namespace) -> None:
+    import sys
+
+    print("Warning: 'list' is deprecated. Use 'anima list' instead.", file=sys.stderr)
     from cli.commands.messaging import cmd_list
 
     cmd_list(args)
@@ -386,3 +447,33 @@ def _lazy_migrate_cron(args: argparse.Namespace) -> None:
         print(f"Migrated {count} anima(s) to standard cron format.")
     else:
         print("No migration needed — all cron.md files are already in standard format.")
+
+
+def _lazy_anima_create(args: argparse.Namespace) -> None:
+    from cli.commands.anima import cmd_create_anima
+
+    cmd_create_anima(args)
+
+
+def _lazy_anima_delete(args: argparse.Namespace) -> None:
+    from cli.commands.anima_mgmt import cmd_anima_delete
+
+    cmd_anima_delete(args)
+
+
+def _lazy_anima_disable(args: argparse.Namespace) -> None:
+    from cli.commands.anima_mgmt import cmd_anima_disable
+
+    cmd_anima_disable(args)
+
+
+def _lazy_anima_enable(args: argparse.Namespace) -> None:
+    from cli.commands.anima_mgmt import cmd_anima_enable
+
+    cmd_anima_enable(args)
+
+
+def _lazy_anima_list(args: argparse.Namespace) -> None:
+    from cli.commands.anima_mgmt import cmd_anima_list
+
+    cmd_anima_list(args)

@@ -317,3 +317,133 @@ class TestLazyImportWrappers:
         args = MagicMock()
         _lazy_status(args)
         mock_cmd.assert_called_once_with(args)
+
+
+class TestAnimaSubcommandParsing:
+    """Test that anima subcommand args are correctly parsed."""
+
+    def test_anima_create(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_anima = sub.add_parser("anima")
+        anima_sub = p_anima.add_subparsers(dest="anima_command")
+        p = anima_sub.add_parser("create")
+        p.add_argument("--name", default=None)
+        p.add_argument("--from-md", default=None)
+        p.add_argument("--template", default=None)
+
+        args = parser.parse_args(["anima", "create", "--name", "alice", "--from-md", "alice.md"])
+        assert args.anima_command == "create"
+        assert args.name == "alice"
+        assert args.from_md == "alice.md"
+
+    def test_anima_delete(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_anima = sub.add_parser("anima")
+        anima_sub = p_anima.add_subparsers(dest="anima_command")
+        p = anima_sub.add_parser("delete")
+        p.add_argument("anima")
+        p.add_argument("--no-archive", action="store_true")
+        p.add_argument("--force", action="store_true")
+
+        args = parser.parse_args(["anima", "delete", "alice", "--force", "--no-archive"])
+        assert args.anima == "alice"
+        assert args.force is True
+        assert args.no_archive is True
+
+    def test_anima_disable(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_anima = sub.add_parser("anima")
+        anima_sub = p_anima.add_subparsers(dest="anima_command")
+        p = anima_sub.add_parser("disable")
+        p.add_argument("anima")
+
+        args = parser.parse_args(["anima", "disable", "alice"])
+        assert args.anima == "alice"
+
+    def test_anima_enable(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_anima = sub.add_parser("anima")
+        anima_sub = p_anima.add_subparsers(dest="anima_command")
+        p = anima_sub.add_parser("enable")
+        p.add_argument("anima")
+
+        args = parser.parse_args(["anima", "enable", "alice"])
+        assert args.anima == "alice"
+
+    def test_anima_list(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_anima = sub.add_parser("anima")
+        anima_sub = p_anima.add_subparsers(dest="anima_command")
+        p = anima_sub.add_parser("list")
+        p.add_argument("--local", action="store_true")
+
+        args = parser.parse_args(["anima", "list", "--local"])
+        assert args.local is True
+
+
+class TestDeprecationWarnings:
+    """Test that deprecated commands show warnings."""
+
+    @patch("cli.commands.anima.cmd_create_anima")
+    def test_create_anima_deprecation(self, mock_cmd, capsys):
+        from cli.parser import _lazy_create_anima
+        args = MagicMock()
+        _lazy_create_anima(args)
+        captured = capsys.readouterr()
+        assert "deprecated" in captured.err
+        assert "anima create" in captured.err
+        mock_cmd.assert_called_once_with(args)
+
+    @patch("cli.commands.messaging.cmd_list")
+    def test_list_deprecation(self, mock_cmd, capsys):
+        from cli.parser import _lazy_list
+        args = MagicMock()
+        _lazy_list(args)
+        captured = capsys.readouterr()
+        assert "deprecated" in captured.err
+        assert "anima list" in captured.err
+        mock_cmd.assert_called_once_with(args)
+
+
+class TestNewLazyWrappers:
+    """Test new lazy import wrappers."""
+
+    @patch("cli.commands.anima.cmd_create_anima")
+    def test_lazy_anima_create(self, mock_cmd):
+        from cli.parser import _lazy_anima_create
+        args = MagicMock()
+        _lazy_anima_create(args)
+        mock_cmd.assert_called_once_with(args)
+
+    @patch("cli.commands.anima_mgmt.cmd_anima_delete")
+    def test_lazy_anima_delete(self, mock_cmd):
+        from cli.parser import _lazy_anima_delete
+        args = MagicMock()
+        _lazy_anima_delete(args)
+        mock_cmd.assert_called_once_with(args)
+
+    @patch("cli.commands.anima_mgmt.cmd_anima_disable")
+    def test_lazy_anima_disable(self, mock_cmd):
+        from cli.parser import _lazy_anima_disable
+        args = MagicMock()
+        _lazy_anima_disable(args)
+        mock_cmd.assert_called_once_with(args)
+
+    @patch("cli.commands.anima_mgmt.cmd_anima_enable")
+    def test_lazy_anima_enable(self, mock_cmd):
+        from cli.parser import _lazy_anima_enable
+        args = MagicMock()
+        _lazy_anima_enable(args)
+        mock_cmd.assert_called_once_with(args)
+
+    @patch("cli.commands.anima_mgmt.cmd_anima_list")
+    def test_lazy_anima_list(self, mock_cmd):
+        from cli.parser import _lazy_anima_list
+        args = MagicMock()
+        _lazy_anima_list(args)
+        mock_cmd.assert_called_once_with(args)

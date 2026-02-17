@@ -742,3 +742,28 @@ def register_anima_in_config(
             anima_name,
             supervisor,
         )
+
+
+def unregister_anima_from_config(
+    data_dir: Path,
+    anima_name: str,
+) -> bool:
+    """Remove an anima from config.json.
+
+    Args:
+        data_dir: The AnimaWorks data directory (e.g. ``~/.animaworks``).
+        anima_name: Name of the anima to unregister.
+
+    Returns:
+        True if the anima was found and removed, False if it was not present.
+    """
+    config_path = data_dir / "config.json"
+    if not config_path.exists():
+        return False
+    config = load_config(config_path)
+    if anima_name not in config.animas:
+        return False
+    del config.animas[anima_name]
+    save_config(config, config_path)
+    logger.debug("Unregistered anima '%s' from config", anima_name)
+    return True
