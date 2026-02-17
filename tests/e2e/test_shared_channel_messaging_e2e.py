@@ -20,9 +20,11 @@ def shared_dir(tmp_path: Path) -> Path:
 
 
 class TestE2EDMFlow:
-    """Full DM flow: send → inbox + dm_logs."""
+    """Full DM flow: send → inbox (dm_logs no longer written by send)."""
 
-    def test_send_creates_both_inbox_and_dm_log(self, shared_dir):
+    def test_send_creates_inbox_only(self, shared_dir):
+        """send() creates inbox file but no longer writes dm_log
+        (replaced by unified activity log)."""
         alice = Messenger(shared_dir, "alice")
         alice.send("bob", "Hello Bob!")
 
@@ -30,14 +32,13 @@ class TestE2EDMFlow:
         bob_inbox = shared_dir / "inbox" / "bob"
         assert len(list(bob_inbox.glob("*.json"))) == 1
 
-        # DM log exists
+        # DM log should NOT be created (replaced by activity log)
         dm_log = shared_dir / "dm_logs" / "alice-bob.jsonl"
-        assert dm_log.exists()
-        entry = json.loads(dm_log.read_text(encoding="utf-8").strip())
-        assert entry["from"] == "alice"
-        assert entry["text"] == "Hello Bob!"
+        assert not dm_log.exists()
 
-    def test_bidirectional_dm_conversation(self, shared_dir):
+    def test_bidirectional_inbox_conversation(self, shared_dir):
+        """Bidirectional messages are delivered via inbox.
+        DM log is no longer written by send()."""
         alice = Messenger(shared_dir, "alice")
         bob = Messenger(shared_dir, "bob")
 
@@ -45,36 +46,30 @@ class TestE2EDMFlow:
         bob.send("alice", "I'm fine, thanks Alice!")
         alice.send("bob", "Great to hear!")
 
-        # Both should share the same DM log
-        dm_log = shared_dir / "dm_logs" / "alice-bob.jsonl"
-        lines = dm_log.read_text(encoding="utf-8").strip().splitlines()
-        assert len(lines) == 3
+        # Bob has 2 messages from alice in inbox
+        bob_msgs = bob.receive()
+        alice_msgs_in_bob = [m for m in bob_msgs if m.from_person == "alice"]
+        assert len(alice_msgs_in_bob) == 2
 
-        # Read via API
-        alice_history = alice.read_dm_history("bob")
-        bob_history = bob.read_dm_history("alice")
-        assert len(alice_history) == 3
-        assert len(bob_history) == 3
+        # Alice has 1 message from bob in inbox
+        alice_msgs = alice.receive()
+        bob_msgs_in_alice = [m for m in alice_msgs if m.from_person == "bob"]
+        assert len(bob_msgs_in_alice) == 1
 
-        # Content matches
-        assert alice_history[0]["from"] == "alice"
-        assert alice_history[1]["from"] == "bob"
-        assert alice_history[2]["from"] == "alice"
-
-    def test_receive_and_archive_preserves_dm_log(self, shared_dir):
+    def test_receive_and_archive_clears_inbox(self, shared_dir):
+        """receive_and_archive clears inbox. DM log no longer written."""
         alice = Messenger(shared_dir, "alice")
         bob = Messenger(shared_dir, "bob")
 
         alice.send("bob", "Important message")
-        bob.receive_and_archive()
+        messages = bob.receive_and_archive()
+
+        # Message was received
+        assert len(messages) == 1
+        assert messages[0].content == "Important message"
 
         # Inbox is archived
         assert not bob.has_unread()
-
-        # But DM log persists
-        history = bob.read_dm_history("alice")
-        assert len(history) >= 1
-        assert any("Important message" in h["text"] for h in history)
 
 
 class TestE2EChannelFlow:

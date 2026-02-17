@@ -110,8 +110,8 @@ async def test_priming_all_channels(temp_anima_dir, temp_shared_dir):
     assert "山田さんのプロファイル" in result.sender_profile
     assert "Slack" in result.sender_profile
 
-    # Verify recent episodes were loaded
-    assert "朝のタスク確認" in result.recent_episodes or "山田さんとのミーティング" in result.recent_episodes
+    # Verify recent activity was loaded
+    assert "朝のタスク確認" in result.recent_activity or "山田さんとのミーティング" in result.recent_activity
 
     # Verify knowledge search (may be empty if ripgrep not available or doesn't match)
     # Note: Japanese keyword matching without morphological analysis is limited
@@ -127,7 +127,7 @@ async def test_priming_all_channels(temp_anima_dir, temp_shared_dir):
 
     print(f"\nPriming result:")
     print(f"  Sender profile: {len(result.sender_profile)} chars")
-    print(f"  Episodes: {len(result.recent_episodes)} chars")
+    print(f"  Episodes: {len(result.recent_activity)} chars")
     print(f"  Knowledge: {len(result.related_knowledge)} chars")
     print(f"  Skills: {result.matched_skills}")
     print(f"  Total tokens: {result.estimated_tokens()}")
@@ -162,11 +162,11 @@ async def test_priming_empty_result(temp_anima_dir, temp_shared_dir):
 
     # Should have some episodes, but no sender profile
     assert not result.sender_profile
-    assert result.recent_episodes  # Today's episodes should still be loaded
+    assert result.recent_activity  # Today's episodes should still be loaded
 
     print(f"\nEmpty sender priming result:")
     print(f"  Sender profile: {len(result.sender_profile)} chars")
-    print(f"  Episodes: {len(result.recent_episodes)} chars")
+    print(f"  Episodes: {len(result.recent_activity)} chars")
 
 
 def test_format_priming_section():
@@ -175,7 +175,7 @@ def test_format_priming_section():
 
     result = PrimingResult(
         sender_profile="テストユーザーのプロファイル",
-        recent_episodes="最近の会話履歴",
+        recent_activity="最近の会話履歴",
         related_knowledge="関連する知識",
         matched_skills=["skill1", "skill2"],
     )
@@ -184,7 +184,7 @@ def test_format_priming_section():
 
     assert "あなたが思い出していること" in formatted
     assert "テストユーザー について" in formatted
-    assert "直近の出来事" in formatted
+    assert "直近のアクティビティ" in formatted
     assert "関連する知識" in formatted
     assert "使えそうなスキル" in formatted
     assert "skill1" in formatted
@@ -252,7 +252,7 @@ if __name__ == "__main__":
             result = await engine.prime_memories("テストメッセージ", "human")
 
             print(f"Priming test result:")
-            print(f"  Episodes: {len(result.recent_episodes)} chars")
+            print(f"  Episodes: {len(result.recent_activity)} chars")
             print(f"  Knowledge: {len(result.related_knowledge)} chars")
             print(f"  Tokens: {result.estimated_tokens()}")
 

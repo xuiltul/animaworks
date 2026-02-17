@@ -212,11 +212,13 @@ class TestConversationDataLossProtection:
         assert len(error_turns) == 1
         assert "エラー" in error_turns[0]["content"]
 
-    async def test_transcript_includes_presaved_input(
+    async def test_transcript_not_written_by_append_turn(
         self, make_anima, data_dir,
     ):
-        """The JSONL transcript file must contain the user input regardless
-        of whether the agent cycle succeeds or fails."""
+        """append_turn() no longer writes to transcript (replaced by
+        unified activity log).  Verify that no transcript JSONL is
+        created when processing a message, while conversation.json
+        still records the turns."""
         anima_dir = make_anima(name="dataloss-transcript")
         shared_dir = data_dir / "shared"
         dp = _make_anima_with_mocks(anima_dir, shared_dir)
@@ -229,16 +231,12 @@ class TestConversationDataLossProtection:
         with pytest.raises(RuntimeError, match="Transcript test error"):
             await dp.process_message("transcript input")
 
+        # Transcript JSONL should NOT be written (replaced by activity log)
         entries = _read_transcript(anima_dir)
+        assert len(entries) == 0
 
-        # At least the human input must be in the transcript
-        human_entries = [e for e in entries if e["role"] == "human"]
-        assert len(human_entries) >= 1
-        assert human_entries[0]["content"] == "transcript input"
-
-        # Error marker should also be in the transcript
-        error_entries = [
-            e for e in entries
-            if e["role"] == "assistant" and "ERROR" in e["content"]
-        ]
-        assert len(error_entries) == 1
+        # But conversation.json must still have the turns
+        turns = _read_conversation(anima_dir)
+        human_turns = [t for t in turns if t["role"] == "human"]
+        assert len(human_turns) >= 1
+        assert human_turns[0]["content"] == "transcript input"

@@ -39,11 +39,9 @@ _BUDGET_HEARTBEAT = 200
 
 # Channel-specific token budgets (default distribution)
 _BUDGET_SENDER_PROFILE = 500
-_BUDGET_RECENT_EPISODES = 600
+_BUDGET_RECENT_ACTIVITY = 1300  # Unified: old B(600) + E(700)
 _BUDGET_RELATED_KNOWLEDGE = 700
 _BUDGET_SKILL_MATCH = 200
-_BUDGET_CHANNEL_CONTEXT = 500
-_BUDGET_CHANNEL_HUMAN_EXTRA = 200
 
 # Rough characters-per-token for Japanese/English mixed text
 _CHARS_PER_TOKEN = 4
@@ -57,29 +55,26 @@ class PrimingResult:
     """Result of priming memory retrieval."""
 
     sender_profile: str = ""
-    recent_episodes: str = ""
+    recent_activity: str = ""
     related_knowledge: str = ""
     matched_skills: list[str] = field(default_factory=list)
-    channel_context: str = ""      # Channel E: shared channels
 
     def is_empty(self) -> bool:
         """Return True if no memories were primed."""
         return (
             not self.sender_profile
-            and not self.recent_episodes
+            and not self.recent_activity
             and not self.related_knowledge
             and not self.matched_skills
-            and not self.channel_context
         )
 
     def total_chars(self) -> int:
         """Estimate total character count."""
         return (
             len(self.sender_profile)
-            + len(self.recent_episodes)
+            + len(self.recent_activity)
             + len(self.related_knowledge)
             + sum(len(s) for s in self.matched_skills)
-            + len(self.channel_context)
         )
 
     def estimated_tokens(self) -> int:
@@ -93,12 +88,11 @@ class PrimingResult:
 class PrimingEngine:
     """Automatic memory priming engine.
 
-    Executes 5-channel parallel memory retrieval:
+    Executes 4-channel parallel memory retrieval:
       A. Sender profile (direct file read)
-      B. Recent episodes (last 2 days)
+      B. Recent activity (unified activity log, replaces old episodes + channels)
       C. Related knowledge (dense vector search)
       D. Skill matching (filename pattern match)
-      E. Shared channel context (recent channel messages)
     """
 
     def __init__(self, anima_dir: Path, shared_dir: Path | None = None) -> None:
@@ -146,22 +140,20 @@ class PrimingEngine:
         # Extract keywords for search (simple rule-based for Phase 1)
         keywords = self._extract_keywords(message)
 
-        # Execute 5 channels in parallel
+        # Execute 4 channels in parallel
         results = await asyncio.gather(
             self._channel_a_sender_profile(sender_name),
-            self._channel_b_recent_episodes(),
+            self._channel_b_recent_activity(sender_name, keywords),  # Unified channel
             self._channel_c_related_knowledge(keywords),
             self._channel_d_skill_match(keywords),
-            self._channel_e_shared_channels(),
             return_exceptions=True,
         )
 
         # Unpack results (handle exceptions gracefully)
         sender_profile = results[0] if isinstance(results[0], str) else ""
-        recent_episodes = results[1] if isinstance(results[1], str) else ""
+        recent_activity = results[1] if isinstance(results[1], str) else ""
         related_knowledge = results[2] if isinstance(results[2], str) else ""
         matched_skills = results[3] if isinstance(results[3], list) else []
-        channel_context = results[4] if isinstance(results[4], str) else ""
 
         # Log exceptions if any
         for i, r in enumerate(results):
@@ -170,32 +162,26 @@ class PrimingEngine:
 
         # Apply token budget limits (distribute based on budget)
         budget_profile = int(_BUDGET_SENDER_PROFILE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
-        budget_episodes = int(_BUDGET_RECENT_EPISODES * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
+        budget_activity = int(_BUDGET_RECENT_ACTIVITY * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
         budget_knowledge = int(_BUDGET_RELATED_KNOWLEDGE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
         budget_skills = int(_BUDGET_SKILL_MATCH * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
-        budget_channel = int(
-            (_BUDGET_CHANNEL_CONTEXT + _BUDGET_CHANNEL_HUMAN_EXTRA)
-            * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS)
-        )
 
         result = PrimingResult(
             sender_profile=self._truncate_head(sender_profile, budget_profile),
-            recent_episodes=self._truncate_tail(recent_episodes, budget_episodes),
+            recent_activity=self._truncate_tail(recent_activity, budget_activity),
             related_knowledge=self._truncate_head(related_knowledge, budget_knowledge),
             matched_skills=matched_skills[:max(1, budget_skills // 50)],  # ~50 tokens per skill name
-            channel_context=self._truncate_tail(channel_context, budget_channel),
         )
 
         logger.info(
-            "Priming complete: %d chars (~%d tokens), sender_prof=%d, episodes=%d, "
-            "knowledge=%d, skills=%d, channel=%d",
+            "Priming complete: %d chars (~%d tokens), sender_prof=%d, activity=%d, "
+            "knowledge=%d, skills=%d",
             result.total_chars(),
             result.estimated_tokens(),
             len(result.sender_profile),
-            len(result.recent_episodes),
+            len(result.recent_activity),
             len(result.related_knowledge),
             len(result.matched_skills),
-            len(result.channel_context),
         )
 
         return result
@@ -228,19 +214,89 @@ class PrimingEngine:
             logger.warning("Channel A: Failed to read profile for %s: %s", sender_name, e)
             return ""
 
-    async def _channel_b_recent_episodes(self) -> str:
-        """Channel B: Recent episode logs.
+    async def _channel_b_recent_activity(self, sender_name: str, keywords: list[str]) -> str:
+        """Channel B: Recent activity from unified activity log.
 
-        Reads last 2 days of episode files (today + yesterday).
-        Returns newest entries first, truncated to budget.
+        Replaces old Channel B (episodes) and Channel E (shared channels).
+        Reads from activity_log/{date}.jsonl for a unified timeline.
+        Falls back to episodes/ if activity_log is empty (migration period).
         """
+        from core.memory.activity import ActivityLogger
+
+        activity = ActivityLogger(self.anima_dir)
+        entries = activity.recent(days=2, limit=50)
+
+        if entries:
+            # Prioritize: sender-related entries first, then by recency
+            prioritized = self._prioritize_entries(entries, sender_name, keywords)
+            return activity.format_for_priming(prioritized, budget_tokens=1300)
+
+        # Fallback: read old episodes if no activity log exists yet
+        return await self._fallback_episodes_and_channels()
+
+    def _prioritize_entries(
+        self,
+        entries: list,  # list[ActivityEntry]
+        sender_name: str,
+        keywords: list[str],
+    ) -> list:
+        """Prioritize activity entries for priming.
+
+        Priority order:
+        1. Entries involving the current sender (most relevant)
+        2. Entries matching keywords (topically relevant)
+        3. Most recent entries (temporal relevance)
+        """
+        from core.memory.activity import ActivityEntry
+
+        keywords_lower = {kw.lower() for kw in keywords} if keywords else set()
+
+        scored: list[tuple[float, int, ActivityEntry]] = []
+        for i, entry in enumerate(entries):
+            score = 0.0
+            # Sender relevance
+            if entry.from_person == sender_name or entry.to_person == sender_name:
+                score += 10.0
+            # Keyword relevance
+            text = (entry.content + " " + entry.summary).lower()
+            matching_kw = sum(1 for kw in keywords_lower if kw in text)
+            score += matching_kw * 3.0
+            # Recency (later index = more recent = higher score)
+            score += i * 0.1
+            scored.append((score, i, entry))
+
+        # Sort by score descending
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        # Return entries in chronological order among the top-scored
+        top_entries = [e for _, _, e in scored[:50]]
+        top_entries.sort(key=lambda e: e.ts)
+        return top_entries
+
+    async def _fallback_episodes_and_channels(self) -> str:
+        """Fallback: read old episodes + channels when activity_log is empty."""
+        parts: list[str] = []
+
+        # Old Channel B logic
+        episodes = await self._read_old_episodes()
+        if episodes:
+            parts.append(episodes)
+
+        # Old Channel E logic
+        channels = await self._read_old_channels()
+        if channels:
+            parts.append(channels)
+
+        return "\n\n---\n\n".join(parts) if parts else ""
+
+    async def _read_old_episodes(self) -> str:
+        """Read old episode files (migration fallback for Channel B)."""
         if not self.episodes_dir.is_dir():
             return ""
 
         parts: list[str] = []
         today = date.today()
 
-        # Read today and yesterday
         for offset in range(2):
             target_date = today - timedelta(days=offset)
             path = self.episodes_dir / f"{target_date.isoformat()}.md"
@@ -250,22 +306,104 @@ class PrimingEngine:
 
             try:
                 content = await run_sync(path.read_text, encoding="utf-8")
-                # Take last N lines (most recent)
                 lines = content.strip().splitlines()
-                # Limit to ~30 lines per day to avoid overwhelming
                 if len(lines) > 30:
                     lines = lines[-30:]
                 parts.append("\n".join(lines))
             except Exception as e:
-                logger.warning("Channel B: Failed to read episode %s: %s", path, e)
+                logger.warning("Channel B fallback: Failed to read episode %s: %s", path, e)
 
         if not parts:
-            logger.debug("Channel B: No recent episodes found")
             return ""
 
-        result = "\n\n---\n\n".join(parts)
-        logger.debug("Channel B: Loaded %d days of episodes (%d chars)", len(parts), len(result))
-        return result
+        return "\n\n---\n\n".join(parts)
+
+    async def _read_old_channels(self) -> str:
+        """Read old shared channel files (migration fallback for Channel E)."""
+        if not self.shared_dir:
+            return ""
+
+        from datetime import datetime
+
+        channels_dir = self.shared_dir / "channels"
+        if not channels_dir.is_dir():
+            return ""
+
+        anima_name = self.anima_dir.name
+        mention_tag = f"@{anima_name}"
+        now = datetime.now()
+        cutoff_24h = now - timedelta(hours=24)
+
+        parts: list[str] = []
+
+        for channel_name in ("general", "ops"):
+            channel_file = channels_dir / f"{channel_name}.jsonl"
+            if not channel_file.exists():
+                continue
+
+            try:
+                content = await run_sync(channel_file.read_text, encoding="utf-8")
+            except OSError:
+                continue
+
+            lines = content.strip().splitlines()
+            if not lines:
+                continue
+
+            entries: list[dict] = []
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+
+            if not entries:
+                continue
+
+            selected: list[dict] = []
+            seen_indices: set[int] = set()
+
+            for i in range(max(0, len(entries) - 5), len(entries)):
+                if i not in seen_indices:
+                    selected.append(entries[i])
+                    seen_indices.add(i)
+
+            for i, entry in enumerate(entries):
+                if i in seen_indices:
+                    continue
+                ts_str = entry.get("ts", "")
+                try:
+                    ts = datetime.fromisoformat(ts_str)
+                except (ValueError, TypeError):
+                    continue
+                is_human = entry.get("source") == "human"
+                is_mention = mention_tag in entry.get("text", "")
+                if (is_human and ts >= cutoff_24h) or is_mention:
+                    selected.append(entry)
+                    seen_indices.add(i)
+
+            selected.sort(key=lambda e: e.get("ts", ""))
+
+            channel_parts: list[str] = []
+            for entry in selected:
+                src = entry.get("source", "anima")
+                marker = " [human]" if src == "human" else ""
+                channel_parts.append(
+                    f"[{entry.get('ts', '?')}] {entry.get('from', '?')}{marker}: "
+                    f"{entry.get('text', '')}"
+                )
+
+            if channel_parts:
+                parts.append(f"### #{channel_name}")
+                parts.extend(channel_parts)
+                parts.append("")
+
+        if not parts:
+            return ""
+
+        return "\n".join(parts)
 
     async def _channel_c_related_knowledge(self, keywords: list[str]) -> str:
         """Channel C: Related knowledge search (vector search).
@@ -402,107 +540,6 @@ class PrimingEngine:
             logger.debug("Channel D: Matched %d skills: %s", len(matched), matched)
 
         return matched
-
-    async def _channel_e_shared_channels(self) -> str:
-        """Channel E: Shared channel context.
-
-        Retrieves recent messages from shared channels (general, ops).
-        Human messages from the last 24 hours are always included (special budget).
-        @mentions for this anima are prioritized.
-        """
-        if not self.shared_dir:
-            return ""
-
-        from datetime import datetime, timedelta
-
-        channels_dir = self.shared_dir / "channels"
-        if not channels_dir.is_dir():
-            return ""
-
-        anima_name = self.anima_dir.name
-        mention_tag = f"@{anima_name}"
-        now = datetime.now()
-        cutoff_24h = now - timedelta(hours=24)
-
-        parts: list[str] = []
-
-        for channel_name in ("general", "ops"):
-            channel_file = channels_dir / f"{channel_name}.jsonl"
-            if not channel_file.exists():
-                continue
-
-            try:
-                content = await run_sync(channel_file.read_text, encoding="utf-8")
-            except OSError:
-                continue
-
-            lines = content.strip().splitlines()
-            if not lines:
-                continue
-
-            # Parse all entries
-            entries: list[dict] = []
-            for line in lines:
-                if not line.strip():
-                    continue
-                try:
-                    entries.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-
-            if not entries:
-                continue
-
-            # Select: last 5 entries + human messages within 24h + @mentions
-            selected: list[dict] = []
-            seen_indices: set[int] = set()
-
-            # Last 5 entries
-            for i in range(max(0, len(entries) - 5), len(entries)):
-                if i not in seen_indices:
-                    selected.append(entries[i])
-                    seen_indices.add(i)
-
-            # Human messages within 24h and @mentions
-            for i, entry in enumerate(entries):
-                if i in seen_indices:
-                    continue
-                ts_str = entry.get("ts", "")
-                try:
-                    ts = datetime.fromisoformat(ts_str)
-                except (ValueError, TypeError):
-                    continue
-                is_human = entry.get("source") == "human"
-                is_mention = mention_tag in entry.get("text", "")
-                if (is_human and ts >= cutoff_24h) or is_mention:
-                    selected.append(entry)
-                    seen_indices.add(i)
-
-            # Sort by timestamp
-            selected.sort(key=lambda e: e.get("ts", ""))
-
-            # Format
-            channel_parts: list[str] = []
-            for entry in selected:
-                src = entry.get("source", "anima")
-                marker = " [human]" if src == "human" else ""
-                channel_parts.append(
-                    f"[{entry.get('ts', '?')}] {entry.get('from', '?')}{marker}: "
-                    f"{entry.get('text', '')}"
-                )
-
-            if channel_parts:
-                parts.append(f"### #{channel_name}")
-                parts.extend(channel_parts)
-                parts.append("")
-
-        if not parts:
-            logger.debug("Channel E: No shared channel messages found")
-            return ""
-
-        result = "\n".join(parts)
-        logger.debug("Channel E: Loaded channel context (%d chars)", len(result))
-        return result
 
     # ── Dynamic budget adjustment (Phase 3) ─────────────────────
 
@@ -693,22 +730,16 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
         parts.append(result.sender_profile)
         parts.append("")
 
-    if result.recent_episodes:
-        parts.append("### 直近の出来事")
+    if result.recent_activity:
+        parts.append("### 直近のアクティビティ")
         parts.append("")
-        parts.append(result.recent_episodes)
+        parts.append(result.recent_activity)
         parts.append("")
 
     if result.related_knowledge:
         parts.append("### 関連する知識")
         parts.append("")
         parts.append(result.related_knowledge)
-        parts.append("")
-
-    if result.channel_context:
-        parts.append("### 社内チャネルの様子")
-        parts.append("")
-        parts.append(result.channel_context)
         parts.append("")
 
     if result.matched_skills:

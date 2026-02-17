@@ -332,7 +332,7 @@ Senior Software Engineer
     # Verify priming retrieved data
     assert not priming_result.is_empty()
     assert "Developer" in priming_result.sender_profile or "Senior" in priming_result.sender_profile
-    assert "standup" in priming_result.recent_episodes or "Sprint" in priming_result.recent_episodes
+    assert "standup" in priming_result.recent_activity or "Sprint" in priming_result.recent_activity
 
     # Step 2: Format priming for system prompt injection
     priming_section = format_priming_section(priming_result, "developer")
@@ -681,8 +681,8 @@ All animas can see this profile.
                         )
 
             # Should retrieve own episodes only
-            if result.recent_episodes:
-                assert anima_name in result.recent_episodes.lower()
+            if result.recent_activity:
+                assert anima_name in result.recent_activity.lower()
 
             # Should retrieve shared user profile (accessible to all)
             if result.sender_profile:
@@ -1057,7 +1057,7 @@ async def test_priming_with_empty_memories(full_anima_environment):
     # RAG may return stale indexed data even after files are deleted,
     # so we only verify the result is structurally valid.
     assert result.sender_profile == ""
-    assert result.recent_episodes == ""
+    assert result.recent_activity == ""
     # related_knowledge may contain stale RAG results; that's acceptable
 
 

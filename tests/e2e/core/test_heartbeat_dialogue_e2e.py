@@ -577,7 +577,13 @@ class TestCurrentTaskEmphasis:
         _prompt_cache.clear()
 
     def test_heartbeat_summary_injected_into_prompt_a2(self, tmp_path, monkeypatch):
-        """A-2: build_system_prompt includes recent heartbeat summary section."""
+        """A-2: build_system_prompt includes recent activity summary section.
+
+        The builder now uses _load_recent_activity_summary() which reads
+        from the unified ActivityLogger, falling back to legacy
+        heartbeat_history.  We write activity_log entries so the primary
+        path is exercised.
+        """
         data_dir = tmp_path / ".animaworks"
         data_dir.mkdir()
         monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(data_dir))
@@ -595,27 +601,12 @@ class TestCurrentTaskEmphasis:
 
         anima_dir = _setup_anima_dir(tmp_path, "tester")
 
-        # Write heartbeat history with non-OK entries
-        history_dir = anima_dir / "shortterm" / "heartbeat_history"
-        history_dir.mkdir(parents=True, exist_ok=True)
-        entries = [
-            json.dumps({
-                "timestamp": "2026-02-17T10:00:00",
-                "trigger": "heartbeat",
-                "action": "reported",
-                "summary": "Found 3 errors in production logs",
-                "duration_ms": 200,
-            }, ensure_ascii=False),
-            json.dumps({
-                "timestamp": "2026-02-17T10:30:00",
-                "trigger": "heartbeat",
-                "action": "checked",
-                "summary": "HEARTBEAT_OK - all clear",
-                "duration_ms": 100,
-            }, ensure_ascii=False),
-        ]
-        (history_dir / f"{date.today().isoformat()}.jsonl").write_text(
-            "\n".join(entries) + "\n", encoding="utf-8",
+        # Write unified activity log entries (replaces heartbeat_history)
+        from core.memory.activity import ActivityLogger
+        activity = ActivityLogger(anima_dir)
+        activity.log(
+            "heartbeat_end",
+            summary="Found 3 errors in production logs",
         )
 
         mm = MemoryManager.__new__(MemoryManager)
@@ -634,11 +625,9 @@ class TestCurrentTaskEmphasis:
         from core.prompt.builder import build_system_prompt
         prompt = build_system_prompt(mm)
 
-        # A-2: heartbeat summary section should be present
-        assert "直近のハートビート活動" in prompt
+        # A-2: activity summary section should be present (renamed from ハートビート活動)
+        assert "直近の活動" in prompt
         assert "Found 3 errors in production logs" in prompt
-        # HEARTBEAT_OK entry should be filtered out
-        assert "all clear" not in prompt
 
         invalidate_cache()
         _prompt_cache.clear()

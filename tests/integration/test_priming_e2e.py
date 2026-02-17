@@ -285,8 +285,8 @@ async def test_priming_with_real_anima_directory(anima_dir: Path):
         assert "プロジェクトマネージャー" in result.sender_profile
 
         # Channel B: Recent episodes should be loaded (today and yesterday)
-        assert result.recent_episodes != ""
-        assert "朝のタスク確認" in result.recent_episodes or "ミーティング" in result.recent_episodes
+        assert result.recent_activity != ""
+        assert "朝のタスク確認" in result.recent_activity or "ミーティング" in result.recent_activity
 
         # Channel C: Related knowledge should be found (priming-layer-design.md)
         # Note: May be empty if ripgrep is not installed or RAG is not available
@@ -347,8 +347,8 @@ async def test_message_to_response_flow(anima_dir: Path):
         if priming_result.sender_profile:
             assert sender_name in priming_section or "について" in priming_section
 
-        if priming_result.recent_episodes:
-            assert "直近の出来事" in priming_section
+        if priming_result.recent_activity:
+            assert "直近のアクティビティ" in priming_section
 
         if priming_result.related_knowledge:
             assert "関連する知識" in priming_section
@@ -673,7 +673,7 @@ async def test_priming_empty_directories(tmp_path: Path):
     # Should return empty result without errors
     assert result.is_empty()
     assert result.sender_profile == ""
-    assert result.recent_episodes == ""
+    assert result.recent_activity == ""
     assert result.related_knowledge == ""
     assert result.matched_skills == []
 

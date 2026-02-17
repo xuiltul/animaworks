@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from core.background import BackgroundTaskManager
+from core.memory.activity import ActivityLogger
 from core.tooling.dispatch import ExternalToolDispatcher
 from core.memory import MemoryManager
 from core.messenger import Messenger
@@ -278,6 +279,7 @@ class ToolHandler:
                         logger.warning("Unknown tool requested: %s", name)
                         result = f"Unknown tool: {name}"
 
+            self._log_tool_activity(name, args)
             return self._truncate_output(result)
 
         except Exception as e:
@@ -304,6 +306,25 @@ class ToolHandler:
             truncated
             + f"\n\n[出力が500KBを超えたためトランケーションしました。元のサイズ: {size}]"
         )
+
+    def _log_tool_activity(self, name: str, args: dict[str, Any]) -> None:
+        """Record tool usage in unified activity log."""
+        try:
+            activity = ActivityLogger(self._anima_dir)
+            if name == "send_message":
+                activity.log("dm_sent", content=args.get("content", "")[:200], to_person=args.get("to", ""))
+            elif name == "post_channel":
+                activity.log("channel_post", content=args.get("text", "")[:200], channel=args.get("channel", ""))
+            elif name == "read_channel":
+                activity.log("channel_read", channel=args.get("channel", ""), summary=f"最新{args.get('limit', 20)}件を確認")
+            elif name == "read_dm_history":
+                activity.log("channel_read", channel=f"dm:{args.get('peer', '')}", summary="DM履歴を確認")
+            elif name == "call_human":
+                activity.log("human_notify", content=args.get("message", "")[:200], via="configured_channels")
+            else:
+                activity.log("tool_use", tool=name, summary=str(args)[:200])
+        except Exception:
+            pass  # Never let activity logging break tool execution
 
     # ── Memory tool handlers ─────────────────────────────────
 

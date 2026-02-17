@@ -17,6 +17,41 @@ from core.memory.shortterm import ShortTermMemory
 
 logger = logging.getLogger("animaworks.prompt_builder")
 
+
+# ── Activity summary helper ──────────────────────────────
+
+
+def _load_recent_activity_summary(anima_dir: Path, limit: int = 5) -> str:
+    """Load recent activity summary from unified activity log.
+
+    Falls back to legacy heartbeat_history if activity log is empty.
+    """
+    try:
+        from core.memory.activity import ActivityLogger
+
+        activity = ActivityLogger(anima_dir)
+        entries = activity.recent(
+            days=1,
+            limit=limit,
+            types=["heartbeat_end", "cron_executed", "dm_sent",
+                   "dm_received", "channel_post", "human_notify"],
+        )
+        if entries:
+            lines: list[str] = []
+            for e in entries:
+                ts = e.ts[11:16] if len(e.ts) >= 16 else e.ts
+                text = e.summary or e.content[:300]
+                lines.append(f"- {ts}: [{e.type}] {text}")
+            return "\n".join(lines)
+    except Exception:
+        logger.debug("Failed to load activity summary", exc_info=True)
+
+    # Fallback: legacy heartbeat_history
+    from core.memory import MemoryManager as _MM
+    mm = _MM(anima_dir)
+    return mm.load_recent_heartbeat_summary(limit=limit)
+
+
 # ── Emotion Instruction ───────────────────────────────────
 
 def _build_emotion_instruction() -> str:
@@ -321,14 +356,14 @@ def build_system_prompt(
     if pending:
         parts.append(f"## 未完了タスク\n\n{pending}")
 
-    # A-2: Inject recent heartbeat activity summary for cross-session continuity
-    hb_summary = memory.load_recent_heartbeat_summary(limit=5)
-    if hb_summary:
+    # A-2: Inject recent activity summary for cross-session continuity
+    recent_summary = _load_recent_activity_summary(memory.anima_dir)
+    if recent_summary:
         parts.append(
-            "## 直近のハートビート活動\n\n"
-            "以下は最近のハートビートで行った活動です。"
+            "## 直近の活動\n\n"
+            "以下は最近の活動です。"
             "対話の文脈として考慮してください。\n\n"
-            f"{hb_summary}"
+            f"{recent_summary}"
         )
 
     # Priming section (automatic memory recall)

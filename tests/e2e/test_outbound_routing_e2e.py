@@ -252,6 +252,8 @@ class TestFallbackBehavior:
         self, mock_slack, make_anima, animas_dir, config_with_aliases,
         shared_dir, make_handler,
     ):
+        """ToolHandler logs external sends to the unified activity log
+        (dm_logs are no longer written by messenger.send)."""
         mock_slack.return_value = json.dumps({"status": "sent"})
         sakura_dir = make_anima("sakura")
         messenger = Messenger(shared_dir, "sakura")
@@ -261,8 +263,9 @@ class TestFallbackBehavior:
              patch("core.config.models.load_config", return_value=config_with_aliases):
             handler.handle("send_message", {"to": "user", "content": "hello"})
 
-        # messenger.send() should have created a DM log for activity timeline
-        log_dir = shared_dir / "dm_logs"
-        assert log_dir.exists()
-        log_files = list(log_dir.glob("*.jsonl"))
-        assert len(log_files) > 0
+        # ToolHandler._log_tool_activity records dm_sent in unified activity log
+        from core.memory.activity import ActivityLogger
+        activity = ActivityLogger(sakura_dir)
+        entries = activity.recent(days=1, types=["dm_sent"])
+        assert len(entries) >= 1
+        assert entries[0].to_person == "user"

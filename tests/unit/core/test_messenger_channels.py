@@ -141,12 +141,30 @@ class TestReadChannelMentions:
 
 
 class TestReadDmHistory:
+    """read_dm_history() reads existing dm_logs files.
+
+    After migration to unified activity log, send() no longer writes to
+    dm_logs/.  These tests manually create log files to verify that
+    read_dm_history() can still parse legacy logs.
+    """
+
+    def _write_dm_log(self, shared_dir: Path, pair: str, entries: list[dict]) -> None:
+        """Helper: write JSONL entries to dm_logs/{pair}.jsonl."""
+        dm_dir = shared_dir / "dm_logs"
+        dm_dir.mkdir(parents=True, exist_ok=True)
+        filepath = dm_dir / f"{pair}.jsonl"
+        with filepath.open("a", encoding="utf-8") as f:
+            for entry in entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
     def test_no_history(self, shared_dir, messenger):
         result = messenger.read_dm_history("bob")
         assert result == []
 
-    def test_reads_after_send(self, shared_dir, messenger):
-        messenger.send("bob", "Hello Bob!")
+    def test_reads_legacy_log(self, shared_dir, messenger):
+        self._write_dm_log(shared_dir, "alice-bob", [
+            {"ts": "2026-02-17T10:00:00", "from": "alice", "text": "Hello Bob!", "source": "anima"},
+        ])
         result = messenger.read_dm_history("bob")
         assert len(result) == 1
         assert result[0]["from"] == "alice"
@@ -163,8 +181,17 @@ class TestReadDmHistory:
     def test_bidirectional_history(self, shared_dir):
         alice = Messenger(shared_dir, "alice")
         bob = Messenger(shared_dir, "bob")
-        alice.send("bob", "Hi Bob")
-        bob.send("alice", "Hi Alice")
+        # Manually write bidirectional entries (pair is always alice-bob)
+        dm_dir = shared_dir / "dm_logs"
+        dm_dir.mkdir(parents=True, exist_ok=True)
+        filepath = dm_dir / "alice-bob.jsonl"
+        entries = [
+            {"ts": "2026-02-17T10:00:00", "from": "alice", "text": "Hi Bob", "source": "anima"},
+            {"ts": "2026-02-17T10:00:01", "from": "bob", "text": "Hi Alice", "source": "anima"},
+        ]
+        with filepath.open("a", encoding="utf-8") as f:
+            for entry in entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         # Both should see the full history
         history_alice = alice.read_dm_history("bob")
         history_bob = bob.read_dm_history("alice")
@@ -172,34 +199,23 @@ class TestReadDmHistory:
         assert len(history_bob) == 2
 
     def test_limit(self, shared_dir, messenger):
-        for i in range(10):
-            messenger.send("bob", f"msg{i}")
+        entries = [
+            {"ts": f"2026-02-17T10:{i:02d}:00", "from": "alice", "text": f"msg{i}", "source": "anima"}
+            for i in range(10)
+        ]
+        self._write_dm_log(shared_dir, "alice-bob", entries)
         result = messenger.read_dm_history("bob", limit=3)
         assert len(result) == 3
 
-
-# ── send() DM log integration ───────────────────────────
-
-
-class TestSendDmLog:
-    def test_send_creates_dm_log(self, shared_dir, messenger):
+    def test_send_does_not_write_dm_log(self, shared_dir, messenger):
+        """send() should NOT create dm_logs anymore (unified activity log migration)."""
         messenger.send("bob", "Hello!")
-        dm_log = shared_dir / "dm_logs" / "alice-bob.jsonl"
-        assert dm_log.exists()
+        assert not (shared_dir / "dm_logs").exists()
 
     def test_send_no_message_log(self, shared_dir, messenger):
         """send() should NOT create message_log anymore."""
         messenger.send("bob", "Hello!")
         assert not (shared_dir / "message_log").exists()
-
-    def test_dm_log_entry_format(self, shared_dir, messenger):
-        messenger.send("bob", "Test message")
-        dm_log = shared_dir / "dm_logs" / "alice-bob.jsonl"
-        entry = json.loads(dm_log.read_text(encoding="utf-8").strip())
-        assert entry["from"] == "alice"
-        assert entry["text"] == "Test message"
-        assert entry["source"] == "anima"
-        assert "ts" in entry
 
 
 # ── receive_external() channel mirroring ──────────────────

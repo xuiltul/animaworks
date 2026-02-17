@@ -66,8 +66,7 @@ class Messenger:
         filepath = target_dir / f"{msg.id}.json"
         filepath.write_text(msg.model_dump_json(indent=2), encoding="utf-8")
         logger.info("Message sent: %s -> %s (%s)", self.anima_name, to, msg.id)
-        # Append to DM log for activity timeline
-        self._append_dm_log(to, content)
+        # DM log replaced by unified activity log (core.memory.activity)
         return msg
 
     def reply(self, original: Message, content: str) -> Message:

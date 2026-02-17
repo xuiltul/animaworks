@@ -212,8 +212,13 @@ class TestConversationMemoryAttachments:
         assert len(state.turns) == 1
         assert state.turns[0].attachments == []
 
-    def test_transcript_includes_attachments(self, tmp_path: Path) -> None:
-        """Transcript JSONL includes attachments when present."""
+    def test_conversation_state_includes_attachments(self, tmp_path: Path) -> None:
+        """conversation.json includes attachments when present.
+
+        append_turn() no longer writes to transcript JSONL (replaced by
+        unified activity log).  Attachments are stored in the in-memory
+        conversation state and persisted to conversation.json.
+        """
         from core.memory.conversation import ConversationMemory
         from core.schemas import ModelConfig
 
@@ -228,22 +233,24 @@ class TestConversationMemoryAttachments:
         conv.append_turn(
             "human", "check image", attachments=["attachments/photo.jpg"],
         )
+        conv.save()
 
-        # Find transcript file
+        # Verify attachments in conversation state
+        state = conv.load()
+        assert len(state.turns) == 1
+        assert state.turns[0].attachments == ["attachments/photo.jpg"]
+
+        # Transcript JSONL should NOT be created (replaced by activity log)
         transcript_files = list(transcripts_dir.glob("*.jsonl"))
-        assert len(transcript_files) == 1
+        assert len(transcript_files) == 0
 
-        lines = (
-            transcript_files[0].read_text(encoding="utf-8").strip().splitlines()
-        )
-        assert len(lines) == 1
-        entry = json.loads(lines[0])
-        assert entry["attachments"] == ["attachments/photo.jpg"]
-
-    def test_transcript_omits_attachments_when_empty(
+    def test_conversation_state_omits_attachments_when_empty(
         self, tmp_path: Path,
     ) -> None:
-        """Transcript JSONL omits attachments key when empty."""
+        """conversation.json stores empty attachments list when none provided.
+
+        append_turn() no longer writes to transcript JSONL.
+        """
         from core.memory.conversation import ConversationMemory
         from core.schemas import ModelConfig
 
@@ -256,15 +263,16 @@ class TestConversationMemoryAttachments:
         conv = ConversationMemory(anima_dir, config)
 
         conv.append_turn("human", "hello")
+        conv.save()
 
+        # Verify no attachments in conversation state
+        state = conv.load()
+        assert len(state.turns) == 1
+        assert state.turns[0].attachments == []
+
+        # Transcript JSONL should NOT be created
         transcript_files = list(transcripts_dir.glob("*.jsonl"))
-        assert len(transcript_files) == 1
-
-        lines = (
-            transcript_files[0].read_text(encoding="utf-8").strip().splitlines()
-        )
-        entry = json.loads(lines[0])
-        assert "attachments" not in entry
+        assert len(transcript_files) == 0
 
 
 # ── 7. BaseExecutor images parameter ──────────────────────────

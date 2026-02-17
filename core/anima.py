@@ -18,6 +18,7 @@ from typing import Any
 
 from core.agent import AgentCore
 from core.background import BackgroundTask
+from core.memory.activity import ActivityLogger
 from core.memory.conversation import ConversationMemory
 from core.memory import MemoryManager
 from core.messenger import Messenger
@@ -374,6 +375,13 @@ class DigitalAnima:
                 )
                 conv_memory.save()
 
+                # Activity log: message received
+                try:
+                    activity = ActivityLogger(self.anima_dir)
+                    activity.log("message_received", content=content, from_person=from_person, channel="chat")
+                except Exception:
+                    pass
+
                 try:
                     result = await self.agent.run_cycle(
                         prompt, trigger=f"message:{from_person}",
@@ -384,6 +392,13 @@ class DigitalAnima:
                     # Record assistant response in conversation memory
                     conv_memory.append_turn("assistant", result.summary)
                     conv_memory.save()
+
+                    # Activity log: response sent
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat")
+                    except Exception:
+                        pass
 
                     # Fire-and-forget: episode recording
                     asyncio.create_task(conv_memory.finalize_session(min_turns=3))
@@ -683,6 +698,13 @@ class DigitalAnima:
                 self._status = "checking"
                 self._last_heartbeat = datetime.now()
 
+                # Activity log: heartbeat start
+                try:
+                    activity = ActivityLogger(self.anima_dir)
+                    activity.log("heartbeat_start")
+                except Exception:
+                    pass
+
                 hb_config = self.memory.read_heartbeat_config()
                 checklist = hb_config or load_prompt("heartbeat_default_checklist")
                 parts = [load_prompt("heartbeat", checklist=checklist)]
@@ -763,6 +785,14 @@ class DigitalAnima:
                                 self.name, _m.from_person, exc_info=True,
                             )
 
+                    # Activity log: DM received
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        for _m in _recordable[:10]:
+                            activity.log("dm_received", content=_m.content[:200], from_person=_m.from_person)
+                    except Exception:
+                        pass
+
                 # Set heartbeat context for relay
                 if unread_count > 0:
                     self._heartbeat_context = (
@@ -817,7 +847,14 @@ class DigitalAnima:
                         )
 
                     self._last_activity = datetime.now()
-                    self._save_heartbeat_history(result)
+                    # Heartbeat history replaced by unified activity log
+
+                    # Activity log: heartbeat end
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log("heartbeat_end", summary=result.summary[:200])
+                    except Exception:
+                        pass
 
                     # A-3: Record important heartbeat actions to episodes
                     if result.summary and "HEARTBEAT_OK" not in result.summary:
@@ -905,6 +942,13 @@ class DigitalAnima:
                         summary=result.summary,
                         duration_ms=result.duration_ms,
                     )
+
+                    # Activity log: cron executed
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log("cron_executed", summary=f"タスク: {task_name}", meta={"task_name": task_name})
+                    except Exception:
+                        pass
 
                     logger.info(
                         "[%s] run_cron_task END task=%s duration_ms=%d",

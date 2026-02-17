@@ -279,33 +279,39 @@ class TestBuildSystemPromptHBSummary:
     """Tests that the heartbeat summary section is injected into the system prompt."""
 
     def test_hb_summary_injected_when_present(self, mock_memory: MagicMock):
-        """Verify the '直近のハートビート活動' section appears when summary is non-empty."""
+        """Verify the '直近の活動' section appears when summary is non-empty."""
         mock_memory.load_recent_heartbeat_summary.return_value = (
             "- 2026-02-17T10:00:00: [responded] Replied to Slack inquiry\n"
             "- 2026-02-17T11:00:00: [checked] Ran daily report"
         )
 
+        summary_text = (
+            "- 10:00: [heartbeat_end] Replied to Slack inquiry\n"
+            "- 11:00: [heartbeat_end] Ran daily report"
+        )
         with patch("core.prompt.builder.load_prompt", return_value="prompt section"), \
              patch("core.prompt.builder._discover_other_animas", return_value=[]), \
-             patch("core.prompt.builder._build_org_context", return_value=""):
+             patch("core.prompt.builder._build_org_context", return_value=""), \
+             patch("core.prompt.builder._load_recent_activity_summary", return_value=summary_text):
             from core.prompt.builder import build_system_prompt
             result = build_system_prompt(mock_memory)
 
-        assert "直近のハートビート活動" in result
+        assert "直近の活動" in result
         assert "Replied to Slack inquiry" in result
         assert "Ran daily report" in result
 
     def test_hb_summary_absent_when_empty(self, mock_memory: MagicMock):
-        """When load_recent_heartbeat_summary returns empty, the section should not appear."""
+        """When _load_recent_activity_summary returns empty, the section should not appear."""
         mock_memory.load_recent_heartbeat_summary.return_value = ""
 
         with patch("core.prompt.builder.load_prompt", return_value="prompt section"), \
              patch("core.prompt.builder._discover_other_animas", return_value=[]), \
-             patch("core.prompt.builder._build_org_context", return_value=""):
+             patch("core.prompt.builder._build_org_context", return_value=""), \
+             patch("core.prompt.builder._load_recent_activity_summary", return_value=""):
             from core.prompt.builder import build_system_prompt
             result = build_system_prompt(mock_memory)
 
-        assert "直近のハートビート活動" not in result
+        assert "直近の活動" not in result
 
 
 # ══════════════════════════════════════════════════════════

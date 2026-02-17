@@ -211,15 +211,17 @@ class ConversationMemory:
         content: str,
         attachments: list[str] | None = None,
     ) -> None:
-        """Record a conversation turn."""
+        """Record a conversation turn.
+
+        Transcript recording has been replaced by the unified activity log
+        (core.memory.activity.ActivityLogger).  The conversation.json state
+        is still maintained for prompt building and compression.
+        """
         state = self.load()
         turn = ConversationTurn(
             role=role, content=content, attachments=attachments or [],
         )
         state.turns.append(turn)
-        self._append_transcript(
-            role, content, turn.timestamp, attachments=attachments or [],
-        )
 
     def clear(self) -> None:
         """Clear all conversation history."""
@@ -428,9 +430,12 @@ class ConversationMemory:
             )
             return False
 
+        # Gather activity context for richer episode generation
+        activity_context = self._gather_activity_context(state.turns)
+
         # Generate summary
         try:
-            summary = await self._summarize_session(state.turns)
+            summary = await self._summarize_session(state.turns, activity_context)
         except Exception:
             logger.exception("Failed to summarize session; skipping episode write")
             return False
@@ -458,17 +463,70 @@ class ConversationMemory:
 
         return True
 
-    async def _summarize_session(self, turns: list[ConversationTurn]) -> str:
+    def _gather_activity_context(self, turns: list[ConversationTurn]) -> str:
+        """Gather non-conversation activities from activity log for episode enrichment.
+
+        Retrieves DM, channel, tool_use, human_notify events that occurred
+        during the conversation session timeframe.
+        """
+        try:
+            from core.memory.activity import ActivityLogger
+
+            activity = ActivityLogger(self.anima_dir)
+
+            # Determine session timeframe from conversation turns
+            if not turns:
+                return ""
+            first_ts = turns[0].timestamp
+            last_ts = turns[-1].timestamp
+
+            # Get all non-conversation activities from today
+            entries = activity.recent(
+                days=1,
+                limit=30,
+                types=[
+                    "dm_sent", "dm_received", "channel_post", "channel_read",
+                    "tool_use", "human_notify", "cron_executed",
+                ],
+            )
+
+            # Filter to session timeframe (between first and last turn)
+            session_entries = [
+                e for e in entries
+                if first_ts <= e.ts <= last_ts
+            ]
+
+            if not session_entries:
+                return ""
+
+            # Format as context
+            lines = ["## セッション中のその他の活動"]
+            for e in session_entries:
+                text = e.summary or e.content[:100]
+                lines.append(f"- [{e.type}] {text}")
+
+            return "\n".join(lines)
+        except Exception:
+            logger.debug("Failed to gather activity context", exc_info=True)
+            return ""
+
+    async def _summarize_session(
+        self, turns: list[ConversationTurn], activity_context: str = "",
+    ) -> str:
         """Summarize a conversation session for episode recording.
 
         Uses a cheap model (fallback_model or main model) to generate
         a structured summary of the conversation.
+
+        Args:
+            turns: Conversation turns to summarize.
+            activity_context: Optional activity log context to include.
         """
         # Format turns for summarization
         conversation_text = self._format_turns_for_compression(turns)
 
         system = (
-            "あなたは会話記録の要約者です。以下の会話をエピソード記憶として記録するための要約を作成してください。\n\n"
+            "あなたは会話記録の要約者です。以下の会話とセッション中の活動をエピソード記憶として記録するための要約を作成してください。\n\n"
             "出力形式（最初の行はタイトルとして使います）:\n"
             "{会話の要約タイトル（20文字以内）}\n\n"
             "**相手**: {相手の名前}\n"
@@ -476,9 +534,14 @@ class ConversationMemory:
             "**要点**:\n"
             "- {要点1}\n"
             "- {要点2}\n"
+            "**実行したアクション**: {DM送信、チャネル投稿、ツール使用等があれば}\n"
             "**決定事項**: {決定事項があれば}\n"
             "**未解決**: {未解決事項があれば}\n\n"
             "日本語で、簡潔に、事実を中心に記述してください。"
         )
 
-        return await self._call_llm(system, conversation_text)
+        user_content = conversation_text
+        if activity_context:
+            user_content += f"\n\n{activity_context}"
+
+        return await self._call_llm(system, user_content)
