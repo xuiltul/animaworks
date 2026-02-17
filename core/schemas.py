@@ -74,6 +74,7 @@ class ModelConfig(BaseModel):
     supervisor: str | None = None  # supervisor Anima name
     speciality: str | None = None  # free-text specialisation
     resolved_mode: str | None = None  # "A1"/"A2"/"B" — resolved from config
+    thinking: bool | None = None  # Ollama think param (None = auto: off for ollama/)
 
 
 class AnimaConfig(BaseModel):

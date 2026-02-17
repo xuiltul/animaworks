@@ -158,10 +158,6 @@ class ProcessSupervisor:
             logger.warning("Process already exists: %s", anima_name)
             return
 
-        if anima_name in self._restarting:
-            logger.debug("Skipping start_anima for %s (restart in progress)", anima_name)
-            return
-
         socket_dir = self.run_dir / "sockets"
         socket_dir.mkdir(parents=True, exist_ok=True)
         socket_path = socket_dir / f"{anima_name}.sock"
@@ -649,11 +645,17 @@ class ProcessSupervisor:
             self._restart_counts[anima_name] = count + 1
             await self.restart_anima(anima_name)
 
-            logger.info(
-                "Process restarted: %s (PID %s, retry=%d/%d)",
-                anima_name, self.processes[anima_name].get_pid(),
-                count + 1, self.restart_policy.max_retries
-            )
+            new_handle = self.processes.get(anima_name)
+            if new_handle:
+                logger.info(
+                    "Process restarted: %s (PID %s, retry=%d/%d)",
+                    anima_name, new_handle.get_pid(),
+                    count + 1, self.restart_policy.max_retries
+                )
+            else:
+                logger.error(
+                    "Restart completed but no handle found: %s", anima_name
+                )
 
         except Exception as e:
             logger.error("Failed to restart %s: %s", anima_name, e)

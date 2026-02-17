@@ -36,14 +36,23 @@ class TestStartAnimaRestartingGuard:
     """start_anima() should skip if anima is in _restarting set."""
 
     @pytest.mark.asyncio
-    async def test_start_anima_skips_when_restarting(self, supervisor: ProcessSupervisor):
-        """start_anima() returns early when anima is in _restarting."""
+    async def test_start_anima_proceeds_when_restarting(self, supervisor: ProcessSupervisor):
+        """start_anima() should proceed even when anima is in _restarting (guard removed)."""
         supervisor._restarting.add("test-anima")
 
-        # Should return without starting anything
-        await supervisor.start_anima("test-anima")
+        # Mock ProcessHandle to avoid real process creation
+        with patch("core.supervisor.manager.ProcessHandle") as MockHandle:
+            mock_handle = AsyncMock()
+            mock_handle.get_pid.return_value = 12345
+            mock_handle.send_request = AsyncMock(
+                return_value=MagicMock(error=None, result={"needs_bootstrap": False})
+            )
+            MockHandle.return_value = mock_handle
 
-        assert "test-anima" not in supervisor.processes
+            await supervisor.start_anima("test-anima")
+
+            assert "test-anima" in supervisor.processes
+            mock_handle.start.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_start_anima_proceeds_when_not_restarting(self, supervisor: ProcessSupervisor):
@@ -121,21 +130,12 @@ class TestReconcileRestartingGuard:
 
     @pytest.mark.asyncio
     async def test_concurrent_restart_and_reconcile(self, supervisor: ProcessSupervisor):
-        """Simulate race: _restarting prevents double start."""
+        """Simulate race: _restarting prevents double start via _reconcile guard."""
         anima_dir = supervisor.animas_dir / "test-anima"
         anima_dir.mkdir()
         (anima_dir / "identity.md").write_text("Test identity")
 
-        start_call_count = 0
-
-        async def mock_start(name: str) -> None:
-            nonlocal start_call_count
-            # Only count actual start attempts (not blocked by _restarting)
-            if name not in supervisor._restarting:
-                start_call_count += 1
-                supervisor.processes[name] = MagicMock()
-
-        supervisor.start_anima = AsyncMock(side_effect=mock_start)
+        supervisor.start_anima = AsyncMock()
 
         # Simulate restart in progress
         supervisor._restarting.add("test-anima")
@@ -143,5 +143,5 @@ class TestReconcileRestartingGuard:
         with patch.object(supervisor, "_reconcile_assets", new_callable=AsyncMock):
             await supervisor._reconcile()
 
-        # Should not have started during reconciliation
+        # _reconcile should skip animas in _restarting (guard is in _reconcile itself)
         supervisor.start_anima.assert_not_awaited()

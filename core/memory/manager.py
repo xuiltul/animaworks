@@ -451,6 +451,7 @@ class MemoryManager:
                 supervisor=resolved.supervisor,
                 speciality=resolved.speciality,
                 resolved_mode=mode,
+                thinking=resolved.thinking,
             )
 
         # Legacy fallback: parse config.md

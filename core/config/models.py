@@ -76,6 +76,7 @@ class AnimaModelConfig(BaseModel):
     execution_mode: str | None = None  # "autonomous" or "assisted"
     supervisor: str | None = None  # name of supervisor Anima
     speciality: str | None = None  # free-text specialisation
+    thinking: bool | None = None  # Ollama thinking mode (None=auto, True/False=explicit)
 
 
 class AnimaDefaults(BaseModel):
@@ -92,6 +93,7 @@ class AnimaDefaults(BaseModel):
     execution_mode: str | None = None  # None = auto-detect from model
     supervisor: str | None = None
     speciality: str | None = None
+    thinking: bool | None = None  # Ollama thinking mode
 
 
 class RAGConfig(BaseModel):
@@ -595,6 +597,7 @@ def load_model_config(anima_dir: Path) -> "ModelConfig":
         supervisor=resolved.supervisor,
         speciality=resolved.speciality,
         resolved_mode=mode,
+        thinking=resolved.thinking,
     )
 
 

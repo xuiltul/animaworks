@@ -203,6 +203,12 @@ class AssistedExecutor(BaseExecutor):
         if self._model_config.api_base_url:
             kwargs["api_base"] = self._model_config.api_base_url
 
+        # Ollama thinking control: default to off for ollama/ models
+        if self._model_config.thinking is not None:
+            kwargs["think"] = self._model_config.thinking
+        elif self._model_config.model.startswith("ollama/"):
+            kwargs["think"] = False
+
         return await litellm.acompletion(**kwargs)
 
     async def execute(
