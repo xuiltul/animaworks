@@ -74,6 +74,7 @@ class ProcessHandle:
         self.ipc_client: IPCClient | None = None
         self.stats = ProcessStats(started_at=datetime.now())
         self._streaming = False
+        self._streaming_started_at: datetime | None = None
         self._stderr_file: Any | None = None
 
     async def start(self) -> None:
@@ -287,6 +288,7 @@ class ProcessHandle:
         )
 
         self._streaming = True
+        self._streaming_started_at = datetime.now()
         try:
             async for response in self.ipc_client.send_request_stream(
                 request, timeout=timeout
@@ -297,6 +299,7 @@ class ProcessHandle:
             raise
         finally:
             self._streaming = False
+            self._streaming_started_at = None
 
     async def ping(self, timeout: float = 5.0) -> bool:
         """

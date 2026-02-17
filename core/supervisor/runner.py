@@ -644,10 +644,22 @@ class AnimaRunner:
                 await queue.put(_SENTINEL)
 
         async def _keepalive_producer() -> None:
-            """Emit keep-alive chunks when Agent SDK stream is silent."""
+            """Emit keep-alive chunks when Agent SDK stream is silent.
+
+            Stops automatically when *producer_task* finishes (crash or
+            normal exit), so that stale keep-alives do not mask a dead
+            Agent SDK subprocess.
+            """
             try:
                 while True:
                     await asyncio.sleep(keepalive_interval)
+                    # Stop if producer finished (SENTINEL already queued)
+                    if producer_task.done():
+                        logger.debug(
+                            "Keepalive stopping: producer finished for %s",
+                            self.anima_name,
+                        )
+                        return
                     elapsed_since_chunk = time.monotonic() - last_chunk_time
                     if elapsed_since_chunk >= keepalive_interval:
                         elapsed = round(

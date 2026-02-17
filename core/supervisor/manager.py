@@ -95,6 +95,19 @@ class ProcessSupervisor:
         self._bootstrap_retry_counts: dict[str, int] = {}
         self._bootstrap_max_retries: int = 3
 
+        # Maximum streaming duration before hang detection (seconds).
+        # Defaults to 1800s (30 min) to accommodate long tool executions
+        # while still catching truly stuck streams.
+        self._max_streaming_duration_sec: int = 1800
+        try:
+            from core.config import load_config
+            srv = load_config().server
+            self._max_streaming_duration_sec = getattr(
+                srv, "max_streaming_duration", 1800,
+            )
+        except Exception:
+            pass
+
         # Callbacks for anima lifecycle events (set by server/app.py)
         self.on_anima_added: Callable[[str], None] | None = None
         self.on_anima_removed: Callable[[str], None] | None = None
@@ -501,9 +514,41 @@ class ProcessSupervisor:
         handle: ProcessHandle
     ) -> None:
         """Check health of a single process."""
-        # Skip if currently streaming (IPC lock held, ping would block)
+        # During streaming: skip ping (IPC lock held) but still check
+        # process liveness and streaming duration timeout.
         if handle._streaming:
-            logger.debug("Skipping health check for %s (streaming)", anima_name)
+            # Detect process death during streaming
+            if handle.state == ProcessState.FAILED:
+                logger.error(
+                    "Process FAILED during streaming: %s", anima_name,
+                )
+                asyncio.create_task(
+                    self._handle_process_failure(anima_name, handle)
+                )
+                return
+            if not handle.is_alive():
+                logger.error(
+                    "Process died during streaming: %s (exit_code=%s)",
+                    anima_name, handle.stats.exit_code,
+                )
+                asyncio.create_task(
+                    self._handle_process_failure(anima_name, handle)
+                )
+                return
+            # Streaming duration timeout
+            if handle._streaming_started_at is not None:
+                streaming_sec = (
+                    datetime.now() - handle._streaming_started_at
+                ).total_seconds()
+                if streaming_sec > self._max_streaming_duration_sec:
+                    logger.error(
+                        "Streaming timeout for %s (%.0fs > %ds)",
+                        anima_name, streaming_sec,
+                        self._max_streaming_duration_sec,
+                    )
+                    asyncio.create_task(
+                        self._handle_process_hang(anima_name, handle)
+                    )
             return
 
         # Skip if in startup grace period
