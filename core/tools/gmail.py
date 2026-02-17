@@ -38,6 +38,15 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "inbox":  {"expected_seconds": 15, "background_eligible": False},
+    "read":   {"expected_seconds": 10, "background_eligible": False},
+    "send":   {"expected_seconds": 10, "background_eligible": False},
+    "search": {"expected_seconds": 15, "background_eligible": False},
+}
+
 # Gmail API scopes
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",

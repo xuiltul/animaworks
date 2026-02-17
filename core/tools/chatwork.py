@@ -31,6 +31,16 @@ from core.tools._base import ToolConfigError, get_credential, logger
 from core.tools._cache import BaseMessageCache
 from core.tools._retry import retry_on_rate_limit
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "rooms":    {"expected_seconds": 10, "background_eligible": False},
+    "messages": {"expected_seconds": 30, "background_eligible": False},
+    "send":     {"expected_seconds": 10, "background_eligible": False},
+    "search":   {"expected_seconds": 30, "background_eligible": False},
+    "unreplied": {"expected_seconds": 60, "background_eligible": False},
+}
+
 requests = None
 
 def _require_requests():

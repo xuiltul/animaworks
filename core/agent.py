@@ -161,14 +161,21 @@ class AgentCore:
             config = load_config()
             if not config.background_task.enabled:
                 return None
-            eligible = {
+
+            from core.tools import TOOL_MODULES
+            from core.tools._base import load_execution_profiles
+
+            profiles = load_execution_profiles(TOOL_MODULES)
+            config_eligible = {
                 name: tc.threshold_s
                 for name, tc in config.background_task.eligible_tools.items()
             }
-            return BackgroundTaskManager(
+
+            return BackgroundTaskManager.from_profiles(
                 anima_dir=self.anima_dir,
                 anima_name=self.anima_dir.name,
-                eligible_tools=eligible,
+                profiles=profiles,
+                config_eligible=config_eligible or None,
             )
         except Exception:
             logger.debug("BackgroundTaskManager init skipped", exc_info=True)

@@ -181,3 +181,63 @@ def auto_cli_guide(tool_name: str, schemas: list[dict[str, Any]]) -> str:
         lines.append(" ".join(parts))
     lines.append("```")
     return "\n".join(lines)
+
+
+# ── Execution Profile Loading ─────────────────────────────
+
+
+def load_execution_profiles(
+    tool_modules: dict[str, str],
+    personal_tools: dict[str, str] | None = None,
+) -> dict[str, dict[str, dict[str, object]]]:
+    """Load EXECUTION_PROFILE from all tool modules.
+
+    Returns:
+        Nested dict: {tool_name: {subcommand: {expected_seconds, background_eligible}}}.
+        Tools without EXECUTION_PROFILE are omitted.
+    """
+    import importlib
+    import importlib.util
+
+    profiles: dict[str, dict[str, dict[str, object]]] = {}
+
+    for tool_name, module_path in tool_modules.items():
+        try:
+            mod = importlib.import_module(module_path)
+            if hasattr(mod, "EXECUTION_PROFILE"):
+                profiles[tool_name] = mod.EXECUTION_PROFILE
+        except Exception:
+            logger.debug("Failed to load EXECUTION_PROFILE for %s", tool_name, exc_info=True)
+
+    if personal_tools:
+        for tool_name, file_path in personal_tools.items():
+            try:
+                spec = importlib.util.spec_from_file_location(
+                    f"animaworks_profile_{tool_name}", file_path,
+                )
+                if spec and spec.loader:
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    if hasattr(mod, "EXECUTION_PROFILE"):
+                        profiles[tool_name] = mod.EXECUTION_PROFILE
+            except Exception:
+                logger.debug("Failed to load EXECUTION_PROFILE for personal tool %s", tool_name, exc_info=True)
+
+    return profiles
+
+
+def get_eligible_tools_from_profiles(
+    profiles: dict[str, dict[str, dict[str, object]]],
+) -> dict[str, int]:
+    """Extract eligible tools map from loaded profiles.
+
+    Returns:
+        Dict of {tool_subcommand_key: expected_seconds} for background_eligible=True entries.
+        The key format matches BackgroundTaskManager expectations.
+    """
+    eligible: dict[str, int] = {}
+    for tool_name, subcommands in profiles.items():
+        for subcmd, info in subcommands.items():
+            if info.get("background_eligible"):
+                eligible[f"{tool_name}:{subcmd}"] = int(info.get("expected_seconds", 60))
+    return eligible

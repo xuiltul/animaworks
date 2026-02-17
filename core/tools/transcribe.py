@@ -31,6 +31,12 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "transcribe": {"expected_seconds": 120, "background_eligible": True},
+}
+
 # Configuration from environment
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "large-v3-turbo")
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "auto")

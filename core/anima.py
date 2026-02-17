@@ -87,6 +87,25 @@ class DigitalAnima:
         """Return and clear pending notification events."""
         return self.agent.drain_notifications()
 
+    def drain_background_notifications(self) -> list[str]:
+        """Read and remove all pending background task notifications.
+
+        Returns list of notification texts for inclusion in heartbeat context.
+        """
+        notif_dir = self.agent.anima_dir / "state" / "background_notifications"
+        if not notif_dir.is_dir():
+            return []
+
+        notifications: list[str] = []
+        for path in sorted(notif_dir.glob("*.md")):
+            try:
+                notifications.append(path.read_text(encoding="utf-8"))
+                path.unlink()
+            except Exception:
+                logger.warning("Failed to read notification: %s", path.name)
+
+        return notifications
+
     def set_on_lock_released(self, fn: Callable[[], None]) -> None:
         """Inject a callback invoked when the anima's lock is released."""
         self._on_lock_released = fn
@@ -137,6 +156,36 @@ class DigitalAnima:
                     "[%s] Human notification failed for bg task %s",
                     self.name, task.task_id,
                 )
+
+        # Send inbox notification so next heartbeat picks up the result
+        try:
+            summary = task.summary()
+            subject = f"バックグラウンドタスク完了: {task.tool_name}"
+            if task.status.value == "failed":
+                subject = f"バックグラウンドタスク失敗: {task.tool_name}"
+
+            # Write a notification file to the anima's own inbox-like location
+            # so the next heartbeat can process it
+            notif_dir = self.agent.anima_dir / "state" / "background_notifications"
+            notif_dir.mkdir(parents=True, exist_ok=True)
+            notif_path = notif_dir / f"{task.task_id}.md"
+            notif_content = (
+                f"# {subject}\n\n"
+                f"- タスクID: {task.task_id}\n"
+                f"- ツール: {task.tool_name}\n"
+                f"- ステータス: {task.status.value}\n"
+                f"- 結果: {summary}\n"
+            )
+            notif_path.write_text(notif_content, encoding="utf-8")
+            logger.info(
+                "[%s] Background task notification written: %s",
+                self.name, notif_path.name,
+            )
+        except Exception:
+            logger.exception(
+                "[%s] Failed to write bg task notification for %s",
+                self.name, task.task_id,
+            )
 
     @property
     def background_tasks(self) -> list[dict[str, Any]]:
@@ -637,6 +686,17 @@ class DigitalAnima:
                 hb_config = self.memory.read_heartbeat_config()
                 checklist = hb_config or load_prompt("heartbeat_default_checklist")
                 parts = [load_prompt("heartbeat", checklist=checklist)]
+
+                # Inject pending background task notifications
+                bg_notifications = self.drain_background_notifications()
+                if bg_notifications:
+                    notif_text = "\n\n".join(bg_notifications)
+                    parts.append(
+                        "## バックグラウンドタスク完了通知\n\n"
+                        "以下のバックグラウンドタスクが完了しました。"
+                        "結果を確認し、必要に応じて対応してください。\n\n"
+                        + notif_text
+                    )
 
                 # Inject recent heartbeat history for continuity
                 history_text = self._load_heartbeat_history()

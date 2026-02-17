@@ -87,6 +87,105 @@ def discover_personal_tools(anima_dir: Path) -> dict[str, str]:
     return personal
 
 
+_SUBMIT_TASK_ID_LENGTH = 12
+
+
+def _handle_submit(argv: list[str]) -> None:
+    """Handle ``animaworks-tool submit <tool> <args...>``.
+
+    Writes a pending task descriptor to ``state/background_tasks/pending/``
+    and exits immediately.  The runner's pending watcher will pick it up.
+    """
+    import json
+    import os
+    import time
+    import uuid
+
+    if len(argv) < 1:
+        print("Usage: animaworks-tool submit <tool_name> [args...]")
+        print("Submits a long-running tool for background execution.")
+        print("Results are delivered to your inbox on completion.")
+        sys.exit(1)
+
+    tool_name = argv[0]
+    tool_args = argv[1:]
+
+    anima_dir = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
+    if not anima_dir:
+        print(
+            "Error: ANIMAWORKS_ANIMA_DIR not set. "
+            "Cannot determine pending directory.",
+        )
+        sys.exit(1)
+
+    anima_dir_path = Path(anima_dir)
+    anima_name = anima_dir_path.name
+
+    # Generate task ID
+    task_id = uuid.uuid4().hex[:_SUBMIT_TASK_ID_LENGTH]
+
+    # Determine subcommand (first non-flag argument after tool_name)
+    subcommand = ""
+    for arg in tool_args:
+        if not arg.startswith("-"):
+            subcommand = arg
+            break
+
+    # Optional: check EXECUTION_PROFILE for warning
+    try:
+        if tool_name in TOOL_MODULES:
+            import importlib
+
+            mod = importlib.import_module(TOOL_MODULES[tool_name])
+            profile = getattr(mod, "EXECUTION_PROFILE", None)
+            if profile and subcommand and subcommand in profile:
+                info = profile[subcommand]
+                if not info.get("background_eligible"):
+                    print(
+                        f"Warning: {tool_name} {subcommand} is not marked "
+                        f"as long-running "
+                        f"(expected ~{info.get('expected_seconds', '?')}s). "
+                        f"Consider running directly instead.",
+                        file=sys.stderr,
+                    )
+    except Exception:
+        pass  # Don't fail submit because of profile check
+
+    # Write pending task descriptor
+    pending_dir = anima_dir_path / "state" / "background_tasks" / "pending"
+    pending_dir.mkdir(parents=True, exist_ok=True)
+
+    task_desc = {
+        "task_id": task_id,
+        "tool_name": tool_name,
+        "subcommand": subcommand,
+        "raw_args": tool_args,
+        "anima_name": anima_name,
+        "anima_dir": str(anima_dir_path),
+        "submitted_at": time.time(),
+        "status": "pending",
+    }
+
+    task_path = pending_dir / f"{task_id}.json"
+    task_path.write_text(
+        json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    # Output result
+    result = {
+        "task_id": task_id,
+        "status": "submitted",
+        "tool": tool_name,
+        "subcommand": subcommand,
+        "message": (
+            f"バックグラウンドタスクを投入しました。"
+            f"完了時にinboxに通知されます。(task_id: {task_id})"
+        ),
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 def cli_dispatch():
     """Entry point for ``animaworks-tool`` CLI command.
 
@@ -114,6 +213,11 @@ def cli_dispatch():
         sys.exit(0 if "--help" in sys.argv else 1)
 
     tool_name = sys.argv[1]
+
+    # Handle submit subcommand — write pending task and exit immediately
+    if tool_name == "submit":
+        _handle_submit(sys.argv[2:])
+        return
 
     # Try core tools first
     if tool_name in TOOL_MODULES:

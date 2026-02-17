@@ -35,6 +35,18 @@ import httpx
 from core.tools._base import ToolConfigError, get_credential, logger
 from core.tools._retry import retry_with_backoff
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "pipeline":   {"expected_seconds": 1800, "background_eligible": True},
+    "3d":         {"expected_seconds": 600,  "background_eligible": True},
+    "rigging":    {"expected_seconds": 600,  "background_eligible": True},
+    "animations": {"expected_seconds": 600,  "background_eligible": True},
+    "fullbody":   {"expected_seconds": 120,  "background_eligible": True},
+    "bustup":     {"expected_seconds": 120,  "background_eligible": True},
+    "chibi":      {"expected_seconds": 120,  "background_eligible": True},
+}
+
 # ── Constants ──────────────────────────────────────────────
 
 NOVELAI_API_URL = "https://image.novelai.net/ai/generate-image"

@@ -30,6 +30,15 @@ import httpx
 from core.tools._base import logger
 from core.tools._retry import retry_with_backoff
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "generate": {"expected_seconds": 300, "background_eligible": True},
+    "chat":     {"expected_seconds": 300, "background_eligible": True},
+    "list":     {"expected_seconds": 5,   "background_eligible": False},
+    "status":   {"expected_seconds": 5,   "background_eligible": False},
+}
+
 # ---------------------------------------------------------------------------
 # Server configuration
 # ---------------------------------------------------------------------------

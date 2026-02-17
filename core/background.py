@@ -132,8 +132,39 @@ class BackgroundTaskManager:
 
     # ── Public API ───────────────────────────────────────────
 
+    @classmethod
+    def from_profiles(
+        cls,
+        anima_dir: Path,
+        anima_name: str = "",
+        profiles: dict[str, dict[str, dict[str, object]]] | None = None,
+        config_eligible: dict[str, int] | None = None,
+    ) -> "BackgroundTaskManager":
+        """Create a BackgroundTaskManager with eligible tools derived from EXECUTION_PROFILE.
+
+        Merges three layers (later overrides earlier):
+        1. ``_DEFAULT_ELIGIBLE_TOOLS`` — hardcoded defaults for A2 compat
+        2. ``profiles`` — EXECUTION_PROFILE from tool modules
+        3. ``config_eligible`` — explicit config.json overrides
+        """
+        from core.tools._base import get_eligible_tools_from_profiles
+
+        eligible = dict(_DEFAULT_ELIGIBLE_TOOLS)  # Layer 1
+        if profiles:
+            profile_eligible = get_eligible_tools_from_profiles(profiles)
+            eligible.update(profile_eligible)  # Layer 2
+        if config_eligible:
+            eligible.update(config_eligible)  # Layer 3 (highest priority)
+
+        return cls(anima_dir, anima_name=anima_name, eligible_tools=eligible)
+
     def is_eligible(self, tool_name: str) -> bool:
-        """Check if a tool is eligible for background execution."""
+        """Check if a tool is eligible for background execution.
+
+        Accepts both formats:
+        - Schema name: ``"generate_3d_model"`` (Mode A2)
+        - Profile key: ``"image_gen:3d"`` (Mode A1 submit)
+        """
         return tool_name in self._eligible_tools
 
     def submit(

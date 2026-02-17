@@ -38,6 +38,13 @@
 - クレデンシャルの確認・追加・更新はこのファイルに対して行うこと
 - 個人ディレクトリに secrets.json 等のクレデンシャルファイルを作成してはならない
 
+### 長時間ツールの実行ルール
+
+- ツールガイドに ⚠ マークがあるサブコマンドは `animaworks-tool submit` で非同期実行すること
+- 直接実行すると自分自身がロックされ、メッセージ受信・heartbeat・cron が全て停止する
+- submit 後はターンを終了し、結果は state/background_notifications/ で受け取る
+- 詳細は `common_knowledge/operations/background-tasks.md` を参照
+
 ### 禁止事項
 
 - ランタイムデータディレクトリ外のファイルシステムへのアクセス

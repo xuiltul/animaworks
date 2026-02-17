@@ -23,6 +23,12 @@ import httpx
 
 from core.tools._base import ToolConfigError, get_credential, logger
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "search": {"expected_seconds": 10, "background_eligible": False},
+}
+
 # ---------------------------------------------------------------------------
 # Brave Search API endpoint
 # ---------------------------------------------------------------------------

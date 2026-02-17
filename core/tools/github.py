@@ -21,6 +21,16 @@ from typing import Any
 
 from core.tools._base import logger
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "issues":       {"expected_seconds": 15, "background_eligible": False},
+    "issue":        {"expected_seconds": 10, "background_eligible": False},
+    "create-issue": {"expected_seconds": 15, "background_eligible": False},
+    "prs":          {"expected_seconds": 15, "background_eligible": False},
+    "create-pr":    {"expected_seconds": 15, "background_eligible": False},
+}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # GitHubClient

@@ -27,7 +27,10 @@ def build_tools_guide(
         return ""
 
     from core.tools import TOOL_MODULES
-    from core.tools._base import auto_cli_guide
+    from core.tools._base import auto_cli_guide, load_execution_profiles
+
+    # Load execution profiles for background task annotations
+    profiles = load_execution_profiles(TOOL_MODULES, personal_tools)
 
     parts: list[str] = [
         "## 外部ツール",
@@ -42,6 +45,11 @@ def build_tools_guide(
             continue
         guide = _guide_from_module_path(tool_name, TOOL_MODULES[tool_name])
         if guide:
+            # Add background task warning if any subcommand is eligible
+            profile = profiles.get(tool_name, {})
+            bg_warning = _build_background_warning(tool_name, profile)
+            if bg_warning:
+                parts.append(bg_warning)
             parts.append(guide)
             parts.append("")
 
@@ -49,15 +57,39 @@ def build_tools_guide(
         for tool_name in sorted(personal_tools):
             guide = _guide_from_file(tool_name, personal_tools[tool_name])
             if guide:
+                profile = profiles.get(tool_name, {})
+                bg_warning = _build_background_warning(tool_name, profile)
+                if bg_warning:
+                    parts.append(bg_warning)
                 parts.append(guide)
                 parts.append("")
+
+    # Check if any tool has background-eligible subcommands
+    has_bg_tools = any(
+        any(info.get("background_eligible") for info in subcmds.values())
+        for subcmds in profiles.values()
+    )
 
     parts.extend([
         "### 注意事項",
         "- 使えるツールは上記のみ（permissions.mdで許可されたもの）",
         "- APIキーが未設定のツールはエラーになる。エラー内容を確認して報告すること",
-        "- 検索結果やメッセージ一覧は記憶に保存すべきか判断すること",
     ])
+
+    if has_bg_tools:
+        parts.append(
+            "- ⚠ マークのある長時間ツールは `animaworks-tool submit <tool> <args...>` で"
+            "非同期実行すること。直接実行するとロックが保持され、"
+            "メッセージ受信やheartbeatが停止する"
+        )
+        parts.append(
+            "- submit したタスクの結果は state/background_notifications/ に通知される。"
+            "次回の heartbeat で確認すること"
+        )
+
+    parts.append(
+        "- 検索結果やメッセージ一覧は記憶に保存すべきか判断すること"
+    )
 
     return "\n".join(parts)
 
@@ -80,6 +112,45 @@ def load_tool_schemas(
 
 
 # ── Helpers ───────────────────────────────────────────────────
+
+
+def _build_background_warning(
+    tool_name: str,
+    profile: dict[str, dict[str, object]],
+) -> str:
+    """Build a warning block for tools with background-eligible subcommands."""
+    if not profile:
+        return ""
+
+    bg_subcmds = {
+        name: info
+        for name, info in profile.items()
+        if info.get("background_eligible")
+    }
+
+    if not bg_subcmds:
+        return ""
+
+    max_seconds = max(
+        int(info.get("expected_seconds", 60)) for info in bg_subcmds.values()
+    )
+
+    if max_seconds >= 600:
+        time_desc = f"最大{max_seconds // 60}分"
+    else:
+        time_desc = f"最大{max_seconds}秒"
+
+    subcmd_list = ", ".join(sorted(bg_subcmds.keys()))
+
+    lines = [
+        f"⚠ **長時間ツール** ({tool_name}): "
+        f"以下のサブコマンドは実行に{time_desc}かかります。",
+        f"`animaworks-tool submit {tool_name} <subcommand> ...` で非同期実行してください。",
+        f"結果は次回のheartbeatで通知されます。",
+        f"対象サブコマンド: {subcmd_list}",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def _guide_from_module_path(tool_name: str, module_path: str) -> str | None:

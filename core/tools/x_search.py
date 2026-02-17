@@ -22,6 +22,12 @@ import httpx
 
 from core.tools._base import ToolConfigError, get_credential, logger
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "search": {"expected_seconds": 30, "background_eligible": False},
+}
+
 
 # ---------------------------------------------------------------------------
 # X API v2 client

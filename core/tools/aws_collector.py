@@ -26,6 +26,14 @@ from typing import Any
 
 from core.tools._base import logger
 
+# ── Execution Profile ─────────────────────────────────────
+
+EXECUTION_PROFILE: dict[str, dict[str, object]] = {
+    "ecs-status":  {"expected_seconds": 15, "background_eligible": False},
+    "error-logs":  {"expected_seconds": 20, "background_eligible": False},
+    "metrics":     {"expected_seconds": 15, "background_eligible": False},
+}
+
 # ---------------------------------------------------------------------------
 # Guard boto3 import
 # ---------------------------------------------------------------------------
