@@ -33,6 +33,7 @@ def _make_mock_memory(
     memory.read_identity.return_value = ""
     memory.read_injection.return_value = ""
     memory.read_permissions.return_value = ""
+    memory.read_specialty_prompt.return_value = ""
     memory.read_current_state.return_value = ""
     memory.read_pending.return_value = ""
     memory.list_knowledge_files.return_value = []
@@ -64,7 +65,7 @@ class TestCommanderHiringGuardrail:
             result = build_system_prompt(memory)
 
         assert "雇用ルール" in result
-        assert "create_anima" in result
+        assert "create-anima" in result
 
     def test_guardrail_absent_when_no_newstaff_skill(
         self, tmp_path: Path, data_dir: Path,
@@ -109,7 +110,7 @@ class TestCommanderHiringGuardrail:
             result = build_system_prompt(memory)
 
         # All key phrases from the guardrail block
-        assert "create_anima" in result
+        assert "create-anima" in result
         assert "identity.md" in result
         assert "キャラクターシート" in result
 
@@ -131,4 +132,4 @@ class TestCommanderHiringGuardrail:
             result = build_system_prompt(memory)
 
         assert "雇用ルール" in result
-        assert "create_anima" in result
+        assert "create-anima" in result

@@ -69,7 +69,8 @@ class TestEncodeVibe:
     """Tests for NovelAIClient.encode_vibe()."""
 
     @pytest.fixture(autouse=True)
-    def _set_token(self, monkeypatch: pytest.MonkeyPatch):
+    def _set_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("NOVELAI_TOKEN", "test-nai-token")
 
     def test_returns_binary_content(self):
@@ -252,7 +253,8 @@ class TestGenerateFullbodyVibeTransfer:
     """Tests for the vibe_image flow in generate_fullbody()."""
 
     @pytest.fixture(autouse=True)
-    def _set_token(self, monkeypatch: pytest.MonkeyPatch):
+    def _set_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("NOVELAI_TOKEN", "test-nai-token")
 
     def _make_generate_response(self, png_data: bytes = b"GENERATED-PNG") -> MagicMock:

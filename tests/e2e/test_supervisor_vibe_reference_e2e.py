@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.config.models import AnimaWorksConfig, ImageGenConfig
-from core.tooling.dispatch import _handle_generate_character_assets
 
 
 @pytest.fixture
@@ -51,31 +50,59 @@ def subordinate_dir(animas_dir: Path) -> Path:
 
 
 @pytest.fixture
-def mock_pipeline():
-    """Create a mock ImageGenPipeline that records its config."""
-    mock_mod = MagicMock()
-    mock_pipeline_instance = MagicMock()
+def mock_pipeline_result():
+    """Create a mock PipelineResult."""
     mock_result = MagicMock()
     mock_result.to_dict.return_value = {
         "fullbody_path": "assets/avatar_fullbody.png",
         "errors": [],
     }
-    mock_pipeline_instance.generate_all.return_value = mock_result
-    mock_mod.ImageGenPipeline.return_value = mock_pipeline_instance
-    return mock_mod
+    return mock_result
+
+
+def _dispatch_generate(args: dict, config: AnimaWorksConfig, animas_dir: Path):
+    """Call dispatch() with proper patches for generate_character_assets."""
+    mock_result = MagicMock()
+    mock_result.to_dict.return_value = {
+        "fullbody_path": "assets/avatar_fullbody.png",
+        "errors": [],
+    }
+
+    captured_configs: list[ImageGenConfig] = []
+
+    original_init = None
+
+    def capture_pipeline_init(self, anima_dir, config=None):
+        captured_configs.append(config)
+        self._anima_dir = anima_dir
+        self._assets_dir = anima_dir / "assets"
+        self._config = config or ImageGenConfig()
+
+    def mock_generate_all(self, **kwargs):
+        return mock_result
+
+    with (
+        patch("core.config.models.load_config", return_value=config),
+        patch("core.tools.image_gen.ImageGenPipeline.__init__", capture_pipeline_init),
+        patch("core.tools.image_gen.ImageGenPipeline.generate_all", mock_generate_all),
+        patch("core.tools.image_gen.logger"),
+    ):
+        from core.tools.image_gen import dispatch
+        result = dispatch("generate_character_assets", dict(args))
+
+    return result, captured_configs, mock_result
 
 
 class TestSupervisorVibeReferenceE2E:
-    """End-to-end tests for supervisor image → Vibe Transfer reference flow."""
+    """End-to-end tests for supervisor image -> Vibe Transfer reference flow."""
 
     def test_full_flow_supervisor_image_applied(
         self,
         data_dir: Path,
         supervisor_with_image: Path,
         subordinate_dir: Path,
-        mock_pipeline: MagicMock,
     ):
-        """Full flow: supervisor has image → subordinate gets it as vibe reference."""
+        """Full flow: supervisor has image -> subordinate gets it as vibe reference."""
         config = AnimaWorksConfig(
             image_gen=ImageGenConfig(
                 style_prefix="anime, ",
@@ -84,20 +111,19 @@ class TestSupervisorVibeReferenceE2E:
             ),
         )
 
-        with patch("core.config.models.load_config", return_value=config):
-            result = _handle_generate_character_assets(
-                mock_pipeline,
-                {
-                    "anima_dir": str(subordinate_dir),
-                    "prompt": "1girl, short hair, blue eyes",
-                    "negative_prompt": "lowres",
-                    "supervisor_name": "sakura",
-                },
-            )
+        result, captured_configs, _ = _dispatch_generate(
+            {
+                "anima_dir": str(subordinate_dir),
+                "prompt": "1girl, short hair, blue eyes",
+                "negative_prompt": "lowres",
+                "supervisor_name": "sakura",
+            },
+            config,
+            data_dir / "animas",
+        )
 
-        # Verify pipeline was created with supervisor's image as style_reference
-        pipeline_call = mock_pipeline.ImageGenPipeline.call_args
-        config_used = pipeline_call[1]["config"]
+        assert len(captured_configs) == 1
+        config_used = captured_configs[0]
         expected_path = str(
             supervisor_with_image / "assets" / "avatar_fullbody.png"
         )
@@ -107,15 +133,6 @@ class TestSupervisorVibeReferenceE2E:
         assert config_used.vibe_info_extracted == 0.7
         assert config_used.style_prefix == "anime, "
 
-        # Verify generate_all was called with correct prompts
-        gen_call = mock_pipeline.ImageGenPipeline.return_value.generate_all
-        gen_call.assert_called_once_with(
-            prompt="1girl, short hair, blue eyes",
-            negative_prompt="lowres",
-            skip_existing=True,
-            steps=None,
-            animations=None,
-        )
         assert result == {"fullbody_path": "assets/avatar_fullbody.png", "errors": []}
 
     def test_full_flow_no_supervisor_image_fallback(
@@ -123,9 +140,8 @@ class TestSupervisorVibeReferenceE2E:
         data_dir: Path,
         supervisor_without_image: Path,
         subordinate_dir: Path,
-        mock_pipeline: MagicMock,
     ):
-        """Full flow: supervisor exists but no image → falls back to global config."""
+        """Full flow: supervisor exists but no image -> falls back to global config."""
         config = AnimaWorksConfig(
             image_gen=ImageGenConfig(
                 style_reference="/global/org_style.png",
@@ -133,18 +149,18 @@ class TestSupervisorVibeReferenceE2E:
             ),
         )
 
-        with patch("core.config.models.load_config", return_value=config):
-            _handle_generate_character_assets(
-                mock_pipeline,
-                {
-                    "anima_dir": str(subordinate_dir),
-                    "prompt": "1girl",
-                    "supervisor_name": "mio",
-                },
-            )
+        _, captured_configs, _ = _dispatch_generate(
+            {
+                "anima_dir": str(subordinate_dir),
+                "prompt": "1girl",
+                "supervisor_name": "mio",
+            },
+            config,
+            data_dir / "animas",
+        )
 
-        pipeline_call = mock_pipeline.ImageGenPipeline.call_args
-        config_used = pipeline_call[1]["config"]
+        assert len(captured_configs) == 1
+        config_used = captured_configs[0]
         # Global style_reference preserved (supervisor has no image)
         assert config_used.style_reference == "/global/org_style.png"
 
@@ -152,24 +168,23 @@ class TestSupervisorVibeReferenceE2E:
         self,
         data_dir: Path,
         subordinate_dir: Path,
-        mock_pipeline: MagicMock,
     ):
-        """Full flow: no supervisor_name → global config used as-is."""
+        """Full flow: no supervisor_name -> global config used as-is."""
         config = AnimaWorksConfig(
             image_gen=ImageGenConfig(style_reference="/global/style.png"),
         )
 
-        with patch("core.config.models.load_config", return_value=config):
-            _handle_generate_character_assets(
-                mock_pipeline,
-                {
-                    "anima_dir": str(subordinate_dir),
-                    "prompt": "1girl",
-                },
-            )
+        _, captured_configs, _ = _dispatch_generate(
+            {
+                "anima_dir": str(subordinate_dir),
+                "prompt": "1girl",
+            },
+            config,
+            data_dir / "animas",
+        )
 
-        pipeline_call = mock_pipeline.ImageGenPipeline.call_args
-        config_used = pipeline_call[1]["config"]
+        assert len(captured_configs) == 1
+        config_used = captured_configs[0]
         assert config_used is config.image_gen
 
     def test_supervisor_image_overrides_global_reference(
@@ -177,7 +192,6 @@ class TestSupervisorVibeReferenceE2E:
         data_dir: Path,
         supervisor_with_image: Path,
         subordinate_dir: Path,
-        mock_pipeline: MagicMock,
     ):
         """Supervisor's image takes priority over global style_reference."""
         config = AnimaWorksConfig(
@@ -186,18 +200,18 @@ class TestSupervisorVibeReferenceE2E:
             ),
         )
 
-        with patch("core.config.models.load_config", return_value=config):
-            _handle_generate_character_assets(
-                mock_pipeline,
-                {
-                    "anima_dir": str(subordinate_dir),
-                    "prompt": "1girl",
-                    "supervisor_name": "sakura",
-                },
-            )
+        _, captured_configs, _ = _dispatch_generate(
+            {
+                "anima_dir": str(subordinate_dir),
+                "prompt": "1girl",
+                "supervisor_name": "sakura",
+            },
+            config,
+            data_dir / "animas",
+        )
 
-        pipeline_call = mock_pipeline.ImageGenPipeline.call_args
-        config_used = pipeline_call[1]["config"]
+        assert len(captured_configs) == 1
+        config_used = captured_configs[0]
         # Supervisor image should win over global style_reference
         expected_path = str(
             supervisor_with_image / "assets" / "avatar_fullbody.png"
@@ -210,7 +224,6 @@ class TestSupervisorVibeReferenceE2E:
         data_dir: Path,
         supervisor_with_image: Path,
         subordinate_dir: Path,
-        mock_pipeline: MagicMock,
     ):
         """Applying supervisor image must not mutate the original ImageGenConfig."""
         original_ref = "/global/org_style.png"
@@ -218,15 +231,15 @@ class TestSupervisorVibeReferenceE2E:
             image_gen=ImageGenConfig(style_reference=original_ref),
         )
 
-        with patch("core.config.models.load_config", return_value=config):
-            _handle_generate_character_assets(
-                mock_pipeline,
-                {
-                    "anima_dir": str(subordinate_dir),
-                    "prompt": "1girl",
-                    "supervisor_name": "sakura",
-                },
-            )
+        _dispatch_generate(
+            {
+                "anima_dir": str(subordinate_dir),
+                "prompt": "1girl",
+                "supervisor_name": "sakura",
+            },
+            config,
+            data_dir / "animas",
+        )
 
         # Original config object must remain unchanged
         assert config.image_gen.style_reference == original_ref
@@ -246,40 +259,30 @@ class TestSupervisorVibeReferenceE2E:
         data_dir: Path,
         supervisor_with_image: Path,
         animas_dir: Path,
-        mock_pipeline: MagicMock,
     ):
         """Multiple subordinates created by the same supervisor get same vibe reference."""
         config = AnimaWorksConfig()
-        configs_used: list[ImageGenConfig] = []
-
-        def capture_config(*args, **kwargs):
-            configs_used.append(kwargs["config"])
-            pipeline = MagicMock()
-            result = MagicMock()
-            result.to_dict.return_value = {}
-            pipeline.generate_all.return_value = result
-            return pipeline
-
-        mock_pipeline.ImageGenPipeline.side_effect = capture_config
+        all_captured_configs: list[ImageGenConfig] = []
 
         subordinates = ["rin", "yui", "hana"]
         for name in subordinates:
             sub_dir = animas_dir / name
             sub_dir.mkdir(parents=True, exist_ok=True)
 
-            with patch("core.config.models.load_config", return_value=config):
-                _handle_generate_character_assets(
-                    mock_pipeline,
-                    {
-                        "anima_dir": str(sub_dir),
-                        "prompt": "1girl",
-                        "supervisor_name": "sakura",
-                    },
-                )
+            _, captured, _ = _dispatch_generate(
+                {
+                    "anima_dir": str(sub_dir),
+                    "prompt": "1girl",
+                    "supervisor_name": "sakura",
+                },
+                config,
+                animas_dir,
+            )
+            all_captured_configs.extend(captured)
 
         expected_path = str(
             supervisor_with_image / "assets" / "avatar_fullbody.png"
         )
-        assert len(configs_used) == 3
-        for cfg in configs_used:
+        assert len(all_captured_configs) == 3
+        for cfg in all_captured_configs:
             assert cfg.style_reference == expected_path

@@ -148,8 +148,9 @@ class TestBootstrapLifecycle:
 
         mock_handle.send_request = AsyncMock(side_effect=_controlled_send_request)
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("alice")
 
@@ -182,8 +183,9 @@ class TestBootstrapLifecycle:
         """WebSocket broadcasts started and completed events during bootstrap."""
         mock_handle = _make_mock_handle("bob", needs_bootstrap=True, bootstrap_delay=0.05)
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("bob")
 
@@ -240,8 +242,9 @@ class TestBootstrapLifecycle:
         # Before start: should not be bootstrapping
         assert supervisor.is_bootstrapping("carol") is False
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("carol")
 
@@ -264,8 +267,9 @@ class TestBootstrapLifecycle:
         """When needs_bootstrap=False, no bootstrap task is launched."""
         mock_handle = _make_mock_handle("dave", needs_bootstrap=False)
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("dave")
 
@@ -308,8 +312,9 @@ class TestBootstrapLifecycle:
 
         mock_handle.send_request = AsyncMock(side_effect=_failing_send_request)
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("eve")
 
@@ -350,8 +355,9 @@ class TestBootstrapLifecycle:
 
         mock_handle.send_request = AsyncMock(side_effect=_pausing_send_request)
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("frank")
 
@@ -414,8 +420,9 @@ class TestChatGuardDuringBootstrap:
 
         mock_handle.send_request = AsyncMock(side_effect=_pausing_send_request)
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("alice")
 
@@ -463,8 +470,9 @@ class TestChatGuardDuringBootstrap:
 
         mock_handle.send_request = AsyncMock(side_effect=_pausing_send_request)
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("alice")
 
@@ -519,8 +527,9 @@ class TestChatGuardDuringBootstrap:
 
         mock_handle.send_request_stream = _send_request_stream
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("alice")
 
@@ -560,8 +569,9 @@ class TestChatGuardDuringBootstrap:
         a normal 200 response."""
         mock_handle = _make_mock_handle("alice", needs_bootstrap=True, bootstrap_delay=0.05)
 
-        with patch.object(
-            ProcessHandle, "__new__", return_value=mock_handle,
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
         ):
             await supervisor.start_anima("alice")
 
@@ -628,15 +638,11 @@ class TestMultipleAnimasBootstrap:
 
         bob_handle.send_request = AsyncMock(side_effect=_bob_send)
 
-        # Patch ProcessHandle.__new__ to return different mocks per call
-        call_count = 0
-
-        def _new_handle(cls, *args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            return alice_handle if call_count == 1 else bob_handle
-
-        with patch.object(ProcessHandle, "__new__", side_effect=_new_handle):
+        # Patch ProcessHandle in manager to return different mocks per call
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            side_effect=[alice_handle, bob_handle],
+        ):
             await supervisor.start_anima("alice")
             await supervisor.start_anima("bob")
 

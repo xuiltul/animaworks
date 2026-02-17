@@ -296,11 +296,11 @@ class TestRemakePreview:
         self, mock_pipeline_cls, tmp_path,
     ):
         """On generation failure, assets are restored from backup."""
-        persons_dir = tmp_path / "persons"
-        persons_dir.mkdir()
+        animas_dir = tmp_path / "animas"
+        animas_dir.mkdir()
 
-        target_dir = _setup_person_with_assets(persons_dir, "target")
-        _setup_person_with_assets(persons_dir, "style-ref")
+        target_dir = _setup_anima_with_assets(animas_dir, "target")
+        _setup_anima_with_assets(animas_dir, "style-ref")
 
         # Mark original assets with known content
         original_content = b"original-fullbody-content"
@@ -312,11 +312,11 @@ class TestRemakePreview:
         mock_pipeline.generate_all.return_value = mock_result
         mock_pipeline_cls.return_value = mock_pipeline
 
-        app = _make_test_app(persons_dir)
+        app = _make_test_app(animas_dir)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/api/persons/target/assets/remake-preview",
+                "/api/animas/target/assets/remake-preview",
                 json={"style_from": "style-ref"},
             )
 
@@ -336,28 +336,28 @@ class TestRemakePreview:
         self, mock_pipeline_cls, tmp_path,
     ):
         """Multiple failed attempts should not leave orphaned backup directories."""
-        persons_dir = tmp_path / "persons"
-        persons_dir.mkdir()
+        animas_dir = tmp_path / "animas"
+        animas_dir.mkdir()
 
-        target_dir = _setup_person_with_assets(persons_dir, "target")
-        _setup_person_with_assets(persons_dir, "style-ref")
+        target_dir = _setup_anima_with_assets(animas_dir, "target")
+        _setup_anima_with_assets(animas_dir, "style-ref")
 
         mock_result = _make_pipeline_result(errors=["fullbody: timeout"])
         mock_pipeline = MagicMock()
         mock_pipeline.generate_all.return_value = mock_result
         mock_pipeline_cls.return_value = mock_pipeline
 
-        app = _make_test_app(persons_dir)
+        app = _make_test_app(animas_dir)
         transport = ASGITransport(app=app)
 
         # Two failed attempts
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post(
-                "/api/persons/target/assets/remake-preview",
+                "/api/animas/target/assets/remake-preview",
                 json={"style_from": "style-ref"},
             )
             await client.post(
-                "/api/persons/target/assets/remake-preview",
+                "/api/animas/target/assets/remake-preview",
                 json={"style_from": "style-ref"},
             )
 

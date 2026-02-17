@@ -25,6 +25,7 @@ def _make_test_app_with_supervisor():
     app.state.ws_manager = MagicMock()
     app.state.ws_manager.broadcast = AsyncMock()
     app.state.supervisor = MagicMock()
+    app.state.supervisor.is_bootstrapping = MagicMock(return_value=False)
 
     router = create_chat_router()
     app.include_router(router, prefix="/api")

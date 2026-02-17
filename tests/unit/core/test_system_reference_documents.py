@@ -217,6 +217,7 @@ def _make_mock_memory(anima_dir: Path) -> MagicMock:
     mem.read_company_vision.return_value = ""
     mem.read_identity.return_value = "# Test Anima"
     mem.read_injection.return_value = ""
+    mem.read_specialty_prompt.return_value = ""
     mem.read_permissions.return_value = ""
     mem.read_current_state.return_value = ""
     mem.read_pending.return_value = ""

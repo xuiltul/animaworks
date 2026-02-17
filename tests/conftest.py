@@ -48,6 +48,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Force mock mode for all API calls",
     )
+    parser.addoption(
+        "--run-live",
+        action="store_true",
+        default=False,
+        help="Run @pytest.mark.live tests (skipped by default)",
+    )
 
 
 # ── Fixtures ──────────────────────────────────────────────
@@ -68,14 +74,22 @@ def use_mock(request: pytest.FixtureRequest) -> bool:
 
 @pytest.fixture(autouse=True)
 def _skip_live_without_key(request: pytest.FixtureRequest, use_mock: bool) -> None:
-    """Auto-skip ``@pytest.mark.live`` tests when in mock mode.
+    """Auto-skip ``@pytest.mark.live`` tests unless explicitly enabled.
+
+    Live tests are skipped by default unless:
+      - ``--run-live`` flag is passed, AND
+      - Required API keys are available
 
     Additional skip rules:
       - ``@pytest.mark.azure`` requires ``AZURE_API_KEY`` in environment
       - ``@pytest.mark.ollama`` requires ``OLLAMA_API_BASE`` in environment
     """
-    if request.node.get_closest_marker("live") and use_mock:
-        pytest.skip("Skipping live test: no API key or --mock flag set")
+    run_live = request.config.getoption("--run-live", default=False)
+    if request.node.get_closest_marker("live"):
+        if not run_live:
+            pytest.skip("Skipping live test: use --run-live to enable")
+        if use_mock:
+            pytest.skip("Skipping live test: no API key or --mock flag set")
     if request.node.get_closest_marker("azure"):
         if not os.environ.get("AZURE_API_KEY"):
             pytest.skip("Skipping Azure test: AZURE_API_KEY not set")

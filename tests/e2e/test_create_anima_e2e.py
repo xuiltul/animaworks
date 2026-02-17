@@ -120,7 +120,7 @@ class TestCreateFromMdFullFlow:
             (anima_dir / "status.json").read_text(encoding="utf-8")
         )
         assert status["supervisor"] == "sakura"
-        assert status["role"] == "worker"
+        assert status["role"] == "general"
         assert status["execution_mode"] == "autonomous"
         assert status["model"] == "claude-sonnet-4-20250514"
         assert status["credential"] == "anthropic"

@@ -261,20 +261,23 @@ class TestActivityEndpointE2E:
 
     async def test_activity_with_session_archive(self, tmp_path):
         """Activity should include session events from shortterm archives."""
+        from datetime import datetime, timezone
+
         animas_dir = tmp_path / "animas"
         anima_dir = _create_anima_on_disk(animas_dir, "alice")
 
-        # Create a session archive
+        # Create a session archive with a recent timestamp (within query window)
         archive_dir = anima_dir / "shortterm" / "archive"
         archive_dir.mkdir(parents=True, exist_ok=True)
+        recent_ts = datetime.now(timezone.utc).isoformat()
         session = {
-            "timestamp": "2026-02-15T10:00:00+00:00",
+            "timestamp": recent_ts,
             "trigger": "heartbeat",
             "original_prompt": "Regular check-in",
             "turn_count": 3,
             "context_usage_ratio": 0.2,
         }
-        (archive_dir / "20260215_100000.json").write_text(
+        (archive_dir / "20260217_100000.json").write_text(
             json.dumps(session), encoding="utf-8",
         )
 

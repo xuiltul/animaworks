@@ -105,6 +105,7 @@ class TestReconcileRestartingGuard:
         anima_dir = supervisor.animas_dir / "test-anima"
         anima_dir.mkdir()
         (anima_dir / "identity.md").write_text("Test identity")
+        (anima_dir / "status.json").write_text('{"enabled": true}')
 
         # NOT in _restarting set
         assert "test-anima" not in supervisor._restarting

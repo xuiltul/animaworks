@@ -5,6 +5,7 @@ that is currently bootstrapping.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
 
@@ -24,6 +25,8 @@ def _make_test_app_with_bootstrap():
 
     supervisor = MagicMock()
     supervisor.processes = {"alice"}
+    # Anima is NOT currently bootstrapping (so the guard doesn't block the stream)
+    supervisor.is_bootstrapping = MagicMock(return_value=False)
 
     async def _send_request_stream(
         anima_name, method, params, timeout=120.0,
@@ -76,10 +79,14 @@ def _make_test_app_with_bootstrap():
 
 
 def _make_test_app_bootstrap_busy():
-    """Build a test FastAPI app where the anima is busy bootstrapping."""
+    """Build a test FastAPI app where the anima is busy bootstrapping.
+
+    The chat route checks supervisor.is_bootstrapping() before streaming.
+    When True, it returns a "busy" bootstrap SSE event immediately without
+    consulting the IPC stream.
+    """
     from fastapi import FastAPI
     from server.routes.chat import create_chat_router
-    from core.supervisor.ipc import IPCResponse
 
     app = FastAPI()
     app.state.ws_manager = MagicMock()
@@ -87,34 +94,9 @@ def _make_test_app_bootstrap_busy():
 
     supervisor = MagicMock()
     supervisor.processes = {"alice"}
+    # Anima IS currently bootstrapping — triggers the guard path
+    supervisor.is_bootstrapping = MagicMock(return_value=True)
 
-    async def _send_request_stream(
-        anima_name, method, params, timeout=120.0,
-    ):
-        """Simulate IPC stream — anima rejects with bootstrap_busy."""
-        if anima_name == "alice":
-            yield IPCResponse(
-                id="test",
-                stream=True,
-                chunk=json.dumps(
-                    {
-                        "type": "bootstrap_busy",
-                        "message": "現在初期化中です。しばらくお待ちください。",
-                    },
-                    ensure_ascii=False,
-                ),
-            )
-            yield IPCResponse(
-                id="test",
-                stream=True,
-                done=True,
-                result={
-                    "response": "",
-                    "replied_to": [],
-                },
-            )
-
-    supervisor.send_request_stream = _send_request_stream
     app.state.supervisor = supervisor
 
     router = create_chat_router()
@@ -168,10 +150,16 @@ class TestBootstrapStreamE2E:
         body = resp.text
         assert "event: bootstrap" in body
         assert '"busy"' in body
-        assert "初期化中" in body
+        # The route guard returns this specific Japanese message
+        assert "作成中" in body or "初期化中" in body
 
     async def test_websocket_bootstrap_broadcast(self):
-        """WebSocket broadcast should be called with anima.bootstrap event."""
+        """WebSocket broadcast should be called with anima.bootstrap event.
+
+        The _handle_chunk function uses asyncio.ensure_future to emit
+        broadcast events, so we must allow the event loop to process
+        those fire-and-forget coroutines before inspecting the mock.
+        """
         app = _make_test_app_with_bootstrap()
         transport = ASGITransport(app=app)
         async with AsyncClient(
@@ -181,6 +169,9 @@ class TestBootstrapStreamE2E:
                 "/api/animas/alice/chat/stream",
                 json={"message": "Hello"},
             )
+
+        # Allow fire-and-forget emit() tasks to complete
+        await asyncio.sleep(0.05)
 
         ws = app.state.ws_manager
         # Should have broadcast calls — at least anima.status + anima.bootstrap

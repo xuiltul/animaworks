@@ -15,6 +15,10 @@ from core.tools.image_gen import FalTextToImageClient, FAL_FLUX_PRO_SUBMIT_URL
 
 
 class TestFalTextToImageInit:
+    @pytest.fixture(autouse=True)
+    def _isolate_credentials(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
+
     def test_requires_fal_key(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.delenv("FAL_KEY", raising=False)
         with pytest.raises(ToolConfigError):
@@ -31,7 +35,8 @@ class TestFalTextToImageInit:
 
 class TestFalGenerateFullbody:
     @pytest.fixture(autouse=True)
-    def _set_key(self, monkeypatch: pytest.MonkeyPatch):
+    def _set_key(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("FAL_KEY", "test-fal-key")
 
     def _make_submit_response(self, request_id: str = "req-123"):

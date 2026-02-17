@@ -261,12 +261,14 @@ class TestBaseToolCount:
     """Verify the base tool set matches the design spec."""
 
     def test_base_tool_count(self, executor):
-        """Base tools should be 11 (4 memory + 4 file + 2 search + 1 discovery)."""
+        """Base tools should be 13 (4 memory + 4 file + 2 search + 1 discovery + 2 tool_management)."""
         tools = executor._build_base_tools()
-        assert len(tools) == 11
+        assert len(tools) == 13
         names = {t["function"]["name"] for t in tools}
         assert "search_code" in names
         assert "list_directory" in names
         assert "discover_tools" in names
         assert "read_file" in names
         assert "search_memory" in names
+        assert "refresh_tools" in names
+        assert "share_tool" in names

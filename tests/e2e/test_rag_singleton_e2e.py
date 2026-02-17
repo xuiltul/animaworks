@@ -28,14 +28,14 @@ def anima_dir(tmp_path, monkeypatch):
     anima_path = animas_dir / "test-anima"
     anima_path.mkdir()
     for sub in ("episodes", "knowledge", "procedures", "skills", "state"):
-        (anima_dir / sub).mkdir()
+        (anima_path / sub).mkdir()
     (tmp_path / "company").mkdir()
     (tmp_path / "company" / "vision.md").write_text("# Vision", encoding="utf-8")
     (tmp_path / "common_skills").mkdir()
     (tmp_path / "common_knowledge").mkdir()
     (tmp_path / "shared" / "users").mkdir(parents=True)
 
-    return dp
+    return anima_path
 
 
 class TestMemoryManagerSingleton:

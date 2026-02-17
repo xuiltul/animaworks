@@ -192,7 +192,11 @@ class TestWebSocketNotificationQueueFlush:
     def test_queued_notifications_flushed_on_connect(
         self, ws_app: tuple[FastAPI, WebSocketManager],
     ) -> None:
-        """Notifications queued before any client connects are sent on connect."""
+        """Notifications queued before any client connects are sent on connect.
+
+        broadcast_notification queues two events per call:
+        anima.proactive_message (for chat) and anima.notification (for toast).
+        """
         app, ws_manager = ws_app
 
         # Queue notifications while no clients are connected
@@ -206,15 +210,20 @@ class TestWebSocketNotificationQueueFlush:
         }))
         loop.close()
 
-        assert len(ws_manager._notification_queue) == 1
+        # 2 events queued: proactive_message + notification
+        assert len(ws_manager._notification_queue) == 2
 
         with TestClient(app) as client:
             with client.websocket_connect("/ws") as ws:
-                # The queued notification should be flushed immediately
-                data = ws.receive_json()
-                assert data["type"] == "anima.notification"
-                assert data["data"]["subject"] == "Queued Alert"
-                assert data["data"]["body"] == "This was queued while offline"
+                # The queued events should be flushed immediately
+                data1 = ws.receive_json()
+                assert data1["type"] == "anima.proactive_message"
+                assert data1["data"]["subject"] == "Queued Alert"
+
+                data2 = ws.receive_json()
+                assert data2["type"] == "anima.notification"
+                assert data2["data"]["subject"] == "Queued Alert"
+                assert data2["data"]["body"] == "This was queued while offline"
 
                 # Queue should be empty after flush
                 assert len(ws_manager._notification_queue) == 0
@@ -222,7 +231,11 @@ class TestWebSocketNotificationQueueFlush:
     def test_multiple_queued_notifications_flushed_in_order(
         self, ws_app: tuple[FastAPI, WebSocketManager],
     ) -> None:
-        """Multiple queued notifications are flushed in FIFO order."""
+        """Multiple queued notifications are flushed in FIFO order.
+
+        Each broadcast_notification call queues 2 events (proactive_message
+        + notification), so 3 calls produce 6 queued events.
+        """
         app, ws_manager = ws_app
 
         import asyncio
@@ -236,14 +249,20 @@ class TestWebSocketNotificationQueueFlush:
             }))
         loop.close()
 
-        assert len(ws_manager._notification_queue) == 3
+        # 3 calls x 2 events each = 6 queued events
+        assert len(ws_manager._notification_queue) == 6
 
         with TestClient(app) as client:
             with client.websocket_connect("/ws") as ws:
                 for i in range(3):
-                    data = ws.receive_json()
-                    assert data["type"] == "anima.notification"
-                    assert data["data"]["subject"] == f"Alert {i}"
+                    # Each notification produces a proactive_message then a notification
+                    proactive = ws.receive_json()
+                    assert proactive["type"] == "anima.proactive_message"
+                    assert proactive["data"]["subject"] == f"Alert {i}"
+
+                    notif = ws.receive_json()
+                    assert notif["type"] == "anima.notification"
+                    assert notif["data"]["subject"] == f"Alert {i}"
 
                 assert len(ws_manager._notification_queue) == 0
 

@@ -70,47 +70,65 @@ class TestBreathingAnimationCSS:
 
 
 class TestToolEndBehaviorJS:
-    """Verify tool_end handler does NOT clear activeTool in JS files."""
+    """Verify tool_end (onToolEnd) handler does NOT clear activeTool in JS files.
+
+    The JS uses callback-style handlers (onToolEnd) rather than switch/case.
+    The onToolEnd callback should keep the tool indicator visible (not null it).
+    """
 
     @pytest.mark.parametrize("js_path", [_DASHBOARD_JS, _WORKSPACE_JS])
     def test_tool_end_does_not_clear_active_tool(self, js_path: Path):
-        """After tool_end, activeTool should remain set (not nulled)."""
+        """After onToolEnd, activeTool should remain set (not nulled)."""
         content = js_path.read_text()
 
-        # Find the tool_end case block
-        tool_end_idx = content.find('"tool_end"')
-        assert tool_end_idx != -1, f"tool_end handler not found in {js_path.name}"
+        # Find the onToolEnd callback
+        tool_end_idx = content.find("onToolEnd")
+        assert tool_end_idx != -1, f"onToolEnd handler not found in {js_path.name}"
 
-        # Extract from tool_end to next case or closing brace
+        # Extract a reasonable chunk around onToolEnd
         after_tool_end = content[tool_end_idx:tool_end_idx + 300]
 
-        # Find the break statement that ends this case
-        break_idx = after_tool_end.find("break;")
-        assert break_idx != -1, f"break statement not found after tool_end in {js_path.name}"
-        tool_end_block = after_tool_end[:break_idx + len("break;")]
+        # Find the callback body (between the first { and matching })
+        brace_start = after_tool_end.find("{")
+        assert brace_start != -1, f"onToolEnd callback body not found in {js_path.name}"
+        # Find the closing brace of the callback
+        depth = 0
+        end = brace_start
+        for i, ch in enumerate(after_tool_end[brace_start:], start=brace_start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        tool_end_block = after_tool_end[brace_start:end]
 
-        # activeTool = null should NOT appear in the tool_end block
+        # activeTool = null should NOT appear in the onToolEnd block
         assert "activeTool = null" not in tool_end_block, (
-            f"tool_end handler should NOT clear activeTool in {js_path.name}"
+            f"onToolEnd handler should NOT clear activeTool in {js_path.name}"
         )
 
 
 class TestDoneHandlerClearsActiveTool:
-    """Verify done handler DOES clear activeTool in JS files."""
+    """Verify done (onDone) handler DOES clear activeTool in JS files.
+
+    The JS uses callback-style handlers (onDone) rather than switch/case.
+    """
 
     @pytest.mark.parametrize("js_path", [_DASHBOARD_JS, _WORKSPACE_JS])
     def test_done_clears_active_tool(self, js_path: Path):
-        """The done event handler should reset activeTool to null."""
+        """The onDone event handler should reset activeTool to null."""
         content = js_path.read_text()
 
-        # Find the done case block
-        done_idx = content.find('"done"')
-        assert done_idx != -1, f"done handler not found in {js_path.name}"
+        # Find the onDone callback
+        done_idx = content.find("onDone")
+        assert done_idx != -1, f"onDone handler not found in {js_path.name}"
 
-        # Extract a reasonable chunk after "done"
+        # Extract a reasonable chunk after "onDone"
         after_done = content[done_idx:done_idx + 500]
 
-        # activeTool = null should appear in the done block
+        # activeTool = null should appear in the onDone block
         assert "activeTool = null" in after_done, (
-            f"done handler should clear activeTool in {js_path.name}"
+            f"onDone handler should clear activeTool in {js_path.name}"
         )

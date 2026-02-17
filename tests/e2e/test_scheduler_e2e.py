@@ -31,12 +31,14 @@ def anima_dir(tmp_path: Path) -> Path:
         "## チェックリスト\n- Inboxをチェック\n"
     )
 
-    # Cron config
+    # Cron config (schedule: must be a valid 5-field cron expression)
     (anima_dir / "cron.md").write_text(
         "## 毎朝の業務計画（毎日 9:00 JST）\n"
+        "schedule: 0 9 * * *\n"
         "type: llm\n"
         "長期記憶から昨日の進捗を確認する。\n\n"
         "## 週次振り返り（毎週金曜 17:00 JST）\n"
+        "schedule: 0 17 * * 5\n"
         "type: llm\n"
         "今週のepisodesを振り返る。\n"
     )
@@ -130,12 +132,15 @@ class TestAnimaRunnerSchedulerE2E:
         # Simulate adding a new cron task
         new_cron = (
             "## 毎朝の業務計画（毎日 9:00 JST）\n"
+            "schedule: 0 9 * * *\n"
             "type: llm\n"
             "Description A\n\n"
             "## 週次振り返り（毎週金曜 17:00 JST）\n"
+            "schedule: 0 17 * * 5\n"
             "type: llm\n"
             "Description B\n\n"
             "## 新しいタスク（毎日 18:00 JST）\n"
+            "schedule: 0 18 * * *\n"
             "type: llm\n"
             "New task added\n"
         )

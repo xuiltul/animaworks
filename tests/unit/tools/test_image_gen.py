@@ -102,7 +102,8 @@ class TestRetry:
 
 class TestNovelAIClient:
     @pytest.fixture(autouse=True)
-    def _set_token(self, monkeypatch: pytest.MonkeyPatch):
+    def _set_token(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("NOVELAI_TOKEN", "test-nai-token")
 
     def test_init(self):
@@ -151,7 +152,8 @@ class TestNovelAIClient:
 
 class TestFluxKontextClient:
     @pytest.fixture(autouse=True)
-    def _set_key(self, monkeypatch: pytest.MonkeyPatch):
+    def _set_key(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("FAL_KEY", "test-fal-key")
 
     def test_init(self):
@@ -169,7 +171,8 @@ class TestFluxKontextClient:
 
 class TestMeshyClient:
     @pytest.fixture(autouse=True)
-    def _set_key(self, monkeypatch: pytest.MonkeyPatch):
+    def _set_key(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("MESHY_API_KEY", "test-meshy-key")
 
     def test_init(self):

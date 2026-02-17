@@ -45,7 +45,8 @@
               color var(--assets-transition);
 }
 
-.assets-anima-btn:hover {
+.assets-anima-btn:hover,
+.assets-anima-btn:active {
   background: var(--assets-bg);
   border-color: #9ca3af;
 }
@@ -56,7 +57,8 @@
   border-color: var(--assets-primary);
 }
 
-.assets-anima-btn--active:hover {
+.assets-anima-btn--active:hover,
+.assets-anima-btn--active:active {
   background: var(--assets-primary-hover);
   border-color: var(--assets-primary-hover);
 }
@@ -85,7 +87,8 @@
               transform var(--assets-transition);
 }
 
-.assets-thumb-card:hover {
+.assets-thumb-card:hover,
+.assets-thumb-card:active {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transform: translateY(-2px);
 }
@@ -221,7 +224,8 @@
   transition: background var(--assets-transition), color var(--assets-transition);
 }
 
-.assets-modal-close:hover {
+.assets-modal-close:hover,
+.assets-modal-close:active {
   background: #f3f4f6;
   color: var(--assets-text);
 }
