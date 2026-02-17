@@ -45,6 +45,9 @@ _PROTECTED_FILES = frozenset({
     "bootstrap.md",
 })
 
+# Standard episode filename: YYYY-MM-DD.md or YYYY-MM-DD_suffix.md
+_EPISODE_FILENAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(_.+)?\.md$")
+
 
 def _error_result(
     error_type: str,
@@ -65,6 +68,42 @@ def _error_result(
     if suggestion:
         result["suggestion"] = suggestion
     return _json.dumps(result, ensure_ascii=False)
+
+
+def _validate_episode_path(rel_path: str) -> str | None:
+    """Return a warning if *rel_path* targets ``episodes/`` with a non-standard name.
+
+    Standard patterns (no warning):
+      - ``episodes/YYYY-MM-DD.md``
+      - ``episodes/YYYY-MM-DD_suffix.md``
+
+    Non-standard patterns (warning returned):
+      - ``episodes/random_name.md``
+      - ``episodes/2026-99-99.md`` (invalid date chars are caught by regex)
+
+    The warning does NOT block the write — it is appended to the tool
+    response so the LLM can learn the convention for future calls.
+    """
+    if not rel_path.startswith("episodes/"):
+        return None
+
+    # Only validate direct children (not subdirectories)
+    parts = rel_path.split("/")
+    if len(parts) != 2:
+        return None
+
+    filename = parts[1]
+    if _EPISODE_FILENAME_RE.match(filename):
+        return None
+
+    from datetime import date
+
+    return (
+        f"WARNING: エピソードファイル名 '{filename}' は標準パターン "
+        f"(YYYY-MM-DD.md または YYYY-MM-DD_suffix.md) に合致しません。"
+        f" 推奨: episodes/{date.today().isoformat()}.md に"
+        f" '## HH:MM — タイトル' 形式で追記してください。"
+    )
 
 
 def _is_protected_write(anima_dir: Path, target: Path) -> str | None:
@@ -330,7 +369,15 @@ class ToolHandler:
             except Exception:
                 logger.exception("Schedule reload failed for '%s'", self._anima_name)
 
-        return f"Written to {args['path']}"
+        result = f"Written to {args['path']}"
+
+        # Warn (but don't block) if episode filename is non-standard
+        episode_warning = _validate_episode_path(args["path"])
+        if episode_warning:
+            logger.warning("Non-standard episode path: %s", args["path"])
+            result = f"{result}\n\n{episode_warning}"
+
+        return result
 
     def _handle_send_message(self, args: dict[str, Any]) -> str:
         if not self._messenger:

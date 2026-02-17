@@ -7,7 +7,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.tooling.handler import ToolHandler, _SHELL_METACHAR_RE, _error_result, _PROTECTED_FILES, _is_protected_write
+from core.tooling.handler import (
+    ToolHandler,
+    _SHELL_METACHAR_RE,
+    _error_result,
+    _EPISODE_FILENAME_RE,
+    _PROTECTED_FILES,
+    _is_protected_write,
+    _validate_episode_path,
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────
@@ -1179,3 +1187,150 @@ class TestShareTool:
         result = handler.handle("share_tool", {"tool_name": "foo/bar"})
         parsed = json.loads(result)
         assert parsed["error_type"] == "InvalidArguments"
+
+
+# ── _validate_episode_path unit tests ────────────────────────
+
+
+class TestValidateEpisodePath:
+    """Direct unit tests for _validate_episode_path()."""
+
+    def test_standard_pattern_no_warning(self):
+        assert _validate_episode_path("episodes/2026-02-17.md") is None
+
+    def test_suffixed_pattern_no_warning(self):
+        assert _validate_episode_path("episodes/2026-02-17_heartbeat.md") is None
+
+    def test_suffixed_long_name_no_warning(self):
+        assert _validate_episode_path("episodes/2026-02-17_heartbeat_emergency_response.md") is None
+
+    def test_non_standard_name_returns_warning(self):
+        result = _validate_episode_path("episodes/random_notes.md")
+        assert result is not None
+        assert "WARNING" in result
+        assert "random_notes.md" in result
+        assert "YYYY-MM-DD.md" in result
+
+    def test_invalid_date_digits_accepted(self):
+        """Regex validates format (YYYY-MM-DD) not date validity — by design."""
+        assert _validate_episode_path("episodes/2026-99-99.md") is None
+
+    def test_no_extension_returns_warning(self):
+        result = _validate_episode_path("episodes/2026-02-17")
+        assert result is not None
+        assert "WARNING" in result
+
+    def test_txt_extension_returns_warning(self):
+        result = _validate_episode_path("episodes/notes.txt")
+        assert result is not None
+        assert "WARNING" in result
+
+    def test_non_episode_path_no_validation(self):
+        assert _validate_episode_path("knowledge/topic.md") is None
+
+    def test_state_path_no_validation(self):
+        assert _validate_episode_path("state/current_task.md") is None
+
+    def test_episode_subdirectory_no_validation(self):
+        """Subdirectories under episodes/ are not validated."""
+        assert _validate_episode_path("episodes/2026-02/17.md") is None
+
+
+class TestEpisodeFilenameRegex:
+    """Tests for _EPISODE_FILENAME_RE pattern."""
+
+    @pytest.mark.parametrize("filename", [
+        "2026-02-17.md",
+        "2026-01-01.md",
+        "2026-12-31_heartbeat.md",
+        "2026-02-17_cron_batch.md",
+        "2026-02-17_a.md",
+    ])
+    def test_valid_patterns(self, filename: str):
+        assert _EPISODE_FILENAME_RE.match(filename)
+
+    @pytest.mark.parametrize("filename", [
+        "random_notes.md",
+        "2026-02-17",
+        "notes.txt",
+        "20260217.md",
+        "2026-2-17.md",
+    ])
+    def test_invalid_patterns(self, filename: str):
+        assert not _EPISODE_FILENAME_RE.match(filename)
+
+
+# ── write_memory_file episode path warning (integration) ─────
+
+
+class TestWriteMemoryFileEpisodeWarning:
+    """Tests for episode path warning in _handle_write_memory_file()."""
+
+    def test_standard_episode_no_warning(
+        self, handler: ToolHandler, anima_dir: Path,
+    ):
+        result = handler.handle(
+            "write_memory_file",
+            {"path": "episodes/2026-02-17.md", "content": "## 10:00 — テスト\n"},
+        )
+        assert "Written to" in result
+        assert "WARNING" not in result
+
+    def test_suffixed_episode_no_warning(
+        self, handler: ToolHandler, anima_dir: Path,
+    ):
+        result = handler.handle(
+            "write_memory_file",
+            {"path": "episodes/2026-02-17_heartbeat.md", "content": "check"},
+        )
+        assert "Written to" in result
+        assert "WARNING" not in result
+
+    def test_non_standard_episode_returns_warning(
+        self, handler: ToolHandler, anima_dir: Path,
+    ):
+        result = handler.handle(
+            "write_memory_file",
+            {"path": "episodes/random_notes.md", "content": "some notes"},
+        )
+        assert "Written to" in result
+        assert "WARNING" in result
+        assert "YYYY-MM-DD.md" in result
+        # File should still be written
+        assert (anima_dir / "episodes" / "random_notes.md").exists()
+
+    def test_non_episode_path_no_warning(
+        self, handler: ToolHandler, anima_dir: Path,
+    ):
+        result = handler.handle(
+            "write_memory_file",
+            {"path": "knowledge/note.md", "content": "content"},
+        )
+        assert "Written to" in result
+        assert "WARNING" not in result
+
+    def test_warning_does_not_block_write(
+        self, handler: ToolHandler, anima_dir: Path,
+    ):
+        result = handler.handle(
+            "write_memory_file",
+            {"path": "episodes/bad_name.md", "content": "important data"},
+        )
+        assert "Written to" in result
+        assert "WARNING" in result
+        content = (anima_dir / "episodes" / "bad_name.md").read_text(encoding="utf-8")
+        assert content == "important data"
+
+    def test_warning_with_append_mode(
+        self, handler: ToolHandler, anima_dir: Path,
+    ):
+        (anima_dir / "episodes").mkdir(exist_ok=True)
+        (anima_dir / "episodes" / "my_log.md").write_text("line1\n", encoding="utf-8")
+        result = handler.handle(
+            "write_memory_file",
+            {"path": "episodes/my_log.md", "content": "line2\n", "mode": "append"},
+        )
+        assert "Written to" in result
+        assert "WARNING" in result
+        content = (anima_dir / "episodes" / "my_log.md").read_text(encoding="utf-8")
+        assert content == "line1\nline2\n"
