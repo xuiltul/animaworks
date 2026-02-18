@@ -47,10 +47,12 @@ class ActivityEntry:
     tool: str = ""
     via: str = ""
     meta: dict[str, Any] = field(default_factory=dict)
+    _line_number: int = field(default=0, init=False, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-safe dict, omitting empty fields."""
         d = asdict(self)
+        d.pop("_line_number", None)
         d = {k: v for k, v in d.items() if v}
         # Rename Python field names to JSONL keys (avoid Python reserved word 'from')
         if "from_person" in d:
@@ -58,6 +60,74 @@ class ActivityEntry:
         if "to_person" in d:
             d["to"] = d.pop("to_person")
         return d
+
+
+@dataclass
+class EntryGroup:
+    """A group of related activity entries for compact priming display."""
+
+    type: str                     # "dm", "hb", "cron", "single"
+    start_ts: str                 # Group start timestamp
+    end_ts: str                   # Group end timestamp
+    entries: list[ActivityEntry]  # Entries in this group
+    label: str                    # Group label (e.g. "yuki: boto3問題")
+    source_lines: str             # JSONL line number range (e.g. "L2-6")
+
+
+# ── Grouping helpers ─────────────────────────────────────────
+
+
+def _get_peer(group: EntryGroup) -> str:
+    """Get the peer name from the first entry of a DM group."""
+    e = group.entries[0]
+    if e.type == "dm_sent":
+        return e.to_person
+    return e.from_person
+
+
+def _dm_label(peer: str, first_entry: ActivityEntry) -> str:
+    """Generate a DM group label."""
+    text = first_entry.summary or first_entry.content[:30]
+    return f"{peer}: {text}"
+
+
+def _get_task_name(group: EntryGroup) -> str:
+    """Get the task_name from the first entry of a cron group."""
+    return group.entries[0].meta.get("task_name", "")
+
+
+def _time_diff(ts1: str, ts2: str) -> float:
+    """Return the difference between two ISO timestamps in seconds."""
+    try:
+        t1 = datetime.fromisoformat(ts1)
+        t2 = datetime.fromisoformat(ts2)
+        return abs((t2 - t1).total_seconds())
+    except (ValueError, TypeError):
+        return float("inf")
+
+
+def _set_source_lines(group: EntryGroup) -> None:
+    """Set source_lines from entry _line_number values."""
+    by_date: dict[str, list[int]] = {}
+    for e in group.entries:
+        if e._line_number > 0:
+            date_str = e.ts[:10] if len(e.ts) >= 10 else "unknown"
+            by_date.setdefault(date_str, []).append(e._line_number)
+
+    parts: list[str] = []
+    for date_str, lines in sorted(by_date.items()):
+        lines.sort()
+        if len(lines) == 1:
+            ref = f"L{lines[0]}"
+        elif lines[-1] - lines[0] == len(lines) - 1:
+            # Consecutive lines: L2-6
+            ref = f"L{lines[0]}-{lines[-1]}"
+        else:
+            # Non-consecutive: L1,3,5
+            ref = "L" + ",".join(str(n) for n in lines)
+        parts.append(f"activity_log/{date_str}.jsonl#{ref}")
+
+    group.source_lines = " + ".join(parts)
 
 
 # ── ActivityLogger ────────────────────────────────────────────
@@ -164,7 +234,9 @@ class ActivityLogger:
             if not path.exists():
                 continue
             try:
-                for line in path.read_text(encoding="utf-8").splitlines():
+                for line_num, line in enumerate(
+                    path.read_text(encoding="utf-8").splitlines(), start=1
+                ):
                     line = line.strip()
                     if not line:
                         continue
@@ -181,10 +253,12 @@ class ActivityLogger:
                         raw["from_person"] = raw.pop("from")
                     if "to" in raw:
                         raw["to_person"] = raw.pop("to")
-                    entries.append(ActivityEntry(**{
+                    entry = ActivityEntry(**{
                         k: v for k, v in raw.items()
                         if k in ActivityEntry.__dataclass_fields__
-                    }))
+                    })
+                    entry._line_number = line_num
+                    entries.append(entry)
             except Exception:
                 logger.exception("Failed to read activity log %s", path)
 
@@ -215,36 +289,35 @@ class ActivityLogger:
     ) -> str:
         """Format activity entries for system prompt injection.
 
-        Renders a human-readable timeline, truncated to *budget_tokens*.
+        Groups related entries (DM conversations, heartbeats, cron tasks)
+        and renders a compact timeline, truncated to *budget_tokens*.
 
         Args:
             entries: Entries to format (should be chronological).
             budget_tokens: Target token budget.
 
         Returns:
-            Formatted Markdown string.
+            Formatted string.
         """
         if not entries:
             return ""
 
+        groups = self._group_entries(entries)
         max_chars = budget_tokens * _CHARS_PER_TOKEN
         lines: list[str] = []
         total_chars = 0
 
-        # Build lines in reverse-chronological order (newest first)
-        # so that if we truncate, we keep the most recent events.
-        for entry in reversed(entries):
-            line = self._format_entry(entry)
-            line_len = len(line) + 1  # +1 for newline
-            if total_chars + line_len > max_chars:
+        # Process groups newest-first (budget cuts oldest groups)
+        for group in reversed(groups):
+            formatted = self._format_group(group)
+            if total_chars + len(formatted) + 1 > max_chars:
                 break
-            lines.append(line)
-            total_chars += line_len
+            lines.append(formatted)
+            total_chars += len(formatted) + 1  # +1 for newline
 
         if not lines:
             return ""
 
-        # Reverse back to chronological order
         lines.reverse()
         return "\n".join(lines)
 
@@ -254,24 +327,25 @@ class ActivityLogger:
         ts = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
         text = entry.summary or entry.content
 
-        # Truncate long content
+        # Truncate long content with pointer
         if len(text) > 200:
-            text = text[:200] + "..."
+            date_str = entry.ts[:10] if len(entry.ts) >= 10 else "unknown"
+            text = text[:180] + f"...(-> activity_log/{date_str}.jsonl)"
 
         type_map: dict[str, str] = {
-            "message_received": "📩",
-            "response_sent": "💬",
-            "channel_read": "👁",
-            "channel_post": "📢",
-            "dm_received": "📨",
-            "dm_sent": "✉️",
-            "human_notify": "🔔",
-            "tool_use": "🔧",
-            "heartbeat_start": "💓",
-            "heartbeat_end": "💓",
-            "cron_executed": "⏰",
-            "memory_write": "📝",
-            "error": "❌",
+            "message_received": "MSG<",
+            "response_sent": "MSG>",
+            "channel_read": "CH.R",
+            "channel_post": "CH.W",
+            "dm_received": "DM<",
+            "dm_sent": "DM>",
+            "human_notify": "NTFY",
+            "tool_use": "TOOL",
+            "heartbeat_start": "HB",
+            "heartbeat_end": "HB",
+            "cron_executed": "CRON",
+            "memory_write": "MEM",
+            "error": "ERR",
         }
         icon = type_map.get(entry.type, "•")
 
@@ -288,5 +362,168 @@ class ActivityLogger:
         if entry.via:
             context_parts.append(f"via:{entry.via}")
 
-        ctx = f" ({', '.join(context_parts)})" if context_parts else ""
+        ctx = f"({', '.join(context_parts)})" if context_parts else ""
         return f"[{ts}] {icon} {entry.type}{ctx}: {text}"
+
+    # ── Grouping ─────────────────────────────────────────────
+
+    @staticmethod
+    def _group_entries(
+        entries: list[ActivityEntry],
+        time_gap_minutes: int = 30,
+    ) -> list[EntryGroup]:
+        """Group related activity entries for compact display.
+
+        Grouping rules:
+        1. DM: Same peer, within time_gap_minutes → 1 group
+        2. HB: Consecutive heartbeat_start/heartbeat_end only
+        3. CRON: Same task_name → 1 group
+        4. Others: Single-entry group
+        """
+        groups: list[EntryGroup] = []
+        current_group: EntryGroup | None = None
+        gap_seconds = time_gap_minutes * 60
+
+        for entry in entries:
+            entry_type = entry.type
+
+            # DM grouping
+            if entry_type in ("dm_sent", "dm_received"):
+                peer = entry.to_person if entry_type == "dm_sent" else entry.from_person
+                if (
+                    current_group
+                    and current_group.type == "dm"
+                    and _get_peer(current_group) == peer
+                    and _time_diff(current_group.end_ts, entry.ts) <= gap_seconds
+                ):
+                    current_group.entries.append(entry)
+                    current_group.end_ts = entry.ts
+                    continue
+                # New DM group
+                if current_group:
+                    groups.append(current_group)
+                current_group = EntryGroup(
+                    type="dm",
+                    start_ts=entry.ts,
+                    end_ts=entry.ts,
+                    entries=[entry],
+                    label=_dm_label(peer, entry),
+                    source_lines="",
+                )
+                continue
+
+            # HB grouping
+            if entry_type in ("heartbeat_start", "heartbeat_end"):
+                if current_group and current_group.type == "hb":
+                    current_group.entries.append(entry)
+                    current_group.end_ts = entry.ts
+                    continue
+                if current_group:
+                    groups.append(current_group)
+                current_group = EntryGroup(
+                    type="hb",
+                    start_ts=entry.ts,
+                    end_ts=entry.ts,
+                    entries=[entry],
+                    label="",
+                    source_lines="",
+                )
+                continue
+
+            # CRON grouping
+            if entry_type == "cron_executed":
+                task_name = entry.meta.get("task_name", "")
+                if (
+                    current_group
+                    and current_group.type == "cron"
+                    and _get_task_name(current_group) == task_name
+                ):
+                    current_group.entries.append(entry)
+                    current_group.end_ts = entry.ts
+                    continue
+                if current_group:
+                    groups.append(current_group)
+                current_group = EntryGroup(
+                    type="cron",
+                    start_ts=entry.ts,
+                    end_ts=entry.ts,
+                    entries=[entry],
+                    label=task_name,
+                    source_lines="",
+                )
+                continue
+
+            # Other: close current group, create single-entry group
+            if current_group:
+                groups.append(current_group)
+                current_group = None
+            groups.append(EntryGroup(
+                type="single",
+                start_ts=entry.ts,
+                end_ts=entry.ts,
+                entries=[entry],
+                label="",
+                source_lines="",
+            ))
+
+        if current_group:
+            groups.append(current_group)
+
+        # Generate source_lines for all groups
+        for group in groups:
+            _set_source_lines(group)
+
+        return groups
+
+    @staticmethod
+    def _format_group(group: EntryGroup) -> str:
+        """Format a group of entries for priming display."""
+        start_time = group.start_ts[11:16] if len(group.start_ts) >= 16 else group.start_ts
+        end_time = group.end_ts[11:16] if len(group.end_ts) >= 16 else group.end_ts
+
+        time_range = (
+            f"[{start_time}-{end_time}]"
+            if start_time != end_time
+            else f"[{start_time}]"
+        )
+
+        if group.type == "dm":
+            # Header: [HH:MM-HH:MM] DM {label}
+            lines = [f"{time_range} DM {group.label}"]
+            # Child lines: indented DM direction + summary
+            for e in group.entries:
+                direction = "DM<" if e.type == "dm_received" else "DM>"
+                text = e.summary or e.content[:100]
+                if len(text) > 100:
+                    text = text[:100]
+                lines.append(f"  {direction} {text}")
+            # Pointer line
+            if group.source_lines:
+                lines.append(f"  -> {group.source_lines}")
+            return "\n".join(lines)
+
+        if group.type == "hb":
+            # Use heartbeat_end summary if available
+            hb_summary = ""
+            for e in group.entries:
+                if e.type == "heartbeat_end":
+                    hb_summary = (e.summary or e.content)[:50]
+                    break
+            header = f"{time_range} HB: {hb_summary}" if hb_summary else f"{time_range} HB"
+            lines = [header]
+            if group.source_lines:
+                lines.append(f"  -> {group.source_lines}")
+            return "\n".join(lines)
+
+        if group.type == "cron":
+            # Get exit code from first entry if available
+            exit_code = group.entries[0].meta.get("exit_code", "")
+            exit_info = f": exit={exit_code}" if exit_code != "" else ""
+            header = f"{time_range} CRON {group.label}{exit_info}"
+            lines = [header]
+            if group.source_lines:
+                lines.append(f"  -> {group.source_lines}")
+            return "\n".join(lines)
+
+        # Single entry: use _format_entry
+        return ActivityLogger._format_entry(group.entries[0])
