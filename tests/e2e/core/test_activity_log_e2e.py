@@ -125,9 +125,13 @@ async def test_activity_log_priming_integration(
     # The result should be a non-empty string containing formatted entries
     assert result, "Channel B should return non-empty priming text"
 
-    # Verify each event type appears in the formatted output
+    # Verify each event type appears in the formatted output.
+    # DM entries are grouped under a "DM" header (not shown as "dm_sent").
     for etype in event_types:
-        assert etype in result, f"Event type '{etype}' not found in priming output"
+        if etype == "dm_sent":
+            assert "DM" in result, "DM group header not found in priming output"
+        else:
+            assert etype in result, f"Event type '{etype}' not found in priming output"
 
     # Verify person/channel context appears
     assert "sakura" in result

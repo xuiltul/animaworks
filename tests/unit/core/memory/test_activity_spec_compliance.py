@@ -124,7 +124,7 @@ class TestMemoryWriteEvent:
         assert entries[0].type == "memory_write"
         assert "knowledge/tech.md" in entries[0].summary
 
-    def test_memory_write_format_has_icon(self):
+    def test_memory_write_format_has_label(self):
         entry = ActivityEntry(
             ts="2026-02-17T10:00:00",
             type="memory_write",
@@ -132,7 +132,7 @@ class TestMemoryWriteEvent:
         )
         logger = ActivityLogger.__new__(ActivityLogger)
         line = logger._format_entry(entry)
-        assert "📝" in line
+        assert "MEM" in line
 
 
 class TestErrorEvent:
@@ -154,7 +154,7 @@ class TestErrorEvent:
         assert "process_message" in entries[0].summary
         assert entries[0].meta["phase"] == "process_message"
 
-    def test_error_format_has_icon(self):
+    def test_error_format_has_label(self):
         entry = ActivityEntry(
             ts="2026-02-17T10:00:00",
             type="error",
@@ -162,7 +162,7 @@ class TestErrorEvent:
         )
         logger = ActivityLogger.__new__(ActivityLogger)
         line = logger._format_entry(entry)
-        assert "❌" in line
+        assert "ERR" in line
 
     def test_multiple_error_types_recorded(self, tmp_path):
         """Multiple error events from different phases can be recorded and filtered."""

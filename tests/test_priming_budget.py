@@ -148,3 +148,22 @@ def test_budget_distribution(temp_anima_dir):
     # This is tested indirectly through the priming flow
     # Direct testing would require mocking internal truncate logic
     pass
+
+
+def test_heartbeat_budget_minimum_400(temp_anima_dir):
+    """Channel B budget_activity never drops below 400 even at heartbeat budget."""
+    from core.memory.priming import (
+        _BUDGET_HEARTBEAT,
+        _BUDGET_RECENT_ACTIVITY,
+        _DEFAULT_MAX_PRIMING_TOKENS,
+    )
+
+    # Heartbeat budget = 200 tokens
+    token_budget = _BUDGET_HEARTBEAT
+    # Old formula: int(1300 * (200 / 2000)) = 130
+    # New formula: max(400, int(1300 * (200 / 2000))) = 400
+    budget_activity = max(
+        400,
+        int(_BUDGET_RECENT_ACTIVITY * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS)),
+    )
+    assert budget_activity >= 400
