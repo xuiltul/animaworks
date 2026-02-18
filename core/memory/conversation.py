@@ -657,17 +657,14 @@ class ConversationMemory:
         self, memory_mgr: "MemoryManager", parsed: ParsedSessionSummary,
     ) -> None:
         """Auto-update state/current_task.md based on conversation conclusions."""
-        from core.memory.manager import MemoryManager as _MM
-
         current = memory_mgr.read_current_state()
         updated = False
 
         # Append resolved items with checkmark
         for item in parsed.resolved_items:
             if item not in current:
-                marker = f"   - ✅ {item}（自動検出: {datetime.now().strftime('%m/%d %H:%M')}）"
-                if "未解決" in current or "継続監視" in current:
-                    current += f"\n{marker}"
+                marker = f"- ✅ {item}（自動検出: {datetime.now().strftime('%m/%d %H:%M')}）"
+                current += f"\n{marker}"
                 updated = True
 
         # Append new tasks

@@ -349,6 +349,27 @@ class TestUpdateState:
         assert "- [ ] レポート作成" in updated
         assert "自動検出" in updated
 
+    def test_appends_resolved_without_keyword(self, conv_memory, anima_dir):
+        """Resolved items are appended even when state lacks '未解決' keyword."""
+        from core.memory.manager import MemoryManager
+
+        mm = MemoryManager(anima_dir)
+        mm.update_state("status: idle")
+
+        parsed = ParsedSessionSummary(
+            title="test",
+            episode_body="",
+            resolved_items=["ネットワーク障害"],
+            new_tasks=[],
+            current_status="",
+            has_state_changes=True,
+        )
+
+        conv_memory._update_state_from_summary(mm, parsed)
+        updated = mm.read_current_state()
+        assert "ネットワーク障害" in updated
+        assert "✅" in updated
+
     def test_no_duplicate(self, conv_memory, anima_dir):
         """Already-present items are not duplicated."""
         from core.memory.manager import MemoryManager
