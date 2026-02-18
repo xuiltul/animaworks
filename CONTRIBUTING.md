@@ -2,26 +2,6 @@
 
 Thank you for your interest in contributing to AnimaWorks.
 
-## Contributor License Agreement (CLA)
-
-Before your first pull request can be merged, you must sign the project's
-Contributor License Agreement.
-
-### Why a CLA?
-
-AnimaWorks is licensed under **AGPL-3.0-or-later** for the entire codebase.
-
-The CLA allows the project maintainers to offer commercial licenses to
-organizations that cannot use AGPL-licensed software. Without a CLA,
-third-party contributions would prevent this, making the project
-unsustainable.
-
-### How to sign
-
-1. Read [CLA.md](CLA.md) carefully.
-2. Add your entry to the signature table at the bottom of `CLA.md`.
-3. Include the CLA signature commit in your first pull request.
-
 ## Development Setup
 
 ```bash
@@ -40,18 +20,17 @@ pip install -e ".[all-tools,test]"
 
 ## License Headers
 
-All source files must include the AGPL header:
+All source files must include the Apache 2.0 header:
 
 ```python
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: Apache-2.0
 ```
 
 ## Pull Request Process
 
-1. Ensure your CLA signature is on file.
-2. Create a feature branch from `main`.
-3. Add tests for new functionality.
-4. Run `pytest` and ensure all tests pass.
-5. Submit a pull request with a clear description.
+1. Create a feature branch from `main`.
+2. Add tests for new functionality.
+3. Run `pytest` and ensure all tests pass.
+4. Submit a pull request with a clear description.

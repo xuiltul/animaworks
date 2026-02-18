@@ -401,7 +401,7 @@ call_human統合、組織構成プロンプト注入等。
 
 記憶書き込みセキュリティ、ライセンス等。
 
-- **ライセンス戦略設計書** (2026-02-14) — AGPL-3.0 + Commercial Dual License戦略
+- **ライセンス戦略設計書** (2026-02-14) — Apache-2.0 ライセンス戦略
   [設計](implemented/20260214_licensing-strategy_design.md)
 - **メモリ書き込みセキュリティ: 全実行モードの保護ファイル・パストラバーサル対策** (2026-02-15) — 記憶書き込みのセキュリティ強化
   [設計](implemented/20260215_memory-write-security-20260216.md) | [Review](implemented/20260216_review_memory-write-security_approved-20260216.md)

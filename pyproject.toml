@@ -2,8 +2,8 @@
 name = "animaworks"
 version = "0.2.0"
 description = "AnimaWorks - Digital Anima Framework with library-type memory"
-license = "AGPL-3.0-or-later"
-license-files = ["LICENSE", "LICENSES/*.txt"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "claude-agent-sdk>=0.1.35",

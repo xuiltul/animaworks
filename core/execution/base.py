@@ -1,10 +1,10 @@
 from __future__ import annotations
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: Apache-2.0
 #
-# This file is part of AnimaWorks core/server, licensed under AGPL-3.0.
-# See LICENSES/AGPL-3.0.txt for the full license text.
+# This file is part of AnimaWorks core/server, licensed under Apache-2.0.
+# See LICENSE for the full license text.
 
 
 """Base class and result type for execution engines."""
