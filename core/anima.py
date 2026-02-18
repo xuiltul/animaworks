@@ -329,7 +329,7 @@ class DigitalAnima:
                 # Activity log: message received
                 try:
                     activity = ActivityLogger(self.anima_dir)
-                    activity.log("message_received", content=content, from_person=from_person, channel="chat")
+                    activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
                 except Exception:
                     pass
 
@@ -475,7 +475,7 @@ class DigitalAnima:
                 # Activity log: message received
                 try:
                     activity = ActivityLogger(self.anima_dir)
-                    activity.log("message_received", content=content, from_person=from_person, channel="chat")
+                    activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
                 except Exception:
                     pass
 
@@ -703,7 +703,7 @@ class DigitalAnima:
                 # Activity log: heartbeat start
                 try:
                     activity = ActivityLogger(self.anima_dir)
-                    activity.log("heartbeat_start")
+                    activity.log("heartbeat_start", summary="定期巡回開始")
                 except Exception:
                     pass
 
@@ -791,7 +791,7 @@ class DigitalAnima:
                     try:
                         activity = ActivityLogger(self.anima_dir)
                         for _m in _recordable[:10]:
-                            activity.log("dm_received", content=_m.content[:200], from_person=_m.from_person)
+                            activity.log("dm_received", content=_m.content[:200], summary=_m.content[:100], from_person=_m.from_person)
                     except Exception:
                         pass
 

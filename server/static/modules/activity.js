@@ -1,15 +1,7 @@
 /* ── Activity Feed ─────────────────────────── */
 
 import { dom, nowTimeStr, escapeHtml } from "./state.js";
-
-const TYPE_ICONS = {
-  message: "\uD83D\uDCE9",     // 📩 envelope
-  heartbeat: "\uD83D\uDC93",   // 💓 heart
-  cron: "\u23F0",               // ⏰ alarm clock
-  chat: "\uD83D\uDCAC",        // 💬 speech bubble
-  notification: "\uD83D\uDD14", // 🔔 bell
-  system: "\u2699\uFE0F",      // ⚙️ gear
-};
+import { getIcon } from "../shared/activity-types.js";
 
 let activityEmpty = true;
 
@@ -22,7 +14,7 @@ export function addActivity(type, animaName, summary) {
     activityEmpty = false;
   }
 
-  const icon = TYPE_ICONS[type] || TYPE_ICONS.system;
+  const icon = getIcon(type);
   const entry = document.createElement("div");
   entry.className = "activity-entry";
   entry.innerHTML = `

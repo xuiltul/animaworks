@@ -19,18 +19,7 @@
  */
 
 import { showMessage as showMessagePopup } from "./message-popup.js";
-
-// ── Type icons ─────────────────────────────────────
-
-const TYPE_ICONS = {
-  message:   "\uD83D\uDCE9",  // 📩
-  board:     "\uD83D\uDCCB",  // 📋
-  heartbeat: "\uD83D\uDC97",  // 💗
-  cron:      "\u23F0",         // ⏰
-  chat:      "\uD83D\uDCAC",  // 💬
-  status:    "\uD83D\uDD35",  // 🔵
-  session:   "\uD83D\uDCC4",  // 📄
-};
+import { getIcon, getDisplaySummary, normalizeEvent } from "../../shared/activity-types.js";
 
 // ── Module state ───────────────────────────────────
 
@@ -39,8 +28,17 @@ const _events = [];
 
 const MAX_EVENTS = 200;
 
-/** @type {string} current filter — "all" or a type */
-let _currentFilter = "all";
+const filterDefs = [
+  { label: "All", types: [] },
+  { label: "💬", types: ["message_received", "response_sent", "dm_received", "dm_sent", "message", "chat"] },
+  { label: "📋", types: ["channel_read", "channel_post", "board"] },
+  { label: "💗", types: ["heartbeat_start", "heartbeat_end", "heartbeat"] },
+  { label: "⏰", types: ["cron_executed", "cron"] },
+  { label: "🔧", types: ["tool_use", "memory_write"] },
+];
+
+/** @type {string[]} current filter — empty array means "all" */
+let _currentFilter = [];
 
 /** @type {HTMLElement|null} */
 let _container = null;
@@ -130,21 +128,13 @@ function _buildDOM(officePanel) {
   const filters = document.createElement("div");
   filters.className = "ws-timeline-filters";
 
-  const filterDefs = [
-    { label: "All",  value: "all" },
-    { label: "\uD83D\uDCE9", value: "message" },   // 📩
-    { label: "\uD83D\uDCCB", value: "board" },      // 📋
-    { label: "\uD83D\uDC97", value: "heartbeat" },  // 💗
-    { label: "\u23F0",        value: "cron" },       // ⏰
-    { label: "\uD83D\uDCAC", value: "chat" },       // 💬
-  ];
-
-  for (const fd of filterDefs) {
+  for (let i = 0; i < filterDefs.length; i++) {
+    const fd = filterDefs[i];
     const btn = document.createElement("button");
-    btn.className = "tl-filter" + (fd.value === "all" ? " active" : "");
-    btn.dataset.filter = fd.value;
+    btn.className = "tl-filter" + (i === 0 ? " active" : "");
+    btn.dataset.index = i;
     btn.textContent = fd.label;
-    btn.addEventListener("click", () => _onFilterClick(fd.value, filters));
+    btn.addEventListener("click", () => _onFilterClick(i, filters));
     filters.appendChild(btn);
   }
 
@@ -185,12 +175,17 @@ function _buildDOM(officePanel) {
 
 // ── Filter logic ───────────────────────────────────
 
-function _onFilterClick(value, filtersEl) {
-  _currentFilter = value;
+function _onFilterClick(index, filtersEl) {
+  const fd = filterDefs[index];
+  if (index === 0 || !fd) {
+    _currentFilter = [];
+  } else {
+    _currentFilter = fd.types || [];
+  }
 
   // Update active class
   for (const btn of filtersEl.querySelectorAll(".tl-filter")) {
-    btn.classList.toggle("active", btn.dataset.filter === value);
+    btn.classList.toggle("active", parseInt(btn.dataset.index) === index);
   }
 
   _renderList();
@@ -203,9 +198,9 @@ function _renderList() {
 
   _listEl.innerHTML = "";
 
-  const filtered = _currentFilter === "all"
+  const filtered = _currentFilter.length === 0
     ? _events
-    : _events.filter((e) => e.type === _currentFilter);
+    : _events.filter((e) => _currentFilter.includes(e.type));
 
   for (const evt of filtered) {
     const el = _createEventElement(evt);
@@ -232,7 +227,7 @@ function _createEventElement(evt) {
   // Icon
   const iconEl = document.createElement("span");
   iconEl.className = "tl-event-icon";
-  iconEl.textContent = TYPE_ICONS[evt.type] || "\u2022";
+  iconEl.textContent = getIcon(evt.type);
   iconEl.style.cssText = "flex-shrink:0;";
 
   // Anima
@@ -244,7 +239,7 @@ function _createEventElement(evt) {
   // Summary
   const summaryEl = document.createElement("span");
   summaryEl.className = "tl-event-summary";
-  summaryEl.textContent = evt.summary;
+  summaryEl.textContent = getDisplaySummary(evt);
   summaryEl.style.cssText = "color:#555; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;";
 
   el.appendChild(timeEl);
@@ -359,7 +354,7 @@ export function addTimelineEvent(event) {
   }
 
   // If currently displayed, prepend element
-  if (_listEl && (_currentFilter === "all" || _currentFilter === event.type)) {
+  if (_listEl && (_currentFilter.length === 0 || _currentFilter.includes(event.type))) {
     const el = _createEventElement(event);
     _listEl.insertBefore(el, _listEl.firstChild);
   }
@@ -381,7 +376,8 @@ export async function loadHistory(hours = 48) {
     _hasMore = data.has_more || false;
     _totalCount = data.total || 0;
 
-    for (const evt of events) {
+    for (const raw of events) {
+      const evt = normalizeEvent(raw);
       if (!evt.id) {
         evt.id = evt.ts || Date.now().toString();
       }
@@ -437,7 +433,8 @@ async function _loadMore() {
     _totalCount = data.total || 0;
     _currentOffset += newEvents.length;
 
-    for (const evt of newEvents) {
+    for (const raw of newEvents) {
+      const evt = normalizeEvent(raw);
       if (!evt.id) {
         evt.id = evt.ts || Date.now().toString();
       }

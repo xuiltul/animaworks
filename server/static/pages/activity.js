@@ -1,6 +1,7 @@
 // ── Activity Timeline Page ──────────────────
 import { api } from "../modules/api.js";
 import { state, escapeHtml, smartTimestamp } from "../modules/state.js";
+import { getIcon, getDisplaySummary, TYPE_CATEGORIES } from "../shared/activity-types.js";
 
 let _refreshInterval = null;
 let _events = [];
@@ -12,28 +13,6 @@ let _selectedAnima = "";
 let _selectedTypes = [];
 
 const LIMIT = 200;
-
-const TYPE_ICONS = {
-  message_received: "\uD83D\uDCE8", response_sent: "\uD83D\uDCAC",
-  channel_read: "\uD83D\uDCD6", channel_post: "\uD83D\uDCE2",
-  dm_received: "\uD83D\uDCE9", dm_sent: "\u2709\uFE0F",
-  human_notify: "\uD83D\uDCE3", tool_use: "\uD83D\uDD27",
-  heartbeat_start: "\uD83D\uDD04", heartbeat_end: "\u2705",
-  cron_executed: "\u23F0", memory_write: "\uD83D\uDCDD",
-  error: "\u26A0\uFE0F", issue_resolved: "\uD83C\uDFAF",
-};
-
-const TYPE_CHIPS = [
-  { label: "All", types: [] },
-  { label: "\uD83D\uDCAC MSG", types: ["message_received", "response_sent", "dm_received", "dm_sent"] },
-  { label: "\uD83D\uDCE2 CH", types: ["channel_read", "channel_post"] },
-  { label: "\uD83D\uDD04 HB", types: ["heartbeat_start", "heartbeat_end"] },
-  { label: "\u23F0 CRON", types: ["cron_executed"] },
-  { label: "\uD83D\uDD27 Tool", types: ["tool_use"] },
-  { label: "\uD83D\uDCDD Mem", types: ["memory_write"] },
-  { label: "\uD83D\uDCE3 Notify", types: ["human_notify"] },
-  { label: "\u26A0\uFE0F Err", types: ["error", "issue_resolved"] },
-];
 
 // ── Render ─────────────────────────────────
 
@@ -109,8 +88,8 @@ function _buildTypeChips() {
   if (!wrap) return;
 
   wrap.innerHTML = "";
-  for (let i = 0; i < TYPE_CHIPS.length; i++) {
-    const chip = TYPE_CHIPS[i];
+  for (let i = 0; i < TYPE_CATEGORIES.length; i++) {
+    const chip = TYPE_CATEGORIES[i];
     const btn = document.createElement("button");
     btn.className = "activity-type-chip" + (i === 0 ? " active" : "");
     btn.textContent = chip.label;
@@ -137,7 +116,7 @@ function _buildTypeChips() {
         for (const b of wrap.querySelectorAll(".activity-type-chip.active")) {
           const idx = parseInt(b.dataset.index);
           if (idx > 0) {
-            _selectedTypes.push(...TYPE_CHIPS[idx].types);
+            _selectedTypes.push(...TYPE_CATEGORIES[idx].types);
           }
         }
 
@@ -233,10 +212,10 @@ function _createRow(evt) {
   const row = document.createElement("div");
   row.className = "activity-row" + (evt.id === _expandedId ? " expanded" : "");
 
-  const icon = TYPE_ICONS[evt.type] || "\u2699\uFE0F";
+  const icon = getIcon(evt.type);
   const time = smartTimestamp(evt.ts);
   const anima = evt.anima || "";
-  const summary = evt.summary || "";
+  const summary = getDisplaySummary(evt);
 
   row.innerHTML =
     `<span class="activity-row-time">${escapeHtml(time)}</span>` +

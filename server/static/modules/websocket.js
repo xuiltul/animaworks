@@ -287,7 +287,8 @@ function handleWsMessage(raw) {
 
     default:
       if (data.name || data.anima) {
-        addActivity("system", data.name || data.anima, JSON.stringify(data).slice(0, 120));
+        const summary = data.summary || data.message || eventType || "イベント";
+        addActivity("system", data.name || data.anima, summary);
       }
       break;
   }

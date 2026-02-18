@@ -4,6 +4,7 @@ import { escapeHtml, renderMarkdown, timeStr, smartTimestamp } from "../modules/
 import { streamChat } from "../shared/chat-stream.js";
 import { createLogger } from "../shared/logger.js";
 import { createImageInput, initLightbox, renderChatImages } from "../shared/image-input.js";
+import { getIcon, getDisplaySummary } from "../shared/activity-types.js";
 
 const logger = createLogger("chat-page");
 
@@ -753,23 +754,6 @@ function _renderAnimaState() {
 
 // ── Activity Feed ──────────────────────────
 
-const _TYPE_ICONS = {
-  message_received: "\uD83D\uDCE8",
-  response_sent: "\uD83D\uDCAC",
-  channel_read: "\uD83D\uDCD6",
-  channel_post: "\uD83D\uDCE2",
-  dm_received: "\uD83D\uDCE9",
-  dm_sent: "\u2709\uFE0F",
-  human_notify: "\uD83D\uDCE3",
-  tool_use: "\uD83D\uDD27",
-  heartbeat_start: "\uD83D\uDD04",
-  heartbeat_end: "\u2705",
-  cron_executed: "\u23F0",
-  memory_write: "\uD83D\uDCDD",
-  error: "\u26A0\uFE0F",
-  issue_resolved: "\uD83C\uDFAF",
-};
-
 function _addLocalActivity(type, animaName, summary) {
   const feed = _$("chatActivityFeed");
   if (!feed) return;
@@ -778,7 +762,7 @@ function _addLocalActivity(type, animaName, summary) {
   const empty = feed.querySelector(".activity-empty");
   if (empty) empty.remove();
 
-  const icon = _TYPE_ICONS[type] || "\u2022";
+  const icon = getIcon(type);
   const ts = new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   const entry = document.createElement("div");
@@ -813,9 +797,9 @@ async function _loadActivity() {
     }
 
     feed.innerHTML = events.slice(0, 50).map(evt => {
-      const icon = _TYPE_ICONS[evt.type] || "\u2022";
+      const icon = getIcon(evt.type);
       const ts = timeStr(evt.ts);
-      const summary = evt.summary || evt.message || "";
+      const summary = getDisplaySummary(evt);
       return `
         <div class="activity-entry">
           <span class="activity-icon">${icon}</span>

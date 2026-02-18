@@ -1,6 +1,7 @@
 // ── Home Dashboard ──────────────────────────
 import { api } from "../modules/api.js";
 import { escapeHtml, timeStr, statusClass } from "../modules/state.js";
+import { getIcon, getDisplaySummary } from "../shared/activity-types.js";
 
 let _refreshInterval = null;
 
@@ -163,23 +164,6 @@ async function _loadActivity() {
   const timeline = document.getElementById("homeActivityTimeline");
   if (!timeline) return;
 
-  const TYPE_ICONS = {
-    message_received: "\uD83D\uDCE8",
-    response_sent: "\uD83D\uDCAC",
-    channel_read: "\uD83D\uDCD6",
-    channel_post: "\uD83D\uDCE2",
-    dm_received: "\uD83D\uDCE9",
-    dm_sent: "\u2709\uFE0F",
-    human_notify: "\uD83D\uDCE3",
-    tool_use: "\uD83D\uDD27",
-    heartbeat_start: "\uD83D\uDD04",
-    heartbeat_end: "\u2705",
-    cron_executed: "\u23F0",
-    memory_write: "\uD83D\uDCDD",
-    error: "\u26A0\uFE0F",
-    issue_resolved: "\uD83C\uDFAF",
-  };
-
   try {
     const data = await api("/api/activity/recent?hours=12&limit=10");
     const events = data.events || [];
@@ -189,10 +173,10 @@ async function _loadActivity() {
     }
 
     const eventsHtml = events.map(evt => {
-      const icon = TYPE_ICONS[evt.type] || "\u2022";
+      const icon = getIcon(evt.type);
       const ts = timeStr(evt.ts);
       const anima = evt.anima || "";
-      const summary = evt.summary || evt.content || "";
+      const summary = getDisplaySummary(evt);
       return `
         <div style="display:flex; align-items:flex-start; gap:0.5rem; padding:0.4rem 0; border-bottom:1px solid var(--border-color, #eee);">
           <span style="flex-shrink:0;">${icon}</span>

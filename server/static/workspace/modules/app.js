@@ -23,6 +23,7 @@ import { streamChat } from "../../shared/chat-stream.js";
 import { SwipeHandler } from "../../modules/touch.js";
 import { createLogger } from "../../shared/logger.js";
 import { createImageInput, initLightbox, renderChatImages } from "../../shared/image-input.js";
+import { getIcon } from "../../shared/activity-types.js";
 
 const logger = createLogger("ws-app");
 
@@ -91,19 +92,12 @@ function cacheDom() {
 
 // ── Activity Feed ──────────────────────
 
-const TYPE_ICONS = {
-  heartbeat: "\uD83D\uDC93",
-  cron: "\u23F0",
-  chat: "\uD83D\uDCAC",
-  system: "\u2699\uFE0F",
-};
-
 function addActivity(type, animaName, summary) {
   if (!dom.paneActivity) return;
 
   const now = new Date();
   const ts = now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
-  const icon = TYPE_ICONS[type] || "\u2022";
+  const icon = getIcon(type);
 
   const entry = document.createElement("div");
   entry.className = "activity-entry";
@@ -820,10 +814,10 @@ function setupWebSocket() {
     addTimelineEvent({
       id: Date.now().toString(),
       type: "message",
-      animas: [data.from_person, data.to_person],
-      timestamp: new Date().toISOString(),
+      anima: `${data.from_person} → ${data.to_person}`,
+      ts: new Date().toISOString(),
       summary: `${data.from_person} → ${data.to_person}: ${data.summary || ""}`,
-      metadata: {
+      meta: {
         text: data.summary || "",
         message_id: data.message_id || "",
         from_person: data.from_person,
@@ -841,8 +835,8 @@ function setupWebSocket() {
     addTimelineEvent({
       id: Date.now().toString(),
       type: "heartbeat",
-      animas: [data.name],
-      timestamp: new Date().toISOString(),
+      anima: data.name,
+      ts: new Date().toISOString(),
       summary: data.summary || "heartbeat completed",
     });
   }));
@@ -852,8 +846,8 @@ function setupWebSocket() {
     addTimelineEvent({
       id: Date.now().toString(),
       type: "cron",
-      animas: [data.name],
-      timestamp: new Date().toISOString(),
+      anima: data.name,
+      ts: new Date().toISOString(),
       summary: data.summary || `cron: ${data.job || ""}`,
     });
   }));
@@ -881,10 +875,10 @@ function setupWebSocket() {
     addTimelineEvent({
       id: Date.now().toString(),
       type: "board",
-      animas: [from],
-      timestamp: data.ts || new Date().toISOString(),
+      anima: from,
+      ts: data.ts || new Date().toISOString(),
       summary: `#${channel}: ${from} — ${text}`,
-      metadata: {
+      meta: {
         channel,
         from,
         text,
