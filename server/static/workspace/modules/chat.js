@@ -117,6 +117,8 @@ function updateStreamingBubble(msg) {
     if (msg.heartbeatText) {
       html += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
     }
+  } else if (msg.afterHeartbeatRelay && !msg.text) {
+    html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>応答を準備中...</div>';
   } else if (msg.text) {
     html = renderSimpleMarkdown(msg.text);
   } else {
@@ -363,6 +365,7 @@ export async function sendMessage(text) {
 
     await streamChat(selectedAnima, body, null, {
       onTextDelta: (text) => {
+        streamingMsg.afterHeartbeatRelay = false;
         streamingMsg.text += text;
         scheduleStreamingUpdate(streamingMsg);
       },
@@ -389,7 +392,7 @@ export async function sendMessage(text) {
       onHeartbeatRelayDone: () => {
         streamingMsg.heartbeatRelay = false;
         streamingMsg.heartbeatText = "";
-        streamingMsg.text = "";
+        streamingMsg.afterHeartbeatRelay = true;
         scheduleStreamingUpdate(streamingMsg);
       },
       onError: ({ message: errorMsg }) => {
@@ -410,6 +413,7 @@ export async function sendMessage(text) {
         streamingMsg.activeTool = null;
         streamingMsg.heartbeatRelay = false;
         streamingMsg.heartbeatText = "";
+        streamingMsg.afterHeartbeatRelay = false;
         setState({ chatMessages: [...getState().chatMessages] });
         renderAllMessages();
       },
@@ -418,7 +422,12 @@ export async function sendMessage(text) {
     // Ensure finalized if stream ended without done event
     if (streamingMsg.streaming) {
       streamingMsg.streaming = false;
-      if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
+      if (!streamingMsg.text) {
+        streamingMsg.text = streamingMsg.afterHeartbeatRelay
+          ? "(応答の受信に失敗しました。再送信してください)"
+          : "(空の応答)";
+      }
+      streamingMsg.afterHeartbeatRelay = false;
       setState({ chatMessages: [...getState().chatMessages] });
       renderAllMessages();
     }
@@ -565,6 +574,7 @@ async function resumeActiveStream(animaName) {
         if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
         streamingMsg.streaming = false;
         streamingMsg.activeTool = null;
+        streamingMsg.afterHeartbeatRelay = false;
         setState({ chatMessages: [...getState().chatMessages] });
         renderAllMessages();
       },

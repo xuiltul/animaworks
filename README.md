@@ -25,7 +25,7 @@ AnimaWorks treats AI agents not as tools, but as autonomous members of an organi
 │    ├ A1: Claude Agent SDK (Claude models)             │
 │    ├ A1 Fallback: Anthropic SDK (when SDK missing)    │
 │    ├ A2: LiteLLM + tool_use (GPT-4o, Gemini, etc.)   │
-│    └ B:  LiteLLM one-shot (Ollama, assistive mode)    │
+│    └ B:  LiteLLM text-based tool loop (Ollama, etc.)   │
 │  Memory ──────── Library-style, self-directed recall  │
 │  Boards ──────── Slack-style shared channels          │
 │  Permissions ─── Tool/file/command restrictions       │
@@ -154,7 +154,7 @@ Each Anima can use a different LLM model and execution mode. Set via `config.jso
 | A1 | Claude Agent SDK | Claude models | Read/Write/Edit/Bash/Grep/Glob |
 | A1 Fallback | Anthropic SDK | Claude (when Agent SDK unavailable) | search_memory, read/write_file, etc. |
 | A2 | LiteLLM + tool_use | GPT-4o, Gemini, etc. | search_memory, read/write_file, execute_command, etc. |
-| B | LiteLLM one-shot | Ollama, etc. | None (framework-assisted) |
+| B | LiteLLM text-based tool loop | Ollama, etc. | Pseudo tool calls (text-parsed JSON) |
 
 ## Hierarchy & Roles
 

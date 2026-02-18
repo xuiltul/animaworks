@@ -456,6 +456,8 @@ function _renderStreamingBubble(msg) {
     if (msg.heartbeatText) {
       html += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
     }
+  } else if (msg.afterHeartbeatRelay && !msg.text) {
+    html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>応答を準備中...</div>';
   } else if (msg.text) {
     try { html = marked.parse(msg.text, { breaks: true }); }
     catch { html = escapeHtml(msg.text); }
@@ -598,6 +600,7 @@ async function _sendChat(message) {
 
     await streamChat(name, body, null, {
       onTextDelta: (text) => {
+        streamingMsg.afterHeartbeatRelay = false;
         streamingMsg.text += text;
         _renderStreamingBubble(streamingMsg);
       },
@@ -624,7 +627,7 @@ async function _sendChat(message) {
       onHeartbeatRelayDone: () => {
         streamingMsg.heartbeatRelay = false;
         streamingMsg.heartbeatText = "";
-        streamingMsg.text = "";
+        streamingMsg.afterHeartbeatRelay = true;
         _renderStreamingBubble(streamingMsg);
       },
       onError: ({ message: errorMsg }) => {
@@ -639,6 +642,7 @@ async function _sendChat(message) {
         streamingMsg.activeTool = null;
         streamingMsg.heartbeatRelay = false;
         streamingMsg.heartbeatText = "";
+        streamingMsg.afterHeartbeatRelay = false;
         _renderChat();
         _addLocalActivity("chat", name, `応答: ${streamingMsg.text.slice(0, 100)}`);
       },
@@ -647,7 +651,12 @@ async function _sendChat(message) {
     // Ensure streaming is finalized if stream ended without done event
     if (streamingMsg.streaming) {
       streamingMsg.streaming = false;
-      if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
+      if (!streamingMsg.text) {
+        streamingMsg.text = streamingMsg.afterHeartbeatRelay
+          ? "(応答の受信に失敗しました。再送信してください)"
+          : "(空の応答)";
+      }
+      streamingMsg.afterHeartbeatRelay = false;
       _renderChat();
     }
   } catch (err) {
