@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.messenger import InboxItem
 from core.schemas import CycleResult
 
 
@@ -322,8 +323,8 @@ class TestHeartbeatStreamingMode:
         mock_msg.from_person = "kotoha"
         mock_msg.content = "Hello!"
         anima.messenger.has_unread.return_value = True
-        anima.messenger.receive.return_value = [mock_msg]
-        anima.messenger.archive_all.return_value = 1
+        anima.messenger.receive_with_paths.return_value = [InboxItem(msg=mock_msg, path=Path("/fake/msg.json"))]
+        anima.messenger.archive_paths.return_value = 1
 
         # Capture context during execution
         captured_context = None

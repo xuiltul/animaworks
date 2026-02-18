@@ -96,16 +96,16 @@ class TestHeartbeatMessageEpisodeE2E:
 
             dp.agent.run_cycle_streaming = mock_stream
 
-            # Mock archive_all to verify it's called after episode recording
-            original_archive = dp.messenger.archive_all
+            # Mock archive_paths to verify it's called after episode recording
+            original_archive = dp.messenger.archive_paths
             archive_called = False
 
-            def mock_archive():
+            def mock_archive(items):
                 nonlocal archive_called
                 archive_called = True
-                return original_archive()
+                return original_archive(items)
 
-            dp.messenger.archive_all = mock_archive
+            dp.messenger.archive_paths = mock_archive
 
             await dp.run_heartbeat()
 

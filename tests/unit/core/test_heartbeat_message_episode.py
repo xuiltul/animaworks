@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.messenger import InboxItem
 from core.schemas import Message
 
 
@@ -48,8 +49,8 @@ class TestHeartbeatMessageEpisodeRecording:
             # Create a message from "mio"
             msg = Message(from_person="mio", to_person="alice", content="Hello from mio")
             MockMsg.return_value.has_unread.return_value = True
-            MockMsg.return_value.receive.return_value = [msg]
-            MockMsg.return_value.archive_all.return_value = 1
+            MockMsg.return_value.receive_with_paths.return_value = [InboxItem(msg=msg, path=Path(f"/fake/{msg.id}.json"))]
+            MockMsg.return_value.archive_paths.return_value = 1
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
@@ -103,8 +104,12 @@ class TestHeartbeatMessageEpisodeRecording:
             msg2 = Message(from_person="bob", to_person="alice", content="Message from bob")
             msg3 = Message(from_person="carol", to_person="alice", content="Message from carol")
             MockMsg.return_value.has_unread.return_value = True
-            MockMsg.return_value.receive.return_value = [msg1, msg2, msg3]
-            MockMsg.return_value.archive_all.return_value = 3
+            MockMsg.return_value.receive_with_paths.return_value = [
+                InboxItem(msg=msg1, path=Path(f"/fake/{msg1.id}.json")),
+                InboxItem(msg=msg2, path=Path(f"/fake/{msg2.id}.json")),
+                InboxItem(msg=msg3, path=Path(f"/fake/{msg3.id}.json")),
+            ]
+            MockMsg.return_value.archive_paths.return_value = 3
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
@@ -163,8 +168,12 @@ class TestHeartbeatMessageEpisodeRecording:
             msg2 = Message(from_person="bob", to_person="alice", type="ack", content="ACK message")
             msg3 = Message(from_person="carol", to_person="alice", type="message", content="Another regular")
             MockMsg.return_value.has_unread.return_value = True
-            MockMsg.return_value.receive.return_value = [msg1, msg2, msg3]
-            MockMsg.return_value.archive_all.return_value = 3
+            MockMsg.return_value.receive_with_paths.return_value = [
+                InboxItem(msg=msg1, path=Path(f"/fake/{msg1.id}.json")),
+                InboxItem(msg=msg2, path=Path(f"/fake/{msg2.id}.json")),
+                InboxItem(msg=msg3, path=Path(f"/fake/{msg3.id}.json")),
+            ]
+            MockMsg.return_value.archive_paths.return_value = 3
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
@@ -218,8 +227,8 @@ class TestHeartbeatMessageEpisodeRecording:
             long_content = "A" * 1500
             msg = Message(from_person="mio", to_person="alice", content=long_content)
             MockMsg.return_value.has_unread.return_value = True
-            MockMsg.return_value.receive.return_value = [msg]
-            MockMsg.return_value.archive_all.return_value = 1
+            MockMsg.return_value.receive_with_paths.return_value = [InboxItem(msg=msg, path=Path(f"/fake/{msg.id}.json"))]
+            MockMsg.return_value.archive_paths.return_value = 1
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
@@ -275,8 +284,10 @@ class TestHeartbeatMessageEpisodeRecording:
                 for i in range(15)
             ]
             MockMsg.return_value.has_unread.return_value = True
-            MockMsg.return_value.receive.return_value = messages
-            MockMsg.return_value.archive_all.return_value = 15
+            MockMsg.return_value.receive_with_paths.return_value = [
+                InboxItem(msg=m, path=Path(f"/fake/{m.id}.json")) for m in messages
+            ]
+            MockMsg.return_value.archive_paths.return_value = 15
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
@@ -375,8 +386,12 @@ class TestHeartbeatMessageEpisodeRecording:
             msg2 = Message(from_person="bob", to_person="alice", content="Message 2")
             msg3 = Message(from_person="carol", to_person="alice", content="Message 3")
             MockMsg.return_value.has_unread.return_value = True
-            MockMsg.return_value.receive.return_value = [msg1, msg2, msg3]
-            MockMsg.return_value.archive_all.return_value = 3
+            MockMsg.return_value.receive_with_paths.return_value = [
+                InboxItem(msg=msg1, path=Path(f"/fake/{msg1.id}.json")),
+                InboxItem(msg=msg2, path=Path(f"/fake/{msg2.id}.json")),
+                InboxItem(msg=msg3, path=Path(f"/fake/{msg3.id}.json")),
+            ]
+            MockMsg.return_value.archive_paths.return_value = 3
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
@@ -427,8 +442,8 @@ class TestHeartbeatMessageEpisodeRecording:
             # Create a message
             msg = Message(from_person="mio", to_person="alice", content="Test message")
             MockMsg.return_value.has_unread.return_value = True
-            MockMsg.return_value.receive.return_value = [msg]
-            MockMsg.return_value.archive_all.return_value = 1
+            MockMsg.return_value.receive_with_paths.return_value = [InboxItem(msg=msg, path=Path(f"/fake/{msg.id}.json"))]
+            MockMsg.return_value.archive_paths.return_value = 1
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
@@ -456,4 +471,4 @@ class TestHeartbeatMessageEpisodeRecording:
             assert result.action == "responded"
 
             # Verify messages were still archived despite episode recording failure
-            MockMsg.return_value.archive_all.assert_called_once()
+            MockMsg.return_value.archive_paths.assert_called_once()

@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.memory.activity import ActivityLogger, ActivityEntry
+from core.messenger import InboxItem
 from core.schemas import CycleResult
 
 
@@ -191,8 +192,8 @@ class TestDmReceivedSummary:
             mock_msg.content = dm_content
             mock_msg.type = "message"
             MockMsger.return_value.has_unread.return_value = True
-            MockMsger.return_value.receive.return_value = [mock_msg]
-            MockMsger.return_value.archive_all.return_value = 1
+            MockMsger.return_value.receive_with_paths.return_value = [InboxItem(msg=mock_msg, path=Path("/fake/msg.json"))]
+            MockMsger.return_value.archive_paths.return_value = 1
 
             mock_conv = MagicMock()
             mock_conv.load.return_value = MagicMock(turns=[])

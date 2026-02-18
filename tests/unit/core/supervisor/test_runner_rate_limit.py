@@ -220,7 +220,7 @@ class TestInboxWatcher:
         with patch("asyncio.sleep", side_effect=mock_sleep):
             await runner._inbox_watcher_loop()
 
-        assert runner._deferred_inbox is True
+        assert runner._deferred_timer is not None
         assert runner._pending_trigger is False
 
         # Release the lock to clean up
