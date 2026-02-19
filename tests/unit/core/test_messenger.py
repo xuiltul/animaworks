@@ -85,6 +85,38 @@ class TestSend:
         assert data["to_person"] == "bob"
         assert data["content"] == "Content check"
 
+    def test_send_with_intent(self, shared_dir, messenger):
+        msg = messenger.send("bob", "Report content", intent="report")
+        assert msg.intent == "report"
+
+    def test_send_intent_default_empty(self, shared_dir, messenger):
+        msg = messenger.send("bob", "Hello")
+        assert msg.intent == ""
+
+    def test_send_intent_persisted_in_file(self, shared_dir, messenger):
+        msg = messenger.send("bob", "Report", intent="report")
+        bob_inbox = shared_dir / "inbox" / "bob"
+        files = list(bob_inbox.glob("*.json"))
+        data = json.loads(files[0].read_text(encoding="utf-8"))
+        assert data["intent"] == "report"
+
+    def test_send_intent_in_dm_log(self, shared_dir, messenger):
+        messenger.send("bob", "Report", intent="report")
+        log_path = shared_dir / "dm_logs"
+        assert log_path.exists()
+        files = list(log_path.glob("*.jsonl"))
+        assert len(files) == 1
+        entry = json.loads(files[0].read_text(encoding="utf-8").strip().split("\n")[0])
+        assert entry.get("intent") == "report"
+
+    def test_send_no_intent_not_in_dm_log(self, shared_dir, messenger):
+        messenger.send("bob", "Hello")
+        log_path = shared_dir / "dm_logs"
+        files = list(log_path.glob("*.jsonl"))
+        if files:
+            entry = json.loads(files[0].read_text(encoding="utf-8").strip().split("\n")[0])
+            assert "intent" not in entry
+
 
 # ── reply ─────────────────────────────────────────────────
 
@@ -108,6 +140,22 @@ class TestReply:
         original.thread_id = ""  # no thread_id
         reply = messenger.reply(original, "Got it!")
         assert reply.thread_id == original.id
+
+    def test_reply_with_intent(self, shared_dir, messenger):
+        original = Message(
+            from_person="bob", to_person="alice",
+            content="original", thread_id="thread-abc",
+        )
+        reply = messenger.reply(original, "Report here", intent="report")
+        assert reply.intent == "report"
+
+    def test_reply_intent_default_empty(self, shared_dir, messenger):
+        original = Message(
+            from_person="bob", to_person="alice",
+            content="original", thread_id="thread-abc",
+        )
+        reply = messenger.reply(original, "Got it!")
+        assert reply.intent == ""
 
 
 # ── receive ───────────────────────────────────────────────
@@ -293,6 +341,10 @@ class TestSendAsync:
         assert msg.from_person == "alice"
         bob_inbox = shared_dir / "inbox" / "bob"
         assert len(list(bob_inbox.glob("*.json"))) == 1
+
+    async def test_send_async_with_intent(self, shared_dir, messenger):
+        msg = await messenger.send_async("bob", "async report", intent="report")
+        assert msg.intent == "report"
 
 
 # ── send() writes DM log (restored) ────────────────────

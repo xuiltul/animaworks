@@ -11,6 +11,17 @@ Bashで以下のコマンドを実行してください:
 bash send <宛先> "メッセージ内容"
 ```
 
+intent を指定する場合:
+```
+bash send <宛先> "メッセージ内容" --intent <delegation|report|question>
+```
+
+**intent の種類:**
+- `delegation` — タスクの指示・委任
+- `report` — 状況報告・結果報告（reportテンプレート必須）
+- `question` — 質問・確認依頼
+- （省略時） — 雑談・FYI
+
 もし `send` が見つからない場合は、絶対パスで実行してください:
 ```
 bash $ANIMAWORKS_ANIMA_DIR/send <宛先> "メッセージ内容"

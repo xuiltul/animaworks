@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -100,6 +100,7 @@ class Message(BaseModel):
     type: str = "message"
     content: str
     attachments: list[str] = []
+    intent: str = ""  # sender-declared intent: "delegation" | "report" | "question" | ""
     timestamp: datetime = Field(default_factory=datetime.now)
 
     # External messaging integration
@@ -127,3 +128,18 @@ class AnimaStatus(BaseModel):
     last_heartbeat: datetime | None = None
     last_activity: datetime | None = None
     pending_messages: int = 0
+
+
+class TaskEntry(BaseModel):
+    """永続タスクキューのエントリ."""
+
+    task_id: str  # ULID or UUID
+    ts: str  # ISO8601 作成日時
+    source: Literal["human", "anima"]
+    original_instruction: str  # 原文（委任時は引用を含む）
+    assignee: str  # 担当Anima名
+    status: str  # "pending" | "in_progress" | "done" | "cancelled" | "blocked"
+    summary: str  # 1行要約
+    deadline: str | None = None  # ISO8601 期限（任意）
+    relay_chain: list[str] = Field(default_factory=list)  # 委任経路
+    updated_at: str  # ISO8601 最終更新日時

@@ -140,6 +140,32 @@ class TestMessage:
         assert "from_person" in json_str
         assert '"a"' in json_str
 
+    def test_intent_default_empty(self):
+        msg = Message(from_person="a", to_person="b", content="test")
+        assert msg.intent == ""
+
+    def test_intent_delegation(self):
+        msg = Message(from_person="a", to_person="b", content="test", intent="delegation")
+        assert msg.intent == "delegation"
+
+    def test_intent_report(self):
+        msg = Message(from_person="a", to_person="b", content="test", intent="report")
+        assert msg.intent == "report"
+
+    def test_intent_question(self):
+        msg = Message(from_person="a", to_person="b", content="test", intent="question")
+        assert msg.intent == "question"
+
+    def test_intent_in_json_serialization(self):
+        msg = Message(from_person="a", to_person="b", content="test", intent="report")
+        json_str = msg.model_dump_json()
+        assert '"report"' in json_str
+
+    def test_intent_empty_in_json(self):
+        msg = Message(from_person="a", to_person="b", content="test")
+        d = msg.model_dump()
+        assert d["intent"] == ""
+
     def test_two_messages_have_different_ids(self):
         m1 = Message(from_person="a", to_person="b", content="1")
         m2 = Message(from_person="a", to_person="b", content="2")

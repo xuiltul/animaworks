@@ -191,6 +191,47 @@ class TestHandleRouting:
         assert "Message sent to alice" in result
         assert "alice" in handler_with_messenger.replied_to
 
+    def test_send_message_with_intent(
+        self, handler_with_messenger: ToolHandler, anima_dir: Path,
+    ):
+        alice_dir = anima_dir.parent / "alice"
+        alice_dir.mkdir(exist_ok=True)
+        with patch("core.paths.get_animas_dir", return_value=anima_dir.parent):
+            result = handler_with_messenger.handle(
+                "send_message", {"to": "alice", "content": "hello", "intent": "delegation"},
+            )
+        assert "Message sent to alice" in result
+        handler_with_messenger._messenger.send.assert_called_once_with(
+            to="alice", content="hello", thread_id="", reply_to="", intent="delegation",
+        )
+
+    def test_send_message_intent_default_empty(
+        self, handler_with_messenger: ToolHandler, anima_dir: Path,
+    ):
+        alice_dir = anima_dir.parent / "alice"
+        alice_dir.mkdir(exist_ok=True)
+        with patch("core.paths.get_animas_dir", return_value=anima_dir.parent):
+            handler_with_messenger.handle(
+                "send_message", {"to": "alice", "content": "hello"},
+            )
+        handler_with_messenger._messenger.send.assert_called_once_with(
+            to="alice", content="hello", thread_id="", reply_to="", intent="",
+        )
+
+    def test_send_message_intent_truncated_at_50(
+        self, handler_with_messenger: ToolHandler, anima_dir: Path,
+    ):
+        alice_dir = anima_dir.parent / "alice"
+        alice_dir.mkdir(exist_ok=True)
+        long_intent = "x" * 100
+        with patch("core.paths.get_animas_dir", return_value=anima_dir.parent):
+            handler_with_messenger.handle(
+                "send_message", {"to": "alice", "content": "hello", "intent": long_intent},
+            )
+        handler_with_messenger._messenger.send.assert_called_once_with(
+            to="alice", content="hello", thread_id="", reply_to="", intent="x" * 50,
+        )
+
     def test_send_message_calls_on_message_sent(
         self, handler_with_messenger: ToolHandler, anima_dir: Path,
     ):

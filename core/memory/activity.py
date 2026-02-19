@@ -485,6 +485,8 @@ class ActivityLogger:
             "memory_write": "MEM",
             "error": "ERR",
             "issue_resolved": "RSLV",
+            "task_created": "TSK+",
+            "task_updated": "TSK~",
         }
         icon = type_map.get(entry.type, "•")
 

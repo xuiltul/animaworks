@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from core.schemas import Message
 
@@ -58,7 +59,31 @@ class Messenger:
         thread_id: str = "",
         reply_to: str = "",
         skip_logging: bool = False,
+        intent: str = "",
     ) -> Message:
+        # ── Conversation depth check (internal Anima only) ──
+        if msg_type not in ("ack", "error", "system_alert", "board_mention"):
+            from core.paths import get_animas_dir
+            animas_dir = get_animas_dir()
+            is_internal = (animas_dir / to).is_dir() if animas_dir.exists() else False
+            if is_internal:
+                from core.cascade_limiter import depth_limiter
+                if not depth_limiter.check_and_record(self.anima_name, to):
+                    logger.warning(
+                        "Depth limit exceeded: %s -> %s. Message not sent.",
+                        self.anima_name, to,
+                    )
+                    return Message(
+                        from_person="system",
+                        to_person=self.anima_name,
+                        type="error",
+                        content=(
+                            f"ConversationDepthExceeded: {to}との会話が"
+                            f"10分間に6ターンに達しました。"
+                            f"次のハートビートサイクルまでお待ちください"
+                        ),
+                    )
+
         msg = Message(
             from_person=self.anima_name,
             to_person=to,
@@ -66,6 +91,7 @@ class Messenger:
             content=content,
             thread_id=thread_id,
             reply_to=reply_to,
+            intent=intent,
         )
         # New thread: use message id as thread_id
         if not msg.thread_id:
@@ -91,7 +117,10 @@ class Messenger:
                 anima_dir = self.shared_dir.parent / "animas" / self.anima_name
                 if anima_dir.exists():
                     activity = ActivityLogger(anima_dir)
-                    activity.log("dm_sent", content=content, to_person=to)
+                    log_kwargs: dict[str, Any] = {"content": content, "to_person": to}
+                    if intent:
+                        log_kwargs["meta"] = {"intent": intent}
+                    activity.log("dm_sent", **log_kwargs)
             except Exception as e:
                 logger.warning(
                     "Activity logging failed for dm_sent (%s -> %s): %s",
@@ -100,19 +129,20 @@ class Messenger:
 
         # Parallel write to legacy dm_logs/ (fallback data source)
         try:
-            self._append_dm_log(to, content)
+            self._append_dm_log(to, content, intent=intent)
         except Exception:
             pass  # Never fail the send itself
 
         return msg
 
-    def reply(self, original: Message, content: str) -> Message:
+    def reply(self, original: Message, content: str, *, intent: str = "") -> Message:
         """Reply to a message, inheriting thread_id."""
         return self.send(
             to=original.from_person,
             content=content,
             thread_id=original.thread_id or original.id,
             reply_to=original.id,
+            intent=intent,
         )
 
     # ── Channel operations ──────────────────────────────────
@@ -238,16 +268,19 @@ class Messenger:
         pair = sorted([self.anima_name, peer])
         return self.shared_dir / "dm_logs" / f"{pair[0]}-{pair[1]}.jsonl"
 
-    def _append_dm_log(self, peer: str, content: str) -> None:
+    def _append_dm_log(self, peer: str, content: str, *, intent: str = "") -> None:
         """Append a DM entry to the legacy dm_logs/ file."""
         filepath = self._get_dm_log_path(peer)
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        entry = json.dumps({
+        entry_dict: dict[str, Any] = {
             "ts": datetime.now().isoformat(),
             "from": self.anima_name,
             "to": peer,
             "text": content,
-        }, ensure_ascii=False)
+        }
+        if intent:
+            entry_dict["intent"] = intent
+        entry = json.dumps(entry_dict, ensure_ascii=False)
         with filepath.open("a", encoding="utf-8") as f:
             f.write(entry + "\n")
 
@@ -402,6 +435,7 @@ class Messenger:
         msg_type: str = "message",
         thread_id: str = "",
         reply_to: str = "",
+        intent: str = "",
     ) -> Message:
         """Async wrapper for filesystem-based send."""
         return self.send(
@@ -410,4 +444,5 @@ class Messenger:
             msg_type=msg_type,
             thread_id=thread_id,
             reply_to=reply_to,
+            intent=intent,
         )

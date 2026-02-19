@@ -148,6 +148,7 @@ class LiteLLMExecutor(BaseExecutor):
             include_notification_tools=self._tool_handler._human_notifier is not None,
             include_admin_tools=(self._anima_dir / "skills" / "newstaff.md").exists(),
             include_tool_management=True,
+            include_task_tools=True,
         )
         return to_litellm_format(canonical)
 

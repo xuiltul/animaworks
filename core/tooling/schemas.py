@@ -95,6 +95,15 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                 "content": {"type": "string", "description": "Message content"},
                 "reply_to": {"type": "string", "description": "Message ID to reply to"},
                 "thread_id": {"type": "string", "description": "Thread ID"},
+                "intent": {
+                    "type": "string",
+                    "description": (
+                        "Message intent: 'delegation' (task assignment), "
+                        "'report' (status/result report — use the report template), "
+                        "'question' (question/confirmation), "
+                        "or '' (default, casual/FYI)."
+                    ),
+                },
             },
             "required": ["to", "content"],
         },
@@ -460,6 +469,92 @@ PROCEDURE_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+TASK_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "add_task",
+        "description": (
+            "タスクキューに新しいタスクを追加する。"
+            "人間からの指示は必ず source='human' で記録すること。"
+            "Anima間の委任は source='anima' で記録する。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "enum": ["human", "anima"],
+                    "description": "タスクの発生源 (human=人間からの指示, anima=Anima間委任)",
+                },
+                "original_instruction": {
+                    "type": "string",
+                    "description": "元の指示文（委任時は原文引用を含める）",
+                },
+                "assignee": {
+                    "type": "string",
+                    "description": "担当者名（自分自身または委任先のAnima名）",
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "タスクの1行要約",
+                },
+                "deadline": {
+                    "type": "string",
+                    "description": "期限（必須）。相対形式 '30m','2h','1d' またはISO8601。例: '1h' = 1時間後",
+                },
+                "relay_chain": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "委任経路（例: ['taka', 'sakura', 'rin']）",
+                },
+            },
+            "required": ["source", "original_instruction", "assignee", "summary", "deadline"],
+        },
+    },
+    {
+        "name": "update_task",
+        "description": (
+            "タスクのステータスを更新する。"
+            "完了時は status='done'、中断時は status='cancelled' に設定する。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "タスクID（add_task時に返されたID）",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "in_progress", "done", "cancelled", "blocked"],
+                    "description": "新しいステータス",
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "更新後の要約（任意）",
+                },
+            },
+            "required": ["task_id", "status"],
+        },
+    },
+    {
+        "name": "list_tasks",
+        "description": (
+            "タスクキューの一覧を取得する。"
+            "ステータスでフィルタリング可能。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["pending", "in_progress", "done", "cancelled", "blocked"],
+                    "description": "フィルタするステータス（省略時は全件）",
+                },
+            },
+        },
+    },
+]
+
 # ── Format converters ────────────────────────────────────────
 
 
@@ -539,6 +634,7 @@ def build_tool_list(
     include_notification_tools: bool = False,
     include_admin_tools: bool = False,
     include_tool_management: bool = False,
+    include_task_tools: bool = False,
     external_schemas: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Assemble a tool list from canonical definitions.
@@ -550,6 +646,7 @@ def build_tool_list(
         include_notification_tools: Include call_human tool (for top-level Animas).
         include_admin_tools: Include admin tools (create_anima etc.).
         include_tool_management: Include refresh_tools/share_tool tools.
+        include_task_tools: Include task queue tools (add_task, update_task, list_tasks).
         external_schemas: Additional tool schemas in canonical format.
 
     Returns:
@@ -572,6 +669,8 @@ def build_tool_list(
         tools.extend(ADMIN_TOOLS)
     if include_tool_management:
         tools.extend(TOOL_MANAGEMENT_TOOLS)
+    if include_task_tools:
+        tools.extend(TASK_TOOLS)
     if external_schemas:
         tools.extend(external_schemas)
     return tools

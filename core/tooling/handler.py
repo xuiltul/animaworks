@@ -395,6 +395,13 @@ class ToolHandler:
             # Procedure outcome tracking
             elif name == "report_procedure_outcome":
                 result = self._handle_report_procedure_outcome(args)
+            # Task queue tools
+            elif name == "add_task":
+                result = self._handle_add_task(args)
+            elif name == "update_task":
+                result = self._handle_update_task(args)
+            elif name == "list_tasks":
+                result = self._handle_list_tasks(args)
             else:
                 # ── Background execution for eligible external tools ──
                 if self._background_manager and self._background_manager.is_eligible(name):
@@ -580,6 +587,7 @@ class ToolHandler:
 
         to = args["to"]
         content = args["content"]
+        intent = args.get("intent", "")[:50]
 
         # ── Resolve recipient: internal Anima or external user ──
         try:
@@ -625,6 +633,7 @@ class ToolHandler:
                 content=content,
                 thread_id=args.get("thread_id", ""),
                 reply_to=args.get("reply_to", ""),
+                intent=intent,
             )
 
             if self._on_message_sent:
@@ -648,7 +657,13 @@ class ToolHandler:
             content=content,
             thread_id=args.get("thread_id", ""),
             reply_to=args.get("reply_to", ""),
+            intent=intent,
         )
+
+        # Depth limiter may return an error Message without delivery
+        if msg.type == "error":
+            return f"Error: {msg.content}"
+
         logger.info("send_message to=%s thread=%s", internal_to, msg.thread_id)
         self._replied_to.add(internal_to)
         self._persist_replied_to(internal_to, success=True)
@@ -1066,6 +1081,96 @@ class ToolHandler:
             result += f"\nnotes: {notes}"
 
         return result
+
+    # ── Task queue handlers ─────────────────────────────────
+
+    def _handle_add_task(self, args: dict[str, Any]) -> str:
+        from core.memory.task_queue import TaskQueueManager
+
+        manager = TaskQueueManager(self._anima_dir)
+        source = args.get("source", "anima")
+        instruction = args.get("original_instruction", "")
+        assignee = args.get("assignee", "")
+        summary = args.get("summary", "") or instruction[:100]
+        deadline = args.get("deadline")
+        relay_chain = args.get("relay_chain", [])
+
+        if not instruction:
+            return _error_result("InvalidArguments", "original_instruction is required")
+        if not assignee:
+            return _error_result("InvalidArguments", "assignee is required")
+        if not deadline:
+            return _error_result(
+                "InvalidArguments",
+                "deadline is required. Use relative format ('30m', '2h', '1d') or ISO8601.",
+            )
+
+        try:
+            entry = manager.add_task(
+                source=source,
+                original_instruction=instruction,
+                assignee=assignee,
+                summary=summary,
+                deadline=deadline,
+                relay_chain=relay_chain,
+            )
+        except ValueError as e:
+            return _error_result("InvalidArguments", str(e))
+
+        # Activity log: task created
+        try:
+            activity = ActivityLogger(self._anima_dir)
+            activity.log(
+                "task_created",
+                summary=f"タスク追加: {summary[:100]}",
+                meta={"task_id": entry.task_id, "source": source, "assignee": assignee},
+            )
+        except Exception:
+            pass
+
+        return _json.dumps(entry.model_dump(), ensure_ascii=False, indent=2)
+
+    def _handle_update_task(self, args: dict[str, Any]) -> str:
+        from core.memory.task_queue import TaskQueueManager
+
+        manager = TaskQueueManager(self._anima_dir)
+        task_id = args.get("task_id", "")
+        status = args.get("status", "")
+        summary = args.get("summary")
+
+        if not task_id:
+            return _error_result("InvalidArguments", "task_id is required")
+        if not status:
+            return _error_result("InvalidArguments", "status is required")
+
+        entry = manager.update_status(task_id, status, summary=summary)
+        if entry is None:
+            return _error_result(
+                "TaskNotFound",
+                f"Task not found or invalid status: {task_id}",
+            )
+
+        # Activity log: task updated
+        try:
+            activity = ActivityLogger(self._anima_dir)
+            activity.log(
+                "task_updated",
+                summary=f"タスク更新: {entry.summary[:100]} → {status}",
+                meta={"task_id": task_id, "status": status},
+            )
+        except Exception:
+            pass
+
+        return _json.dumps(entry.model_dump(), ensure_ascii=False, indent=2)
+
+    def _handle_list_tasks(self, args: dict[str, Any]) -> str:
+        from core.memory.task_queue import TaskQueueManager
+
+        manager = TaskQueueManager(self._anima_dir)
+        status_filter = args.get("status")
+        tasks = manager.list_tasks(status=status_filter)
+        result = [t.model_dump() for t in tasks]
+        return _json.dumps(result, ensure_ascii=False, indent=2)
 
     # ── File operation handlers ──────────────────────────────
 

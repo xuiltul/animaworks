@@ -28,9 +28,38 @@ def cmd_send(args: argparse.Namespace) -> None:
         content=args.message,
         thread_id=args.thread_id or "",
         reply_to=args.reply_to or "",
+        intent=getattr(args, "intent", "") or "",
     )
     print(f"Sent: {msg.from_person} -> {msg.to_person} (id: {msg.id}, thread: {msg.thread_id})")
+    _persist_replied_to_for_a1(args.to_person)
     _notify_server_message_sent(args.from_person, args.to_person, args.message, msg.id)
+
+
+def _persist_replied_to_for_a1(to: str) -> None:
+    """Write replied_to entry for A1 mode (Agent SDK subprocess).
+
+    In A1 mode, agents send messages via the CLI ``send`` command instead of
+    the ``send_message`` tool, so ToolHandler._persist_replied_to() is never
+    called.  This function bridges the gap by writing to the same
+    ``{anima_dir}/run/replied_to.jsonl`` file that the Agent SDK executor
+    reads after the subprocess finishes.
+
+    Only writes when ``ANIMAWORKS_ANIMA_DIR`` is set (i.e. running inside an
+    Agent SDK subprocess).  No-op otherwise.
+    """
+    import json as _json
+    from pathlib import Path
+
+    anima_dir = os.environ.get("ANIMAWORKS_ANIMA_DIR")
+    if not anima_dir:
+        return
+    replied_to_path = Path(anima_dir) / "run" / "replied_to.jsonl"
+    try:
+        replied_to_path.parent.mkdir(parents=True, exist_ok=True)
+        with replied_to_path.open("a", encoding="utf-8") as f:
+            f.write(_json.dumps({"to": to, "success": True}) + "\n")
+    except Exception as e:
+        logger.debug("Failed to persist replied_to for '%s': %s", to, e)
 
 
 def _notify_server_message_sent(

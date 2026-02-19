@@ -417,6 +417,21 @@ def build_system_prompt(
     if pending:
         parts.append(f"## 未完了タスク\n\n{pending}")
 
+    # ── Task Queue (structured persistent queue) ──
+    try:
+        from core.memory.task_queue import TaskQueueManager
+        task_queue = TaskQueueManager(memory.anima_dir)
+        task_summary = task_queue.format_for_priming()
+        if task_summary:
+            parts.append(
+                "## Active Task Queue\n\n"
+                "以下は永続タスクキューの未完了タスクです。"
+                "🔴 HIGH は人間からの指示であり最優先です。\n\n"
+                + task_summary
+            )
+    except Exception:
+        logger.debug("Failed to inject task queue", exc_info=True)
+
     # Resolution registry injection (cross-org resolved issues)
     try:
         resolutions = memory.read_resolutions(days=7)

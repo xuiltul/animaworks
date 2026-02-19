@@ -9,9 +9,20 @@
 **send_message ツールを使用する場合（推奨）:**
 send_message ツールが利用可能な場合はそちらを使ってください。
 
+**intent パラメータ（任意）:**
+send_message には `intent` パラメータを指定できます:
+- `delegation` — タスクの指示・委任（上司→部下が主）
+- `report` — 状況報告・結果報告（部下→上司が主。reportテンプレート必須）
+- `question` — 質問・確認依頼
+- （空文字） — 雑談・FYI・テンプレートに当てはまらないメッセージ（デフォルト）
+
+```json
+{{"name": "send_message", "arguments": {{"to": "相手名", "content": "メッセージ", "intent": "report"}}}}
+```
+
 **Bashで送信する場合:**
 ```
-python {main_py} send {self_name} <宛先> "メッセージ内容"
+python {main_py} send {self_name} <宛先> "メッセージ内容" --intent report
 ```
 
 スレッドで返信する場合:

@@ -67,6 +67,20 @@ class TestMemoryTools:
         assert set(schema["parameters"]["required"]) == {"to", "content"}
 
 
+class TestSendMessageSchema:
+    def test_intent_property_exists(self):
+        send_msg = next(t for t in MEMORY_TOOLS if t["name"] == "send_message")
+        assert "intent" in send_msg["parameters"]["properties"]
+
+    def test_intent_not_required(self):
+        send_msg = next(t for t in MEMORY_TOOLS if t["name"] == "send_message")
+        assert "intent" not in send_msg["parameters"]["required"]
+
+    def test_intent_type_is_string(self):
+        send_msg = next(t for t in MEMORY_TOOLS if t["name"] == "send_message")
+        assert send_msg["parameters"]["properties"]["intent"]["type"] == "string"
+
+
 class TestFileTools:
     def test_file_tools_is_list(self):
         assert isinstance(FILE_TOOLS, list)

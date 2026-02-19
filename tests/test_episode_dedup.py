@@ -506,7 +506,7 @@ class TestBuilderResolutionInjection:
 
         mm = MemoryManager(anima_dir)
         result = build_system_prompt(mm)
-        assert "解決済み案件" not in result.system_prompt
+        assert "## 解決済み案件（組織横断）" not in result.system_prompt
 
 
 # ── Consolidation resolved events test ────────────────────────

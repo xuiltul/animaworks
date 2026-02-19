@@ -1,4 +1,4 @@
-"""Unit tests for ToolHandler top-level catch and output truncation."""
+"""Unit tests for ToolHandler top-level catch, output truncation, and depth-limit error handling."""
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.schemas import Message
 from core.tooling.handler import ToolHandler
 
 
@@ -40,6 +41,92 @@ class TestToolHandlerTopLevelCatch:
         assert "Tool execution failed" in result
         assert "search_memory" in result
         assert "boom" in result
+
+
+class TestToolHandlerDepthLimitError:
+    """Test that _handle_send_message checks for depth-limit error from send()."""
+
+    def test_depth_limit_error_returns_error_string(self, tmp_path):
+        """When send() returns type='error', handler should return Error string."""
+        handler = _make_handler(tmp_path)
+
+        # Create a messenger mock that returns an error Message (depth limit exceeded)
+        messenger = MagicMock()
+        messenger.anima_name = "test"
+        error_msg = Message(
+            from_person="system",
+            to_person="test",
+            type="error",
+            content="ConversationDepthExceeded: bob",
+        )
+        messenger.send.return_value = error_msg
+        handler._messenger = messenger
+
+        # Mock config and resolve_recipient to reach internal send path
+        mock_config = MagicMock()
+        mock_config.external_messaging = MagicMock()
+        with (
+            patch("core.config.models.load_config", return_value=mock_config),
+            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+            patch("core.outbound.resolve_recipient", return_value=None),
+        ):
+            result = handler._handle_send_message({"to": "bob", "content": "hello"})
+
+        assert "Error:" in result
+        assert "ConversationDepthExceeded" in result
+
+    def test_depth_limit_error_does_not_track_replied_to(self, tmp_path):
+        """When send() is blocked, replied_to should NOT be updated."""
+        handler = _make_handler(tmp_path)
+
+        messenger = MagicMock()
+        messenger.anima_name = "test"
+        error_msg = Message(
+            from_person="system",
+            to_person="test",
+            type="error",
+            content="ConversationDepthExceeded: bob",
+        )
+        messenger.send.return_value = error_msg
+        handler._messenger = messenger
+
+        mock_config = MagicMock()
+        mock_config.external_messaging = MagicMock()
+        with (
+            patch("core.config.models.load_config", return_value=mock_config),
+            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+            patch("core.outbound.resolve_recipient", return_value=None),
+        ):
+            handler._handle_send_message({"to": "bob", "content": "hello"})
+
+        assert "bob" not in handler._replied_to
+
+    def test_successful_send_still_tracks_replied_to(self, tmp_path):
+        """Normal send should still track replied_to as before."""
+        handler = _make_handler(tmp_path)
+
+        messenger = MagicMock()
+        messenger.anima_name = "test"
+        success_msg = Message(
+            from_person="test",
+            to_person="bob",
+            type="message",
+            content="hello",
+        )
+        messenger.send.return_value = success_msg
+        handler._messenger = messenger
+
+        mock_config = MagicMock()
+        mock_config.external_messaging = MagicMock()
+        with (
+            patch("core.config.models.load_config", return_value=mock_config),
+            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+            patch("core.outbound.resolve_recipient", return_value=None),
+        ):
+            result = handler._handle_send_message({"to": "bob", "content": "hello"})
+
+        assert "bob" in handler._replied_to
+        assert "Message sent to bob" in result
 
 
 class TestToolOutputTruncation:

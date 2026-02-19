@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # send — Anima間メッセージ送信ラッパー
-# Usage: bash send <recipient> "message" [--reply-to ID] [--thread-id ID]
+# Usage: bash send <recipient> "message" [--reply-to ID] [--thread-id ID] [--intent TYPE]
 set -euo pipefail
 SELF="$(basename "${ANIMAWORKS_ANIMA_DIR:-$(pwd)}")"
 MAIN="${ANIMAWORKS_PROJECT_DIR:-.}/main.py"

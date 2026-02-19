@@ -156,6 +156,10 @@ def cli_main() -> None:
     p_send.add_argument("message", help="Message content")
     p_send.add_argument("--thread-id", default=None, help="Thread ID")
     p_send.add_argument("--reply-to", default=None, help="Reply to message ID")
+    p_send.add_argument(
+        "--intent", default="",
+        help="Message intent: delegation, report, question, or empty",
+    )
     p_send.set_defaults(func=_lazy_send)
 
     # ── Board ─────────────────────────────────────────────
@@ -344,6 +348,11 @@ def cli_main() -> None:
     from cli.commands import remake_cmd
 
     remake_cmd.register(sub)
+
+    # ── Task Queue ───────────────────────────────────────────
+    from cli.commands.task_cmd import register_task_command
+
+    register_task_command(sub)
 
     args = parser.parse_args()
 

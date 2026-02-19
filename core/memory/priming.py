@@ -42,6 +42,7 @@ _BUDGET_SENDER_PROFILE = 500
 _BUDGET_RECENT_ACTIVITY = 1300  # Unified: old B(600) + E(700)
 _BUDGET_RELATED_KNOWLEDGE = 700
 _BUDGET_SKILL_MATCH = 200
+_BUDGET_PENDING_TASKS = 300
 
 # Rough characters-per-token for Japanese/English mixed text
 _CHARS_PER_TOKEN = 4
@@ -64,6 +65,7 @@ class PrimingResult:
     recent_activity: str = ""
     related_knowledge: str = ""
     matched_skills: list[str] = field(default_factory=list)
+    pending_tasks: str = ""
 
     def is_empty(self) -> bool:
         """Return True if no memories were primed."""
@@ -72,6 +74,7 @@ class PrimingResult:
             and not self.recent_activity
             and not self.related_knowledge
             and not self.matched_skills
+            and not self.pending_tasks
         )
 
     def total_chars(self) -> int:
@@ -81,6 +84,7 @@ class PrimingResult:
             + len(self.recent_activity)
             + len(self.related_knowledge)
             + sum(len(s) for s in self.matched_skills)
+            + len(self.pending_tasks)
         )
 
     def estimated_tokens(self) -> int:
@@ -94,11 +98,12 @@ class PrimingResult:
 class PrimingEngine:
     """Automatic memory priming engine.
 
-    Executes 4-channel parallel memory retrieval:
+    Executes 5-channel parallel memory retrieval:
       A. Sender profile (direct file read)
       B. Recent activity (unified activity log, replaces old episodes + channels)
       C. Related knowledge (dense vector search)
       D. Skill matching (filename pattern match)
+      E. Pending tasks (persistent task queue summary)
     """
 
     def __init__(self, anima_dir: Path, shared_dir: Path | None = None) -> None:
@@ -146,12 +151,13 @@ class PrimingEngine:
         # Extract keywords for search (simple rule-based for Phase 1)
         keywords = self._extract_keywords(message)
 
-        # Execute 4 channels in parallel
+        # Execute 5 channels in parallel
         results = await asyncio.gather(
             self._channel_a_sender_profile(sender_name),
             self._channel_b_recent_activity(sender_name, keywords),  # Unified channel
             self._channel_c_related_knowledge(keywords),
             self._channel_d_skill_match(keywords),
+            self._channel_e_pending_tasks(),
             return_exceptions=True,
         )
 
@@ -160,6 +166,7 @@ class PrimingEngine:
         recent_activity = results[1] if isinstance(results[1], str) else ""
         related_knowledge = results[2] if isinstance(results[2], str) else ""
         matched_skills = results[3] if isinstance(results[3], list) else []
+        pending_tasks = results[4] if isinstance(results[4], str) else ""
 
         # Log exceptions if any
         for i, r in enumerate(results):
@@ -171,12 +178,14 @@ class PrimingEngine:
         budget_activity = max(400, int(_BUDGET_RECENT_ACTIVITY * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS)))
         budget_knowledge = int(_BUDGET_RELATED_KNOWLEDGE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
         budget_skills = int(_BUDGET_SKILL_MATCH * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
+        budget_tasks = int(_BUDGET_PENDING_TASKS * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
 
         result = PrimingResult(
             sender_profile=self._truncate_head(sender_profile, budget_profile),
             recent_activity=self._truncate_tail(recent_activity, budget_activity),
             related_knowledge=self._truncate_head(related_knowledge, budget_knowledge),
             matched_skills=matched_skills[:max(1, budget_skills // 50)],  # ~50 tokens per skill name
+            pending_tasks=self._truncate_head(pending_tasks, budget_tasks),
         )
 
         logger.info(
@@ -653,6 +662,26 @@ class PrimingEngine:
 
         return matched
 
+    async def _channel_e_pending_tasks(self) -> str:
+        """Channel E: Pending task queue summary.
+
+        Retrieves pending tasks from the persistent task queue.
+        Human-origin tasks are marked with 🔴 HIGH priority.
+        Budget: 300 tokens.
+
+        Uses asyncio.to_thread to avoid blocking the event loop
+        since TaskQueueManager performs synchronous file I/O.
+        """
+        try:
+            from core.memory.task_queue import TaskQueueManager
+            manager = TaskQueueManager(self.anima_dir)
+            return await asyncio.to_thread(
+                manager.format_for_priming, _BUDGET_PENDING_TASKS,
+            )
+        except Exception:
+            logger.debug("Channel E (pending_tasks) failed", exc_info=True)
+            return ""
+
     # ── Dynamic budget adjustment (Phase 3) ─────────────────────
 
     def _classify_message_type(self, message: str, channel: str) -> str:
@@ -865,6 +894,12 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
         parts.append(f"あなたが持っているスキル: {skills_line}")
         parts.append("")
         parts.append("※詳細はスキルファイルをReadで確認してください。")
+        parts.append("")
+
+    if result.pending_tasks:
+        parts.append("### 未完了タスク")
+        parts.append("")
+        parts.append(result.pending_tasks)
         parts.append("")
 
     return "\n".join(parts)

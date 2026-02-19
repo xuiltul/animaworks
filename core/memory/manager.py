@@ -253,6 +253,11 @@ class MemoryManager:
         self._indexer = None
         self._indexer_initialized = False
 
+    @property
+    def task_queue_path(self) -> Path:
+        """Path to the persistent task queue JSONL file."""
+        return self.state_dir / "task_queue.jsonl"
+
     # ── RAG indexer initialization ────────────────────────
 
     def _init_indexer(self) -> None:
