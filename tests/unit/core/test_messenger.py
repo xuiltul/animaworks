@@ -444,3 +444,82 @@ class TestArchivePaths:
 
         processed = shared_dir / "inbox" / "alice" / "processed"
         assert processed.is_dir()
+
+
+# ── Delivery verification ────────────────────────────────
+
+
+class TestSendDeliveryVerification:
+    """Verify that send() checks file was actually written."""
+
+    def test_send_verifies_file_exists(self, shared_dir, messenger):
+        """Normal send should succeed (file written and verified)."""
+        msg = messenger.send("bob", "verified message")
+        bob_inbox = shared_dir / "inbox" / "bob"
+        assert (bob_inbox / f"{msg.id}.json").exists()
+
+    def test_send_raises_on_write_failure(self, shared_dir, messenger):
+        """If file write silently fails, OSError should be raised."""
+        from unittest.mock import patch
+
+        # Make filepath.exists() return False after write_text
+        original_exists = Path.exists
+
+        call_count = 0
+
+        def fake_exists(self_path):
+            nonlocal call_count
+            # The delivery verification check is on the specific inbox file
+            if "inbox" in str(self_path) and str(self_path).endswith(".json"):
+                call_count += 1
+                # Only fail the first .json exists check (the verification)
+                if call_count == 1:
+                    return False
+            return original_exists(self_path)
+
+        with patch.object(Path, "exists", fake_exists):
+            with pytest.raises(OSError, match="Message delivery failed"):
+                messenger.send("bob", "will fail verification")
+
+
+# ── Activity logging warning ─────────────────────────────
+
+
+class TestActivityLoggingWarning:
+    """Verify that ActivityLogger failures produce warning logs."""
+
+    def test_activity_logger_failure_logs_warning(self, shared_dir, messenger, caplog):
+        """When ActivityLogger.log() raises, a warning should be logged."""
+        import logging
+        from unittest.mock import patch, MagicMock
+
+        # Create anima directory so the activity log path check passes
+        anima_dir = shared_dir.parent / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        mock_activity = MagicMock()
+        mock_activity.log.side_effect = RuntimeError("disk full")
+
+        with patch("core.memory.activity.ActivityLogger", return_value=mock_activity):
+            with caplog.at_level(logging.WARNING, logger="animaworks.messenger"):
+                messenger.send("bob", "activity will fail")
+
+        assert any("Activity logging failed" in r.message for r in caplog.records)
+        assert any("disk full" in r.message for r in caplog.records)
+
+    def test_send_succeeds_despite_activity_failure(self, shared_dir, messenger):
+        """send() should succeed even when ActivityLogger fails."""
+        from unittest.mock import patch, MagicMock
+
+        anima_dir = shared_dir.parent / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        mock_activity = MagicMock()
+        mock_activity.log.side_effect = RuntimeError("boom")
+
+        with patch("core.memory.activity.ActivityLogger", return_value=mock_activity):
+            msg = messenger.send("bob", "should still work")
+
+        assert msg.from_person == "alice"
+        bob_inbox = shared_dir / "inbox" / "bob"
+        assert len(list(bob_inbox.glob("*.json"))) == 1

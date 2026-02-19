@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.execution.agent_sdk import AgentSDKExecutor
-from core.anima_factory import ensure_send_scripts
+from core.anima_factory import ensure_board_scripts, ensure_send_scripts
 from core.schemas import ModelConfig
 
 
@@ -116,8 +116,8 @@ class TestEnsureSendScripts:
             assert send.exists(), f"send script missing for {name}"
             assert send.stat().st_mode & 0o100, f"send script not executable for {name}"
 
-    def test_does_not_overwrite_existing_scripts(self, tmp_path: Path) -> None:
-        """Existing send scripts must not be replaced."""
+    def test_overwrites_existing_scripts(self, tmp_path: Path) -> None:
+        """Existing send scripts are overwritten to ensure template tracking."""
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
@@ -134,7 +134,8 @@ class TestEnsureSendScripts:
         with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir):
             ensure_send_scripts(animas_dir)
 
-        assert existing.read_text(encoding="utf-8") == "#!/bin/bash\ncustom-send"
+        # Script should now match the template (overwritten)
+        assert existing.read_text(encoding="utf-8") == "#!/bin/bash\ntemplate-send"
 
     def test_skips_dirs_without_identity(self, tmp_path: Path) -> None:
         """Directories without identity.md are not anima dirs; skip them."""
@@ -159,3 +160,75 @@ class TestEnsureSendScripts:
         missing_dir = tmp_path / "nonexistent"
         # Should not raise
         ensure_send_scripts(missing_dir)
+
+
+# ── ensure_board_scripts() ────────────────────────────────
+
+
+class TestEnsureBoardScripts:
+    """Verify ensure_board_scripts() places board script for all animas."""
+
+    def test_places_script_for_animas_without_it(self, tmp_path: Path) -> None:
+        """Animas missing the board script should get it."""
+        animas_dir = tmp_path / "animas"
+        animas_dir.mkdir()
+
+        for name in ("alice", "bob"):
+            d = animas_dir / name
+            d.mkdir()
+            (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
+
+        blank_dir = tmp_path / "blank"
+        blank_dir.mkdir()
+        (blank_dir / "board").write_text("#!/bin/bash\necho board", encoding="utf-8")
+
+        with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir):
+            ensure_board_scripts(animas_dir)
+
+        for name in ("alice", "bob"):
+            board = animas_dir / name / "board"
+            assert board.exists(), f"board script missing for {name}"
+            assert board.stat().st_mode & 0o100, f"board script not executable for {name}"
+
+    def test_overwrites_existing_scripts(self, tmp_path: Path) -> None:
+        """Existing board scripts are overwritten to ensure template tracking."""
+        animas_dir = tmp_path / "animas"
+        alice_dir = animas_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# alice", encoding="utf-8")
+
+        # Pre-existing custom board script
+        existing = alice_dir / "board"
+        existing.write_text("#!/bin/bash\ncustom-board", encoding="utf-8")
+
+        blank_dir = tmp_path / "blank"
+        blank_dir.mkdir()
+        (blank_dir / "board").write_text("#!/bin/bash\ntemplate-board", encoding="utf-8")
+
+        with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir):
+            ensure_board_scripts(animas_dir)
+
+        # Script should now match the template (overwritten)
+        assert existing.read_text(encoding="utf-8") == "#!/bin/bash\ntemplate-board"
+
+    def test_skips_dirs_without_identity(self, tmp_path: Path) -> None:
+        """Directories without identity.md are not anima dirs; skip them."""
+        animas_dir = tmp_path / "animas"
+        animas_dir.mkdir()
+
+        non_anima_path = animas_dir / "shared"
+        non_anima_path.mkdir()
+
+        blank_dir = tmp_path / "blank"
+        blank_dir.mkdir()
+        (blank_dir / "board").write_text("#!/bin/bash\necho board", encoding="utf-8")
+
+        with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir):
+            ensure_board_scripts(animas_dir)
+
+        assert not (non_anima_path / "board").exists()
+
+    def test_nonexistent_animas_dir(self, tmp_path: Path) -> None:
+        """If animas_dir doesn't exist, ensure_board_scripts() is a no-op."""
+        missing_dir = tmp_path / "nonexistent"
+        ensure_board_scripts(missing_dir)

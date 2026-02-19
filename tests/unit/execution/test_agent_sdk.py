@@ -78,7 +78,8 @@ class TestAgentSDKExecutor:
             executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
             env = executor._build_env()
             assert env["ANIMAWORKS_ANIMA_DIR"] == str(anima_dir)
-            assert env["ANTHROPIC_API_KEY"] == "sk-test"
+            # A1 mode does NOT pass ANTHROPIC_API_KEY (uses subscription auth)
+            assert "ANTHROPIC_API_KEY" not in env
             assert env["ANTHROPIC_BASE_URL"] == "https://custom.api"
 
     def test_build_env_disables_skill_improvement(self, model_config, anima_dir):
@@ -187,3 +188,140 @@ class TestAgentSDKExecutorStreaming:
 
             assert last_event["type"] == "done"
             assert last_event["result_message"] is not None
+
+
+# ── _BASH_SEND_RE regex ──────────────────────────────────
+
+
+class TestBashSendRegex:
+    """Verify _BASH_SEND_RE correctly detects send commands."""
+
+    def test_bash_send_matches(self):
+        from core.execution.agent_sdk import _BASH_SEND_RE
+
+        m = _BASH_SEND_RE.match('bash send kotoha "Hello"')
+        assert m is not None
+        assert m.group(1) == "kotoha"
+
+    def test_send_without_bash_prefix(self):
+        from core.execution.agent_sdk import _BASH_SEND_RE
+
+        m = _BASH_SEND_RE.match('send kotoha "Hello"')
+        assert m is not None
+        assert m.group(1) == "kotoha"
+
+    def test_send_with_leading_whitespace(self):
+        from core.execution.agent_sdk import _BASH_SEND_RE
+
+        m = _BASH_SEND_RE.match('  send kotoha "Hello"')
+        assert m is not None
+        assert m.group(1) == "kotoha"
+
+    def test_echo_send_does_not_match(self):
+        from core.execution.agent_sdk import _BASH_SEND_RE
+
+        m = _BASH_SEND_RE.match('echo "send kotoha hello"')
+        assert m is None
+
+    def test_cat_send_does_not_match(self):
+        from core.execution.agent_sdk import _BASH_SEND_RE
+
+        m = _BASH_SEND_RE.match("cat send_script.sh")
+        assert m is None
+
+    def test_grep_send_does_not_match(self):
+        from core.execution.agent_sdk import _BASH_SEND_RE
+
+        m = _BASH_SEND_RE.match("grep send file.txt")
+        assert m is None
+
+    def test_send_no_recipient_does_not_match(self):
+        """send with no args should not match (needs recipient + space after)."""
+        from core.execution.agent_sdk import _BASH_SEND_RE
+
+        m = _BASH_SEND_RE.match("send")
+        assert m is None
+
+
+# ── _check_unconfirmed_sends ─────────────────────────────
+
+
+class TestCheckUnconfirmedSends:
+    """Verify unconfirmed send detection logic."""
+
+    def _make_executor(self, tmp_path):
+        from core.execution.agent_sdk import AgentSDKExecutor
+        from core.schemas import ModelConfig
+        from tests.helpers.mocks import patch_agent_sdk
+
+        anima_dir = tmp_path / "animas" / "test"
+        anima_dir.mkdir(parents=True)
+
+        mc = ModelConfig(model="claude-sonnet-4-20250514", api_key="sk-test")
+        with patch_agent_sdk():
+            executor = AgentSDKExecutor(model_config=mc, anima_dir=anima_dir)
+        return executor
+
+    def test_no_pending_returns_empty(self, tmp_path):
+        executor = self._make_executor(tmp_path)
+        result = executor._check_unconfirmed_sends([], set())
+        assert result == []
+
+    def test_all_confirmed_returns_empty(self, tmp_path):
+        executor = self._make_executor(tmp_path)
+        pending = [{"to": "kotoha", "command": "send kotoha hello"}]
+        confirmed = {"kotoha"}
+        result = executor._check_unconfirmed_sends(pending, confirmed)
+        assert result == []
+
+    def test_unconfirmed_detected(self, tmp_path):
+        executor = self._make_executor(tmp_path)
+        pending = [
+            {"to": "kotoha", "command": 'send kotoha "hello"'},
+            {"to": "rin", "command": 'send rin "task"'},
+        ]
+        confirmed = {"kotoha"}  # only kotoha confirmed
+        result = executor._check_unconfirmed_sends(pending, confirmed)
+        assert len(result) == 1
+        assert result[0]["to"] == "rin"
+
+    def test_all_unconfirmed(self, tmp_path):
+        executor = self._make_executor(tmp_path)
+        pending = [{"to": "kotoha", "command": "send kotoha hello"}]
+        confirmed = set()
+        result = executor._check_unconfirmed_sends(pending, confirmed)
+        assert len(result) == 1
+        assert result[0]["to"] == "kotoha"
+
+    def test_unconfirmed_logs_warning(self, tmp_path, caplog):
+        import logging
+
+        executor = self._make_executor(tmp_path)
+        pending = [{"to": "rin", "command": 'send rin "msg"'}]
+
+        with caplog.at_level(logging.WARNING, logger="animaworks.execution.agent_sdk"):
+            executor._check_unconfirmed_sends(pending, set())
+
+        assert any("Unconfirmed sends" in r.message for r in caplog.records)
+        assert any("rin" in r.message for r in caplog.records)
+
+
+# ── ExecutionResult.unconfirmed_sends ────────────────────
+
+
+class TestExecutionResultUnconfirmedSends:
+    """Verify the new field on ExecutionResult."""
+
+    def test_default_empty(self):
+        from core.execution.base import ExecutionResult
+
+        result = ExecutionResult(text="hello")
+        assert result.unconfirmed_sends == []
+
+    def test_with_unconfirmed(self):
+        from core.execution.base import ExecutionResult
+
+        sends = [{"to": "kotoha", "command": "send kotoha msg"}]
+        result = ExecutionResult(text="hello", unconfirmed_sends=sends)
+        assert result.unconfirmed_sends == sends
+        assert len(result.unconfirmed_sends) == 1

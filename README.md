@@ -12,15 +12,81 @@ Each agent has its own name, personality, memory, and schedule. They communicate
 
 ## Quick Start
 
-**Prerequisites:** Python 3.12+, [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended — no API key needed) or any LLM API key.
+### 1. Install Python 3.12+
+
+AnimaWorks requires **Python 3.12 or higher**. Check your version first:
+
+```bash
+python3 --version
+```
+
+If it shows 3.11 or lower (macOS ships with 3.9), install a newer version:
+
+<details>
+<summary><strong>macOS</strong></summary>
+
+```bash
+brew install python@3.13
+```
+
+If you don't have Homebrew: https://brew.sh
+
+After install, use `python3.13` instead of `python3`:
+
+```bash
+python3.13 --version   # Should show 3.13.x
+```
+
+</details>
+
+<details>
+<summary><strong>Ubuntu / Debian</strong></summary>
+
+```bash
+sudo apt update
+sudo apt install python3.12 python3.12-venv
+```
+
+After install, use `python3.12` instead of `python3`:
+
+```bash
+python3.12 --version   # Should show 3.12.x
+```
+
+</details>
+
+<details>
+<summary><strong>Windows</strong></summary>
+
+Download the installer from https://www.python.org/downloads/ (3.12 or later).
+
+Check "Add Python to PATH" during installation.
+
+</details>
+
+### 2. Clone and Install
 
 ```bash
 git clone https://github.com/xuiltul/animaworks.git
 cd animaworks
-python3 -m venv .venv && source .venv/bin/activate
+```
+
+Create a virtual environment using your Python 3.12+ binary:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate    # Linux / macOS
+# On Windows: python -m venv .venv && .venv\Scripts\activate
+```
+
+> **Tip:** If `python3` still points to an old version, use the versioned command directly:
+> `python3.13 -m venv .venv` (macOS with Homebrew) or `python3.12 -m venv .venv` (Ubuntu).
+
+```bash
 pip install --upgrade pip
 pip install -e .
 ```
+
+### 3. Run
 
 ```bash
 animaworks init     # Opens setup wizard in your browser

@@ -74,6 +74,14 @@ class Messenger:
         target_dir.mkdir(parents=True, exist_ok=True)
         filepath = target_dir / f"{msg.id}.json"
         filepath.write_text(msg.model_dump_json(indent=2), encoding="utf-8")
+
+        # Delivery verification: confirm file was written
+        if not filepath.exists():
+            raise OSError(
+                f"Message delivery failed: file not created at {filepath} "
+                f"({self.anima_name} -> {to})"
+            )
+
         logger.info("Message sent: %s -> %s (%s)", self.anima_name, to, msg.id)
 
         # Activity Log: record dm_sent for all send paths (A1/A2/B/CLI)
@@ -84,8 +92,11 @@ class Messenger:
                 if anima_dir.exists():
                     activity = ActivityLogger(anima_dir)
                     activity.log("dm_sent", content=content, to_person=to)
-            except Exception:
-                pass  # Never fail the send itself
+            except Exception as e:
+                logger.warning(
+                    "Activity logging failed for dm_sent (%s -> %s): %s",
+                    self.anima_name, to, e,
+                )
 
         # Parallel write to legacy dm_logs/ (fallback data source)
         try:

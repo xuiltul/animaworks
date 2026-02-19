@@ -18,7 +18,7 @@ import logging
 import os
 import re
 import shutil
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from core.prompt.context import ContextTracker
@@ -38,6 +38,8 @@ _SEND_PATTERNS = [
     re.compile(r"Sent:\s+\S+\s+->\s+(\w+)"),           # CLI output: "Sent: sakura -> kotoha (...)"
     re.compile(r"Message sent to (\w+)"),                # ToolHandler: "Message sent to kotoha (...)"
 ]
+
+_BASH_SEND_RE = re.compile(r"^\s*(?:bash\s+)?send\s+(\S+)\s+")
 
 # ── A1 mode security ──────────────────────────────────────────
 
@@ -217,6 +219,96 @@ def _cleanup_tool_outputs(anima_dir: Path) -> None:
         logger.debug("Cleaned up tool output directory: %s", tool_output_dir)
 
 
+def _build_pre_tool_hook(
+    anima_dir: Path,
+    pending_sends: list[dict],
+) -> Callable:
+    """Build a PreToolUse hook with security checks, output guards, and send tracking."""
+    from claude_agent_sdk.types import (
+        HookContext,
+        HookInput,
+        PreToolUseHookSpecificOutput,
+        SyncHookJSONOutput,
+    )
+
+    async def _pre_tool_hook(
+        input_data: HookInput,
+        tool_use_id: str | None,
+        context: HookContext,
+    ) -> SyncHookJSONOutput:
+        tool_name = input_data.get("tool_name", "")
+        tool_input = input_data.get("tool_input", {})
+
+        # Write / Edit: check file path
+        if tool_name in ("Write", "Edit"):
+            file_path = tool_input.get("file_path", "")
+            violation = _check_a1_file_access(
+                file_path, anima_dir, write=True,
+            )
+            if violation:
+                return SyncHookJSONOutput(
+                    hookSpecificOutput=PreToolUseHookSpecificOutput(
+                        hookEventName="PreToolUse",
+                        permissionDecision="deny",
+                        permissionDecisionReason=violation,
+                    )
+                )
+
+        # Read: check for path traversal to other animas
+        if tool_name == "Read":
+            file_path = tool_input.get("file_path", "")
+            violation = _check_a1_file_access(
+                file_path, anima_dir, write=False,
+            )
+            if violation:
+                return SyncHookJSONOutput(
+                    hookSpecificOutput=PreToolUseHookSpecificOutput(
+                        hookEventName="PreToolUse",
+                        permissionDecision="deny",
+                        permissionDecisionReason=violation,
+                    )
+                )
+
+        # Bash: inspect command
+        if tool_name == "Bash":
+            command = tool_input.get("command", "")
+            violation = _check_a1_bash_command(command, anima_dir)
+            if violation:
+                return SyncHookJSONOutput(
+                    hookSpecificOutput=PreToolUseHookSpecificOutput(
+                        hookEventName="PreToolUse",
+                        permissionDecision="deny",
+                        permissionDecisionReason=violation,
+                    )
+                )
+
+            # Send intent tracking — intentionally matched against the
+            # original command *before* output-guard rewriting, so that
+            # "send <recipient> <msg>" is detected regardless of any
+            # output-guard prefix injected later in this hook.
+            m = _BASH_SEND_RE.match(command)
+            if m:
+                pending_sends.append({
+                    "to": m.group(1),
+                    "command": command,
+                })
+
+        # Output guard
+        updated = _build_output_guard(tool_name, tool_input, anima_dir)
+        if updated is not None:
+            return SyncHookJSONOutput(
+                hookSpecificOutput=PreToolUseHookSpecificOutput(
+                    hookEventName="PreToolUse",
+                    permissionDecision="allow",
+                    updatedInput=updated,
+                )
+            )
+
+        return SyncHookJSONOutput()
+
+    return _pre_tool_hook
+
+
 class AgentSDKExecutor(BaseExecutor):
     """Execute via Claude Agent SDK (Mode A1).
 
@@ -298,6 +390,36 @@ class AgentSDKExecutor(BaseExecutor):
             logger.debug("Parsed replied_to from transcript: %s", names)
         return names
 
+    def _check_unconfirmed_sends(
+        self,
+        pending_sends: list[dict],
+        confirmed: set[str],
+    ) -> list[dict]:
+        """Compare send intents with confirmed sends, log unconfirmed."""
+        if not pending_sends:
+            return []
+        unconfirmed = [
+            s for s in pending_sends
+            if s["to"] not in confirmed
+        ]
+        if unconfirmed:
+            names = ", ".join(s["to"] for s in unconfirmed)
+            logger.warning(
+                "Unconfirmed sends detected: %s (attempted %d, confirmed %d)",
+                names, len(pending_sends), len(confirmed),
+            )
+            try:
+                from core.memory.activity import ActivityLogger
+                activity = ActivityLogger(self._anima_dir)
+                activity.log(
+                    "error",
+                    content=f"Unconfirmed message sends to: {names}",
+                    meta={"unconfirmed_sends": unconfirmed},
+                )
+            except Exception as e:
+                logger.warning("Failed to log unconfirmed sends: %s", e)
+        return unconfirmed
+
     # ── Blocking execution ───────────────────────────────────
 
     async def execute(
@@ -331,13 +453,13 @@ class AgentSDKExecutor(BaseExecutor):
             HookContext,
             HookInput,
             PostToolUseHookSpecificOutput,
-            PreToolUseHookSpecificOutput,
             SyncHookJSONOutput,
         )
 
         threshold = self._model_config.context_threshold
         _hook_fired = False
         _transcript_path = ""
+        pending_sends: list[dict] = []
 
         async def _post_tool_hook(
             input_data: HookInput,
@@ -369,70 +491,6 @@ class AgentSDKExecutor(BaseExecutor):
                 )
             return SyncHookJSONOutput()
 
-        async def _pre_tool_hook(
-            input_data: HookInput,
-            tool_use_id: str | None,
-            context: HookContext,
-        ) -> SyncHookJSONOutput:
-            tool_name = input_data.get("tool_name", "")
-            tool_input = input_data.get("tool_input", {})
-
-            # Write / Edit: check file path
-            if tool_name in ("Write", "Edit"):
-                file_path = tool_input.get("file_path", "")
-                violation = _check_a1_file_access(
-                    file_path, self._anima_dir, write=True,
-                )
-                if violation:
-                    return SyncHookJSONOutput(
-                        hookSpecificOutput=PreToolUseHookSpecificOutput(
-                            hookEventName="PreToolUse",
-                            permissionDecision="deny",
-                            permissionDecisionReason=violation,
-                        )
-                    )
-
-            # Read: check for path traversal to other animas
-            if tool_name == "Read":
-                file_path = tool_input.get("file_path", "")
-                violation = _check_a1_file_access(
-                    file_path, self._anima_dir, write=False,
-                )
-                if violation:
-                    return SyncHookJSONOutput(
-                        hookSpecificOutput=PreToolUseHookSpecificOutput(
-                            hookEventName="PreToolUse",
-                            permissionDecision="deny",
-                            permissionDecisionReason=violation,
-                        )
-                    )
-
-            # Bash: inspect command for file operation patterns
-            if tool_name == "Bash":
-                command = tool_input.get("command", "")
-                violation = _check_a1_bash_command(command, self._anima_dir)
-                if violation:
-                    return SyncHookJSONOutput(
-                        hookSpecificOutput=PreToolUseHookSpecificOutput(
-                            hookEventName="PreToolUse",
-                            permissionDecision="deny",
-                            permissionDecisionReason=violation,
-                        )
-                    )
-
-            # ── Output guard ──
-            updated = _build_output_guard(tool_name, tool_input, self._anima_dir)
-            if updated is not None:
-                return SyncHookJSONOutput(
-                    hookSpecificOutput=PreToolUseHookSpecificOutput(
-                        hookEventName="PreToolUse",
-                        permissionDecision="allow",
-                        updatedInput=updated,
-                    )
-                )
-
-            return SyncHookJSONOutput()
-
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
             allowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
@@ -445,7 +503,7 @@ class AgentSDKExecutor(BaseExecutor):
             hooks={
                 "PreToolUse": [HookMatcher(
                     matcher="Write|Edit|Bash|Read|Grep|Glob",
-                    hooks=[_pre_tool_hook],
+                    hooks=[_build_pre_tool_hook(self._anima_dir, pending_sends)],
                 )],
                 "PostToolUse": [HookMatcher(matcher=None, hooks=[_post_tool_hook])],
             },
@@ -479,10 +537,12 @@ class AgentSDKExecutor(BaseExecutor):
             message_count, len(response_text),
         )
         replied_to = self._parse_replied_to(_transcript_path)
+        unconfirmed = self._check_unconfirmed_sends(pending_sends, replied_to)
         return ExecutionResult(
             text="\n".join(response_text) or "(no response)",
             result_message=result_message,
             replied_to_from_transcript=replied_to,
+            unconfirmed_sends=unconfirmed,
         )
 
     # ── Streaming execution ──────────────────────────────────
@@ -520,7 +580,6 @@ class AgentSDKExecutor(BaseExecutor):
             HookContext,
             HookInput,
             PostToolUseHookSpecificOutput,
-            PreToolUseHookSpecificOutput,
             StreamEvent,
             SyncHookJSONOutput,
         )
@@ -528,6 +587,7 @@ class AgentSDKExecutor(BaseExecutor):
         threshold = self._model_config.context_threshold
         _hook_fired = False
         _transcript_path = ""
+        pending_sends: list[dict] = []
 
         async def _post_tool_hook(
             input_data: HookInput,
@@ -557,70 +617,6 @@ class AgentSDKExecutor(BaseExecutor):
                 )
             return SyncHookJSONOutput()
 
-        async def _pre_tool_hook(
-            input_data: HookInput,
-            tool_use_id: str | None,
-            context: HookContext,
-        ) -> SyncHookJSONOutput:
-            tool_name = input_data.get("tool_name", "")
-            tool_input = input_data.get("tool_input", {})
-
-            # Write / Edit: check file path
-            if tool_name in ("Write", "Edit"):
-                file_path = tool_input.get("file_path", "")
-                violation = _check_a1_file_access(
-                    file_path, self._anima_dir, write=True,
-                )
-                if violation:
-                    return SyncHookJSONOutput(
-                        hookSpecificOutput=PreToolUseHookSpecificOutput(
-                            hookEventName="PreToolUse",
-                            permissionDecision="deny",
-                            permissionDecisionReason=violation,
-                        )
-                    )
-
-            # Read: check for path traversal to other animas
-            if tool_name == "Read":
-                file_path = tool_input.get("file_path", "")
-                violation = _check_a1_file_access(
-                    file_path, self._anima_dir, write=False,
-                )
-                if violation:
-                    return SyncHookJSONOutput(
-                        hookSpecificOutput=PreToolUseHookSpecificOutput(
-                            hookEventName="PreToolUse",
-                            permissionDecision="deny",
-                            permissionDecisionReason=violation,
-                        )
-                    )
-
-            # Bash: inspect command for file operation patterns
-            if tool_name == "Bash":
-                command = tool_input.get("command", "")
-                violation = _check_a1_bash_command(command, self._anima_dir)
-                if violation:
-                    return SyncHookJSONOutput(
-                        hookSpecificOutput=PreToolUseHookSpecificOutput(
-                            hookEventName="PreToolUse",
-                            permissionDecision="deny",
-                            permissionDecisionReason=violation,
-                        )
-                    )
-
-            # ── Output guard ──
-            updated = _build_output_guard(tool_name, tool_input, self._anima_dir)
-            if updated is not None:
-                return SyncHookJSONOutput(
-                    hookSpecificOutput=PreToolUseHookSpecificOutput(
-                        hookEventName="PreToolUse",
-                        permissionDecision="allow",
-                        updatedInput=updated,
-                    )
-                )
-
-            return SyncHookJSONOutput()
-
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
             allowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
@@ -634,7 +630,7 @@ class AgentSDKExecutor(BaseExecutor):
             hooks={
                 "PreToolUse": [HookMatcher(
                     matcher="Write|Edit|Bash|Read|Grep|Glob",
-                    hooks=[_pre_tool_hook],
+                    hooks=[_build_pre_tool_hook(self._anima_dir, pending_sends)],
                 )],
                 "PostToolUse": [HookMatcher(matcher=None, hooks=[_post_tool_hook])],
             },
@@ -702,9 +698,11 @@ class AgentSDKExecutor(BaseExecutor):
         )
         full_text = "\n".join(response_text) or "(no response)"
         replied_to = self._parse_replied_to(_transcript_path)
+        unconfirmed = self._check_unconfirmed_sends(pending_sends, replied_to)
         yield {
             "type": "done",
             "full_text": full_text,
             "result_message": result_message,
             "replied_to_from_transcript": replied_to,
+            "unconfirmed_sends": unconfirmed,
         }

@@ -57,6 +57,7 @@ class ExecutionResult:
     text: str
     result_message: Any = field(default=None, repr=False)
     replied_to_from_transcript: set[str] = field(default_factory=set)
+    unconfirmed_sends: list[dict] = field(default_factory=list)
 
 
 class BaseExecutor(ABC):

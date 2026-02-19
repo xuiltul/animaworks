@@ -497,8 +497,8 @@ class TestPlaceSendScript:
         # Check executable permission
         assert dst.stat().st_mode & 0o755
 
-    def test_does_not_overwrite_existing(self, tmp_path):
-        """If send script already exists in anima_dir, don't overwrite."""
+    def test_overwrites_existing(self, tmp_path):
+        """Send script is always overwritten to match the latest template."""
         blank_dir = tmp_path / "blank"
         blank_dir.mkdir()
         (blank_dir / "send").write_text("#!/bin/bash\nnew", encoding="utf-8")
@@ -510,8 +510,8 @@ class TestPlaceSendScript:
         with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir):
             _place_send_script(anima_dir)
 
-        # Should keep the old content
-        assert (anima_dir / "send").read_text(encoding="utf-8") == "#!/bin/bash\nold"
+        # Should be updated to match the template
+        assert (anima_dir / "send").read_text(encoding="utf-8") == "#!/bin/bash\nnew"
 
     def test_no_source_script(self, tmp_path):
         """If blank template has no send script, do nothing."""
