@@ -1,0 +1,7 @@
+{
+  "model": "claude-sonnet-4-20250514",
+  "context_threshold": 0.70,
+  "max_turns": 80,
+  "max_chains": 5,
+  "conversation_history_threshold": 0.30
+}

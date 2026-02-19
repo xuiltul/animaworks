@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnimaWorks Setup</title>
+  <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg">
+  <link rel="stylesheet" href="/setup/setup.css">
+</head>
+<body>
+  <div class="setup-container">
+    <header class="setup-header">
+      <h1 class="setup-title" data-i18n="wizard.title">AnimaWorks Setup</h1>
+      <p class="setup-subtitle" data-i18n="wizard.subtitle">Digital Anima Framework - Initial Setup</p>
+    </header>
+
+    <nav class="step-progress">
+      <div class="step-item active" data-step="0">
+        <div class="step-circle">1</div>
+        <span class="step-label" data-i18n="step.language">Language</span>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-item" data-step="1">
+        <div class="step-circle">2</div>
+        <span class="step-label" data-i18n="step.userinfo">User Info</span>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-item" data-step="2">
+        <div class="step-circle">3</div>
+        <span class="step-label" data-i18n="step.environment">Environment</span>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-item" data-step="3">
+        <div class="step-circle">4</div>
+        <span class="step-label" data-i18n="step.leader">Leader</span>
+      </div>
+      <div class="step-connector"></div>
+      <div class="step-item" data-step="4">
+        <div class="step-circle">5</div>
+        <span class="step-label" data-i18n="step.confirm">Confirm</span>
+      </div>
+    </nav>
+
+    <main class="step-content" id="stepContent">
+      <!-- Step panels injected by JS -->
+    </main>
+
+    <footer class="step-nav">
+      <button class="btn btn-back" id="btnBack" disabled data-i18n="btn.back">Back</button>
+      <div class="step-indicator" id="stepIndicator">1 / 5</div>
+      <button class="btn btn-next" id="btnNext" data-i18n="btn.next">Next</button>
+    </footer>
+  </div>
+
+  <script type="module" src="/setup/setup.js"></script>
+</body>
+</html>

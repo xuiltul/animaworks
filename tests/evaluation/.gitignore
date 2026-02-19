@@ -1,0 +1,20 @@
+# Generated datasets (large, not committed)
+_datasets/
+_experiment_data/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.log

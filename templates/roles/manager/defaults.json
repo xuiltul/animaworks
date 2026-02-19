@@ -1,0 +1,7 @@
+{
+  "model": "claude-opus-4-20250514",
+  "context_threshold": 0.60,
+  "max_turns": 50,
+  "max_chains": 3,
+  "conversation_history_threshold": 0.30
+}

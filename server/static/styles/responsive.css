@@ -1,0 +1,526 @@
+/* ============================================
+   Digital Anima — Responsive Styles
+   ============================================ */
+
+/* ── Base Defaults (hidden on desktop) ──────── */
+
+.hamburger-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
+  font-size: 1.4rem;
+  color: #1a1a1a;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.hamburger-btn:hover,
+.hamburger-btn:active {
+  background: #f0f0f0;
+}
+
+.hamburger-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.mobile-nav-backdrop {
+  display: none;
+}
+
+.data-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* ── Fluid Typography for Headings ─────────── */
+
+.page-header h2 {
+  font-size: clamp(1.05rem, 2vw + 0.5rem, 1.25rem);
+}
+
+.login-title {
+  font-size: clamp(1.15rem, 2vw + 0.5rem, 1.4rem);
+}
+
+/* ── Desktop (< 1100px) ────────────────────── */
+
+@media (max-width: 1100px) {
+  .panel-right {
+    width: 320px;
+    min-width: 320px;
+  }
+}
+
+/* ── Tablet / Small Desktop (< 900px) ──────── */
+
+@media (max-width: 900px) {
+  .app-layout {
+    flex-direction: column;
+    gap: 0;
+  }
+  .panel-main {
+    min-height: 50vh;
+  }
+  .panel-right {
+    width: 100%;
+    min-width: 0;
+    max-height: 45vh;
+  }
+}
+
+/* ── Tablet (< 768px) ─────────────────────── */
+
+@media (max-width: 768px) {
+  /* --- Layout: stack sidebar below --- */
+  .app-shell {
+    flex-direction: column;
+  }
+
+  /* --- Sidebar Nav: hidden by default, overlay drawer --- */
+  .sidebar-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 1100;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .mobile-nav-open .sidebar-nav {
+    transform: translateX(0);
+  }
+
+  /* --- Mobile nav backdrop --- */
+  .mobile-nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1050;
+  }
+
+  .mobile-nav-open .mobile-nav-backdrop {
+    display: block;
+  }
+
+  /* --- Hamburger button visible --- */
+  .hamburger-btn {
+    display: flex;
+  }
+
+  /* --- Right panel: full width stacked below --- */
+  .panel-right {
+    width: 100%;
+    min-width: 0;
+    max-height: none;
+  }
+
+  /* --- Main content: reduce padding --- */
+  .main-content {
+    padding: 12px;
+  }
+
+  /* --- Header: reduce padding --- */
+  .app-header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .app-title {
+    font-size: 1rem;
+  }
+
+  .person-selector {
+    display: none;
+  }
+
+  /* --- Login card: compact padding --- */
+  .login-card {
+    padding: 20px 16px;
+    margin: 0 12px;
+  }
+
+  /* --- Card grid: smaller min --- */
+  .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+
+  /* --- Tap targets: 44px minimum --- */
+  .btn-logout {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .nav-item {
+    min-height: 44px;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+  }
+
+  .page-tab {
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+
+  .memory-tab {
+    min-height: 44px;
+    padding: 10px 6px;
+  }
+
+  .right-tab {
+    min-height: 44px;
+    padding: 10px 6px;
+  }
+
+  .memory-file-item {
+    min-height: 44px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+  }
+
+  .session-item {
+    min-height: 44px;
+    padding: 10px;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    min-height: 44px;
+  }
+
+  .user-btn {
+    min-height: 44px;
+    padding: 12px 16px;
+  }
+
+  .btn-guest {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .activity-entry {
+    min-height: 44px;
+    padding: 8px;
+  }
+
+  /* --- Font size minimums (no sub-12px) --- */
+  .notification-toast-header {
+    font-size: 0.85rem;
+  }
+
+  .session-item-meta {
+    font-size: 0.8rem;
+  }
+
+  .history-turn-meta {
+    font-size: 0.8rem;
+  }
+
+  .activity-time {
+    font-size: 0.8rem;
+  }
+
+  .session-section-header {
+    font-size: 0.8rem;
+  }
+
+  .state-content {
+    font-size: 0.85rem;
+  }
+
+  .stat-card-label {
+    font-size: 0.85rem;
+  }
+
+  .tool-indicator {
+    font-size: 0.85rem;
+  }
+
+  .bootstrap-indicator {
+    font-size: 0.85rem;
+  }
+
+  .status-badge {
+    font-size: 0.85rem;
+  }
+
+  .data-table th {
+    font-size: 0.85rem;
+  }
+
+  .history-section-label {
+    font-size: 0.8rem;
+  }
+
+  .history-summary-label {
+    font-size: 0.8rem;
+  }
+
+  /* --- Chat mobile improvements --- */
+  .chat-input-form {
+    padding: 8px;
+  }
+
+  .chat-send-btn {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  .chat-input {
+    max-height: 100px;
+  }
+
+  .chat-bubble {
+    max-width: 90%;
+  }
+
+  /* --- Toast notifications: full width --- */
+  #notificationToasts {
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+
+  /* --- Data table scroll wrapper --- */
+  .data-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* --- Page header --- */
+  .page-header {
+    margin-bottom: 16px;
+  }
+
+  /* --- Card body/header: compact --- */
+  .card-header {
+    padding: 12px 14px;
+  }
+
+  .card-body {
+    padding: 12px 14px;
+  }
+
+  /* --- Stat card: compact --- */
+  .stat-card {
+    padding: 14px;
+  }
+
+  /* --- Empty state: compact --- */
+  .empty-state {
+    padding: 32px 16px;
+  }
+
+  /* --- Body scroll for mobile layout --- */
+  body.mobile-nav-open {
+    overflow: hidden;
+  }
+}
+
+/* ── Mobile (< 640px) ─────────────────────── */
+
+@media (max-width: 640px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .page-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .page-tab {
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 10px;
+    font-size: 0.85rem;
+  }
+
+  .chat-messages {
+    padding: 10px 12px;
+  }
+
+  .stat-card-value {
+    font-size: 1.3rem;
+  }
+
+  .memory-tabs {
+    padding: 8px 8px 0;
+  }
+
+  .right-tabs {
+    padding: 8px 8px 0;
+  }
+
+  .app-title {
+    font-size: 0.95rem;
+  }
+}
+
+/* ── Small Phone (< 480px) ────────────────── */
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 8px;
+  }
+
+  .app-header {
+    padding: 0 8px;
+    height: 48px;
+  }
+
+  .login-card {
+    padding: 16px 12px;
+    margin: 0 8px;
+  }
+
+  .chat-input-form {
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .chat-bubble {
+    max-width: 95%;
+    padding: 8px 12px;
+    font-size: 0.88rem;
+  }
+
+  .card-header {
+    padding: 10px 12px;
+    font-size: 0.88rem;
+  }
+
+  .card-body {
+    padding: 10px 12px;
+  }
+
+  .page-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .system-status {
+    display: none;
+  }
+}
+
+/* ── Chat Page Layout (desktop defaults) ──── */
+
+.chat-page-layout {
+  display: flex;
+  gap: 1rem;
+  height: calc(100svh - 140px);
+  min-height: 400px;
+}
+
+.chat-page-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-page-sidebar {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-color, #eee);
+  overflow: hidden;
+}
+
+/* Mobile tabs: hidden on desktop */
+.chat-mobile-tabs {
+  display: none;
+}
+
+/* ── Chat Page Mobile (< 768px) ──────────── */
+
+@media (max-width: 768px) {
+  .chat-mobile-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--border-color, #eee);
+    background: #fff;
+    flex-shrink: 0;
+  }
+
+  .chat-mobile-tab {
+    flex: 1;
+    padding: 10px 0;
+    border: none;
+    background: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #64748b;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    border-bottom: 3px solid transparent;
+    min-height: 44px;
+  }
+
+  .chat-mobile-tab.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+  }
+
+  .chat-page-layout {
+    height: calc(100svh - 140px);
+    gap: 0;
+  }
+
+  .chat-page-main {
+    flex: 1;
+  }
+
+  .chat-page-sidebar {
+    width: 100%;
+    flex: 1;
+    border-left: none;
+  }
+
+  .chat-page-sidebar.mobile-hidden,
+  .chat-page-main.mobile-hidden {
+    display: none !important;
+  }
+}
+
+/* ── Desktop-only Hover Effects ───────────── */
+
+@media (hover: hover) and (pointer: fine) {
+  .data-table tr:hover td {
+    background: #fafafa;
+  }
+
+  .activity-entry:hover {
+    background: #fafafa;
+  }
+}
+
+.data-table tr:active td {
+  background: #fafafa;
+}
+
+.activity-entry:active {
+  background: #fafafa;
+}
+
+/* ── Data Table Keyboard Accessibility ──── */
+.data-table-wrapper :focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}

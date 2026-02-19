@@ -1,0 +1,481 @@
+/* ============================================
+   Digital Anima — Base Styles
+   ============================================ */
+
+/* --- Reset & Base --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f5f5f5;
+  color: #1a1a1a;
+  height: var(--vh-fallback, 100vh);
+  height: 100svh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Login Screen --- */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f5f5;
+}
+
+.login-screen.hidden {
+  display: none;
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  padding: 40px 36px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+}
+
+.login-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #2563eb;
+  margin-bottom: 4px;
+}
+
+.login-subtitle {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.user-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-btn:hover,
+.user-btn:active {
+  background: #1d4ed8;
+}
+
+.user-btn:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.login-guest {
+  border-top: 1px solid #e5e5e5;
+  padding-top: 16px;
+}
+
+.btn-guest {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.15s;
+}
+
+.btn-guest:hover,
+.btn-guest:active {
+  color: #555;
+}
+
+.btn-guest:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* --- User Info (header) --- */
+.header-spacer {
+  flex: 1;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.user-label {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.btn-logout {
+  padding: 4px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.78rem;
+  font-family: inherit;
+  color: #888;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-logout:hover,
+.btn-logout:active {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.btn-logout:focus-visible {
+  outline: 2px solid #ef4444;
+  outline-offset: 2px;
+}
+
+/* --- Header --- */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+  height: 52px;
+  background: #fff;
+  border-bottom: 1px solid #e5e5e5;
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #2563eb;
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+
+.anima-selector {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.anima-dropdown {
+  min-width: 220px;
+  max-width: 360px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #1a1a1a;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.anima-dropdown:focus,
+.anima-dropdown:focus-visible {
+  border-color: #2563eb;
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.system-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #666;
+  flex-shrink: 0;
+}
+
+/* --- Status Dots --- */
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.status-idle {
+  background: #22c55e;
+}
+
+.status-thinking {
+  background: #f59e0b;
+  animation: pulse-amber 1.2s ease-in-out infinite;
+}
+
+.status-error {
+  background: #ef4444;
+}
+
+.status-offline {
+  background: #9ca3af;
+}
+
+@keyframes pulse-amber {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+/* ── Anima Visual States ──────────────────── */
+
+/* Sleeping State (stopped / not_found) */
+.anima-item--sleeping {
+    opacity: 0.45;
+    filter: grayscale(0.85) brightness(0.8);
+}
+
+.anima-item--sleeping .anima-avatar-img {
+    animation: breathe 4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+    0%, 100% { opacity: 0.5; }
+    50%      { opacity: 0.7; }
+}
+
+.anima-item--sleeping .anima-avatar-placeholder {
+    filter: grayscale(1);
+    opacity: 0.4;
+}
+
+.anima-item--sleeping .anima-status {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Bootstrapping State (loading) */
+.anima-item--loading {
+    opacity: 0.75;
+    pointer-events: none;
+}
+
+.anima-avatar-wrapper {
+    position: relative;
+}
+
+.anima-avatar-spinner {
+    display: none;
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 3px solid rgba(245, 158, 11, 0.2);
+    border-top-color: #f59e0b;
+    animation: anima-spin 1.2s linear infinite;
+}
+
+.anima-item--loading .anima-avatar-spinner {
+    display: block;
+}
+
+@keyframes anima-spin {
+    to { transform: rotate(360deg); }
+}
+
+.anima-progress {
+    display: none;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(245, 158, 11, 0.15);
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.anima-item--loading .anima-progress {
+    display: block;
+}
+
+.anima-progress-bar {
+    width: 40%;
+    height: 100%;
+    background: #f59e0b;
+    border-radius: 2px;
+    animation: indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+}
+
+.anima-item--loading .anima-status {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+}
+
+/* State Transitions */
+.anima-item {
+    transition: opacity 0.4s ease, filter 0.4s ease, transform 0.3s ease;
+}
+
+.anima-item--just-activated {
+    animation: activate-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes activate-pop {
+    0%   { transform: scale(0.97); opacity: 0.75; }
+    50%  { transform: scale(1.02); }
+    100% { transform: scale(1);    opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .anima-item--sleeping .anima-avatar-img {
+        animation: none;
+    }
+    .anima-avatar-spinner,
+    .anima-progress-bar {
+        animation: none;
+    }
+    .anima-item--just-activated {
+        animation: none;
+    }
+}
+
+/* --- Main Layout --- */
+.app-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 1px;
+  background: #e5e5e5;
+}
+
+/* --- Panels (shared) --- */
+.panel {
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* --- Utility / Loading --- */
+.loading-placeholder {
+  color: #aaa;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* --- Scrollbar --- */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
+
+/* ── Login Form ───────────────────────────── */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.login-form input {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  background: var(--bg-secondary, #f8fafc);
+  color: var(--text-primary, #1e293b);
+}
+.login-form input:focus {
+  outline: none;
+  border-color: var(--accent-color, #6366f1);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+.btn-login {
+  padding: 0.6rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--accent-color, #6366f1);
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-login:hover {
+  background: var(--accent-hover, #4f46e5);
+}
+.login-error {
+  color: #ef4444;
+  font-size: 0.85rem;
+  padding: 0.4rem;
+  text-align: center;
+}
+.login-error.hidden {
+  display: none;
+}
+/* ── Auth Banner ──────────────────────────── */
+.auth-banner {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+.auth-banner a {
+  color: #b45309;
+  font-weight: 500;
+  text-decoration: underline;
+}
+.auth-banner-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #92400e;
+  padding: 0 0.25rem;
+}

@@ -1,0 +1,7 @@
+{
+  "model": "claude-haiku-3.5-20241022",
+  "context_threshold": 0.50,
+  "max_turns": 30,
+  "max_chains": 2,
+  "conversation_history_threshold": 0.30
+}

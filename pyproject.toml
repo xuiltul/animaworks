@@ -1,0 +1,63 @@
+[project]
+name = "animaworks"
+version = "0.2.0"
+description = "AnimaWorks - Digital Anima Framework with library-type memory"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    "claude-agent-sdk>=0.1.35",
+    "anthropic>=0.42.0",
+    "litellm>=1.55.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "apscheduler>=3.10.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0",
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+    "numpy>=1.24.0",
+    "structlog>=24.1.0",
+    "orjson>=3.9.0",
+    "json-repair>=0.30.0",
+    "pwdlib[argon2]>=0.3.0",
+]
+
+[project.optional-dependencies]
+communication = ["requests>=2.31", "slack-sdk>=3.27", "slack-bolt>=1.21", "aiohttp>=3.9"]
+notification = ["line-bot-sdk>=3.0"]
+gmail = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.0", "google-auth-httplib2>=0.2"]
+transcribe = ["faster-whisper>=1.0"]
+aws = ["boto3>=1.34"]
+rag = ["networkx>=3.0", "watchdog>=3.0.0"]
+all-tools = ["animaworks[communication,gmail,transcribe,aws,rag,notification]"]
+redis = ["redis>=5.0.0"]
+test = ["pytest>=8.0", "pytest-asyncio>=0.24", "pytest-timeout>=2.2", "psutil>=5.9.0"]
+evaluation = [
+    "scipy>=1.11.0",
+    "statsmodels>=0.14.0",
+    "scikit-learn>=1.3.0",
+    "pandas>=2.1.0",
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.0",
+]
+
+[tool.setuptools]
+py-modules = ["main"]
+packages = ["cli", "cli.commands", "core", "core.tools", "core.notification", "core.notification.channels", "server"]
+
+[project.scripts]
+animaworks = "cli:cli_main"
+animaworks-tool = "core.tools:cli_dispatch"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "live: tests making real API calls (skip with --mock or no API key)",
+    "azure: tests requiring Azure OpenAI API key",
+    "ollama: tests requiring Ollama server access",
+    "timeout: set per-test timeout in seconds (requires pytest-timeout)",
+]

@@ -1,0 +1,1151 @@
+from __future__ import annotations
+# AnimaWorks - Digital Anima Framework
+# Copyright (C) 2026 AnimaWorks Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# This file is part of AnimaWorks core/server, licensed under Apache-2.0.
+# See LICENSE for the full license text.
+
+
+import asyncio
+import json
+import logging
+import time
+from collections.abc import AsyncGenerator, Callable
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from core.agent import AgentCore
+from core.background import BackgroundTask
+from core.memory.activity import ActivityLogger
+from core.memory.streaming_journal import StreamingJournal
+from core.memory.conversation import ConversationMemory
+from core.memory import MemoryManager
+from core.messenger import InboxItem, Messenger
+from core.paths import load_prompt
+from core.schemas import CycleResult, AnimaStatus, VALID_EMOTIONS
+
+logger = logging.getLogger("animaworks.anima")
+
+
+class DigitalAnima:
+    """A Digital Anima: encapsulates identity, memory, agent, and communication.
+
+    1 anima = 1 directory.
+    """
+
+    def __init__(self, anima_dir: Path, shared_dir: Path) -> None:
+        self.anima_dir = anima_dir
+        self.name = anima_dir.name
+
+        self.memory = MemoryManager(anima_dir)
+        self.model_config = self.memory.read_model_config()
+        self.messenger = Messenger(shared_dir, self.name)
+        self.agent = AgentCore(
+            anima_dir, self.memory, self.model_config, self.messenger
+        )
+
+        self._lock = asyncio.Lock()
+        self._user_waiting = asyncio.Event()
+        # Event NOT set = no user waiting (default state)
+        self._status = "idle"
+        self._current_task = ""
+        self._last_heartbeat: datetime | None = None
+        self._last_activity: datetime | None = None
+        self._on_lock_released: Callable[[], None] | None = None
+
+        # Heartbeat SSE relay: allow process_message_stream to read
+        # heartbeat's streaming chunks while waiting for the lock.
+        self._heartbeat_stream_queue: asyncio.Queue | None = None
+        self._heartbeat_context: str = ""
+
+        # Greet cache (1-hour cooldown)
+        self._last_greet_at: float | None = None
+        self._last_greet_text: str | None = None
+        self._last_greet_emotion: str = "neutral"
+        self._GREET_COOLDOWN = 3600  # seconds
+
+        # Wire background task completion callback
+        self._ws_broadcast: Callable[[dict], Any] | None = None
+        if self.agent.background_manager:
+            self.agent.background_manager.on_complete = self._on_background_task_complete
+
+        logger.info("DigitalAnima '%s' initialized from %s", self.name, anima_dir)
+
+    def set_on_message_sent(
+        self, fn: Callable[[str, str, str], None],
+    ) -> None:
+        """Inject a callback fired after this anima sends a message."""
+        self.agent.set_on_message_sent(fn)
+
+    def set_on_schedule_changed(
+        self, fn: Callable[[str], Any] | None,
+    ) -> None:
+        """Inject a callback fired when heartbeat.md or cron.md is modified."""
+        self.agent.set_on_schedule_changed(fn)
+
+    def drain_notifications(self) -> list[dict[str, Any]]:
+        """Return and clear pending notification events."""
+        return self.agent.drain_notifications()
+
+    def drain_background_notifications(self) -> list[str]:
+        """Read and remove all pending background task notifications.
+
+        Returns list of notification texts for inclusion in heartbeat context.
+        """
+        notif_dir = self.agent.anima_dir / "state" / "background_notifications"
+        if not notif_dir.is_dir():
+            return []
+
+        notifications: list[str] = []
+        for path in sorted(notif_dir.glob("*.md")):
+            try:
+                notifications.append(path.read_text(encoding="utf-8"))
+                path.unlink()
+            except Exception:
+                logger.warning("Failed to read notification: %s", path.name)
+
+        return notifications
+
+    def set_on_lock_released(self, fn: Callable[[], None]) -> None:
+        """Inject a callback invoked when the anima's lock is released."""
+        self._on_lock_released = fn
+
+    def set_ws_broadcast(self, fn: Callable[[dict], Any]) -> None:
+        """Inject a WebSocket broadcast function for background task notifications."""
+        self._ws_broadcast = fn
+
+    async def _on_background_task_complete(self, task: BackgroundTask) -> None:
+        """Callback invoked when a background tool call completes."""
+        logger.info(
+            "[%s] Background task completed: id=%s tool=%s status=%s",
+            self.name, task.task_id, task.tool_name, task.status.value,
+        )
+
+        # Broadcast via WebSocket
+        if self._ws_broadcast:
+            try:
+                await self._ws_broadcast({
+                    "type": "background_task.done",
+                    "data": {
+                        "task_id": task.task_id,
+                        "anima": self.name,
+                        "tool_name": task.tool_name,
+                        "status": task.status.value,
+                        "result_summary": task.summary(),
+                    },
+                })
+            except Exception:
+                logger.exception(
+                    "[%s] WebSocket broadcast failed for bg task %s",
+                    self.name, task.task_id,
+                )
+
+        # Notify human via configured channels
+        if self.agent.has_human_notifier:
+            try:
+                notifier = self.agent.human_notifier
+                if notifier:
+                    await notifier.notify(
+                        subject=f"バックグラウンドタスク完了: {task.tool_name}",
+                        body=task.summary(),
+                        priority="normal",
+                        anima_name=self.name,
+                    )
+            except Exception:
+                logger.exception(
+                    "[%s] Human notification failed for bg task %s",
+                    self.name, task.task_id,
+                )
+
+        # Send inbox notification so next heartbeat picks up the result
+        try:
+            summary = task.summary()
+            subject = f"バックグラウンドタスク完了: {task.tool_name}"
+            if task.status.value == "failed":
+                subject = f"バックグラウンドタスク失敗: {task.tool_name}"
+
+            # Write a notification file to the anima's own inbox-like location
+            # so the next heartbeat can process it
+            notif_dir = self.agent.anima_dir / "state" / "background_notifications"
+            notif_dir.mkdir(parents=True, exist_ok=True)
+            notif_path = notif_dir / f"{task.task_id}.md"
+            notif_content = (
+                f"# {subject}\n\n"
+                f"- タスクID: {task.task_id}\n"
+                f"- ツール: {task.tool_name}\n"
+                f"- ステータス: {task.status.value}\n"
+                f"- 結果: {summary}\n"
+            )
+            notif_path.write_text(notif_content, encoding="utf-8")
+            logger.info(
+                "[%s] Background task notification written: %s",
+                self.name, notif_path.name,
+            )
+        except Exception:
+            logger.exception(
+                "[%s] Failed to write bg task notification for %s",
+                self.name, task.task_id,
+            )
+
+    @property
+    def background_tasks(self) -> list[dict[str, Any]]:
+        """Return a list of all background tasks as dicts."""
+        mgr = self.agent.background_manager
+        if not mgr:
+            return []
+        return [t.to_dict() for t in mgr.list_tasks()]
+
+    def _notify_lock_released(self) -> None:
+        if self._on_lock_released:
+            try:
+                self._on_lock_released()
+            except Exception:
+                logger.exception("[%s] on_lock_released callback failed", self.name)
+
+    # ── Heartbeat history ────────────────────────────────────
+
+    _HEARTBEAT_HISTORY_N = 3
+
+    def _load_heartbeat_history(self) -> str:
+        """Load last N heartbeat history entries from unified activity log.
+
+        Falls back to legacy ``shortterm/heartbeat_history/`` when the
+        activity log is empty (migration period).
+        """
+        try:
+            activity = ActivityLogger(self.anima_dir)
+            entries = activity.recent(
+                days=2,
+                types=["heartbeat_end"],
+                limit=self._HEARTBEAT_HISTORY_N,
+            )
+            if entries:
+                lines: list[str] = []
+                for e in entries:
+                    ts_short = e.ts[11:19] if len(e.ts) >= 19 else e.ts
+                    summary = e.summary or e.content
+                    lines.append(f"- {ts_short}: {summary}")
+                return "\n".join(lines)
+
+            # Legacy fallback: read from shortterm/heartbeat_history/
+            legacy = self.memory.load_recent_heartbeat_summary(
+                limit=self._HEARTBEAT_HISTORY_N,
+            )
+            if legacy:
+                return legacy
+            return ""
+        except Exception:
+            logger.exception("[%s] Failed to load heartbeat history", self.name)
+            return ""
+
+    @property
+    def needs_bootstrap(self) -> bool:
+        """True if this anima has not completed the first-run bootstrap."""
+        return (self.anima_dir / "bootstrap.md").exists()
+
+    @property
+    def status(self) -> AnimaStatus:
+        return AnimaStatus(
+            name=self.name,
+            status=self._status,
+            current_task=self._current_task,
+            last_heartbeat=self._last_heartbeat,
+            last_activity=self._last_activity,
+            pending_messages=self.messenger.unread_count(),
+        )
+
+    async def run_bootstrap(self) -> CycleResult:
+        """Run the first-time bootstrap process in the background.
+
+        Acquires the anima lock, sets status to ``"bootstrapping"``, and
+        triggers an agent cycle with the bootstrap prompt.  The agent reads
+        ``bootstrap.md`` from the anima directory and follows its
+        instructions (identity setup, avatar generation, self-introduction,
+        etc.).  Upon completion the agent deletes ``bootstrap.md``.
+        """
+        if not self.needs_bootstrap:
+            logger.info("[%s] run_bootstrap SKIPPED: no bootstrap.md", self.name)
+            return CycleResult(
+                trigger="bootstrap",
+                action="skipped",
+                summary="Bootstrap not needed",
+            )
+
+        logger.info("[%s] run_bootstrap START", self.name)
+        try:
+            async with self._lock:
+                self._status = "bootstrapping"
+                self._current_task = "Initial bootstrap"
+
+                conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+                prompt = conv_memory.build_chat_prompt(
+                    "あなたの bootstrap.md ファイルを読み、指示に従ってください。",
+                    "system",
+                )
+
+                try:
+                    result = await self.agent.run_cycle(
+                        prompt, trigger="bootstrap"
+                    )
+                    self._last_activity = datetime.now()
+
+                    logger.info(
+                        "[%s] run_bootstrap END duration_ms=%d",
+                        self.name, result.duration_ms,
+                    )
+                    return result
+                except Exception:
+                    logger.exception("[%s] run_bootstrap FAILED", self.name)
+                    raise
+                finally:
+                    self._status = "idle"
+                    self._current_task = ""
+        finally:
+            self._notify_lock_released()
+
+    async def process_message(
+        self,
+        content: str,
+        from_person: str = "human",
+        images: list[dict[str, Any]] | None = None,
+        attachment_paths: list[str] | None = None,
+    ) -> str:
+        logger.info(
+            "[%s] process_message WAITING from=%s content_len=%d images=%d",
+            self.name, from_person, len(content), len(images or []),
+        )
+        self._user_waiting.set()
+        try:
+            async with self._lock:
+                logger.info(
+                    "[%s] process_message START (lock acquired) from=%s",
+                    self.name, from_person,
+                )
+                self._status = "thinking"
+                self._current_task = f"Responding to {from_person}"
+
+                # Build history-aware prompt via conversation memory
+                conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+                await conv_memory.compress_if_needed()
+                prompt = conv_memory.build_chat_prompt(content, from_person)
+
+                # Pre-save: persist user input before agent execution
+                conv_memory.append_turn(
+                    "human", content, attachments=attachment_paths or [],
+                )
+                conv_memory.save()
+
+                # Activity log: message received
+                try:
+                    activity = ActivityLogger(self.anima_dir)
+                    activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
+                except Exception:
+                    pass
+
+                try:
+                    result = await self.agent.run_cycle(
+                        prompt, trigger=f"message:{from_person}",
+                        images=images,
+                    )
+                    self._last_activity = datetime.now()
+
+                    # Record assistant response in conversation memory
+                    conv_memory.append_turn("assistant", result.summary)
+                    conv_memory.save()
+
+                    # Activity log: response sent
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat")
+                    except Exception:
+                        pass
+
+                    logger.info(
+                        "[%s] process_message END duration_ms=%d",
+                        self.name, result.duration_ms,
+                    )
+                    return result.summary
+                except Exception as exc:
+                    logger.exception("[%s] process_message FAILED", self.name)
+                    # Activity log: error
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log(
+                            "error",
+                            summary=f"process_messageエラー: {type(exc).__name__}",
+                            meta={"phase": "process_message", "error": str(exc)[:200]},
+                        )
+                    except Exception:
+                        pass
+                    # Save error marker so the failed exchange is visible
+                    conv_memory.append_turn(
+                        "assistant", "[ERROR: エージェント実行中にエラーが発生しました]"
+                    )
+                    conv_memory.save()
+                    raise
+                finally:
+                    self._status = "idle"
+                    self._current_task = ""
+        finally:
+            self._user_waiting.clear()
+            self._notify_lock_released()
+
+    async def process_message_stream(
+        self,
+        content: str,
+        from_person: str = "human",
+        images: list[dict[str, Any]] | None = None,
+        attachment_paths: list[str] | None = None,
+    ) -> AsyncGenerator[dict, None]:
+        """Streaming version of process_message.
+
+        Yields stream event dicts. The lock is held for the entire duration.
+        If bootstrapping is in progress (lock held + needs_bootstrap), yields
+        an immediate "initializing" message instead of waiting.
+        """
+        # ── Bootstrap guard: return immediately if bootstrap is running ──
+        if self.needs_bootstrap and self._lock.locked():
+            logger.info(
+                "[%s] process_message_stream REJECTED (bootstrapping) from=%s",
+                self.name, from_person,
+            )
+            yield {
+                "type": "bootstrap_busy",
+                "message": "現在初期化中です。しばらくお待ちください。",
+            }
+            return
+
+        logger.info(
+            "[%s] process_message_stream WAITING from=%s content_len=%d images=%d",
+            self.name, from_person, len(content), len(images or []),
+        )
+        self._user_waiting.set()
+        try:
+            # ── Heartbeat relay: stream heartbeat output while waiting ──
+            if self._lock.locked():
+                context_msg = self._heartbeat_context or "処理中です"
+                logger.info(
+                    "[%s] process_message_stream: lock held, starting heartbeat relay",
+                    self.name,
+                )
+                yield {
+                    "type": "heartbeat_relay_start",
+                    "message": f"ハートビート処理中（{context_msg}）",
+                }
+
+                # Create a queue so run_heartbeat can push chunks to us
+                self._heartbeat_stream_queue = asyncio.Queue()
+                try:
+                    while True:
+                        try:
+                            chunk = await asyncio.wait_for(
+                                self._heartbeat_stream_queue.get(), timeout=1.0,
+                            )
+                        except asyncio.TimeoutError:
+                            # Check if lock was released while we waited
+                            if not self._lock.locked():
+                                break
+                            continue
+                        if chunk is None:
+                            # Sentinel: heartbeat finished
+                            break
+                        yield {
+                            "type": "heartbeat_relay",
+                            "text": chunk.get("text", ""),
+                        }
+                finally:
+                    self._heartbeat_stream_queue = None
+
+                yield {"type": "heartbeat_relay_done"}
+                logger.info(
+                    "[%s] process_message_stream: heartbeat relay done",
+                    self.name,
+                )
+
+            async with self._lock:
+                logger.info(
+                    "[%s] process_message_stream START (lock acquired) from=%s",
+                    self.name, from_person,
+                )
+                self._status = "thinking"
+                self._current_task = f"Responding to {from_person}"
+
+                # Build history-aware prompt via conversation memory
+                conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+                await conv_memory.compress_if_needed()
+                prompt = conv_memory.build_chat_prompt(content, from_person)
+
+                # Pre-save: persist user input before agent execution
+                conv_memory.append_turn(
+                    "human", content, attachments=attachment_paths or [],
+                )
+                conv_memory.save()
+
+                # Activity log: message received
+                try:
+                    activity = ActivityLogger(self.anima_dir)
+                    activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
+                except Exception:
+                    pass
+
+                # Streaming journal: write-ahead log for crash recovery
+                journal = StreamingJournal(self.anima_dir)
+                journal.open(
+                    trigger=f"message:{from_person}",
+                    from_person=from_person,
+                )
+
+                partial_response = ""
+                cycle_done = False
+
+                try:
+                    async for chunk in self.agent.run_cycle_streaming(
+                        prompt, trigger=f"message:{from_person}",
+                        images=images,
+                    ):
+                        if chunk.get("type") == "text_delta":
+                            delta_text = chunk.get("text", "")
+                            partial_response += delta_text
+                            journal.write_text(delta_text)
+
+                        if chunk.get("type") == "tool_start":
+                            journal.write_tool_start(
+                                tool=chunk.get("tool_name", ""),
+                                args_summary="",
+                            )
+                        if chunk.get("type") == "tool_end":
+                            journal.write_tool_end(
+                                tool=chunk.get("tool_name", ""),
+                                result_summary="",
+                            )
+
+                        if chunk.get("type") == "cycle_done":
+                            cycle_done = True
+                            self._last_activity = datetime.now()
+                            # Record assistant response in conversation memory
+                            cycle_result = chunk.get("cycle_result", {})
+                            summary = cycle_result.get("summary", "")
+                            conv_memory.append_turn("assistant", summary)
+                            conv_memory.save()
+
+                            # Activity log: response sent
+                            try:
+                                activity = ActivityLogger(self.anima_dir)
+                                activity.log("response_sent", content=summary, to_person=from_person, channel="chat")
+                            except Exception:
+                                pass
+
+                            # Finalize streaming journal (deletes the file)
+                            journal.finalize(summary=summary[:500])
+
+                            # Yield pending notification events before cycle_done
+                            for notif in self.agent.drain_notifications():
+                                yield {"type": "notification_sent", "data": notif}
+
+                            logger.info(
+                                "[%s] process_message_stream END",
+                                self.name,
+                            )
+                        yield chunk
+                except Exception as exc:
+                    logger.exception("[%s] process_message_stream FAILED", self.name)
+                    # Determine error code from exception type
+                    exc_module = type(exc).__module__ or ""
+                    exc_name = type(exc).__qualname__
+                    if "tool" in exc_module.lower() or "tool" in exc_name.lower():
+                        error_code = "TOOL_ERROR"
+                    elif any(
+                        k in exc_module.lower()
+                        for k in ("anthropic", "openai", "litellm", "llm")
+                    ):
+                        error_code = "LLM_ERROR"
+                    else:
+                        error_code = "STREAM_ERROR"
+                    # Activity log: error
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log(
+                            "error",
+                            summary=f"process_message_streamエラー: {type(exc).__name__}",
+                            meta={"phase": "process_message_stream", "error_code": error_code, "error": str(exc)[:200]},
+                        )
+                    except Exception:
+                        pass
+                    yield {
+                        "type": "error",
+                        "code": error_code,
+                        "message": "Internal error",
+                    }
+                finally:
+                    # Save partial response if cycle_done was never received
+                    if not cycle_done:
+                        if partial_response:
+                            saved_text = partial_response + "\n[応答が中断されました]"
+                        else:
+                            saved_text = "[応答が中断されました]"
+                        conv_memory.append_turn("assistant", saved_text)
+                        conv_memory.save()
+                    # Close journal (no-op if already finalized)
+                    journal.close()
+                    self._status = "idle"
+                    self._current_task = ""
+        finally:
+            self._user_waiting.clear()
+            self._notify_lock_released()
+
+    async def process_greet(self) -> dict[str, str | bool]:
+        """Generate a greeting response when user clicks the character.
+
+        Returns a cached response if called within the cooldown period.
+
+        Returns:
+            Dict with keys: response, emotion, cached.
+        """
+        # Check cooldown
+        now = time.time()
+        if (
+            self._last_greet_at is not None
+            and (now - self._last_greet_at) < self._GREET_COOLDOWN
+            and self._last_greet_text is not None
+        ):
+            logger.info(
+                "[%s] process_greet CACHED (%.0fs since last)",
+                self.name, now - self._last_greet_at,
+            )
+            return {
+                "response": self._last_greet_text,
+                "emotion": self._last_greet_emotion,
+                "cached": True,
+            }
+
+        logger.info("[%s] process_greet START", self.name)
+        async with self._lock:
+            prev_status = self._status
+            prev_task = self._current_task
+
+            # Build greet prompt with current state
+            status_text = prev_status if prev_status != "idle" else "待機中"
+            task_text = prev_task if prev_task else "特になし"
+            prompt = load_prompt(
+                "greet", status=status_text, current_task=task_text,
+            )
+
+            self._status = "greeting"
+            self._current_task = "Greeting user"
+
+            conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+
+            # Record visit marker (user turn) before greeting
+            visit_text = "[デスクを訪問]"
+            conv_memory.append_turn("system", visit_text)
+            conv_memory.save()
+
+            try:
+                result = await self.agent.run_cycle(
+                    prompt, trigger="greet:user",
+                )
+                self._last_activity = datetime.now()
+
+                # Extract emotion from response (inline to avoid circular import)
+                import re as _re
+                _em_pat = _re.compile(r'<!--\s*emotion:\s*(\{.*?\})\s*-->', _re.DOTALL)
+                _em_match = _em_pat.search(result.summary)
+                if _em_match:
+                    clean_text = _em_pat.sub("", result.summary).rstrip()
+                    try:
+                        _meta = json.loads(_em_match.group(1))
+                        emotion = _meta.get("emotion", "neutral")
+                        if emotion not in VALID_EMOTIONS:
+                            emotion = "neutral"
+                    except (json.JSONDecodeError, AttributeError):
+                        emotion = "neutral"
+                else:
+                    clean_text = result.summary
+                    emotion = "neutral"
+
+                # Record assistant turn in conversation memory
+                conv_memory.append_turn("assistant", clean_text)
+                conv_memory.save()
+
+                # Update greet cache
+                self._last_greet_at = time.time()
+                self._last_greet_text = clean_text
+                self._last_greet_emotion = emotion
+
+                logger.info(
+                    "[%s] process_greet END duration_ms=%d",
+                    self.name, result.duration_ms,
+                )
+                return {
+                    "response": clean_text,
+                    "emotion": emotion,
+                    "cached": False,
+                }
+            except Exception:
+                logger.exception("[%s] process_greet FAILED", self.name)
+                # Save error marker in conversation memory
+                conv_memory.append_turn(
+                    "assistant", "[ERROR: 挨拶生成中にエラーが発生しました]"
+                )
+                conv_memory.save()
+                raise
+            finally:
+                self._status = prev_status
+                self._current_task = prev_task
+
+    async def run_heartbeat(self) -> CycleResult:
+        # Defer to user messages: skip heartbeat if a user is waiting for the lock
+        if self._user_waiting.is_set():
+            logger.info("[%s] run_heartbeat SKIPPED: user message waiting", self.name)
+            return CycleResult(
+                trigger="heartbeat",
+                action="skipped",
+                summary="User message priority: heartbeat deferred",
+            )
+
+        logger.info("[%s] run_heartbeat START", self.name)
+        try:
+            async with self._lock:
+                self._status = "checking"
+                self._last_heartbeat = datetime.now()
+
+                # Activity log: heartbeat start
+                try:
+                    activity = ActivityLogger(self.anima_dir)
+                    activity.log("heartbeat_start", summary="定期巡回開始")
+                except Exception:
+                    pass
+
+                hb_config = self.memory.read_heartbeat_config()
+                checklist = hb_config or load_prompt("heartbeat_default_checklist")
+                parts = [load_prompt("heartbeat", checklist=checklist)]
+
+                # Inject pending background task notifications
+                bg_notifications = self.drain_background_notifications()
+                if bg_notifications:
+                    notif_text = "\n\n".join(bg_notifications)
+                    parts.append(
+                        "## バックグラウンドタスク完了通知\n\n"
+                        "以下のバックグラウンドタスクが完了しました。"
+                        "結果を確認し、必要に応じて対応してください。\n\n"
+                        + notif_text
+                    )
+
+                # Inject recent heartbeat history for continuity
+                history_text = self._load_heartbeat_history()
+                if history_text:
+                    parts.append(load_prompt(
+                        "heartbeat_history", history=history_text,
+                    ))
+
+                # A-1: Inject recent dialogue context for cross-session continuity
+                try:
+                    conv_mem = ConversationMemory(self.anima_dir, self.model_config)
+                    state = conv_mem.load()
+                    recent_turns = state.turns[-5:] if state.turns else []
+                    if recent_turns:
+                        conv_lines = []
+                        for t in recent_turns:
+                            snippet = t.content[:200]
+                            conv_lines.append(f"- [{t.role}] {snippet}")
+                        conv_summary = "\n".join(conv_lines)
+                        parts.append(
+                            f"## 直近の対話履歴\n\n"
+                            f"以下はユーザーとの直近の対話です。"
+                            f"進行中のタスクや指示がある場合、この内容を考慮してください。\n\n"
+                            f"{conv_summary}"
+                        )
+                except Exception:
+                    logger.debug("[%s] Failed to load dialogue context for heartbeat", self.name, exc_info=True)
+
+                # Read unread messages but do NOT archive yet.
+                # Messages stay in inbox until the agent replies to each sender.
+                unread_count = 0
+                inbox_items: list[InboxItem] = []
+                senders: set[str] = set()
+                if self.messenger.has_unread():
+                    inbox_items = self.messenger.receive_with_paths()
+                    messages = [item.msg for item in inbox_items]
+                    unread_count = len(messages)
+                    senders = {m.from_person for m in messages}
+                    logger.info(
+                        "[%s] Processing %d unread messages in heartbeat (senders: %s)",
+                        self.name, unread_count, ", ".join(senders),
+                    )
+                    summary = "\n".join(
+                        f"- {m.from_person}: {m.content[:800]}" for m in messages
+                    )
+                    parts.append(load_prompt("unread_messages", summary=summary))
+
+                    # Record received message content to episodes so that
+                    # inter-Anima communications survive in episodic memory.
+                    # Without this, only the heartbeat summary (a generic
+                    # one-liner) would be written, and the actual message
+                    # content would be lost after archiving.
+                    _msg_ts = datetime.now().strftime("%H:%M")
+                    _recordable = [m for m in messages if m.type != "ack"]
+                    if len(_recordable) > 50:
+                        logger.warning(
+                            "[%s] DM burst: %d messages, recording first 50",
+                            self.name, len(_recordable),
+                        )
+                    for _m in _recordable[:50]:
+                        _episode = (
+                            f"## {_msg_ts} {_m.from_person}からのメッセージ受信\n\n"
+                            f"**送信者**: {_m.from_person}\n"
+                            f"**内容**:\n{_m.content[:1000]}\n"
+                        )
+                        try:
+                            self.memory.append_episode(_episode)
+                        except Exception:
+                            logger.debug(
+                                "[%s] Failed to record message episode from %s",
+                                self.name, _m.from_person, exc_info=True,
+                            )
+
+                    # Activity log: DM received (full content, summary truncated)
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        for _m in _recordable[:50]:
+                            activity.log("dm_received", content=_m.content, summary=_m.content[:200], from_person=_m.from_person, to_person=self.name)
+                    except Exception:
+                        pass
+
+                # Set heartbeat context for relay
+                if unread_count > 0:
+                    self._heartbeat_context = (
+                        f"{', '.join(senders)}からのメッセージを確認中"
+                    )
+                else:
+                    self._heartbeat_context = "定期巡回中"
+
+                try:
+                    # Reset reply tracking before the cycle
+                    self.agent.reset_reply_tracking()
+
+                    prompt = "\n\n".join(parts)
+                    accumulated_text = ""
+                    result: CycleResult | None = None
+
+                    # Streaming journal for heartbeat crash recovery
+                    journal = StreamingJournal(self.anima_dir)
+                    journal.open(trigger="heartbeat")
+
+                    async for chunk in self.agent.run_cycle_streaming(
+                        prompt, trigger="heartbeat"
+                    ):
+                        # Relay text_delta chunks to waiting user stream
+                        if chunk.get("type") == "text_delta":
+                            journal.write_text(chunk.get("text", ""))
+                            queue = self._heartbeat_stream_queue
+                            if queue is not None:
+                                await queue.put(chunk)
+
+                        if chunk.get("type") == "cycle_done":
+                            cycle_result = chunk.get("cycle_result", {})
+                            result = CycleResult(
+                                trigger=cycle_result.get("trigger", "heartbeat"),
+                                action=cycle_result.get("action", "responded"),
+                                summary=cycle_result.get("summary", ""),
+                                duration_ms=cycle_result.get("duration_ms", 0),
+                                context_usage_ratio=cycle_result.get(
+                                    "context_usage_ratio", 0.0
+                                ),
+                                session_chained=cycle_result.get(
+                                    "session_chained", False
+                                ),
+                                total_turns=cycle_result.get("total_turns", 0),
+                            )
+                            journal.finalize(summary=result.summary[:500])
+
+                    # Send sentinel to close the relay queue
+                    queue = self._heartbeat_stream_queue
+                    if queue is not None:
+                        await queue.put(None)
+
+                    if result is None:
+                        result = CycleResult(
+                            trigger="heartbeat",
+                            action="responded",
+                            summary=accumulated_text or "(no result)",
+                        )
+
+                    self._last_activity = datetime.now()
+                    # Heartbeat history replaced by unified activity log
+
+                    # Activity log: heartbeat end
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log("heartbeat_end", summary=result.summary)
+                    except Exception:
+                        pass
+
+                    # Session boundary: finalize pending conversation turns
+                    try:
+                        conv_mem = ConversationMemory(self.anima_dir, self.model_config)
+                        await conv_mem.finalize_if_session_ended()
+                    except Exception:
+                        logger.debug("[%s] finalize_if_session_ended failed", self.name, exc_info=True)
+
+                    # A-3: Record important heartbeat actions to episodes
+                    if result.summary and "HEARTBEAT_OK" not in result.summary:
+                        ts = datetime.now().strftime("%H:%M")
+                        episode_entry = (
+                            f"## {ts} ハートビート活動\n\n"
+                            f"{result.summary[:500]}"
+                        )
+                        if unread_count > 0:
+                            episode_entry += (
+                                f"\n\n（{unread_count}件のメッセージを処理）"
+                            )
+                        try:
+                            self.memory.append_episode(episode_entry)
+                        except Exception:
+                            logger.debug("[%s] Failed to record heartbeat episode", self.name, exc_info=True)
+
+                    # Archive all messages that were injected into the prompt.
+                    # In A1 mode agents send replies via Bash (not the
+                    # send_message tool), so ToolHandler.replied_to may be
+                    # incomplete.  Keeping unarchived messages causes
+                    # re-processing and heartbeat cascade loops.
+                    #
+                    # NOTE: Message content has already been recorded to
+                    # episodes above (before agent processing).  If that
+                    # recording failed, the messages will still be archived
+                    # here to prevent re-processing loops.  A warning is
+                    # logged so operators can investigate.
+                    if unread_count > 0:
+                        replied_to = self.agent.replied_to
+                        unreplied = senders - replied_to
+                        if unreplied:
+                            logger.info(
+                                "[%s] No send_message tool calls detected for %s "
+                                "(may have replied via Bash)",
+                                self.name, ", ".join(unreplied),
+                            )
+                        total_archived = self.messenger.archive_paths(inbox_items)
+                        logger.info(
+                            "[%s] Archived %d messages from heartbeat",
+                            self.name, total_archived,
+                        )
+
+                    logger.info(
+                        "[%s] run_heartbeat END duration_ms=%d unread_processed=%d",
+                        self.name, result.duration_ms, unread_count,
+                    )
+                    return result
+                except Exception as exc:
+                    logger.exception("[%s] run_heartbeat FAILED", self.name)
+                    # Activity log: error
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log(
+                            "error",
+                            summary=f"run_heartbeatエラー: {type(exc).__name__}",
+                            meta={"phase": "run_heartbeat", "error": str(exc)[:200]},
+                        )
+                    except Exception:
+                        pass
+                    # Send sentinel to close the relay queue on error
+                    queue = self._heartbeat_stream_queue
+                    if queue is not None:
+                        await queue.put(None)
+                    raise
+                finally:
+                    journal.close()
+                    self._status = "idle"
+                    self._current_task = ""
+                    self._heartbeat_context = ""
+        finally:
+            self._notify_lock_released()
+
+    async def run_cron_task(
+        self, task_name: str, description: str
+    ) -> CycleResult:
+        logger.info("[%s] run_cron_task START task=%s", self.name, task_name)
+        try:
+            async with self._lock:
+                self._status = "working"
+                self._current_task = task_name
+
+                prompt = load_prompt(
+                    "cron_task", task_name=task_name, description=description
+                )
+
+                try:
+                    result = await self.agent.run_cycle(
+                        prompt, trigger=f"cron:{task_name}"
+                    )
+                    self._last_activity = datetime.now()
+
+                    # Record cron execution result
+                    self.memory.append_cron_log(
+                        task_name,
+                        summary=result.summary,
+                        duration_ms=result.duration_ms,
+                    )
+
+                    # Activity log: cron executed
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log(
+                            "cron_executed",
+                            summary=f"タスク: {task_name}",
+                            content=result.summary[:500] if result else "",
+                            meta={
+                                "task_name": task_name,
+                                "duration_ms": result.duration_ms if result else 0,
+                            },
+                        )
+                    except Exception:
+                        pass
+
+                    logger.info(
+                        "[%s] run_cron_task END task=%s duration_ms=%d",
+                        self.name, task_name, result.duration_ms,
+                    )
+                    return result
+                except Exception as exc:
+                    logger.exception(
+                        "[%s] run_cron_task FAILED task=%s", self.name, task_name,
+                    )
+                    # Activity log: error
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log(
+                            "error",
+                            summary=f"run_cron_taskエラー: {type(exc).__name__}",
+                            meta={"phase": "run_cron_task", "error": str(exc)[:200]},
+                        )
+                    except Exception:
+                        pass
+                    raise
+                finally:
+                    self._status = "idle"
+                    self._current_task = ""
+        finally:
+            self._notify_lock_released()
+    async def run_cron_command(
+        self,
+        task_name: str,
+        *,
+        command: str | None = None,
+        tool: str | None = None,
+        args: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Execute a command-type cron task (bash or internal tool).
+
+        Args:
+            task_name: Task identifier for logging
+            command: Bash command to execute (mutually exclusive with tool)
+            tool: Internal tool name (mutually exclusive with command)
+            args: Tool arguments (only used with tool)
+
+        Returns:
+            Dictionary with execution results (exit_code, stdout, stderr, duration_ms)
+        """
+        import time
+
+        logger.info("[%s] run_cron_command START task=%s", self.name, task_name)
+        start_ms = time.time_ns() // 1_000_000
+
+        stdout = ""
+        stderr = ""
+        exit_code = 0
+
+        try:
+            async with self._lock:
+                self._status = "working"
+                self._current_task = task_name
+
+                try:
+                    if command:
+                        # Execute bash command
+                        logger.debug("[%s] Executing bash: %s", self.name, command)
+                        proc = await asyncio.create_subprocess_shell(
+                            command,
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        stdout_bytes, stderr_bytes = await proc.communicate()
+                        stdout = stdout_bytes.decode("utf-8", errors="replace")
+                        stderr = stderr_bytes.decode("utf-8", errors="replace")
+                        exit_code = proc.returncode or 0
+
+                    elif tool:
+                        # Execute internal tool via ToolHandler
+                        logger.debug("[%s] Executing tool: %s", self.name, tool)
+                        result = self.agent._tool_handler.handle(tool, args or {})
+                        stdout = str(result)
+                        exit_code = 0
+
+                    else:
+                        stderr = "Neither command nor tool specified"
+                        exit_code = 1
+
+                    self._last_activity = datetime.now()
+
+                except Exception as exc:
+                    stderr = f"{type(exc).__name__}: {exc}"
+                    exit_code = 1
+                    logger.exception(
+                        "[%s] run_cron_command FAILED task=%s", self.name, task_name
+                    )
+                    # Activity log: error
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log(
+                            "error",
+                            summary=f"run_cron_commandエラー: {type(exc).__name__}",
+                            meta={"phase": "run_cron_command", "error": str(exc)[:200]},
+                        )
+                    except Exception:
+                        pass
+                finally:
+                    self._status = "idle"
+                    self._current_task = ""
+
+            duration_ms = (time.time_ns() // 1_000_000) - start_ms
+
+            # Log to cron_log with command-specific format
+            self.memory.append_cron_command_log(
+                task_name,
+                exit_code=exit_code,
+                stdout=stdout,
+                stderr=stderr,
+                duration_ms=duration_ms,
+            )
+
+            # Activity log: cron command executed (intentionally logs even on
+            # failure — exit_code captures the error state, unlike run_cron_task
+            # which re-raises and never reaches this point on error)
+            try:
+                activity = ActivityLogger(self.anima_dir)
+                activity.log(
+                    "cron_executed",
+                    summary=f"コマンド: {task_name}",
+                    meta={"task_name": task_name, "exit_code": exit_code, "command": command or "", "tool": tool or ""},
+                )
+            except Exception:
+                pass
+
+            logger.info(
+                "[%s] run_cron_command END task=%s exit_code=%d duration_ms=%d",
+                self.name,
+                task_name,
+                exit_code,
+                duration_ms,
+            )
+
+            return {
+                "task": task_name,
+                "exit_code": exit_code,
+                "stdout": stdout[:1000],  # Preview for response
+                "stderr": stderr[:1000],
+                "duration_ms": duration_ms,
+            }
+
+        finally:
+            self._notify_lock_released()

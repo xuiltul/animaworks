@@ -1,0 +1,98 @@
+/* ============================================
+   Sidebar Navigation
+   ============================================ */
+
+.sidebar-nav {
+  width: 220px;
+  min-width: 220px;
+  background: #1e293b;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+/* ── Brand ───────────────────────────────────── */
+
+.sidebar-brand {
+  padding: 20px 20px 16px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #93c5fd;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Nav List ────────────────────────────────── */
+
+.nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  flex: 1;
+}
+
+.nav-list li {
+  margin: 0;
+}
+
+/* ── Nav Item ────────────────────────────────── */
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  color: #cbd5e1;
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+
+.nav-item:hover,
+.nav-item:active {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+
+.nav-item.active {
+  background: rgba(37, 99, 235, 0.15);
+  color: #fff;
+  border-left-color: #2563eb;
+}
+
+/* ── Nav Icon ────────────────────────────────── */
+
+.nav-icon {
+  font-size: 1.1rem;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ── External Link ───────────────────────────── */
+
+.nav-external {
+  opacity: 0.75;
+}
+
+.nav-external:hover,
+.nav-external:active {
+  opacity: 1;
+}
+
+/* ── Divider ─────────────────────────────────── */
+
+.nav-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 8px 16px;
+}

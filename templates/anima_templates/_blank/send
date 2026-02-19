@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# send — Anima間メッセージ送信ラッパー
+# Usage: bash send <recipient> "message" [--reply-to ID] [--thread-id ID]
+set -euo pipefail
+SELF="$(basename "$(pwd)")"
+MAIN="${ANIMAWORKS_PROJECT_DIR:-.}/main.py"
+exec python3 "$MAIN" send "$SELF" "$@"

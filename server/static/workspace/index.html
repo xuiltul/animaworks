@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AnimaWorks Workspace</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://esm.sh/three@0.172.0",
+      "three/addons/": "https://esm.sh/three@0.172.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <!-- ── Login Overlay ────────────────── -->
+  <div id="wsLogin"></div>
+
+  <!-- ── Dashboard ────────────────────── -->
+  <div id="wsDashboard" class="hidden">
+
+    <!-- Header -->
+    <header class="ws-header">
+      <div class="ws-header-left">
+        <span class="ws-title">AnimaWorks</span>
+        <span class="ws-subtitle">Workspace</span>
+      </div>
+      <div class="ws-header-center" id="wsAnimaSelector"></div>
+      <div class="ws-header-right">
+        <div class="ws-system-status" id="wsSystemStatus">
+          <span class="status-dot status-offline"></span>
+          <span class="status-text">接続中...</span>
+        </div>
+        <span class="ws-user-info" id="wsUserInfo"></span>
+        <button class="ws-logout-btn" id="wsLogoutBtn">ログアウト</button>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="ws-layout">
+
+      <!-- 3D Office (always visible) -->
+      <div class="ws-office-panel" id="wsOfficePanel">
+        <div class="ws-office-canvas" id="wsOfficeCanvas"></div>
+      </div>
+
+      <!-- Conversation Overlay (appears on top of office) -->
+      <div class="ws-conv-overlay hidden" id="wsConvOverlay">
+        <div class="ws-conv-layout" id="wsConvLayout">
+
+          <!-- Left: Info Sidebar -->
+          <aside class="ws-conv-sidebar">
+            <!-- Tab Bar -->
+            <div class="ws-right-tabs" id="wsRightTabs">
+              <button class="right-tab active" data-tab="state" id="wsTabState">状態</button>
+              <button class="right-tab" data-tab="activity" id="wsTabActivity">活動</button>
+              <button class="right-tab" data-tab="board" id="wsTabBoard">Board</button>
+              <button class="right-tab" data-tab="history" id="wsTabHistory">履歴</button>
+            </div>
+
+            <!-- Tab Panes -->
+            <div class="ws-right-panes">
+              <div class="tab-pane" data-pane="state" id="wsPaneState"></div>
+              <div class="tab-pane" data-pane="activity" id="wsPaneActivity" style="display:none"></div>
+              <div class="tab-pane" data-pane="board" id="wsPaneBoard" style="display:none"></div>
+              <div class="tab-pane" data-pane="history" id="wsPaneHistory" style="display:none"></div>
+            </div>
+
+            <!-- Memory Browser -->
+            <div class="ws-memory-panel" id="wsMemoryPanel"></div>
+            <button class="ws-mobile-memory-close" id="wsMobileMemoryClose" aria-label="閉じる">&times;</button>
+          </aside>
+
+          <!-- Mobile sidebar backdrop -->
+          <div class="ws-conv-sidebar-backdrop" id="wsSidebarBackdrop"></div>
+
+          <!-- Center: Chat -->
+          <main class="ws-conv-main">
+            <div class="ws-conv-header">
+              <button class="ws-mobile-sidebar-toggle" id="wsMobileSidebarToggle" aria-label="サイドバー">&#9776;</button>
+              <button class="ws-conv-back-btn" id="wsConvBack">&larr; オフィスに戻る</button>
+              <span class="ws-conv-anima-name" id="wsConvAnimaName"></span>
+              <button class="ws-mobile-character-toggle" id="wsMobileCharacterToggle" aria-label="キャラクター">&#128100;</button>
+            </div>
+            <div class="ws-conv-messages" id="wsConvMessages">
+              <div class="chat-empty">メッセージはまだありません</div>
+            </div>
+            <div class="ws-conv-input-area">
+              <div class="image-preview-bar" id="wsConvPreviewBar" style="display:none"></div>
+              <div class="chat-input-row">
+                <textarea class="ws-conv-input" id="wsConvInput" placeholder="メッセージを入力... (Ctrl+Enter)" rows="1"></textarea>
+                <button class="chat-attach-btn" type="button" id="wsConvAttachBtn" title="画像を添付">+</button>
+                <button class="ws-conv-send" id="wsConvSend">送信</button>
+              </div>
+              <input type="file" id="wsConvFileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none" />
+            </div>
+          </main>
+
+          <!-- Right: Live2D Character -->
+          <aside class="ws-conv-character">
+            <canvas id="wsConvCanvas"></canvas>
+          </aside>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Reveal Overlay (Anima Birth Animation) ── -->
+    <div id="wsRevealOverlay" class="ws-reveal-overlay" aria-hidden="true">
+      <div class="ws-reveal-flash"></div>
+      <div class="ws-reveal-content">
+        <img class="ws-reveal-avatar" id="wsRevealAvatar" alt="" />
+        <div class="ws-reveal-text" id="wsRevealText"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Module Entry Point ───────────── -->
+  <script type="module" src="modules/app.js?v=20260219a"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# board — Board共有チャネル操作ラッパー
+# Usage:
+#   bash board read <channel> [--limit N] [--human-only]
+#   bash board post <channel> "text"
+#   bash board dm-history <peer> [--limit N]
+set -euo pipefail
+SELF="$(basename "$(pwd)")"
+MAIN="${ANIMAWORKS_PROJECT_DIR:-.}/main.py"
+CMD="${1:-}"
+shift || true
+case "$CMD" in
+  read)       exec python3 "$MAIN" board read "$@" ;;
+  post)       exec python3 "$MAIN" board post "$SELF" "$@" ;;
+  dm-history) exec python3 "$MAIN" board dm-history "$SELF" "$@" ;;
+  *)          echo "Usage: board {read|post|dm-history} ..." >&2; exit 1 ;;
+esac

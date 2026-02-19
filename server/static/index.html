@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AnimaWorks — Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg">
+  <link rel="stylesheet" href="/styles/base.css">
+  <link rel="stylesheet" href="/styles/layout.css">
+  <link rel="stylesheet" href="/styles/sidebar-nav.css">
+  <link rel="stylesheet" href="/styles/dashboard.css">
+  <link rel="stylesheet" href="/styles/chat.css">
+  <link rel="stylesheet" href="/styles/sidebar.css">
+  <link rel="stylesheet" href="/styles/activity.css">
+  <link rel="stylesheet" href="/styles/memory.css">
+  <link rel="stylesheet" href="/styles/history.css">
+  <link rel="stylesheet" href="/styles/avatar.css">
+  <link rel="stylesheet" href="/styles/assets.css">
+  <link rel="stylesheet" href="/styles/board.css">
+  <link rel="stylesheet" href="/styles/responsive.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-screen">
+    <!-- Login form is rendered dynamically by login.js -->
+  </div>
+
+  <header class="app-header">
+    <button class="hamburger-btn" id="hamburgerBtn" aria-label="メニューを開く">&#x2630;</button>
+    <h1 class="app-title">AnimaWorks</h1>
+    <div class="header-spacer"></div>
+    <div class="user-info" id="userInfo">
+      <span class="user-label" id="currentUserLabel"></span>
+      <button class="btn-logout" id="logoutBtn">ログアウト</button>
+    </div>
+    <div class="system-status" id="systemStatus">
+      <span class="status-dot status-idle"></span>
+      <span id="systemStatusText">接続中...</span>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <!-- Mobile Nav Backdrop -->
+    <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
+    <!-- Left Sidebar Navigation -->
+    <nav class="sidebar-nav" id="sidebarNav">
+      <div class="sidebar-brand">AnimaWorks</div>
+      <ul class="nav-list">
+        <li><a href="#/chat" class="nav-item active" data-route="/chat">
+          <span class="nav-icon">&#x1F4AC;</span>チャット</a></li>
+        <li><a href="#/board" class="nav-item" data-route="/board">
+          <span class="nav-icon">&#x1F4CB;</span>ボード</a></li>
+        <li><a href="#/" class="nav-item" data-route="/">
+          <span class="nav-icon">&#x1F9E9;</span>ダッシュボード</a></li>
+        <li><a href="#/activity" class="nav-item" data-route="/activity">
+          <span class="nav-icon">&#x1F4CA;</span>アクティビティ</a></li>
+        <li><a href="#/setup" class="nav-item" data-route="/setup">
+          <span class="nav-icon">&#x2699;</span>セットアップ</a></li>
+        <li><a href="#/users" class="nav-item" data-route="/users">
+          <span class="nav-icon">&#x1F465;</span>ユーザー</a></li>
+        <li><a href="#/animas" class="nav-item" data-route="/animas">
+          <span class="nav-icon">&#x1F338;</span>Anima管理</a></li>
+        <li><a href="#/processes" class="nav-item" data-route="/processes">
+          <span class="nav-icon">&#x1F4BB;</span>プロセス監視</a></li>
+        <li><a href="#/server" class="nav-item" data-route="/server">
+          <span class="nav-icon">&#x1F310;</span>サーバー通信</a></li>
+        <li><a href="#/memory" class="nav-item" data-route="/memory">
+          <span class="nav-icon">&#x1F4DA;</span>記憶ブラウザ</a></li>
+        <li><a href="#/logs" class="nav-item" data-route="/logs">
+          <span class="nav-icon">&#x1F4C4;</span>ログ</a></li>
+        <li><a href="#/assets" class="nav-item" data-route="/assets">
+          <span class="nav-icon">&#x1F3A8;</span>アセット</a></li>
+        <li class="nav-divider"></li>
+        <li><a href="/workspace/" class="nav-item nav-external" target="_blank">
+          <span class="nav-icon">&#x1F3AE;</span>Workspace &#x2197;</a></li>
+      </ul>
+    </nav>
+
+    <!-- Main Content Area -->
+    <div class="main-content" id="pageContent">
+      <!-- Pages are rendered here by the router -->
+    </div>
+  </div>
+
+  <script type="module" src="/modules/app.js?v=20260219a"></script>
+</body>
+</html>

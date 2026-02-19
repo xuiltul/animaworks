@@ -1,0 +1,100 @@
+{
+  "h1_priming_effect": {
+    "t_statistic": 2.6291804178930955,
+    "p_value": 0.01354948589985368,
+    "effect_size": 0.48002047421030253,
+    "interpretation": "small",
+    "significant": true,
+    "mean_reduction_pct": 27.795272353938277,
+    "confidence_interval": [
+      0.23646153734469688,
+      1.8928276746167954
+    ],
+    "sample_size": 30,
+    "mean_hybrid": 3.8303082352416573,
+    "mean_priming": 2.765663629260912
+  },
+  "h2_hybrid_search": {
+    "f_statistic": 16.581586879696765,
+    "p_value": 7.92559735603542e-07,
+    "eta_squared": 0.27598450275453973,
+    "tukey_results": {
+      "bm25_vs_hybrid": {
+        "meandiff": 0.22,
+        "p_adj": 0.0,
+        "lower": 0.1288,
+        "upper": 0.3112,
+        "reject": true
+      },
+      "bm25_vs_vector": {
+        "meandiff": 0.1016,
+        "p_adj": 0.0251,
+        "lower": 0.0104,
+        "upper": 0.1928,
+        "reject": true
+      },
+      "hybrid_vs_vector": {
+        "meandiff": -0.1184,
+        "p_adj": 0.0074,
+        "lower": -0.2095,
+        "upper": -0.0272,
+        "reject": true
+      }
+    },
+    "significant": true,
+    "mean_precision": {
+      "bm25": 0.5917211197448682,
+      "vector": 0.6933331070864628,
+      "hybrid": 0.8117014781433683
+    },
+    "sample_sizes": {
+      "bm25": 30,
+      "vector": 30,
+      "hybrid": 30
+    }
+  },
+  "h3_consolidation": {
+    "coefficients": {
+      "auto_consolidation": 1.6475791788768892,
+      "days_elapsed": -0.03604179325120485,
+      "importance": 0.3631770080261568,
+      "type_procedural": 0.26041560649685813,
+      "type_semantic": 0.2789643805399388
+    },
+    "odds_ratios": {
+      "auto_consolidation": 5.194389905549182,
+      "days_elapsed": 0.9645999788714604,
+      "importance": 1.4378903548502042,
+      "type_procedural": 1.2974692112598427,
+      "type_semantic": 1.3217602626441545
+    },
+    "p_values": {
+      "auto_consolidation": 0.0,
+      "days_elapsed": 0.24423457039405827,
+      "importance": 0.0,
+      "type_procedural": 0.0,
+      "type_semantic": 0.0
+    },
+    "aic": -216.16509104846034,
+    "bic": -199.67350421572016,
+    "accuracy": 0.7,
+    "significant_predictors": [
+      "auto_consolidation",
+      "importance",
+      "type_procedural",
+      "type_semantic"
+    ],
+    "sample_size": 200,
+    "n_features": 5
+  },
+  "power_analysis": {
+    "required_n_per_group": 64,
+    "effect_size": 0.5,
+    "alpha": 0.05,
+    "power": 0.8,
+    "interpretation": "medium"
+  },
+  "inter_rater_reliability": {
+    "cohens_kappa": 0.699248120300752
+  }
+}

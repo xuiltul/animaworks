@@ -1,0 +1,183 @@
+/* ============================================
+   Digital Anima — History Panel Styles
+   ============================================ */
+
+.history-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.history-session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+
+.session-section-header {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 12px 8px 4px;
+  border-bottom: 1px solid #eee;
+}
+
+.session-item {
+  padding: 10px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.session-item:hover,
+.session-item:active {
+  background: #f0f4ff;
+}
+
+.session-item.session-active {
+  border-left: 3px solid #22c55e;
+  background: #f0fdf4;
+}
+
+.session-item-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.session-item-meta {
+  font-size: 0.72rem;
+  color: #888;
+  margin-top: 2px;
+}
+
+.session-item-preview {
+  font-size: 0.78rem;
+  color: #666;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 8px;
+}
+
+.history-detail-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 4px 0 8px;
+  flex-shrink: 0;
+}
+
+.history-conversation {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding-bottom: 12px;
+}
+
+.history-turn-meta {
+  font-size: 0.7rem;
+  color: #999;
+  margin-bottom: 2px;
+  padding-left: 4px;
+}
+
+.history-summary {
+  background: #fefce8;
+  border: 1px solid #fef08a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.history-summary-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #a16207;
+  margin-bottom: 6px;
+}
+
+.history-summary-body {
+  font-size: 0.82rem;
+  color: #444;
+  line-height: 1.55;
+}
+
+.history-markdown {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: #333;
+  padding: 8px;
+}
+
+.history-markdown p { margin: 0 0 0.5em; }
+.history-markdown p:last-child { margin-bottom: 0; }
+.history-markdown h1,
+.history-markdown h2,
+.history-markdown h3 { margin: 0.6em 0 0.3em; line-height: 1.3; }
+.history-markdown h1 { font-size: 1.1em; }
+.history-markdown h2 { font-size: 1.05em; }
+.history-markdown h3 { font-size: 1em; }
+.history-markdown ul,
+.history-markdown ol { margin: 0.3em 0; padding-left: 1.4em; }
+.history-markdown li { margin: 0.15em 0; }
+.history-markdown code {
+  background: #e0e0e0;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-size: 0.85em;
+}
+.history-markdown pre {
+  background: #2d2d2d;
+  color: #f8f8f2;
+  padding: 8px 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.4em 0;
+  font-size: 0.82em;
+}
+.history-markdown pre code { background: none; padding: 0; color: inherit; }
+
+.history-session-meta {
+  font-size: 0.82rem;
+  color: #555;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 12px;
+}
+
+.history-section {
+  margin-bottom: 16px;
+}
+
+.history-section-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.history-pre {
+  background: #fafafa;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #eee;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}

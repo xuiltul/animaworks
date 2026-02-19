@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Project
+site/
+site-docs/
+# mkdocs.yml は管理対象
+.env
+tmp/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Evaluation framework - generated data (excluded from repo)
+tests/evaluation/datasets/
+tests/evaluation/scenarios/
+tests/evaluation/ground_truth/
+tests/evaluation/_datasets/
+tests/evaluation/_experiment_data/
+
+# Evaluation results - tracked in repo for reproducibility
+# tests/evaluation/results/ is committed
