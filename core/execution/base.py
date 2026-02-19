@@ -111,6 +111,31 @@ class BaseExecutor(ABC):
             return self._model_config.api_key
         return os.environ.get(self._model_config.api_key_env)
 
+    def _read_replied_to_file(self) -> set[str]:
+        """Read replied_to entries from persistent file."""
+        import json as _json
+        import logging
+
+        replied_to_path = self._anima_dir / "run" / "replied_to.jsonl"
+        if not replied_to_path.exists():
+            return set()
+        names: set[str] = set()
+        _logger = logging.getLogger("animaworks.execution.base")
+        try:
+            for line in replied_to_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = _json.loads(line)
+                    if entry.get("success"):
+                        names.add(entry["to"])
+                except (KeyError, _json.JSONDecodeError):
+                    continue
+        except Exception as e:
+            _logger.warning("Failed to read replied_to file: %s", e)
+        return names
+
     # -- Execution -----------------------------------------
 
     @abstractmethod

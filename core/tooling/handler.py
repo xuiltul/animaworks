@@ -318,6 +318,19 @@ class ToolHandler:
         """Clear reply tracking (call at start of each heartbeat cycle)."""
         self._replied_to.clear()
 
+    def _persist_replied_to(self, to: str, *, success: bool) -> None:
+        """Persist replied_to entry to file for cross-mode tracking."""
+        if not self._anima_dir:
+            return
+        replied_to_path = self._anima_dir / "run" / "replied_to.jsonl"
+        try:
+            replied_to_path.parent.mkdir(parents=True, exist_ok=True)
+            entry = _json.dumps({"to": to, "success": success}, ensure_ascii=False)
+            with replied_to_path.open("a", encoding="utf-8") as f:
+                f.write(entry + "\n")
+        except Exception as e:
+            logger.warning("Failed to persist replied_to for '%s': %s", to, e)
+
     def merge_replied_to(self, names: set[str]) -> None:
         """Merge externally detected reply targets into tracking."""
         self._replied_to.update(names)
@@ -444,8 +457,8 @@ class ToolHandler:
                 activity.log("human_notify", content=args.get("body", "")[:200], via="configured_channels")
             else:
                 activity.log("tool_use", tool=name, summary=str(args)[:200])
-        except Exception:
-            pass  # Never let activity logging break tool execution
+        except Exception as e:
+            logger.warning("Activity logging failed for tool '%s': %s", name, e)
 
     # ── Memory tool handlers ─────────────────────────────────
 
@@ -586,13 +599,16 @@ class ToolHandler:
         except ValueError as e:
             # Unknown recipient — return helpful error
             return _error_result("UnknownRecipient", str(e))
-        except Exception:
-            # Fallback: treat as internal (preserve backward compatibility)
-            logger.debug(
-                "Recipient resolution failed for '%s', falling back to internal",
-                to, exc_info=True,
+        except Exception as e:
+            logger.warning(
+                "Recipient resolution failed for '%s': %s",
+                to, e, exc_info=True,
             )
-            resolved = None
+            return _error_result(
+                "RecipientResolutionError",
+                f"Failed to resolve recipient '{to}': {e}",
+                suggestion="Check config.json external_messaging settings",
+            )
 
         # ── External routing ──
         if resolved is not None and not resolved.is_internal:
@@ -601,6 +617,7 @@ class ToolHandler:
                 to, resolved.channel,
             )
             self._replied_to.add(to)
+            self._persist_replied_to(to, success=True)
 
             # Log to dm_logs via messenger (Activity Timeline)
             msg = self._messenger.send(
@@ -634,6 +651,7 @@ class ToolHandler:
         )
         logger.info("send_message to=%s thread=%s", internal_to, msg.thread_id)
         self._replied_to.add(internal_to)
+        self._persist_replied_to(internal_to, success=True)
 
         if self._on_message_sent:
             try:

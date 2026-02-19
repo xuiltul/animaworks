@@ -26,10 +26,10 @@ BroadcastFn = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 # Minimum seconds between consecutive message-triggered heartbeats
 # for the same anima. Prevents cascading loops (A sends to B, B replies
 # to A, A replies to B, …).
-_MSG_HEARTBEAT_COOLDOWN_S = 60
+_MSG_HEARTBEAT_COOLDOWN_S = 300  # 5 minutes
 
-_CASCADE_WINDOW_S = 600   # 10 minutes
-_CASCADE_THRESHOLD = 4     # max round-trips per pair within window
+_CASCADE_WINDOW_S = 1800  # 30 minutes
+_CASCADE_THRESHOLD = 3     # max round-trips per pair within window
 
 class LifecycleManager:
     """Manages heartbeat and cron for Digital Animas via APScheduler."""

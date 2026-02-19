@@ -34,11 +34,6 @@ logger = logging.getLogger("animaworks.execution.agent_sdk")
 __all__ = ["AgentSDKExecutor", "StreamDisconnectedError"]
 
 
-_SEND_PATTERNS = [
-    re.compile(r"Sent:\s+\S+\s+->\s+(\w+)"),           # CLI output: "Sent: sakura -> kotoha (...)"
-    re.compile(r"Message sent to (\w+)"),                # ToolHandler: "Message sent to kotoha (...)"
-]
-
 _BASH_SEND_RE = re.compile(r"^\s*(?:bash\s+)?send\s+(\S+)\s+")
 
 # ── A1 mode security ──────────────────────────────────────────
@@ -368,28 +363,6 @@ class AgentSDKExecutor(BaseExecutor):
             env["ANTHROPIC_BASE_URL"] = self._model_config.api_base_url
         return env
 
-    # ── Transcript parsing ─────────────────────────────────────
-
-    def _parse_replied_to(self, transcript_path: str) -> set[str]:
-        """Parse Agent SDK transcript for message send patterns."""
-        if not transcript_path:
-            return set()
-        path = Path(transcript_path)
-        if not path.exists():
-            return set()
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError:
-            logger.debug("Could not read transcript: %s", transcript_path)
-            return set()
-        names: set[str] = set()
-        for pat in _SEND_PATTERNS:
-            for m in pat.finditer(content):
-                names.add(m.group(1))
-        if names:
-            logger.debug("Parsed replied_to from transcript: %s", names)
-        return names
-
     def _check_unconfirmed_sends(
         self,
         pending_sends: list[dict],
@@ -536,7 +509,7 @@ class AgentSDKExecutor(BaseExecutor):
             "Agent SDK completed, messages=%d text_blocks=%d",
             message_count, len(response_text),
         )
-        replied_to = self._parse_replied_to(_transcript_path)
+        replied_to = self._read_replied_to_file()
         unconfirmed = self._check_unconfirmed_sends(pending_sends, replied_to)
         return ExecutionResult(
             text="\n".join(response_text) or "(no response)",
@@ -697,7 +670,7 @@ class AgentSDKExecutor(BaseExecutor):
             message_count, len(response_text),
         )
         full_text = "\n".join(response_text) or "(no response)"
-        replied_to = self._parse_replied_to(_transcript_path)
+        replied_to = self._read_replied_to_file()
         unconfirmed = self._check_unconfirmed_sends(pending_sends, replied_to)
         yield {
             "type": "done",

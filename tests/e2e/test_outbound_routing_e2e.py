@@ -237,7 +237,7 @@ class TestRobustRecipientHandling:
 
 
 class TestFallbackBehavior:
-    def test_config_load_failure_falls_back_to_internal(
+    def test_config_load_failure_returns_error_json(
         self, make_anima, make_handler,
     ):
         sakura_dir = make_anima("sakura")
@@ -248,8 +248,11 @@ class TestFallbackBehavior:
                 "send_message", {"to": "user", "content": "hi"},
             )
 
-        # Should fall back to internal messaging, not crash
-        assert "Message sent" in result or "error" not in result.lower()
+        # Should return a RecipientResolutionError instead of silently
+        # falling back to internal messaging
+        parsed = json.loads(result)
+        assert parsed["status"] == "error"
+        assert parsed["error_type"] == "RecipientResolutionError"
 
     @patch("core.outbound._send_via_slack")
     def test_activity_timeline_log_on_external(

@@ -182,6 +182,13 @@ def send_external(
     Tries the resolved channel first, then falls back to alternatives.
     """
     channels_to_try = _build_channel_order(resolved)
+    if not channels_to_try:
+        return json.dumps({
+            "status": "error",
+            "error_type": "NoChannelConfigured",
+            "message": f"No external messaging channel configured for '{resolved.name}'. "
+                       f"Set up slack or chatwork in config.json external_messaging.",
+        }, ensure_ascii=False)
 
     last_error = ""
     for channel in channels_to_try:

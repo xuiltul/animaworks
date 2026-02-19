@@ -26,7 +26,7 @@ const COLOR = {
   book2:       0x4e7cc4,
   book3:       0x52c44e,
   highlight:   0xffcc00,
-  connector:   0xaaaaaa,
+  connector:   0x556677,
 };
 
 /** Spacing between desks in a row (X axis). */
@@ -562,12 +562,12 @@ function buildDesks(scene) {
  * @param {Array<{name: string, role?: string, supervisor?: string}>} animas
  */
 function buildConnectors(scene, animas) {
-  const LINE_W = 0.08;
-  const Y = 0.02;
+  const LINE_W = 0.1;
+  const Y = 0.03;
   const lineMat = new THREE.MeshBasicMaterial({
     color: COLOR.connector,
     transparent: true,
-    opacity: 0.55,
+    opacity: 0.7,
   });
   _disposables.add(lineMat);
 
@@ -605,8 +605,8 @@ function buildConnectors(scene, animas) {
       // 1. Vertical: parent desk → bus
       addSegment(parentPos.x, parentPos.z + 1.0, parentPos.x, busZ);
 
-      // 2. Horizontal bus spanning all children
-      const xs = childPositions.map((p) => p.x);
+      // 2. Horizontal bus spanning parent and all children
+      const xs = [parentPos.x, ...childPositions.map((p) => p.x)];
       const minX = Math.min(...xs);
       const maxX = Math.max(...xs);
       if (minX < maxX) {

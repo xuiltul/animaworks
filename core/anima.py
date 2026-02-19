@@ -824,6 +824,10 @@ class DigitalAnima:
                 try:
                     # Reset reply tracking before the cycle
                     self.agent.reset_reply_tracking()
+                    # Clear replied_to persistence file
+                    _replied_to_path = self.anima_dir / "run" / "replied_to.jsonl"
+                    if _replied_to_path.exists():
+                        _replied_to_path.unlink(missing_ok=True)
 
                     prompt = "\n\n".join(parts)
                     accumulated_text = ""
@@ -919,16 +923,29 @@ class DigitalAnima:
                     if unread_count > 0:
                         replied_to = self.agent.replied_to
                         unreplied = senders - replied_to
+
+                        # Only archive messages from senders that were replied to
+                        items_to_archive = [
+                            item for item in inbox_items
+                            if item.msg.from_person in replied_to
+                            or item.msg.from_person not in senders  # system messages etc.
+                        ]
+                        items_to_keep = [
+                            item for item in inbox_items
+                            if item not in items_to_archive
+                        ]
+
                         if unreplied:
-                            logger.info(
-                                "[%s] No send_message tool calls detected for %s "
-                                "(may have replied via Bash)",
+                            logger.warning(
+                                "[%s] Unreplied messages from %s will remain in inbox "
+                                "for next heartbeat cycle",
                                 self.name, ", ".join(unreplied),
                             )
-                        total_archived = self.messenger.archive_paths(inbox_items)
+
+                        total_archived = self.messenger.archive_paths(items_to_archive)
                         logger.info(
-                            "[%s] Archived %d messages from heartbeat",
-                            self.name, total_archived,
+                            "[%s] Archived %d/%d messages (kept %d unreplied in inbox)",
+                            self.name, total_archived, len(inbox_items), len(items_to_keep),
                         )
 
                     logger.info(
