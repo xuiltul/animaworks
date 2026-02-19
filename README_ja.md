@@ -13,21 +13,33 @@
 ## クイックスタート
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh   # uvをインストール（インストール済みならスキップ）
-git clone https://github.com/xuiltul/animaworks.git && cd animaworks
-uv sync
+curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh | bash
+cd animaworks
 uv run animaworks init      # ブラウザにセットアップウィザードが開く
 uv run animaworks start     # サーバー起動
 ```
 
 **http://localhost:18500/** を開く — 最初のAnimaが待っている。クリックして会話を始めよう。
 
-**セットアップはこれで完了。** `uv` がPython 3.12+と全依存パッケージを自動でダウンロードする。手動のPythonインストールは不要。
+**セットアップはこれで完了。** セットアップスクリプトが [uv](https://docs.astral.sh/uv/) をインストールし、リポジトリをクローンし、Python 3.12+と全依存パッケージを自動でダウンロードする。
 
-> **他のLLMを使う場合:** `.env.example` を `.env` にコピーしてAPIキーを追加。詳細は [APIキーリファレンス](#apiキーリファレンス) を参照。
+> **他のLLMを使う場合:** `.env` を編集してAPIキーを追加。詳細は [APIキーリファレンス](#apiキーリファレンス) を参照。
 
 <details>
-<summary><strong>別の方法: pipでインストール</strong></summary>
+<summary><strong>別の方法: スクリプトを確認してから実行</strong></summary>
+
+`curl | bash` を直接実行したくない場合、先にスクリプトの中身を確認できます:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh -o setup.sh
+cat setup.sh            # スクリプトの中身を確認
+bash setup.sh           # 確認後に実行
+```
+
+</details>
+
+<details>
+<summary><strong>別の方法: pipで手動インストール</strong></summary>
 
 Python 3.12+ がシステムにインストール済みであること。
 

@@ -217,7 +217,7 @@ class ProcessHandle:
 
             try:
                 request = IPCRequest(
-                    id="ready_check",
+                    id=f"ping_{uuid.uuid4().hex[:8]}",
                     method="ping",
                     params={}
                 )

@@ -296,6 +296,25 @@ class IPCClient:
             )
             logger.debug("IPC client connected to %s", self.socket_path)
 
+    async def _reconnect(self) -> None:
+        """Reconnect the shared connection (discard stale reader/writer).
+
+        MUST be called while self._lock is held — callers are responsible
+        for acquiring the lock before invoking this method.
+        """
+        logger.warning("[IPC] reconnecting socket=%s", self.socket_path)
+        if self.writer:
+            try:
+                self.writer.close()
+                await self.writer.wait_closed()
+            except Exception:
+                pass
+        self.reader, self.writer = await asyncio.open_unix_connection(
+            path=str(self.socket_path),
+            limit=IPC_BUFFER_LIMIT,
+        )
+        logger.info("[IPC] reconnected socket=%s", self.socket_path)
+
     async def send_request(
         self,
         request: IPCRequest,
@@ -313,7 +332,7 @@ class IPCClient:
 
         Raises:
             asyncio.TimeoutError: If timeout exceeded
-            RuntimeError: If not connected
+            RuntimeError: If not connected or response ID mismatch
         """
         if not self.reader or not self.writer:
             raise RuntimeError("Not connected")
@@ -335,6 +354,18 @@ class IPCClient:
                 response = IPCResponse.from_json(response_line)
                 logger.debug("IPC response received: id=%s", response.id)
 
+                # Validate response ID matches request ID
+                if response.id != request.id:
+                    logger.warning(
+                        "[IPC] ID_MISMATCH method=%s expected=%s got=%s",
+                        request.method, request.id, response.id,
+                    )
+                    await self._reconnect()
+                    raise RuntimeError(
+                        f"IPC protocol error: response ID mismatch "
+                        f"(expected={request.id}, got={response.id})"
+                    )
+
                 return response
 
     async def send_request_stream(
@@ -343,11 +374,11 @@ class IPCClient:
         timeout: float | None = None,
     ) -> AsyncIterator[IPCResponse]:
         """
-        Send a request and yield streaming responses.
+        Send a request and yield streaming responses over a dedicated connection.
 
-        Reads JSON lines until a response with done=True is received.
-        Each intermediate chunk has stream=True and a chunk field.
-        The final response has stream=True, done=True, and a result field.
+        Opens a fresh Unix socket connection for each streaming request so that
+        concurrent unary traffic on the shared connection cannot contaminate the
+        stream with stale responses (e.g. delayed ping replies).
 
         The first readline uses a generous timeout (``max(timeout, 120s)``)
         because the initial response may carry large payloads such as RAG
@@ -364,13 +395,10 @@ class IPCClient:
 
         Raises:
             asyncio.TimeoutError: If timeout exceeded
-            RuntimeError: If not connected
+            RuntimeError: If socket not available or response ID mismatch
         """
         if timeout is None:
             timeout = self._resolve_ipc_timeout()
-        if not self.reader or not self.writer:
-            logger.info("[IPC-STREAM] not connected socket=%s", self.socket_path)
-            raise RuntimeError("Not connected")
 
         import time as _time
         _ipc_start = _time.monotonic()
@@ -379,11 +407,26 @@ class IPCClient:
         # The first chunk may include large RAG data, so allow extra time.
         first_chunk_timeout = max(timeout, 120.0)
 
-        async with self._lock:
+        # Open a dedicated connection for this streaming request so that
+        # concurrent unary traffic (e.g. pings) on the shared connection
+        # cannot contaminate the response stream.
+        logger.info(
+            "[IPC-STREAM] opening dedicated connection socket=%s method=%s id=%s",
+            self.socket_path, request.method, request.id,
+        )
+        try:
+            stream_reader, stream_writer = await asyncio.open_unix_connection(
+                path=str(self.socket_path),
+                limit=IPC_BUFFER_LIMIT,
+            )
+        except (ConnectionRefusedError, FileNotFoundError, OSError) as e:
+            raise RuntimeError(f"Not connected: {e}") from e
+
+        try:
             # Send request
             request_line = request.to_json() + "\n"
-            self.writer.write(request_line.encode("utf-8"))
-            await self.writer.drain()
+            stream_writer.write(request_line.encode("utf-8"))
+            await stream_writer.drain()
             logger.info(
                 "[IPC-STREAM] request sent method=%s id=%s timeout=%.1fs first_chunk_timeout=%.1fs socket=%s",
                 request.method, request.id, timeout, first_chunk_timeout, self.socket_path,
@@ -396,7 +439,7 @@ class IPCClient:
                 effective_timeout = first_chunk_timeout if chunk_count == 0 else timeout
                 try:
                     response_line_bytes = await asyncio.wait_for(
-                        self.reader.readline(),
+                        stream_reader.readline(),
                         timeout=effective_timeout,
                     )
                 except asyncio.TimeoutError:
@@ -421,6 +464,18 @@ class IPCClient:
                 response = IPCResponse.from_json(response_line)
                 chunk_count += 1
 
+                # Validate response ID matches request ID
+                if response.id != request.id:
+                    elapsed = _time.monotonic() - _ipc_start
+                    logger.warning(
+                        "[IPC-STREAM] ID_MISMATCH method=%s expected=%s got=%s chunks=%d elapsed=%.1fs",
+                        request.method, request.id, response.id, chunk_count, elapsed,
+                    )
+                    raise RuntimeError(
+                        f"IPC protocol error: response ID mismatch "
+                        f"(expected={request.id}, got={response.id})"
+                    )
+
                 # Non-streaming response (error or unexpected)
                 if not response.stream:
                     elapsed = _time.monotonic() - _ipc_start
@@ -442,6 +497,14 @@ class IPCClient:
                         request.method, request.id, chunk_count, elapsed,
                     )
                     return
+        finally:
+            elapsed = _time.monotonic() - _ipc_start
+            stream_writer.close()
+            await stream_writer.wait_closed()
+            logger.info(
+                "[IPC-STREAM] dedicated connection closed method=%s id=%s chunks=%d elapsed=%.1fs",
+                request.method, request.id, chunk_count, elapsed,
+            )
 
     async def close(self) -> None:
         """Close the connection."""

@@ -180,7 +180,7 @@ async def test_ipc_stream_connection_close_raises_runtime_error_e2e():
             )
             chunk_sent.set()
             # Block until the test kills the connection
-            await asyncio.sleep(3600)
+            await asyncio.sleep(10)
 
         async def streaming_handler(request: IPCRequest):
             """Handler that returns an async iterator for streaming."""
@@ -217,8 +217,10 @@ async def test_ipc_stream_connection_close_raises_runtime_error_e2e():
                 await asyncio.sleep(0.05)
                 # Forcibly close the server-side writer (simulates process crash)
                 if server_writer_ref:
-                    server_writer_ref[0].close()
-                    await server_writer_ref[0].wait_closed()
+                    # Close the dedicated streaming connection (last one opened),
+                    # not the shared connection (first one from client.connect())
+                    server_writer_ref[-1].close()
+                    await server_writer_ref[-1].wait_closed()
 
             kill_task = asyncio.create_task(kill_connection_after_chunk())
 

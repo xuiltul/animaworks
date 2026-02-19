@@ -149,22 +149,32 @@ async def test_chunked_write_empty_data():
 @pytest.mark.asyncio
 async def test_first_chunk_uses_generous_timeout():
     """First readline should use max(timeout, 120.0) — fast response succeeds."""
+    from unittest.mock import patch
+
     client = IPCClient(Path("/tmp/test_first_chunk.sock"))
     client.reader = asyncio.StreamReader()
     client.writer = MockStreamWriter()
 
-    # Feed a single non-streaming response to the reader
+    # Create dedicated reader/writer for the stream connection
+    mock_reader = asyncio.StreamReader()
+    mock_writer = MockStreamWriter()
+
+    # Feed a single non-streaming response to the dedicated reader
     response = IPCResponse(id="1", result={"ok": True})
     response_bytes = (response.to_json() + "\n").encode("utf-8")
-    client.reader.feed_data(response_bytes)
+    mock_reader.feed_data(response_bytes)
+
+    async def mock_open_unix(*args, **kwargs):
+        return mock_reader, mock_writer
 
     # With timeout=30.0, effective first_chunk_timeout = max(30.0, 120.0) = 120.0
     # The fast response should be read without hitting any timeout
     chunks = []
-    async for chunk in client.send_request_stream(
-        IPCRequest(id="1", method="test"), timeout=30.0
-    ):
-        chunks.append(chunk)
+    with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
+        async for chunk in client.send_request_stream(
+            IPCRequest(id="1", method="test"), timeout=30.0
+        ):
+            chunks.append(chunk)
 
     assert len(chunks) == 1
     assert chunks[0].result == {"ok": True}
@@ -173,21 +183,31 @@ async def test_first_chunk_uses_generous_timeout():
 @pytest.mark.asyncio
 async def test_first_chunk_timeout_respects_higher_value():
     """When user timeout > 120s, first_chunk_timeout should use that larger value."""
+    from unittest.mock import patch
+
     client = IPCClient(Path("/tmp/test_higher_timeout.sock"))
     client.reader = asyncio.StreamReader()
     client.writer = MockStreamWriter()
 
-    # Feed a non-streaming response
+    # Create dedicated reader/writer for the stream connection
+    mock_reader = asyncio.StreamReader()
+    mock_writer = MockStreamWriter()
+
+    # Feed a non-streaming response to the dedicated reader
     response = IPCResponse(id="2", result={"data": "large"})
     response_bytes = (response.to_json() + "\n").encode("utf-8")
-    client.reader.feed_data(response_bytes)
+    mock_reader.feed_data(response_bytes)
+
+    async def mock_open_unix(*args, **kwargs):
+        return mock_reader, mock_writer
 
     # With timeout=300.0, effective first_chunk_timeout = max(300.0, 120.0) = 300.0
     chunks = []
-    async for chunk in client.send_request_stream(
-        IPCRequest(id="2", method="test"), timeout=300.0
-    ):
-        chunks.append(chunk)
+    with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
+        async for chunk in client.send_request_stream(
+            IPCRequest(id="2", method="test"), timeout=300.0
+        ):
+            chunks.append(chunk)
 
     assert len(chunks) == 1
     assert chunks[0].result == {"data": "large"}
@@ -196,9 +216,15 @@ async def test_first_chunk_timeout_respects_higher_value():
 @pytest.mark.asyncio
 async def test_subsequent_chunks_use_normal_timeout():
     """After the first chunk, subsequent reads should use the normal timeout."""
+    from unittest.mock import patch
+
     client = IPCClient(Path("/tmp/test_subsequent.sock"))
     client.reader = asyncio.StreamReader()
     client.writer = MockStreamWriter()
+
+    # Create dedicated reader/writer for the stream connection
+    mock_reader = asyncio.StreamReader()
+    mock_writer = MockStreamWriter()
 
     # Feed a streaming sequence: two chunks then a final done chunk
     chunk1 = IPCResponse(id="3", stream=True, chunk="Hello ")
@@ -206,13 +232,17 @@ async def test_subsequent_chunks_use_normal_timeout():
     final = IPCResponse(id="3", stream=True, done=True, result={"total": 2})
 
     for resp in [chunk1, chunk2, final]:
-        client.reader.feed_data((resp.to_json() + "\n").encode("utf-8"))
+        mock_reader.feed_data((resp.to_json() + "\n").encode("utf-8"))
+
+    async def mock_open_unix(*args, **kwargs):
+        return mock_reader, mock_writer
 
     chunks = []
-    async for chunk in client.send_request_stream(
-        IPCRequest(id="3", method="stream_test"), timeout=30.0
-    ):
-        chunks.append(chunk)
+    with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
+        async for chunk in client.send_request_stream(
+            IPCRequest(id="3", method="stream_test"), timeout=30.0
+        ):
+            chunks.append(chunk)
 
     # All three responses should be received
     assert len(chunks) == 3
@@ -236,6 +266,13 @@ async def test_first_chunk_timeout_fires_on_no_data():
     client.reader = asyncio.StreamReader()
     client.writer = MockStreamWriter()
 
+    # Create dedicated reader/writer for the stream connection (no data fed)
+    mock_reader = asyncio.StreamReader()
+    mock_writer = MockStreamWriter()
+
+    async def mock_open_unix(*args, **kwargs):
+        return mock_reader, mock_writer
+
     # Do NOT feed any data — readline will block forever without mock.
     captured_timeouts: list[float] = []
 
@@ -246,12 +283,13 @@ async def test_first_chunk_timeout_fires_on_no_data():
         coro.close()
         raise asyncio.TimeoutError()
 
-    with patch.object(asyncio, "wait_for", side_effect=mock_wait_for):
-        with pytest.raises(asyncio.TimeoutError):
-            async for _ in client.send_request_stream(
-                IPCRequest(id="4", method="slow"), timeout=30.0
-            ):
-                pass  # pragma: no cover
+    with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
+        with patch.object(asyncio, "wait_for", side_effect=mock_wait_for):
+            with pytest.raises(asyncio.TimeoutError):
+                async for _ in client.send_request_stream(
+                    IPCRequest(id="4", method="slow"), timeout=30.0
+                ):
+                    pass  # pragma: no cover
 
     # The first (and only) call should use first_chunk_timeout = max(30.0, 120.0) = 120.0
     assert len(captured_timeouts) == 1
@@ -271,9 +309,16 @@ async def test_subsequent_chunk_timeout_value():
     client.reader = asyncio.StreamReader()
     client.writer = MockStreamWriter()
 
+    # Create dedicated reader/writer for the stream connection
+    mock_reader = asyncio.StreamReader()
+    mock_writer = MockStreamWriter()
+
     # Feed one streaming chunk (not done) so the loop continues
     chunk1 = IPCResponse(id="5", stream=True, chunk="data")
-    client.reader.feed_data((chunk1.to_json() + "\n").encode("utf-8"))
+    mock_reader.feed_data((chunk1.to_json() + "\n").encode("utf-8"))
+
+    async def mock_open_unix(*args, **kwargs):
+        return mock_reader, mock_writer
 
     captured_timeouts: list[float] = []
     call_count = 0
@@ -292,13 +337,14 @@ async def test_subsequent_chunk_timeout_value():
             coro.close()
             raise asyncio.TimeoutError()
 
-    with patch.object(asyncio, "wait_for", side_effect=mock_wait_for):
-        chunks = []
-        with pytest.raises(asyncio.TimeoutError):
-            async for chunk in client.send_request_stream(
-                IPCRequest(id="5", method="stream"), timeout=30.0
-            ):
-                chunks.append(chunk)
+    with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
+        with patch.object(asyncio, "wait_for", side_effect=mock_wait_for):
+            chunks = []
+            with pytest.raises(asyncio.TimeoutError):
+                async for chunk in client.send_request_stream(
+                    IPCRequest(id="5", method="stream"), timeout=30.0
+                ):
+                    chunks.append(chunk)
 
     # First chunk received successfully
     assert len(chunks) == 1

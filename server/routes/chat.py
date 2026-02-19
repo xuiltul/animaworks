@@ -657,6 +657,24 @@ def create_chat_router() -> APIRouter:
                         "message": "ストリームが予期せず終了しました。再試行してください。",
                     })
 
+            except RuntimeError as e:
+                if "IPC protocol error" in str(e):
+                    elapsed = _time.monotonic() - _stream_start_time
+                    logger.error(
+                        "[SSE-STREAM] IPC_PROTOCOL_ERROR anima=%s stream=%s elapsed=%.1fs error=%s",
+                        name, stream.response_id, elapsed, e,
+                    )
+                    yield registry.format_sse(stream, "error", {
+                        "code": "IPC_PROTOCOL_ERROR",
+                        "message": "通信エラーが発生しました。再試行してください。",
+                    })
+                else:
+                    elapsed = _time.monotonic() - _stream_start_time
+                    logger.exception(
+                        "[SSE-STREAM] RUNTIME_ERROR anima=%s stream=%s elapsed=%.1fs error=%s",
+                        name, stream.response_id, elapsed, e,
+                    )
+                    yield registry.format_sse(stream, "error", {"code": "STREAM_ERROR", "message": "Internal server error"})
             except ValueError as e:
                 elapsed = _time.monotonic() - _stream_start_time
                 logger.error(

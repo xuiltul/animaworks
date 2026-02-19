@@ -255,13 +255,18 @@ class TestIPCPerChunkTimeout:
 
         reader.readline = _readline_with_delay
 
+        # Mock dedicated connection to use our custom reader/writer
+        async def mock_open_unix(*args, **kwargs):
+            return reader, writer
+
         request = IPCRequest(id="req_1", method="test", params={})
 
         # Per-chunk timeout of 0.8s — total time ~1.2s would fail with a
         # single-shot timeout of 0.8s, but per-chunk should succeed.
         collected: list[IPCResponse] = []
-        async for resp in client.send_request_stream(request, timeout=0.8):
-            collected.append(resp)
+        with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
+            async for resp in client.send_request_stream(request, timeout=0.8):
+                collected.append(resp)
 
         assert len(collected) == 4
         assert collected[-1].done is True
@@ -296,8 +301,13 @@ class TestIPCPerChunkTimeout:
 
         reader.readline = _readline_block_after_first
 
+        # Mock dedicated connection to use our custom reader/writer
+        async def mock_open_unix(*args, **kwargs):
+            return reader, writer
+
         request = IPCRequest(id="req_2", method="test", params={})
 
-        with pytest.raises(TimeoutError):
-            async for _ in client.send_request_stream(request, timeout=0.5):
-                pass
+        with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
+            with pytest.raises(TimeoutError):
+                async for _ in client.send_request_stream(request, timeout=0.5):
+                    pass

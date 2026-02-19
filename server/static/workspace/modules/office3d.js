@@ -557,36 +557,76 @@ function buildDesks(scene) {
 
 /**
  * Draw organizational hierarchy connector lines between supervisor and subordinate desks.
+ * Walks the same org tree used for layout to guarantee consistency.
  * @param {THREE.Scene} scene
  * @param {Array<{name: string, role?: string, supervisor?: string}>} animas
  */
 function buildConnectors(scene, animas) {
-  const lineMat = new THREE.LineBasicMaterial({
+  const LINE_W = 0.08;
+  const Y = 0.02;
+  const lineMat = new THREE.MeshBasicMaterial({
     color: COLOR.connector,
     transparent: true,
-    opacity: 0.4,
+    opacity: 0.55,
   });
   _disposables.add(lineMat);
 
-  for (const p of animas) {
-    if (!p.supervisor) continue;
-    const fromPos = _deskLayout[p.supervisor];
-    const toPos = _deskLayout[p.name];
-    if (!fromPos || !toPos) continue;
-
-    // Draw an L-shaped connector: down from parent, then across to child
-    const midZ = (fromPos.z + toPos.z) / 2;
-    const points = [
-      new THREE.Vector3(fromPos.x, 0.01, fromPos.z + 1.0),
-      new THREE.Vector3(fromPos.x, 0.01, midZ),
-      new THREE.Vector3(toPos.x, 0.01, midZ),
-      new THREE.Vector3(toPos.x, 0.01, toPos.z - 1.0),
-    ];
-
-    const geo = new THREE.BufferGeometry().setFromPoints(points);
+  // Draw a flat box from (x1,z1) to (x2,z2) on the floor
+  const addSegment = (x1, z1, x2, z2) => {
+    const dx = x2 - x1;
+    const dz = z2 - z1;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.001) return;
+    const geo = new THREE.BoxGeometry(len, 0.01, LINE_W);
     _disposables.add(geo);
-    const line = new THREE.Line(geo, lineMat);
-    scene.add(line);
+    const mesh = new THREE.Mesh(geo, lineMat);
+    mesh.position.set((x1 + x2) / 2, Y, (z1 + z2) / 2);
+    mesh.rotation.y = -Math.atan2(dz, dx);
+    scene.add(mesh);
+  };
+
+  // Rebuild the same tree used for layout, then walk it recursively
+  const roots = buildOrgTree(animas);
+
+  /** @param {TreeNode} node */
+  const walkNode = (node) => {
+    const parentPos = _deskLayout[node.name];
+    if (!parentPos) return;
+
+    // Collect children that have desk positions
+    const kids = node.children.filter((c) => _deskLayout[c.name]);
+    if (kids.length > 0) {
+      const childPositions = kids.map((c) => _deskLayout[c.name]);
+
+      // Bus Z = midpoint between parent and children row
+      const childZ = childPositions[0].z;
+      const busZ = (parentPos.z + childZ) / 2;
+
+      // 1. Vertical: parent desk → bus
+      addSegment(parentPos.x, parentPos.z + 1.0, parentPos.x, busZ);
+
+      // 2. Horizontal bus spanning all children
+      const xs = childPositions.map((p) => p.x);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      if (minX < maxX) {
+        addSegment(minX, busZ, maxX, busZ);
+      }
+
+      // 3. Vertical: bus → each child desk
+      for (const cp of childPositions) {
+        addSegment(cp.x, busZ, cp.x, cp.z - 1.0);
+      }
+    }
+
+    // Recurse into children
+    for (const child of node.children) {
+      walkNode(child);
+    }
+  };
+
+  for (const root of roots) {
+    walkNode(root);
   }
 }
 
@@ -610,7 +650,7 @@ function buildDecorations(scene) {
 
   // A center-ish plant if the office is large enough
   if (_floorWidth >= 14 && _floorDepth >= 10) {
-    buildPlant(scene, 0, 0, potMat, leafMat, 0.25, 0.6);
+//    buildPlant(scene, 0, 0, potMat, leafMat, 0.25, 0.6);
   }
 }
 
@@ -926,7 +966,7 @@ export function initOffice(container, animas = []) {
   _controls.enableRotate = true;
   _controls.enableZoom = true;
   _controls.minZoom = 0.5;
-  _controls.maxZoom = 3;
+  _controls.maxZoom = 10;
   _controls.maxPolarAngle = Math.PI / 2.5;   // prevent looking from below
   _controls.minPolarAngle = Math.PI / 6;     // prevent looking from directly above
   _controls.target.set(0, 0, 0);

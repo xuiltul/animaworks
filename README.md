@@ -13,21 +13,33 @@ Each agent has its own name, personality, memory, and schedule. They communicate
 ## Quick Start
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv (skip if already installed)
-git clone https://github.com/xuiltul/animaworks.git && cd animaworks
-uv sync
+curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh | bash
+cd animaworks
 uv run animaworks init      # opens setup wizard in your browser
 uv run animaworks start     # start the server
 ```
 
 Open **http://localhost:18500/** — your first Anima is ready. Click to start chatting.
 
-**That's it.** `uv` automatically downloads Python 3.12+ and all dependencies. No manual Python install needed.
+**That's it.** The setup script installs [uv](https://docs.astral.sh/uv/), clones the repo, and downloads Python 3.12+ with all dependencies automatically.
 
-> **Using a different LLM?** Copy `.env.example` to `.env` and add your API key. See [API Key Reference](#api-key-reference) below.
+> **Using a different LLM?** Edit `.env` and add your API key. See [API Key Reference](#api-key-reference) below.
 
 <details>
-<summary><strong>Alternative: install with pip</strong></summary>
+<summary><strong>Alternative: inspect before running</strong></summary>
+
+If you prefer to verify the setup script before executing it:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh -o setup.sh
+cat setup.sh            # review the script
+bash setup.sh           # run after inspection
+```
+
+</details>
+
+<details>
+<summary><strong>Alternative: manual install with pip</strong></summary>
 
 Requires Python 3.12+ already installed on your system.
 
