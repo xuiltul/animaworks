@@ -12,92 +12,34 @@
 
 ## クイックスタート
 
-### 1. Python 3.12+ をインストール
-
-AnimaWorksには **Python 3.12以上** が必要です。まずバージョンを確認:
-
 ```bash
-python3 --version
-```
-
-3.11以下と表示された場合（macOSは3.9が付属）、新しいバージョンをインストール:
-
-<details>
-<summary><strong>macOS</strong></summary>
-
-```bash
-brew install python@3.13
-```
-
-Homebrewが未インストールの場合: https://brew.sh
-
-インストール後は `python3` の代わりに `python3.13` を使用:
-
-```bash
-python3.13 --version   # 3.13.x と表示されればOK
-```
-
-</details>
-
-<details>
-<summary><strong>Ubuntu / Debian</strong></summary>
-
-```bash
-sudo apt update
-sudo apt install python3.12 python3.12-venv
-```
-
-インストール後は `python3` の代わりに `python3.12` を使用:
-
-```bash
-python3.12 --version   # 3.12.x と表示されればOK
-```
-
-</details>
-
-<details>
-<summary><strong>Windows</strong></summary>
-
-https://www.python.org/downloads/ から3.12以降のインストーラをダウンロード。
-
-インストール時に「Add Python to PATH」にチェックを入れること。
-
-</details>
-
-### 2. クローンとインストール
-
-```bash
-git clone https://github.com/xuiltul/animaworks.git
-cd animaworks
-```
-
-Python 3.12+ のバイナリで仮想環境を作成:
-
-```bash
-python3 -m venv .venv && source .venv/bin/activate    # Linux / macOS
-# Windowsの場合: python -m venv .venv && .venv\Scripts\activate
-```
-
-> **ヒント:** `python3` が古いバージョンのままの場合、バージョン付きコマンドを直接使用:
-> `python3.13 -m venv .venv`（macOS + Homebrew）または `python3.12 -m venv .venv`（Ubuntu）
-
-```bash
-pip install --upgrade pip
-pip install -e .
-```
-
-### 3. 起動
-
-```bash
-animaworks init     # ブラウザにセットアップウィザードが開く
-animaworks start    # サーバー起動
+curl -LsSf https://astral.sh/uv/install.sh | sh   # uvをインストール（インストール済みならスキップ）
+git clone https://github.com/xuiltul/animaworks.git && cd animaworks
+uv sync
+uv run animaworks init      # ブラウザにセットアップウィザードが開く
+uv run animaworks start     # サーバー起動
 ```
 
 **http://localhost:18500/** を開く — 最初のAnimaが待っている。クリックして会話を始めよう。
 
-**セットアップはこれで完了。** 以降はすべてブラウザで。
+**セットアップはこれで完了。** `uv` がPython 3.12+と全依存パッケージを自動でダウンロードする。手動のPythonインストールは不要。
 
 > **他のLLMを使う場合:** `.env.example` を `.env` にコピーしてAPIキーを追加。詳細は [APIキーリファレンス](#apiキーリファレンス) を参照。
+
+<details>
+<summary><strong>別の方法: pipでインストール</strong></summary>
+
+Python 3.12+ がシステムにインストール済みであること。
+
+```bash
+git clone https://github.com/xuiltul/animaworks.git && cd animaworks
+python3 -m venv .venv && source .venv/bin/activate
+pip install --upgrade pip && pip install -e .
+animaworks init
+animaworks start
+```
+
+</details>
 
 ---
 
