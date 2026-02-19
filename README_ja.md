@@ -1,4 +1,4 @@
-# AnimaWorks
+# AnimaWorks  ---  Organization-as-Code
 
 **AIエージェントが「自律的な人」として働くオフィスを作ろう。**
 

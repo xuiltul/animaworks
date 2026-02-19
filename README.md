@@ -1,4 +1,4 @@
-# AnimaWorks
+# AnimaWorks --- Organization-as-Code
 
 **Build an AI office where agents work as autonomous people — not tools.**
 
