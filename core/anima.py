@@ -702,7 +702,10 @@ class DigitalAnima:
                 self._status = prev_status
                 self._current_task = prev_task
 
-    async def run_heartbeat(self) -> CycleResult:
+    async def run_heartbeat(
+        self,
+        cascade_suppressed_senders: set[str] | None = None,
+    ) -> CycleResult:
         # Defer to user messages: skip heartbeat if a user is waiting for the lock
         if self._user_waiting.is_set():
             logger.info("[%s] run_heartbeat SKIPPED: user message waiting", self.name)
@@ -797,6 +800,26 @@ class DigitalAnima:
                     unread_count = len(messages)
                     senders = {m.from_person for m in messages}
 
+                    # ── Filter cascade-suppressed senders ──
+                    if cascade_suppressed_senders:
+                        suppressed_items = [
+                            item for item in inbox_items
+                            if item.msg.from_person in cascade_suppressed_senders
+                        ]
+                        inbox_items = [
+                            item for item in inbox_items
+                            if item.msg.from_person not in cascade_suppressed_senders
+                        ]
+                        messages = [item.msg for item in inbox_items]
+                        if suppressed_items:
+                            logger.info(
+                                "[%s] Cascade-suppressed %d messages from %s",
+                                self.name, len(suppressed_items),
+                                ", ".join(cascade_suppressed_senders & senders),
+                            )
+                        senders = {m.from_person for m in messages}
+                        unread_count = len(messages)
+
                     # ── Message deduplication (Phase 4) ──
                     try:
                         from core.memory.dedup import MessageDeduplicator
@@ -853,9 +876,52 @@ class DigitalAnima:
                         "[%s] Processing %d unread messages in heartbeat (senders: %s)",
                         self.name, unread_count, ", ".join(senders),
                     )
-                    summary = "\n".join(
-                        f"- {m.from_person}: {m.content[:800]}" for m in messages
-                    )
+
+                    # ── Retry counter: track how many times each inbox message is presented ──
+                    _read_counts_path = self.anima_dir / "state" / "inbox_read_counts.json"
+                    _read_counts: dict[str, int] = {}
+                    try:
+                        if _read_counts_path.exists():
+                            _read_counts = json.loads(
+                                _read_counts_path.read_text(encoding="utf-8")
+                            )
+                    except Exception:
+                        _read_counts = {}
+
+                    for item in inbox_items:
+                        key = item.path.name
+                        _read_counts[key] = _read_counts.get(key, 0) + 1
+
+                    # Prune entries for inbox files that no longer exist
+                    inbox_dir = self.anima_dir.parent.parent / "shared" / "inbox" / self.name
+                    _read_counts = {
+                        k: v for k, v in _read_counts.items()
+                        if (inbox_dir / k).exists()
+                    }
+
+                    try:
+                        _read_counts_path.write_text(
+                            json.dumps(_read_counts, ensure_ascii=False),
+                            encoding="utf-8",
+                        )
+                    except Exception:
+                        logger.debug("[%s] Failed to write inbox_read_counts", self.name, exc_info=True)
+
+                    # Format messages with retry annotations
+                    lines: list[str] = []
+                    for item in inbox_items:
+                        m = item.msg
+                        count = _read_counts.get(item.path.name, 1)
+                        if count >= 2:
+                            prefix = f"- {m.from_person} [⚠️ 未返信{count}回目]: "
+                        else:
+                            prefix = f"- {m.from_person}: "
+                        lines.append(f"{prefix}{m.content[:800]}")
+                    # Deferred messages (no InboxItem) are appended without counter
+                    for m in messages:
+                        if not any(item.msg is m for item in inbox_items):
+                            lines.append(f"- {m.from_person}: {m.content[:800]}")
+                    summary = "\n".join(lines)
                     parts.append(load_prompt("unread_messages", summary=summary))
 
                     # Record received message content to episodes so that

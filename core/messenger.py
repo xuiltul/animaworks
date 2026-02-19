@@ -59,6 +59,29 @@ class Messenger:
         reply_to: str = "",
         skip_logging: bool = False,
     ) -> Message:
+        # ── Conversation depth check (internal Anima only) ──
+        if msg_type not in ("ack", "error", "system_alert", "board_mention"):
+            from core.paths import get_animas_dir
+            animas_dir = get_animas_dir()
+            is_internal = (animas_dir / to).is_dir() if animas_dir.exists() else False
+            if is_internal:
+                from core.cascade_limiter import depth_limiter
+                if not depth_limiter.check_and_record(self.anima_name, to):
+                    logger.warning(
+                        "Depth limit exceeded: %s -> %s. Message not sent.",
+                        self.anima_name, to,
+                    )
+                    return Message(
+                        from_person="system",
+                        to_person=self.anima_name,
+                        type="error",
+                        content=(
+                            f"ConversationDepthExceeded: {to}との会話が"
+                            f"10分間に6ターンに達しました。"
+                            f"次のハートビートサイクルまでお待ちください"
+                        ),
+                    )
+
         msg = Message(
             from_person=self.anima_name,
             to_person=to,

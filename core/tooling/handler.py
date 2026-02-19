@@ -656,6 +656,11 @@ class ToolHandler:
             thread_id=args.get("thread_id", ""),
             reply_to=args.get("reply_to", ""),
         )
+
+        # Depth limiter may return an error Message without delivery
+        if msg.type == "error":
+            return f"Error: {msg.content}"
+
         logger.info("send_message to=%s thread=%s", internal_to, msg.thread_id)
         self._replied_to.add(internal_to)
         self._persist_replied_to(internal_to, success=True)

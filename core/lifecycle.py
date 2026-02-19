@@ -154,9 +154,37 @@ class LifecycleManager:
         if not anima:
             return
 
-        logger.info("Heartbeat: %s", name)
-        result = await anima.run_heartbeat()
+        # ── Cascade detection for scheduled heartbeats ──
+        # NOTE: TOCTOU — inbox is peeked here and re-read inside run_heartbeat().
+        # Messages may arrive between the two reads. This is acceptable because
+        # the depth limiter at Messenger.send() is the primary defense; this
+        # check is a best-effort supplementary layer.
+        cascade_suppressed: set[str] = set()
+        senders: set[str] = set()
+        try:
+            inbox_messages = anima.messenger.receive()
+            senders = {m.from_person for m in inbox_messages}
+            if senders:
+                for sender in senders:
+                    if self._check_cascade(name, {sender}):
+                        cascade_suppressed.add(sender)
+        except Exception:
+            logger.debug("Cascade check failed for scheduled HB: %s", name, exc_info=True)
+
+        logger.info("Heartbeat: %s (cascade_suppressed=%s)", name, cascade_suppressed or "none")
+        result = await anima.run_heartbeat(
+            cascade_suppressed_senders=cascade_suppressed or None,
+        )
         self._last_msg_heartbeat_end[name] = time.monotonic()
+
+        # Record pair exchanges for processed senders
+        try:
+            processed_senders = senders - cascade_suppressed if senders else set()
+            if processed_senders:
+                self._record_pair_heartbeat(name, processed_senders)
+        except Exception:
+            logger.debug("Pair heartbeat recording failed: %s", name, exc_info=True)
+
         if self._ws_broadcast:
             await self._ws_broadcast(
                 {
