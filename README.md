@@ -18,6 +18,7 @@ Each agent has its own name, personality, memory, and schedule. They communicate
 git clone https://github.com/xuiltul/animaworks.git
 cd animaworks
 python3 -m venv .venv && source .venv/bin/activate
+pip install --upgrade pip
 pip install -e .
 ```
 
