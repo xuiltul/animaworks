@@ -65,31 +65,30 @@ class TestAppJsScrollFix:
         assert "innerHTML" in func_body
 
 
-class TestChatJsScrollFix:
-    """Verify chat.js contains correct scroll and throttle patterns."""
+class TestWorkspaceAppJsScrollFix:
+    """Verify workspace app.js contains correct scroll and throttle patterns.
+
+    After workspace chat.js deletion, app.js handles all workspace streaming.
+    App.js uses scrollTop-based scrolling (not scrollIntoView).
+    """
 
     @pytest.fixture()
     def source(self) -> str:
-        return (PROJECT_ROOT / "server/static/workspace/modules/chat.js").read_text()
+        return (PROJECT_ROOT / "server/static/workspace/modules/app.js").read_text()
 
-    def test_update_streaming_bubble_uses_raf_scroll(self, source: str):
-        """updateStreamingBubble should use rAF + scrollIntoView."""
-        assert "bubble.scrollIntoView(" in source
-        assert "requestAnimationFrame" in source
-
-    def test_no_synchronous_scroll_in_update_streaming_bubble(self, source: str):
-        """updateStreamingBubble must not set scrollTop synchronously after innerHTML."""
+    def test_update_streaming_bubble_scrolls(self, source: str):
+        """updateStreamingBubble should scroll the messages container."""
         idx = source.index("function updateStreamingBubble")
-        end_marker = source.find("\nfunction ", idx + 100)
+        end_marker = source.find("\n// ──", idx + 1)
         if end_marker == -1:
-            end_marker = len(source)
+            end_marker = source.find("\nfunction ", idx + 100)
         func_body = source[idx:end_marker]
-        assert "scrollTop" not in func_body
+        assert "scrollTop" in func_body or "scrollIntoView" in func_body
 
     def test_schedule_streaming_update_exists(self, source: str):
         """scheduleStreamingUpdate function with rAF throttle guard must exist."""
         assert "function scheduleStreamingUpdate" in source
-        assert "_chatRafPending" in source
+        assert "_convRafPending" in source
 
     def test_text_delta_uses_throttled_update(self, source: str):
         """onTextDelta handler should call scheduleStreamingUpdate."""
@@ -97,14 +96,11 @@ class TestChatJsScrollFix:
         context = source[idx:idx + 400]
         assert "scheduleStreamingUpdate" in context
 
-    def test_render_all_messages_uses_raf_scroll(self, source: str):
-        """renderAllMessages should use rAF + scrollIntoView for scrollToBottom path."""
-        idx = source.index("function renderAllMessages")
-        end_idx = source.find("\n// ──", idx + 1)
+    def test_render_conv_messages_scrolls(self, source: str):
+        """renderConvMessages should scroll messages container."""
+        idx = source.index("function renderConvMessages")
+        end_idx = source.find("\nasync function", idx + 1)
         if end_idx == -1:
             end_idx = source.find("\nfunction ", idx + 100)
         func_body = source[idx:end_idx]
-        assert "requestAnimationFrame" in func_body
-        assert "scrollIntoView" in func_body
-        # scrollTop is used in the scroll-preserve path (prepending older messages),
-        # which is valid; the primary scrollToBottom path uses rAF + scrollIntoView.
+        assert "scrollTop" in func_body

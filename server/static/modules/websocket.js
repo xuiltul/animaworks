@@ -123,7 +123,7 @@ function handleWsMessage(raw) {
     case "anima.cron": {
       const animaName = data.name || data.anima;
       if (animaName) {
-        addActivity("cron", animaName, data.summary || data.job || "スケジュール実行");
+        addActivity("cron", animaName, data.summary || data.task || "スケジュール実行");
       }
       break;
     }

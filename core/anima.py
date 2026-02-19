@@ -809,7 +809,7 @@ class DigitalAnima:
                     try:
                         activity = ActivityLogger(self.anima_dir)
                         for _m in _recordable[:50]:
-                            activity.log("dm_received", content=_m.content, summary=_m.content[:200], from_person=_m.from_person)
+                            activity.log("dm_received", content=_m.content, summary=_m.content[:200], from_person=_m.from_person, to_person=self.name)
                     except Exception:
                         pass
 

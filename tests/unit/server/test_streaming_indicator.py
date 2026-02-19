@@ -21,7 +21,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _DASHBOARD_CSS = _PROJECT_ROOT / "server" / "static" / "styles" / "chat.css"
 _WORKSPACE_CSS = _PROJECT_ROOT / "server" / "static" / "workspace" / "style.css"
 _DASHBOARD_JS = _PROJECT_ROOT / "server" / "static" / "modules" / "chat.js"
-_WORKSPACE_JS = _PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "chat.js"
 
 
 # ── CSS: Breathing Animation ──────────────────────────────
@@ -79,7 +78,7 @@ class TestToolEndBehaviorJS:
     The onToolEnd callback should keep the tool indicator visible (not null it).
     """
 
-    @pytest.mark.parametrize("js_path", [_DASHBOARD_JS, _WORKSPACE_JS])
+    @pytest.mark.parametrize("js_path", [_DASHBOARD_JS])
     def test_tool_end_does_not_clear_active_tool(self, js_path: Path):
         """After onToolEnd, activeTool should remain set (not nulled)."""
         content = js_path.read_text()
@@ -119,7 +118,7 @@ class TestDoneHandlerClearsActiveTool:
     The JS uses callback-style handlers (onDone) rather than switch/case.
     """
 
-    @pytest.mark.parametrize("js_path", [_DASHBOARD_JS, _WORKSPACE_JS])
+    @pytest.mark.parametrize("js_path", [_DASHBOARD_JS])
     def test_done_clears_active_tool(self, js_path: Path):
         """The onDone event handler should reset activeTool to null."""
         content = js_path.read_text()

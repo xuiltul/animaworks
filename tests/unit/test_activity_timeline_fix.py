@@ -98,14 +98,14 @@ class TestAppJsTimestampUsage:
             )
 
     def test_localISOString_usage_count(self) -> None:
-        """localISOString() should appear at least 6 times (4 existing + 2 active handlers).
+        """localISOString() should appear at least 5 times (4 existing + 1 active handler).
 
-        Note: anima.notification handler no longer adds timeline events
-        (Arch-1 fix for double event), so count reduced from 7 to 6.
+        Note: chat.response handler was removed (dead code — no server emit).
+        anima.notification handler is a no-op (Arch-1 fix for double event).
         """
         src = APP_JS.read_text(encoding="utf-8")
         count = src.count("localISOString()")
-        assert count >= 6, f"Expected ≥6 localISOString() usages, got {count}"
+        assert count >= 5, f"Expected ≥5 localISOString() usages, got {count}"
 
 
 # ── Test 5: New event handlers exist in app.js ─────────
@@ -115,7 +115,6 @@ class TestNewEventHandlers:
     """Verify the three new WebSocket event handlers exist."""
 
     @pytest.mark.parametrize("event_name", [
-        "chat.response",
         "anima.proactive_message",
         "anima.notification",
     ])
@@ -123,12 +122,10 @@ class TestNewEventHandlers:
         src = APP_JS.read_text(encoding="utf-8")
         assert f'onEvent("{event_name}"' in src
 
-    def test_chat_response_uses_response_sent_type(self) -> None:
+    def test_chat_response_handler_removed(self) -> None:
+        """chat.response handler was dead code (no server emit) and has been removed."""
         src = APP_JS.read_text(encoding="utf-8")
-        # The chat.response handler should produce type: "response_sent"
-        idx = src.index('onEvent("chat.response"')
-        block = src[idx:idx + 400]
-        assert 'type: "response_sent"' in block
+        assert 'onEvent("chat.response"' not in src
 
     def test_proactive_message_uses_dm_sent_type(self) -> None:
         src = APP_JS.read_text(encoding="utf-8")

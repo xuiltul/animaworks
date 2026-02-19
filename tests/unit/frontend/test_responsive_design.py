@@ -302,8 +302,8 @@ class TestWorkspaceChatMobile:
     """Verify workspace chat.js handles mobile send and virtual keyboard."""
 
     def test_workspace_chat_mobile_enter_send(self) -> None:
-        """Chat.js should have mobile Enter-to-send logic (not just Ctrl+Enter)."""
-        js = _read(WORKSPACE_DIR / "modules" / "chat.js")
+        """Workspace app.js should have mobile Enter-to-send logic (not just Ctrl+Enter)."""
+        js = _read(WORKSPACE_DIR / "modules" / "app.js")
         # Should detect mobile via matchMedia and allow plain Enter
         assert "matchMedia" in js, "Expected matchMedia for mobile detection"
         assert "Enter" in js, "Expected Enter key handling"
@@ -313,13 +313,13 @@ class TestWorkspaceChatMobile:
         assert "mobile" in js.lower() or "max-width: 768px" in js
 
     def test_workspace_chat_visualviewport(self) -> None:
-        """Chat.js should handle visualViewport for mobile keyboard."""
-        js = _read(WORKSPACE_DIR / "modules" / "chat.js")
+        """Workspace app.js should handle visualViewport for mobile keyboard."""
+        js = _read(WORKSPACE_DIR / "modules" / "app.js")
         assert "visualViewport" in js
 
     def test_workspace_chat_mobile_placeholder(self) -> None:
         """Chat placeholder should show mobile-appropriate shortcut hint."""
-        js = _read(WORKSPACE_DIR / "modules" / "chat.js")
+        js = _read(WORKSPACE_DIR / "modules" / "app.js")
         # Should show "Enter" on mobile, "Ctrl+Enter" on desktop
         assert "Ctrl+Enter" in js or "Ctrl\\+Enter" in js
 

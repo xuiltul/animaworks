@@ -169,30 +169,35 @@ class TestStreamingMultiLineSSE:
 # ── chat.js rAF + scrollIntoView pattern ─────────────────────
 
 
-class TestChatJsScrollPattern:
-    """Verify chat.js contains the rAF + scrollIntoView pattern."""
+class TestAppJsScrollPattern:
+    """Verify app.js contains streaming scroll patterns.
+
+    After workspace chat.js deletion, streaming scroll is handled
+    by app.js using scrollTop-based scrolling and rAF-throttled updates.
+    """
 
     @pytest.fixture()
     def source(self) -> str:
-        return _read_source("server/static/workspace/modules/chat.js")
+        return _read_source("server/static/workspace/modules/app.js")
 
-    def test_update_streaming_bubble_uses_scroll_into_view(self, source):
-        assert "scrollIntoView" in source
-
-    def test_update_streaming_bubble_uses_raf(self, source):
-        assert "requestAnimationFrame" in source
+    def test_update_streaming_bubble_exists(self, source):
+        assert "function updateStreamingBubble" in source
 
     def test_schedule_streaming_update_exists(self, source):
         assert "function scheduleStreamingUpdate" in source
 
-    def test_render_all_messages_scrolls_last_element(self, source):
-        assert "lastElementChild" in source
+    def test_schedule_streaming_update_uses_raf(self, source):
+        assert "_convRafPending" in source
+        assert "requestAnimationFrame" in source
 
-    def test_scroll_into_view_uses_block_end(self, source):
-        assert 'block: "end"' in source
-
-    def test_scroll_into_view_uses_instant_behavior(self, source):
-        assert 'behavior: "instant"' in source
+    def test_update_streaming_bubble_scrolls(self, source):
+        """updateStreamingBubble scrolls the messages container."""
+        idx = source.index("function updateStreamingBubble")
+        end_marker = source.find("\n// ──", idx + 1)
+        if end_marker == -1:
+            end_marker = source.find("\nfunction ", idx + 100)
+        func_body = source[idx:end_marker]
+        assert "scrollTop" in func_body or "scrollIntoView" in func_body
 
 
 # ── CSS multi-line rendering ─────────────────────────────────
@@ -229,9 +234,9 @@ class TestMarkdownLineBreakRendering:
     def test_newline_to_br_conversion(self):
         assert "<br>" in _read_source("server/static/workspace/modules/utils.js")
 
-    def test_chat_js_uses_render_simple_markdown(self):
+    def test_app_js_uses_render_simple_markdown(self):
         assert "renderSimpleMarkdown" in _read_source(
-            "server/static/workspace/modules/chat.js"
+            "server/static/workspace/modules/app.js"
         )
 
 

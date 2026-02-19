@@ -63,6 +63,8 @@ const filterDefs = [
   { label: "💗", types: ["heartbeat_start", "heartbeat_end", "heartbeat"] },
   { label: "⏰", types: ["cron_executed", "cron"] },
   { label: "🔧", types: ["tool_use", "memory_write"] },
+  { label: "📣", types: ["human_notify", "notification"] },
+  { label: "⚠️", types: ["error", "issue_resolved"] },
 ];
 
 /** @type {string[]} current filter — empty array means "all" */

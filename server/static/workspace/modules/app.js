@@ -19,7 +19,7 @@ import { initInteractions, showMessageEffect, showConversation, updateInteractio
 import { initTimeline, addTimelineEvent, loadHistory, localISOString } from "./timeline.js";
 import { initMessagePopup, isVisible as isMessagePopupVisible, hide as hideMessagePopup } from "./message-popup.js";
 import { playReveal } from "./reveal.js";
-import { streamChat } from "../../shared/chat-stream.js";
+import { streamChat, fetchActiveStream, fetchStreamProgress } from "../../shared/chat-stream.js";
 import { SwipeHandler } from "../../modules/touch.js";
 import { createLogger } from "../../shared/logger.js";
 import { createImageInput, initLightbox, renderChatImages } from "../../shared/image-input.js";
@@ -92,11 +92,11 @@ function cacheDom() {
 
 // ── Activity Feed ──────────────────────
 
-function addActivity(type, animaName, summary) {
+function addActivity(type, animaName, summary, isoTs) {
   if (!dom.paneActivity) return;
 
-  const now = new Date();
-  const ts = now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  const d = isoTs ? new Date(isoTs) : new Date();
+  const ts = d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
   const icon = getIcon(type);
 
   const entry = document.createElement("div");
@@ -112,6 +112,33 @@ function addActivity(type, animaName, summary) {
   // Cap at 200 entries
   while (dom.paneActivity.children.length > 200) {
     dom.paneActivity.removeChild(dom.paneActivity.lastChild);
+  }
+}
+
+// ── Activity History Loading ──────────────────────
+
+let _activityHistoryLoaded = false;
+
+async function loadActivityHistory() {
+  if (_activityHistoryLoaded || !dom.paneActivity) return;
+  _activityHistoryLoaded = true;
+
+  try {
+    const res = await fetch("/api/activity/recent?hours=24&limit=50&offset=0");
+    if (!res.ok) return;
+    const data = await res.json();
+    const events = data.events || [];
+
+    for (const evt of events) {
+      const type = evt.type || "system";
+      const anima = evt.anima || evt.animas || "";
+      const summary = evt.summary || evt.content || "";
+      const ts = evt.ts || evt.timestamp || "";
+
+      addActivity(type, typeof anima === "string" ? anima : String(anima), summary, ts);
+    }
+  } catch (err) {
+    logger.error("Failed to load activity history", { error: err.message });
   }
 }
 
@@ -133,6 +160,9 @@ function activateRightTab(tab) {
   }
   if (tab === "board") {
     initBoardTab();
+  }
+  if (tab === "activity") {
+    loadActivityHistory();
   }
 }
 
@@ -414,6 +444,93 @@ async function loadAndRenderConvMessages(animaName) {
     setState({ chatMessages: [] });
   }
   renderConvMessages();
+
+  // Check for active stream to resume after page reload
+  resumeConversationStream(animaName);
+}
+
+// ── Stream Resume (page reload recovery) ──────────────────────
+
+async function resumeConversationStream(animaName) {
+  if (convStreamController) return; // Already streaming
+
+  try {
+    const active = await fetchActiveStream(animaName);
+    if (!active || active.status !== "streaming") return;
+
+    const progress = await fetchStreamProgress(animaName, active.response_id);
+    if (!progress) return;
+
+    // Show accumulated text in streaming bubble
+    const { chatMessages } = getState();
+    const streamingMsg = {
+      role: "assistant",
+      text: progress.full_text || "",
+      streaming: true,
+      activeTool: progress.active_tool || null,
+    };
+    setState({ chatMessages: [...chatMessages, streamingMsg] });
+    renderConvMessages();
+
+    dom.convInput.disabled = true;
+    dom.convSend.disabled = true;
+    convStreamController = new AbortController();
+
+    const resumeBody = JSON.stringify({
+      message: "",
+      from_person: getCurrentUser() || "guest",
+      resume: active.response_id,
+      last_event_id: progress.last_event_id || "",
+    });
+
+    await streamChat(animaName, resumeBody, convStreamController.signal, {
+      onTextDelta: (deltaText) => {
+        streamingMsg.text += deltaText;
+        scheduleStreamingUpdate(streamingMsg);
+      },
+      onToolStart: (toolName) => {
+        streamingMsg.activeTool = toolName;
+        setExpression("thinking");
+        updateStreamingBubble(streamingMsg);
+      },
+      onToolEnd: () => {
+        streamingMsg.activeTool = null;
+        setExpression("neutral");
+        updateStreamingBubble(streamingMsg);
+      },
+      onDone: ({ summary, emotion }) => {
+        if (summary) streamingMsg.text = summary;
+        if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
+        streamingMsg.streaming = false;
+        streamingMsg.activeTool = null;
+        setExpression(emotion);
+        setTimeout(() => setExpression("neutral"), 3000);
+        setState({ chatMessages: [...getState().chatMessages] });
+        renderConvMessages();
+      },
+      onError: ({ message: errorMsg }) => {
+        streamingMsg.text += `\n[エラー: ${errorMsg}]`;
+        streamingMsg.streaming = false;
+        setExpression("troubled");
+        setState({ chatMessages: [...getState().chatMessages] });
+        renderConvMessages();
+      },
+    });
+
+    setTalking(false);
+    if (streamingMsg.streaming) {
+      streamingMsg.streaming = false;
+      if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
+      setState({ chatMessages: [...getState().chatMessages] });
+      renderConvMessages();
+    }
+  } catch (err) {
+    logger.error("Resume stream error", { anima: animaName, error: err.message });
+  } finally {
+    convStreamController = null;
+    if (dom.convInput) dom.convInput.disabled = false;
+    if (dom.convSend) dom.convSend.disabled = false;
+  }
 }
 
 // ── SSE Streaming for Conversation ──────────────────────
@@ -460,6 +577,7 @@ async function sendConversationMessage() {
 
     await streamChat(animaName, body, convStreamController.signal, {
       onTextDelta: (deltaText) => {
+        streamingMsg.afterHeartbeatRelay = false;
         if (!talkingStarted) {
           setTalking(true);
           setExpression("neutral");
@@ -477,6 +595,22 @@ async function sendConversationMessage() {
         streamingMsg.activeTool = null;
         setExpression("neutral");
         updateStreamingBubble(streamingMsg);
+      },
+      onHeartbeatRelayStart: ({ message }) => {
+        streamingMsg.heartbeatRelay = true;
+        streamingMsg.heartbeatText = "";
+        streamingMsg.text = "";
+        scheduleStreamingUpdate(streamingMsg);
+      },
+      onHeartbeatRelay: ({ text }) => {
+        streamingMsg.heartbeatText = (streamingMsg.heartbeatText || "") + text;
+        scheduleStreamingUpdate(streamingMsg);
+      },
+      onHeartbeatRelayDone: () => {
+        streamingMsg.heartbeatRelay = false;
+        streamingMsg.heartbeatText = "";
+        streamingMsg.afterHeartbeatRelay = true;
+        scheduleStreamingUpdate(streamingMsg);
       },
       onDone: ({ summary, emotion }) => {
         // Use clean summary (emotion tag already stripped server-side)
@@ -542,7 +676,14 @@ function updateStreamingBubble(msg) {
   if (!bubble) return;
 
   let html = "";
-  if (msg.text) {
+  if (msg.heartbeatRelay) {
+    html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>ハートビート処理中...</div>';
+    if (msg.heartbeatText) {
+      html += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
+    }
+  } else if (msg.afterHeartbeatRelay && !msg.text) {
+    html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>応答を準備中...</div>';
+  } else if (msg.text) {
     html = renderSimpleMarkdown(msg.text);
   } else {
     html = '<span class="cursor-blink"></span>';
@@ -842,13 +983,13 @@ function setupWebSocket() {
   }));
 
   wsUnsubscribers.push(onEvent("anima.cron", (data) => {
-    addActivity("cron", data.name, data.summary || `cron: ${data.job || ""}`);
+    addActivity("cron", data.name, data.summary || `cron: ${data.task || ""}`);
     addTimelineEvent({
       id: Date.now().toString(),
       type: "cron",
       anima: data.name,
       ts: data.ts || localISOString(),
-      summary: data.summary || `cron: ${data.job || ""}`,
+      summary: data.summary || `cron: ${data.task || ""}`,
     });
   }));
 
@@ -885,21 +1026,6 @@ function setupWebSocket() {
         source: data.source || "",
       },
     });
-  }));
-
-  // ── chat.response — user chat messages ──
-  wsUnsubscribers.push(onEvent("chat.response", (data) => {
-    const animaName = data.anima || data.name || "";
-    const response = data.response || data.text || "";
-    if (animaName) {
-      addTimelineEvent({
-        id: Date.now().toString(),
-        type: "response_sent",
-        anima: animaName,
-        ts: data.ts || localISOString(),
-        summary: `応答: ${response.slice(0, 100)}`,
-      });
-    }
   }));
 
   // ── anima.proactive_message — autonomous outbound messages ──
