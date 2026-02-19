@@ -79,7 +79,8 @@ class TestCrashRecovery:
 
         has_orphan() must return True.  recover() must return a
         JournalRecovery whose recovered_text equals the concatenation
-        of all written fragments.  After recovery the file is deleted.
+        of all written fragments.  After confirm_recovery() the file
+        is deleted.
         """
         journal.open(trigger="chat", from_person="tester", session_id="s-crash")
 
@@ -102,7 +103,10 @@ class TestCrashRecovery:
         assert recovery.is_complete is False
 
         journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
-        assert not journal_path.exists(), "Journal file should be deleted after recover"
+        # recover() no longer deletes the file; caller must confirm_recovery()
+        assert journal_path.exists(), "Journal file should survive after recover()"
+        StreamingJournal.confirm_recovery(anima_dir)
+        assert not journal_path.exists(), "Journal file should be deleted after confirm_recovery()"
 
 
 # ── Tool Events Recovery ────────────────────────────────────────────
@@ -414,24 +418,31 @@ class TestRecoverStreamingJournal:
         ) as activity_cls:
             runner._recover_streaming_journal()
 
-        # ActivityLogger was instantiated with anima_dir
-        activity_cls.assert_called_once_with(anima_dir)
+        # ActivityLogger was instantiated twice (crash event + tool_use events)
+        assert activity_cls.call_count == 2
 
-        # log() was called with event_type "error"
-        mock_activity.log.assert_called_once()
-        call_args = mock_activity.log.call_args
-        assert call_args[0][0] == "error"
+        # log() was called multiple times: 1 error + 1 tool_use
+        assert mock_activity.log.call_count == 2
 
-        # Verify keyword arguments
-        assert "プロセスクラッシュ" in call_args[1]["summary"]
+        # First call: error event
+        error_call = mock_activity.log.call_args_list[0]
+        assert error_call[0][0] == "error"
+        assert "プロセスクラッシュ" in error_call[1]["summary"]
 
-        meta = call_args[1]["meta"]
+        meta = error_call[1]["meta"]
         assert meta["recovered_chars"] == len("some output")
         assert meta["trigger"] == "heartbeat"
         assert meta["tool_calls"] == 1
         assert meta["from_person"] == "cron"
         assert "started_at" in meta
         assert "last_event_at" in meta
+
+        # Second call: tool_use event
+        tool_call = mock_activity.log.call_args_list[1]
+        assert tool_call[0][0] == "tool_use"
+        assert "[recovered]" in tool_call[1]["summary"]
+        assert tool_call[1]["tool"] == "web_search"
+        assert tool_call[1]["meta"]["recovered"] is True
 
     def test_recover_no_orphan_noop(self, anima_dir: Path):
         """When no orphaned journal exists, nothing is called.

@@ -273,12 +273,6 @@ class StreamingJournal:
             is_complete=is_complete,
         )
 
-        # Delete the journal after recovery
-        try:
-            path.unlink(missing_ok=True)
-        except OSError:
-            logger.warning("Failed to delete recovered journal: %s", path)
-
         logger.info(
             "Recovered streaming journal: %d chars, %d tool calls, complete=%s",
             len(recovery.recovered_text),
@@ -286,6 +280,15 @@ class StreamingJournal:
             recovery.is_complete,
         )
         return recovery
+
+    @classmethod
+    def confirm_recovery(cls, anima_dir: Path) -> None:
+        """Delete journal after recovery data has been safely persisted."""
+        path = anima_dir / "shortterm" / _JOURNAL_FILENAME
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Failed to delete recovered journal: %s", path)
 
     # ── Private helpers ───────────────────────────────────────
 

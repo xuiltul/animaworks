@@ -14,6 +14,7 @@ import unicodedata
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from core.memory._io import atomic_write_text
 from core.paths import get_common_knowledge_dir, get_common_skills_dir, get_company_dir, get_shared_dir
 from core.schemas import ModelConfig, SkillMeta
 
@@ -735,6 +736,8 @@ class MemoryManager:
             )
         with open(path, "a", encoding="utf-8") as f:
             f.write(f"\n{entry}\n")
+            f.flush()
+            os.fsync(f.fileno())
         logger.debug("Episode appended, length=%d", len(entry))
 
         # Index the updated episode file (incremental)
@@ -799,8 +802,7 @@ class MemoryManager:
         import yaml
 
         frontmatter = yaml.dump(metadata, default_flow_style=False, allow_unicode=True)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"---\n{frontmatter}---\n\n{content}", encoding="utf-8")
+        atomic_write_text(path, f"---\n{frontmatter}---\n\n{content}")
         logger.debug("Knowledge written with metadata path='%s' length=%d", path, len(content))
 
     def read_knowledge_content(self, path: Path) -> str:

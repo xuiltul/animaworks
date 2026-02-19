@@ -1,88 +1,88 @@
-# Slack Socket Mode セットアップガイド
+# Slack Socket Mode Setup Guide
 
-AnimaWorksがSlackメッセージをリアルタイムで受信するための設定手順。
+Setup instructions for AnimaWorks to receive Slack messages in real time.
 
-## 概要
+## Overview
 
-Socket ModeはSlackからWebSocket経由でイベントをpush受信する方式。
-パブリックURL不要で、NAT内のサーバーでも動作する。
+Socket Mode is a method for receiving events pushed from Slack via WebSocket.
+It requires no public URL and works on servers behind NAT.
 
 ```
 [Slack] ←WebSocket→ [SlackSocketModeManager] → Messenger.receive_external() → [Anima inbox]
                               ↑
-                     server/app.py lifespan で自動起動
-                     config.json external_messaging.slack で制御
+                     Auto-started in server/app.py lifespan
+                     Controlled by config.json external_messaging.slack
 ```
 
-## 前提条件
+## Prerequisites
 
-- AnimaWorksサーバーが起動していること
-- `slack-bolt`, `aiohttp` がインストール済み（`pyproject.toml` に含まれる）
+- AnimaWorks server is running
+- `slack-bolt` and `aiohttp` are installed (included in `pyproject.toml`)
 
-## 1. Slack App設定（Slack管理画面）
+## 1. Slack App Configuration (Slack Admin Console)
 
-https://api.slack.com/apps でアプリを設定する。
+Configure your app at https://api.slack.com/apps.
 
-### Socket Mode有効化
+### Enabling Socket Mode
 
-1. 左メニュー「Socket Mode」を選択
-2. 「Enable Socket Mode」をON
-3. App-Level Tokenを生成（スコープ: `connections:write`）
-4. 生成された `xapp-...` トークンを控える
+1. Select "Socket Mode" from the left menu
+2. Turn on "Enable Socket Mode"
+3. Generate an App-Level Token (scope: `connections:write`)
+4. Save the generated `xapp-...` token
 
 ### Event Subscriptions
 
-1. 左メニュー「Event Subscriptions」を選択
-2. 「Enable Events」をON
-3. Request URLは不要（Socket Modeのため）
-4. 「Subscribe to bot events」に以下を追加:
+1. Select "Event Subscriptions" from the left menu
+2. Turn on "Enable Events"
+3. No Request URL is needed (because Socket Mode is used)
+4. Add the following under "Subscribe to bot events":
 
-| イベント | 説明 |
-|----------|------|
-| `message.channels` | パブリックチャンネルのメッセージ |
-| `message.groups` | プライベートチャンネルのメッセージ |
-| `message.im` | ダイレクトメッセージ |
-| `message.mpim` | グループDM |
-| `app_mention` | @メンション |
+| Event | Description |
+|-------|-------------|
+| `message.channels` | Messages in public channels |
+| `message.groups` | Messages in private channels |
+| `message.im` | Direct messages |
+| `message.mpim` | Group DMs |
+| `app_mention` | @mentions |
 
-### OAuth Scopes（Bot Token Scopes）
+### OAuth Scopes (Bot Token Scopes)
 
-左メニュー「OAuth & Permissions」で以下を追加:
+Add the following under "OAuth & Permissions" in the left menu:
 
-| スコープ | 用途 |
-|----------|------|
-| `channels:history` | パブリックチャンネル履歴読み取り |
-| `channels:read` | チャンネル一覧取得 |
-| `chat:write` | メッセージ送信 |
-| `groups:history` | プライベートチャンネル履歴読み取り |
-| `groups:read` | プライベートチャンネル一覧取得 |
-| `im:history` | DM履歴読み取り |
-| `im:read` | DM一覧取得 |
-| `im:write` | DMを開く |
-| `mpim:history` | グループDM履歴読み取り |
-| `mpim:read` | グループDM一覧取得 |
-| `users:read` | ユーザー情報取得 |
-| `app_mentions:read` | @メンション読み取り |
+| Scope | Purpose |
+|-------|---------|
+| `channels:history` | Read public channel history |
+| `channels:read` | List channels |
+| `chat:write` | Send messages |
+| `groups:history` | Read private channel history |
+| `groups:read` | List private channels |
+| `im:history` | Read DM history |
+| `im:read` | List DMs |
+| `im:write` | Open DMs |
+| `mpim:history` | Read group DM history |
+| `mpim:read` | List group DMs |
+| `users:read` | Retrieve user information |
+| `app_mentions:read` | Read @mentions |
 
 ### App Home
 
-1. 左メニュー「App Home」を選択
-2. 「Messages Tab」を有効化
-3. 「Allow users to send Slash commands and messages from the messages tab」にチェック
+1. Select "App Home" from the left menu
+2. Enable the "Messages Tab"
+3. Check "Allow users to send Slash commands and messages from the messages tab"
 
-### ワークスペースへのインストール
+### Installing to the Workspace
 
-1. 左メニュー「Install App」
-2. 「Install to Workspace」をクリック
-3. 認可後に表示される `xoxb-...` トークンを控える
+1. Select "Install App" from the left menu
+2. Click "Install to Workspace"
+3. Save the `xoxb-...` token displayed after authorization
 
-### Botをチャンネルに招待
+### Inviting the Bot to a Channel
 
-受信したいチャンネルで `/invite @BotName` を実行。
+Run `/invite @BotName` in each channel where you want to receive messages.
 
-## 2. クレデンシャル設定（AnimaWorks側）
+## 2. Credential Configuration (AnimaWorks Side)
 
-`~/.animaworks/shared/credentials.json` に以下のキーを設定:
+Set the following keys in `~/.animaworks/shared/credentials.json`:
 
 ```json
 {
@@ -91,16 +91,16 @@ https://api.slack.com/apps でアプリを設定する。
 }
 ```
 
-| キー | prefix | 用途 |
-|------|--------|------|
-| `SLACK_BOT_TOKEN` | `xoxb-` | Slack API呼び出し（送信・情報取得） |
-| `SLACK_APP_TOKEN` | `xapp-` | Socket Mode WebSocket接続確立 |
+| Key | Prefix | Purpose |
+|-----|--------|---------|
+| `SLACK_BOT_TOKEN` | `xoxb-` | Slack API calls (sending messages, retrieving info) |
+| `SLACK_APP_TOKEN` | `xapp-` | Establishing the Socket Mode WebSocket connection |
 
-環境変数 `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` でも可（credentials.json優先）。
+You can also use the environment variables `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` (credentials.json takes precedence).
 
-## 3. config.json設定
+## 3. config.json Configuration
 
-`~/.animaworks/config.json` に `external_messaging` セクションを追加:
+Add the `external_messaging` section to `~/.animaworks/config.json`:
 
 ```json
 {
@@ -116,85 +116,85 @@ https://api.slack.com/apps でアプリを設定する。
 }
 ```
 
-### 設定項目
+### Configuration Options
 
-| キー | 型 | デフォルト | 説明 |
-|------|----|-----------|------|
-| `enabled` | bool | `false` | Slack受信の有効/無効 |
-| `mode` | string | `"socket"` | `"socket"`（推奨）または `"webhook"` |
-| `anima_mapping` | object | `{}` | SlackチャンネルID → Anima名のマッピング |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `false` | Enable/disable Slack message reception |
+| `mode` | string | `"socket"` | `"socket"` (recommended) or `"webhook"` |
+| `anima_mapping` | object | `{}` | Mapping of Slack channel IDs to Anima names |
 
-### チャンネルIDの確認方法
+### Finding the Channel ID
 
-Slackでチャンネル名を右クリック → 「チャンネル詳細を表示」→ 最下部にチャンネルID（`C`で始まる）。DMは `D` で始まる。
+Right-click a channel name in Slack, select "View channel details", and find the channel ID (starting with `C`) at the bottom. DM IDs start with `D`.
 
-### mode の違い
+### Differences Between Modes
 
-| mode | 接続方向 | パブリックURL | 用途 |
-|------|----------|--------------|------|
-| `socket` | サーバー→Slack（WebSocket） | 不要 | NAT内サーバー（推奨） |
-| `webhook` | Slack→サーバー（HTTP POST） | 必要 | 公開サーバー |
+| Mode | Connection Direction | Public URL | Use Case |
+|------|---------------------|------------|----------|
+| `socket` | Server to Slack (WebSocket) | Not required | Servers behind NAT (recommended) |
+| `webhook` | Slack to Server (HTTP POST) | Required | Public-facing servers |
 
-## 4. サーバー再起動
+## 4. Restart the Server
 
 ```bash
 animaworks start
 ```
 
-起動ログに以下が表示されれば成功:
+If the following appears in the startup log, the connection was successful:
 
 ```
 INFO  animaworks.slack_socket: Slack Socket Mode connected
 ```
 
-無効時は:
+When disabled:
 
 ```
 INFO  animaworks.slack_socket: Slack Socket Mode is disabled
 ```
 
-## メッセージの流れ
+## Message Flow
 
-1. Slackユーザーがマッピングされたチャンネルにメッセージ送信
-2. Slack → WebSocket → `SlackSocketModeManager` がイベント受信
-3. `anima_mapping` でチャンネルID → Anima名を解決
-4. `Messenger.receive_external()` が `~/.animaworks/shared/inbox/{anima_name}/{msg_id}.json` にメッセージ配置
-5. Animaが次のrunサイクル（heartbeat/cron/手動）でinboxを処理
+1. A Slack user sends a message in a mapped channel
+2. Slack sends the event via WebSocket to `SlackSocketModeManager`
+3. `anima_mapping` resolves the channel ID to an Anima name
+4. `Messenger.receive_external()` places the message at `~/.animaworks/shared/inbox/{anima_name}/{msg_id}.json`
+5. The Anima processes the inbox on its next run cycle (heartbeat/cron/manual)
 
-## 関連ファイル
+## Related Files
 
-| ファイル | 役割 |
-|----------|------|
-| `server/slack_socket.py` | SlackSocketModeManager実装 |
-| `server/app.py:171-179` | lifespan内での起動/停止 |
-| `core/messenger.py:150-175` | `receive_external()` — inbox配置 |
-| `core/config/models.py:160-172` | `ExternalMessagingChannelConfig` モデル |
-| `server/routes/webhooks.py:64-113` | Webhook方式のエンドポイント（mode=webhookの場合） |
-| `core/tools/slack.py` | ポーリング型ツール（send/messages/unreplied — 共存） |
+| File | Role |
+|------|------|
+| `server/slack_socket.py` | SlackSocketModeManager implementation |
+| `server/app.py:171-179` | Start/stop within lifespan |
+| `core/messenger.py:150-175` | `receive_external()` -- inbox placement |
+| `core/config/models.py:160-172` | `ExternalMessagingChannelConfig` model |
+| `server/routes/webhooks.py:64-113` | Webhook endpoint (when mode=webhook) |
+| `core/tools/slack.py` | Polling-based tools (send/messages/unreplied -- coexists with Socket Mode) |
 
-## トラブルシューティング
+## Troubleshooting
 
-### 接続できない
+### Cannot Connect
 
-- `SLACK_APP_TOKEN` が `xapp-` で始まるか確認
-- Slack App設定でSocket Modeが有効か確認
-- Event Subscriptionsが有効か確認
+- Verify that `SLACK_APP_TOKEN` starts with `xapp-`
+- Confirm that Socket Mode is enabled in the Slack App settings
+- Confirm that Event Subscriptions are enabled
 
-### メッセージが届かない
+### Messages Are Not Received
 
-- `anima_mapping` のチャンネルIDが正しいか確認
-- Botが対象チャンネルに招待されているか確認
-- サーバーログで `"No anima mapping for channel"` が出ていないか確認
+- Verify that the channel IDs in `anima_mapping` are correct
+- Confirm that the Bot has been invited to the target channel
+- Check the server logs for `"No anima mapping for channel"` messages
 
-### 再接続
+### Reconnection
 
-- `slack-bolt` の `AsyncSocketModeHandler` は自動再接続をサポート
-- WebSocket接続は約1時間で定期リフレッシュされる
-- 長期稼働時にレート制限（429）が発生する場合はサーバー再起動で解消
+- `slack-bolt`'s `AsyncSocketModeHandler` supports automatic reconnection
+- WebSocket connections are periodically refreshed approximately every hour
+- If rate limiting (429) occurs during long-running operation, restart the server to resolve it
 
-## 制約事項
+## Limitations
 
-- Socket ModeアプリはSlack App Directoryに公開不可（社内ツール向け）
-- 最大同時WebSocket接続数: 10本/アプリ
-- `apps.connections.open` のレート制限: 1回/分
-- inboxに配置されたメッセージの処理はAnimaの次のrunサイクルに依存
+- Socket Mode apps cannot be published to the Slack App Directory (intended for internal tools)
+- Maximum concurrent WebSocket connections: 10 per app
+- `apps.connections.open` rate limit: 1 per minute
+- Processing of messages placed in the inbox depends on the Anima's next run cycle

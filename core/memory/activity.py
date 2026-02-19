@@ -20,6 +20,7 @@ dm_log, and heartbeat_history files.
 import json
 import logging
 import math
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -225,7 +226,7 @@ class ActivityLogger:
         return entry
 
     def _append(self, entry: ActivityEntry) -> None:
-        """Append *entry* to today's JSONL file."""
+        """Append *entry* to today's JSONL file with fsync."""
         try:
             self._log_dir.mkdir(parents=True, exist_ok=True)
             date_str = entry.ts[:10]
@@ -233,6 +234,8 @@ class ActivityLogger:
             line = json.dumps(entry.to_dict(), ensure_ascii=False)
             with path.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
+                f.flush()
+                os.fsync(f.fileno())
         except Exception:
             logger.exception("Failed to append activity log")
 

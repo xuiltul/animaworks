@@ -141,6 +141,11 @@ class AnimaRunner:
             # Crash recovery: check for orphaned streaming journal
             self._recover_streaming_journal()
 
+            # Clean up stale .tmp files left by interrupted atomic writes
+            from core.memory._io import cleanup_tmp_files
+            cleanup_tmp_files(self._anima_dir / "state")
+            cleanup_tmp_files(self._anima_dir / "knowledge")
+
             self._ready_event.set()
 
             # Start autonomous scheduler (heartbeat + cron)
@@ -206,6 +211,7 @@ class AnimaRunner:
                 )
                 conv_memory.append_turn("assistant", saved_text)
                 conv_memory.save()
+                StreamingJournal.confirm_recovery(self._anima_dir)
                 logger.info(
                     "Recovered %d chars into conversation memory for %s",
                     len(recovery.recovered_text),
@@ -216,6 +222,9 @@ class AnimaRunner:
                     "Failed to save recovered journal to conversation memory: %s",
                     self.anima_name,
                 )
+        else:
+            # No text to save, but still need to clean up the journal
+            StreamingJournal.confirm_recovery(self._anima_dir)
 
         # Record crash event in activity log
         try:
@@ -239,6 +248,25 @@ class AnimaRunner:
                 self.anima_name,
                 exc_info=True,
             )
+
+        # Record tool_use events in activity log
+        if recovery.tool_calls:
+            try:
+                from core.memory.activity import ActivityLogger as _AL
+                _activity = _AL(self._anima_dir)
+                for tc in recovery.tool_calls:
+                    _activity.log(
+                        "tool_use",
+                        summary=f"[recovered] {tc.get('tool', 'unknown')}",
+                        tool=tc.get("tool", "unknown"),
+                        meta={"recovered": True, **tc},
+                    )
+            except Exception:
+                logger.debug(
+                    "Failed to log recovered tool_use events: %s",
+                    self.anima_name,
+                    exc_info=True,
+                )
 
     # ── Event Emission ─────────────────────────────────────────────
 

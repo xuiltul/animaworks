@@ -25,6 +25,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.memory._io import atomic_write_text
 from core.schemas import ModelConfig
 
 if TYPE_CHECKING:
@@ -182,7 +183,6 @@ class ConversationMemory:
     def save(self) -> None:
         """Persist current conversation state to disk."""
         state = self.load()
-        self._state_dir.mkdir(parents=True, exist_ok=True)
         data = {
             "anima_name": state.anima_name,
             "turns": [asdict(t) for t in state.turns],
@@ -190,9 +190,9 @@ class ConversationMemory:
             "compressed_turn_count": state.compressed_turn_count,
             "last_finalized_turn_index": state.last_finalized_turn_index,
         }
-        self._state_path.write_text(
+        atomic_write_text(
+            self._state_path,
             json.dumps(data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
         )
 
     # ── Pending injected procedures ─────────────────────────────
