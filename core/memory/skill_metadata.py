@@ -155,7 +155,7 @@ def _match_tier3_vector(
     retriever: object,
     anima_name: str,
     top_k: int = 3,
-    min_score: float = 0.88,
+    min_score: float = 0.92,
 ) -> list[SkillMeta]:
     """Tier 3: Use RAG vector search to find semantically matching skills."""
     from core.memory.rag.retriever import MemoryRetriever

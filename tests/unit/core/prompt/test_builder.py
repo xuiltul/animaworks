@@ -531,18 +531,21 @@ class TestHiringContextPlacement:
 
         return memory
 
-    def test_hiring_context_before_behavior_rules(self, tmp_path, data_dir):
-        """hiring_context must appear before behavior_rules in the prompt."""
+    def test_behavior_rules_in_group1_hiring_context_in_group5(self, tmp_path, data_dir):
+        """behavior_rules is in Group 1, hiring_context is in Group 5."""
         memory = self._build_solo_prompt(tmp_path, data_dir)
 
         # Use real load_prompt so both templates are loaded with real content
         result = build_system_prompt(memory)
 
-        # hiring_context contains "チーム構成について"
-        # behavior_rules contains "行動ルール"
+        # behavior_rules is in Group 1 (動作環境と行動ルール)
+        assert "# 1. 動作環境と行動ルール" in result
+        assert "## 行動ルール" in result
+        # hiring_context is in Group 5 (組織とコミュニケーション)
+        assert "# 5. 組織とコミュニケーション" in result
         assert "チーム構成について" in result
-        assert "行動ルール" in result
-        assert result.index("チーム構成について") < result.index("行動ルール")
+        # behavior_rules section appears before hiring_context
+        assert result.index("## 行動ルール") < result.index("チーム構成について")
 
     def test_hiring_context_not_injected_with_peers(self, tmp_path, data_dir):
         """hiring_context must NOT be injected when other animas exist."""
