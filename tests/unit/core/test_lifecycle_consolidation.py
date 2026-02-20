@@ -86,7 +86,7 @@ class TestLifecycleConsolidationIntegration:
         """Test daily consolidation runs for registered anima."""
         from core.lifecycle import LifecycleManager
         from core.anima import DigitalAnima
-        from datetime import datetime
+        from core.time_utils import now_jst
 
         manager = LifecycleManager()
 
@@ -98,9 +98,10 @@ class TestLifecycleConsolidationIntegration:
         knowledge_dir.mkdir(parents=True)
 
         # Create sample episode
-        today = datetime.now().date()
+        today = now_jst().date()
+        now = now_jst()
         episode_file = episodes_dir / f"{today}.md"
-        episode_file.write_text("""## 10:00 — Test Episode
+        episode_file.write_text(f"""## {now.strftime('%H:%M')} — Test Episode
 
 **要点**: Test content
 """, encoding="utf-8")

@@ -17,9 +17,10 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from core.time_utils import now_jst
 
 logger = logging.getLogger("animaworks.shortterm_memory")
 
@@ -197,7 +198,7 @@ class ShortTermMemory:
     def _archive_existing(self) -> None:
         """Move existing session_state files to archive/."""
         self._archive_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = now_jst().strftime("%Y%m%d_%H%M%S")
         for suffix in (".json", ".md"):
             src = self.shortterm_dir / f"session_state{suffix}"
             if src.exists():

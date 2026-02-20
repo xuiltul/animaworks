@@ -16,13 +16,15 @@ execution is delegated to engines in ``core.execution``, tool dispatch to
 """
 
 import asyncio
+import json as _json
 import logging
 import re
 import time
 from collections.abc import AsyncGenerator, Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from core.time_utils import now_iso
 
 from core.background import BackgroundTaskManager
 from core.prompt.context import ContextTracker
@@ -30,6 +32,7 @@ from core.memory import MemoryManager
 from core.messenger import Messenger
 from core.paths import load_prompt
 from core.prompt.builder import BuildResult, build_system_prompt, inject_shortterm
+from core.exceptions import AnimaWorksError  # noqa: F401
 from core.schemas import CycleResult, ModelConfig
 from core.memory.shortterm import SessionState, ShortTermMemory
 from core.tooling.handler import ToolHandler
@@ -43,6 +46,47 @@ logger = logging.getLogger("animaworks.agent")
 # on top of the raw text, so we use conservative byte limits.
 _PROMPT_SOFT_LIMIT_BYTES = 600_000   # Force compression
 _PROMPT_HARD_LIMIT_BYTES = 1_200_000  # Fall back to A1 Fallback
+
+
+def _save_prompt_log(
+    anima_dir: Path,
+    *,
+    trigger: str,
+    sender: str,
+    model: str,
+    mode: str,
+    system_prompt: str,
+    user_message: str,
+    tools: list[str],
+    session_id: str,
+) -> None:
+    """Persist the full prompt payload to a JSONL log for post-hoc debugging.
+
+    Writes to ``{anima_dir}/prompt_logs/{date}.jsonl``.
+    Failures are silently logged -- prompt logging must never break execution.
+    """
+    try:
+        log_dir = anima_dir / "prompt_logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        today = now_iso()[:10]  # YYYY-MM-DD
+        entry = {
+            "ts": now_iso(),
+            "trigger": trigger,
+            "from": sender,
+            "model": model,
+            "mode": mode,
+            "system_prompt_length": len(system_prompt),
+            "system_prompt": system_prompt,
+            "user_message": user_message,
+            "tools": tools,
+            "session_id": session_id,
+        }
+        log_file = log_dir / f"{today}.jsonl"
+        with log_file.open("a", encoding="utf-8") as f:
+            f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+        logger.debug("Prompt log saved: %s (%d bytes)", log_file, len(system_prompt))
+    except Exception:
+        logger.warning("Failed to save prompt log", exc_info=True)
 
 
 class AgentCore:
@@ -118,6 +162,13 @@ class AgentCore:
     def replied_to(self) -> set[str]:
         """Anima names this agent has sent messages to in the current cycle."""
         return self._tool_handler.replied_to
+
+    @staticmethod
+    def _extract_sender(prompt: str, trigger: str) -> str:
+        """Extract sender name from trigger string."""
+        if trigger.startswith("message:"):
+            return trigger.split(":", 1)[1]
+        return trigger  # heartbeat, cron, manual, etc.
 
     # ── Human notification ─────────────────────────────────
 
@@ -654,6 +705,19 @@ class AgentCore:
             system_prompt = inject_shortterm(system_prompt, shortterm)
             logger.info("Injected short-term memory into system prompt")
 
+        # ── Prompt log: save full payload for debugging ───
+        _save_prompt_log(
+            self.anima_dir,
+            trigger=trigger,
+            sender=self._extract_sender(prompt, trigger),
+            model=self.model_config.model,
+            mode=mode,
+            system_prompt=system_prompt,
+            user_message=prompt,
+            tools=self._tool_registry,
+            session_id=self._tool_handler.session_id,
+        )
+
         # ── Mode B: text-based tool-call loop ─────────────
         if mode == "b":
             result = await self._executor.execute(
@@ -751,7 +815,7 @@ class AgentCore:
             shortterm.save(
                 SessionState(
                     session_id=result_msg.session_id if result_msg else "",
-                    timestamp=datetime.now().isoformat(),
+                    timestamp=now_iso(),
                     trigger=trigger,
                     original_prompt=prompt,
                     accumulated_response=accumulated_text,
@@ -897,6 +961,19 @@ class AgentCore:
             }
             return
 
+        # ── Prompt log: save full payload for debugging ───
+        _save_prompt_log(
+            self.anima_dir,
+            trigger=trigger,
+            sender=self._extract_sender(prompt, trigger),
+            model=self.model_config.model,
+            mode=mode,
+            system_prompt=system_prompt,
+            user_message=prompt,
+            tools=self._tool_registry,
+            session_id=self._tool_handler.session_id,
+        )
+
         # ── Stream retry configuration ────────────────────
         retry_cfg = self._load_stream_retry_config()
         checkpoint_enabled = retry_cfg["checkpoint_enabled"]
@@ -938,7 +1015,7 @@ class AgentCore:
                         # Save checkpoint after each tool completion
                         from core.memory.shortterm import StreamCheckpoint
                         shortterm.save_checkpoint(StreamCheckpoint(
-                            timestamp=datetime.now().isoformat(),
+                            timestamp=now_iso(),
                             trigger=trigger,
                             original_prompt=prompt,
                             completed_tools=completed_tools,
@@ -995,7 +1072,7 @@ class AgentCore:
                 checkpoint = shortterm.load_checkpoint()
                 if checkpoint is None:
                     checkpoint = StreamCheckpoint(
-                        timestamp=datetime.now().isoformat(),
+                        timestamp=now_iso(),
                         trigger=trigger,
                         original_prompt=prompt,
                         completed_tools=completed_tools,
@@ -1050,7 +1127,7 @@ class AgentCore:
             shortterm.save(
                 SessionState(
                     session_id=result_message.session_id if result_message else "",
-                    timestamp=datetime.now().isoformat(),
+                    timestamp=now_iso(),
                     trigger=trigger,
                     original_prompt=prompt,
                     accumulated_response="\n".join(full_text_parts),

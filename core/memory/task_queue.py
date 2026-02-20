@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from core.schemas import TaskEntry
+from core.time_utils import ensure_aware, now_iso, now_jst
 
 logger = logging.getLogger("animaworks.task_queue")
 
@@ -55,7 +56,7 @@ def _parse_deadline(value: str) -> str:
             delta = timedelta(hours=amount)
         else:  # "d"
             delta = timedelta(days=amount)
-        return (datetime.now() + delta).isoformat()
+        return (now_jst() + delta).isoformat()
 
     # Try parsing as ISO8601
     try:
@@ -71,7 +72,7 @@ def _parse_deadline(value: str) -> str:
 def _elapsed_seconds(updated_at: str, now: datetime) -> float | None:
     """Return seconds since updated_at, or None on parse failure."""
     try:
-        updated = datetime.fromisoformat(updated_at)
+        updated = ensure_aware(datetime.fromisoformat(updated_at))
         return (now - updated).total_seconds()
     except (ValueError, TypeError):
         return None
@@ -98,7 +99,7 @@ def _format_elapsed_from_sec(elapsed_sec: float | None) -> str:
 def _format_deadline_display(deadline: str, now: datetime) -> str:
     """Format deadline for display. Returns OVERDUE marker if past."""
     try:
-        dl = datetime.fromisoformat(deadline)
+        dl = ensure_aware(datetime.fromisoformat(deadline))
     except (ValueError, TypeError):
         return ""
     if now >= dl:
@@ -149,7 +150,7 @@ class TaskQueueManager:
         if len(original_instruction) > _MAX_INSTRUCTION_CHARS:
             original_instruction = original_instruction[:_MAX_INSTRUCTION_CHARS]
             logger.warning("original_instruction truncated to %d chars", _MAX_INSTRUCTION_CHARS)
-        now = datetime.now().isoformat()
+        now = now_iso()
         entry = TaskEntry(
             task_id=uuid.uuid4().hex[:12],
             ts=now,
@@ -191,7 +192,7 @@ class TaskQueueManager:
             logger.warning("Task not found: %s", task_id)
             return None
 
-        now = datetime.now().isoformat()
+        now = now_iso()
         update: dict[str, Any] = {
             "task_id": task_id,
             "status": status,
@@ -296,7 +297,7 @@ class TaskQueueManager:
         if not tasks:
             return ""
 
-        now = datetime.now()
+        now = now_jst()
         chars_per_token = 4
         max_chars = budget_tokens * chars_per_token
         lines: list[str] = []
@@ -340,7 +341,7 @@ class TaskQueueManager:
 
     def get_stale_tasks(self) -> list[TaskEntry]:
         """Return pending/in_progress tasks not updated for 30+ minutes."""
-        now = datetime.now()
+        now = now_jst()
         result: list[TaskEntry] = []
         for task in self.get_pending():
             elapsed = _elapsed_seconds(task.updated_at, now)

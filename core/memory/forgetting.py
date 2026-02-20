@@ -25,6 +25,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.paths import load_prompt
+from core.time_utils import ensure_aware, now_jst
+
 logger = logging.getLogger("animaworks.forgetting")
 
 # ── Configuration ──────────────────────────────────────────────────
@@ -67,6 +70,8 @@ class ForgettingEngine:
 
         Fully protected types (skills, shared_users) are always skipped.
         Procedures use utility-based protection via ``_is_protected_procedure``.
+        Knowledge with ``success_count >= 2`` is protected via
+        ``_is_protected_knowledge``.
         The ``importance == "important"`` tag protects any memory type.
         """
         if metadata.get("memory_type") in PROTECTED_MEMORY_TYPES:
@@ -76,6 +81,28 @@ class ForgettingEngine:
         # Procedures use utility-based protection instead of blanket protection
         if metadata.get("memory_type") == "procedures":
             return self._is_protected_procedure(metadata)
+        # Knowledge with confirmed usefulness is protected
+        if metadata.get("memory_type") == "knowledge":
+            return self._is_protected_knowledge(metadata)
+        return False
+
+    def _is_protected_knowledge(self, metadata: dict) -> bool:
+        """Knowledge-specific protection check.
+
+        Returns True (protected) if any of:
+        - ``importance == "important"`` ([IMPORTANT] tag)
+        - ``success_count >= 2`` (knowledge confirmed useful multiple times)
+
+        Args:
+            metadata: Chunk metadata from the vector store.
+
+        Returns:
+            True if the knowledge chunk should be protected from forgetting.
+        """
+        if metadata.get("importance") == "important":
+            return True
+        if int(metadata.get("success_count", 0)) >= 2:
+            return True
         return False
 
     def _is_protected_procedure(self, metadata: dict) -> bool:
@@ -119,7 +146,7 @@ class ForgettingEngine:
 
         if last_used_str:
             try:
-                last_used_dt = datetime.fromisoformat(str(last_used_str))
+                last_used_dt = ensure_aware(datetime.fromisoformat(str(last_used_str)))
                 days_since = (now - last_used_dt).total_seconds() / 86400.0
             except (ValueError, TypeError):
                 days_since = float("inf")
@@ -176,8 +203,8 @@ class ForgettingEngine:
         Skip: Protected memory types, important chunks, already low
         """
         logger.info("Starting synaptic downscaling for anima=%s", self.anima_name)
-        now = datetime.now()
-        now_iso = now.isoformat()
+        now = now_jst()
+        now_iso_str = now.isoformat()
         total_scanned = 0
         total_marked = 0
         store = self._get_vector_store()
@@ -208,7 +235,7 @@ class ForgettingEngine:
                         ids_to_mark.append(chunk["id"])
                         metas_to_mark.append({
                             "activation_level": "low",
-                            "low_activation_since": now_iso,
+                            "low_activation_since": now_iso_str,
                         })
                     continue
 
@@ -218,7 +245,7 @@ class ForgettingEngine:
 
                 if last_accessed_str:
                     try:
-                        last_accessed = datetime.fromisoformat(str(last_accessed_str))
+                        last_accessed = ensure_aware(datetime.fromisoformat(str(last_accessed_str)))
                         days_since = (now - last_accessed).total_seconds() / 86400.0
                     except (ValueError, TypeError):
                         days_since = float("inf")
@@ -227,7 +254,7 @@ class ForgettingEngine:
                     updated_str = meta.get("updated_at", "")
                     if updated_str:
                         try:
-                            updated_at = datetime.fromisoformat(str(updated_str))
+                            updated_at = ensure_aware(datetime.fromisoformat(str(updated_str)))
                             days_since = (now - updated_at).total_seconds() / 86400.0
                         except (ValueError, TypeError):
                             days_since = float("inf")
@@ -239,7 +266,7 @@ class ForgettingEngine:
                     ids_to_mark.append(chunk["id"])
                     metas_to_mark.append({
                         "activation_level": "low",
-                        "low_activation_since": now_iso,
+                        "low_activation_since": now_iso_str,
                     })
 
             # Batch update
@@ -270,13 +297,16 @@ class ForgettingEngine:
 
     async def neurogenesis_reorganize(
         self,
-        model: str = "anthropic/claude-sonnet-4-20250514",
+        model: str = "",
     ) -> dict[str, Any]:
         """Merge similar low-activation chunks (weekly, runs in weekly_integrate).
 
         Criteria: activation_level=="low" AND pairwise vector similarity >= 0.8
         Action: LLM merge -> delete originals -> insert merged chunk
         """
+        if not model:
+            from core.config.models import ConsolidationConfig
+            model = ConsolidationConfig().llm_model
         logger.info("Starting neurogenesis reorganization for anima=%s", self.anima_name)
         store = self._get_vector_store()
         total_merged = 0
@@ -409,22 +439,12 @@ class ForgettingEngine:
         model: str,
     ) -> str | None:
         """Merge two chunks using LLM."""
-        prompt = f"""以下は同一人物の記憶システムにある、類似した2つの記憶断片です。
-
-【記憶断片1】
-{chunk_a['content']}
-
-【記憶断片2】
-{chunk_b['content']}
-
-類似度: {similarity:.2f}
-
-タスク: この2つの記憶を1つに統合してください。
-- 重複する情報は1つにまとめる
-- 両方の重要な情報を保持する
-- 簡潔にまとめる
-
-統合された記憶のみを出力してください（説明不要）:"""
+        prompt = load_prompt(
+            "memory/forgetting_merge",
+            content_a=chunk_a["content"],
+            content_b=chunk_b["content"],
+            similarity=f"{similarity:.2f}",
+        )
 
         try:
             import litellm
@@ -455,19 +475,19 @@ class ForgettingEngine:
             indexer = MemoryIndexer(store, self.anima_name, self.anima_dir)
 
             # Generate new ID
-            merged_id = f"{self.anima_name}/{memory_type}/merged_{datetime.now().strftime('%Y%m%d_%H%M%S')}#0"
+            merged_id = f"{self.anima_name}/{memory_type}/merged_{now_jst().strftime('%Y%m%d_%H%M%S')}#0"
 
             embedding = indexer._generate_embeddings([content])[0]
 
-            now_iso = datetime.now().isoformat()
+            now_iso_str = now.isoformat()
             metadata = {
                 "anima": self.anima_name,
                 "memory_type": memory_type,
                 "source_file": "merged",
                 "chunk_index": 0,
                 "total_chunks": 1,
-                "created_at": now_iso,
-                "updated_at": now_iso,
+                "created_at": now_iso_str,
+                "updated_at": now_iso_str,
                 "importance": "normal",
                 "access_count": 0,
                 "last_accessed_at": "",
@@ -520,7 +540,7 @@ class ForgettingEngine:
         # Archive directory for merged originals
         archive_dir = self.anima_dir / "archive" / "merged"
         archive_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = now_jst().strftime("%Y%m%d_%H%M%S")
 
         # Archive primary original
         if primary_path.exists():
@@ -565,7 +585,7 @@ class ForgettingEngine:
         Action: Move source file to archive/forgotten/, delete from vector index
         """
         logger.info("Starting complete forgetting for anima=%s", self.anima_name)
-        now = datetime.now()
+        now = now_jst()
         store = self._get_vector_store()
         total_forgotten = 0
         archived_files: list[str] = []
@@ -594,7 +614,7 @@ class ForgettingEngine:
                     continue
 
                 try:
-                    low_since = datetime.fromisoformat(str(low_since_str))
+                    low_since = ensure_aware(datetime.fromisoformat(str(low_since_str)))
                     days_low = (now - low_since).total_seconds() / 86400.0
                 except (ValueError, TypeError):
                     continue
@@ -649,7 +669,7 @@ class ForgettingEngine:
 
         # Add timestamp suffix if destination exists
         if dest_path.exists():
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = now_jst().strftime("%Y%m%d_%H%M%S")
             dest_path = self.archive_dir / f"{source_path.stem}_{timestamp}{source_path.suffix}"
 
         try:

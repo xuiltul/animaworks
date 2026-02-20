@@ -259,7 +259,14 @@ class TestBuildSystemPromptCommonKnowledge:
         monkeypatch.setattr("core.prompt.builder.get_data_dir", lambda: data_dir)
         monkeypatch.setattr(
             "core.prompt.builder.load_prompt",
-            lambda name, **kw: f"[{name}]",
+            lambda name, **kw: (
+                "## 共有リファレンス\n\n"
+                "困ったとき・手順が不明なときは `common_knowledge/` を "
+                "`search_memory` で検索するか、`read_memory_file` で直接読んでください。\n"
+                "目次: `common_knowledge/00_index.md`"
+                if name == "builder/common_knowledge_hint"
+                else f"[{name}]"
+            ),
         )
 
         prompt = build_system_prompt(memory)
@@ -341,7 +348,11 @@ class TestBuildSystemPromptCommonKnowledge:
         monkeypatch.setattr("core.prompt.builder.get_data_dir", lambda: data_dir)
         monkeypatch.setattr(
             "core.prompt.builder.load_prompt",
-            lambda name, **kw: f"[{name}]",
+            lambda name, **kw: (
+                "## 共有リファレンス\n\ncommon_knowledge/ を検索してください。"
+                if name == "builder/common_knowledge_hint"
+                else f"[{name}]"
+            ),
         )
 
         prompt = build_system_prompt(memory)

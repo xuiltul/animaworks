@@ -24,6 +24,7 @@ from core.config.models import (
     read_anima_supervisor,
     save_config,
 )
+from core.exceptions import AnimaWorksError  # noqa: F401
 from core.messenger import Messenger
 
 logger = logging.getLogger(__name__)
@@ -241,7 +242,7 @@ def _find_orphan_supervisor(
                 if candidate_dir.is_dir() and (candidate_dir / "identity.md").exists():
                     return pname
     except Exception:
-        pass
+        logger.debug("Failed to resolve orphan supervisor for '%s'", name, exc_info=True)
 
     return None
 

@@ -18,6 +18,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from core.exceptions import AnimaWorksError  # noqa: F401
+
 logger = logging.getLogger("animaworks.asset_reconciler")
 
 # Per-anima locks to prevent concurrent generation (bootstrap vs fallback).

@@ -17,9 +17,7 @@ from typing import Any
 logger = logging.getLogger("animaworks.tools")
 
 
-class ToolConfigError(Exception):
-    """Raised when a tool's configuration is incomplete."""
-    pass
+from core.exceptions import ToolConfigError  # noqa: F401 – re-export
 
 
 @dataclass

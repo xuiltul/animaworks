@@ -136,11 +136,10 @@ def _print_anima_status(name: str, status: dict) -> None:
 
 def cmd_anima_delete(args: argparse.Namespace) -> None:
     """Delete an anima with optional archive."""
-    from datetime import datetime
-
     import requests
 
     from core.config.models import unregister_anima_from_config
+    from core.time_utils import now_jst
     from core.paths import get_animas_dir, get_data_dir
 
     name = args.anima
@@ -180,7 +179,7 @@ def cmd_anima_delete(args: argparse.Namespace) -> None:
     if not args.no_archive:
         archive_dir = data_dir / "archive"
         archive_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = now_jst().strftime("%Y%m%d_%H%M%S")
         zip_path = archive_dir / f"{name}_{timestamp}.zip"
         shutil.make_archive(str(zip_path.with_suffix("")), "zip", str(anima_dir))
         print(f"Archived to: {zip_path}")

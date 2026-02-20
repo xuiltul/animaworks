@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
+from core.time_utils import ensure_aware, now_jst
 from core.tools._async_compat import run_sync
 
 logger = logging.getLogger("animaworks.priming")
@@ -102,7 +103,7 @@ class PrimingEngine:
       A. Sender profile (direct file read)
       B. Recent activity (unified activity log, replaces old episodes + channels)
       C. Related knowledge (dense vector search)
-      D. Skill matching (filename pattern match)
+      D. Skill matching (description-based 3-tier match with vector search)
       E. Pending tasks (persistent task queue summary)
     """
 
@@ -112,6 +113,9 @@ class PrimingEngine:
         self.episodes_dir = anima_dir / "episodes"
         self.knowledge_dir = anima_dir / "knowledge"
         self.skills_dir = anima_dir / "skills"
+        # Lazily initialized by _get_or_create_retriever(); shared by C & D
+        self._retriever: object | None = None
+        self._retriever_initialized: bool = False
 
     # ── Main entry point ────────────────────────────────────────
 
@@ -156,7 +160,7 @@ class PrimingEngine:
             self._channel_a_sender_profile(sender_name),
             self._channel_b_recent_activity(sender_name, keywords),  # Unified channel
             self._channel_c_related_knowledge(keywords),
-            self._channel_d_skill_match(keywords),
+            self._channel_d_skill_match(message, keywords),
             self._channel_e_pending_tasks(),
             return_exceptions=True,
         )
@@ -200,6 +204,45 @@ class PrimingEngine:
         )
 
         return result
+
+    # ── Shared retriever ────────────────────────────────────────
+
+    def _get_or_create_retriever(self) -> object | None:
+        """Return a MemoryRetriever instance, creating one lazily if needed.
+
+        Shared between Channel C (related knowledge) and Channel D (skill
+        matching).  Returns ``None`` when RAG dependencies are unavailable
+        or the knowledge directory does not exist.
+
+        If ``_retriever`` was injected externally (e.g. in tests), it is
+        returned as-is without re-initialization.
+        """
+        if self._retriever_initialized or self._retriever is not None:
+            return self._retriever
+
+        self._retriever_initialized = True
+
+        if not self.knowledge_dir.is_dir():
+            return None
+
+        try:
+            from core.memory.rag import MemoryRetriever
+            from core.memory.rag.singleton import get_vector_store
+            from core.memory.rag.indexer import MemoryIndexer
+
+            vector_store = get_vector_store()
+            anima_name = self.anima_dir.name
+            indexer = MemoryIndexer(vector_store, anima_name, self.anima_dir)
+            self._retriever = MemoryRetriever(
+                vector_store, indexer, self.knowledge_dir,
+            )
+            logger.debug("Shared MemoryRetriever initialized for %s", anima_name)
+        except ImportError:
+            logger.debug("RAG dependencies not installed, retriever unavailable")
+        except Exception as e:
+            logger.warning("Failed to initialize MemoryRetriever: %s", e)
+
+        return self._retriever
 
     # ── Channel implementations ─────────────────────────────────
 
@@ -281,7 +324,7 @@ class PrimingEngine:
 
         anima_name = self.anima_dir.name
         mention_tag = f"@{anima_name}"
-        now = datetime.now()
+        now = now_jst()
         cutoff_24h = now - timedelta(hours=24)
 
         result: list[ActivityEntry] = []
@@ -327,7 +370,7 @@ class PrimingEngine:
                         continue
                     ts_str = entry.get("ts", "")
                     try:
-                        ts = datetime.fromisoformat(ts_str)
+                        ts = ensure_aware(datetime.fromisoformat(ts_str))
                     except (ValueError, TypeError):
                         continue
                     is_human = entry.get("source") == "human"
@@ -449,7 +492,7 @@ class PrimingEngine:
 
         anima_name = self.anima_dir.name
         mention_tag = f"@{anima_name}"
-        now = datetime.now()
+        now = now_jst()
         cutoff_24h = now - timedelta(hours=24)
 
         parts: list[str] = []
@@ -493,7 +536,7 @@ class PrimingEngine:
                     continue
                 ts_str = entry.get("ts", "")
                 try:
-                    ts = datetime.fromisoformat(ts_str)
+                    ts = ensure_aware(datetime.fromisoformat(ts_str))
                 except (ValueError, TypeError):
                     continue
                 is_human = entry.get("source") == "human"
@@ -535,25 +578,17 @@ class PrimingEngine:
             return ""
 
         try:
-            from core.memory.rag import MemoryRetriever
-            from core.memory.rag.singleton import get_vector_store
-            from core.memory.rag.indexer import MemoryIndexer
-
-            # Initialize RAG components if not already done
-            if not hasattr(self, "_retriever"):
-                vector_store = get_vector_store()
-                anima_name = self.anima_dir.name
-                indexer = MemoryIndexer(vector_store, anima_name, self.anima_dir)
-                self._retriever = MemoryRetriever(
-                    vector_store, indexer, self.knowledge_dir
-                )
+            retriever = self._get_or_create_retriever()
+            if retriever is None:
+                logger.debug("Channel C: Retriever unavailable")
+                return ""
 
             # Build query from keywords
             query = " ".join(keywords[:5])
             anima_name = self.anima_dir.name
 
             # Vector search (personal + shared common_knowledge)
-            results = self._retriever.search(
+            results = retriever.search(
                 query=query,
                 anima_name=anima_name,
                 memory_type="knowledge",
@@ -563,7 +598,7 @@ class PrimingEngine:
 
             if results:
                 # Record access (Hebbian LTP: memories that fire together wire together)
-                self._retriever.record_access(results, anima_name)
+                retriever.record_access(results, anima_name)
 
                 # Format results
                 parts = []
@@ -588,79 +623,106 @@ class PrimingEngine:
                 logger.debug("Channel C: Vector search found no results")
                 return ""
 
-        except ImportError:
-            logger.debug("Channel C: RAG not installed")
-            return ""
         except Exception as e:
             logger.warning("Channel C: Vector search failed: %s", e)
             return ""
 
-    async def _channel_d_skill_match(self, keywords: list[str]) -> list[str]:
-        """Channel D: Skill and procedure filename matching.
+    async def _channel_d_skill_match(
+        self, message: str, keywords: list[str],
+    ) -> list[str]:
+        """Channel D: Skill matching via description-based 3-tier search.
 
-        Returns list of skill/procedure names (not full content) that match
-        keywords.  Searches personal skills/, common_skills/, and procedures/.
+        Uses ``match_skills_by_description()`` from ``core.memory.manager``
+        which applies Tier 1 (keyword), Tier 2 (vocabulary), and Tier 3
+        (vector search) matching.  The MemoryRetriever instance is shared
+        with Channel C via ``_get_or_create_retriever()``.
+
+        Returns list of skill/procedure names (not full content, max 5).
+        Searches personal skills/, common_skills/, and procedures/.
         """
-        if not keywords:
+        _MAX_SKILL_MATCHES = 5
+
+        if not message and not keywords:
             return []
 
+        from core.memory.manager import MemoryManager, match_skills_by_description
         from core.paths import get_common_skills_dir
 
-        matched: list[str] = []
-        keywords_lower = [kw.lower() for kw in keywords]
+        # Collect all skill/procedure metas from the three sources.
+        # File I/O is offloaded to a thread to avoid blocking the event loop.
+        all_metas: list = []
+        seen_names: set[str] = set()
 
-        # Collect skill and procedure directories to search
-        procedures_dir = self.anima_dir / "procedures"
-        skill_dirs: list[Path] = []
-        if self.skills_dir.is_dir():
-            skill_dirs.append(self.skills_dir)
-        common_dir = get_common_skills_dir()
-        if common_dir.is_dir():
-            skill_dirs.append(common_dir)
-        if procedures_dir.is_dir():
-            skill_dirs.append(procedures_dir)
+        def _collect_metas() -> list:
+            """Synchronous helper — runs in thread via run_sync."""
+            metas: list = []
+            names: set[str] = set()
 
-        if not skill_dirs:
+            # Personal skills (highest precedence)
+            if self.skills_dir.is_dir():
+                for f in sorted(self.skills_dir.glob("*.md")):
+                    try:
+                        meta = MemoryManager._extract_skill_meta(f, is_common=False)
+                        if meta.name not in names:
+                            metas.append(meta)
+                            names.add(meta.name)
+                    except Exception:
+                        logger.debug("Failed to extract skill meta from %s", f, exc_info=True)
+
+            # Common skills
+            common_dir = get_common_skills_dir()
+            if common_dir.is_dir():
+                for f in sorted(common_dir.glob("*.md")):
+                    try:
+                        meta = MemoryManager._extract_skill_meta(f, is_common=True)
+                        if meta.name not in names:
+                            metas.append(meta)
+                            names.add(meta.name)
+                    except Exception:
+                        logger.debug("Failed to extract common skill meta from %s", f, exc_info=True)
+
+            # Procedures
+            procedures_dir = self.anima_dir / "procedures"
+            if procedures_dir.is_dir():
+                for f in sorted(procedures_dir.glob("*.md")):
+                    try:
+                        meta = MemoryManager._extract_skill_meta(f, is_common=False)
+                        if meta.name not in names:
+                            metas.append(meta)
+                            names.add(meta.name)
+                    except Exception:
+                        logger.debug("Failed to extract procedure meta from %s", f, exc_info=True)
+
+            return metas
+
+        all_metas = await run_sync(_collect_metas)
+
+        if not all_metas:
             return []
 
         try:
-            for skills_dir in skill_dirs:
-                for skill_file in skills_dir.glob("*.md"):
-                    skill_name = skill_file.stem
+            retriever = self._get_or_create_retriever()
+            anima_name = self.anima_dir.name
 
-                    # Skip duplicates (personal skills take precedence)
-                    if skill_name in matched:
-                        continue
+            matched = match_skills_by_description(
+                message,
+                all_metas,
+                retriever=retriever,
+                anima_name=anima_name,
+            )
 
-                    # Match against filename
-                    if any(kw in skill_name.lower() for kw in keywords_lower):
-                        matched.append(skill_name)
-                        continue
+            result = [m.name for m in matched[:_MAX_SKILL_MATCHES]]
 
-                    # Match against first few lines of file
-                    try:
-                        content = await run_sync(
-                            skill_file.read_text, encoding="utf-8",
-                        )
-                        first_lines = "\n".join(content.splitlines()[:10]).lower()
-                        if any(kw in first_lines for kw in keywords_lower):
-                            matched.append(skill_name)
-                    except Exception:
-                        pass
+            if result:
+                logger.debug(
+                    "Channel D: Matched %d skills: %s", len(result), result,
+                )
 
-                    if len(matched) >= 5:  # Limit to 5 skills
-                        break
-
-                if len(matched) >= 5:
-                    break
+            return result
 
         except Exception as e:
             logger.warning("Channel D: Skill matching failed: %s", e)
-
-        if matched:
-            logger.debug("Channel D: Matched %d skills: %s", len(matched), matched)
-
-        return matched
+            return []
 
     async def _channel_e_pending_tasks(self) -> str:
         """Channel E: Pending task queue summary.

@@ -106,3 +106,30 @@ class TestBaseExecutor:
             BaseExecutor(  # type: ignore[abstract]
                 model_config=ModelConfig(), anima_dir=tmp_path,
             )
+
+
+# ── _resolve_llm_timeout ─────────────────────────────────────
+
+
+class TestResolveLlmTimeout:
+    """Test LLM timeout resolution logic."""
+
+    def test_explicit_timeout_from_config(self, tmp_path: Path):
+        config = ModelConfig(model="claude-sonnet-4-20250514", llm_timeout=120)
+        executor = ConcreteExecutor(model_config=config, anima_dir=tmp_path)
+        assert executor._resolve_llm_timeout() == 120
+
+    def test_ollama_model_default(self, tmp_path: Path):
+        config = ModelConfig(model="ollama/gemma3:27b", llm_timeout=None)
+        executor = ConcreteExecutor(model_config=config, anima_dir=tmp_path)
+        assert executor._resolve_llm_timeout() == 300
+
+    def test_api_model_default(self, tmp_path: Path):
+        config = ModelConfig(model="claude-sonnet-4-20250514", llm_timeout=None)
+        executor = ConcreteExecutor(model_config=config, anima_dir=tmp_path)
+        assert executor._resolve_llm_timeout() == 600
+
+    def test_explicit_overrides_ollama_default(self, tmp_path: Path):
+        config = ModelConfig(model="ollama/gemma3:27b", llm_timeout=60)
+        executor = ConcreteExecutor(model_config=config, anima_dir=tmp_path)
+        assert executor._resolve_llm_timeout() == 60

@@ -15,6 +15,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from core.exceptions import ToolConfigError  # noqa: F401
+
 logger = logging.getLogger("animaworks.tool_guide")
 
 

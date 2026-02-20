@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -17,6 +16,7 @@ from pydantic import BaseModel
 
 from core.memory.activity import ActivityLogger
 from core.messenger import Messenger
+from core.time_utils import now_iso
 from server.events import emit
 
 logger = logging.getLogger("animaworks.routes.channels")
@@ -162,7 +162,7 @@ def create_channels_router() -> APIRouter:
             "from": body.from_name,
             "text": body.text,
             "source": "human",
-            "ts": datetime.now().isoformat(),
+            "ts": now_iso(),
         }
         await emit(request, "board.post", event_data)
 

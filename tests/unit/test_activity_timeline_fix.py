@@ -147,25 +147,25 @@ class TestNewEventHandlers:
 
 
 class TestBackendTimestampFormat:
-    """Verify the server's datetime.now().isoformat() produces naive local format."""
+    """Verify the server uses timezone-aware JST timestamps."""
 
-    def test_naive_isoformat_no_z(self) -> None:
-        """datetime.now() (no tz) produces ISO without Z suffix."""
-        ts = datetime.now().isoformat()
+    def test_jst_isoformat_no_z(self) -> None:
+        """now_iso() (JST-aware) produces ISO without Z suffix."""
+        from core.time_utils import now_iso
+        ts = now_iso()
         assert not ts.endswith("Z")
-        assert "+" not in ts  # no timezone offset
 
-    def test_naive_isoformat_pattern(self) -> None:
-        """Format matches YYYY-MM-DDTHH:MM:SS.ffffff."""
-        ts = datetime.now().isoformat()
-        assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+", ts)
+    def test_jst_isoformat_pattern(self) -> None:
+        """Format matches YYYY-MM-DDTHH:MM:SS.ffffff+09:00."""
+        from core.time_utils import now_iso
+        ts = now_iso()
+        assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+09:00", ts)
 
-    def test_activity_logger_uses_naive_now(self) -> None:
-        """ActivityLogger.log() must use datetime.now() not datetime.now(tz)."""
+    def test_activity_logger_uses_now_iso(self) -> None:
+        """ActivityLogger.log() must use now_iso() for timezone-aware timestamps."""
         from core.memory.activity import ActivityLogger
         import inspect
         source = inspect.getsource(ActivityLogger.log)
-        assert "datetime.now()" in source
-        # Must not use timezone-aware now
-        assert "datetime.now(timezone" not in source
-        assert "datetime.now(tz=" not in source
+        assert "now_iso()" in source
+        # Must not use raw datetime.now()
+        assert "datetime.now()" not in source

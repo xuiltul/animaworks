@@ -199,12 +199,12 @@ class TestModeBSkillInjection:
         captured_system = []
         original_call = agent._executor._call_llm
 
-        async def capture_call(messages):
+        async def capture_call(messages, **kwargs):
             for msg in messages:
                 if msg.get("role") == "system":
                     captured_system.append(msg["content"])
                     break
-            return await original_call(messages)
+            return await original_call(messages, **kwargs)
 
         agent._executor._call_llm = capture_call
 
@@ -238,12 +238,12 @@ class TestModeBSkillInjection:
         captured_system = []
         original_call = agent._executor._call_llm
 
-        async def capture_call(messages):
+        async def capture_call(messages, **kwargs):
             for msg in messages:
                 if msg.get("role") == "system":
                     captured_system.append(msg["content"])
                     break
-            return await original_call(messages)
+            return await original_call(messages, **kwargs)
 
         agent._executor._call_llm = capture_call
 
@@ -269,12 +269,12 @@ class TestModeBSkillInjection:
         captured_system = []
         original_call = agent._executor._call_llm
 
-        async def capture_call(messages):
+        async def capture_call(messages, **kwargs):
             for msg in messages:
                 if msg.get("role") == "system":
                     captured_system.append(msg["content"])
                     break
-            return await original_call(messages)
+            return await original_call(messages, **kwargs)
 
         agent._executor._call_llm = capture_call
 

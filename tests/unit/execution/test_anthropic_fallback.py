@@ -338,3 +338,70 @@ class TestExecuteContextTracking:
             result = await executor.execute("test", system_prompt="sys", tracker=None)
 
         assert result.text == "Response"
+
+
+# ── execute() / execute_streaming() — timeout ─────────────────
+
+
+class TestAnthropicFallbackTimeout:
+    """Verify that httpx.Timeout is passed to Anthropic API calls."""
+
+    async def test_execute_passes_timeout(self, executor: AnthropicFallbackExecutor):
+        """client.messages.create() must receive a 'timeout' kwarg."""
+        resp = _make_response([_make_text_block("Hello")])
+
+        with patch("anthropic.AsyncAnthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages = MagicMock()
+            mock_client.messages.create = AsyncMock(return_value=resp)
+            mock_cls.return_value = mock_client
+
+            await executor.execute("test prompt", system_prompt="sys")
+
+            create_call_kwargs = mock_client.messages.create.call_args[1]
+            assert "timeout" in create_call_kwargs
+            timeout_val = create_call_kwargs["timeout"]
+            # Should be an httpx.Timeout instance
+            import httpx
+            assert isinstance(timeout_val, httpx.Timeout)
+
+    async def test_streaming_passes_timeout(self, executor: AnthropicFallbackExecutor):
+        """client.messages.stream() must receive a 'timeout' kwarg."""
+        tracker = ContextTracker(model="claude-sonnet-4-20250514", threshold=0.50)
+
+        # Build a mock stream context manager
+        mock_final_message = _make_response(
+            [_make_text_block("Streamed response")],
+            input_tokens=100,
+            output_tokens=50,
+        )
+
+        mock_stream = AsyncMock()
+        mock_stream.get_final_message = AsyncMock(return_value=mock_final_message)
+        # Make async iteration yield nothing (no events)
+        mock_stream.__aiter__ = MagicMock(return_value=AsyncMock(
+            __anext__=AsyncMock(side_effect=StopAsyncIteration),
+        ))
+
+        mock_stream_cm = MagicMock()
+        mock_stream_cm.__aenter__ = AsyncMock(return_value=mock_stream)
+        mock_stream_cm.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("anthropic.AsyncAnthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages = MagicMock()
+            mock_client.messages.stream = MagicMock(return_value=mock_stream_cm)
+            mock_cls.return_value = mock_client
+
+            events = []
+            async for event in executor.execute_streaming(
+                system_prompt="sys",
+                prompt="test",
+                tracker=tracker,
+            ):
+                events.append(event)
+
+            stream_call_kwargs = mock_client.messages.stream.call_args[1]
+            assert "timeout" in stream_call_kwargs
+            import httpx
+            assert isinstance(stream_call_kwargs["timeout"], httpx.Timeout)

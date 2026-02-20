@@ -17,6 +17,7 @@ from core.memory.manager import match_skills_by_description
 from core.paths import PROJECT_DIR, get_data_dir, load_prompt
 from core.memory.shortterm import ShortTermMemory
 from core.schemas import SkillMeta
+from core.time_utils import now_jst
 
 logger = logging.getLogger("animaworks.prompt_builder")
 
@@ -112,27 +113,7 @@ def _build_emotion_instruction() -> str:
     """Build EMOTION_INSTRUCTION with the canonical emotion list."""
     from core.schemas import VALID_EMOTIONS
     emotion_list = ", ".join(sorted(VALID_EMOTIONS))
-    return f"""\
-## 表情メタデータ
-
-応答の最後の行に、あなたの今の感情を以下の形式で付加してください。
-この行はユーザーには表示されません。
-
-<!-- emotion: {{"emotion": "<感情名>"}} -->
-
-使える感情名: {emotion_list}
-
-**重要**: 会話の内容に合わせて表情を積極的に変えてください。neutral以外の表情を優先的に選びましょう。
-
-表情の選び方:
-- smile: 相手の話に共感した時、良いニュースを聞いた時、挨拶の時、感謝された時
-- laugh: 面白い話、ジョークを言う/聞いた時、楽しい雰囲気の時、嬉しい成果を報告する時
-- troubled: 難しい問題に直面した時、相手の悩みを聞いている時、判断に迷う時、トラブル報告の時
-- surprised: 予想外の情報、意外な展開、新しい発見をした時、驚くべき結果が出た時
-- thinking: 分析・検討中の時、質問の意図を考えている時、計画を練っている時、比較検討中の時
-- embarrassed: 褒められた時、失敗を認める時、個人的な話題の時、照れる内容の時
-- neutral: 淡々とした事実伝達、定型的な確認応答のみ（迷ったらneutral以外を選ぶ）
-"""
+    return load_prompt("builder/emotion_instruction", emotion_list=emotion_list)
 
 
 EMOTION_INSTRUCTION = _build_emotion_instruction()
@@ -226,10 +207,11 @@ def _build_org_context(anima_name: str, other_animas: list[str]) -> str:
         anima_speciality = my_speciality or "(未設定)"
         tree_text = _build_full_org_tree(anima_name, all_animas)
         parts = [
-            f"## あなたの組織上の位置\n\n"
-            f"あなたの専門: {anima_speciality}\n\n"
-            f"あなたはトップレベルです（上司なし）。以下が組織全体の構成です：\n\n"
-            f"```\n{tree_text}\n```",
+            load_prompt(
+                "builder/org_context_toplevel",
+                anima_speciality=anima_speciality,
+                tree_text=tree_text,
+            ),
         ]
         if other_animas:
             parts.append(load_prompt("communication_rules"))
@@ -315,30 +297,14 @@ def _load_a2_reflection() -> str:
         return ""
 
 
-def _build_human_notification_guidance() -> str:
+def _build_human_notification_guidance(execution_mode: str = "") -> str:
     """Build the human notification instruction for top-level Animas."""
-    return """\
-## 人間への連絡
+    if execution_mode == "a1":
+        how_to = load_prompt("builder/human_notification_howto_a1")
+    else:
+        how_to = load_prompt("builder/human_notification_howto_other")
 
-あなたはトップレベルのPersonです（上司なし）。
-重要な事項は `call_human` ツールで人間の管理者に連絡してください。
-連絡内容はチャット画面と外部通知チャネル（Slack等）の両方に届きます。
-部下からのエスカレーションを受けた場合、まず報告内容の事実確認を自分で行ってください。
-確認の結果、重要であれば人間に連絡してください。
-大したことがなければ自分の判断で対応を完了して構いません。
-検証できない報告をそのまま人間に転送しないこと。
-
-**連絡すべき場合:**
-- 問題・エラー・障害の検出
-- 判断が必要な事項
-- 重要なタスクの完了報告
-- 部下からのエスカレーション
-
-**連絡不要な場合:**
-- 定常的な巡回で特に問題がなかった場合
-- 軽微な自動修復が完了した場合
-
-判断に迷う場合は連絡してください。"""
+    return load_prompt("builder/human_notification", how_to=how_to)
 
 
 def build_system_prompt(
@@ -376,6 +342,10 @@ def build_system_prompt(
         anima_name=pd.name,
     ))
 
+    # Current time injection (immediately after environment)
+    current_time = now_jst().strftime("%Y-%m-%d %H:%M (%Z)")
+    parts.append(f"**現在時刻**: {current_time}")
+
     # Bootstrap instructions (highest priority after environment)
     bootstrap = memory.read_bootstrap()
     if bootstrap:
@@ -404,12 +374,7 @@ def build_system_prompt(
 
     state = memory.read_current_state()
     if state and state.strip() != "status: idle":
-        parts.append(
-            "## ⚠️ 進行中タスク（MUST: 最優先で確認すること）\n\n"
-            "以下のタスクが進行中です。状態を確認し、このタスクの続きから開始してください。\n"
-            "「idle」「待機中」と判定する前に、必ずこの内容を確認すること。\n\n"
-            f"{state}"
-        )
+        parts.append(load_prompt("builder/task_in_progress", state=state))
     elif state:
         parts.append(f"## 現在の状態\n\n{state}")
 
@@ -423,12 +388,7 @@ def build_system_prompt(
         task_queue = TaskQueueManager(memory.anima_dir)
         task_summary = task_queue.format_for_priming()
         if task_summary:
-            parts.append(
-                "## Active Task Queue\n\n"
-                "以下は永続タスクキューの未完了タスクです。"
-                "🔴 HIGH は人間からの指示であり最優先です。\n\n"
-                + task_summary
-            )
+            parts.append(load_prompt("builder/task_queue", task_summary=task_summary))
     except Exception:
         logger.debug("Failed to inject task queue", exc_info=True)
 
@@ -442,12 +402,10 @@ def build_system_prompt(
                 resolver = r.get("resolver", "unknown")
                 issue = r.get("issue", "")
                 res_lines.append(f"- [{ts_short}] {resolver}: {issue}")
-            parts.append(
-                "## 解決済み案件（組織横断）\n\n"
-                "以下は直近7日間に解決された案件です。"
-                "これらの問題については再調査・再報告は不要です。\n\n"
-                + "\n".join(res_lines)
-            )
+            parts.append(load_prompt(
+                "builder/resolution_registry",
+                res_lines="\n".join(res_lines),
+            ))
     except Exception:
         logger.debug("Failed to inject resolution registry", exc_info=True)
 
@@ -482,12 +440,7 @@ def build_system_prompt(
     # Common knowledge reference hint
     common_knowledge_dir = data_dir / "common_knowledge"
     if common_knowledge_dir.exists() and any(common_knowledge_dir.rglob("*.md")):
-        parts.append(
-            "## 共有リファレンス\n\n"
-            "困ったとき・手順が不明なときは `common_knowledge/` を "
-            "`search_memory` で検索するか、`read_memory_file` で直接読んでください。\n"
-            "目次: `common_knowledge/00_index.md`"
-        )
+        parts.append(load_prompt("builder/common_knowledge_hint"))
 
     # ── Skill + procedure injection (description-based matching) ──────
     procedure_metas = memory.list_procedure_metas()
@@ -521,11 +474,13 @@ def build_system_prompt(
         else:
             label = "(個人スキル)"
         section_title = "手順" if is_procedure else "スキル"
-        parts.append(
-            f"## {section_title}: {skill.name} {label}\n\n"
-            f"以下の{section_title}がこのメッセージに該当します。手順に従って実行してください。\n\n"
-            f"{body}"
-        )
+        parts.append(load_prompt(
+            "builder/skill_injection",
+            section_title=section_title,
+            skill_name=skill.name,
+            label=label,
+            body=body,
+        ))
         matched_names.add(skill.name)
         used_tokens += body_len
 
@@ -555,12 +510,11 @@ def build_system_prompt(
             f"| {m.name} | {m.description} |" for m in unmatched_common
         )
         common_skills_dir = memory.common_skills_dir
-        parts.append(
-            f"## 共通スキル\n\n"
-            f"以下は全社員共通のスキルです。使用する際は "
-            f"`{common_skills_dir}/{{スキル名}}.md` をReadで読んでから実行してください。\n\n"
-            f"| スキル名 | 概要 |\n|---------|------|\n{common_skill_lines}"
-        )
+        parts.append(load_prompt(
+            "builder/common_skills_header",
+            common_skills_dir=common_skills_dir,
+            common_skill_lines=common_skill_lines,
+        ))
 
     # Non-matched procedures → table
     unmatched_procedures = [
@@ -570,36 +524,18 @@ def build_system_prompt(
         proc_lines = "\n".join(
             f"| {m.name} | {m.description} |" for m in unmatched_procedures
         )
-        parts.append(
-            f"## 手順書\n\n"
-            f"以下は個人の手順書です。使用する際は `procedures/{{手順名}}.md` をReadで読んでから実行してください。\n\n"
-            f"| 手順名 | 概要 |\n|---------|------|\n{proc_lines}"
-        )
+        parts.append(load_prompt(
+            "builder/procedures_header",
+            proc_lines=proc_lines,
+        ))
 
     # Commander hiring guardrail: force create_anima tool/CLI usage
     has_newstaff = any(m.name == "newstaff" for m in skill_metas)
     if has_newstaff:
         if execution_mode == "a1":
-            parts.append(
-                "## 雇用ルール\n\n"
-                "新しいAnimaを雇用する際は、以下の手順に従ってください。\n"
-                "手動で identity.md 等のファイルを個別に作成してはいけません。\n\n"
-                "1. キャラクターシートを1ファイルのMarkdownとして作成する\n"
-                "   - 必須セクション: `## 基本情報`, `## 人格`, `## 役割・行動方針`\n"
-                "2. Bashで以下のコマンドを実行する:\n"
-                "   ```\n"
-                "   animaworks create-anima --from-md <キャラクターシートのパス>"
-                " --supervisor $(basename $ANIMAWORKS_ANIMA_DIR)\n"
-                "   ```\n"
-                "3. サーバーのReconciliationが自動的に新Animaを検出・起動します"
-            )
+            parts.append(load_prompt("builder/hiring_rules_a1"))
         else:
-            parts.append(
-                "## 雇用ルール\n\n"
-                "新しいAnimaを雇用する際は、必ず `create_anima` ツールを使用してください。\n"
-                "手動で identity.md 等のファイルを個別に作成してはいけません。\n"
-                "キャラクターシートを1ファイルで作成し、create_anima に渡してください。"
-            )
+            parts.append(load_prompt("builder/hiring_rules_other"))
 
     # Inject dynamically generated external tools guide (filtered by registry)
     if permissions and "外部ツール" in permissions and (tool_registry or personal_tools):
@@ -609,12 +545,10 @@ def build_system_prompt(
             if personal_tools:
                 personal_cats = ", ".join(sorted(personal_tools.keys()))
                 categories = f"{categories}, {personal_cats}" if categories else personal_cats
-            parts.append(
-                f"## 外部ツール\n\n"
-                f"外部ツールを使うには `discover_tools` を呼んでください。\n"
-                f"利用可能なカテゴリ: {categories}\n"
-                f"カテゴリを指定して呼ぶとそのツール群が使えるようになります。"
-            )
+            parts.append(load_prompt(
+                "builder/external_tools_guide",
+                categories=categories,
+            ))
         else:
             # A1/B: CLI guide via animaworks-tool
             from core.tooling.guide import build_tools_guide
@@ -660,7 +594,7 @@ def build_system_prompt(
         _my_pcfg = _cfg.animas.get(pd.name)
         _is_top_level = _my_pcfg is None or _my_pcfg.supervisor is None
         if _is_top_level and _cfg.human_notification.enabled:
-            parts.append(_build_human_notification_guidance())
+            parts.append(_build_human_notification_guidance(execution_mode))
     except Exception:
         logger.debug("Skipped human notification guidance injection", exc_info=True)
 

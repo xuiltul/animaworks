@@ -17,6 +17,20 @@ from core.prompt.builder import build_system_prompt
 from core.schemas import SkillMeta
 
 
+def _mock_load_prompt_guardrail(name: str, **kwargs) -> str:
+    """Mock load_prompt that renders hiring_rules templates realistically."""
+    if name in ("builder/hiring_rules_a1", "builder/hiring_rules_other"):
+        return (
+            "## 雇用ルール\n\n"
+            "新しいAnimaを雇用する際は、以下の手順に従ってください。\n"
+            "手動で identity.md 等のファイルを個別に作成してはいけません。\n\n"
+            "1. キャラクターシートを1ファイルのMarkdownとして作成する\n"
+            "2. Bashで以下のコマンドを実行する:\n"
+            "   animaworks create-anima --from-md <パス>\n"
+        )
+    return "prompt section"
+
+
 def _make_mock_memory(
     tmp_path: Path,
     skill_summaries: list[tuple[str, str]],
@@ -75,7 +89,7 @@ class TestCommanderHiringGuardrail:
             skill_summaries=[("newstaff", "新しい社員雇用")],
         )
 
-        with patch("core.prompt.builder.load_prompt", return_value="prompt section"):
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_guardrail):
             result = build_system_prompt(memory)
 
         assert "雇用ルール" in result
@@ -120,7 +134,7 @@ class TestCommanderHiringGuardrail:
             skill_summaries=[("newstaff", "新しい社員雇用")],
         )
 
-        with patch("core.prompt.builder.load_prompt", return_value="prompt section"):
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_guardrail):
             result = build_system_prompt(memory)
 
         # All key phrases from the guardrail block
@@ -142,7 +156,7 @@ class TestCommanderHiringGuardrail:
             ],
         )
 
-        with patch("core.prompt.builder.load_prompt", return_value="prompt section"):
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_guardrail):
             result = build_system_prompt(memory)
 
         assert "雇用ルール" in result

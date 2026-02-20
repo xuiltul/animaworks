@@ -12,9 +12,12 @@ Provides atomic file writes (temp + rename) and fsync-backed appends
 to protect against data loss on process crash or power failure.
 """
 
+import logging
 import os
 import tempfile
 from pathlib import Path
+
+logger = logging.getLogger("animaworks.memory._io")
 
 
 def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
@@ -33,7 +36,7 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
         try:
             os.unlink(tmp_path)
         except OSError:
-            pass
+            logger.debug("Failed to unlink temp file %s", tmp_path, exc_info=True)
         raise
 
 
@@ -47,5 +50,5 @@ def cleanup_tmp_files(directory: Path, prefix: str = ".") -> int:
             tmp.unlink()
             removed += 1
         except OSError:
-            pass
+            logger.debug("Failed to remove stale tmp file %s", tmp, exc_info=True)
     return removed

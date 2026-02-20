@@ -35,6 +35,7 @@ from core.tooling.schemas import (
     build_tool_list,
     to_anthropic_format,
 )
+import httpx
 
 logger = logging.getLogger("animaworks.execution.anthropic_fallback")
 
@@ -136,6 +137,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     system=system_prompt,
                     messages=messages,
                     tools=tools,
+                    timeout=httpx.Timeout(self._resolve_llm_timeout()),
                 )
             except Exception as e:
                 logger.exception("Anthropic API error")
@@ -258,6 +260,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     system=system_prompt,
                     messages=messages,
                     tools=tools,
+                    timeout=httpx.Timeout(self._resolve_llm_timeout()),
                 ) as stream:
                     async for event in stream:
                         # Text deltas — forward immediately

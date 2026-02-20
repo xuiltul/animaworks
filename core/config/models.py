@@ -23,6 +23,8 @@ from typing import Any
 
 from pydantic import BaseModel, model_validator
 
+from core.exceptions import ConfigError  # noqa: F401
+
 logger = logging.getLogger("animaworks.config")
 
 # ---------------------------------------------------------------------------
@@ -77,6 +79,7 @@ class AnimaModelConfig(BaseModel):
     supervisor: str | None = None  # name of supervisor Anima
     speciality: str | None = None  # free-text specialisation
     thinking: bool | None = None  # Ollama thinking mode (None=auto, True/False=explicit)
+    llm_timeout: int | None = None  # LLM API timeout (seconds); None = auto
 
 
 class AnimaDefaults(BaseModel):
@@ -94,6 +97,7 @@ class AnimaDefaults(BaseModel):
     supervisor: str | None = None
     speciality: str | None = None
     thinking: bool | None = None  # Ollama thinking mode
+    llm_timeout: int = 600  # default LLM API timeout (seconds)
 
 
 class RAGConfig(BaseModel):
@@ -229,6 +233,17 @@ class BackgroundTaskConfig(BaseModel):
     result_retention_hours: int = 24
 
 
+class HeartbeatConfig(BaseModel):
+    """Heartbeat scheduling and cascade prevention settings."""
+
+    msg_heartbeat_cooldown_s: int = 300  # message-triggered heartbeat cooldown
+    cascade_window_s: int = 1800  # sliding window for cascade detection
+    cascade_threshold: int = 3  # max round-trips per pair within window
+    depth_window_s: int = 600  # bilateral depth limiter window
+    max_depth: int = 6  # max bilateral exchange depth
+    actionable_intents: list[str] = ["delegation", "report", "question"]
+
+
 class AnimaWorksConfig(BaseModel):
     version: int = 1
     setup_complete: bool = False
@@ -247,6 +262,7 @@ class AnimaWorksConfig(BaseModel):
     server: ServerConfig = ServerConfig()
     external_messaging: ExternalMessagingConfig = ExternalMessagingConfig()
     background_task: BackgroundTaskConfig = BackgroundTaskConfig()
+    heartbeat: HeartbeatConfig = HeartbeatConfig()
 
 
 # ---------------------------------------------------------------------------
@@ -601,6 +617,7 @@ def load_model_config(anima_dir: Path) -> "ModelConfig":
         speciality=resolved.speciality,
         resolved_mode=mode,
         thinking=resolved.thinking,
+        llm_timeout=resolved.llm_timeout,
     )
 
 

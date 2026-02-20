@@ -7,8 +7,9 @@ from __future__ import annotations
 import argparse
 import logging
 import shutil
-from datetime import datetime
 from pathlib import Path
+
+from core.time_utils import now_jst
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +166,7 @@ def _run(args: argparse.Namespace) -> None:
         print("[DRY-RUN] The following actions would be performed:")
         print()
         if not args.no_backup and assets_dir.exists():
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ts = now_jst().strftime("%Y%m%d_%H%M%S")
             print(f"  1. Backup: {assets_dir} -> {target_dir / f'assets_backup_{ts}'}")
         else:
             print("  1. Backup: skipped (--no-backup or no existing assets)")
@@ -188,7 +189,7 @@ def _run(args: argparse.Namespace) -> None:
     # ── Backup existing assets ──
     assets_dir = target_dir / "assets"
     if not args.no_backup and assets_dir.exists():
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = now_jst().strftime("%Y%m%d_%H%M%S")
         backup_dir = target_dir / f"assets_backup_{ts}"
         shutil.copytree(assets_dir, backup_dir)
         print(f"Backup created: {backup_dir}")

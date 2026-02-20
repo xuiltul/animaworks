@@ -22,6 +22,7 @@ from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from core.prompt.context import ContextTracker
+from core.exceptions import ExecutionError, LLMAPIError, MemoryWriteError  # noqa: F401
 from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError
 from core.schemas import ModelConfig
 from core.memory.shortterm import ShortTermMemory

@@ -22,6 +22,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.paths import load_prompt
+from core.time_utils import ensure_aware, now_iso, now_jst
+
 logger = logging.getLogger("animaworks.consolidation")
 
 
@@ -119,7 +122,7 @@ class ConsolidationEngine:
                 shutil.copy2(path, backup_dir / path.name)
 
                 # Try to extract created_at from [AUTO-CONSOLIDATED: YYYY-MM-DD HH:MM]
-                created_at = datetime.now().isoformat()
+                created_at = now_iso()
                 ts_match = re.search(
                     r"\[AUTO-CONSOLIDATED:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})\]",
                     text,
@@ -129,7 +132,7 @@ class ConsolidationEngine:
                         parsed = datetime.strptime(ts_match.group(1), "%Y-%m-%d %H:%M")
                         created_at = parsed.isoformat()
                     except ValueError:
-                        pass
+                        logger.debug("Failed to parse consolidation timestamp", exc_info=True)
 
                 # Strip code fences that LLM may have wrapped around content
                 content = re.sub(r"^```(?:markdown|md)?\s*\n", "", text, flags=re.MULTILINE)
@@ -141,6 +144,10 @@ class ConsolidationEngine:
                     "confidence": 0.5,
                     "auto_consolidated": True,
                     "migrated_from_legacy": True,
+                    "success_count": 0,
+                    "failure_count": 0,
+                    "version": 1,
+                    "last_used": "",
                 }
 
                 mm.write_knowledge_with_meta(path, content, metadata)
@@ -153,7 +160,7 @@ class ConsolidationEngine:
 
         # Write marker
         marker.write_text(
-            datetime.now().isoformat() + "\n",
+            now_iso() + "\n",
             encoding="utf-8",
         )
         if migrated > 0:
@@ -167,7 +174,7 @@ class ConsolidationEngine:
 
     async def daily_consolidate(
         self,
-        model: str = "anthropic/claude-sonnet-4-20250514",
+        model: str = "",
         min_episodes: int = 1,
     ) -> dict[str, Any]:
         """Perform daily consolidation: Episodes → Knowledge.
@@ -186,6 +193,9 @@ class ConsolidationEngine:
             - knowledge_files_updated: List of updated knowledge files
             - skipped: True if consolidation was skipped
         """
+        if not model:
+            from core.config.models import ConsolidationConfig
+            model = ConsolidationConfig().llm_model
         logger.info("Starting daily consolidation for anima=%s", self.anima_name)
 
         # Run legacy migration (once)
@@ -311,7 +321,7 @@ class ConsolidationEngine:
         except Exception:
             logger.exception("Synaptic downscaling failed for anima=%s", self.anima_name)
 
-        # Reconsolidation: detect and apply prediction errors
+        # Reconsolidation: detect and apply prediction errors (procedures)
         reconsolidation_result: dict[str, Any] = {}
         try:
             reconsolidation_result = await self._run_reconsolidation(
@@ -319,6 +329,15 @@ class ConsolidationEngine:
             )
         except Exception:
             logger.exception("Reconsolidation failed for anima=%s", self.anima_name)
+
+        # Knowledge reconsolidation: revise failing knowledge files
+        knowledge_reconsolidation_result: dict[str, Any] = {}
+        try:
+            knowledge_reconsolidation_result = await self._run_knowledge_reconsolidation(model)
+        except Exception:
+            logger.exception(
+                "Knowledge reconsolidation failed for anima=%s", self.anima_name,
+            )
 
         # Contradiction check for newly created/updated knowledge files
         contradiction_result: dict[str, int] = {}
@@ -344,6 +363,7 @@ class ConsolidationEngine:
             "distillation": distillation_result,
             "downscaling": downscaling_result,
             "reconsolidation": reconsolidation_result,
+            "knowledge_reconsolidation": knowledge_reconsolidation_result,
             "contradiction": contradiction_result,
             "skipped": False,
         }
@@ -421,6 +441,33 @@ class ConsolidationEngine:
 
         return result
 
+    async def _run_knowledge_reconsolidation(
+        self,
+        model: str,
+    ) -> dict[str, Any]:
+        """Run failure-count-based reconsolidation on knowledge files.
+
+        Scans knowledge frontmatter for files with failure_count >= 2
+        and confidence < 0.6, then uses an LLM to revise them.
+
+        Args:
+            model: LLM model identifier for revision.
+
+        Returns:
+            Dict with reconsolidation results (targets_found, updated, etc.).
+        """
+        from core.memory.reconsolidation import ReconsolidationEngine
+
+        engine = ReconsolidationEngine(self.anima_dir, self.anima_name)
+        result = await engine.reconsolidate_knowledge(model)
+
+        # Re-index only the files that were actually updated
+        updated_files = result.get("updated_files", [])
+        if updated_files:
+            self._update_rag_index(updated_files)
+
+        return result
+
     def _collect_recent_episodes(self, hours: int = 24) -> list[dict[str, str]]:
         """Collect episode entries from the past N hours.
 
@@ -435,12 +482,12 @@ class ConsolidationEngine:
         Returns:
             List of episode entries, each with 'date', 'time', 'content'
         """
-        cutoff = datetime.now() - timedelta(hours=hours)
+        cutoff = now_jst() - timedelta(hours=hours)
         entries: list[dict[str, str]] = []
 
         # Check today and yesterday's episode files
         for day_offset in range(2):
-            target_date = datetime.now().date() - timedelta(days=day_offset)
+            target_date = now_jst().date() - timedelta(days=day_offset)
             episode_files = sorted(self.episodes_dir.glob(f"{target_date}*.md"))
 
             for episode_file in episode_files:
@@ -460,10 +507,10 @@ class ConsolidationEngine:
 
                         # Parse timestamp
                         try:
-                            entry_dt = datetime.strptime(
+                            entry_dt = ensure_aware(datetime.strptime(
                                 f"{target_date} {time_str}",
                                 "%Y-%m-%d %H:%M",
-                            )
+                            ))
 
                             # Only include if within time window
                             if entry_dt >= cutoff:
@@ -479,9 +526,9 @@ class ConsolidationEngine:
                             )
                 else:
                     # Fallback: treat entire file as a single entry using mtime
-                    file_mtime = datetime.fromtimestamp(
+                    file_mtime = ensure_aware(datetime.fromtimestamp(
                         episode_file.stat().st_mtime,
-                    )
+                    ))
                     if file_mtime >= cutoff:
                         entries.append({
                             "date": str(target_date),
@@ -650,66 +697,33 @@ class ConsolidationEngine:
         # Fetch related knowledge via RAG for context
         related_knowledge = self._fetch_related_knowledge(episodes_text)
 
-        # Build consolidation prompt
-        prompt = f"""以下は{self.anima_name}の過去24時間のエピソード記録です。
+        # Build consolidation prompt: data → context → task instructions
+        prompt = load_prompt(
+            "memory/daily_consolidation",
+            anima_name=self.anima_name,
+            episodes_text=episodes_text,
+            knowledge_list=knowledge_list,
+        )
 
-【エピソード】
-{episodes_text}
-
-【既存の知識ファイル一覧】
-{knowledge_list}
-"""
-
-        # Inject related knowledge content
+        # Inject related knowledge content (between data and task)
         if related_knowledge:
-            prompt += f"""
-【関連する既存知識の内容】
-{related_knowledge}
-"""
+            prompt += load_prompt(
+                "memory/daily_consolidation_related",
+                related_knowledge=related_knowledge,
+            )
 
-        prompt += """
-タスク:
-以下のエピソードから新しい教訓・パターン・方針を抽出してください。
-
-1. **新しい教訓やパターン**: エピソードから学んだことで、今後の判断に役立つもの
-2. **既存知識の更新**: 既存の知識ファイルに追加・修正すべき内容
-3. **新規知識ファイル**: 新しいトピックとして独立した知識ファイルが必要な場合
-
-出力形式:
-## 既存ファイル更新
-- ファイル名: knowledge/xxx.md
-  追加内容: (具体的な内容をMarkdown形式で記述)
-
-## 新規ファイル作成
-- ファイル名: knowledge/yyy.md
-  内容: (ファイル全体の内容をMarkdown形式で記述)
-
-注意事項:
-- 以下の情報は必ず抽出してください:
-  - 具体的な設定値・APIキー・認証情報の格納場所
-  - ユーザーやシステムの識別情報（ID、名前、役割）
-  - 手順・ワークフロー・プロセスの記録
-  - チーム構成・役割分担・指揮系統
-  - 技術的な判断とその理由
-- 完全に同一内容の繰り返しのみスキップしてください
-- 挨拶のみの会話や実質的な情報を含まないやり取りは知識化不要です
-- 既存ファイルがない場合は、すべて新規ファイルとして提案してください
-- ファイル名はトピックを表すわかりやすい名前にしてください（英数字とハイフン推奨）
-- コードフェンス（```）で囲まないでください
-"""
-
-        # Inject resolved events into prompt
+        # Inject resolved events into prompt (between data and task)
         if resolved_events:
             resolved_text = "\n".join(
                 f"- {r.get('ts', '')[:16]}: {r.get('content', '')}" for r in resolved_events
             )
-            prompt += f"""
-【解決済み案件】
-以下の案件は解決済みです。既存の知識ファイルに「未解決」「対応中」「調査中」等の
-記載がある場合は、「解決済み」に更新してください。
+            prompt += load_prompt(
+                "memory/daily_consolidation_resolved",
+                resolved_text=resolved_text,
+            )
 
-{resolved_text}
-"""
+        # Append task instructions after all context
+        prompt += load_prompt("memory/daily_consolidation_task")
 
         # Call LLM
         try:
@@ -738,17 +752,9 @@ class ConsolidationEngine:
                     "for anima=%s",
                     self.anima_name,
                 )
-                retry_prompt = (
-                    "先ほどの出力が期待された形式と異なりました。\n"
-                    "以下の形式で再出力してください:\n\n"
-                    "## 既存ファイル更新\n"
-                    "- ファイル名: knowledge/xxx.md\n"
-                    "  追加内容: (内容)\n\n"
-                    "## 新規ファイル作成\n"
-                    "- ファイル名: knowledge/yyy.md\n"
-                    "  内容: (内容)\n\n"
-                    "コードフェンス（```）は使わないでください。\n\n"
-                    f"元の内容:\n{result[:2000]}"
+                retry_prompt = load_prompt(
+                    "memory/consolidation_retry",
+                    previous_result=result[:2000],
                 )
                 retry_response = await litellm.acompletion(
                     model=model,
@@ -954,24 +960,28 @@ class ConsolidationEngine:
                     existing_meta = mm.read_knowledge_metadata(filepath)
                     existing_content = mm.read_knowledge_content(filepath)
 
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    timestamp = now_jst().strftime("%Y-%m-%d %H:%M")
                     updated_content = (
                         f"{existing_content}\n\n"
                         f"[AUTO-CONSOLIDATED: {timestamp}]\n\n{content}"
                     )
 
                     # Update metadata
-                    existing_meta["updated_at"] = datetime.now().isoformat()
+                    existing_meta["updated_at"] = now_iso()
                     mm.write_knowledge_with_meta(filepath, updated_content, existing_meta)
                     files_updated.append(filename)
                     logger.info("Updated knowledge file: %s", filename)
                 else:
                     # File doesn't exist, create with frontmatter
-                    timestamp = datetime.now().isoformat()
+                    timestamp = now_iso()
                     metadata = {
                         "created_at": timestamp,
                         "confidence": 0.7,
                         "auto_consolidated": True,
+                        "success_count": 0,
+                        "failure_count": 0,
+                        "version": 1,
+                        "last_used": "",
                     }
                     body = f"# {filepath.stem}\n\n{content}"
                     mm.write_knowledge_with_meta(filepath, body, metadata)
@@ -1004,18 +1014,22 @@ class ConsolidationEngine:
 
                 if not filepath.exists():
                     # Build source episode filenames
-                    today = datetime.now().date()
+                    today = now_jst().date()
                     source_episodes = [
                         f"{today}.md",
                         f"{(today - timedelta(days=1))}.md",
                     ]
 
-                    timestamp = datetime.now().isoformat()
+                    timestamp = now_iso()
                     metadata = {
                         "created_at": timestamp,
                         "source_episodes": source_episodes,
                         "confidence": 0.7,
                         "auto_consolidated": True,
+                        "success_count": 0,
+                        "failure_count": 0,
+                        "version": 1,
+                        "last_used": "",
                     }
                     mm.write_knowledge_with_meta(filepath, content, metadata)
                     files_created.append(filename)
@@ -1067,7 +1081,7 @@ class ConsolidationEngine:
 
     async def weekly_integrate(
         self,
-        model: str = "anthropic/claude-sonnet-4-20250514",
+        model: str = "",
         duplicate_threshold: float = 0.85,
         episode_retention_days: int = 30,
     ) -> dict[str, Any]:
@@ -1084,6 +1098,9 @@ class ConsolidationEngine:
             - episodes_compressed: Number of episodes compressed
             - skipped: True if integration was skipped
         """
+        if not model:
+            from core.config.models import ConsolidationConfig
+            model = ConsolidationConfig().llm_model
         logger.info("Starting weekly integration for anima=%s", self.anima_name)
 
         results = {
@@ -1278,30 +1295,15 @@ class ConsolidationEngine:
                 content2 = (self.knowledge_dir / file2).read_text(encoding="utf-8")
 
                 # Build merge prompt
-                prompt = f"""以下は{self.anima_name}の類似した2つの知識ファイルです。
-
-【ファイル1: {file1}】
-{content1}
-
-【ファイル2: {file2}】
-{content2}
-
-類似度: {similarity:.2f}
-
-タスク:
-この2つのファイルを1つに統合してください。
-
-1. 重複する内容は1つにまとめる
-2. 矛盾する記述があれば、より新しい/詳細な方を採用
-3. 両方の情報を失わないように統合する
-
-出力形式:
-## 統合ファイル名
-(file1とfile2を統合した適切なファイル名を提案。knowledge/は不要)
-
-## 統合内容
-(統合後のファイル全体の内容をMarkdown形式で記述)
-"""
+                prompt = load_prompt(
+                    "memory/knowledge_merge",
+                    anima_name=self.anima_name,
+                    file1=file1,
+                    content1=content1,
+                    file2=file2,
+                    content2=content2,
+                    similarity=f"{similarity:.2f}",
+                )
 
                 # Call LLM
                 import litellm
@@ -1341,7 +1343,7 @@ class ConsolidationEngine:
                     merged_filename = merged_path.name
 
                     # Write merged file
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    timestamp = now_jst().strftime("%Y-%m-%d %H:%M")
                     header = f"# {merged_path.stem}\n\n[AUTO-MERGED: {timestamp}]\n"
                     header += f"[SOURCE: {file1}, {file2}]\n\n"
 
@@ -1373,7 +1375,7 @@ class ConsolidationEngine:
     async def _compress_old_episodes(
         self,
         retention_days: int = 30,
-        model: str = "anthropic/claude-sonnet-4-20250514",
+        model: str = "",
     ) -> int:
         """Compress old episodes that don't have [IMPORTANT] tags.
 
@@ -1384,7 +1386,10 @@ class ConsolidationEngine:
         Returns:
             Number of episodes compressed
         """
-        cutoff_date = datetime.now().date() - timedelta(days=retention_days)
+        if not model:
+            from core.config.models import ConsolidationConfig
+            model = ConsolidationConfig().llm_model
+        cutoff_date = now_jst().date() - timedelta(days=retention_days)
         compressed_count = 0
 
         # Iterate through episode files
@@ -1408,21 +1413,12 @@ class ConsolidationEngine:
                     continue
 
                 # Compress with LLM
-                prompt = f"""以下は{self.anima_name}の{date_str}のエピソード記録です。
-
-【エピソード】
-{content}
-
-タスク:
-主要な出来事のみを抽出し、簡潔に要約してください。
-些細な会話や定型的なやり取りは省略してください。
-
-出力形式:
-## {date_str} 要約
-- (要点1)
-- (要点2)
-...
-"""
+                prompt = load_prompt(
+                    "memory/episode_compression",
+                    anima_name=self.anima_name,
+                    date_str=date_str,
+                    content=content,
+                )
 
                 import litellm
 
@@ -1441,7 +1437,7 @@ class ConsolidationEngine:
                     shutil.copy2(str(episode_file), str(backup_dir / episode_file.name))
 
                     # Replace original file with compressed version
-                    compressed_header = f"# {date_str}\n\n[COMPRESSED: {datetime.now().strftime('%Y-%m-%d %H:%M')}]\n\n"
+                    compressed_header = f"# {date_str}\n\n[COMPRESSED: {now_jst().strftime('%Y-%m-%d %H:%M')}]\n\n"
                     episode_file.write_text(
                         compressed_header + summary,
                         encoding="utf-8"

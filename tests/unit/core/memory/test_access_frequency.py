@@ -189,11 +189,8 @@ class TestRecordAccess:
             memory_type="knowledge", anima="test_anima",
         )
 
-        with patch("core.memory.rag.retriever.datetime") as mock_dt:
-            fixed_now = datetime(2026, 2, 15, 12, 0, 0)
-            mock_dt.now.return_value = fixed_now
-            mock_dt.fromisoformat = datetime.fromisoformat
-
+        fixed_now = datetime(2026, 2, 15, 12, 0, 0)
+        with patch("core.memory.rag.retriever.now_iso", return_value=fixed_now.isoformat()):
             retriever.record_access([result], "test_anima")
 
         mock_vector_store.update_metadata.assert_called_once()

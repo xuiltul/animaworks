@@ -23,22 +23,8 @@ from core.memory.shortterm import ShortTermMemory
 
 # ── Streaming error ──────────────────────────────────────────
 
+from core.exceptions import StreamDisconnectedError  # noqa: F401 – re-export
 
-class StreamDisconnectedError(Exception):
-    """Raised when a streaming session disconnects unexpectedly.
-
-    Carries partial response text accumulated before the disconnect
-    so AgentCore can build a checkpoint-based retry prompt.
-    """
-
-    def __init__(
-        self,
-        message: str = "Stream disconnected",
-        *,
-        partial_text: str = "",
-    ) -> None:
-        super().__init__(message)
-        self.partial_text = partial_text
 
 
 # ── Result ───────────────────────────────────────────────────
@@ -135,6 +121,19 @@ class BaseExecutor(ABC):
         except Exception as e:
             _logger.warning("Failed to read replied_to file: %s", e)
         return names
+
+    def _resolve_llm_timeout(self) -> int:
+        """Resolve LLM API call timeout in seconds.
+
+        Priority:
+          1. Explicit ``llm_timeout`` in ModelConfig (per-anima setting)
+          2. Automatic: 300s for ``ollama/`` models, 600s for API models
+        """
+        if self._model_config.llm_timeout is not None:
+            return self._model_config.llm_timeout
+        if self._model_config.model.startswith("ollama/"):
+            return 300
+        return 600
 
     # -- Execution -----------------------------------------
 

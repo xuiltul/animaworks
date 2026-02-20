@@ -39,6 +39,15 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
     "send":     {"expected_seconds": 10, "background_eligible": False},
     "search":   {"expected_seconds": 30, "background_eligible": False},
     "unreplied": {"expected_seconds": 60, "background_eligible": False},
+    "sync":     {"expected_seconds": 60, "background_eligible": True},
+    "me":       {"expected_seconds": 5,  "background_eligible": False},
+    "members":  {"expected_seconds": 10, "background_eligible": False},
+    "contacts": {"expected_seconds": 10, "background_eligible": False},
+    "task":     {"expected_seconds": 10, "background_eligible": False},
+    "mytasks":  {"expected_seconds": 10, "background_eligible": False},
+    "tasks":    {"expected_seconds": 10, "background_eligible": False},
+    "mentions": {"expected_seconds": 60, "background_eligible": False},
+    "stats":    {"expected_seconds": 5,  "background_eligible": False},
 }
 
 requests = None
@@ -181,11 +190,13 @@ class ChatworkClient:
         )
 
     def post_message(self, room_id: str, body: str) -> dict:
-        if len(body) > 10000:
-            raise ValueError(
-                f"Message exceeds 10,000 characters ({len(body)} chars)"
-            )
-        return self.post(f"/rooms/{room_id}/messages", data={"body": body})
+        # NOTE: 送信機能は一時的に無効化されています
+        raise RuntimeError("送信機能は現在無効化されています")
+        # if len(body) > 10000:
+        #     raise ValueError(
+        #         f"Message exceeds 10,000 characters ({len(body)} chars)"
+        #     )
+        # return self.post(f"/rooms/{room_id}/messages", data={"body": body})
 
     def my_tasks(self, status: str = "open") -> list[dict]:
         """List my tasks. status: open / done"""
@@ -463,6 +474,40 @@ class MessageCache(BaseMessageCache):
         return {"rooms": rooms, "messages": msgs}
 
 
+# ── Sync ──────────────────────────────────────────────────────
+
+
+def _sync_rooms(
+    client: ChatworkClient,
+    cache: MessageCache,
+    sync_limit: int = 30,
+    sleep_interval: float = 0.3,
+) -> dict[str, int]:
+    """Fetch all room metadata + sync messages for top N rooms.
+
+    Returns dict with ``rooms`` (total room count) and ``messages``
+    (total messages fetched).
+    """
+    rooms_data = client.rooms()
+    for room in rooms_data:
+        cache.upsert_room(room)
+
+    rooms_data.sort(key=lambda r: r.get("last_update_time", 0), reverse=True)
+    total_msgs = 0
+    for room in rooms_data[:sync_limit]:
+        rid = str(room["room_id"])
+        try:
+            msgs = client.get_messages(rid, force=True)
+            if msgs:
+                cache.upsert_messages(rid, msgs)
+                cache.update_sync_state(rid)
+                total_msgs += len(msgs)
+        except Exception:
+            logger.warning("sync failed for room %s", rid)
+        time.sleep(sleep_interval)
+    return {"rooms": len(rooms_data), "messages": total_msgs}
+
+
 # ============================================================
 # Tool schemas (Anthropic tool_use format)
 # ============================================================
@@ -470,27 +515,28 @@ class MessageCache(BaseMessageCache):
 def get_tool_schemas() -> list[dict]:
     """Return Anthropic tool_use schemas for Chatwork tools."""
     return [
-        {
-            "name": "chatwork_send",
-            "description": (
-                "Send a message to a Chatwork room. "
-                "The room can be specified by numeric ID or by name (partial match)."
-            ),
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "room": {
-                        "type": "string",
-                        "description": "Room name or numeric room ID.",
-                    },
-                    "message": {
-                        "type": "string",
-                        "description": "Message body text to send.",
-                    },
-                },
-                "required": ["room", "message"],
-            },
-        },
+        # NOTE: chatwork_send は一時的に無効化されています
+        # {
+        #     "name": "chatwork_send",
+        #     "description": (
+        #         "Send a message to a Chatwork room. "
+        #         "The room can be specified by numeric ID or by name (partial match)."
+        #     ),
+        #     "input_schema": {
+        #         "type": "object",
+        #         "properties": {
+        #             "room": {
+        #                 "type": "string",
+        #                 "description": "Room name or numeric room ID.",
+        #             },
+        #             "message": {
+        #                 "type": "string",
+        #                 "description": "Message body text to send.",
+        #             },
+        #         },
+        #         "required": ["room", "message"],
+        #     },
+        # },
         {
             "name": "chatwork_messages",
             "description": (
@@ -566,6 +612,48 @@ def get_tool_schemas() -> list[dict]:
                 "required": [],
             },
         },
+        {
+            "name": "chatwork_sync",
+            "description": (
+                "Sync Chatwork rooms and messages to the local cache. "
+                "Fetches all room metadata and messages for the top N most "
+                "recently updated rooms."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of rooms to sync messages for (default 30).",
+                        "default": 30,
+                    },
+                },
+                "required": [],
+            },
+        },
+        {
+            "name": "chatwork_mentions",
+            "description": (
+                "Find Chatwork messages addressed to me (both replied and unreplied). "
+                "Uses the local cache. Includes DMs and explicitly watched rooms."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "include_toall": {
+                        "type": "boolean",
+                        "description": "Include @all mentions (default false).",
+                        "default": False,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of mentions to return (default 200).",
+                        "default": 200,
+                    },
+                },
+                "required": [],
+            },
+        },
     ]
 
 
@@ -579,11 +667,20 @@ def get_cli_guide() -> str:
     return """\
 ### Chatwork
 ```bash
-animaworks-tool chatwork rooms -j
-animaworks-tool chatwork messages <ルーム名またはID> -j
+animaworks-tool chatwork sync [--limit N]
+animaworks-tool chatwork rooms
+animaworks-tool chatwork messages <ルーム名またはID> [-n 20]
 animaworks-tool chatwork send <ルーム名またはID> "メッセージ本文"
-animaworks-tool chatwork search "キーワード" -j
-animaworks-tool chatwork unreplied -j
+animaworks-tool chatwork search "キーワード" [-r ルーム] [-n 50]
+animaworks-tool chatwork unreplied [--sync] [--sync-limit 50] [--json]
+animaworks-tool chatwork mentions [--sync] [--sync-limit 50] [-n 200] [--json]
+animaworks-tool chatwork me
+animaworks-tool chatwork members <ルーム名またはID>
+animaworks-tool chatwork contacts
+animaworks-tool chatwork task <ルーム名またはID> "タスク本文" "担当者ID(カンマ区切り)"
+animaworks-tool chatwork mytasks [--done]
+animaworks-tool chatwork tasks <ルーム名またはID> [--done]
+animaworks-tool chatwork stats
 ```"""
 
 
@@ -617,6 +714,10 @@ def cli_main(argv: list[str] | None = None) -> None:
 
     # unreplied
     p = sub.add_parser("unreplied", help="Show unreplied messages addressed to me")
+    p.add_argument("--sync", action="store_true", help="Sync before checking")
+    p.add_argument(
+        "--sync-limit", type=int, default=50, help="Rooms to sync (default 50)"
+    )
     p.add_argument(
         "--include-toall", action="store_true", help="Include @all mentions"
     )
@@ -624,6 +725,56 @@ def cli_main(argv: list[str] | None = None) -> None:
 
     # rooms
     sub.add_parser("rooms", help="List accessible rooms")
+
+    # sync
+    p = sub.add_parser("sync", help="Sync room metadata and messages to local cache")
+    p.add_argument("room", nargs="?", help="Specific room name or ID to sync")
+    p.add_argument(
+        "-l", "--limit", type=int, default=30,
+        help="Number of rooms to sync messages for (default 30)",
+    )
+
+    # me
+    sub.add_parser("me", help="Show own account info")
+
+    # members
+    p = sub.add_parser("members", help="List room members")
+    p.add_argument("room", help="Room name or ID")
+
+    # contacts
+    sub.add_parser("contacts", help="List contacts")
+
+    # task
+    p = sub.add_parser("task", help="Create a task in a room")
+    p.add_argument("room", help="Room name or ID")
+    p.add_argument("body", help="Task body text")
+    p.add_argument("to_ids", help="Comma-separated account IDs for assignees")
+
+    # mytasks
+    p = sub.add_parser("mytasks", help="List my tasks")
+    p.add_argument("--done", action="store_true", help="Show completed tasks")
+
+    # tasks
+    p = sub.add_parser("tasks", help="List tasks in a room")
+    p.add_argument("room", help="Room name or ID")
+    p.add_argument("--done", action="store_true", help="Show completed tasks")
+
+    # mentions
+    p = sub.add_parser("mentions", help="Show messages addressed to me")
+    p.add_argument("--sync", action="store_true", help="Sync before checking")
+    p.add_argument(
+        "--sync-limit", type=int, default=50, help="Rooms to sync (default 50)"
+    )
+    p.add_argument(
+        "--include-toall", action="store_true", help="Include @all mentions"
+    )
+    p.add_argument(
+        "-n", "--num", type=int, default=200, help="Max mentions (default 200)"
+    )
+    p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # stats
+    sub.add_parser("stats", help="Show cache statistics")
 
     args = parser.parse_args(argv)
 
@@ -638,13 +789,16 @@ def cli_main(argv: list[str] | None = None) -> None:
         sys.exit(1)
 
     if args.command == "send":
-        room_id = client.resolve_room_id(args.room)
-        message = " ".join(args.message)
-        result = client.post_message(room_id, message)
-        if result and "message_id" in result:
-            print(f"Sent (message_id: {result['message_id']})")
-        else:
-            print(f"Result: {result}")
+        # NOTE: 送信機能は一時的に無効化されています
+        print("Error: 送信機能は現在無効化されています", file=sys.stderr)
+        sys.exit(1)
+        # room_id = client.resolve_room_id(args.room)
+        # message = " ".join(args.message)
+        # result = client.post_message(room_id, message)
+        # if result and "message_id" in result:
+        #     print(f"Sent (message_id: {result['message_id']})")
+        # else:
+        #     print(f"Result: {result}")
 
     elif args.command == "messages":
         room_id = client.resolve_room_id(args.room)
@@ -703,6 +857,13 @@ def cli_main(argv: list[str] | None = None) -> None:
             my_info = client.me()
             my_id = str(my_info["account_id"])
             my_name = my_info["name"]
+            if args.sync:
+                print(
+                    f"Syncing (top {args.sync_limit} rooms)...",
+                    file=sys.stderr,
+                )
+                _sync_rooms(client, cache, args.sync_limit)
+                print("Sync complete.\n", file=sys.stderr)
             unreplied = cache.find_unreplied(
                 my_id, exclude_toall=(not args.include_toall)
             )
@@ -743,13 +904,230 @@ def cli_main(argv: list[str] | None = None) -> None:
             cache.close()
 
     elif args.command == "rooms":
-        rooms = client.rooms()
-        rooms.sort(key=lambda r: r.get("last_update_time", 0), reverse=True)
-        print(f"{'ID':>12}  {'Updated':19}  {'Name'}")
-        print("-" * 70)
-        for r in rooms:
-            ts = _format_timestamp(r.get("last_update_time", 0))
-            print(f"{r['room_id']:>12}  {ts}  {r['name']}")
+        cache = MessageCache()
+        try:
+            rooms_data = client.rooms()
+            for room in rooms_data:
+                cache.upsert_room(room)
+            rooms_data.sort(
+                key=lambda r: r.get("last_update_time", 0), reverse=True
+            )
+            print(f"{'ID':>12}  {'Updated':19}  {'Name'}")
+            print("-" * 70)
+            for r in rooms_data:
+                ts = _format_timestamp(r.get("last_update_time", 0))
+                print(f"{r['room_id']:>12}  {ts}  {r['name']}")
+        finally:
+            cache.close()
+
+    elif args.command == "sync":
+        cache = MessageCache()
+        try:
+            if args.room:
+                room_id = client.resolve_room_id(args.room)
+                room_obj = {"room_id": room_id, "name": args.room}
+                cache.upsert_room(room_obj)
+                print(
+                    f"Syncing room {args.room} (ID:{room_id})...",
+                    end=" ",
+                    flush=True,
+                )
+                msgs = client.get_messages(room_id, force=True)
+                if msgs:
+                    cache.upsert_messages(room_id, msgs)
+                    cache.update_sync_state(room_id)
+                    print(f"{len(msgs)} messages")
+                else:
+                    print("0 messages")
+            else:
+                rooms_data = client.rooms()
+                for room in rooms_data:
+                    cache.upsert_room(room)
+                rooms_data.sort(
+                    key=lambda r: r.get("last_update_time", 0), reverse=True
+                )
+                rooms_to_sync = rooms_data[: args.limit]
+                print(
+                    f"Syncing {len(rooms_to_sync)} rooms "
+                    f"(metadata: {len(rooms_data)} rooms saved)...\n"
+                )
+                total_msgs = 0
+                for i, room in enumerate(rooms_to_sync, 1):
+                    rid = str(room["room_id"])
+                    name = room.get("name", rid)
+                    print(
+                        f"[{i}/{len(rooms_to_sync)}] {name} (ID:{rid})...",
+                        end=" ",
+                        flush=True,
+                    )
+                    try:
+                        msgs = client.get_messages(rid, force=True)
+                        if msgs:
+                            cache.upsert_messages(rid, msgs)
+                            cache.update_sync_state(rid)
+                            print(f"{len(msgs)} messages")
+                            total_msgs += len(msgs)
+                        else:
+                            print("0 messages")
+                    except Exception as exc:
+                        print(f"Error: {exc}")
+                    time.sleep(0.5)
+                stats = cache.get_stats()
+                print(f"\nSync complete: {total_msgs} messages fetched")
+                print(
+                    f"Cache total: {stats['rooms']} rooms / "
+                    f"{stats['messages']} messages"
+                )
+        finally:
+            cache.close()
+
+    elif args.command == "me":
+        info = client.me()
+        print(f"Account ID: {info['account_id']}")
+        print(f"Name: {info['name']}")
+        print(f"Email: {info.get('mail', 'N/A')}")
+        print(f"Organization: {info.get('organization_name', 'N/A')}")
+
+    elif args.command == "members":
+        room_id = client.resolve_room_id(args.room)
+        members = client.room_members(room_id)
+        print(f"{'Account ID':>12}  {'Role':10}  {'Name'}")
+        print("-" * 50)
+        for m in members:
+            print(
+                f"{m['account_id']:>12}  {m.get('role', ''):10}  {m['name']}"
+            )
+
+    elif args.command == "contacts":
+        contacts = client.contacts()
+        print(f"{'Account ID':>12}  {'Name'}")
+        print("-" * 40)
+        for c in contacts:
+            print(f"{c['account_id']:>12}  {c['name']}")
+
+    elif args.command == "task":
+        room_id = client.resolve_room_id(args.room)
+        result = client.add_task(room_id, args.body, args.to_ids)
+        print(f"Task created: {result}")
+
+    elif args.command == "mytasks":
+        status = "done" if args.done else "open"
+        tasks = client.my_tasks(status=status)
+        if not tasks:
+            print(f"No {status} tasks.")
+            return
+        print(f"=== My Tasks ({status}): {len(tasks)} ===\n")
+        for t in tasks:
+            room_name = t.get("room", {}).get("name", "?")
+            body = t.get("body", "").strip()
+            body_clean = re.sub(r"\[.*?\]", "", body).strip()
+            body_preview = body_clean.replace("\n", " ")[:120]
+            if len(body_clean) > 120:
+                body_preview += "..."
+            limit_time = t.get("limit_time", 0)
+            deadline = _format_timestamp(limit_time) if limit_time else "No deadline"
+            assigned_by = t.get("assigned_by_account", {}).get("name", "?")
+            print(f"[{room_name}]  Deadline: {deadline}  By: {assigned_by}")
+            print(f"  {body_preview}")
+            print()
+
+    elif args.command == "tasks":
+        room_id = client.resolve_room_id(args.room)
+        status = "done" if args.done else "open"
+        tasks = client.room_tasks(room_id, status=status)
+        if not tasks:
+            print(f"No {status} tasks.")
+            return
+        print(f"=== Room Tasks ({status}): {len(tasks)} ===\n")
+        for t in tasks:
+            body = t.get("body", "").strip()
+            body_clean = re.sub(r"\[.*?\]", "", body).strip()
+            body_preview = body_clean.replace("\n", " ")[:120]
+            if len(body_clean) > 120:
+                body_preview += "..."
+            limit_time = t.get("limit_time", 0)
+            deadline = _format_timestamp(limit_time) if limit_time else "No deadline"
+            assignee = t.get("account", {}).get("name", "?")
+            assigned_by = t.get("assigned_by_account", {}).get("name", "?")
+            print(f"  Assignee: {assignee}  Deadline: {deadline}  By: {assigned_by}")
+            print(f"  {body_preview}")
+            print()
+
+    elif args.command == "mentions":
+        cache = MessageCache()
+        try:
+            my_info = client.me()
+            my_id = str(my_info["account_id"])
+            if args.sync:
+                print(
+                    f"Syncing (top {args.sync_limit} rooms)...",
+                    file=sys.stderr,
+                )
+                _sync_rooms(client, cache, args.sync_limit)
+                print("Sync complete.\n", file=sys.stderr)
+            mentions = cache.find_mentions(
+                my_id,
+                exclude_toall=(not args.include_toall),
+                limit=args.num,
+            )
+            unreplied_set: set[tuple[str, str]] = set()
+            if mentions:
+                unreplied_list = cache.find_unreplied(
+                    my_id, exclude_toall=(not args.include_toall)
+                )
+                unreplied_set = {
+                    (m["room_id"], m["message_id"]) for m in unreplied_list
+                }
+            if getattr(args, "json", False):
+                output = []
+                for m in mentions:
+                    is_unreplied = (m["room_id"], m["message_id"]) in unreplied_set
+                    output.append({
+                        "message_id": m.get("message_id", ""),
+                        "room_id": m.get("room_id", ""),
+                        "room_name": m.get("room_name", m.get("room_id", "")),
+                        "account_id": m.get("account_id", ""),
+                        "account_name": m.get("account_name", ""),
+                        "body": m.get("body", "").strip(),
+                        "send_time": m.get("send_time", 0),
+                        "send_time_jst": m.get("send_time_jst", ""),
+                        "unreplied": is_unreplied,
+                    })
+                print(json.dumps(output, ensure_ascii=False, indent=2))
+            elif not mentions:
+                print("No mentions found.")
+                print("Hint: run 'chatwork mentions --sync' to sync first.")
+            else:
+                print(f"=== Mentions: {len(mentions)} ===\n")
+                for m in mentions:
+                    ts = m.get("send_time_jst", "")
+                    name = m.get("account_name", "?")
+                    room_name = m.get("room_name", m.get("room_id", ""))
+                    is_unreplied = (m["room_id"], m["message_id"]) in unreplied_set
+                    status = "[UNREPLIED] " if is_unreplied else "[replied]   "
+                    body = m.get("body", "").strip()
+                    body_clean = re.sub(
+                        r"\[To:\d+\][^\n]*\n?", "", body
+                    ).strip()
+                    body_preview = body_clean.replace("\n", " ")[:100]
+                    if len(body_clean) > 100:
+                        body_preview += "..."
+                    print(f"{status}{ts} [{room_name}] {name}")
+                    print(f"  {body_preview}")
+                    print()
+        finally:
+            cache.close()
+
+    elif args.command == "stats":
+        cache = MessageCache()
+        try:
+            stats = cache.get_stats()
+            print("Cache statistics:")
+            print(f"  Rooms: {stats['rooms']}")
+            print(f"  Messages: {stats['messages']}")
+            print(f"  DB file: {cache.db_path}")
+        finally:
+            cache.close()
 
 
 # ── Dispatch ──────────────────────────────────────────
@@ -757,9 +1135,11 @@ def cli_main(argv: list[str] | None = None) -> None:
 def dispatch(name: str, args: dict[str, Any]) -> Any:
     """Dispatch a tool call by schema name."""
     if name == "chatwork_send":
-        client = ChatworkClient()
-        room_id = client.resolve_room_id(args["room"])
-        return client.post_message(room_id, args["message"])
+        # NOTE: 送信機能は一時的に無効化されています
+        raise RuntimeError("送信機能は現在無効化されています")
+        # client = ChatworkClient()
+        # room_id = client.resolve_room_id(args["room"])
+        # return client.post_message(room_id, args["message"])
     if name == "chatwork_messages":
         client = ChatworkClient()
         room_id = client.resolve_room_id(args["room"])
@@ -798,6 +1178,28 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
     if name == "chatwork_rooms":
         client = ChatworkClient()
         return client.rooms()
+    if name == "chatwork_sync":
+        client = ChatworkClient()
+        cache = MessageCache()
+        try:
+            return _sync_rooms(
+                client, cache, sync_limit=args.get("limit", 30)
+            )
+        finally:
+            cache.close()
+    if name == "chatwork_mentions":
+        client = ChatworkClient()
+        cache = MessageCache()
+        try:
+            my_info = client.me()
+            my_id = str(my_info["account_id"])
+            return cache.find_mentions(
+                my_id,
+                exclude_toall=not args.get("include_toall", False),
+                limit=args.get("limit", 200),
+            )
+        finally:
+            cache.close()
     raise ValueError(f"Unknown tool: {name}")
 
 

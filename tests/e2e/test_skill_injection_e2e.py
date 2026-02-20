@@ -69,6 +69,19 @@ _BUILDER_PATCHES = [
 ]
 
 
+def _fake_load_prompt_base(name: str, **kwargs) -> str:
+    """Minimal load_prompt mock that renders builder/skill_injection correctly."""
+    if name == "builder/skill_injection":
+        return (
+            f"## {kwargs.get('section_title', '')}: "
+            f"{kwargs.get('skill_name', '')} {kwargs.get('label', '')}\n\n"
+            f"以下の{kwargs.get('section_title', '')}がこのメッセージに該当します。"
+            f"手順に従って実行してください。\n\n"
+            f"{kwargs.get('body', '')}"
+        )
+    return ""
+
+
 # ── Test Cases ───────────────────────────────────────────
 
 
@@ -109,7 +122,7 @@ class TestSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = []
 
         with (
-            patch("core.prompt.builder.load_prompt", return_value=""),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
@@ -154,6 +167,8 @@ class TestSkillInjectionE2E:
 
         # The skills_guide load_prompt call returns a table format
         def fake_load_prompt(name: str, **kwargs) -> str:
+            if name == "builder/skill_injection":
+                return _fake_load_prompt_base(name, **kwargs)
             if name == "skills_guide":
                 return (
                     "## あなたのスキル\n\n"
@@ -211,7 +226,7 @@ class TestSkillInjectionE2E:
 
         # Use a greeting message so budget = 1000
         with (
-            patch("core.prompt.builder.load_prompt", return_value=""),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
@@ -287,6 +302,8 @@ class TestSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = []
 
         def fake_load_prompt(name: str, **kwargs) -> str:
+            if name == "builder/skill_injection":
+                return _fake_load_prompt_base(name, **kwargs)
             if name == "skills_guide":
                 return (
                     "## あなたのスキル\n\n"
@@ -345,7 +362,7 @@ class TestSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = [common_meta]
 
         with (
-            patch("core.prompt.builder.load_prompt", return_value=""),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
@@ -381,6 +398,8 @@ class TestSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = []
 
         def fake_load_prompt(name: str, **kwargs) -> str:
+            if name == "builder/skill_injection":
+                return _fake_load_prompt_base(name, **kwargs)
             if name == "skills_guide":
                 return (
                     "## あなたのスキル\n\n"
@@ -431,7 +450,7 @@ class TestEnhancedSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = []
 
         with (
-            patch("core.prompt.builder.load_prompt", return_value=""),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
@@ -465,7 +484,7 @@ class TestEnhancedSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = []
 
         with (
-            patch("core.prompt.builder.load_prompt", return_value=""),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
@@ -505,7 +524,7 @@ class TestEnhancedSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = []
 
         with (
-            patch("core.prompt.builder.load_prompt", return_value=""),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
@@ -540,6 +559,8 @@ class TestEnhancedSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = []
 
         def fake_load_prompt(name: str, **kwargs) -> str:
+            if name == "builder/skill_injection":
+                return _fake_load_prompt_base(name, **kwargs)
             if name == "skills_guide":
                 return (
                     "## あなたのスキル\n\n"
@@ -600,7 +621,7 @@ class TestEnhancedSkillInjectionE2E:
         memory.list_common_skill_metas.return_value = []
 
         with (
-            patch("core.prompt.builder.load_prompt", return_value=""),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),

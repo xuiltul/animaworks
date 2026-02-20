@@ -28,6 +28,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.paths import load_prompt
+
 logger = logging.getLogger("animaworks.reconsolidation")
 
 
@@ -101,7 +103,7 @@ class ReconsolidationEngine:
     async def apply_reconsolidation(
         self,
         targets: list[Path],
-        model: str = "anthropic/claude-sonnet-4-20250514",
+        model: str = "",
     ) -> dict[str, int]:
         """Revise procedures using LLM and reset counters.
 
@@ -119,6 +121,9 @@ class ReconsolidationEngine:
         Returns:
             Dict with counts: "updated", "skipped", "errors".
         """
+        if not model:
+            from core.config.models import ConsolidationConfig
+            model = ConsolidationConfig().llm_model
         results: dict[str, int] = {"updated": 0, "skipped": 0, "errors": 0}
 
         for proc_path in targets:
@@ -198,25 +203,13 @@ class ReconsolidationEngine:
         confidence = meta.get("confidence", 0.5)
         description = meta.get("description", "")
 
-        prompt = f"""以下の手順書が繰り返し失敗しています。改善してください。
-
-【手順書の説明】
-{description}
-
-【現在の手順書】
-{content[:3000]}
-
-【メタデータ】
-- 失敗回数: {failure_count}
-- 信頼度: {confidence}
-
-タスク:
-1. なぜこの手順書が失敗しているか考察してください
-2. 改善された手順書を出力してください
-
-出力形式:
-改善後の手順書テキストのみを出力してください（説明やコメントは不要）。
-コードフェンス（```）で囲まないでください。"""
+        prompt = load_prompt(
+            "memory/procedure_revision",
+            description=description,
+            content=content[:3000],
+            failure_count=failure_count,
+            confidence=confidence,
+        )
 
         try:
             import litellm
@@ -274,6 +267,189 @@ class ReconsolidationEngine:
             "Archived version %d of %s to %s",
             version, file_path.name, dest.name,
         )
+
+    # ── Knowledge Reconsolidation ─────────────────────────────
+
+    async def find_knowledge_reconsolidation_targets(self) -> list[Path]:
+        """Find knowledge files with failure_count >= 2 and confidence < 0.6.
+
+        Scans all ``*.md`` files in the anima's ``knowledge/`` directory,
+        reading YAML frontmatter to check the trigger conditions.
+
+        Returns:
+            List of paths to knowledge files that need reconsolidation.
+        """
+        targets: list[Path] = []
+        knowledge_dir = self.anima_dir / "knowledge"
+        if not knowledge_dir.exists():
+            return targets
+        for md_file in knowledge_dir.glob("*.md"):
+            meta = self.memory_manager.read_knowledge_metadata(md_file)
+            failure_count = meta.get("failure_count", 0)
+            confidence = meta.get("confidence", 1.0)
+            if failure_count >= 2 and confidence < 0.6:
+                targets.append(md_file)
+        return targets
+
+    async def reconsolidate_knowledge(
+        self,
+        model: str = "",
+    ) -> dict[str, int]:
+        """Revise knowledge files using LLM and reset counters.
+
+        Scans knowledge/*.md files for those with failure_count >= 2
+        and confidence < 0.6, then uses an LLM to revise the content.
+        Each revision is version-controlled with an archived copy.
+
+        Args:
+            model: LLM model identifier (LiteLLM format) for revision.
+
+        Returns:
+            Dict with counts: "targets_found", "updated", "skipped", "errors".
+        """
+        if not model:
+            from core.config.models import ConsolidationConfig
+            model = ConsolidationConfig().llm_model
+        targets = await self.find_knowledge_reconsolidation_targets()
+        results: dict[str, Any] = {
+            "targets_found": len(targets),
+            "updated": 0,
+            "skipped": 0,
+            "errors": 0,
+            "updated_files": [],
+        }
+
+        if not targets:
+            return results
+
+        for know_path in targets:
+            try:
+                meta = self.memory_manager.read_knowledge_metadata(know_path)
+                content = self.memory_manager.read_knowledge_content(know_path)
+
+                # Use LLM to revise the knowledge
+                revised = await self._revise_knowledge(content, meta, model)
+                if revised:
+                    version = meta.get("version", 1)
+                    self._archive_version(know_path, content, version)
+
+                    meta["version"] = version + 1
+                    meta["failure_count"] = 0
+                    meta["success_count"] = 0
+                    meta["confidence"] = 0.5
+                    meta["previous_version"] = f"v{version}"
+                    meta["reconsolidated_at"] = datetime.now(UTC).isoformat()
+
+                    self.memory_manager.write_knowledge_with_meta(
+                        know_path, revised, meta,
+                    )
+
+                    # Activity log event
+                    self.activity_logger.log(
+                        "knowledge_reconsolidated",
+                        summary=(
+                            f"Reconsolidated {know_path.name}: "
+                            f"v{version} -> v{version + 1}"
+                        ),
+                        meta={
+                            "knowledge": know_path.name,
+                            "old_version": version,
+                            "new_version": version + 1,
+                        },
+                    )
+                    results["updated"] += 1
+                    results["updated_files"].append(know_path.name)
+
+                    logger.info(
+                        "Reconsolidated knowledge %s: v%d -> v%d",
+                        know_path.name, version, version + 1,
+                    )
+                else:
+                    results["skipped"] += 1
+                    logger.debug(
+                        "Skipping knowledge reconsolidation (LLM returned "
+                        "no revision) for %s",
+                        know_path.name,
+                    )
+
+            except Exception as e:
+                logger.warning(
+                    "Knowledge reconsolidation failed for %s: %s",
+                    know_path, e,
+                )
+                results["errors"] += 1
+
+        logger.info(
+            "Knowledge reconsolidation complete for anima=%s: "
+            "targets=%d updated=%d skipped=%d errors=%d",
+            self.anima_name,
+            results["targets_found"],
+            results["updated"],
+            results["skipped"],
+            results["errors"],
+        )
+        return results
+
+    async def _revise_knowledge(
+        self,
+        content: str,
+        meta: dict[str, Any],
+        model: str,
+    ) -> str | None:
+        """Use LLM to revise knowledge that has been reported as inaccurate.
+
+        Args:
+            content: Current knowledge body text.
+            meta: Current knowledge metadata (failure_count, confidence, etc.).
+            model: LLM model identifier (LiteLLM format).
+
+        Returns:
+            Revised knowledge text, or None if revision was not possible.
+        """
+        failure_count = meta.get("failure_count", 0)
+        confidence = meta.get("confidence", 0.5)
+
+        prompt = f"""以下の知識ファイルが繰り返し不正確と報告されています。改善してください。
+
+【現在の知識内容】
+{content[:3000]}
+
+【メタデータ】
+- 失敗回数: {failure_count}
+- 信頼度: {confidence}
+
+タスク:
+1. この知識がなぜ不正確と判断されたか考察してください
+2. 改善された知識を出力してください
+
+出力形式:
+改善後の知識テキストのみを出力してください（説明やコメントは不要）。
+コードフェンス（```）で囲まないでください。"""
+
+        try:
+            import litellm
+
+            response = await litellm.acompletion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2048,
+            )
+
+            text = response.choices[0].message.content or ""
+
+            # Sanitize LLM output
+            from core.memory.consolidation import ConsolidationEngine
+            text = ConsolidationEngine._sanitize_llm_output(text)
+
+            if text.strip():
+                return text.strip()
+            return None
+
+        except Exception as e:
+            logger.warning(
+                "LLM knowledge revision failed: %s", e,
+            )
+            return None
 
     # ── Activity Logging ───────────────────────────────────────
 

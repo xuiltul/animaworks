@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Unit tests for IPC keep-alive functionality.
 
-Tests keep-alive chunk emission in AnimaRunner._handle_process_message_stream()
+Tests keep-alive chunk emission in StreamingIPCHandler.handle_stream()
 and per-chunk timeout behaviour in IPCClient.send_request_stream().
 """
 from __future__ import annotations
@@ -17,8 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.supervisor.ipc import IPCClient, IPCRequest, IPCResponse
-from core.supervisor.runner import (
-    AnimaRunner,
+from core.supervisor.streaming_handler import (
+    StreamingIPCHandler,
     _DEFAULT_KEEPALIVE_INTERVAL,
     _SENTINEL,
     _Sentinel,
@@ -28,18 +28,16 @@ from core.supervisor.runner import (
 # ── Helpers ──────────────────────────────────────────────────
 
 
-def _make_runner() -> AnimaRunner:
-    """Create a AnimaRunner with minimal config for unit testing."""
-    runner = AnimaRunner(
+def _make_handler() -> StreamingIPCHandler:
+    """Create a StreamingIPCHandler with minimal config for unit testing."""
+    mock_anima = MagicMock()
+    mock_anima.needs_bootstrap = False
+    mock_anima._lock = asyncio.Lock()
+    return StreamingIPCHandler(
+        anima=mock_anima,
         anima_name="test",
-        socket_path=Path("/tmp/test.sock"),
-        animas_dir=Path("/tmp/animas"),
-        shared_dir=Path("/tmp/shared"),
+        anima_dir=Path("/tmp/animas/test"),
     )
-    runner.anima = MagicMock()
-    runner.anima.needs_bootstrap = False
-    runner.anima._lock = asyncio.Lock()
-    return runner
 
 
 async def _collect_responses(
@@ -56,7 +54,7 @@ async def _collect_responses(
 
 
 class TestRunnerKeepalive:
-    """Tests for keep-alive chunk emission in _handle_process_message_stream()."""
+    """Tests for keep-alive chunk emission in StreamingIPCHandler.handle_stream()."""
 
     async def test_keepalive_emitted_during_silence(self):
         """Keep-alive chunks are emitted when the Agent SDK stream is silent.
@@ -65,7 +63,7 @@ class TestRunnerKeepalive:
         keepalive_interval set to 1 second. At least one keep-alive chunk
         with ``{"type": "keepalive", "elapsed_s": ...}`` should be yielded.
         """
-        runner = _make_runner()
+        handler = _make_handler()
 
         async def _slow_stream(message, from_person="human", **kwargs):
             """Async generator that is silent for ~1.5s then emits cycle_done."""
@@ -75,7 +73,7 @@ class TestRunnerKeepalive:
                 "cycle_result": {"summary": "done"},
             }
 
-        runner.anima.process_message_stream = _slow_stream
+        handler._anima.process_message_stream = _slow_stream
 
         request = IPCRequest(
             id="ka_001",
@@ -91,7 +89,7 @@ class TestRunnerKeepalive:
             "core.config.load_config", return_value=mock_config
         ):
             responses = await _collect_responses(
-                runner._handle_process_message_stream(request)
+                handler.handle_stream(request)
             )
 
         # Extract keep-alive chunks
@@ -117,7 +115,7 @@ class TestRunnerKeepalive:
         keepalive_interval set to 2 seconds. Since chunks arrive faster
         than the keepalive interval, no keep-alive should be emitted.
         """
-        runner = _make_runner()
+        handler = _make_handler()
 
         async def _fast_stream(message, from_person="human", **kwargs):
             """Async generator that produces chunks rapidly."""
@@ -129,7 +127,7 @@ class TestRunnerKeepalive:
                 "cycle_result": {"summary": "fast"},
             }
 
-        runner.anima.process_message_stream = _fast_stream
+        handler._anima.process_message_stream = _fast_stream
 
         request = IPCRequest(
             id="ka_002",
@@ -144,7 +142,7 @@ class TestRunnerKeepalive:
             "core.config.load_config", return_value=mock_config
         ):
             responses = await _collect_responses(
-                runner._handle_process_message_stream(request)
+                handler.handle_stream(request)
             )
 
         # Count keep-alive chunks
@@ -165,7 +163,7 @@ class TestRunnerKeepalive:
         Simulates a stream that completes instantly. After the stream is
         done, no additional keep-alive chunks should arrive.
         """
-        runner = _make_runner()
+        handler = _make_handler()
 
         async def _instant_stream(message, from_person="human", **kwargs):
             """Async generator that completes immediately."""
@@ -174,7 +172,7 @@ class TestRunnerKeepalive:
                 "cycle_result": {"summary": "instant"},
             }
 
-        runner.anima.process_message_stream = _instant_stream
+        handler._anima.process_message_stream = _instant_stream
 
         request = IPCRequest(
             id="ka_003",
@@ -189,7 +187,7 @@ class TestRunnerKeepalive:
             "core.config.load_config", return_value=mock_config
         ):
             responses = await _collect_responses(
-                runner._handle_process_message_stream(request)
+                handler.handle_stream(request)
             )
 
         # The stream should have completed with a done response
@@ -197,9 +195,6 @@ class TestRunnerKeepalive:
         assert len(done_responses) == 1
 
         # Wait a bit longer than keepalive_interval to ensure no more come
-        # (If the keepalive task was not cancelled, it would still be running
-        # and would have tried to put items on the queue, but since the
-        # generator has exited, the finally block should have cancelled it.)
         await asyncio.sleep(0.5)
 
         # No keepalive chunks should be present at all for an instant stream

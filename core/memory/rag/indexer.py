@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from core.time_utils import ensure_aware, now_iso
+
 logger = logging.getLogger("animaworks.rag.indexer")
 
 # ── Configuration ───────────────────────────────────────────────────
@@ -188,7 +190,7 @@ class MemoryIndexer:
         # Update index metadata
         self.index_meta[file_key] = {
             "hash": file_hash,
-            "indexed_at": datetime.now().isoformat(),
+            "indexed_at": now_iso(),
             "chunks": len(chunks),
         }
         self._save_index_meta()
@@ -465,8 +467,8 @@ class MemoryIndexer:
 
         # File timestamps
         stat = file_path.stat()
-        metadata["created_at"] = datetime.fromtimestamp(stat.st_ctime).isoformat()
-        metadata["updated_at"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
+        metadata["created_at"] = ensure_aware(datetime.fromtimestamp(stat.st_ctime)).isoformat()
+        metadata["updated_at"] = ensure_aware(datetime.fromtimestamp(stat.st_mtime)).isoformat()
 
         # Importance detection
         if "[IMPORTANT]" in content or "[重要]" in content:
@@ -494,6 +496,16 @@ class MemoryIndexer:
         if "superseded_at" in fm and "valid_until" not in fm:
             fm["valid_until"] = fm.pop("superseded_at")
         metadata["valid_until"] = str(fm.get("valid_until", "") or "")
+
+        # Failure tracking fields from frontmatter (knowledge + procedures)
+        if fm:
+            for field in ("success_count", "failure_count", "version"):
+                if field in fm:
+                    metadata[field] = int(fm[field])
+            if "confidence" in fm:
+                metadata["confidence"] = float(fm["confidence"])
+            if "last_used" in fm and fm["last_used"]:
+                metadata["last_used"] = str(fm["last_used"])
 
         return metadata
 

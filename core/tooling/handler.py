@@ -25,6 +25,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.exceptions import ToolExecutionError, MemoryWriteError, ProcessError, DeliveryError  # noqa: F401
+from core.time_utils import now_iso
+
 from core.background import BackgroundTaskManager
 from core.memory.activity import ActivityLogger
 from core.tooling.dispatch import ExternalToolDispatcher
@@ -137,6 +140,7 @@ def _validate_skill_format(content: str) -> str:
         if not isinstance(frontmatter, dict):
             frontmatter = {}
     except Exception:
+        logger.debug("YAML parse fallback for skill validation", exc_info=True)
         # Fallback: simple key: value parsing
         frontmatter = {}
         for line in frontmatter_raw.splitlines():
@@ -202,6 +206,7 @@ def _validate_procedure_format(content: str) -> str:
         if not isinstance(frontmatter, dict):
             frontmatter = {}
     except Exception:
+        logger.debug("YAML parse fallback for procedure validation", exc_info=True)
         frontmatter = {}
         for line in frontmatter_raw.splitlines():
             if ":" in line:
@@ -273,10 +278,37 @@ class ToolHandler:
         self._pending_notifications: list[dict[str, Any]] = []
         self._replied_to: set[str] = set()
         self._session_id: str = uuid.uuid4().hex[:12]
+        self._activity = ActivityLogger(self._anima_dir)
         self._external = ExternalToolDispatcher(
             tool_registry or [],
             personal_tools=personal_tools,
         )
+
+        # ── Dispatch table: tool name → handler method ──
+        self._dispatch: dict[str, Callable[[dict[str, Any]], str]] = {
+            "search_memory": self._handle_search_memory,
+            "read_memory_file": self._handle_read_memory_file,
+            "write_memory_file": self._handle_write_memory_file,
+            "send_message": self._handle_send_message,
+            "post_channel": self._handle_post_channel,
+            "read_channel": self._handle_read_channel,
+            "read_dm_history": self._handle_read_dm_history,
+            "read_file": self._handle_read_file,
+            "write_file": self._handle_write_file,
+            "edit_file": self._handle_edit_file,
+            "execute_command": self._handle_execute_command,
+            "search_code": self._handle_search_code,
+            "list_directory": self._handle_list_directory,
+            "call_human": self._handle_call_human,
+            "create_anima": self._handle_create_anima,
+            "refresh_tools": self._handle_refresh_tools,
+            "share_tool": self._handle_share_tool,
+            "report_procedure_outcome": self._handle_report_procedure_outcome,
+            "report_knowledge_outcome": self._handle_report_knowledge_outcome,
+            "add_task": self._handle_add_task,
+            "update_task": self._handle_update_task,
+            "list_tasks": self._handle_list_tasks,
+        }
 
     @property
     def on_message_sent(self) -> OnMessageSentFn | None:
@@ -343,65 +375,17 @@ class ToolHandler:
     def handle(self, name: str, args: dict[str, Any]) -> str:
         """Synchronous tool call dispatch.
 
-        Routes by tool name to the appropriate handler method.
+        Routes by tool name to the appropriate handler method via
+        ``self._dispatch`` dict lookup.  Falls back to external tool
+        dispatch (or background execution) for unregistered names.
         Returns the tool result as a string (truncated if >500KB).
         """
         try:
             logger.debug("tool_call name=%s args_keys=%s", name, list(args.keys()))
 
-            result: str | None = None
-
-            # Memory tools
-            if name == "search_memory":
-                result = self._handle_search_memory(args)
-            elif name == "read_memory_file":
-                result = self._handle_read_memory_file(args)
-            elif name == "write_memory_file":
-                result = self._handle_write_memory_file(args)
-            elif name == "send_message":
-                result = self._handle_send_message(args)
-            # Channel tools
-            elif name == "post_channel":
-                result = self._handle_post_channel(args)
-            elif name == "read_channel":
-                result = self._handle_read_channel(args)
-            elif name == "read_dm_history":
-                result = self._handle_read_dm_history(args)
-            # File operation tools
-            elif name == "read_file":
-                result = self._handle_read_file(args)
-            elif name == "write_file":
-                result = self._handle_write_file(args)
-            elif name == "edit_file":
-                result = self._handle_edit_file(args)
-            elif name == "execute_command":
-                result = self._handle_execute_command(args)
-            # Search tools
-            elif name == "search_code":
-                result = self._handle_search_code(args)
-            elif name == "list_directory":
-                result = self._handle_list_directory(args)
-            # Human notification
-            elif name == "call_human":
-                result = self._handle_call_human(args)
-            # Admin tools
-            elif name == "create_anima":
-                result = self._handle_create_anima(args)
-            # Tool management
-            elif name == "refresh_tools":
-                result = self._handle_refresh_tools(args)
-            elif name == "share_tool":
-                result = self._handle_share_tool(args)
-            # Procedure outcome tracking
-            elif name == "report_procedure_outcome":
-                result = self._handle_report_procedure_outcome(args)
-            # Task queue tools
-            elif name == "add_task":
-                result = self._handle_add_task(args)
-            elif name == "update_task":
-                result = self._handle_update_task(args)
-            elif name == "list_tasks":
-                result = self._handle_list_tasks(args)
+            handler = self._dispatch.get(name)
+            if handler is not None:
+                result = handler(args)
             else:
                 # ── Background execution for eligible external tools ──
                 if self._background_manager and self._background_manager.is_eligible(name):
@@ -450,20 +434,29 @@ class ToolHandler:
             + f"\n\n[出力が500KBを超えたためトランケーションしました。元のサイズ: {size}]"
         )
 
+    # Activity type mapping: tool name → (activity_type, kwargs_builder)
+    _ACTIVITY_TYPE_MAP: dict[str, str] = {
+        "post_channel": "channel_post",
+        "read_channel": "channel_read",
+        "read_dm_history": "channel_read",
+        "call_human": "human_notify",
+    }
+
     def _log_tool_activity(self, name: str, args: dict[str, Any]) -> None:
         """Record tool usage in unified activity log."""
         try:
-            activity = ActivityLogger(self._anima_dir)
-            if name == "post_channel":
-                activity.log("channel_post", content=args.get("text", "")[:200], channel=args.get("channel", ""))
+            activity_type = self._ACTIVITY_TYPE_MAP.get(name)
+
+            if activity_type is None:
+                self._activity.log("tool_use", tool=name, summary=str(args)[:200])
+            elif name == "post_channel":
+                self._activity.log(activity_type, content=args.get("text", "")[:200], channel=args.get("channel", ""))
             elif name == "read_channel":
-                activity.log("channel_read", channel=args.get("channel", ""), summary=f"最新{args.get('limit', 20)}件を確認")
+                self._activity.log(activity_type, channel=args.get("channel", ""), summary=f"最新{args.get('limit', 20)}件を確認")
             elif name == "read_dm_history":
-                activity.log("channel_read", channel=f"dm:{args.get('peer', '')}", summary="DM履歴を確認")
+                self._activity.log(activity_type, channel=f"dm:{args.get('peer', '')}", summary="DM履歴を確認")
             elif name == "call_human":
-                activity.log("human_notify", content=args.get("body", "")[:200], via="configured_channels")
-            else:
-                activity.log("tool_use", tool=name, summary=str(args)[:200])
+                self._activity.log(activity_type, content=args.get("body", "")[:200], via="configured_channels")
         except Exception as e:
             logger.warning("Activity logging failed for tool '%s': %s", name, e)
 
@@ -531,15 +524,11 @@ class ToolHandler:
         )
 
         # Activity log: memory write
-        try:
-            activity = ActivityLogger(self._anima_dir)
-            activity.log(
-                "memory_write",
-                summary=f"{rel} ({args.get('mode', 'overwrite')})",
-                meta={"path": rel, "mode": args.get("mode", "overwrite")},
-            )
-        except Exception:
-            pass
+        self._activity.log(
+            "memory_write",
+            summary=f"{rel} ({args.get('mode', 'overwrite')})",
+            meta={"path": rel, "mode": args.get("mode", "overwrite")},
+        )
 
         # Trigger schedule reload if heartbeat or cron config changed
         if args["path"] in ("heartbeat.md", "cron.md") and self._on_schedule_changed:
@@ -834,7 +823,7 @@ class ToolHandler:
             "subject": subject,
             "body": body,
             "priority": priority,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_iso(),
         }
         self._pending_notifications.append(notif_data)
 
@@ -1052,7 +1041,7 @@ class ToolHandler:
             meta["failure_count"] = meta.get("failure_count", 0) + 1
 
         # Update last_used
-        meta["last_used"] = datetime.now().isoformat()
+        meta["last_used"] = now_iso()
 
         # Recalculate confidence
         s = meta.get("success_count", 0)
@@ -1076,6 +1065,82 @@ class ToolHandler:
             f"Procedure outcome recorded: {rel} -> {outcome_label}\n"
             f"confidence: {meta['confidence']:.2f} "
             f"(success: {meta['success_count']}, failure: {meta['failure_count']})"
+        )
+        if notes:
+            result += f"\nnotes: {notes}"
+
+        return result
+
+    # ── Knowledge outcome tracking ──────────────────────────
+
+    def _handle_report_knowledge_outcome(self, args: dict[str, Any]) -> str:
+        """Report success/failure of a knowledge file and update its metadata.
+
+        Updates frontmatter fields: success_count, failure_count, last_used,
+        and recalculates confidence = success / max(1, success + failure).
+        """
+        rel = args.get("path", "")
+        success = args.get("success", True)
+        notes = args.get("notes", "")
+
+        if not rel:
+            return _error_result("InvalidArguments", "path is required")
+
+        target = self._anima_dir / rel
+        if not target.exists():
+            return _error_result(
+                "FileNotFound",
+                f"File not found: {rel}",
+                suggestion="Check the path (e.g. knowledge/topic.md)",
+            )
+
+        # Security: must be within anima_dir
+        if not target.resolve().is_relative_to(self._anima_dir.resolve()):
+            return _error_result("PermissionDenied", "Path resolves outside anima directory")
+
+        # Read existing metadata
+        meta = self._memory.read_knowledge_metadata(target)
+
+        # Update counts
+        if success:
+            meta["success_count"] = meta.get("success_count", 0) + 1
+        else:
+            meta["failure_count"] = meta.get("failure_count", 0) + 1
+
+        # Update last_used
+        meta["last_used"] = datetime.now().isoformat()
+
+        # Recalculate confidence
+        s = meta.get("success_count", 0)
+        f = meta.get("failure_count", 0)
+        meta["confidence"] = s / max(1, s + f)
+
+        # Read body and rewrite with updated metadata
+        content = self._memory.read_knowledge_content(target)
+        self._memory.write_knowledge_with_meta(target, content, meta)
+
+        logger.info(
+            "report_knowledge_outcome path=%s success=%s confidence=%.2f",
+            rel, success, meta["confidence"],
+        )
+
+        # Activity log: knowledge outcome
+        self._activity.log(
+            "knowledge_outcome",
+            summary=f"{'成功' if success else '失敗'}: {rel}",
+            meta={
+                "path": rel,
+                "success": success,
+                "confidence": meta["confidence"],
+                "notes": notes[:200] if notes else "",
+            },
+        )
+
+        outcome_label = "成功" if success else "失敗"
+        result = (
+            f"Knowledge outcome recorded: {rel} -> {outcome_label}\n"
+            f"confidence: {meta.get('confidence', 0):.2f} "
+            f"(success: {meta.get('success_count', 0)}, failure: {meta.get('failure_count', 0)})"
         )
         if notes:
             result += f"\nnotes: {notes}"
@@ -1118,15 +1183,11 @@ class ToolHandler:
             return _error_result("InvalidArguments", str(e))
 
         # Activity log: task created
-        try:
-            activity = ActivityLogger(self._anima_dir)
-            activity.log(
-                "task_created",
-                summary=f"タスク追加: {summary[:100]}",
-                meta={"task_id": entry.task_id, "source": source, "assignee": assignee},
-            )
-        except Exception:
-            pass
+        self._activity.log(
+            "task_created",
+            summary=f"タスク追加: {summary[:100]}",
+            meta={"task_id": entry.task_id, "source": source, "assignee": assignee},
+        )
 
         return _json.dumps(entry.model_dump(), ensure_ascii=False, indent=2)
 
@@ -1151,15 +1212,11 @@ class ToolHandler:
             )
 
         # Activity log: task updated
-        try:
-            activity = ActivityLogger(self._anima_dir)
-            activity.log(
-                "task_updated",
-                summary=f"タスク更新: {entry.summary[:100]} → {status}",
-                meta={"task_id": task_id, "status": status},
-            )
-        except Exception:
-            pass
+        self._activity.log(
+            "task_updated",
+            summary=f"タスク更新: {entry.summary[:100]} → {status}",
+            meta={"task_id": task_id, "status": status},
+        )
 
         return _json.dumps(entry.model_dump(), ensure_ascii=False, indent=2)
 

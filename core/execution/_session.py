@@ -17,9 +17,9 @@ logic so it lives in exactly one place.
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
 
 from core.memory import MemoryManager
+from core.time_utils import now_iso
 from core.memory.shortterm import SessionState, ShortTermMemory
 from core.paths import load_prompt
 from core.prompt.builder import BuildResult, build_system_prompt, inject_shortterm
@@ -111,7 +111,7 @@ async def handle_session_chaining(
     shortterm.save(
         SessionState(
             session_id=session_id,
-            timestamp=datetime.now().isoformat(),
+            timestamp=now_iso(),
             trigger=trigger,
             original_prompt=original_prompt,
             accumulated_response=full_accumulated,

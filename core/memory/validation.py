@@ -22,6 +22,8 @@ import json
 import logging
 import re
 
+from core.paths import load_prompt
+
 logger = logging.getLogger("animaworks.validation")
 
 
@@ -109,7 +111,7 @@ class KnowledgeValidator:
         self,
         knowledge_items: list[dict],
         source_episodes: str,
-        model: str = "anthropic/claude-sonnet-4-20250514",
+        model: str = "",
     ) -> list[dict]:
         """Validate knowledge items against source episodes.
 
@@ -130,6 +132,9 @@ class KnowledgeValidator:
             Filtered list of accepted knowledge items with ``confidence``
             field populated
         """
+        if not model:
+            from core.config.models import ConsolidationConfig
+            model = ConsolidationConfig().llm_model
         if self._nli_pipeline is None and self._nli_available:
             self._load_nli_model()
 
@@ -194,21 +199,11 @@ class KnowledgeValidator:
         """
         import litellm
 
-        prompt = f"""以下の「知識」が「エピソード」から正しく導出されているか検証してください。
-
-【エピソード（原文）】
-{episodes[:3000]}
-
-【抽出された知識】
-{knowledge}
-
-判定:
-- この知識はエピソードの内容から正しく導出されていますか？
-- エピソードに記載のない情報が追加されていませんか？
-- 事実関係に誤りはありませんか？
-
-回答は以下のJSON形式のみで出力してください:
-{{"valid": true/false, "reason": "理由"}}"""
+        prompt = load_prompt(
+            "memory/knowledge_validation",
+            episodes=episodes[:3000],
+            knowledge=knowledge,
+        )
 
         try:
             response = await litellm.acompletion(

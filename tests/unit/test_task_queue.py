@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +16,9 @@ from core.memory.task_queue import (
     _STALE_TASK_THRESHOLD_SEC,
 )
 from core.schemas import TaskEntry
+from core.time_utils import now_jst
+
+JST = timezone(timedelta(hours=9))
 
 
 @pytest.fixture
@@ -322,9 +325,9 @@ class TestParseDeadline:
 
     def test_parse_relative_minutes(self):
         """'30m' should produce an ISO8601 timestamp ~30 minutes from now."""
-        before = datetime.now()
+        before = now_jst()
         result = _parse_deadline("30m")
-        after = datetime.now()
+        after = now_jst()
         parsed = datetime.fromisoformat(result)
         # parsed should be ~30 minutes after 'before'
         assert parsed >= before + timedelta(minutes=29, seconds=59)
@@ -332,18 +335,18 @@ class TestParseDeadline:
 
     def test_parse_relative_hours(self):
         """'2h' should produce an ISO8601 timestamp ~2 hours from now."""
-        before = datetime.now()
+        before = now_jst()
         result = _parse_deadline("2h")
-        after = datetime.now()
+        after = now_jst()
         parsed = datetime.fromisoformat(result)
         assert parsed >= before + timedelta(hours=1, minutes=59, seconds=59)
         assert parsed <= after + timedelta(hours=2, seconds=1)
 
     def test_parse_relative_days(self):
         """'1d' should produce an ISO8601 timestamp ~1 day from now."""
-        before = datetime.now()
+        before = now_jst()
         result = _parse_deadline("1d")
-        after = datetime.now()
+        after = now_jst()
         parsed = datetime.fromisoformat(result)
         assert parsed >= before + timedelta(days=1) - timedelta(seconds=1)
         assert parsed <= after + timedelta(days=1) + timedelta(seconds=1)
@@ -389,7 +392,7 @@ class TestDeadlineMandatory:
 
     def test_add_task_with_relative_deadline_converts(self, task_queue):
         """A relative deadline ('1h') should be converted to ISO8601 in the stored entry."""
-        before = datetime.now()
+        before = now_jst()
         entry = task_queue.add_task(
             source="human",
             original_instruction="test",
@@ -397,7 +400,7 @@ class TestDeadlineMandatory:
             summary="test",
             deadline="1h",
         )
-        after = datetime.now()
+        after = now_jst()
         # The stored deadline should be a valid ISO8601 timestamp
         parsed = datetime.fromisoformat(entry.deadline)
         assert parsed >= before + timedelta(minutes=59, seconds=59)
@@ -449,85 +452,73 @@ class TestFormatForPrimingWithStaleness:
 
     def test_format_shows_elapsed_time(self, task_queue):
         """Output should contain elapsed time indicator."""
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         # Task updated 15 minutes ago
         updated_at = (now - timedelta(minutes=15)).isoformat()
-        self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00")
+        self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00+09:00")
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\u23f1\ufe0f 15\u5206\u7d4c\u904e" in output
 
     def test_format_shows_stale_marker(self, task_queue):
         """Task updated 45 minutes ago should show STALE marker."""
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         updated_at = (now - timedelta(minutes=45)).isoformat()
-        self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00")
+        self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00+09:00")
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\u26a0\ufe0f STALE" in output
 
     def test_format_no_stale_for_recent_task(self, task_queue):
         """Task updated 5 minutes ago should NOT show STALE marker."""
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         updated_at = (now - timedelta(minutes=5)).isoformat()
-        self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00")
+        self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00+09:00")
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\u26a0\ufe0f STALE" not in output
 
     def test_format_shows_deadline(self, task_queue):
         """Task with a future deadline should show deadline display."""
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         updated_at = (now - timedelta(minutes=5)).isoformat()
         self._write_task_entry(
             task_queue, updated_at=updated_at,
-            deadline="2026-03-01T14:30:00",
+            deadline="2026-03-01T14:30:00+09:00",
         )
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\U0001f4c5 14:30\u307e\u3067" in output
 
     def test_format_shows_overdue(self, task_queue):
         """Task with a past deadline should show OVERDUE marker."""
-        now = datetime(2026, 3, 1, 15, 0, 0)
+        now = datetime(2026, 3, 1, 15, 0, 0, tzinfo=JST)
         updated_at = (now - timedelta(minutes=10)).isoformat()
         self._write_task_entry(
             task_queue, updated_at=updated_at,
-            deadline="2026-03-01T14:00:00",
+            deadline="2026-03-01T14:00:00+09:00",
         )
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\U0001f534 OVERDUE" in output
 
     def test_format_handles_null_deadline(self, task_queue):
         """Existing task with deadline=None should not crash format_for_priming."""
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         updated_at = (now - timedelta(minutes=5)).isoformat()
         self._write_task_entry(task_queue, updated_at=updated_at, deadline=None)
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             output = task_queue.format_for_priming()
 
         # Should produce output without crashing; no deadline markers
@@ -554,10 +545,8 @@ class TestFormatForPrimingWithStaleness:
         with task_queue.queue_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-        now = datetime(2026, 3, 1, 12, 0, 0)
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             # Should not raise
             output = task_queue.format_for_priming()
 
@@ -594,13 +583,11 @@ class TestGetStaleTasks:
 
     def test_returns_stale_tasks(self, task_queue):
         """Tasks with updated_at older than 30 minutes should be returned."""
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         old_time = (now - timedelta(minutes=45)).isoformat()
         task_id = self._write_task_entry(task_queue, updated_at=old_time)
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             stale = task_queue.get_stale_tasks()
 
         assert len(stale) == 1
@@ -608,13 +595,11 @@ class TestGetStaleTasks:
 
     def test_excludes_recent_tasks(self, task_queue):
         """Recently updated tasks should not be returned as stale."""
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         recent_time = (now - timedelta(minutes=10)).isoformat()
         self._write_task_entry(task_queue, updated_at=recent_time)
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             stale = task_queue.get_stale_tasks()
 
         assert len(stale) == 0
@@ -626,13 +611,11 @@ class TestGetStaleTasks:
 
     def test_excludes_done_tasks(self, task_queue):
         """Done tasks should not appear in stale results (get_pending filters them)."""
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         old_time = (now - timedelta(minutes=45)).isoformat()
         self._write_task_entry(task_queue, updated_at=old_time, status="done")
 
-        with patch("core.memory.task_queue.datetime") as mock_dt:
-            mock_dt.now.return_value = now
-            mock_dt.fromisoformat = datetime.fromisoformat
+        with patch("core.memory.task_queue.now_jst", return_value=now):
             stale = task_queue.get_stale_tasks()
 
         assert len(stale) == 0
@@ -649,18 +632,18 @@ class TestElapsedSeconds:
     """Tests for the _elapsed_seconds() helper."""
 
     def test_valid_timestamps(self):
-        now = datetime(2026, 3, 1, 12, 0, 0)
-        updated_at = "2026-03-01T11:30:00"
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
+        updated_at = "2026-03-01T11:30:00+09:00"
         result = _elapsed_seconds(updated_at, now)
         assert result == 1800.0
 
     def test_invalid_timestamp_returns_none(self):
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         result = _elapsed_seconds("not-valid", now)
         assert result is None
 
     def test_none_timestamp_returns_none(self):
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         result = _elapsed_seconds(None, now)
         assert result is None
 
@@ -693,21 +676,21 @@ class TestFormatDeadlineDisplay:
     """Tests for the _format_deadline_display() helper."""
 
     def test_future_deadline(self):
-        now = datetime(2026, 3, 1, 12, 0, 0)
-        result = _format_deadline_display("2026-03-01T14:30:00", now)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
+        result = _format_deadline_display("2026-03-01T14:30:00+09:00", now)
         assert result == "\U0001f4c5 14:30\u307e\u3067"
 
     def test_past_deadline(self):
-        now = datetime(2026, 3, 1, 15, 0, 0)
-        result = _format_deadline_display("2026-03-01T14:00:00", now)
+        now = datetime(2026, 3, 1, 15, 0, 0, tzinfo=JST)
+        result = _format_deadline_display("2026-03-01T14:00:00+09:00", now)
         assert result == "\U0001f534 OVERDUE(14:00\u671f\u9650)"
 
     def test_invalid_deadline_returns_empty(self):
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         result = _format_deadline_display("not-valid", now)
         assert result == ""
 
     def test_none_deadline_returns_empty(self):
-        now = datetime(2026, 3, 1, 12, 0, 0)
+        now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
         result = _format_deadline_display(None, now)
         assert result == ""

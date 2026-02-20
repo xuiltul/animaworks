@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass
 
 from core.config.models import ExternalMessagingConfig, UserAliasConfig
+from core.exceptions import MessagingError, DeliveryError, RecipientNotFoundError  # noqa: F401
 
 logger = logging.getLogger("animaworks.outbound")
 

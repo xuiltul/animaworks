@@ -15,7 +15,7 @@ from core.lifecycle import (
     _parse_cron_md,
     _parse_schedule,
 )
-from core.schemas import CronTask
+from core.schemas import CronTask, Message
 
 
 # ── _parse_cron_md ────────────────────────────────────────
@@ -326,7 +326,24 @@ class TestSetupHeartbeat:
         hb_job = next(j for j in jobs if j.id == "bob_heartbeat")
         assert str(hb_job.trigger).find("*/30") != -1
 
-    def test_parses_active_hours(self):
+    def test_default_24h_when_no_time_range(self):
+        """No time range in heartbeat.md means 24h heartbeat (hour='*')."""
+        lm = LifecycleManager()
+        dp = MagicMock()
+        dp.name = "carol"
+        dp.memory.read_heartbeat_config.return_value = "- チェック項目"
+        dp.memory.read_cron_config.return_value = ""
+        dp.set_on_lock_released = MagicMock()
+
+        lm.register_anima(dp)
+        jobs = lm.scheduler.get_jobs()
+        hb_job = next(j for j in jobs if j.id == "carol_heartbeat")
+        trigger_str = str(hb_job.trigger)
+        # hour should not be restricted — no "hour=" range like "9-21"
+        assert "*/30" in trigger_str
+
+    def test_parses_active_hours_from_heartbeat_md(self):
+        """Time range in heartbeat.md restricts heartbeat hours."""
         lm = LifecycleManager()
         dp = MagicMock()
         dp.name = "bob"
@@ -346,6 +363,12 @@ class TestMessageTriggeredHeartbeat:
         dp.name = "alice"
         dp.run_heartbeat = AsyncMock(return_value=MagicMock())
         dp.run_heartbeat.return_value.model_dump.return_value = {}
+        # Provide an actionable message so intent filter passes
+        msg = Message(
+            from_person="bob", to_person="alice",
+            content="please do X", intent="delegation", source="anima",
+        )
+        dp.messenger.receive.return_value = [msg]
         lm.animas["alice"] = dp
         lm._pending_triggers.add("alice")
 

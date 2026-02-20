@@ -17,7 +17,9 @@ from core.memory.conversation import (
     ConversationState,
     ConversationTurn,
     _CHARS_PER_TOKEN,
+    _MAX_DISPLAY_TURNS,
     _MAX_RESPONSE_CHARS_IN_HISTORY,
+    _MAX_TURNS_BEFORE_COMPRESS,
 )
 from core.schemas import ModelConfig
 
@@ -221,7 +223,7 @@ class TestClear:
 
 class TestBuildChatPrompt:
     def test_no_history(self, conv, anima_dir):
-        with patch("core.paths.load_prompt") as mock_load:
+        with patch("core.memory.conversation.load_prompt") as mock_load:
             mock_load.return_value = "prompt text"
             result = conv.build_chat_prompt("Hello", from_person="human")
             mock_load.assert_called_once_with(
@@ -232,7 +234,7 @@ class TestBuildChatPrompt:
         conv.append_turn("human", "Previous question")
         conv.append_turn("assistant", "Previous answer")
 
-        with patch("core.paths.load_prompt") as mock_load:
+        with patch("core.memory.conversation.load_prompt") as mock_load:
             mock_load.return_value = "prompt with history"
             result = conv.build_chat_prompt("New question", from_person="bob")
             mock_load.assert_called_once()
@@ -356,3 +358,237 @@ class TestFormatTurnsForCompression:
         assert "あなた" in result
         assert "Q1" in result
         assert "A1" in result
+
+
+# ── Compression auto-scale ─────────────────────────────────
+
+
+class TestNeedsCompressionAutoScale:
+    """Verify that needs_compression() auto-scales threshold for small windows."""
+
+    def _make_conv(self, anima_dir: Path, configured_threshold: float = 0.30) -> ConversationMemory:
+        """Create a ConversationMemory with a specific configured threshold."""
+        mc = ModelConfig(
+            model="claude-sonnet-4-20250514",
+            conversation_history_threshold=configured_threshold,
+        )
+        return ConversationMemory(anima_dir, mc)
+
+    def _add_turns_with_tokens(self, conv: ConversationMemory, total_tokens: int) -> None:
+        """Add enough turns to reach approximately total_tokens estimate.
+
+        Each turn: content is 4 * token_estimate chars long (since _CHARS_PER_TOKEN=4).
+        We need at least 4 turns so needs_compression doesn't bail early.
+        """
+        turns_count = max(4, 8)  # Enough turns to pass the min-4 check
+        tokens_per_turn = total_tokens // turns_count
+        chars_per_turn = tokens_per_turn * _CHARS_PER_TOKEN
+        for i in range(turns_count):
+            role = "human" if i % 2 == 0 else "assistant"
+            # Use short chars to avoid _MAX_STORED_CONTENT_CHARS truncation (3000)
+            # If chars_per_turn > 3000, stored content is truncated to ~3050
+            conv.append_turn(role, "x" * min(chars_per_turn, 2900))
+
+    def test_small_model_auto_scales_down(self, anima_dir: Path):
+        """16K window → auto_threshold = max(0.10, 16000/64000*0.30) = max(0.10, 0.075) = 0.10.
+
+        effective = min(0.30, 0.10) = 0.10.
+        threshold_tokens = 16000 * 0.10 = 1600.
+        """
+        conv = self._make_conv(anima_dir, configured_threshold=0.30)
+        with patch(
+            "core.prompt.context.resolve_context_window", return_value=16_000,
+        ):
+            # Add turns totalling ~2000 tokens → exceeds 1600 threshold
+            self._add_turns_with_tokens(conv, 2000)
+            assert conv.needs_compression() is True
+
+            # Reset and add turns totalling ~1000 tokens → below 1600 threshold
+            conv._state = None
+            conv2 = self._make_conv(anima_dir, configured_threshold=0.30)
+            # 4 turns with minimal content: 4 * (10/4) = 10 tokens
+            for i in range(4):
+                conv2.append_turn("human" if i % 2 == 0 else "assistant", "x" * 40)
+            # 4 turns * 10 tokens = 40 tokens total, well below 1600
+            assert conv2.needs_compression() is False
+
+    def test_medium_model_auto_scales(self, anima_dir: Path):
+        """32K window → auto = max(0.10, 32000/64000*0.30) = 0.15.
+
+        effective = min(0.30, 0.15) = 0.15.
+        threshold_tokens = 32000 * 0.15 = 4800.
+        """
+        conv = self._make_conv(anima_dir, configured_threshold=0.30)
+        with patch(
+            "core.prompt.context.resolve_context_window", return_value=32_000,
+        ):
+            # Add turns totalling ~5500 tokens → exceeds 4800 threshold
+            self._add_turns_with_tokens(conv, 5500)
+            assert conv.needs_compression() is True
+
+    def test_large_model_uses_configured(self, anima_dir: Path):
+        """128K window (>= 64K) → effective = configured = 0.30.
+
+        threshold_tokens = 128000 * 0.30 = 38400.
+        """
+        conv = self._make_conv(anima_dir, configured_threshold=0.30)
+        with patch(
+            "core.prompt.context.resolve_context_window", return_value=128_000,
+        ):
+            # 8 turns * ~700 tokens each ≈ 5600 tokens, well below 38400
+            self._add_turns_with_tokens(conv, 5600)
+            assert conv.needs_compression() is False
+
+    def test_configured_lower_than_auto_uses_configured(self, anima_dir: Path):
+        """configured=0.05, 32K window → auto=0.15, effective = min(0.05, 0.15) = 0.05.
+
+        threshold_tokens = 32000 * 0.05 = 1600.
+        """
+        conv = self._make_conv(anima_dir, configured_threshold=0.05)
+        with patch(
+            "core.prompt.context.resolve_context_window", return_value=32_000,
+        ):
+            # Add turns totalling ~2000 tokens → exceeds 1600 threshold
+            self._add_turns_with_tokens(conv, 2000)
+            assert conv.needs_compression() is True
+
+
+# ── Display turn limit (_format_history) ─────────────────
+
+
+class TestFormatHistoryDisplayLimit:
+    """Verify that _format_history() only includes the last _MAX_DISPLAY_TURNS turns."""
+
+    @staticmethod
+    def _make_state(n_turns: int) -> ConversationState:
+        """Create a ConversationState with *n_turns* turns."""
+        turns = [
+            ConversationTurn(
+                role="human" if i % 2 == 0 else "assistant",
+                content=f"turn-{i}",
+                timestamp=f"2026-01-15T10:{i:02d}:00",
+            )
+            for i in range(n_turns)
+        ]
+        return ConversationState(anima_name="alice", turns=turns)
+
+    def test_zero_turns_returns_empty(self, conv):
+        state = self._make_state(0)
+        assert conv._format_history(state) == ""
+
+    def test_under_limit_all_displayed(self, conv):
+        state = self._make_state(5)
+        result = conv._format_history(state)
+        for i in range(5):
+            assert f"turn-{i}" in result
+
+    def test_at_limit_all_displayed(self, conv):
+        state = self._make_state(_MAX_DISPLAY_TURNS)  # 20
+        result = conv._format_history(state)
+        for i in range(_MAX_DISPLAY_TURNS):
+            assert f"turn-{i}" in result
+
+    def test_over_limit_only_last_n_displayed(self, conv):
+        n = 25
+        state = self._make_state(n)
+        result = conv._format_history(state)
+        # Turns 0..4 (earliest 5) should be excluded.
+        # Use newline boundary to avoid substring matches (e.g. "turn-1" in "turn-10").
+        for i in range(n - _MAX_DISPLAY_TURNS):
+            assert f"\nturn-{i}\n" not in result
+        # Last 20 turns should be present
+        for i in range(n - _MAX_DISPLAY_TURNS, n):
+            assert f"turn-{i}" in result
+
+    def test_large_count_only_last_n_displayed(self, conv):
+        n = 300
+        state = self._make_state(n)
+        result = conv._format_history(state)
+        # Only the last _MAX_DISPLAY_TURNS turns should appear
+        for i in range(n - _MAX_DISPLAY_TURNS, n):
+            assert f"turn-{i}" in result
+        # An early turn should NOT appear
+        assert "turn-0" not in result
+        assert "turn-100" not in result
+
+
+# ── Turn-count trigger (needs_compression) ───────────────
+
+
+class TestNeedsCompressionTurnCount:
+    """Verify that needs_compression() triggers on turn count > _MAX_TURNS_BEFORE_COMPRESS."""
+
+    def test_three_turns_false(self, conv):
+        """3 turns is below the min-4 early exit; always False."""
+        for i in range(3):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", "x")
+        assert conv.needs_compression() is False
+
+    def test_49_turns_no_turn_count_trigger(self, conv):
+        """49 turns: below _MAX_TURNS_BEFORE_COMPRESS, should NOT trigger the turn-count path.
+
+        With a large context window and small content, token budget is not exceeded either.
+        """
+        for i in range(49):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", "short")
+        with patch(
+            "core.prompt.context.resolve_context_window", return_value=200_000,
+        ):
+            assert conv.needs_compression() is False
+
+    def test_51_turns_true_regardless_of_budget(self, conv):
+        """51 turns > _MAX_TURNS_BEFORE_COMPRESS → True, even with a huge context window."""
+        for i in range(51):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", "tiny")
+        # No need to mock resolve_context_window — the turn-count path
+        # returns True before the token-budget check is reached.
+        assert conv.needs_compression() is True
+
+    def test_100_turns_true(self, conv):
+        """100 turns >> _MAX_TURNS_BEFORE_COMPRESS → True."""
+        for i in range(100):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", "x")
+        assert conv.needs_compression() is True
+
+
+# ── Fixed keep count (_compress) ─────────────────────────
+
+
+class TestCompressKeepCount:
+    """Verify that _compress() uses keep_count = min(_MAX_DISPLAY_TURNS, len-1)."""
+
+    @pytest.mark.asyncio
+    async def test_51_turns_keeps_20_compresses_31(self, conv):
+        """51 turns → keep 20, compress 31."""
+        for i in range(51):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", f"turn-{i}")
+
+        with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = "Compressed summary of 31 turns"
+            await conv._compress()
+
+            state = conv.load()
+            assert len(state.turns) == 20
+            assert state.compressed_turn_count == 31
+            assert state.compressed_summary == "Compressed summary of 31 turns"
+            # The kept turns should be the last 20
+            assert state.turns[0].content == "turn-31"
+            assert state.turns[-1].content == "turn-50"
+
+    @pytest.mark.asyncio
+    async def test_25_turns_keeps_20_compresses_5(self, conv):
+        """25 turns → keep 20 (min(20, 24)=20), compress 5."""
+        for i in range(25):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", f"turn-{i}")
+
+        with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = "Compressed summary of 5 turns"
+            await conv._compress()
+
+            state = conv.load()
+            assert len(state.turns) == 20
+            assert state.compressed_turn_count == 5
+            assert state.compressed_summary == "Compressed summary of 5 turns"
+            # The kept turns should be the last 20
+            assert state.turns[0].content == "turn-5"
+            assert state.turns[-1].content == "turn-24"

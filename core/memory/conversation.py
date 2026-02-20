@@ -23,9 +23,12 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
+
+from core.time_utils import ensure_aware, now_iso, now_jst
 from typing import TYPE_CHECKING, Any
 
 from core.memory._io import atomic_write_text
+from core.paths import load_prompt
 from core.schemas import ModelConfig
 
 if TYPE_CHECKING:
@@ -59,6 +62,16 @@ _MAX_STORED_CONTENT_CHARS = 3000
 # Rough characters-per-token for estimation (conservative for Japanese).
 _CHARS_PER_TOKEN = 4
 
+# Maximum number of turns to include in the chat prompt.
+# Industry standard is 10 (JetBrains NeurIPS 2025); 20 provides headroom
+# for manager-role Animas with frequent heartbeat + chat turns.
+_MAX_DISPLAY_TURNS = 20
+
+# Trigger compression when stored turns exceed this count,
+# regardless of token estimate.  Prevents conversation.json bloat
+# even when the token-budget heuristic underestimates.
+_MAX_TURNS_BEFORE_COMPRESS = 50
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -77,7 +90,7 @@ class ConversationTurn:
 
     def __post_init__(self) -> None:
         if not self.timestamp:
-            self.timestamp = datetime.now().isoformat()
+            self.timestamp = now_iso()
         if not self.token_estimate:
             self.token_estimate = len(self.content) // _CHARS_PER_TOKEN
 
@@ -319,8 +332,6 @@ class ConversationMemory:
         self, content: str, from_person: str = "human"
     ) -> str:
         """Build the user prompt with conversation history injected."""
-        from core.paths import load_prompt
-
         state = self.load()
         history_block = self._format_history(state)
 
@@ -349,8 +360,9 @@ class ConversationMemory:
             )
 
         if state.turns:
+            display_turns = state.turns[-_MAX_DISPLAY_TURNS:]
             turn_lines: list[str] = []
-            for t in state.turns:
+            for t in display_turns:
                 # Extract time portion for compact display
                 ts = t.timestamp[11:16] if len(t.timestamp) >= 16 else t.timestamp
                 role_label = "あなた" if t.role == "assistant" else t.role
@@ -376,14 +388,27 @@ class ConversationMemory:
         if len(state.turns) < 4:
             return False
 
-        from core.prompt.context import _resolve_context_window
+        # Turn-count trigger: force compression regardless of token estimate
+        if len(state.turns) > _MAX_TURNS_BEFORE_COMPRESS:
+            return True
 
-        window = _resolve_context_window(
+        from core.prompt.context import resolve_context_window
+
+        window = resolve_context_window(
             self.model_config.model, self._load_context_window_overrides()
         )
-        threshold_tokens = int(
-            window * self.model_config.conversation_history_threshold
-        )
+
+        # Auto-scale threshold for small context models.
+        # Formula: min(configured, max(0.10, window / 64000 * 0.30))
+        # Results: 128K+ → 0.30, 32K → 0.15, 16K → 0.10
+        configured = self.model_config.conversation_history_threshold
+        if window < 64_000:
+            auto_threshold = max(0.10, window / 64_000 * 0.30)
+            effective_threshold = min(configured, auto_threshold)
+        else:
+            effective_threshold = configured
+
+        threshold_tokens = int(window * effective_threshold)
         return state.total_token_estimate > threshold_tokens
 
     async def compress_if_needed(self) -> bool:
@@ -402,8 +427,8 @@ class ConversationMemory:
         if len(state.turns) < 4:
             return
 
-        # Keep the most recent 25% of turns (at least 2)
-        keep_count = max(2, len(state.turns) // 4)
+        # Keep a fixed number of recent turns (matches _MAX_DISPLAY_TURNS)
+        keep_count = min(_MAX_DISPLAY_TURNS, len(state.turns) - 1)
         to_compress = state.turns[:-keep_count]
         to_keep = state.turns[-keep_count:]
 
@@ -459,21 +484,7 @@ class ConversationMemory:
         self, old_summary: str, new_turns: str
     ) -> str:
         """Call the LLM to produce a compressed conversation summary."""
-        system = (
-            "あなたは会話の要約者です。以下の会話を簡潔に要約してください。\n"
-            "保持すべき情報:\n"
-            "- 議論された主なトピック\n"
-            "- 下された判断・合意事項\n"
-            "- アクションアイテム・未解決の問題\n"
-            "- 重要な事実・数値\n"
-            "- 会話の感情的なトーン\n"
-            "- 相手の名前・関係性\n\n"
-            "不要な情報:\n"
-            "- 挨拶・フィラー\n"
-            "- 重複する内容\n"
-            "- タイムスタンプの詳細\n\n"
-            "要約は日本語で、箇条書きで、簡潔に書いてください。"
-        )
+        system = load_prompt("memory/conversation_compression")
 
         user_content = ""
         if old_summary:
@@ -537,7 +548,7 @@ class ConversationMemory:
         from core.memory.manager import MemoryManager
 
         memory_mgr = MemoryManager(self.anima_dir)
-        timestamp = datetime.now()
+        timestamp = now_jst()
         time_str = timestamp.strftime("%H:%M")
         episode_entry = f"## {time_str} — {parsed.title}\n\n{parsed.episode_body}\n"
         memory_mgr.append_episode(episode_entry)
@@ -597,7 +608,7 @@ class ConversationMemory:
         if not new_turns:
             return False
         last_ts = datetime.fromisoformat(new_turns[-1].timestamp)
-        elapsed = (datetime.now() - last_ts).total_seconds()
+        elapsed = (now_jst() - ensure_aware(last_ts)).total_seconds()
         if elapsed < SESSION_GAP_MINUTES * 60:
             return False
         # Load any pending injected procedures stored by the agent
@@ -664,26 +675,7 @@ class ConversationMemory:
         """
         conversation_text = self._format_turns_for_compression(turns)
 
-        system = (
-            "あなたは会話記録の要約者です。以下の会話をエピソード記憶として記録し、"
-            "同時にステート変更を抽出してください。\n\n"
-            "出力形式:\n"
-            "## エピソード要約\n"
-            "{会話の要約タイトル（20文字以内）}\n\n"
-            "**相手**: {相手の名前}\n"
-            "**トピック**: {主なトピック、カンマ区切り}\n"
-            "**要点**:\n"
-            "- {要点1}\n"
-            "- {要点2}\n\n"
-            "**決定事項**: {あれば記載}\n\n"
-            "## ステート変更\n"
-            "### 解決済み\n"
-            "- {解決した課題があればリスト。なければ「なし」}\n"
-            "### 新規タスク\n"
-            "- {新たに発生したタスク。なければ「なし」}\n"
-            "### 現在の状態\n"
-            "{「idle」または現在取り組み中の内容}\n"
-        )
+        system = load_prompt("memory/session_summary")
 
         user_content = conversation_text
         if activity_context:
@@ -771,14 +763,14 @@ class ConversationMemory:
         # Append resolved items with checkmark
         for item in parsed.resolved_items:
             if item not in current:
-                marker = f"- ✅ {item}（自動検出: {datetime.now().strftime('%m/%d %H:%M')}）"
+                marker = f"- ✅ {item}（自動検出: {now_jst().strftime('%m/%d %H:%M')}）"
                 current += f"\n{marker}"
                 updated = True
 
         # Append new tasks
         for task in parsed.new_tasks:
             if task not in current:
-                current += f"\n- [ ] {task}（自動検出: {datetime.now().strftime('%m/%d %H:%M')}）"
+                current += f"\n- [ ] {task}（自動検出: {now_jst().strftime('%m/%d %H:%M')}）"
                 updated = True
 
         if updated:
@@ -838,7 +830,7 @@ class ConversationMemory:
                 else:
                     meta["success_count"] = meta.get("success_count", 0) + 1
 
-                meta["last_used"] = datetime.now().isoformat()
+                meta["last_used"] = now_iso()
 
                 s = meta.get("success_count", 0)
                 f = meta.get("failure_count", 0)

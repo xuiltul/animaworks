@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from core.time_utils import ensure_aware, now_iso, now_jst
+
 logger = logging.getLogger("animaworks.rag.retriever")
 
 # ── Configuration ───────────────────────────────────────────────────
@@ -233,7 +235,7 @@ class MemoryRetriever:
         - Temporal decay: exponential decay based on document age
         - Frequency boost: log-scaled boost based on access count (Hebbian LTP)
         """
-        now = datetime.now()
+        now = now_jst()
 
         for result in results:
             # --- Temporal decay (existing) ---
@@ -242,7 +244,7 @@ class MemoryRetriever:
                 decay_factor = 0.5
             else:
                 try:
-                    updated_at = datetime.fromisoformat(str(updated_at_str))
+                    updated_at = ensure_aware(datetime.fromisoformat(str(updated_at_str)))
                     age_days = (now - updated_at).total_seconds() / 86400.0
                     decay_factor = 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
                 except (ValueError, TypeError):
@@ -269,7 +271,7 @@ class MemoryRetriever:
         if not results:
             return
 
-        now_iso = datetime.now().isoformat()
+        now_iso_str = now_iso()
         updates_by_collection: dict[str, tuple[list[str], list[dict]]] = {}
 
         for r in results:
@@ -282,7 +284,7 @@ class MemoryRetriever:
             ids.append(r.doc_id)
             metas.append({
                 "access_count": int(r.metadata.get("access_count", 0)) + 1,
-                "last_accessed_at": now_iso,
+                "last_accessed_at": now_iso_str,
             })
 
         for collection, (ids, metas) in updates_by_collection.items():

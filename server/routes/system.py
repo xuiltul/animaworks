@@ -6,12 +6,13 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+
+from core.time_utils import now_jst
 
 logger = logging.getLogger("animaworks.routes.system")
 
@@ -374,8 +375,8 @@ def create_system_router() -> APIRouter:
         from core.paths import get_data_dir
 
         limit = max(1, min(limit, 1000))
-        target_date = date or datetime.now().strftime("%Y%m%d")
-        today = datetime.now().strftime("%Y%m%d")
+        target_date = date or now_jst().strftime("%Y%m%d")
+        today = now_jst().strftime("%Y%m%d")
         log_dir = get_data_dir() / "logs" / "frontend"
 
         # Determine which file to read:

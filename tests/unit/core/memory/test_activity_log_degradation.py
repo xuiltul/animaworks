@@ -498,12 +498,14 @@ class TestAnimaDmReceiveLimit:
         import inspect
         from core.anima import DigitalAnima
 
-        source = inspect.getsource(DigitalAnima.run_heartbeat)
+        # After decomposition, inbox message processing moved to
+        # _process_inbox_messages (called from run_heartbeat).
+        source = inspect.getsource(DigitalAnima._process_inbox_messages)
         # The fix changed [:10] to [:50]
         assert "_recordable[:50]" in source, \
-            "run_heartbeat should use _recordable[:50] (not [:10])"
+            "_process_inbox_messages should use _recordable[:50] (not [:10])"
         assert "_recordable[:10]" not in source, \
-            "run_heartbeat should NOT use _recordable[:10] anymore"
+            "_process_inbox_messages should NOT use _recordable[:10] anymore"
 
 
 # ── 8. activity.py — format_for_priming() with content_trim ───────

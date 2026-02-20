@@ -16,9 +16,10 @@ import logging
 import os
 from collections import Counter
 from copy import copy
-from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from core.time_utils import now_iso
 
 logger = logging.getLogger("animaworks.dedup")
 
@@ -194,7 +195,7 @@ class MessageDeduplicator:
             with self._suppressed_path.open("a", encoding="utf-8") as f:
                 for m in messages:
                     entry = {
-                        "ts": datetime.now().isoformat(),
+                        "ts": now_iso(),
                         "from": getattr(m, "from_person", str(m)),
                         "content": getattr(m, "content", str(m))[:500],
                         "reason": "dedup_suppressed",
@@ -213,7 +214,7 @@ class MessageDeduplicator:
             with self._deferred_path.open("a", encoding="utf-8") as f:
                 for m in messages:
                     entry = {
-                        "ts": datetime.now().isoformat(),
+                        "ts": now_iso(),
                         "from": getattr(m, "from_person", str(m)),
                         "content": getattr(m, "content", str(m)),
                         "type": getattr(m, "type", "message"),

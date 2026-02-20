@@ -13,13 +13,17 @@ import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from pathlib import Path
+
+from core.time_utils import ensure_aware, now_jst
 from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from core.exceptions import (  # noqa: F401
+    ProcessError, AnimaNotFoundError, IPCConnectionError, ConfigError, MemoryIOError,
+)
 from core.supervisor.ipc import IPCResponse
 from core.supervisor.process_handle import ProcessHandle, ProcessState
 
@@ -110,7 +114,7 @@ class ProcessSupervisor:
                 srv, "max_streaming_duration", 1800,
             )
         except Exception:
-            pass
+            logger.debug("Config load failed for max_streaming_duration", exc_info=True)
 
         # Callbacks for anima lifecycle events (set by server/app.py)
         self.on_anima_added: Callable[[str], None] | None = None
@@ -477,7 +481,7 @@ class ProcessSupervisor:
                     try:
                         event_file.unlink()
                     except OSError:
-                        pass
+                        logger.debug("Failed to remove corrupted event file %s", event_file, exc_info=True)
 
     async def _health_check_loop(self) -> None:
         """
@@ -519,7 +523,7 @@ class ProcessSupervisor:
             if not handle.stopping_since:
                 return
             stopping_duration = (
-                datetime.now() - handle.stopping_since
+                now_jst() - ensure_aware(handle.stopping_since)
             ).total_seconds()
             if stopping_duration > 30:
                 logger.error(
@@ -556,7 +560,7 @@ class ProcessSupervisor:
             # Streaming duration timeout
             started_at = handle.streaming_started_at
             if started_at is not None:
-                streaming_sec = (datetime.now() - started_at).total_seconds()
+                streaming_sec = (now_jst() - ensure_aware(started_at)).total_seconds()
                 if streaming_sec > self._max_streaming_duration_sec:
                     logger.error(
                         "Streaming timeout for %s (%.0fs > %ds)",
@@ -569,7 +573,7 @@ class ProcessSupervisor:
             return
 
         # Skip if in startup grace period
-        uptime = (datetime.now() - handle.stats.started_at).total_seconds()
+        uptime = (now_jst() - ensure_aware(handle.stats.started_at)).total_seconds()
         if uptime < self.health_config.startup_grace_sec:
             logger.debug("Skipping health check for %s (startup grace)", anima_name)
             return
@@ -871,6 +875,7 @@ class ProcessSupervisor:
             config = load_config()
             consolidation_cfg = getattr(config, "consolidation", None)
         except Exception:
+            logger.debug("Config load failed for consolidation schedule", exc_info=True)
             consolidation_cfg = None
 
         # Daily consolidation
@@ -967,9 +972,11 @@ class ProcessSupervisor:
             config = load_config()
             consolidation_cfg = getattr(config, "consolidation", None)
         except Exception:
+            logger.debug("Config load failed for daily consolidation", exc_info=True)
             consolidation_cfg = None
 
-        model = "anthropic/claude-sonnet-4-20250514"
+        from core.config.models import ConsolidationConfig
+        model = ConsolidationConfig().llm_model
         min_episodes = 1
         if consolidation_cfg:
             model = getattr(consolidation_cfg, "llm_model", model)
@@ -1017,9 +1024,11 @@ class ProcessSupervisor:
             config = load_config()
             consolidation_cfg = getattr(config, "consolidation", None)
         except Exception:
+            logger.debug("Config load failed for weekly integration", exc_info=True)
             consolidation_cfg = None
 
-        model = "anthropic/claude-sonnet-4-20250514"
+        from core.config.models import ConsolidationConfig as _CC
+        model = _CC().llm_model
         duplicate_threshold = 0.85
         episode_retention_days = 30
         if consolidation_cfg:
@@ -1109,7 +1118,7 @@ class ProcessSupervisor:
         if not handle:
             return {"status": "not_found"}
 
-        uptime = (datetime.now() - handle.stats.started_at).total_seconds()
+        uptime = (now_jst() - ensure_aware(handle.stats.started_at)).total_seconds()
 
         return {
             "status": "bootstrapping" if self.is_bootstrapping(anima_name) else handle.state.value,

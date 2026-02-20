@@ -14,6 +14,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from core.time_utils import now_jst
+
 
 # ── Skill Metadata ────────────────────────────────────────
 
@@ -75,6 +77,7 @@ class ModelConfig(BaseModel):
     speciality: str | None = None  # free-text specialisation
     resolved_mode: str | None = None  # "A1"/"A2"/"B" — resolved from config
     thinking: bool | None = None  # Ollama think param (None = auto: off for ollama/)
+    llm_timeout: int | None = None  # LLM API呼び出しタイムアウト（秒）
 
 
 class AnimaConfig(BaseModel):
@@ -84,14 +87,14 @@ class AnimaConfig(BaseModel):
     injection: str = ""
     permissions: str = ""
     heartbeat_interval: int = 30  # minutes
-    active_hours: tuple[int, int] = (9, 22)
+    active_hours: tuple[int, int] | None = (9, 22)  # None = 24h, e.g. (9, 22) for daytime only
     cron_tasks: list[CronTask] = []
     model_config_data: ModelConfig = Field(default_factory=ModelConfig)
 
 
 class Message(BaseModel):
     id: str = Field(
-        default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        default_factory=lambda: now_jst().strftime("%Y%m%d_%H%M%S_%f")
     )
     thread_id: str = ""  # conversation thread (empty = new thread)
     reply_to: str = ""  # id of message being replied to
@@ -101,7 +104,7 @@ class Message(BaseModel):
     content: str
     attachments: list[str] = []
     intent: str = ""  # sender-declared intent: "delegation" | "report" | "question" | ""
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime = Field(default_factory=now_jst)
 
     # External messaging integration
     source: str = "anima"  # "anima" | "human" | "slack" | "chatwork"
@@ -115,7 +118,7 @@ class CycleResult(BaseModel):
     action: str
     summary: str = ""
     duration_ms: int = 0
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime = Field(default_factory=now_jst)
     context_usage_ratio: float = 0.0
     session_chained: bool = False
     total_turns: int = 0

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -112,7 +112,7 @@ def _make_mock_handle(anima_name: str = "test-anima") -> MagicMock:
     handle.state = ProcessState.RUNNING
     handle.get_pid.return_value = 12345
     handle.stats = MagicMock()
-    handle.stats.started_at = datetime.now()
+    handle.stats.started_at = now_jst()
     handle.stats.restart_count = 0
     handle.stats.missed_pings = 0
     handle.stats.last_ping_at = None

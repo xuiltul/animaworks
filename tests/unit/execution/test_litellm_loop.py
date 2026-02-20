@@ -485,3 +485,50 @@ class TestBgPoolTools:
         """_BG_POOL_TOOLS must NOT contain old category name 'image_generation'."""
         from core.execution.litellm_loop import LiteLLMExecutor
         assert "image_generation" not in LiteLLMExecutor._BG_POOL_TOOLS
+
+
+# ── _build_llm_kwargs — timeout & num_ctx ────────────────────
+
+
+class TestBuildLlmKwargsTimeoutAndNumCtx:
+    """Verify that _build_llm_kwargs() includes timeout and num_ctx."""
+
+    def test_timeout_included_in_kwargs(self, executor):
+        """_build_llm_kwargs() must include a 'timeout' key."""
+        kwargs = executor._build_llm_kwargs()
+        assert "timeout" in kwargs
+        assert isinstance(kwargs["timeout"], int)
+        assert kwargs["timeout"] > 0
+
+    def test_num_ctx_for_ollama_model(
+        self, anima_dir: Path, memory: MagicMock,
+    ):
+        """model='ollama/gemma3:27b' → kwargs must contain 'num_ctx'."""
+        ollama_config = ModelConfig(
+            model="ollama/gemma3:27b",
+            api_key="sk-test",
+            max_tokens=1024,
+            max_turns=5,
+            context_threshold=0.50,
+            max_chains=2,
+        )
+        th = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
+        from core.execution.litellm_loop import LiteLLMExecutor
+        ex = LiteLLMExecutor(
+            model_config=ollama_config,
+            anima_dir=anima_dir,
+            tool_handler=th,
+            tool_registry=[],
+            memory=memory,
+        )
+        with patch("core.config.load_config") as mock_cfg:
+            mock_cfg.return_value.model_context_windows = None
+            kwargs = ex._build_llm_kwargs()
+        assert "num_ctx" in kwargs
+        assert isinstance(kwargs["num_ctx"], int)
+        assert kwargs["num_ctx"] > 0
+
+    def test_no_num_ctx_for_non_ollama(self, executor):
+        """model='openai/gpt-4o' → kwargs must NOT contain 'num_ctx'."""
+        kwargs = executor._build_llm_kwargs()
+        assert "num_ctx" not in kwargs

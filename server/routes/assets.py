@@ -310,7 +310,8 @@ def create_assets_router() -> APIRouter:
         """Generate a fullbody preview using Vibe Transfer from another anima."""
         import asyncio
         import shutil
-        from datetime import datetime
+
+        from core.time_utils import now_jst
 
         animas_dir = request.app.state.animas_dir
         anima_dir = animas_dir / name
@@ -345,7 +346,7 @@ def create_assets_router() -> APIRouter:
 
         # Create backup
         assets_dir = anima_dir / "assets"
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = now_jst().strftime("%Y%m%d_%H%M%S")
         backup_id = f"assets_backup_{ts}"
         backup_dir = anima_dir / backup_id
         if assets_dir.exists():

@@ -381,7 +381,7 @@ class TestRecoverStreamingJournal:
         assert call_args[0][0] == "assistant"
         saved_text = call_args[0][1]
         assert "partial response" in saved_text
-        assert "[プロセスクラッシュにより応答が中断されました]" in saved_text
+        assert "[応答が中断されました]" in saved_text
 
         # save() was called after append_turn
         mock_conv.save.assert_called_once()
@@ -427,7 +427,7 @@ class TestRecoverStreamingJournal:
         # First call: error event
         error_call = mock_activity.log.call_args_list[0]
         assert error_call[0][0] == "error"
-        assert "プロセスクラッシュ" in error_call[1]["summary"]
+        assert "応答が中断されました" in error_call[1]["summary"]
 
         meta = error_call[1]["meta"]
         assert meta["recovered_chars"] == len("some output")

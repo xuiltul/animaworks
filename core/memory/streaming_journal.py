@@ -26,10 +26,11 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
 from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
+
+from core.time_utils import now_jst
 
 logger = logging.getLogger("animaworks.streaming_journal")
 
@@ -179,7 +180,7 @@ class StreamingJournal:
             try:
                 self._flush_buffer()
             except Exception:
-                pass
+                logger.debug("Failed to flush buffer on close", exc_info=True)
         self._close_fd()
 
     # ── Recovery (class methods) ──────────────────────────────
@@ -300,7 +301,7 @@ class StreamingJournal:
         """
         episodes_dir = self._anima_dir / "episodes"
         episodes_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        ts = now_jst().strftime("%Y-%m-%d_%H%M%S")
         recovery_file = episodes_dir / f"recovered_{ts}.md"
         content_lines = [
             f"# Recovered Streaming Journal ({recovery.trigger})",
@@ -324,14 +325,14 @@ class StreamingJournal:
         """Write a single JSONL event line with timestamp."""
         if not self._fd:
             return
-        event.setdefault("ts", datetime.now().isoformat(timespec="seconds"))
+        event.setdefault("ts", now_jst().isoformat(timespec="seconds"))
         line = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
         self._fd.write(line + "\n")
         self._fd.flush()
         try:
             os.fsync(self._fd.fileno())
         except OSError:
-            pass
+            logger.debug("fsync failed for journal", exc_info=True)
 
     def _flush_buffer(self) -> None:
         """Write buffered text as a single text event."""
@@ -347,5 +348,5 @@ class StreamingJournal:
             try:
                 self._fd.close()
             except OSError:
-                pass
+                logger.debug("Failed to close journal fd", exc_info=True)
             self._fd = None

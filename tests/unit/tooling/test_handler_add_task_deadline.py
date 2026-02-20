@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -138,7 +138,8 @@ class TestHandlerDeadlineValidation:
         assert parsed["deadline"] is not None
         # Verify the deadline was converted from relative to ISO8601
         dt = datetime.fromisoformat(parsed["deadline"])
-        assert dt > datetime.now()
+        JST = timezone(timedelta(hours=9))
+        assert dt > datetime.now(tz=JST)
 
     def test_valid_iso8601_deadline_succeeds(self, handler: ToolHandler):
         """Handler should successfully create a task with an ISO8601 deadline."""

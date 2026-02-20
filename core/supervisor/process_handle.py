@@ -17,10 +17,13 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+
+from core.time_utils import ensure_aware, now_jst
 from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
 
+from core.exceptions import IPCConnectionError as IPCConnectionErr  # noqa: F401
 from core.supervisor.ipc import IPCClient, IPCRequest, IPCResponse
 
 logger = logging.getLogger(__name__)
@@ -76,7 +79,7 @@ class ProcessHandle:
         self.state = ProcessState.STOPPED
         self.process: subprocess.Popen | None = None
         self.ipc_client: IPCClient | None = None
-        self.stats = ProcessStats(started_at=datetime.now())
+        self.stats = ProcessStats(started_at=now_jst())
         self._streaming_lock = asyncio.Lock()
         self._streaming = False
         self._streaming_started_at: datetime | None = None
@@ -103,7 +106,7 @@ class ProcessHandle:
             raise RuntimeError(f"Cannot start process in state {self.state}")
 
         self.state = ProcessState.STARTING
-        self.stats = ProcessStats(started_at=datetime.now())
+        self.stats = ProcessStats(started_at=now_jst())
 
         # Spawn child process
         cmd = [
@@ -319,7 +322,7 @@ class ProcessHandle:
 
         async with self._streaming_lock:
             self._streaming = True
-            self._streaming_started_at = datetime.now()
+            self._streaming_started_at = now_jst()
         logger.info(
             "[PH-STREAM] start anima=%s method=%s req_id=%s state=%s pid=%s",
             self.anima_name, method, request.id, self.state.value,
@@ -341,7 +344,7 @@ class ProcessHandle:
             raise
         finally:
             async with self._streaming_lock:
-                elapsed = (datetime.now() - self._streaming_started_at).total_seconds() if self._streaming_started_at else 0
+                elapsed = (now_jst() - ensure_aware(self._streaming_started_at)).total_seconds() if self._streaming_started_at else 0
                 self._streaming = False
                 self._streaming_started_at = None
             logger.info(
@@ -367,7 +370,7 @@ class ProcessHandle:
                 self.stats.missed_pings += 1
                 return False
 
-            self.stats.last_ping_at = datetime.now()
+            self.stats.last_ping_at = now_jst()
             self.stats.missed_pings = 0
             return True
 
@@ -413,7 +416,7 @@ class ProcessHandle:
                 logger.warning("Shutdown request failed for %s: %s", self.anima_name, e)
 
         self.state = ProcessState.STOPPING
-        self.stopping_since = datetime.now()
+        self.stopping_since = now_jst()
 
         # Step 2: Wait for graceful exit
         try:
@@ -443,7 +446,7 @@ class ProcessHandle:
                 await self.kill()
 
         self.state = ProcessState.STOPPED
-        self.stats.stopped_at = datetime.now()
+        self.stats.stopped_at = now_jst()
         await self._cleanup()
 
     async def kill(self) -> None:
@@ -467,8 +470,8 @@ class ProcessHandle:
         if self._stderr_file:
             try:
                 self._stderr_file.close()
-            except Exception:
-                pass
+            except OSError:
+                logger.debug("Failed to close stderr file", exc_info=True)
             self._stderr_file = None
 
         if self.socket_path.exists():

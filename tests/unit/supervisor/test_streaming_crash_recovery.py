@@ -11,7 +11,9 @@ Tests the three fixes:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
+
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -58,8 +60,8 @@ class TestHealthCheckDuringStreaming:
         )
         handle.state = ProcessState.RUNNING
         handle._streaming = True
-        handle._streaming_started_at = datetime.now()
-        handle.stats = ProcessStats(started_at=datetime.now() - timedelta(minutes=5))
+        handle._streaming_started_at = now_jst()
+        handle.stats = ProcessStats(started_at=now_jst() - timedelta(minutes=5))
         # Mock process
         handle.process = MagicMock()
         handle.process.poll.return_value = None  # alive
@@ -104,7 +106,7 @@ class TestHealthCheckDuringStreaming:
     ):
         """Streaming exceeding max duration triggers hang detection."""
         # Set started_at far in the past
-        streaming_handle._streaming_started_at = datetime.now() - timedelta(hours=1)
+        streaming_handle._streaming_started_at = now_jst() - timedelta(hours=1)
         supervisor._max_streaming_duration_sec = 60  # 60s for testing
         supervisor.processes["test"] = streaming_handle
 

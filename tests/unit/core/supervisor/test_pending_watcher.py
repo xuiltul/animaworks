@@ -1,11 +1,11 @@
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for pending task watcher in core/supervisor/runner.py.
+"""Tests for pending task watcher in core/supervisor/pending_executor.py.
 
-Validates ``_pending_task_watcher_loop()`` and ``_execute_pending_task()``:
+Validates ``watcher_loop()`` and ``execute_pending_task()``:
 - Watcher picks up pending JSON files and deletes them
-- ``_execute_pending_task`` calls BackgroundTaskManager.submit()
+- ``execute_pending_task`` calls BackgroundTaskManager.submit()
 - Graceful handling when anima is not initialized
 - Graceful handling when BackgroundTaskManager is not available
 - Corrupt JSON files are removed with a warning
@@ -19,39 +19,43 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.supervisor.runner import AnimaRunner
+from core.supervisor.pending_executor import PendingTaskExecutor
 
 
 # ── Helpers ──────────────────────────────────────────────────
 
 
-def _make_runner(tmp_path: Path) -> AnimaRunner:
-    """Create an AnimaRunner pointing at a temporary directory."""
-    animas_dir = tmp_path / "animas"
-    animas_dir.mkdir(parents=True)
-    shared_dir = tmp_path / "shared"
-    shared_dir.mkdir(parents=True)
-    runner = AnimaRunner(
+def _make_executor(tmp_path: Path) -> PendingTaskExecutor:
+    """Create a PendingTaskExecutor pointing at a temporary directory."""
+    anima_dir = tmp_path / "animas" / "test-anima"
+    anima_dir.mkdir(parents=True, exist_ok=True)
+    return PendingTaskExecutor(
+        anima=None,
         anima_name="test-anima",
-        socket_path=tmp_path / "test.sock",
-        animas_dir=animas_dir,
-        shared_dir=shared_dir,
+        anima_dir=anima_dir,
+        shutdown_event=asyncio.Event(),
     )
-    return runner
 
 
-def _make_runner_with_anima(tmp_path: Path) -> AnimaRunner:
-    """Create an AnimaRunner with a mocked anima and BackgroundTaskManager."""
-    runner = _make_runner(tmp_path)
-    runner.anima = MagicMock()
-    runner.anima._lock = asyncio.Lock()
+def _make_executor_with_anima(tmp_path: Path) -> PendingTaskExecutor:
+    """Create a PendingTaskExecutor with a mocked anima and BackgroundTaskManager."""
+    anima_dir = tmp_path / "animas" / "test-anima"
+    anima_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_anima = MagicMock()
+    mock_anima._lock = asyncio.Lock()
 
     # Mock the background manager chain: anima.agent.background_manager
     bg_mgr = MagicMock()
     bg_mgr.submit = MagicMock(return_value="mock-task-id")
-    runner.anima.agent.background_manager = bg_mgr
+    mock_anima.agent.background_manager = bg_mgr
 
-    return runner
+    return PendingTaskExecutor(
+        anima=mock_anima,
+        anima_name="test-anima",
+        anima_dir=anima_dir,
+        shutdown_event=asyncio.Event(),
+    )
 
 
 def _write_pending_task(
@@ -87,13 +91,12 @@ def _write_pending_task(
 
 
 class TestPendingTaskWatcherLoop:
-    """Tests for _pending_task_watcher_loop()."""
+    """Tests for watcher_loop()."""
 
     async def test_picks_up_pending_and_deletes_file(self, tmp_path: Path) -> None:
         """Watcher finds a pending JSON, processes it, and deletes the file."""
-        runner = _make_runner_with_anima(tmp_path)
-        anima_dir = runner._anima_dir
-        task_path = _write_pending_task(anima_dir)
+        executor = _make_executor_with_anima(tmp_path)
+        task_path = _write_pending_task(executor._anima_dir)
 
         assert task_path.exists()
 
@@ -105,28 +108,27 @@ class TestPendingTaskWatcherLoop:
             nonlocal iteration_count
             iteration_count += 1
             if iteration_count >= 1:
-                runner.shutdown_event.set()
+                executor._shutdown_event.set()
             await original_sleep(0)
 
         with patch("asyncio.sleep", side_effect=mock_sleep):
-            await runner._pending_task_watcher_loop()
+            await executor.watcher_loop()
 
         # File should be deleted after being picked up
         assert not task_path.exists()
 
     async def test_calls_execute_pending_task(self, tmp_path: Path) -> None:
-        """Watcher calls _execute_pending_task with the parsed task descriptor."""
-        runner = _make_runner_with_anima(tmp_path)
-        anima_dir = runner._anima_dir
-        _write_pending_task(anima_dir, tool_name="local_llm", subcommand="generate")
+        """Watcher calls execute_pending_task with the parsed task descriptor."""
+        executor = _make_executor_with_anima(tmp_path)
+        _write_pending_task(executor._anima_dir, tool_name="local_llm", subcommand="generate")
 
         executed_tasks: list[dict] = []
-        original_execute = runner._execute_pending_task
+        original_execute = executor.execute_pending_task
 
         async def capture_execute(task_desc: dict) -> None:
             executed_tasks.append(task_desc)
 
-        runner._execute_pending_task = capture_execute  # type: ignore[assignment]
+        executor.execute_pending_task = capture_execute  # type: ignore[assignment]
 
         iteration_count = 0
         original_sleep = asyncio.sleep
@@ -135,11 +137,11 @@ class TestPendingTaskWatcherLoop:
             nonlocal iteration_count
             iteration_count += 1
             if iteration_count >= 1:
-                runner.shutdown_event.set()
+                executor._shutdown_event.set()
             await original_sleep(0)
 
         with patch("asyncio.sleep", side_effect=mock_sleep):
-            await runner._pending_task_watcher_loop()
+            await executor.watcher_loop()
 
         assert len(executed_tasks) == 1
         assert executed_tasks[0]["tool_name"] == "local_llm"
@@ -147,11 +149,10 @@ class TestPendingTaskWatcherLoop:
 
     async def test_handles_corrupt_json_gracefully(self, tmp_path: Path) -> None:
         """Corrupt JSON files are deleted with a warning, not crashing the watcher."""
-        runner = _make_runner_with_anima(tmp_path)
-        anima_dir = runner._anima_dir
+        executor = _make_executor_with_anima(tmp_path)
 
         # Write a corrupt JSON file
-        pending_dir = anima_dir / "state" / "background_tasks" / "pending"
+        pending_dir = executor._anima_dir / "state" / "background_tasks" / "pending"
         pending_dir.mkdir(parents=True, exist_ok=True)
         corrupt_path = pending_dir / "corrupt.json"
         corrupt_path.write_text("{invalid json content", encoding="utf-8")
@@ -163,25 +164,24 @@ class TestPendingTaskWatcherLoop:
             nonlocal iteration_count
             iteration_count += 1
             if iteration_count >= 1:
-                runner.shutdown_event.set()
+                executor._shutdown_event.set()
             await original_sleep(0)
 
         with patch("asyncio.sleep", side_effect=mock_sleep):
-            await runner._pending_task_watcher_loop()
+            await executor.watcher_loop()
 
         # Corrupt file should be cleaned up
         assert not corrupt_path.exists()
 
     async def test_processes_multiple_pending_files(self, tmp_path: Path) -> None:
         """Watcher processes all pending files in a single scan iteration."""
-        runner = _make_runner_with_anima(tmp_path)
-        anima_dir = runner._anima_dir
+        executor = _make_executor_with_anima(tmp_path)
 
         # Write multiple pending tasks
         paths = [
-            _write_pending_task(anima_dir, task_id="task_aaa001", tool_name="image_gen"),
-            _write_pending_task(anima_dir, task_id="task_bbb002", tool_name="local_llm"),
-            _write_pending_task(anima_dir, task_id="task_ccc003", tool_name="transcribe"),
+            _write_pending_task(executor._anima_dir, task_id="task_aaa001", tool_name="image_gen"),
+            _write_pending_task(executor._anima_dir, task_id="task_bbb002", tool_name="local_llm"),
+            _write_pending_task(executor._anima_dir, task_id="task_ccc003", tool_name="transcribe"),
         ]
 
         executed_tasks: list[dict] = []
@@ -189,7 +189,7 @@ class TestPendingTaskWatcherLoop:
         async def capture_execute(task_desc: dict) -> None:
             executed_tasks.append(task_desc)
 
-        runner._execute_pending_task = capture_execute  # type: ignore[assignment]
+        executor.execute_pending_task = capture_execute  # type: ignore[assignment]
 
         iteration_count = 0
         original_sleep = asyncio.sleep
@@ -198,11 +198,11 @@ class TestPendingTaskWatcherLoop:
             nonlocal iteration_count
             iteration_count += 1
             if iteration_count >= 1:
-                runner.shutdown_event.set()
+                executor._shutdown_event.set()
             await original_sleep(0)
 
         with patch("asyncio.sleep", side_effect=mock_sleep):
-            await runner._pending_task_watcher_loop()
+            await executor.watcher_loop()
 
         # All files should be deleted
         for p in paths:
@@ -212,8 +212,8 @@ class TestPendingTaskWatcherLoop:
 
     async def test_creates_pending_dir_if_missing(self, tmp_path: Path) -> None:
         """Watcher creates the pending directory if it does not exist."""
-        runner = _make_runner_with_anima(tmp_path)
-        pending_dir = runner._anima_dir / "state" / "background_tasks" / "pending"
+        executor = _make_executor_with_anima(tmp_path)
+        pending_dir = executor._anima_dir / "state" / "background_tasks" / "pending"
 
         assert not pending_dir.exists()
 
@@ -224,37 +224,36 @@ class TestPendingTaskWatcherLoop:
             nonlocal iteration_count
             iteration_count += 1
             if iteration_count >= 1:
-                runner.shutdown_event.set()
+                executor._shutdown_event.set()
             await original_sleep(0)
 
         with patch("asyncio.sleep", side_effect=mock_sleep):
-            await runner._pending_task_watcher_loop()
+            await executor.watcher_loop()
 
         assert pending_dir.is_dir()
 
     async def test_stops_on_cancellation(self, tmp_path: Path) -> None:
         """Watcher exits cleanly on asyncio.CancelledError."""
-        runner = _make_runner_with_anima(tmp_path)
-        runner._anima_dir.mkdir(parents=True, exist_ok=True)
+        executor = _make_executor_with_anima(tmp_path)
 
         async def cancel_sleep(duration: float) -> None:
             raise asyncio.CancelledError()
 
         with patch("asyncio.sleep", side_effect=cancel_sleep):
             # Should not raise; just exit cleanly
-            await runner._pending_task_watcher_loop()
+            await executor.watcher_loop()
 
 
 # ── TestExecutePendingTask ───────────────────────────────────
 
 
 class TestExecutePendingTask:
-    """Tests for _execute_pending_task()."""
+    """Tests for execute_pending_task()."""
 
     async def test_calls_background_manager_submit(self, tmp_path: Path) -> None:
-        """_execute_pending_task submits the task to BackgroundTaskManager."""
-        runner = _make_runner_with_anima(tmp_path)
-        bg_mgr = runner.anima.agent.background_manager
+        """execute_pending_task submits the task to BackgroundTaskManager."""
+        executor = _make_executor_with_anima(tmp_path)
+        bg_mgr = executor._anima.agent.background_manager
 
         task_desc = {
             "task_id": "abc123def456",
@@ -262,12 +261,12 @@ class TestExecutePendingTask:
             "subcommand": "3d",
             "raw_args": ["3d", "assets/avatar.png"],
             "anima_name": "test-anima",
-            "anima_dir": str(runner._anima_dir),
+            "anima_dir": str(executor._anima_dir),
             "submitted_at": 1739800000.0,
             "status": "pending",
         }
 
-        await runner._execute_pending_task(task_desc)
+        await executor.execute_pending_task(task_desc)
 
         bg_mgr.submit.assert_called_once()
         call_args = bg_mgr.submit.call_args
@@ -280,8 +279,8 @@ class TestExecutePendingTask:
 
     async def test_composite_name_without_subcommand(self, tmp_path: Path) -> None:
         """When subcommand is empty, composite name is just the tool_name."""
-        runner = _make_runner_with_anima(tmp_path)
-        bg_mgr = runner.anima.agent.background_manager
+        executor = _make_executor_with_anima(tmp_path)
+        bg_mgr = executor._anima.agent.background_manager
 
         task_desc = {
             "task_id": "xyz789abc012",
@@ -289,19 +288,19 @@ class TestExecutePendingTask:
             "subcommand": "",
             "raw_args": ["/path/to/audio.wav"],
             "anima_name": "test-anima",
-            "anima_dir": str(runner._anima_dir),
+            "anima_dir": str(executor._anima_dir),
         }
 
-        await runner._execute_pending_task(task_desc)
+        await executor.execute_pending_task(task_desc)
 
         bg_mgr.submit.assert_called_once()
         composite_name = bg_mgr.submit.call_args[0][0]
         assert composite_name == "transcribe"
 
     async def test_handles_missing_anima_gracefully(self, tmp_path: Path) -> None:
-        """When anima is None, _execute_pending_task logs warning and returns."""
-        runner = _make_runner(tmp_path)
-        assert runner.anima is None
+        """When anima is None, execute_pending_task logs warning and returns."""
+        executor = _make_executor(tmp_path)
+        assert executor._anima is None
 
         task_desc = {
             "task_id": "abc123def456",
@@ -311,15 +310,14 @@ class TestExecutePendingTask:
         }
 
         # Should not raise
-        await runner._execute_pending_task(task_desc)
+        await executor.execute_pending_task(task_desc)
 
     async def test_handles_missing_background_manager_gracefully(
         self, tmp_path: Path,
     ) -> None:
         """When BackgroundTaskManager is None, logs warning and returns."""
-        runner = _make_runner(tmp_path)
-        runner.anima = MagicMock()
-        runner.anima.agent.background_manager = None
+        executor = _make_executor_with_anima(tmp_path)
+        executor._anima.agent.background_manager = None
 
         task_desc = {
             "task_id": "abc123def456",
@@ -329,12 +327,12 @@ class TestExecutePendingTask:
         }
 
         # Should not raise
-        await runner._execute_pending_task(task_desc)
+        await executor.execute_pending_task(task_desc)
 
     async def test_passes_anima_dir_to_tool_args(self, tmp_path: Path) -> None:
         """anima_dir from the task descriptor is passed through to tool_args."""
-        runner = _make_runner_with_anima(tmp_path)
-        bg_mgr = runner.anima.agent.background_manager
+        executor = _make_executor_with_anima(tmp_path)
+        bg_mgr = executor._anima.agent.background_manager
 
         custom_dir = "/home/user/.animaworks/animas/custom-anima"
         task_desc = {
@@ -345,15 +343,15 @@ class TestExecutePendingTask:
             "anima_dir": custom_dir,
         }
 
-        await runner._execute_pending_task(task_desc)
+        await executor.execute_pending_task(task_desc)
 
         tool_args = bg_mgr.submit.call_args[0][1]
         assert tool_args["anima_dir"] == custom_dir
 
     async def test_defaults_anima_dir_when_not_in_task(self, tmp_path: Path) -> None:
-        """When anima_dir is not in task_desc, falls back to runner's _anima_dir."""
-        runner = _make_runner_with_anima(tmp_path)
-        bg_mgr = runner.anima.agent.background_manager
+        """When anima_dir is not in task_desc, falls back to executor's _anima_dir."""
+        executor = _make_executor_with_anima(tmp_path)
+        bg_mgr = executor._anima.agent.background_manager
 
         task_desc = {
             "task_id": "abc123def456",
@@ -363,25 +361,25 @@ class TestExecutePendingTask:
             # No "anima_dir" key
         }
 
-        await runner._execute_pending_task(task_desc)
+        await executor.execute_pending_task(task_desc)
 
         tool_args = bg_mgr.submit.call_args[0][1]
-        assert tool_args["anima_dir"] == str(runner._anima_dir)
+        assert tool_args["anima_dir"] == str(executor._anima_dir)
 
     async def test_dispatch_fn_is_callable(self, tmp_path: Path) -> None:
         """The third argument to bg_mgr.submit() is a callable dispatch function."""
-        runner = _make_runner_with_anima(tmp_path)
-        bg_mgr = runner.anima.agent.background_manager
+        executor = _make_executor_with_anima(tmp_path)
+        bg_mgr = executor._anima.agent.background_manager
 
         task_desc = {
             "task_id": "abc123def456",
             "tool_name": "image_gen",
             "subcommand": "3d",
             "raw_args": ["3d", "test.png"],
-            "anima_dir": str(runner._anima_dir),
+            "anima_dir": str(executor._anima_dir),
         }
 
-        await runner._execute_pending_task(task_desc)
+        await executor.execute_pending_task(task_desc)
 
         dispatch_fn = bg_mgr.submit.call_args[0][2]
         assert callable(dispatch_fn)
@@ -391,20 +389,20 @@ class TestExecutePendingTask:
 
 
 class TestDispatchFn:
-    """Tests for the _dispatch_fn closure built inside _execute_pending_task."""
+    """Tests for the _dispatch_fn closure built inside execute_pending_task."""
 
     async def _capture_dispatch_fn(
         self, tmp_path: Path, task_desc: dict,
-    ) -> tuple[AnimaRunner, MagicMock]:
-        """Run _execute_pending_task and return the captured dispatch function."""
-        runner = _make_runner_with_anima(tmp_path)
-        bg_mgr = runner.anima.agent.background_manager
+    ):
+        """Run execute_pending_task and return the captured dispatch function."""
+        executor = _make_executor_with_anima(tmp_path)
+        bg_mgr = executor._anima.agent.background_manager
 
-        await runner._execute_pending_task(task_desc)
+        await executor.execute_pending_task(task_desc)
 
         bg_mgr.submit.assert_called_once()
         dispatch_fn = bg_mgr.submit.call_args[0][2]
-        return dispatch_fn, runner
+        return dispatch_fn, executor
 
     async def test_dispatch_fn_builds_correct_command(self, tmp_path: Path) -> None:
         """_dispatch_fn builds: animaworks-tool <tool> <subcmd> ...raw_args -j."""
@@ -432,8 +430,6 @@ class TestDispatchFn:
 
             mock_run.assert_called_once()
             cmd = mock_run.call_args[0][0]
-            # Subcommand deduplication: raw_args[0] == subcmd, so subcmd is NOT
-            # prepended separately; result is raw_args + "-j"
             assert cmd == ["animaworks-tool", "image_gen", "3d", "--model", "test", "-j"]
 
     async def test_dispatch_fn_deduplicates_subcommand(self, tmp_path: Path) -> None:

@@ -26,6 +26,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.time_utils import ensure_aware, now_iso, now_jst
+
 logger = logging.getLogger("animaworks.activity")
 
 # Rough characters-per-token for Japanese/English mixed text.
@@ -133,8 +135,8 @@ def _get_task_name(group: EntryGroup) -> str:
 def _time_diff(ts1: str, ts2: str) -> float:
     """Return the difference between two ISO timestamps in seconds."""
     try:
-        t1 = datetime.fromisoformat(ts1)
-        t2 = datetime.fromisoformat(ts2)
+        t1 = ensure_aware(datetime.fromisoformat(ts1))
+        t2 = ensure_aware(datetime.fromisoformat(ts2))
         return abs((t2 - t1).total_seconds())
     except (ValueError, TypeError):
         return float("inf")
@@ -211,7 +213,7 @@ class ActivityLogger:
             The recorded :class:`ActivityEntry`.
         """
         entry = ActivityEntry(
-            ts=datetime.now().isoformat(),
+            ts=now_iso(),
             type=event_type,
             content=content,
             summary=summary,
@@ -262,15 +264,17 @@ class ActivityLogger:
             Chronologically sorted list of all matching entries.
         """
         entries: list[ActivityEntry] = []
-        today = date.today()
+        now = now_jst()
+        today = now.date()
         type_set = set(types) if types else None
 
         # Determine scan range
         scan_days = days
         cutoff: datetime | None = None
         if hours is not None:
-            scan_days = max(1, math.ceil(hours / 24))
-            cutoff = datetime.now() - timedelta(hours=hours)
+            # +1 to handle midnight boundary (e.g. 00:15 - 1h = yesterday)
+            scan_days = math.ceil(hours / 24) + 1
+            cutoff = now - timedelta(hours=hours)
 
         for day_offset in range(scan_days):
             target = today - timedelta(days=day_offset)
@@ -295,13 +299,13 @@ class ActivityLogger:
                     if cutoff:
                         try:
                             ts = datetime.fromisoformat(raw.get("ts", ""))
-                            # Normalise to naive for comparison
-                            if ts.tzinfo is not None:
-                                ts = ts.replace(tzinfo=None)
+                            # Normalise both sides to aware for comparison
+                            if ts.tzinfo is None:
+                                ts = ts.replace(tzinfo=cutoff.tzinfo)
                             if ts < cutoff:
                                 continue
                         except (ValueError, TypeError):
-                            pass
+                            logger.debug("Failed to parse timestamp for cutoff filtering", exc_info=True)
                     # Map JSONL keys to Python field names
                     if "from" in raw:
                         raw["from_person"] = raw.pop("from")

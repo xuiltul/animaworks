@@ -644,12 +644,12 @@ class TestConsolidationIntegration:
         engine = ConsolidationEngine(anima_dir, "test-anima")
 
         # Create a minimal episode file
-        from datetime import datetime
-        today = datetime.now().date()
+        from core.time_utils import now_jst
+        today = now_jst().date()
         episode_path = anima_dir / "episodes" / f"{today}.md"
         episode_path.write_text(
             f"# {today} Log\n\n"
-            f"## {datetime.now().strftime('%H:%M')} --- Test Episode\n"
+            f"## {now_jst().strftime('%H:%M')} --- Test Episode\n"
             f"Some test content here.\n",
             encoding="utf-8",
         )

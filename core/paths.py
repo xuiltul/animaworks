@@ -66,20 +66,34 @@ PROMPTS_DIR = TEMPLATES_DIR / "prompts"
 _prompt_cache: dict[str, str] = {}
 
 
+class _SafeFormatDict(dict):
+    """Dict that returns ``{key}`` for missing keys during format_map.
+
+    This ensures ``{{`` always resolves to ``{`` (double-brace escaping)
+    even when no kwargs are passed, while leaving unknown ``{placeholder}``
+    patterns intact in the output.
+    """
+
+    def __missing__(self, key: str) -> str:
+        return "{" + key + "}"
+
+
 def load_prompt(name: str, **kwargs: object) -> str:
     """Load a prompt template from templates/prompts/{name}.md and format it.
 
     Templates use Python str.format_map() placeholders like {anima_dir}.
     Literal braces in templates should be doubled: {{ and }}.
 
+    Subdirectory paths are supported: ``load_prompt("memory/daily_consolidation")``
+    resolves to ``templates/prompts/memory/daily_consolidation.md``.
+
     Args:
-        name: Template file name without extension (e.g. "behavior_rules").
+        name: Template file name without extension. May include subdirectory
+              (e.g. ``"behavior_rules"``, ``"memory/daily_consolidation"``).
         **kwargs: Values to substitute into the template placeholders.
     """
     if name not in _prompt_cache:
         path = PROMPTS_DIR / f"{name}.md"
         _prompt_cache[name] = path.read_text(encoding="utf-8")
     template = _prompt_cache[name]
-    if kwargs:
-        return template.format_map(kwargs)
-    return template
+    return template.format_map(_SafeFormatDict(kwargs))

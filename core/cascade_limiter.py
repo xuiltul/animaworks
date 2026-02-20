@@ -16,8 +16,11 @@ are blocked until the window expires.
 import logging
 import time
 
+from core.config.models import load_config
+
 logger = logging.getLogger("animaworks.cascade_limiter")
 
+# Kept for backward compatibility; authoritative values now live in HeartbeatConfig.
 _DEPTH_WINDOW_S = 600      # 10 minutes
 _MAX_DEPTH_DEFAULT = 6     # 6 turns = 3 round-trips
 
@@ -30,11 +33,12 @@ class ConversationDepthLimiter:
 
     def __init__(
         self,
-        window_s: float = _DEPTH_WINDOW_S,
-        max_depth: int = _MAX_DEPTH_DEFAULT,
+        window_s: float | None = None,
+        max_depth: int | None = None,
     ) -> None:
-        self._window_s = window_s
-        self._max_depth = max_depth
+        cfg = load_config()
+        self._window_s = window_s if window_s is not None else cfg.heartbeat.depth_window_s
+        self._max_depth = max_depth if max_depth is not None else cfg.heartbeat.max_depth
         self._exchanges: dict[tuple[str, str], list[float]] = {}
 
     def _pair_key(self, a: str, b: str) -> tuple[str, str]:

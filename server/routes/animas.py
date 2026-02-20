@@ -11,6 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from core.config.models import AnimaModelConfig, load_config, resolve_anima_config
+from core.exceptions import AnimaWorksError
 from server.dependencies import get_anima
 
 logger = logging.getLogger("animaworks.routes.animas")
@@ -58,7 +59,7 @@ def create_animas_router() -> APIRouter:
                 resolved, _ = resolve_anima_config(config, name, anima_dir=anima_dir)
                 model = resolved.model
             except Exception:
-                pass
+                logger.debug("Failed to resolve model for anima '%s'", name, exc_info=True)
 
             # Combine data
             data = {

@@ -53,7 +53,7 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
 _DEFAULT_CONTEXT_WINDOW = 128_000
 
 
-def _resolve_context_window(
+def resolve_context_window(
     model: str,
     overrides: dict[str, int] | None = None,
 ) -> int:
@@ -79,6 +79,9 @@ def _resolve_context_window(
             return size
     return _DEFAULT_CONTEXT_WINDOW
 
+# Backward-compatible alias (deprecated)
+_resolve_context_window = resolve_context_window
+
 
 @dataclass
 class ContextTracker:
@@ -89,7 +92,7 @@ class ContextTracker:
       2. Usage-based (Anthropic SDK / ResultMessage): direct input_tokens from API
     """
 
-    model: str = "claude-sonnet-4-20250514"
+    model: str = ""
     threshold: float = 0.50
     context_window_overrides: dict[str, int] = field(default_factory=dict)
 
@@ -99,9 +102,14 @@ class ContextTracker:
     _input_tokens: int = field(default=0, init=False, repr=False)
     _output_tokens: int = field(default=0, init=False, repr=False)
 
+    def __post_init__(self) -> None:
+        if not self.model:
+            from core.config.models import AnimaDefaults
+            self.model = AnimaDefaults().model
+
     @property
     def context_window(self) -> int:
-        return _resolve_context_window(
+        return resolve_context_window(
             self.model, self.context_window_overrides or None
         )
 

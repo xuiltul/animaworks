@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from core.memory.activity import ActivityEntry, ActivityLogger, ActivityPage
+from core.time_utils import now_jst
 
 
 @pytest.fixture
@@ -198,7 +199,7 @@ class TestRecentPage:
     def test_basic_pagination(self, tmp_path: Path) -> None:
         """Write 10 entries, request page of 5 — total=10, has_more=True."""
         anima_dir = tmp_path / "test-anima"
-        now = datetime.now()
+        now = now_jst()
         entries = [
             {"ts": (now - timedelta(seconds=10 - i)).isoformat(), "type": "tool_use", "summary": f"Entry {i}", "content": ""}
             for i in range(10)
@@ -218,7 +219,7 @@ class TestRecentPage:
     def test_offset(self, tmp_path: Path) -> None:
         """Write 10 entries, request offset=5, limit=5 — older 5 entries returned."""
         anima_dir = tmp_path / "test-anima"
-        now = datetime.now()
+        now = now_jst()
         entries = [
             {"ts": (now - timedelta(seconds=10 - i)).isoformat(), "type": "tool_use", "summary": f"Entry {i}", "content": ""}
             for i in range(10)
@@ -236,7 +237,7 @@ class TestRecentPage:
     def test_hours_filter(self, tmp_path: Path) -> None:
         """Only entries within the last N hours are included."""
         anima_dir = tmp_path / "test-anima"
-        now = datetime.now()
+        now = now_jst()
         entries = [
             # Recent entry (30 min ago)
             {"ts": (now - timedelta(minutes=30)).isoformat(), "type": "heartbeat_start", "summary": "Recent", "content": ""},
@@ -254,7 +255,7 @@ class TestRecentPage:
     def test_limit_zero_returns_all(self, tmp_path: Path) -> None:
         """limit=0 should return all entries."""
         anima_dir = tmp_path / "test-anima"
-        now = datetime.now()
+        now = now_jst()
         entries = [
             {"ts": (now - timedelta(seconds=i)).isoformat(), "type": "tool_use", "summary": f"Entry {i}", "content": ""}
             for i in range(15)
@@ -271,7 +272,7 @@ class TestRecentPage:
     def test_types_filter(self, tmp_path: Path) -> None:
         """Only matching event types are returned."""
         anima_dir = tmp_path / "test-anima"
-        now = datetime.now()
+        now = now_jst()
         entries = [
             {"ts": now.isoformat(), "type": "heartbeat_start", "summary": "HB", "content": ""},
             {"ts": now.isoformat(), "type": "cron_executed", "summary": "Cron", "content": ""},
@@ -288,7 +289,7 @@ class TestRecentPage:
     def test_involving_filter(self, tmp_path: Path) -> None:
         """Only entries involving the specified name are returned."""
         anima_dir = tmp_path / "test-anima"
-        now = datetime.now()
+        now = now_jst()
         entries = [
             {"ts": now.isoformat(), "type": "dm_sent", "summary": "msg1", "content": "", "from": "alice", "to": "bob"},
             {"ts": now.isoformat(), "type": "dm_sent", "summary": "msg2", "content": "", "from": "charlie", "to": "dave"},
@@ -304,15 +305,15 @@ class TestRecentPage:
     def test_entries_newest_first(self, tmp_path: Path) -> None:
         """recent_page() returns entries in newest-first order."""
         anima_dir = tmp_path / "test-anima"
-        now = datetime.now()
+        now = now_jst()
         entries = [
-            {"ts": (now - timedelta(hours=2)).isoformat(), "type": "heartbeat_start", "summary": "Old", "content": ""},
+            {"ts": (now - timedelta(seconds=10)).isoformat(), "type": "heartbeat_start", "summary": "Old", "content": ""},
             {"ts": now.isoformat(), "type": "heartbeat_start", "summary": "New", "content": ""},
         ]
         _write_activity(anima_dir, entries)
 
         al = ActivityLogger(anima_dir)
-        page = al.recent_page(days=1, limit=10)
+        page = al.recent_page(days=2, limit=10)
 
         assert page.entries[0].summary == "New"
         assert page.entries[1].summary == "Old"
@@ -405,7 +406,7 @@ class TestLoadEntries:
         log_dir = anima_dir / "activity_log"
         log_dir.mkdir(parents=True)
 
-        now = datetime.now()
+        now = now_jst()
         good = json.dumps({"ts": now.isoformat(), "type": "heartbeat_start", "summary": "Good", "content": ""})
         content = "not json\n" + good + "\n{bad\n"
         (log_dir / f"{now.strftime('%Y-%m-%d')}.jsonl").write_text(content, encoding="utf-8")
@@ -422,7 +423,7 @@ class TestLoadEntries:
         log_dir = anima_dir / "activity_log"
         log_dir.mkdir(parents=True)
 
-        now = datetime.now()
+        now = now_jst()
         entry = json.dumps({"ts": now.isoformat(), "type": "dm_sent", "from": "alice", "to": "bob", "summary": "hi"})
         (log_dir / f"{now.strftime('%Y-%m-%d')}.jsonl").write_text(entry + "\n", encoding="utf-8")
 
@@ -439,7 +440,7 @@ class TestLoadEntries:
         log_dir = anima_dir / "activity_log"
         log_dir.mkdir(parents=True)
 
-        now = datetime.now()
+        now = now_jst()
         yesterday = now - timedelta(days=1)
         e1 = json.dumps({"ts": yesterday.isoformat(), "type": "heartbeat_start", "summary": "Yesterday"})
         e2 = json.dumps({"ts": now.isoformat(), "type": "heartbeat_start", "summary": "Today"})
@@ -453,3 +454,39 @@ class TestLoadEntries:
         summaries = [e.summary for e in entries]
         assert "Yesterday" in summaries
         assert "Today" in summaries
+
+
+class TestTimeDiff:
+    """Tests for _time_diff() — mixed naive/aware timestamp handling."""
+
+    def test_both_aware(self) -> None:
+        """Two aware timestamps compute correct diff."""
+        from core.memory.activity import _time_diff
+
+        t1 = "2026-02-20T10:00:00+09:00"
+        t2 = "2026-02-20T10:00:10+09:00"
+        assert _time_diff(t1, t2) == pytest.approx(10.0)
+
+    def test_both_naive(self) -> None:
+        """Two naive timestamps compute correct diff (tagged as JST)."""
+        from core.memory.activity import _time_diff
+
+        t1 = "2026-02-20T10:00:00"
+        t2 = "2026-02-20T10:00:05"
+        assert _time_diff(t1, t2) == pytest.approx(5.0)
+
+    def test_mixed_naive_and_aware(self) -> None:
+        """Mixed naive + aware timestamps must not raise TypeError."""
+        from core.memory.activity import _time_diff
+
+        naive = "2026-02-20T10:00:00"
+        aware = "2026-02-20T10:00:30+09:00"
+        # Should not raise; naive is tagged as JST by ensure_aware
+        result = _time_diff(naive, aware)
+        assert result == pytest.approx(30.0)
+
+    def test_invalid_returns_inf(self) -> None:
+        """Invalid timestamps return infinity."""
+        from core.memory.activity import _time_diff
+
+        assert _time_diff("not-a-date", "2026-02-20T10:00:00") == float("inf")

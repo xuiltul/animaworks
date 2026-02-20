@@ -56,9 +56,12 @@ def temp_anima_dir():
             encoding="utf-8",
         )
 
-        # Create sample skill file
+        # Create sample skill file with YAML frontmatter
         skill_file = anima_dir / "skills" / "web_search.md"
         skill_file.write_text(
+            "---\n"
+            "description: \"「web search」「web検索」を実行して情報を収集する\"\n"
+            "---\n\n"
             "# Web検索スキル\n\n"
             "## 概要\n"
             "Web検索を実行して情報を収集する\n",
@@ -138,13 +141,13 @@ async def test_priming_skill_match(temp_anima_dir, temp_shared_dir):
     """Test skill matching in Channel D."""
     engine = PrimingEngine(temp_anima_dir)
 
-    # Use English keyword "web" to match "web_search" filename
+    # Use "web search" to match web_search skill via description keyword
     result = await engine.prime_memories(
         message="web search を使って情報を調べてください",
         sender_name="human",
     )
 
-    # Should match "web_search" skill by filename
+    # Should match "web_search" skill by description keyword (Tier 1: 「web search」)
     assert "web_search" in result.matched_skills
 
     print(f"\nMatched skills: {result.matched_skills}")

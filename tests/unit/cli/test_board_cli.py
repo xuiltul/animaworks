@@ -498,7 +498,7 @@ class TestBoardWrapperTemplate:
     def test_board_wrapper_exists(self):
         """Board wrapper template must exist at the expected path."""
         board_path = (
-            Path(__file__).resolve().parent.parent
+            Path(__file__).resolve().parent.parent.parent.parent
             / "templates" / "anima_templates" / "_blank" / "board"
         )
         assert board_path.exists(), f"Board wrapper not found at {board_path}"
@@ -509,7 +509,7 @@ class TestBoardWrapperTemplate:
         import stat
 
         board_path = (
-            Path(__file__).resolve().parent.parent
+            Path(__file__).resolve().parent.parent.parent.parent
             / "templates" / "anima_templates" / "_blank" / "board"
         )
         mode = os.stat(board_path).st_mode
@@ -521,7 +521,7 @@ class TestBoardWrapperTemplate:
     def test_board_wrapper_has_shebang(self):
         """Board wrapper template must start with a bash shebang."""
         board_path = (
-            Path(__file__).resolve().parent.parent
+            Path(__file__).resolve().parent.parent.parent.parent
             / "templates" / "anima_templates" / "_blank" / "board"
         )
         content = board_path.read_text(encoding="utf-8")
@@ -532,7 +532,7 @@ class TestBoardWrapperTemplate:
     def test_board_wrapper_contains_subcommands(self):
         """Board wrapper must support read, post, and dm-history subcommands."""
         board_path = (
-            Path(__file__).resolve().parent.parent
+            Path(__file__).resolve().parent.parent.parent.parent
             / "templates" / "anima_templates" / "_blank" / "board"
         )
         content = board_path.read_text(encoding="utf-8")

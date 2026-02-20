@@ -20,10 +20,12 @@ Tests cover:
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+
+JST = timezone(timedelta(hours=9))
 
 import pytest
 
@@ -223,79 +225,79 @@ class TestShouldDownscaleProcedure:
 
     def test_long_inactivity_low_usage(self, engine):
         """Procedure inactive >180 days with < 3 total uses is downscaled."""
-        old_date = (datetime.now() - timedelta(days=200)).isoformat()
+        old_date = (datetime.now(tz=JST) - timedelta(days=200)).isoformat()
         meta = {
             "last_used": old_date,
             "success_count": 1,
             "failure_count": 0,
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is True
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is True
 
     def test_long_inactivity_sufficient_usage(self, engine):
         """Procedure inactive >180 days but with >= 3 total uses is NOT downscaled."""
-        old_date = (datetime.now() - timedelta(days=200)).isoformat()
+        old_date = (datetime.now(tz=JST) - timedelta(days=200)).isoformat()
         meta = {
             "last_used": old_date,
             "success_count": 2,
             "failure_count": 1,
             # total_usage = 3 >= PROCEDURE_MIN_USAGE
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is False
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is False
 
     def test_recent_with_low_usage(self, engine):
         """Procedure active within 180 days with low usage is NOT downscaled."""
-        recent_date = (datetime.now() - timedelta(days=30)).isoformat()
+        recent_date = (datetime.now(tz=JST) - timedelta(days=30)).isoformat()
         meta = {
             "last_used": recent_date,
             "success_count": 0,
             "failure_count": 0,
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is False
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is False
 
     def test_high_failure_low_utility(self, engine):
         """Procedure with >= 3 failures and utility < 0.3 is downscaled."""
         meta = {
-            "last_used": datetime.now().isoformat(),
+            "last_used": datetime.now(tz=JST).isoformat(),
             "success_count": 0,
             "failure_count": 5,
             # utility = 0 / max(1, 5) = 0.0 < 0.3
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is True
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is True
 
     def test_high_failure_sufficient_utility(self, engine):
         """Procedure with >= 3 failures but utility >= 0.3 is NOT downscaled."""
         meta = {
-            "last_used": datetime.now().isoformat(),
+            "last_used": datetime.now(tz=JST).isoformat(),
             "success_count": 5,
             "failure_count": 3,
             # utility = 5 / max(1, 8) = 0.625 >= 0.3
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is False
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is False
 
     def test_few_failures_low_utility(self, engine):
         """Procedure with < 3 failures is NOT downscaled even if utility is low."""
         meta = {
-            "last_used": datetime.now().isoformat(),
+            "last_used": datetime.now(tz=JST).isoformat(),
             "success_count": 0,
             "failure_count": 2,
             # failure_count < PROCEDURE_LOW_UTILITY_MIN_FAILURES
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is False
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is False
 
     def test_fallback_to_last_accessed_at(self, engine):
         """When last_used is empty, falls back to last_accessed_at."""
-        old_date = (datetime.now() - timedelta(days=200)).isoformat()
+        old_date = (datetime.now(tz=JST) - timedelta(days=200)).isoformat()
         meta = {
             "last_used": "",
             "last_accessed_at": old_date,
             "success_count": 0,
             "failure_count": 0,
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is True
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is True
 
     def test_fallback_to_updated_at(self, engine):
         """When last_used and last_accessed_at are empty, falls back to updated_at."""
-        old_date = (datetime.now() - timedelta(days=200)).isoformat()
+        old_date = (datetime.now(tz=JST) - timedelta(days=200)).isoformat()
         meta = {
             "last_used": "",
             "last_accessed_at": "",
@@ -303,7 +305,7 @@ class TestShouldDownscaleProcedure:
             "success_count": 0,
             "failure_count": 0,
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is True
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is True
 
     def test_no_dates_at_all(self, engine):
         """When no date fields are present, days_since is inf, so downscaled."""
@@ -311,21 +313,21 @@ class TestShouldDownscaleProcedure:
             "success_count": 0,
             "failure_count": 0,
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is True
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is True
 
     def test_utility_boundary_exactly_0_3(self, engine):
         """Procedure with utility exactly 0.3 is NOT downscaled (threshold is <)."""
         meta = {
-            "last_used": datetime.now().isoformat(),
+            "last_used": datetime.now(tz=JST).isoformat(),
             "success_count": 3,
             "failure_count": 7,
             # utility = 3/10 = 0.3, NOT < 0.3
         }
-        assert engine._should_downscale_procedure(meta, datetime.now()) is False
+        assert engine._should_downscale_procedure(meta, datetime.now(tz=JST)) is False
 
     def test_exactly_180_days_not_downscaled(self, engine):
         """Procedure inactive exactly 180 days is NOT downscaled (threshold is >)."""
-        exact_date = (datetime.now() - timedelta(days=180)).isoformat()
+        exact_date = (datetime.now(tz=JST) - timedelta(days=180)).isoformat()
         meta = {
             "last_used": exact_date,
             "success_count": 0,
@@ -333,15 +335,15 @@ class TestShouldDownscaleProcedure:
         }
         # days_since is approximately 180, not > 180
         # Due to float precision this may be slightly > 180, so we use a tight check
-        result = engine._should_downscale_procedure(meta, datetime.now())
+        result = engine._should_downscale_procedure(meta, datetime.now(tz=JST))
         # At exactly 180 days (maybe a few seconds over), the behaviour is acceptable either way
         # The important thing is 179 days is definitely False
         meta_recent = {
-            "last_used": (datetime.now() - timedelta(days=179)).isoformat(),
+            "last_used": (datetime.now(tz=JST) - timedelta(days=179)).isoformat(),
             "success_count": 0,
             "failure_count": 0,
         }
-        assert engine._should_downscale_procedure(meta_recent, datetime.now()) is False
+        assert engine._should_downscale_procedure(meta_recent, datetime.now(tz=JST)) is False
 
 
 # ── Synaptic Downscaling with Procedures ───────────────────────────
@@ -352,7 +354,7 @@ class TestDownscalingWithProcedures:
 
     def test_procedure_downscaled_on_inactivity(self, engine):
         """Test that an old, unused procedure is marked as low activation."""
-        old_date = (datetime.now() - timedelta(days=200)).isoformat()
+        old_date = (datetime.now(tz=JST) - timedelta(days=200)).isoformat()
         proc_chunks = [
             _make_chunk(
                 doc_id="old_proc",
@@ -386,7 +388,7 @@ class TestDownscalingWithProcedures:
 
     def test_protected_procedure_not_downscaled(self, engine):
         """Test that a version >= 3 procedure is NOT downscaled."""
-        old_date = (datetime.now() - timedelta(days=200)).isoformat()
+        old_date = (datetime.now(tz=JST) - timedelta(days=200)).isoformat()
         proc_chunks = [
             _make_chunk(
                 doc_id="mature_proc",
@@ -416,7 +418,7 @@ class TestDownscalingWithProcedures:
 
     def test_high_failure_procedure_downscaled(self, engine):
         """Test that a procedure with high failure rate is downscaled."""
-        recent_date = datetime.now().isoformat()
+        recent_date = datetime.now(tz=JST).isoformat()
         proc_chunks = [
             _make_chunk(
                 doc_id="bad_proc",
@@ -445,7 +447,7 @@ class TestDownscalingWithProcedures:
 
     def test_recently_reconsolidated_procedure_not_downscaled(self, engine):
         """Procedure just reconsolidated (failure_count=0) is not downscaled."""
-        recent_date = datetime.now().isoformat()
+        recent_date = datetime.now(tz=JST).isoformat()
         proc_chunks = [
             _make_chunk(
                 doc_id="reconsolidated_proc",
@@ -481,7 +483,7 @@ class TestCompleteForgettingProcedures:
 
     def test_procedure_archived_and_deleted(self, engine, anima_dir):
         """Low-activation procedure is archived and deleted from vector store."""
-        old_low_since = (datetime.now() - timedelta(days=90)).isoformat()
+        old_low_since = (datetime.now(tz=JST) - timedelta(days=90)).isoformat()
 
         # Create source file
         source_file = anima_dir / "procedures" / "old-deploy.md"
@@ -531,7 +533,7 @@ class TestCompleteForgettingProcedures:
 
     def test_protected_procedure_not_forgotten(self, engine, anima_dir):
         """Mature procedure (version >= 3) is not forgotten."""
-        old_low_since = (datetime.now() - timedelta(days=90)).isoformat()
+        old_low_since = (datetime.now(tz=JST) - timedelta(days=90)).isoformat()
 
         proc_chunks = [
             _make_chunk(
@@ -701,7 +703,7 @@ class TestEdgeCases:
 
     def test_procedure_already_low_not_remarked(self, engine):
         """Procedure already at low activation is not remarked."""
-        old_date = (datetime.now() - timedelta(days=200)).isoformat()
+        old_date = (datetime.now(tz=JST) - timedelta(days=200)).isoformat()
         proc_chunks = [
             _make_chunk(
                 doc_id="already_low_proc",
@@ -732,7 +734,7 @@ class TestEdgeCases:
 
     def test_knowledge_uses_standard_thresholds(self, engine):
         """Knowledge chunks still use the standard 90-day/3-access threshold."""
-        old_date = (datetime.now() - timedelta(days=100)).isoformat()
+        old_date = (datetime.now(tz=JST) - timedelta(days=100)).isoformat()
         knowledge_chunks = [
             _make_chunk(
                 doc_id="old_knowledge",

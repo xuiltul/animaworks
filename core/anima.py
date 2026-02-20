@@ -10,11 +10,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator, Callable
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from core.time_utils import now_iso, now_jst
 
 from core.agent import AgentCore
 from core.background import BackgroundTask
@@ -24,6 +28,7 @@ from core.memory.conversation import ConversationMemory
 from core.memory import MemoryManager
 from core.messenger import InboxItem, Messenger
 from core.paths import load_prompt
+from core.exceptions import AnimaWorksError  # noqa: F401
 from core.schemas import CycleResult, AnimaStatus, VALID_EMOTIONS
 
 logger = logging.getLogger("animaworks.anima")
@@ -35,6 +40,39 @@ logger = logging.getLogger("animaworks.anima")
 # to be replied to before force-archival.
 _STALE_MESSAGE_TIMEOUT_SEC = 600
 
+# ── Reflection extraction ─────────────────────────────────────
+
+_RE_REFLECTION = re.compile(
+    r"\[REFLECTION\]\s*\n?(.*?)\n?\s*\[/REFLECTION\]",
+    re.DOTALL,
+)
+
+_MIN_REFLECTION_LENGTH = 50
+
+
+def _extract_reflection(text: str) -> str:
+    """Extract [REFLECTION]...[/REFLECTION] block from heartbeat output.
+
+    Returns empty string if not found or content is trivial.
+    """
+    if not text:
+        return ""
+    m = _RE_REFLECTION.search(text)
+    if m:
+        return m.group(1).strip()
+    return ""
+
+
+@dataclass
+class InboxResult:
+    """Result of inbox message processing."""
+
+    inbox_items: list[InboxItem] = field(default_factory=list)
+    messages: list[Any] = field(default_factory=list)
+    senders: set[str] = field(default_factory=set)
+    unread_count: int = 0
+    prompt_parts: list[str] = field(default_factory=list)
+
 
 class DigitalAnima:
     """A Digital Anima: encapsulates identity, memory, agent, and communication.
@@ -45,6 +83,7 @@ class DigitalAnima:
     def __init__(self, anima_dir: Path, shared_dir: Path) -> None:
         self.anima_dir = anima_dir
         self.name = anima_dir.name
+        self._activity = ActivityLogger(anima_dir)
 
         self.memory = MemoryManager(anima_dir)
         self.model_config = self.memory.read_model_config()
@@ -222,8 +261,7 @@ class DigitalAnima:
         activity log is empty (migration period).
         """
         try:
-            activity = ActivityLogger(self.anima_dir)
-            entries = activity.recent(
+            entries = self._activity.recent(
                 days=2,
                 types=["heartbeat_end"],
                 limit=self._HEARTBEAT_HISTORY_N,
@@ -245,6 +283,33 @@ class DigitalAnima:
             return ""
         except Exception:
             logger.exception("[%s] Failed to load heartbeat history", self.name)
+            return ""
+
+    # ── Heartbeat reflections ─────────────────────────────────
+
+    _RECENT_REFLECTIONS_N = 3
+
+    def _load_recent_reflections(self) -> str:
+        """Load recent heartbeat reflections from unified activity log."""
+        try:
+            entries = self._activity.recent(
+                days=3,
+                types=["heartbeat_reflection"],
+                limit=self._RECENT_REFLECTIONS_N,
+            )
+            if not entries:
+                return ""
+            lines: list[str] = []
+            for e in entries:
+                ts_short = e.ts[11:19] if len(e.ts) >= 19 else e.ts
+                content = e.content or e.summary
+                lines.append(f"- {ts_short}: {content[:300]}")
+            return "\n".join(lines)
+        except Exception:
+            logger.debug(
+                "[%s] Failed to load recent reflections",
+                self.name, exc_info=True,
+            )
             return ""
 
     @property
@@ -296,7 +361,7 @@ class DigitalAnima:
                     result = await self.agent.run_cycle(
                         prompt, trigger="bootstrap"
                     )
-                    self._last_activity = datetime.now()
+                    self._last_activity = now_jst()
 
                     logger.info(
                         "[%s] run_bootstrap END duration_ms=%d",
@@ -345,29 +410,21 @@ class DigitalAnima:
                 conv_memory.save()
 
                 # Activity log: message received
-                try:
-                    activity = ActivityLogger(self.anima_dir)
-                    activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
-                except Exception:
-                    pass
+                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
 
                 try:
                     result = await self.agent.run_cycle(
                         prompt, trigger=f"message:{from_person}",
                         images=images,
                     )
-                    self._last_activity = datetime.now()
+                    self._last_activity = now_jst()
 
                     # Record assistant response in conversation memory
                     conv_memory.append_turn("assistant", result.summary)
                     conv_memory.save()
 
                     # Activity log: response sent
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat")
-                    except Exception:
-                        pass
+                    self._activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat")
 
                     logger.info(
                         "[%s] process_message END duration_ms=%d",
@@ -377,15 +434,11 @@ class DigitalAnima:
                 except Exception as exc:
                     logger.exception("[%s] process_message FAILED", self.name)
                     # Activity log: error
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        activity.log(
-                            "error",
-                            summary=f"process_messageエラー: {type(exc).__name__}",
-                            meta={"phase": "process_message", "error": str(exc)[:200]},
-                        )
-                    except Exception:
-                        pass
+                    self._activity.log(
+                        "error",
+                        summary=f"process_messageエラー: {type(exc).__name__}",
+                        meta={"phase": "process_message", "error": str(exc)[:200]},
+                    )
                     # Save error marker so the failed exchange is visible
                     conv_memory.append_turn(
                         "assistant", "[ERROR: エージェント実行中にエラーが発生しました]"
@@ -491,11 +544,7 @@ class DigitalAnima:
                 conv_memory.save()
 
                 # Activity log: message received
-                try:
-                    activity = ActivityLogger(self.anima_dir)
-                    activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
-                except Exception:
-                    pass
+                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
 
                 # Streaming journal: write-ahead log for crash recovery
                 journal = StreamingJournal(self.anima_dir)
@@ -530,7 +579,7 @@ class DigitalAnima:
 
                         if chunk.get("type") == "cycle_done":
                             cycle_done = True
-                            self._last_activity = datetime.now()
+                            self._last_activity = now_jst()
                             # Record assistant response in conversation memory
                             cycle_result = chunk.get("cycle_result", {})
                             summary = cycle_result.get("summary", "")
@@ -538,11 +587,7 @@ class DigitalAnima:
                             conv_memory.save()
 
                             # Activity log: response sent
-                            try:
-                                activity = ActivityLogger(self.anima_dir)
-                                activity.log("response_sent", content=summary, to_person=from_person, channel="chat")
-                            except Exception:
-                                pass
+                            self._activity.log("response_sent", content=summary, to_person=from_person, channel="chat")
 
                             # Finalize streaming journal (deletes the file)
                             journal.finalize(summary=summary[:500])
@@ -571,15 +616,11 @@ class DigitalAnima:
                     else:
                         error_code = "STREAM_ERROR"
                     # Activity log: error
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        activity.log(
-                            "error",
-                            summary=f"process_message_streamエラー: {type(exc).__name__}",
-                            meta={"phase": "process_message_stream", "error_code": error_code, "error": str(exc)[:200]},
-                        )
-                    except Exception:
-                        pass
+                    self._activity.log(
+                        "error",
+                        summary=f"process_message_streamエラー: {type(exc).__name__}",
+                        meta={"phase": "process_message_stream", "error_code": error_code, "error": str(exc)[:200]},
+                    )
                     yield {
                         "type": "error",
                         "code": error_code,
@@ -653,7 +694,7 @@ class DigitalAnima:
                 result = await self.agent.run_cycle(
                     prompt, trigger="greet:user",
                 )
-                self._last_activity = datetime.now()
+                self._last_activity = now_jst()
 
                 # Extract emotion from response (inline to avoid circular import)
                 import re as _re
@@ -702,6 +743,552 @@ class DigitalAnima:
                 self._status = prev_status
                 self._current_task = prev_task
 
+    # ── Heartbeat private methods ──────────────────────────
+
+    async def _build_heartbeat_prompt(self) -> list[str]:
+        """Build heartbeat prompt parts.
+
+        Collects: heartbeat checklist, recovery note, background task
+        notifications, heartbeat history, dialogue context, delegation check.
+        """
+        hb_config = self.memory.read_heartbeat_config()
+        checklist = hb_config or load_prompt("heartbeat_default_checklist")
+        parts = [load_prompt("heartbeat", checklist=checklist)]
+
+        # ── Recovery note from previous failed heartbeat ──
+        recovery_note_path = self.anima_dir / "state" / "recovery_note.md"
+        if recovery_note_path.exists():
+            try:
+                recovery_content = recovery_note_path.read_text(encoding="utf-8")
+                parts.append(
+                    "## ⚠️ 前回のハートビート障害情報\n\n"
+                    "前回のハートビートが中断しました。以下の情報を確認し、"
+                    "未完了のタスクを優先的に処理してください。\n\n"
+                    + recovery_content
+                )
+                recovery_note_path.unlink(missing_ok=True)
+                logger.info("[%s] Recovery note loaded and removed", self.name)
+            except Exception:
+                logger.debug("[%s] Failed to read recovery note", self.name, exc_info=True)
+
+        # Inject pending background task notifications
+        bg_notifications = self.drain_background_notifications()
+        if bg_notifications:
+            notif_text = "\n\n".join(bg_notifications)
+            parts.append(
+                "## バックグラウンドタスク完了通知\n\n"
+                "以下のバックグラウンドタスクが完了しました。"
+                "結果を確認し、必要に応じて対応してください。\n\n"
+                + notif_text
+            )
+
+        # Inject recent heartbeat history for continuity
+        history_text = self._load_heartbeat_history()
+        if history_text:
+            parts.append(load_prompt(
+                "heartbeat_history", history=history_text,
+            ))
+
+        # Inject recent reflections for cognitive continuity
+        reflection_text = self._load_recent_reflections()
+        if reflection_text:
+            parts.append(
+                "## 直近の振り返り（前回までの気づき）\n\n"
+                "以下は過去のハートビートで得た気づきです。"
+                "関連があれば今回の判断に活かしてください。\n\n"
+                + reflection_text
+            )
+
+        # A-1: Inject recent dialogue context for cross-session continuity
+        try:
+            conv_mem = ConversationMemory(self.anima_dir, self.model_config)
+            state = conv_mem.load()
+            recent_turns = state.turns[-5:] if state.turns else []
+            if recent_turns:
+                conv_lines = []
+                for t in recent_turns:
+                    snippet = t.content[:200]
+                    conv_lines.append(f"- [{t.role}] {snippet}")
+                conv_summary = "\n".join(conv_lines)
+                parts.append(
+                    f"## 直近の対話履歴\n\n"
+                    f"以下はユーザーとの直近の対話です。"
+                    f"進行中のタスクや指示がある場合、この内容を考慮してください。\n\n"
+                    f"{conv_summary}"
+                )
+        except Exception:
+            logger.debug("[%s] Failed to load dialogue context for heartbeat", self.name, exc_info=True)
+
+        # NOTE: Task queue is injected via builder.py (system prompt)
+        # and priming Channel E. No separate heartbeat injection needed.
+
+        # ── Delegation check for animas with subordinates ──
+        try:
+            from core.config.models import load_config
+            _cfg = load_config()
+            _subordinates = [
+                _name for _name, _pcfg in _cfg.animas.items()
+                if _pcfg.supervisor == self.name
+            ]
+            if _subordinates:
+                parts.append(load_prompt(
+                    "heartbeat_delegation_check",
+                    subordinates=", ".join(_subordinates),
+                ))
+        except Exception:
+            logger.debug(
+                "[%s] Failed to inject delegation check", self.name,
+                exc_info=True,
+            )
+
+        return parts
+
+    async def _process_inbox_messages(
+        self,
+        cascade_suppressed_senders: set[str] | None = None,
+    ) -> InboxResult:
+        """Read, filter, deduplicate, format, and record inbox messages.
+
+        Handles cascade suppression, MessageDeduplicator, retry counter,
+        episode recording, and activity logging.
+        """
+        if not self.messenger.has_unread():
+            return InboxResult()
+
+        inbox_items = self.messenger.receive_with_paths()
+        messages = [item.msg for item in inbox_items]
+        unread_count = len(messages)
+        senders: set[str] = {m.from_person for m in messages}
+
+        # ── Filter cascade-suppressed senders ──
+        if cascade_suppressed_senders:
+            suppressed_items = [
+                item for item in inbox_items
+                if item.msg.from_person in cascade_suppressed_senders
+            ]
+            inbox_items = [
+                item for item in inbox_items
+                if item.msg.from_person not in cascade_suppressed_senders
+            ]
+            messages = [item.msg for item in inbox_items]
+            if suppressed_items:
+                logger.info(
+                    "[%s] Cascade-suppressed %d messages from %s",
+                    self.name, len(suppressed_items),
+                    ", ".join(cascade_suppressed_senders & senders),
+                )
+            senders = {m.from_person for m in messages}
+            unread_count = len(messages)
+
+        # ── Message deduplication (Phase 4) ──
+        try:
+            from core.memory.dedup import MessageDeduplicator
+            dedup = MessageDeduplicator(self.anima_dir)
+
+            # Load previously deferred messages and prepend to inbox
+            deferred_raw = dedup.load_deferred()
+            if deferred_raw:
+                from core.schemas import Message as _Msg
+                for raw in deferred_raw:
+                    try:
+                        deferred_msg = _Msg(
+                            from_person=raw.get("from", "unknown"),
+                            to_person=self.name,
+                            content=raw.get("content", ""),
+                            type=raw.get("type", "message"),
+                        )
+                        messages.append(deferred_msg)
+                    except Exception:
+                        logger.debug("[%s] Skipping invalid deferred message", self.name)
+                logger.info("[%s] Restored %d deferred messages", self.name, len(deferred_raw))
+
+            # Apply rate limiting first (before consolidation)
+            messages, rate_deferred = dedup.apply_rate_limit(messages)
+            if rate_deferred:
+                dedup.archive_suppressed(rate_deferred)
+
+            # Consolidate same-sender messages
+            messages, consolidated_suppressed = dedup.consolidate_messages(messages)
+            if consolidated_suppressed:
+                dedup.archive_suppressed(consolidated_suppressed)
+
+            # Suppress resolved topics
+            try:
+                resolutions = self.memory.read_resolutions(days=7)
+            except Exception:
+                resolutions = []
+            if resolutions:
+                filtered = []
+                for m in messages:
+                    if dedup.is_resolved_topic(m.content, resolutions):
+                        dedup.archive_suppressed([m])
+                    else:
+                        filtered.append(m)
+                messages = filtered
+
+            # Update counts after dedup
+            unread_count = len(messages)
+            senders = {m.from_person for m in messages}
+        except Exception:
+            logger.debug("[%s] Message dedup failed, using original messages", self.name, exc_info=True)
+
+        logger.info(
+            "[%s] Processing %d unread messages in heartbeat (senders: %s)",
+            self.name, unread_count, ", ".join(senders),
+        )
+
+        # ── Retry counter: track how many times each inbox message is presented ──
+        _read_counts_path = self.anima_dir / "state" / "inbox_read_counts.json"
+        _read_counts: dict[str, int] = {}
+        try:
+            if _read_counts_path.exists():
+                _read_counts = json.loads(
+                    _read_counts_path.read_text(encoding="utf-8")
+                )
+        except Exception:
+            _read_counts = {}
+
+        for item in inbox_items:
+            key = item.path.name
+            _read_counts[key] = _read_counts.get(key, 0) + 1
+
+        # Prune entries for inbox files that no longer exist
+        inbox_dir = self.anima_dir.parent.parent / "shared" / "inbox" / self.name
+        _read_counts = {
+            k: v for k, v in _read_counts.items()
+            if (inbox_dir / k).exists()
+        }
+
+        try:
+            _read_counts_path.write_text(
+                json.dumps(_read_counts, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.debug("[%s] Failed to write inbox_read_counts", self.name, exc_info=True)
+
+        # Format messages with retry annotations
+        prompt_parts: list[str] = []
+        lines: list[str] = []
+        for item in inbox_items:
+            m = item.msg
+            count = _read_counts.get(item.path.name, 1)
+            if count >= 2:
+                prefix = f"- {m.from_person} [⚠️ 未返信{count}回目]: "
+            else:
+                prefix = f"- {m.from_person}: "
+            lines.append(f"{prefix}{m.content[:800]}")
+        # Deferred messages (no InboxItem) are appended without counter
+        for m in messages:
+            if not any(item.msg is m for item in inbox_items):
+                lines.append(f"- {m.from_person}: {m.content[:800]}")
+        summary = "\n".join(lines)
+        prompt_parts.append(load_prompt("unread_messages", summary=summary))
+
+        # Record received message content to episodes so that
+        # inter-Anima communications survive in episodic memory.
+        _msg_ts = now_jst().strftime("%H:%M")
+        _recordable = [m for m in messages if m.type != "ack"]
+        if len(_recordable) > 50:
+            logger.warning(
+                "[%s] DM burst: %d messages, recording first 50",
+                self.name, len(_recordable),
+            )
+        for _m in _recordable[:50]:
+            _episode = (
+                f"## {_msg_ts} {_m.from_person}からのメッセージ受信\n\n"
+                f"**送信者**: {_m.from_person}\n"
+                f"**内容**:\n{_m.content[:1000]}\n"
+            )
+            try:
+                self.memory.append_episode(_episode)
+            except Exception:
+                logger.debug(
+                    "[%s] Failed to record message episode from %s",
+                    self.name, _m.from_person, exc_info=True,
+                )
+
+        # Activity log: DM received (full content, summary truncated)
+        for _m in _recordable[:50]:
+            self._activity.log("dm_received", content=_m.content, summary=_m.content[:200], from_person=_m.from_person, to_person=self.name)
+
+        return InboxResult(
+            inbox_items=inbox_items,
+            messages=messages,
+            senders=senders,
+            unread_count=unread_count,
+            prompt_parts=prompt_parts,
+        )
+
+    async def _execute_heartbeat_cycle(
+        self,
+        prompt: str,
+        inbox_items: list[InboxItem],
+        unread_count: int,
+    ) -> CycleResult:
+        """Write checkpoint, execute agent cycle, record results.
+
+        Returns the CycleResult from the agent execution.
+        """
+        # ── Heartbeat Checkpoint ──
+        checkpoint_path = self.anima_dir / "state" / "heartbeat_checkpoint.json"
+        try:
+            checkpoint_data = {
+                "ts": now_iso(),
+                "trigger": "heartbeat",
+                "unread_count": unread_count,
+            }
+            checkpoint_path.write_text(
+                json.dumps(checkpoint_data, ensure_ascii=False), encoding="utf-8",
+            )
+        except Exception:
+            logger.debug("[%s] Failed to write heartbeat checkpoint", self.name, exc_info=True)
+
+        # Reset reply tracking before the cycle
+        self.agent.reset_reply_tracking()
+        # Clear replied_to persistence file
+        _replied_to_path = self.anima_dir / "run" / "replied_to.jsonl"
+        if _replied_to_path.exists():
+            _replied_to_path.unlink(missing_ok=True)
+
+        accumulated_text = ""
+        result: CycleResult | None = None
+
+        # Streaming journal for heartbeat crash recovery
+        journal = StreamingJournal(self.anima_dir)
+        journal.open(trigger="heartbeat")
+
+        try:
+            async for chunk in self.agent.run_cycle_streaming(
+                prompt, trigger="heartbeat"
+            ):
+                # Relay text_delta chunks to waiting user stream
+                if chunk.get("type") == "text_delta":
+                    accumulated_text += chunk.get("text", "")
+                    journal.write_text(chunk.get("text", ""))
+                    queue = self._heartbeat_stream_queue
+                    if queue is not None:
+                        await queue.put(chunk)
+
+                if chunk.get("type") == "cycle_done":
+                    cycle_result = chunk.get("cycle_result", {})
+                    result = CycleResult(
+                        trigger=cycle_result.get("trigger", "heartbeat"),
+                        action=cycle_result.get("action", "responded"),
+                        summary=cycle_result.get("summary", ""),
+                        duration_ms=cycle_result.get("duration_ms", 0),
+                        context_usage_ratio=cycle_result.get(
+                            "context_usage_ratio", 0.0
+                        ),
+                        session_chained=cycle_result.get(
+                            "session_chained", False
+                        ),
+                        total_turns=cycle_result.get("total_turns", 0),
+                    )
+                    journal.finalize(summary=result.summary[:500])
+
+            # Send sentinel to close the relay queue
+            queue = self._heartbeat_stream_queue
+            if queue is not None:
+                await queue.put(None)
+
+            if result is None:
+                result = CycleResult(
+                    trigger="heartbeat",
+                    action="responded",
+                    summary=accumulated_text or "(no result)",
+                )
+
+            self._last_activity = now_jst()
+
+            # Activity log: heartbeat end
+            self._activity.log("heartbeat_end", summary=result.summary)
+
+            # Session boundary: finalize pending conversation turns
+            try:
+                conv_mem = ConversationMemory(self.anima_dir, self.model_config)
+                await conv_mem.finalize_if_session_ended()
+            except Exception:
+                logger.debug("[%s] finalize_if_session_ended failed", self.name, exc_info=True)
+
+            # A-3: Record important heartbeat actions to episodes
+            if result.summary and "HEARTBEAT_OK" not in result.summary:
+                ts = now_jst().strftime("%H:%M")
+                episode_entry = (
+                    f"## {ts} ハートビート活動\n\n"
+                    f"{result.summary[:500]}"
+                )
+                if unread_count > 0:
+                    episode_entry += (
+                        f"\n\n（{unread_count}件のメッセージを処理）"
+                    )
+
+                # A-3b: Extract and record reflection from accumulated text
+                reflection_text = _extract_reflection(accumulated_text)
+                if reflection_text and len(reflection_text) >= _MIN_REFLECTION_LENGTH:
+                    episode_entry += (
+                        f"\n\n[REFLECTION]\n{reflection_text}\n[/REFLECTION]"
+                    )
+                    self._activity.log(
+                        "heartbeat_reflection",
+                        content=reflection_text,
+                        summary=reflection_text[:200],
+                    )
+
+                try:
+                    self.memory.append_episode(episode_entry)
+                except Exception:
+                    logger.debug("[%s] Failed to record heartbeat episode", self.name, exc_info=True)
+
+            logger.info(
+                "[%s] run_heartbeat END duration_ms=%d unread_processed=%d",
+                self.name, result.duration_ms, unread_count,
+            )
+            # Heartbeat completed successfully — remove checkpoint
+            try:
+                checkpoint_path.unlink(missing_ok=True)
+            except Exception:
+                logger.debug("[%s] Failed to remove heartbeat checkpoint", self.name, exc_info=True)
+
+            return result
+        finally:
+            journal.close()
+
+    async def _archive_processed_messages(
+        self,
+        inbox_items: list[InboxItem],
+        senders: set[str],
+        replied_to: set[str],
+    ) -> None:
+        """Archive replied-to messages; force-archive stale unreplied messages.
+
+        Messages from unreplied senders stay in inbox for the next
+        heartbeat cycle.
+        """
+        unreplied = senders - replied_to
+
+        items_to_archive = [
+            item for item in inbox_items
+            if item.msg.from_person in replied_to
+            or item.msg.from_person not in senders  # system msgs
+        ]
+        items_to_keep = [
+            item for item in inbox_items
+            if item not in items_to_archive
+        ]
+
+        # Safety: force-archive messages that have been sitting
+        # in inbox longer than _STALE_MESSAGE_TIMEOUT_SEC to
+        # prevent re-processing storms even if replied_to
+        # tracking fails.
+        if items_to_keep:
+            now = time.time()
+            stale: list[InboxItem] = []
+            for item in items_to_keep:
+                try:
+                    mtime = item.path.stat().st_mtime
+                    if (now - mtime) > _STALE_MESSAGE_TIMEOUT_SEC:
+                        stale.append(item)
+                except FileNotFoundError:
+                    continue  # already archived/deleted
+            if stale:
+                logger.warning(
+                    "[%s] Force-archiving %d stale unreplied "
+                    "messages (>%ds old)",
+                    self.name, len(stale),
+                    _STALE_MESSAGE_TIMEOUT_SEC,
+                )
+                items_to_archive.extend(stale)
+                items_to_keep = [
+                    i for i in items_to_keep if i not in stale
+                ]
+
+        if unreplied and items_to_keep:
+            logger.warning(
+                "[%s] Unreplied messages from %s will remain "
+                "in inbox for next heartbeat cycle",
+                self.name, ", ".join(unreplied),
+            )
+
+        total_archived = self.messenger.archive_paths(
+            items_to_archive
+        )
+        logger.info(
+            "[%s] Archived %d/%d messages "
+            "(kept %d unreplied in inbox)",
+            self.name, total_archived, len(inbox_items),
+            len(items_to_keep),
+        )
+
+    async def _handle_heartbeat_failure(
+        self,
+        error: Exception,
+        inbox_items: list[InboxItem],
+        unread_count: int,
+    ) -> None:
+        """Handle heartbeat failure: crash-archive, log error, save recovery note."""
+        logger.exception("[%s] run_heartbeat FAILED", self.name)
+
+        # Archive inbox messages even on crash to prevent
+        # re-processing storms on next heartbeat.
+        if inbox_items:
+            try:
+                crash_archived = self.messenger.archive_paths(inbox_items)
+                logger.info(
+                    "[%s] Crash-archived %d/%d inbox messages",
+                    self.name, crash_archived, len(inbox_items),
+                )
+            except Exception:
+                logger.warning(
+                    "[%s] Failed to crash-archive inbox messages",
+                    self.name, exc_info=True,
+                )
+
+        # Activity log: error
+        self._activity.log(
+            "error",
+            summary=f"run_heartbeatエラー: {type(error).__name__}",
+            meta={"phase": "run_heartbeat", "error": str(error)[:200]},
+        )
+
+        # ── Save recovery note for next heartbeat ──
+        try:
+            recovery_path = self.anima_dir / "state" / "recovery_note.md"
+            recovery_content = (
+                f"### エラー情報\n\n"
+                f"- エラー種別: {type(error).__name__}\n"
+                f"- エラー内容: {str(error)[:200]}\n"
+                f"- 発生日時: {now_iso()}\n"
+                f"- 未処理メッセージ数: {unread_count}\n"
+            )
+            recovery_path.write_text(recovery_content, encoding="utf-8")
+            logger.info("[%s] Recovery note saved", self.name)
+        except Exception:
+            logger.debug("[%s] Failed to save recovery note", self.name, exc_info=True)
+
+        # Clean up orphaned streaming journal in-process so that
+        # the next restart does not misreport it as a "crash recovery".
+        # The partial heartbeat text is intentionally discarded:
+        # heartbeat output is internal monologue, not a user-facing
+        # response.  Side effects (tool calls, messages sent) are
+        # already persisted independently.
+        try:
+            if StreamingJournal.has_orphan(self.anima_dir):
+                StreamingJournal.confirm_recovery(self.anima_dir)
+                logger.info("[%s] Cleaned up orphaned streaming journal", self.name)
+        except Exception:
+            logger.debug(
+                "[%s] Failed to clean up streaming journal",
+                self.name, exc_info=True,
+            )
+
+        # Send sentinel to close the relay queue on error
+        queue = self._heartbeat_stream_queue
+        if queue is not None:
+            await queue.put(None)
+
+    # ── run_heartbeat orchestrator ───────────────────────────
+
     async def run_heartbeat(
         self,
         cascade_suppressed_senders: set[str] | None = None,
@@ -719,494 +1306,56 @@ class DigitalAnima:
         try:
             async with self._lock:
                 self._status = "checking"
-                self._last_heartbeat = datetime.now()
+                self._last_heartbeat = now_jst()
+                inbox_items: list[InboxItem] = []
+                unread_count = 0
 
                 # Activity log: heartbeat start
-                try:
-                    activity = ActivityLogger(self.anima_dir)
-                    activity.log("heartbeat_start", summary="定期巡回開始")
-                except Exception:
-                    pass
-
-                hb_config = self.memory.read_heartbeat_config()
-                checklist = hb_config or load_prompt("heartbeat_default_checklist")
-                parts = [load_prompt("heartbeat", checklist=checklist)]
-
-                # ── Recovery note from previous failed heartbeat ──
-                recovery_note_path = self.anima_dir / "state" / "recovery_note.md"
-                if recovery_note_path.exists():
-                    try:
-                        recovery_content = recovery_note_path.read_text(encoding="utf-8")
-                        parts.append(
-                            "## ⚠️ 前回のハートビート障害情報\n\n"
-                            "前回のハートビートが中断しました。以下の情報を確認し、"
-                            "未完了のタスクを優先的に処理してください。\n\n"
-                            + recovery_content
-                        )
-                        recovery_note_path.unlink(missing_ok=True)
-                        logger.info("[%s] Recovery note loaded and removed", self.name)
-                    except Exception:
-                        logger.debug("[%s] Failed to read recovery note", self.name, exc_info=True)
-
-                # Inject pending background task notifications
-                bg_notifications = self.drain_background_notifications()
-                if bg_notifications:
-                    notif_text = "\n\n".join(bg_notifications)
-                    parts.append(
-                        "## バックグラウンドタスク完了通知\n\n"
-                        "以下のバックグラウンドタスクが完了しました。"
-                        "結果を確認し、必要に応じて対応してください。\n\n"
-                        + notif_text
-                    )
-
-                # Inject recent heartbeat history for continuity
-                history_text = self._load_heartbeat_history()
-                if history_text:
-                    parts.append(load_prompt(
-                        "heartbeat_history", history=history_text,
-                    ))
-
-                # A-1: Inject recent dialogue context for cross-session continuity
-                try:
-                    conv_mem = ConversationMemory(self.anima_dir, self.model_config)
-                    state = conv_mem.load()
-                    recent_turns = state.turns[-5:] if state.turns else []
-                    if recent_turns:
-                        conv_lines = []
-                        for t in recent_turns:
-                            snippet = t.content[:200]
-                            conv_lines.append(f"- [{t.role}] {snippet}")
-                        conv_summary = "\n".join(conv_lines)
-                        parts.append(
-                            f"## 直近の対話履歴\n\n"
-                            f"以下はユーザーとの直近の対話です。"
-                            f"進行中のタスクや指示がある場合、この内容を考慮してください。\n\n"
-                            f"{conv_summary}"
-                        )
-                except Exception:
-                    logger.debug("[%s] Failed to load dialogue context for heartbeat", self.name, exc_info=True)
-
-                # NOTE: Task queue is injected via builder.py (system prompt)
-                # and priming Channel E. No separate heartbeat injection needed.
-
-                # ── Delegation check for animas with subordinates ──
-                try:
-                    from core.config.models import load_config
-                    _cfg = load_config()
-                    _subordinates = [
-                        _name for _name, _pcfg in _cfg.animas.items()
-                        if _pcfg.supervisor == self.name
-                    ]
-                    if _subordinates:
-                        parts.append(load_prompt(
-                            "heartbeat_delegation_check",
-                            subordinates=", ".join(_subordinates),
-                        ))
-                except Exception:
-                    logger.debug(
-                        "[%s] Failed to inject delegation check", self.name,
-                        exc_info=True,
-                    )
-
-                # Read unread messages but do NOT archive yet.
-                # Archiving happens after agent processing (or on crash).
-                unread_count = 0
-                inbox_items: list[InboxItem] = []
-                senders: set[str] = set()
-                if self.messenger.has_unread():
-                    inbox_items = self.messenger.receive_with_paths()
-                    messages = [item.msg for item in inbox_items]
-                    unread_count = len(messages)
-                    senders = {m.from_person for m in messages}
-
-                    # ── Filter cascade-suppressed senders ──
-                    if cascade_suppressed_senders:
-                        suppressed_items = [
-                            item for item in inbox_items
-                            if item.msg.from_person in cascade_suppressed_senders
-                        ]
-                        inbox_items = [
-                            item for item in inbox_items
-                            if item.msg.from_person not in cascade_suppressed_senders
-                        ]
-                        messages = [item.msg for item in inbox_items]
-                        if suppressed_items:
-                            logger.info(
-                                "[%s] Cascade-suppressed %d messages from %s",
-                                self.name, len(suppressed_items),
-                                ", ".join(cascade_suppressed_senders & senders),
-                            )
-                        senders = {m.from_person for m in messages}
-                        unread_count = len(messages)
-
-                    # ── Message deduplication (Phase 4) ──
-                    try:
-                        from core.memory.dedup import MessageDeduplicator
-                        dedup = MessageDeduplicator(self.anima_dir)
-
-                        # Load previously deferred messages and prepend to inbox
-                        deferred_raw = dedup.load_deferred()
-                        if deferred_raw:
-                            from core.schemas import Message as _Msg
-                            for raw in deferred_raw:
-                                try:
-                                    deferred_msg = _Msg(
-                                        from_person=raw.get("from", "unknown"),
-                                        to_person=self.name,
-                                        content=raw.get("content", ""),
-                                        type=raw.get("type", "message"),
-                                    )
-                                    messages.append(deferred_msg)
-                                except Exception:
-                                    logger.debug("[%s] Skipping invalid deferred message", self.name)
-                            logger.info("[%s] Restored %d deferred messages", self.name, len(deferred_raw))
-
-                        # Apply rate limiting first (before consolidation)
-                        messages, rate_deferred = dedup.apply_rate_limit(messages)
-                        if rate_deferred:
-                            dedup.archive_suppressed(rate_deferred)
-
-                        # Consolidate same-sender messages
-                        messages, consolidated_suppressed = dedup.consolidate_messages(messages)
-                        if consolidated_suppressed:
-                            dedup.archive_suppressed(consolidated_suppressed)
-
-                        # Suppress resolved topics
-                        try:
-                            resolutions = self.memory.read_resolutions(days=7)
-                        except Exception:
-                            resolutions = []
-                        if resolutions:
-                            filtered = []
-                            for m in messages:
-                                if dedup.is_resolved_topic(m.content, resolutions):
-                                    dedup.archive_suppressed([m])
-                                else:
-                                    filtered.append(m)
-                            messages = filtered
-
-                        # Update counts after dedup
-                        unread_count = len(messages)
-                        senders = {m.from_person for m in messages}
-                    except Exception:
-                        logger.debug("[%s] Message dedup failed, using original messages", self.name, exc_info=True)
-
-                    logger.info(
-                        "[%s] Processing %d unread messages in heartbeat (senders: %s)",
-                        self.name, unread_count, ", ".join(senders),
-                    )
-
-                    # ── Retry counter: track how many times each inbox message is presented ──
-                    _read_counts_path = self.anima_dir / "state" / "inbox_read_counts.json"
-                    _read_counts: dict[str, int] = {}
-                    try:
-                        if _read_counts_path.exists():
-                            _read_counts = json.loads(
-                                _read_counts_path.read_text(encoding="utf-8")
-                            )
-                    except Exception:
-                        _read_counts = {}
-
-                    for item in inbox_items:
-                        key = item.path.name
-                        _read_counts[key] = _read_counts.get(key, 0) + 1
-
-                    # Prune entries for inbox files that no longer exist
-                    inbox_dir = self.anima_dir.parent.parent / "shared" / "inbox" / self.name
-                    _read_counts = {
-                        k: v for k, v in _read_counts.items()
-                        if (inbox_dir / k).exists()
-                    }
-
-                    try:
-                        _read_counts_path.write_text(
-                            json.dumps(_read_counts, ensure_ascii=False),
-                            encoding="utf-8",
-                        )
-                    except Exception:
-                        logger.debug("[%s] Failed to write inbox_read_counts", self.name, exc_info=True)
-
-                    # Format messages with retry annotations
-                    lines: list[str] = []
-                    for item in inbox_items:
-                        m = item.msg
-                        count = _read_counts.get(item.path.name, 1)
-                        if count >= 2:
-                            prefix = f"- {m.from_person} [⚠️ 未返信{count}回目]: "
-                        else:
-                            prefix = f"- {m.from_person}: "
-                        lines.append(f"{prefix}{m.content[:800]}")
-                    # Deferred messages (no InboxItem) are appended without counter
-                    for m in messages:
-                        if not any(item.msg is m for item in inbox_items):
-                            lines.append(f"- {m.from_person}: {m.content[:800]}")
-                    summary = "\n".join(lines)
-                    parts.append(load_prompt("unread_messages", summary=summary))
-
-                    # Record received message content to episodes so that
-                    # inter-Anima communications survive in episodic memory.
-                    # Without this, only the heartbeat summary (a generic
-                    # one-liner) would be written, and the actual message
-                    # content would be lost after archiving.
-                    _msg_ts = datetime.now().strftime("%H:%M")
-                    _recordable = [m for m in messages if m.type != "ack"]
-                    if len(_recordable) > 50:
-                        logger.warning(
-                            "[%s] DM burst: %d messages, recording first 50",
-                            self.name, len(_recordable),
-                        )
-                    for _m in _recordable[:50]:
-                        _episode = (
-                            f"## {_msg_ts} {_m.from_person}からのメッセージ受信\n\n"
-                            f"**送信者**: {_m.from_person}\n"
-                            f"**内容**:\n{_m.content[:1000]}\n"
-                        )
-                        try:
-                            self.memory.append_episode(_episode)
-                        except Exception:
-                            logger.debug(
-                                "[%s] Failed to record message episode from %s",
-                                self.name, _m.from_person, exc_info=True,
-                            )
-
-                    # Activity log: DM received (full content, summary truncated)
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        for _m in _recordable[:50]:
-                            activity.log("dm_received", content=_m.content, summary=_m.content[:200], from_person=_m.from_person, to_person=self.name)
-                    except Exception:
-                        pass
-
-                # Set heartbeat context for relay
-                if unread_count > 0:
-                    self._heartbeat_context = (
-                        f"{', '.join(senders)}からのメッセージを確認中"
-                    )
-                else:
-                    self._heartbeat_context = "定期巡回中"
-
-                # ── Heartbeat Checkpoint ──
-                checkpoint_path = self.anima_dir / "state" / "heartbeat_checkpoint.json"
-                try:
-                    checkpoint_data = {
-                        "ts": datetime.now().isoformat(),
-                        "trigger": "heartbeat",
-                        "unread_count": unread_count,
-                    }
-                    checkpoint_path.write_text(
-                        json.dumps(checkpoint_data, ensure_ascii=False), encoding="utf-8",
-                    )
-                except Exception:
-                    logger.debug("[%s] Failed to write heartbeat checkpoint", self.name, exc_info=True)
+                self._activity.log("heartbeat_start", summary="定期巡回開始")
 
                 try:
-                    # Reset reply tracking before the cycle
-                    self.agent.reset_reply_tracking()
-                    # Clear replied_to persistence file
-                    _replied_to_path = self.anima_dir / "run" / "replied_to.jsonl"
-                    if _replied_to_path.exists():
-                        _replied_to_path.unlink(missing_ok=True)
+                    # 1. Build prompt parts
+                    parts = await self._build_heartbeat_prompt()
 
-                    prompt = "\n\n".join(parts)
-                    accumulated_text = ""
-                    result: CycleResult | None = None
+                    # 2. Process inbox messages
+                    inbox_result = await self._process_inbox_messages(
+                        cascade_suppressed_senders,
+                    )
+                    inbox_items = inbox_result.inbox_items
+                    unread_count = inbox_result.unread_count
+                    parts.extend(inbox_result.prompt_parts)
 
-                    # Streaming journal for heartbeat crash recovery
-                    journal = StreamingJournal(self.anima_dir)
-                    journal.open(trigger="heartbeat")
-
-                    async for chunk in self.agent.run_cycle_streaming(
-                        prompt, trigger="heartbeat"
-                    ):
-                        # Relay text_delta chunks to waiting user stream
-                        if chunk.get("type") == "text_delta":
-                            journal.write_text(chunk.get("text", ""))
-                            queue = self._heartbeat_stream_queue
-                            if queue is not None:
-                                await queue.put(chunk)
-
-                        if chunk.get("type") == "cycle_done":
-                            cycle_result = chunk.get("cycle_result", {})
-                            result = CycleResult(
-                                trigger=cycle_result.get("trigger", "heartbeat"),
-                                action=cycle_result.get("action", "responded"),
-                                summary=cycle_result.get("summary", ""),
-                                duration_ms=cycle_result.get("duration_ms", 0),
-                                context_usage_ratio=cycle_result.get(
-                                    "context_usage_ratio", 0.0
-                                ),
-                                session_chained=cycle_result.get(
-                                    "session_chained", False
-                                ),
-                                total_turns=cycle_result.get("total_turns", 0),
-                            )
-                            journal.finalize(summary=result.summary[:500])
-
-                    # Send sentinel to close the relay queue
-                    queue = self._heartbeat_stream_queue
-                    if queue is not None:
-                        await queue.put(None)
-
-                    if result is None:
-                        result = CycleResult(
-                            trigger="heartbeat",
-                            action="responded",
-                            summary=accumulated_text or "(no result)",
-                        )
-
-                    self._last_activity = datetime.now()
-                    # Heartbeat history replaced by unified activity log
-
-                    # Activity log: heartbeat end
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        activity.log("heartbeat_end", summary=result.summary)
-                    except Exception:
-                        pass
-
-                    # Session boundary: finalize pending conversation turns
-                    try:
-                        conv_mem = ConversationMemory(self.anima_dir, self.model_config)
-                        await conv_mem.finalize_if_session_ended()
-                    except Exception:
-                        logger.debug("[%s] finalize_if_session_ended failed", self.name, exc_info=True)
-
-                    # A-3: Record important heartbeat actions to episodes
-                    if result.summary and "HEARTBEAT_OK" not in result.summary:
-                        ts = datetime.now().strftime("%H:%M")
-                        episode_entry = (
-                            f"## {ts} ハートビート活動\n\n"
-                            f"{result.summary[:500]}"
-                        )
-                        if unread_count > 0:
-                            episode_entry += (
-                                f"\n\n（{unread_count}件のメッセージを処理）"
-                            )
-                        try:
-                            self.memory.append_episode(episode_entry)
-                        except Exception:
-                            logger.debug("[%s] Failed to record heartbeat episode", self.name, exc_info=True)
-
-                    # Archive messages from senders the agent replied to.
-                    # In A1 mode, replied_to is tracked via the persistent
-                    # file written by cli/commands/messaging.py.
-                    # Messages from unreplied senders stay in inbox for
-                    # the next heartbeat — but a safety limit prevents
-                    # infinite re-processing loops.
+                    # Set heartbeat context for relay
                     if unread_count > 0:
-                        replied_to = self.agent.replied_to
-                        unreplied = senders - replied_to
-
-                        items_to_archive = [
-                            item for item in inbox_items
-                            if item.msg.from_person in replied_to
-                            or item.msg.from_person not in senders  # system msgs
-                        ]
-                        items_to_keep = [
-                            item for item in inbox_items
-                            if item not in items_to_archive
-                        ]
-
-                        # Safety: force-archive messages that have been sitting
-                        # in inbox longer than _STALE_MESSAGE_TIMEOUT_SEC to
-                        # prevent re-processing storms even if replied_to
-                        # tracking fails.
-                        if items_to_keep:
-                            now = time.time()
-                            stale: list[InboxItem] = []
-                            for item in items_to_keep:
-                                try:
-                                    mtime = item.path.stat().st_mtime
-                                    if (now - mtime) > _STALE_MESSAGE_TIMEOUT_SEC:
-                                        stale.append(item)
-                                except FileNotFoundError:
-                                    continue  # already archived/deleted
-                            if stale:
-                                logger.warning(
-                                    "[%s] Force-archiving %d stale unreplied "
-                                    "messages (>%ds old)",
-                                    self.name, len(stale),
-                                    _STALE_MESSAGE_TIMEOUT_SEC,
-                                )
-                                items_to_archive.extend(stale)
-                                items_to_keep = [
-                                    i for i in items_to_keep if i not in stale
-                                ]
-
-                        if unreplied and items_to_keep:
-                            logger.warning(
-                                "[%s] Unreplied messages from %s will remain "
-                                "in inbox for next heartbeat cycle",
-                                self.name, ", ".join(unreplied),
-                            )
-
-                        total_archived = self.messenger.archive_paths(
-                            items_to_archive
+                        self._heartbeat_context = (
+                            f"{', '.join(inbox_result.senders)}からのメッセージを確認中"
                         )
-                        logger.info(
-                            "[%s] Archived %d/%d messages "
-                            "(kept %d unreplied in inbox)",
-                            self.name, total_archived, len(inbox_items),
-                            len(items_to_keep),
-                        )
+                    else:
+                        self._heartbeat_context = "定期巡回中"
 
-                    logger.info(
-                        "[%s] run_heartbeat END duration_ms=%d unread_processed=%d",
-                        self.name, result.duration_ms, unread_count,
+                    # 3. Execute agent cycle
+                    result = await self._execute_heartbeat_cycle(
+                        "\n\n".join(parts),
+                        inbox_items,
+                        unread_count,
                     )
-                    # Heartbeat completed successfully — remove checkpoint
-                    try:
-                        checkpoint_path.unlink(missing_ok=True)
-                    except Exception:
-                        pass
+
+                    # 4. Archive processed messages
+                    if unread_count > 0:
+                        await self._archive_processed_messages(
+                            inbox_items,
+                            inbox_result.senders,
+                            self.agent.replied_to,
+                        )
+
                     return result
+
                 except Exception as exc:
-                    logger.exception("[%s] run_heartbeat FAILED", self.name)
-                    # Archive inbox messages even on crash to prevent
-                    # re-processing storms on next heartbeat.
-                    if inbox_items:
-                        try:
-                            crash_archived = self.messenger.archive_paths(inbox_items)
-                            logger.info(
-                                "[%s] Crash-archived %d/%d inbox messages",
-                                self.name, crash_archived, len(inbox_items),
-                            )
-                        except Exception:
-                            logger.warning(
-                                "[%s] Failed to crash-archive inbox messages",
-                                self.name, exc_info=True,
-                            )
-                    # Activity log: error
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        activity.log(
-                            "error",
-                            summary=f"run_heartbeatエラー: {type(exc).__name__}",
-                            meta={"phase": "run_heartbeat", "error": str(exc)[:200]},
-                        )
-                    except Exception:
-                        pass
-                    # ── Save recovery note for next heartbeat ──
-                    try:
-                        recovery_path = self.anima_dir / "state" / "recovery_note.md"
-                        recovery_content = (
-                            f"### エラー情報\n\n"
-                            f"- エラー種別: {type(exc).__name__}\n"
-                            f"- エラー内容: {str(exc)[:200]}\n"
-                            f"- 発生日時: {datetime.now().isoformat()}\n"
-                            f"- 未処理メッセージ数: {unread_count}\n"
-                        )
-                        recovery_path.write_text(recovery_content, encoding="utf-8")
-                        logger.info("[%s] Recovery note saved", self.name)
-                    except Exception:
-                        logger.debug("[%s] Failed to save recovery note", self.name, exc_info=True)
-                    # Send sentinel to close the relay queue on error
-                    queue = self._heartbeat_stream_queue
-                    if queue is not None:
-                        await queue.put(None)
+                    await self._handle_heartbeat_failure(
+                        exc, inbox_items, unread_count,
+                    )
                     raise
                 finally:
-                    journal.close()
                     self._status = "idle"
                     self._current_task = ""
                     self._heartbeat_context = ""
@@ -1230,7 +1379,7 @@ class DigitalAnima:
                     result = await self.agent.run_cycle(
                         prompt, trigger=f"cron:{task_name}"
                     )
-                    self._last_activity = datetime.now()
+                    self._last_activity = now_jst()
 
                     # Record cron execution result
                     self.memory.append_cron_log(
@@ -1240,19 +1389,15 @@ class DigitalAnima:
                     )
 
                     # Activity log: cron executed
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        activity.log(
-                            "cron_executed",
-                            summary=f"タスク: {task_name}",
-                            content=result.summary[:500] if result else "",
-                            meta={
-                                "task_name": task_name,
-                                "duration_ms": result.duration_ms if result else 0,
-                            },
-                        )
-                    except Exception:
-                        pass
+                    self._activity.log(
+                        "cron_executed",
+                        summary=f"タスク: {task_name}",
+                        content=result.summary[:500] if result else "",
+                        meta={
+                            "task_name": task_name,
+                            "duration_ms": result.duration_ms if result else 0,
+                        },
+                    )
 
                     logger.info(
                         "[%s] run_cron_task END task=%s duration_ms=%d",
@@ -1264,15 +1409,11 @@ class DigitalAnima:
                         "[%s] run_cron_task FAILED task=%s", self.name, task_name,
                     )
                     # Activity log: error
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        activity.log(
-                            "error",
-                            summary=f"run_cron_taskエラー: {type(exc).__name__}",
-                            meta={"phase": "run_cron_task", "error": str(exc)[:200]},
-                        )
-                    except Exception:
-                        pass
+                    self._activity.log(
+                        "error",
+                        summary=f"run_cron_taskエラー: {type(exc).__name__}",
+                        meta={"phase": "run_cron_task", "error": str(exc)[:200]},
+                    )
                     raise
                 finally:
                     self._status = "idle"
@@ -1337,7 +1478,7 @@ class DigitalAnima:
                         stderr = "Neither command nor tool specified"
                         exit_code = 1
 
-                    self._last_activity = datetime.now()
+                    self._last_activity = now_jst()
 
                 except Exception as exc:
                     stderr = f"{type(exc).__name__}: {exc}"
@@ -1346,15 +1487,11 @@ class DigitalAnima:
                         "[%s] run_cron_command FAILED task=%s", self.name, task_name
                     )
                     # Activity log: error
-                    try:
-                        activity = ActivityLogger(self.anima_dir)
-                        activity.log(
-                            "error",
-                            summary=f"run_cron_commandエラー: {type(exc).__name__}",
-                            meta={"phase": "run_cron_command", "error": str(exc)[:200]},
-                        )
-                    except Exception:
-                        pass
+                    self._activity.log(
+                        "error",
+                        summary=f"run_cron_commandエラー: {type(exc).__name__}",
+                        meta={"phase": "run_cron_command", "error": str(exc)[:200]},
+                    )
                 finally:
                     self._status = "idle"
                     self._current_task = ""
@@ -1373,15 +1510,11 @@ class DigitalAnima:
             # Activity log: cron command executed (intentionally logs even on
             # failure — exit_code captures the error state, unlike run_cron_task
             # which re-raises and never reaches this point on error)
-            try:
-                activity = ActivityLogger(self.anima_dir)
-                activity.log(
-                    "cron_executed",
-                    summary=f"コマンド: {task_name}",
-                    meta={"task_name": task_name, "exit_code": exit_code, "command": command or "", "tool": tool or ""},
-                )
-            except Exception:
-                pass
+            self._activity.log(
+                "cron_executed",
+                summary=f"コマンド: {task_name}",
+                meta={"task_name": task_name, "exit_code": exit_code, "command": command or "", "tool": tool or ""},
+            )
 
             logger.info(
                 "[%s] run_cron_command END task=%s exit_code=%d duration_ms=%d",

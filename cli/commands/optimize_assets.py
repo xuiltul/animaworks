@@ -7,8 +7,9 @@ from __future__ import annotations
 import argparse
 import logging
 import shutil
-from datetime import datetime
 from pathlib import Path
+
+from core.time_utils import now_jst
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,7 @@ def _run(args: argparse.Namespace) -> None:
 
         # ── Backup ──
         if not args.dry_run and not args.skip_backup:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = now_jst().strftime("%Y%m%d_%H%M%S")
             backup_dir = anima_dir / f"assets_backup_{timestamp}"
             shutil.copytree(assets_dir, backup_dir)
             print(f"  Backup created: {backup_dir.name}")

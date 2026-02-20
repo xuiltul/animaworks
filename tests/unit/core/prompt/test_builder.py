@@ -22,6 +22,40 @@ from core.prompt.builder import (
 from core.schemas import SkillMeta
 
 
+def _mock_load_prompt_with_builder(default: str = "section"):
+    """Return a side_effect function that renders builder/* templates minimally."""
+
+    def _mock(name: str, **kwargs) -> str:
+        if name == "builder/common_skills_header":
+            lines = kwargs.get("common_skill_lines", "")
+            return f"## 共通スキル\n\n| スキル名 | 概要 |\n|---------|------|\n{lines}"
+        if name == "builder/task_in_progress":
+            return f"## ⚠️ 進行中タスク\n\n{kwargs.get('state', '')}"
+        if name == "builder/task_queue":
+            return f"## 未完了タスク\n\n{kwargs.get('task_summary', '')}"
+        if name == "builder/external_tools_guide":
+            cats = kwargs.get("categories", "")
+            return (
+                f"外部ツールを使うには `discover_tools` を呼んでください。\n"
+                f"カテゴリ: {cats}"
+            )
+        if name == "builder/hiring_rules_a1":
+            return "## 雇用ルール\n\ncreate-anima"
+        if name == "builder/hiring_rules_other":
+            return "## 雇用ルール\n\ncreate-anima"
+        if name == "builder/skill_injection":
+            return (
+                f"## {kwargs.get('section_title', '')}: "
+                f"{kwargs.get('skill_name', '')} {kwargs.get('label', '')}\n\n"
+                f"{kwargs.get('body', '')}"
+            )
+        if name == "builder/procedures_header":
+            return f"## 手順書\n\n{kwargs.get('proc_lines', '')}"
+        return default
+
+    return _mock
+
+
 # ── _discover_other_animas ───────────────────────────────
 
 
@@ -210,7 +244,7 @@ class TestBuildSystemPrompt:
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
-        with patch("core.prompt.builder.load_prompt", return_value="section"):
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(memory)
             # Common skills section is built inline (not via load_prompt)
             assert "共通スキル" in result
@@ -274,7 +308,7 @@ class TestBuildSystemPrompt:
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
-        with patch("core.prompt.builder.load_prompt", return_value="section"):
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(memory)
             # Non-idle state goes to "進行中タスク" branch
             assert "進行中タスク" in result
@@ -307,7 +341,7 @@ class TestBuildSystemPrompt:
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
-        with patch("core.prompt.builder.load_prompt", return_value="section"):
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(
                 memory,
                 tool_registry=["chatwork", "slack"],

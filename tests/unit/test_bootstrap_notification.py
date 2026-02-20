@@ -267,27 +267,19 @@ class TestStatusClassBootstrapping:
         assert status_class(None) == "status-offline"
 
 
-# ── AnimaRunner bootstrap notification ─────────────────────────
+# ── StreamingIPCHandler bootstrap notification ─────────────────────
 
 
-class TestAnimaRunnerBootstrapNotification:
-    """Test that _handle_process_message_stream emits bootstrap_start
+class TestStreamingHandlerBootstrapNotification:
+    """Test that StreamingIPCHandler.handle_stream emits bootstrap_start
     and bootstrap_complete chunks when appropriate."""
 
     async def test_bootstrap_start_emitted(self, tmp_path: Path):
         """When needs_bootstrap is True at stream start, a bootstrap_start
         chunk should be emitted before any anima stream chunks."""
-        from core.supervisor.runner import AnimaRunner
+        from core.supervisor.streaming_handler import StreamingIPCHandler
         from core.supervisor.ipc import IPCRequest
 
-        runner = AnimaRunner(
-            anima_name="test",
-            socket_path=tmp_path / "test.sock",
-            animas_dir=tmp_path / "animas",
-            shared_dir=tmp_path / "shared",
-        )
-
-        # Create mock anima
         mock_anima = MagicMock()
         mock_anima.needs_bootstrap = True
 
@@ -296,7 +288,12 @@ class TestAnimaRunnerBootstrapNotification:
             yield {"type": "cycle_done", "cycle_result": {"summary": "hello"}}
 
         mock_anima.process_message_stream = mock_stream
-        runner.anima = mock_anima
+
+        handler = StreamingIPCHandler(
+            anima=mock_anima,
+            anima_name="test",
+            anima_dir=tmp_path / "animas" / "test",
+        )
 
         request = IPCRequest(
             id="test_001",
@@ -305,7 +302,7 @@ class TestAnimaRunnerBootstrapNotification:
         )
 
         chunks: list[dict] = []
-        async for resp in runner._handle_process_message_stream(request):
+        async for resp in handler.handle_stream(request):
             if resp.chunk:
                 chunks.append(json.loads(resp.chunk))
 
@@ -316,15 +313,8 @@ class TestAnimaRunnerBootstrapNotification:
     async def test_bootstrap_complete_emitted_when_finished(self, tmp_path: Path):
         """When needs_bootstrap transitions from True to False during the
         stream, a bootstrap_complete chunk should be emitted."""
-        from core.supervisor.runner import AnimaRunner
+        from core.supervisor.streaming_handler import StreamingIPCHandler
         from core.supervisor.ipc import IPCRequest
-
-        runner = AnimaRunner(
-            anima_name="test",
-            socket_path=tmp_path / "test.sock",
-            animas_dir=tmp_path / "animas",
-            shared_dir=tmp_path / "shared",
-        )
 
         mock_anima = MagicMock()
         # Start as True, then switch to False after stream
@@ -340,7 +330,12 @@ class TestAnimaRunnerBootstrapNotification:
             yield {"type": "cycle_done", "cycle_result": {"summary": "hello"}}
 
         mock_anima.process_message_stream = mock_stream
-        runner.anima = mock_anima
+
+        handler = StreamingIPCHandler(
+            anima=mock_anima,
+            anima_name="test",
+            anima_dir=tmp_path / "animas" / "test",
+        )
 
         request = IPCRequest(
             id="test_002",
@@ -350,7 +345,7 @@ class TestAnimaRunnerBootstrapNotification:
 
         all_chunks: list[dict] = []
         done_result = None
-        async for resp in runner._handle_process_message_stream(request):
+        async for resp in handler.handle_stream(request):
             if resp.chunk:
                 all_chunks.append(json.loads(resp.chunk))
             if resp.done:
@@ -363,15 +358,8 @@ class TestAnimaRunnerBootstrapNotification:
 
     async def test_no_bootstrap_events_when_not_bootstrapping(self, tmp_path: Path):
         """When needs_bootstrap is False, no bootstrap events should appear."""
-        from core.supervisor.runner import AnimaRunner
+        from core.supervisor.streaming_handler import StreamingIPCHandler
         from core.supervisor.ipc import IPCRequest
-
-        runner = AnimaRunner(
-            anima_name="test",
-            socket_path=tmp_path / "test.sock",
-            animas_dir=tmp_path / "animas",
-            shared_dir=tmp_path / "shared",
-        )
 
         mock_anima = MagicMock()
         mock_anima.needs_bootstrap = False
@@ -381,7 +369,12 @@ class TestAnimaRunnerBootstrapNotification:
             yield {"type": "cycle_done", "cycle_result": {"summary": "hello"}}
 
         mock_anima.process_message_stream = mock_stream
-        runner.anima = mock_anima
+
+        handler = StreamingIPCHandler(
+            anima=mock_anima,
+            anima_name="test",
+            anima_dir=tmp_path / "animas" / "test",
+        )
 
         request = IPCRequest(
             id="test_003",
@@ -390,7 +383,7 @@ class TestAnimaRunnerBootstrapNotification:
         )
 
         all_chunks: list[dict] = []
-        async for resp in runner._handle_process_message_stream(request):
+        async for resp in handler.handle_stream(request):
             if resp.chunk:
                 all_chunks.append(json.loads(resp.chunk))
 

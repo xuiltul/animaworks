@@ -20,9 +20,10 @@ Provides:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
+
+from core.time_utils import now_jst
 
 import structlog
 
@@ -214,7 +215,7 @@ def setup_anima_logging(
     anima_log_dir.mkdir(parents=True, exist_ok=True)
 
     # Main log file with daily rotation
-    log_file = anima_log_dir / f"{datetime.now().strftime('%Y%m%d')}.log"
+    log_file = anima_log_dir / f"{now_jst().strftime('%Y%m%d')}.log"
 
     # Setup root logger
     root = logging.getLogger()

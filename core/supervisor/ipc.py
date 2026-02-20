@@ -16,6 +16,8 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Callable, Awaitable, Union
 
+from core.exceptions import IPCConnectionError as IPCConnectionErr  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────
@@ -285,6 +287,7 @@ class IPCClient:
             config = load_config()
             return float(config.server.ipc_stream_timeout)
         except Exception:
+            logger.debug("Config load failed for ipc_stream_timeout", exc_info=True)
             return 60.0
 
     async def connect(self, timeout: float = 5.0) -> None:
@@ -308,7 +311,7 @@ class IPCClient:
                 self.writer.close()
                 await self.writer.wait_closed()
             except Exception:
-                pass
+                logger.debug("Failed to close stale connection", exc_info=True)
         self.reader, self.writer = await asyncio.open_unix_connection(
             path=str(self.socket_path),
             limit=IPC_BUFFER_LIMIT,

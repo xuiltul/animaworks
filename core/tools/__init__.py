@@ -149,7 +149,7 @@ def _handle_submit(argv: list[str]) -> None:
                         file=sys.stderr,
                     )
     except Exception:
-        pass  # Don't fail submit because of profile check
+        logger.debug("Profile check failed for %s %s", tool_name, subcommand, exc_info=True)
 
     # Write pending task descriptor
     pending_dir = anima_dir_path / "state" / "background_tasks" / "pending"

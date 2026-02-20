@@ -263,7 +263,16 @@ class TestBuildSystemPromptCurrentTask:
         """When state is not 'status: idle', uses the '⚠️ 進行中タスク' header."""
         mock_memory.read_current_state.return_value = "status: working\ntask: Fix bug"
 
-        with patch("core.prompt.builder.load_prompt", return_value="prompt section"), \
+        def _mock_lp(name: str, **kwargs) -> str:
+            if name == "builder/task_in_progress":
+                return (
+                    "## ⚠️ 進行中タスク（MUST: 最優先で確認すること）\n\n"
+                    "以下のタスクが進行中です。\n\n"
+                    f"{kwargs.get('state', '')}"
+                )
+            return "prompt section"
+
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_lp), \
              patch("core.prompt.builder._discover_other_animas", return_value=[]), \
              patch("core.prompt.builder._build_org_context", return_value=""):
             from core.prompt.builder import build_system_prompt

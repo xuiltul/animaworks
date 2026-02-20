@@ -8,7 +8,6 @@ import base64
 import json
 import logging
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator
 
@@ -16,6 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from core.time_utils import now_jst
 from server.dependencies import get_anima
 from server.events import emit, emit_notification
 from server.stream_registry import StreamRegistry
@@ -83,7 +83,7 @@ def save_images(anima_name: str, images: list[ImageAttachment]) -> list[str]:
     attachments_dir.mkdir(parents=True, exist_ok=True)
 
     paths: list[str] = []
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = now_jst().strftime("%Y%m%d_%H%M%S")
     for i, img in enumerate(images):
         ext = MIME_TO_EXT.get(img.media_type, "png")
         filename = f"{ts}_{i}.{ext}"
