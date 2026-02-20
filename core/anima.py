@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
@@ -35,6 +36,28 @@ logger = logging.getLogger("animaworks.anima")
 # With a typical heartbeat interval of 5 min, a message gets ~2 chances
 # to be replied to before force-archival.
 _STALE_MESSAGE_TIMEOUT_SEC = 600
+
+# ── Reflection extraction ─────────────────────────────────────
+
+_RE_REFLECTION = re.compile(
+    r"\[REFLECTION\]\s*\n?(.*?)\n?\s*\[/REFLECTION\]",
+    re.DOTALL,
+)
+
+_MIN_REFLECTION_LENGTH = 50
+
+
+def _extract_reflection(text: str) -> str:
+    """Extract [REFLECTION]...[/REFLECTION] block from heartbeat output.
+
+    Returns empty string if not found or content is trivial.
+    """
+    if not text:
+        return ""
+    m = _RE_REFLECTION.search(text)
+    if m:
+        return m.group(1).strip()
+    return ""
 
 
 @dataclass
@@ -257,6 +280,34 @@ class DigitalAnima:
             return ""
         except Exception:
             logger.exception("[%s] Failed to load heartbeat history", self.name)
+            return ""
+
+    # ── Heartbeat reflections ─────────────────────────────────
+
+    _RECENT_REFLECTIONS_N = 3
+
+    def _load_recent_reflections(self) -> str:
+        """Load recent heartbeat reflections from unified activity log."""
+        try:
+            activity = ActivityLogger(self.anima_dir)
+            entries = activity.recent(
+                days=3,
+                types=["heartbeat_reflection"],
+                limit=self._RECENT_REFLECTIONS_N,
+            )
+            if not entries:
+                return ""
+            lines: list[str] = []
+            for e in entries:
+                ts_short = e.ts[11:19] if len(e.ts) >= 19 else e.ts
+                content = e.content or e.summary
+                lines.append(f"- {ts_short}: {content[:300]}")
+            return "\n".join(lines)
+        except Exception:
+            logger.debug(
+                "[%s] Failed to load recent reflections",
+                self.name, exc_info=True,
+            )
             return ""
 
     @property
@@ -760,6 +811,16 @@ class DigitalAnima:
                 "heartbeat_history", history=history_text,
             ))
 
+        # Inject recent reflections for cognitive continuity
+        reflection_text = self._load_recent_reflections()
+        if reflection_text:
+            parts.append(
+                "## 直近の振り返り（前回までの気づき）\n\n"
+                "以下は過去のハートビートで得た気づきです。"
+                "関連があれば今回の判断に活かしてください。\n\n"
+                + reflection_text
+            )
+
         # A-1: Inject recent dialogue context for cross-session continuity
         try:
             conv_mem = ConversationMemory(self.anima_dir, self.model_config)
@@ -1029,6 +1090,7 @@ class DigitalAnima:
             ):
                 # Relay text_delta chunks to waiting user stream
                 if chunk.get("type") == "text_delta":
+                    accumulated_text += chunk.get("text", "")
                     journal.write_text(chunk.get("text", ""))
                     queue = self._heartbeat_stream_queue
                     if queue is not None:
@@ -1090,6 +1152,26 @@ class DigitalAnima:
                     episode_entry += (
                         f"\n\n（{unread_count}件のメッセージを処理）"
                     )
+
+                # A-3b: Extract and record reflection from accumulated text
+                reflection_text = _extract_reflection(accumulated_text)
+                if reflection_text and len(reflection_text) >= _MIN_REFLECTION_LENGTH:
+                    episode_entry += (
+                        f"\n\n[REFLECTION]\n{reflection_text}\n[/REFLECTION]"
+                    )
+                    try:
+                        activity = ActivityLogger(self.anima_dir)
+                        activity.log(
+                            "heartbeat_reflection",
+                            content=reflection_text,
+                            summary=reflection_text[:200],
+                        )
+                    except Exception:
+                        logger.debug(
+                            "[%s] Failed to log heartbeat reflection",
+                            self.name, exc_info=True,
+                        )
+
                 try:
                     self.memory.append_episode(episode_entry)
                 except Exception:
