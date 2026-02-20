@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
-from core.time_utils import now_jst
+from core.time_utils import ensure_aware, now_jst
 from core.tools._async_compat import run_sync
 
 logger = logging.getLogger("animaworks.priming")
@@ -328,7 +328,7 @@ class PrimingEngine:
                         continue
                     ts_str = entry.get("ts", "")
                     try:
-                        ts = datetime.fromisoformat(ts_str)
+                        ts = ensure_aware(datetime.fromisoformat(ts_str))
                     except (ValueError, TypeError):
                         continue
                     is_human = entry.get("source") == "human"
@@ -494,7 +494,7 @@ class PrimingEngine:
                     continue
                 ts_str = entry.get("ts", "")
                 try:
-                    ts = datetime.fromisoformat(ts_str)
+                    ts = ensure_aware(datetime.fromisoformat(ts_str))
                 except (ValueError, TypeError):
                     continue
                 is_human = entry.get("source") == "human"

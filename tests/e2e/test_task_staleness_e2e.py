@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.time_utils import now_jst
 from core.memory.task_queue import (
     TaskQueueManager,
     _STALE_TASK_THRESHOLD_SEC,
@@ -90,7 +91,7 @@ class TestFullTaskLifecycleWithStaleness:
 
     def test_relative_deadline_converted_to_iso8601(self, task_queue: TaskQueueManager):
         """add_task with deadline='1h' produces a valid ISO8601 deadline."""
-        before = datetime.now()
+        before = now_jst()
         entry = task_queue.add_task(
             source="human",
             original_instruction="Deploy to staging",
@@ -98,7 +99,7 @@ class TestFullTaskLifecycleWithStaleness:
             summary="Deploy staging",
             deadline="1h",
         )
-        after = datetime.now()
+        after = now_jst()
 
         # Deadline must be valid ISO8601
         deadline_dt = datetime.fromisoformat(entry.deadline)
@@ -107,7 +108,7 @@ class TestFullTaskLifecycleWithStaleness:
 
     def test_relative_deadline_minutes(self, task_queue: TaskQueueManager):
         """add_task with deadline='30m' resolves correctly."""
-        before = datetime.now()
+        before = now_jst()
         entry = task_queue.add_task(
             source="anima",
             original_instruction="Quick check",
@@ -122,7 +123,7 @@ class TestFullTaskLifecycleWithStaleness:
 
     def test_relative_deadline_days(self, task_queue: TaskQueueManager):
         """add_task with deadline='1d' resolves correctly."""
-        before = datetime.now()
+        before = now_jst()
         entry = task_queue.add_task(
             source="human",
             original_instruction="Weekly report",
@@ -512,19 +513,19 @@ class TestParseDeadlineFormats:
     """Validate all accepted deadline formats via _parse_deadline."""
 
     def test_minutes_format(self):
-        before = datetime.now()
+        before = now_jst()
         result = _parse_deadline("30m")
         result_dt = datetime.fromisoformat(result)
         assert result_dt >= before + timedelta(minutes=30) - timedelta(seconds=2)
 
     def test_hours_format(self):
-        before = datetime.now()
+        before = now_jst()
         result = _parse_deadline("2h")
         result_dt = datetime.fromisoformat(result)
         assert result_dt >= before + timedelta(hours=2) - timedelta(seconds=2)
 
     def test_days_format(self):
-        before = datetime.now()
+        before = now_jst()
         result = _parse_deadline("1d")
         result_dt = datetime.fromisoformat(result)
         assert result_dt >= before + timedelta(days=1) - timedelta(seconds=2)
@@ -539,7 +540,7 @@ class TestParseDeadlineFormats:
 
     def test_whitespace_stripped(self):
         """Leading/trailing whitespace is stripped before parsing."""
-        before = datetime.now()
+        before = now_jst()
         result = _parse_deadline("  1h  ")
         result_dt = datetime.fromisoformat(result)
         assert result_dt >= before + timedelta(hours=1) - timedelta(seconds=2)
