@@ -62,6 +62,16 @@ _MAX_STORED_CONTENT_CHARS = 3000
 # Rough characters-per-token for estimation (conservative for Japanese).
 _CHARS_PER_TOKEN = 4
 
+# Maximum number of turns to include in the chat prompt.
+# Industry standard is 10 (JetBrains NeurIPS 2025); 20 provides headroom
+# for manager-role Animas with frequent heartbeat + chat turns.
+_MAX_DISPLAY_TURNS = 20
+
+# Trigger compression when stored turns exceed this count,
+# regardless of token estimate.  Prevents conversation.json bloat
+# even when the token-budget heuristic underestimates.
+_MAX_TURNS_BEFORE_COMPRESS = 50
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -350,8 +360,9 @@ class ConversationMemory:
             )
 
         if state.turns:
+            display_turns = state.turns[-_MAX_DISPLAY_TURNS:]
             turn_lines: list[str] = []
-            for t in state.turns:
+            for t in display_turns:
                 # Extract time portion for compact display
                 ts = t.timestamp[11:16] if len(t.timestamp) >= 16 else t.timestamp
                 role_label = "あなた" if t.role == "assistant" else t.role
@@ -376,6 +387,10 @@ class ConversationMemory:
         state = self.load()
         if len(state.turns) < 4:
             return False
+
+        # Turn-count trigger: force compression regardless of token estimate
+        if len(state.turns) > _MAX_TURNS_BEFORE_COMPRESS:
+            return True
 
         from core.prompt.context import resolve_context_window
 
@@ -412,8 +427,8 @@ class ConversationMemory:
         if len(state.turns) < 4:
             return
 
-        # Keep the most recent 25% of turns (at least 2)
-        keep_count = max(2, len(state.turns) // 4)
+        # Keep a fixed number of recent turns (matches _MAX_DISPLAY_TURNS)
+        keep_count = min(_MAX_DISPLAY_TURNS, len(state.turns) - 1)
         to_compress = state.turns[:-keep_count]
         to_keep = state.turns[-keep_count:]
 

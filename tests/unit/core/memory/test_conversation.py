@@ -17,7 +17,9 @@ from core.memory.conversation import (
     ConversationState,
     ConversationTurn,
     _CHARS_PER_TOKEN,
+    _MAX_DISPLAY_TURNS,
     _MAX_RESPONSE_CHARS_IN_HISTORY,
+    _MAX_TURNS_BEFORE_COMPRESS,
 )
 from core.schemas import ModelConfig
 
@@ -449,3 +451,144 @@ class TestNeedsCompressionAutoScale:
             # Add turns totalling ~2000 tokens → exceeds 1600 threshold
             self._add_turns_with_tokens(conv, 2000)
             assert conv.needs_compression() is True
+
+
+# ── Display turn limit (_format_history) ─────────────────
+
+
+class TestFormatHistoryDisplayLimit:
+    """Verify that _format_history() only includes the last _MAX_DISPLAY_TURNS turns."""
+
+    @staticmethod
+    def _make_state(n_turns: int) -> ConversationState:
+        """Create a ConversationState with *n_turns* turns."""
+        turns = [
+            ConversationTurn(
+                role="human" if i % 2 == 0 else "assistant",
+                content=f"turn-{i}",
+                timestamp=f"2026-01-15T10:{i:02d}:00",
+            )
+            for i in range(n_turns)
+        ]
+        return ConversationState(anima_name="alice", turns=turns)
+
+    def test_zero_turns_returns_empty(self, conv):
+        state = self._make_state(0)
+        assert conv._format_history(state) == ""
+
+    def test_under_limit_all_displayed(self, conv):
+        state = self._make_state(5)
+        result = conv._format_history(state)
+        for i in range(5):
+            assert f"turn-{i}" in result
+
+    def test_at_limit_all_displayed(self, conv):
+        state = self._make_state(_MAX_DISPLAY_TURNS)  # 20
+        result = conv._format_history(state)
+        for i in range(_MAX_DISPLAY_TURNS):
+            assert f"turn-{i}" in result
+
+    def test_over_limit_only_last_n_displayed(self, conv):
+        n = 25
+        state = self._make_state(n)
+        result = conv._format_history(state)
+        # Turns 0..4 (earliest 5) should be excluded.
+        # Use newline boundary to avoid substring matches (e.g. "turn-1" in "turn-10").
+        for i in range(n - _MAX_DISPLAY_TURNS):
+            assert f"\nturn-{i}\n" not in result
+        # Last 20 turns should be present
+        for i in range(n - _MAX_DISPLAY_TURNS, n):
+            assert f"turn-{i}" in result
+
+    def test_large_count_only_last_n_displayed(self, conv):
+        n = 300
+        state = self._make_state(n)
+        result = conv._format_history(state)
+        # Only the last _MAX_DISPLAY_TURNS turns should appear
+        for i in range(n - _MAX_DISPLAY_TURNS, n):
+            assert f"turn-{i}" in result
+        # An early turn should NOT appear
+        assert "turn-0" not in result
+        assert "turn-100" not in result
+
+
+# ── Turn-count trigger (needs_compression) ───────────────
+
+
+class TestNeedsCompressionTurnCount:
+    """Verify that needs_compression() triggers on turn count > _MAX_TURNS_BEFORE_COMPRESS."""
+
+    def test_three_turns_false(self, conv):
+        """3 turns is below the min-4 early exit; always False."""
+        for i in range(3):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", "x")
+        assert conv.needs_compression() is False
+
+    def test_49_turns_no_turn_count_trigger(self, conv):
+        """49 turns: below _MAX_TURNS_BEFORE_COMPRESS, should NOT trigger the turn-count path.
+
+        With a large context window and small content, token budget is not exceeded either.
+        """
+        for i in range(49):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", "short")
+        with patch(
+            "core.prompt.context.resolve_context_window", return_value=200_000,
+        ):
+            assert conv.needs_compression() is False
+
+    def test_51_turns_true_regardless_of_budget(self, conv):
+        """51 turns > _MAX_TURNS_BEFORE_COMPRESS → True, even with a huge context window."""
+        for i in range(51):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", "tiny")
+        # No need to mock resolve_context_window — the turn-count path
+        # returns True before the token-budget check is reached.
+        assert conv.needs_compression() is True
+
+    def test_100_turns_true(self, conv):
+        """100 turns >> _MAX_TURNS_BEFORE_COMPRESS → True."""
+        for i in range(100):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", "x")
+        assert conv.needs_compression() is True
+
+
+# ── Fixed keep count (_compress) ─────────────────────────
+
+
+class TestCompressKeepCount:
+    """Verify that _compress() uses keep_count = min(_MAX_DISPLAY_TURNS, len-1)."""
+
+    @pytest.mark.asyncio
+    async def test_51_turns_keeps_20_compresses_31(self, conv):
+        """51 turns → keep 20, compress 31."""
+        for i in range(51):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", f"turn-{i}")
+
+        with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = "Compressed summary of 31 turns"
+            await conv._compress()
+
+            state = conv.load()
+            assert len(state.turns) == 20
+            assert state.compressed_turn_count == 31
+            assert state.compressed_summary == "Compressed summary of 31 turns"
+            # The kept turns should be the last 20
+            assert state.turns[0].content == "turn-31"
+            assert state.turns[-1].content == "turn-50"
+
+    @pytest.mark.asyncio
+    async def test_25_turns_keeps_20_compresses_5(self, conv):
+        """25 turns → keep 20 (min(20, 24)=20), compress 5."""
+        for i in range(25):
+            conv.append_turn("human" if i % 2 == 0 else "assistant", f"turn-{i}")
+
+        with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = "Compressed summary of 5 turns"
+            await conv._compress()
+
+            state = conv.load()
+            assert len(state.turns) == 20
+            assert state.compressed_turn_count == 5
+            assert state.compressed_summary == "Compressed summary of 5 turns"
+            # The kept turns should be the last 20
+            assert state.turns[0].content == "turn-5"
+            assert state.turns[-1].content == "turn-24"
