@@ -17,6 +17,7 @@ Handles mid-conversation context monitoring and session chaining.
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
+from dataclasses import asdict
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,7 @@ from typing import Any
 from core.prompt.context import ContextTracker
 from core.execution._session import build_continuation_prompt, handle_session_chaining
 from core.execution._streaming import stream_error_boundary
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record
 from core.memory import MemoryManager
 from core.prompt.builder import build_system_prompt
 from core.schemas import ModelConfig
@@ -117,12 +118,17 @@ class AnthropicFallbackExecutor(BaseExecutor):
         shortterm: ShortTermMemory | None = None,
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> ExecutionResult:
         """Run Anthropic SDK with tool_use loop."""
         client = self._build_client()
         tools = self._build_tools()
-        messages = self._build_initial_messages(prompt, images)
+        if prior_messages:
+            messages = prior_messages  # Structured history including current msg
+        else:
+            messages = self._build_initial_messages(prompt, images)
         all_response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         chain_count = 0
 
         for iteration in range(10):
@@ -190,7 +196,10 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     b.text for b in response.content if b.type == "text"
                 )
                 all_response_text.append(final_text)
-                return ExecutionResult(text="\n".join(all_response_text))
+                return ExecutionResult(
+                    text="\n".join(all_response_text),
+                    tool_call_records=all_tool_records,
+                )
 
             # ── Process tool calls ────────────────────────────
             logger.info(
@@ -207,11 +216,18 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     "tool_use_id": tu.id,
                     "content": result,
                 })
+                all_tool_records.append(ToolCallRecord(
+                    tool_name=tu.name,
+                    tool_id=tu.id,
+                    input_summary=_truncate_for_record(str(tu.input), 200),
+                    result_summary=_truncate_for_record(str(result), 300),
+                ))
             messages.append({"role": "user", "content": tool_results})
 
         logger.warning("Max iterations (10) reached, returning fallback response")
         return ExecutionResult(
             text="\n".join(all_response_text) or "(max iterations reached)",
+            tool_call_records=all_tool_records,
         )
 
     # ── Streaming execution ───────────────────────────────────
@@ -222,6 +238,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         prompt: str,
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events using the Anthropic SDK messages.stream().
 
@@ -236,9 +253,13 @@ class AnthropicFallbackExecutor(BaseExecutor):
         """
         client = self._build_client()
         tools = self._build_tools()
-        messages = self._build_initial_messages(prompt, images)
+        if prior_messages:
+            messages = prior_messages
+        else:
+            messages = self._build_initial_messages(prompt, images)
 
         all_response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         _MAX_ITERATIONS = 10
 
         async with stream_error_boundary(
@@ -335,6 +356,12 @@ class AnthropicFallbackExecutor(BaseExecutor):
                         "tool_use_id": tu.id,
                         "content": result,
                     })
+                    all_tool_records.append(ToolCallRecord(
+                        tool_name=tu.name,
+                        tool_id=tu.id,
+                        input_summary=_truncate_for_record(str(tu.input), 200),
+                        result_summary=_truncate_for_record(str(result), 300),
+                    ))
                     yield {
                         "type": "tool_end",
                         "tool_id": tu.id,
@@ -352,4 +379,5 @@ class AnthropicFallbackExecutor(BaseExecutor):
             "type": "done",
             "full_text": full_text,
             "result_message": None,
+            "tool_call_records": [asdict(r) for r in all_tool_records],
         }

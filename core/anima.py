@@ -24,7 +24,7 @@ from core.agent import AgentCore
 from core.background import BackgroundTask
 from core.memory.activity import ActivityLogger
 from core.memory.streaming_journal import StreamingJournal
-from core.memory.conversation import ConversationMemory
+from core.memory.conversation import ConversationMemory, ToolRecord
 from core.memory import MemoryManager
 from core.messenger import InboxItem, Messenger
 from core.paths import load_prompt
@@ -383,6 +383,7 @@ class DigitalAnima:
         from_person: str = "human",
         images: list[dict[str, Any]] | None = None,
         attachment_paths: list[str] | None = None,
+        intent: str = "",
     ) -> str:
         logger.info(
             "[%s] process_message WAITING from=%s content_len=%d images=%d",
@@ -401,7 +402,18 @@ class DigitalAnima:
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, self.model_config)
                 await conv_memory.compress_if_needed()
-                prompt = conv_memory.build_chat_prompt(content, from_person)
+
+                # Determine if structured messages should be used
+                mode = self.agent.execution_mode
+                prior_messages = None
+                if mode in ("a2", "a1_fallback"):
+                    fmt = "openai" if mode == "a2" else "anthropic"
+                    prior_messages = conv_memory.build_structured_messages(
+                        content, fmt=fmt,
+                    )
+                    prompt = content  # Raw message; history is in prior_messages
+                else:
+                    prompt = conv_memory.build_chat_prompt(content, from_person)
 
                 # Pre-save: persist user input before agent execution
                 conv_memory.append_turn(
@@ -415,12 +427,21 @@ class DigitalAnima:
                 try:
                     result = await self.agent.run_cycle(
                         prompt, trigger=f"message:{from_person}",
+                        message_intent=intent,
                         images=images,
+                        prior_messages=prior_messages,
                     )
                     self._last_activity = now_jst()
 
-                    # Record assistant response in conversation memory
-                    conv_memory.append_turn("assistant", result.summary)
+                    # Record assistant response with tool records
+                    tool_records = [
+                        ToolRecord.from_dict(r)
+                        for r in result.tool_call_records
+                    ]
+                    conv_memory.append_turn(
+                        "assistant", result.summary,
+                        tool_records=tool_records,
+                    )
                     conv_memory.save()
 
                     # Activity log: response sent
@@ -458,6 +479,7 @@ class DigitalAnima:
         from_person: str = "human",
         images: list[dict[str, Any]] | None = None,
         attachment_paths: list[str] | None = None,
+        intent: str = "",
     ) -> AsyncGenerator[dict, None]:
         """Streaming version of process_message.
 
@@ -535,7 +557,18 @@ class DigitalAnima:
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, self.model_config)
                 await conv_memory.compress_if_needed()
-                prompt = conv_memory.build_chat_prompt(content, from_person)
+
+                # Determine if structured messages should be used
+                mode = self.agent.execution_mode
+                prior_messages = None
+                if mode in ("a2", "a1_fallback"):
+                    fmt = "openai" if mode == "a2" else "anthropic"
+                    prior_messages = conv_memory.build_structured_messages(
+                        content, fmt=fmt,
+                    )
+                    prompt = content
+                else:
+                    prompt = conv_memory.build_chat_prompt(content, from_person)
 
                 # Pre-save: persist user input before agent execution
                 conv_memory.append_turn(
@@ -559,7 +592,9 @@ class DigitalAnima:
                 try:
                     async for chunk in self.agent.run_cycle_streaming(
                         prompt, trigger=f"message:{from_person}",
+                        message_intent=intent,
                         images=images,
+                        prior_messages=prior_messages,
                     ):
                         if chunk.get("type") == "text_delta":
                             delta_text = chunk.get("text", "")
@@ -580,10 +615,17 @@ class DigitalAnima:
                         if chunk.get("type") == "cycle_done":
                             cycle_done = True
                             self._last_activity = now_jst()
-                            # Record assistant response in conversation memory
+                            # Record assistant response with tool records
                             cycle_result = chunk.get("cycle_result", {})
                             summary = cycle_result.get("summary", "")
-                            conv_memory.append_turn("assistant", summary)
+                            tool_records = [
+                                ToolRecord.from_dict(r)
+                                for r in cycle_result.get("tool_call_records", [])
+                            ]
+                            conv_memory.append_turn(
+                                "assistant", summary,
+                                tool_records=tool_records,
+                            )
                             conv_memory.save()
 
                             # Activity log: response sent

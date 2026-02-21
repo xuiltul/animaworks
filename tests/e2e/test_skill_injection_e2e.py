@@ -1,11 +1,11 @@
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-"""E2E tests for description-based skill injection in build_system_prompt.
+"""E2E tests for unified skill/procedure table in build_system_prompt.
 
-Verifies that build_system_prompt correctly injects skill full text when
-description keywords (「」-delimited) match the incoming message, and that
-unmatched skills appear only in the summary table.
+After the builder refactor, skill matching and full-text injection were removed.
+ALL skills (personal + common) and procedures now appear in a single table with
+columns: | 名前 | 種別 | 概要 |.  No skill body text is ever injected.
 """
 
 from __future__ import annotations
@@ -56,7 +56,27 @@ def _make_mock_memory(anima_dir: Path, tmp_path: Path) -> MagicMock:
     memory.list_shared_users.return_value = []
     memory.load_recent_heartbeat_summary.return_value = ""
     memory.list_procedure_metas.return_value = []
+    memory.list_skill_metas.return_value = []
+    memory.list_common_skill_metas.return_value = []
     return memory
+
+
+_SKILLS_GUIDE_TEXT = (
+    "## スキルと手順書\n\n"
+    "スキルと手順書はあなたが持つ能力・作業手順です。\n"
+    "使用する際は該当ファイルをReadで読んでから実行してください。"
+)
+
+
+def _fake_load_prompt(name: str, **kwargs) -> str:
+    """Minimal load_prompt mock for builder tests.
+
+    Returns the static skills_guide text for 'skills_guide' calls (no kwargs)
+    and empty string for all other templates.
+    """
+    if name == "skills_guide":
+        return _SKILLS_GUIDE_TEXT
+    return ""
 
 
 # Common patches applied to every test to isolate build_system_prompt from
@@ -69,571 +89,262 @@ _BUILDER_PATCHES = [
 ]
 
 
-def _fake_load_prompt_base(name: str, **kwargs) -> str:
-    """Minimal load_prompt mock that renders builder/skill_injection correctly."""
-    if name == "builder/skill_injection":
-        return (
-            f"## {kwargs.get('section_title', '')}: "
-            f"{kwargs.get('skill_name', '')} {kwargs.get('label', '')}\n\n"
-            f"以下の{kwargs.get('section_title', '')}がこのメッセージに該当します。"
-            f"手順に従って実行してください。\n\n"
-            f"{kwargs.get('body', '')}"
-        )
-    return ""
-
-
 # ── Test Cases ───────────────────────────────────────────
 
 
-class TestSkillInjectionE2E:
-    """build_system_prompt injects matched skill full text based on message."""
+class TestUnifiedSkillTableE2E:
+    """build_system_prompt places all skills and procedures in a unified table."""
 
-    def test_message_matches_skill_keyword_injects_full_text(self, tmp_path: Path):
-        """When message matches a 「」-delimited keyword in the description,
-        the full skill body text should be injected into the system prompt."""
+    def test_all_skills_appear_in_unified_table(self, tmp_path: Path):
+        """Personal and common skills both appear as table rows with correct types."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
 
-        # Create a skill file with a keyword that will match
-        skill_path = tmp_path / "skills" / "cron-management.md"
+        # Personal skill
+        personal_path = tmp_path / "skills" / "cron-management.md"
         _make_skill_file(
-            skill_path,
+            personal_path,
             name="cron-management",
-            description=(
-                "cron.mdの読み書き・更新を正しいフォーマットで行うためのスキル。"
-                "「cron設定」「cronタスク」「定時タスク」等の場面で使用。"
-            ),
+            description="cron.mdの読み書き・更新スキル",
             body="## cron.mdの構造\n\nschedule: フィールドにcron式を記載する。",
         )
-
-        memory = _make_mock_memory(anima_dir, tmp_path)
-
-        # Return SkillMeta objects that point to the real file
-        skill_meta = SkillMeta(
+        personal_meta = SkillMeta(
             name="cron-management",
-            description=(
-                "cron.mdの読み書き・更新を正しいフォーマットで行うためのスキル。"
-                "「cron設定」「cronタスク」「定時タスク」等の場面で使用。"
-            ),
-            path=skill_path,
-            is_common=False,
-        )
-        memory.list_skill_metas.return_value = [skill_meta]
-        memory.list_common_skill_metas.return_value = []
-
-        with (
-            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
-            patch("core.prompt.builder._build_org_context", return_value=""),
-            patch("core.prompt.builder._discover_other_animas", return_value=[]),
-            patch("core.prompt.builder._build_messaging_section", return_value=""),
-        ):
-            prompt = build_system_prompt(memory, message="cron設定をして")
-
-        # The skill body should appear in the prompt
-        assert "cron.mdの構造" in prompt
-        assert "schedule: フィールドにcron式を記載する。" in prompt
-        # The skill header should indicate it was injected
-        assert "スキル: cron-management" in prompt
-
-    def test_message_no_match_shows_table_only(self, tmp_path: Path):
-        """When message does NOT match any skill keyword, the skill should
-        appear only in the summary table, not as full text."""
-        anima_dir = tmp_path / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
-
-        skill_path = tmp_path / "skills" / "cron-management.md"
-        _make_skill_file(
-            skill_path,
-            name="cron-management",
-            description=(
-                "cron.mdの読み書き・更新を正しいフォーマットで行うためのスキル。"
-                "「cron設定」「cronタスク」「定時タスク」等の場面で使用。"
-            ),
-            body="## cron.mdの構造\n\nschedule: フィールドにcron式を記載する。",
-        )
-
-        memory = _make_mock_memory(anima_dir, tmp_path)
-        skill_meta = SkillMeta(
-            name="cron-management",
-            description=(
-                "cron.mdの読み書き・更新を正しいフォーマットで行うためのスキル。"
-                "「cron設定」「cronタスク」「定時タスク」等の場面で使用。"
-            ),
-            path=skill_path,
-            is_common=False,
-        )
-        memory.list_skill_metas.return_value = [skill_meta]
-        memory.list_common_skill_metas.return_value = []
-
-        # The skills_guide load_prompt call returns a table format
-        def fake_load_prompt(name: str, **kwargs) -> str:
-            if name == "builder/skill_injection":
-                return _fake_load_prompt_base(name, **kwargs)
-            if name == "skills_guide":
-                return (
-                    "## あなたのスキル\n\n"
-                    "| スキル名 | 概要 |\n|---------|------|\n"
-                    + kwargs.get("skill_lines", "")
-                )
-            return ""
-
-        with (
-            patch("core.prompt.builder.load_prompt", side_effect=fake_load_prompt),
-            patch("core.prompt.builder._build_org_context", return_value=""),
-            patch("core.prompt.builder._discover_other_animas", return_value=[]),
-            patch("core.prompt.builder._build_messaging_section", return_value=""),
-        ):
-            prompt = build_system_prompt(memory, message="おはよう")
-
-        # The skill body should NOT be fully injected
-        assert "cron.mdの構造" not in prompt
-        assert "schedule: フィールドにcron式を記載する。" not in prompt
-        # The skill should appear in the table
-        assert "cron-management" in prompt
-
-    def test_multiple_skills_budget_limits_injection(self, tmp_path: Path):
-        """When multiple skills match but total body exceeds budget,
-        only the first skills within budget should be fully injected."""
-        anima_dir = tmp_path / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
-
-        # Create 3 skills, each with ~2000 chars body. Greeting budget = 1000,
-        # so only the first skill (if any) could fit, but even it exceeds 1000.
-        # We make bodies slightly different sizes to test the cutoff.
-        skills_data = []
-        for i, name in enumerate(["skill-a", "skill-b", "skill-c"]):
-            skill_path = tmp_path / "skills" / f"{name}.md"
-            # Each body is ~600 chars so that first fits in budget (1000)
-            # but first + second (1200) exceeds it
-            body_text = f"手順{i}: " + "あ" * 594
-            _make_skill_file(
-                skill_path,
-                name=name,
-                description=f"スキル{name}の説明。「デプロイ」「deploy」で使用。",
-                body=body_text,
-            )
-            meta = SkillMeta(
-                name=name,
-                description=f"スキル{name}の説明。「デプロイ」「deploy」で使用。",
-                path=skill_path,
-                is_common=False,
-            )
-            skills_data.append((meta, body_text))
-
-        memory = _make_mock_memory(anima_dir, tmp_path)
-        memory.list_skill_metas.return_value = [s[0] for s in skills_data]
-        memory.list_common_skill_metas.return_value = []
-
-        # Use a greeting message so budget = 1000
-        with (
-            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
-            patch("core.prompt.builder._build_org_context", return_value=""),
-            patch("core.prompt.builder._discover_other_animas", return_value=[]),
-            patch("core.prompt.builder._build_messaging_section", return_value=""),
-        ):
-            prompt = build_system_prompt(memory, message="こんにちは、deployして")
-
-        # First skill should be injected (body ~600 chars, budget 1000)
-        assert "スキル: skill-a" in prompt
-        assert "手順0:" in prompt
-
-        # Second skill should exceed the remaining budget (~400 left, body ~600)
-        # and thus should NOT be fully injected
-        assert "手順1:" not in prompt or "手順2:" not in prompt
-        # At minimum, not all three can fit in 1000 budget
-        injected_count = sum(
-            1 for s_meta, s_body in skills_data
-            if f"スキル: {s_meta.name}" in prompt
-        )
-        assert injected_count < 3, (
-            f"Expected fewer than 3 skills injected with budget=1000, got {injected_count}"
-        )
-
-    def test_mixed_matched_and_unmatched_skills(self, tmp_path: Path):
-        """When some skills match and others don't, matched ones get full text
-        and unmatched ones appear only in the table."""
-        anima_dir = tmp_path / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
-
-        # Matched skill: keywords include 「ツール作成」
-        matched_path = tmp_path / "skills" / "tool-creator.md"
-        _make_skill_file(
-            matched_path,
-            name="tool-creator",
-            description=(
-                "新しいPythonツールモジュールを作成するためのメタスキル。"
-                "「ツール作成」「ツール化」「新しいツール」で使用。"
-            ),
-            body="## ツール作成手順\n\n1. _base.py を継承する\n2. schemas.py にスキーマ追加",
-        )
-        matched_meta = SkillMeta(
-            name="tool-creator",
-            description=(
-                "新しいPythonツールモジュールを作成するためのメタスキル。"
-                "「ツール作成」「ツール化」「新しいツール」で使用。"
-            ),
-            path=matched_path,
+            description="cron.mdの読み書き・更新スキル",
+            path=personal_path,
             is_common=False,
         )
 
-        # Unmatched skill: keywords are unrelated to the message
-        unmatched_path = tmp_path / "skills" / "cron-management.md"
+        # Common skill
+        common_path = tmp_path / "common_skills" / "animaworks-guide.md"
         _make_skill_file(
-            unmatched_path,
-            name="cron-management",
-            description=(
-                "cron.mdの読み書き・更新スキル。"
-                "「cron設定」「定時タスク」で使用。"
-            ),
-            body="## cron.mdの構造\n\nこれはcron管理の手順です。",
-        )
-        unmatched_meta = SkillMeta(
-            name="cron-management",
-            description=(
-                "cron.mdの読み書き・更新スキル。"
-                "「cron設定」「定時タスク」で使用。"
-            ),
-            path=unmatched_path,
-            is_common=False,
-        )
-
-        memory = _make_mock_memory(anima_dir, tmp_path)
-        memory.list_skill_metas.return_value = [matched_meta, unmatched_meta]
-        memory.list_common_skill_metas.return_value = []
-
-        def fake_load_prompt(name: str, **kwargs) -> str:
-            if name == "builder/skill_injection":
-                return _fake_load_prompt_base(name, **kwargs)
-            if name == "skills_guide":
-                return (
-                    "## あなたのスキル\n\n"
-                    "| スキル名 | 概要 |\n|---------|------|\n"
-                    + kwargs.get("skill_lines", "")
-                )
-            return ""
-
-        with (
-            patch("core.prompt.builder.load_prompt", side_effect=fake_load_prompt),
-            patch("core.prompt.builder._build_org_context", return_value=""),
-            patch("core.prompt.builder._discover_other_animas", return_value=[]),
-            patch("core.prompt.builder._build_messaging_section", return_value=""),
-        ):
-            prompt = build_system_prompt(
-                memory, message="新しいツール作成をしたい"
-            )
-
-        # Matched skill: full text injected
-        assert "スキル: tool-creator" in prompt
-        assert "ツール作成手順" in prompt
-        assert "_base.py を継承する" in prompt
-
-        # Unmatched skill: body NOT injected, but name appears in table
-        assert "cron.mdの構造" not in prompt
-        assert "これはcron管理の手順です。" not in prompt
-        assert "cron-management" in prompt
-
-    def test_common_skill_matched_injects_with_common_label(self, tmp_path: Path):
-        """Common skills should be injected with the (共通スキル) label."""
-        anima_dir = tmp_path / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
-
-        common_skill_path = tmp_path / "common_skills" / "animaworks-guide.md"
-        _make_skill_file(
-            common_skill_path,
+            common_path,
             name="animaworks-guide",
-            description=(
-                "AnimaWorksフレームワークの仕組みガイド。"
-                "「AnimaWorks」「フレームワーク」「仕組み」で使用。"
-            ),
+            description="AnimaWorksフレームワークの仕組みガイド",
             body="## AnimaWorks とは\n\nAIエージェントの自律フレームワークです。",
         )
         common_meta = SkillMeta(
             name="animaworks-guide",
-            description=(
-                "AnimaWorksフレームワークの仕組みガイド。"
-                "「AnimaWorks」「フレームワーク」「仕組み」で使用。"
-            ),
-            path=common_skill_path,
+            description="AnimaWorksフレームワークの仕組みガイド",
+            path=common_path,
             is_common=True,
         )
 
         memory = _make_mock_memory(anima_dir, tmp_path)
-        memory.list_skill_metas.return_value = []
+        memory.list_skill_metas.return_value = [personal_meta]
         memory.list_common_skill_metas.return_value = [common_meta]
 
         with (
-            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
         ):
-            prompt = build_system_prompt(
-                memory, message="AnimaWorksの仕組みを教えて"
-            )
+            result = build_system_prompt(memory, message="cron設定をして")
 
-        assert "スキル: animaworks-guide (共通スキル)" in prompt
-        assert "AIエージェントの自律フレームワークです。" in prompt
+        prompt = result.system_prompt
 
-    def test_empty_message_no_skill_injection(self, tmp_path: Path):
-        """When message is empty, no skills should be injected (all go to table)."""
+        # Table header present
+        assert "| 名前 | 種別 | 概要 |" in prompt
+
+        # Personal skill row
+        assert "| cron-management | 個人 | cron.mdの読み書き・更新スキル |" in prompt
+
+        # Common skill row
+        assert "| animaworks-guide | 共通 | AnimaWorksフレームワークの仕組みガイド |" in prompt
+
+    def test_procedures_appear_in_unified_table(self, tmp_path: Path):
+        """Procedure metas appear in the table with type '手順'."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
 
+        procedure_meta = SkillMeta(
+            name="deploy-procedure",
+            description="本番デプロイの手順書",
+            path=tmp_path / "procedures" / "deploy-procedure.md",
+            is_common=False,
+        )
+
+        memory = _make_mock_memory(anima_dir, tmp_path)
+        memory.list_procedure_metas.return_value = [procedure_meta]
+
+        with (
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
+            patch("core.prompt.builder._build_org_context", return_value=""),
+            patch("core.prompt.builder._discover_other_animas", return_value=[]),
+            patch("core.prompt.builder._build_messaging_section", return_value=""),
+        ):
+            result = build_system_prompt(memory, message="デプロイ手順を教えて")
+
+        prompt = result.system_prompt
+
+        # Table header present
+        assert "| 名前 | 種別 | 概要 |" in prompt
+
+        # Procedure row with type 手順
+        assert "| deploy-procedure | 手順 | 本番デプロイの手順書 |" in prompt
+
+    def test_no_full_text_injection_regardless_of_message(self, tmp_path: Path):
+        """Even when description keywords match the message, only the table row
+        appears -- no full skill body text is injected into the prompt."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        # Skill whose description closely matches the message
         skill_path = tmp_path / "skills" / "cron-management.md"
         _make_skill_file(
             skill_path,
             name="cron-management",
-            description="cron管理。「cron設定」で使用。",
-            body="## cron手順\n\nこの手順に従うこと。",
+            description=(
+                "cron.mdの読み書き・更新を正しいフォーマットで行うためのスキル。"
+                "「cron設定」「cronタスク」「定時タスク」等の場面で使用。"
+            ),
+            body="## cron.mdの構造\n\nschedule: フィールドにcron式を記載する。",
         )
         skill_meta = SkillMeta(
             name="cron-management",
-            description="cron管理。「cron設定」で使用。",
+            description=(
+                "cron.mdの読み書き・更新を正しいフォーマットで行うためのスキル。"
+                "「cron設定」「cronタスク」「定時タスク」等の場面で使用。"
+            ),
             path=skill_path,
             is_common=False,
         )
 
         memory = _make_mock_memory(anima_dir, tmp_path)
         memory.list_skill_metas.return_value = [skill_meta]
-        memory.list_common_skill_metas.return_value = []
 
-        def fake_load_prompt(name: str, **kwargs) -> str:
-            if name == "builder/skill_injection":
-                return _fake_load_prompt_base(name, **kwargs)
-            if name == "skills_guide":
-                return (
-                    "## あなたのスキル\n\n"
-                    "| スキル名 | 概要 |\n|---------|------|\n"
-                    + kwargs.get("skill_lines", "")
-                )
-            return ""
-
+        # Send a message that directly matches the skill keywords
         with (
-            patch("core.prompt.builder.load_prompt", side_effect=fake_load_prompt),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
         ):
-            prompt = build_system_prompt(memory, message="")
+            result = build_system_prompt(memory, message="cron設定をして")
 
-        # No full text injection
-        assert "cron手順" not in prompt
-        assert "この手順に従うこと。" not in prompt
-        # Skill name appears in table
+        prompt = result.system_prompt
+
+        # Skill name appears in table row
         assert "cron-management" in prompt
 
+        # Skill body text must NOT appear anywhere in the prompt
+        assert "cron.mdの構造" not in prompt
+        assert "schedule: フィールドにcron式を記載する。" not in prompt
 
-class TestEnhancedSkillInjectionE2E:
-    """E2E tests for enhanced 3-tier skill matching in build_system_prompt."""
+        # No full-text injection header pattern
+        assert "スキル: cron-management" not in prompt
 
-    def test_comma_keyword_skill_matches_and_injects(self, tmp_path: Path):
-        """Tier 1 fallback: comma-separated keywords in description trigger injection."""
+    def test_empty_skills_no_table(self, tmp_path: Path):
+        """When there are no skills and no procedures, the table section is
+        omitted entirely from the prompt."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
 
-        skill_path = tmp_path / "skills" / "deploy-guide.md"
-        _make_skill_file(
-            skill_path,
-            name="deploy-guide",
-            description="デプロイ手順、リリース手順、本番反映の方法を提供する",
-            body="## デプロイ手順\n\n1. ステージング確認\n2. 本番デプロイ実行",
-        )
-
         memory = _make_mock_memory(anima_dir, tmp_path)
-        skill_meta = SkillMeta(
-            name="deploy-guide",
-            description="デプロイ手順、リリース手順、本番反映の方法を提供する",
-            path=skill_path,
-            is_common=False,
-        )
-        memory.list_skill_metas.return_value = [skill_meta]
-        memory.list_common_skill_metas.return_value = []
+        # All meta lists are already empty by default in _make_mock_memory
 
         with (
-            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
         ):
-            prompt = build_system_prompt(memory, message="デプロイ手順を教えて")
+            result = build_system_prompt(memory, message="おはよう")
 
-        assert "スキル: deploy-guide" in prompt
-        assert "ステージング確認" in prompt
+        prompt = result.system_prompt
 
-    def test_english_description_tier2_matches(self, tmp_path: Path):
-        """Tier 2: English description without brackets matches via vocabulary overlap."""
+        # No table header
+        assert "| 名前 | 種別 | 概要 |" not in prompt
+
+        # No skills_guide static text either (only appended when rows exist)
+        assert _SKILLS_GUIDE_TEXT not in prompt
+
+    def test_injected_procedures_always_empty(self, tmp_path: Path):
+        """BuildResult.injected_procedures is always an empty list."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
 
-        skill_path = tmp_path / "skills" / "document-creator.md"
-        _make_skill_file(
-            skill_path,
-            name="document-creator",
-            description="Comprehensive document creation, editing, and analysis tool",
-            body="## Document Creation\n\nUse this to create documents.",
-        )
-
-        memory = _make_mock_memory(anima_dir, tmp_path)
-        skill_meta = SkillMeta(
-            name="document-creator",
-            description="Comprehensive document creation, editing, and analysis tool",
-            path=skill_path,
-            is_common=False,
-        )
-        memory.list_skill_metas.return_value = [skill_meta]
-        memory.list_common_skill_metas.return_value = []
-
-        with (
-            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
-            patch("core.prompt.builder._build_org_context", return_value=""),
-            patch("core.prompt.builder._discover_other_animas", return_value=[]),
-            patch("core.prompt.builder._build_messaging_section", return_value=""),
-        ):
-            prompt = build_system_prompt(memory, message="I need document creation help")
-
-        assert "スキル: document-creator" in prompt
-        assert "Use this to create documents." in prompt
-
-    def test_tier1_match_prevents_tier2_duplication(self, tmp_path: Path):
-        """Skills matched by Tier 1 should not duplicate via Tier 2."""
-        anima_dir = tmp_path / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
-
-        skill_path = tmp_path / "skills" / "cron.md"
-        _make_skill_file(
-            skill_path,
-            name="cron-management",
-            description=(
-                "cronジョブの設定と管理を行うスキル。"
-                "「cron設定」「定期実行」等の場面で使用。"
-            ),
-            body="## cron手順\n\n1. cron.md を確認する",
-        )
-
-        memory = _make_mock_memory(anima_dir, tmp_path)
+        # Create skills and procedures that would have been injected before
         skill_meta = SkillMeta(
             name="cron-management",
-            description=(
-                "cronジョブの設定と管理を行うスキル。"
-                "「cron設定」「定期実行」等の場面で使用。"
-            ),
-            path=skill_path,
+            description="cron.mdの読み書き・更新スキル。「cron設定」で使用。",
+            path=tmp_path / "skills" / "cron-management.md",
             is_common=False,
         )
-        memory.list_skill_metas.return_value = [skill_meta]
-        memory.list_common_skill_metas.return_value = []
-
-        with (
-            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
-            patch("core.prompt.builder._build_org_context", return_value=""),
-            patch("core.prompt.builder._discover_other_animas", return_value=[]),
-            patch("core.prompt.builder._build_messaging_section", return_value=""),
-        ):
-            prompt = build_system_prompt(memory, message="cron設定をして")
-
-        # Should appear exactly once (not duplicated by Tier 2)
-        assert prompt.count("スキル: cron-management") == 1
-
-    def test_no_retriever_tier3_skipped_gracefully(self, tmp_path: Path):
-        """Without a retriever, Tier 3 is skipped and only Tier 1/2 operate."""
-        anima_dir = tmp_path / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
-
-        # This skill has no bracket keywords and single-word-only description
-        skill_path = tmp_path / "skills" / "obscure.md"
-        _make_skill_file(
-            skill_path,
-            name="obscure-skill",
-            description="Very specific internal tool",
-            body="## Internal\n\nSomething.",
-        )
-
-        memory = _make_mock_memory(anima_dir, tmp_path)
-        skill_meta = SkillMeta(
-            name="obscure-skill",
-            description="Very specific internal tool",
-            path=skill_path,
-            is_common=False,
-        )
-        memory.list_skill_metas.return_value = [skill_meta]
-        memory.list_common_skill_metas.return_value = []
-
-        def fake_load_prompt(name: str, **kwargs) -> str:
-            if name == "builder/skill_injection":
-                return _fake_load_prompt_base(name, **kwargs)
-            if name == "skills_guide":
-                return (
-                    "## あなたのスキル\n\n"
-                    "| スキル名 | 概要 |\n|---------|------|\n"
-                    + kwargs.get("skill_lines", "")
-                )
-            return ""
-
-        # No retriever → Tier 3 skipped
-        with (
-            patch("core.prompt.builder.load_prompt", side_effect=fake_load_prompt),
-            patch("core.prompt.builder._build_org_context", return_value=""),
-            patch("core.prompt.builder._discover_other_animas", return_value=[]),
-            patch("core.prompt.builder._build_messaging_section", return_value=""),
-        ):
-            prompt = build_system_prompt(memory, message="internal tool please", retriever=None)
-
-        # The key is no crash (graceful degradation). Skill appears in table.
-        assert "obscure-skill" in prompt
-
-    def test_mixed_tiers_correct_injection(self, tmp_path: Path):
-        """Multiple skills across different tiers all get injected correctly."""
-        anima_dir = tmp_path / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
-
-        # Skill 1: matches via Tier 1 (bracket keywords)
-        skill1_path = tmp_path / "skills" / "cron.md"
-        _make_skill_file(
-            skill1_path,
-            name="cron-management",
-            description="cronジョブ管理。「cron設定」「定期実行」で使用。",
-            body="## cron手順\n\ncron設定の手順です。",
-        )
-        meta1 = SkillMeta(
-            name="cron-management",
-            description="cronジョブ管理。「cron設定」「定期実行」で使用。",
-            path=skill1_path,
-            is_common=False,
-        )
-
-        # Skill 2: matches via Tier 2 (English vocabulary)
-        skill2_path = tmp_path / "skills" / "scheduler.md"
-        _make_skill_file(
-            skill2_path,
-            name="scheduler-tool",
-            description="Scheduling and execution management for periodic tasks",
-            body="## Scheduler\n\nScheduler usage.",
-        )
-        meta2 = SkillMeta(
-            name="scheduler-tool",
-            description="Scheduling and execution management for periodic tasks",
-            path=skill2_path,
+        procedure_meta = SkillMeta(
+            name="deploy-procedure",
+            description="本番デプロイの手順書",
+            path=tmp_path / "procedures" / "deploy-procedure.md",
             is_common=False,
         )
 
         memory = _make_mock_memory(anima_dir, tmp_path)
-        memory.list_skill_metas.return_value = [meta1, meta2]
-        memory.list_common_skill_metas.return_value = []
+        memory.list_skill_metas.return_value = [skill_meta]
+        memory.list_procedure_metas.return_value = [procedure_meta]
 
         with (
-            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt_base),
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
         ):
-            prompt = build_system_prompt(
-                memory,
-                message="cron設定と scheduling execution を教えて",
-            )
+            result = build_system_prompt(memory, message="cron設定をして")
 
-        # Skill 1 matched via Tier 1
-        assert "スキル: cron-management" in prompt
-        assert "cron設定の手順です" in prompt
-        # Skill 2 matched via Tier 2
-        assert "スキル: scheduler-tool" in prompt
-        assert "Scheduler usage." in prompt
+        assert result.injected_procedures == []
+
+    def test_mixed_personal_common_procedures(self, tmp_path: Path):
+        """Personal skills, common skills, and procedures all appear in one
+        unified table with correct type labels."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        # Personal skill
+        personal_meta = SkillMeta(
+            name="tool-creator",
+            description="新しいPythonツールモジュールを作成するためのメタスキル",
+            path=tmp_path / "skills" / "tool-creator.md",
+            is_common=False,
+        )
+
+        # Common skill
+        common_meta = SkillMeta(
+            name="animaworks-guide",
+            description="AnimaWorksフレームワークの仕組みガイド",
+            path=tmp_path / "common_skills" / "animaworks-guide.md",
+            is_common=True,
+        )
+
+        # Procedure
+        procedure_meta = SkillMeta(
+            name="incident-response",
+            description="障害発生時の対応手順書",
+            path=tmp_path / "procedures" / "incident-response.md",
+            is_common=False,
+        )
+
+        memory = _make_mock_memory(anima_dir, tmp_path)
+        memory.list_skill_metas.return_value = [personal_meta]
+        memory.list_common_skill_metas.return_value = [common_meta]
+        memory.list_procedure_metas.return_value = [procedure_meta]
+
+        with (
+            patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
+            patch("core.prompt.builder._build_org_context", return_value=""),
+            patch("core.prompt.builder._discover_other_animas", return_value=[]),
+            patch("core.prompt.builder._build_messaging_section", return_value=""),
+        ):
+            result = build_system_prompt(memory, message="ツール作成したい")
+
+        prompt = result.system_prompt
+
+        # Table header
+        assert "| 名前 | 種別 | 概要 |" in prompt
+
+        # All three items with correct types
+        assert "| tool-creator | 個人 | 新しいPythonツールモジュールを作成するためのメタスキル |" in prompt
+        assert "| animaworks-guide | 共通 | AnimaWorksフレームワークの仕組みガイド |" in prompt
+        assert "| incident-response | 手順 | 障害発生時の対応手順書 |" in prompt
+
+        # Skills guide header text is present
+        assert "スキルと手順書" in prompt

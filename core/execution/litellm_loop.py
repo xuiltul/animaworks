@@ -20,7 +20,7 @@ import json as _json
 import logging
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -33,7 +33,7 @@ from core.execution._streaming import (
     parse_accumulated_tool_calls,
     stream_error_boundary,
 )
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record
 from core.memory import MemoryManager
 from core.prompt.builder import build_system_prompt
 from core.schemas import ModelConfig
@@ -276,6 +276,7 @@ class LiteLLMExecutor(BaseExecutor):
         shortterm: ShortTermMemory | None = None,
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> ExecutionResult:
         """Run the LiteLLM tool-use loop.
 
@@ -286,8 +287,11 @@ class LiteLLMExecutor(BaseExecutor):
         tools = self._build_base_tools()
         active_categories: set[str] = set()
 
-        messages = self._build_initial_messages(system_prompt, prompt, images)
+        messages = self._build_initial_messages(
+            system_prompt, prompt, images, prior_messages=prior_messages,
+        )
         all_response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         llm_kwargs = self._build_llm_kwargs()
         max_iterations = self._model_config.max_turns
         chain_count = 0
@@ -306,6 +310,7 @@ class LiteLLMExecutor(BaseExecutor):
                 return ExecutionResult(
                     text=f"[Error: prompt too large for "
                     f"{self._model_config.model}]",
+                    tool_call_records=all_tool_records,
                 )
 
             try:
@@ -366,7 +371,10 @@ class LiteLLMExecutor(BaseExecutor):
                 final_text = message.content or ""
                 all_response_text.append(final_text)
                 logger.debug("A2 final response at iteration=%d", iteration)
-                return ExecutionResult(text="\n".join(all_response_text))
+                return ExecutionResult(
+                    text="\n".join(all_response_text),
+                    tool_call_records=all_tool_records,
+                )
 
             # ── Process tool calls ────────────────────────────
             logger.info(
@@ -381,11 +389,13 @@ class LiteLLMExecutor(BaseExecutor):
             async for _event in self._process_streaming_tool_calls(
                 parsed_calls, messages, tools, active_categories,
             ):
-                pass  # tool_end events not needed in non-streaming execute()
+                if "record" in _event:
+                    all_tool_records.append(_event["record"])
 
         logger.warning("A2 max iterations (%d) reached", max_iterations)
         return ExecutionResult(
             text="\n".join(all_response_text) or "(max iterations reached)",
+            tool_call_records=all_tool_records,
         )
 
     # ── Streaming execution ──────────────────────────────────
@@ -396,6 +406,7 @@ class LiteLLMExecutor(BaseExecutor):
         prompt: str,
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the LiteLLM tool-use loop.
 
@@ -408,11 +419,13 @@ class LiteLLMExecutor(BaseExecutor):
         if self._is_ollama_model:
             async for event in self._stream_iteration_level(
                 system_prompt, prompt, tracker, images,
+                prior_messages=prior_messages,
             ):
                 yield event
         else:
             async for event in self._stream_token_level(
                 system_prompt, prompt, tracker, images,
+                prior_messages=prior_messages,
             ):
                 yield event
 
@@ -424,6 +437,7 @@ class LiteLLMExecutor(BaseExecutor):
         prompt: str,
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Token-level streaming via ``litellm.acompletion(stream=True)``.
 
@@ -435,8 +449,9 @@ class LiteLLMExecutor(BaseExecutor):
         tools = self._build_base_tools()
         active_categories: set[str] = set()
 
-        messages = self._build_initial_messages(system_prompt, prompt, images)
+        messages = self._build_initial_messages(system_prompt, prompt, images, prior_messages=prior_messages)
         all_response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         llm_kwargs = self._build_llm_kwargs()
         max_iterations = self._model_config.max_turns
 
@@ -547,6 +562,7 @@ class LiteLLMExecutor(BaseExecutor):
                         "type": "done",
                         "full_text": full_text,
                         "result_message": None,
+                        "tool_call_records": [asdict(r) for r in all_tool_records],
                     }
                     return
 
@@ -584,6 +600,8 @@ class LiteLLMExecutor(BaseExecutor):
                 async for event in self._process_streaming_tool_calls(
                     parsed_calls, messages, tools, active_categories,
                 ):
+                    if "record" in event:
+                        all_tool_records.append(event["record"])
                     yield event
 
         # If we exit the loop without returning, max iterations reached
@@ -593,6 +611,7 @@ class LiteLLMExecutor(BaseExecutor):
             "type": "done",
             "full_text": full_text,
             "result_message": None,
+            "tool_call_records": [asdict(r) for r in all_tool_records],
         }
 
     # ── Iteration-level streaming (Ollama) ───────────────────
@@ -603,6 +622,7 @@ class LiteLLMExecutor(BaseExecutor):
         prompt: str,
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Iteration-level streaming for Ollama models.
 
@@ -617,8 +637,9 @@ class LiteLLMExecutor(BaseExecutor):
         tools = self._build_base_tools()
         active_categories: set[str] = set()
 
-        messages = self._build_initial_messages(system_prompt, prompt, images)
+        messages = self._build_initial_messages(system_prompt, prompt, images, prior_messages=prior_messages)
         all_response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         llm_kwargs = self._build_llm_kwargs()
         max_iterations = self._model_config.max_turns
 
@@ -683,6 +704,7 @@ class LiteLLMExecutor(BaseExecutor):
                         "type": "done",
                         "full_text": full_text,
                         "result_message": None,
+                        "tool_call_records": [asdict(r) for r in all_tool_records],
                     }
                     return
 
@@ -714,6 +736,8 @@ class LiteLLMExecutor(BaseExecutor):
                 async for event in self._process_streaming_tool_calls(
                     parsed_calls, messages, tools, active_categories,
                 ):
+                    if "record" in event:
+                        all_tool_records.append(event["record"])
                     yield event
 
         # Max iterations reached
@@ -725,6 +749,7 @@ class LiteLLMExecutor(BaseExecutor):
             "type": "done",
             "full_text": full_text,
             "result_message": None,
+            "tool_call_records": [asdict(r) for r in all_tool_records],
         }
 
     # ── Shared helpers for streaming ─────────────────────────
@@ -734,8 +759,21 @@ class LiteLLMExecutor(BaseExecutor):
         system_prompt: str,
         prompt: str,
         images: list[dict[str, Any]] | None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
-        """Build the initial messages list for an LLM call."""
+        """Build the initial messages list for an LLM call.
+
+        When *prior_messages* is provided (structured conversation history
+        with tool_use/tool_result blocks), they are inserted between the
+        system prompt and the current user message.  The current user
+        message is still appended as the final message.
+        """
+        msgs: list[dict[str, Any]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if prior_messages:
+            msgs.extend(prior_messages)
+            return msgs  # prior_messages already includes the current user msg
         if images:
             content_parts: list[dict[str, Any]] = []
             for img in images:
@@ -746,14 +784,10 @@ class LiteLLMExecutor(BaseExecutor):
                     },
                 })
             content_parts.append({"type": "text", "text": prompt})
-            return [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": content_parts},
-            ]
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ]
+            msgs.append({"role": "user", "content": content_parts})
+        else:
+            msgs.append({"role": "user", "content": prompt})
+        return msgs
 
     def _preflight_clamp(
         self,
@@ -833,18 +867,26 @@ class LiteLLMExecutor(BaseExecutor):
 
             # Handle unparseable arguments
             if fn_args is None:
+                error_content = _json.dumps({
+                    "status": "error",
+                    "error_type": "InvalidArguments",
+                    "message": "Failed to parse tool arguments",
+                    "context": {"raw_arguments": (tc.get("raw_arguments") or "")[:500]},
+                    "suggestion": "Ensure arguments are valid JSON",
+                }, ensure_ascii=False)
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc_id,
-                    "content": _json.dumps({
-                        "status": "error",
-                        "error_type": "InvalidArguments",
-                        "message": "Failed to parse tool arguments",
-                        "context": {"raw_arguments": (tc.get("raw_arguments") or "")[:500]},
-                        "suggestion": "Ensure arguments are valid JSON",
-                    }, ensure_ascii=False),
+                    "content": error_content,
                 })
-                yield {"type": "tool_end", "tool_id": tc_id, "tool_name": fn_name}
+                yield {
+                    "type": "tool_end", "tool_id": tc_id, "tool_name": fn_name,
+                    "record": ToolCallRecord(
+                        tool_name=fn_name, tool_id=tc_id,
+                        input_summary="(invalid arguments)",
+                        result_summary=_truncate_for_record(error_content, 300),
+                    ),
+                }
                 continue
 
             # Handle discover_tools inline
@@ -867,7 +909,14 @@ class LiteLLMExecutor(BaseExecutor):
                     "tool_call_id": tc_id,
                     "content": result,
                 })
-                yield {"type": "tool_end", "tool_id": tc_id, "tool_name": fn_name}
+                yield {
+                    "type": "tool_end", "tool_id": tc_id, "tool_name": fn_name,
+                    "record": ToolCallRecord(
+                        tool_name=fn_name, tool_id=tc_id,
+                        input_summary=_truncate_for_record(str(fn_args), 200),
+                        result_summary=_truncate_for_record(result, 300),
+                    ),
+                }
                 continue
 
             # Handle refresh_tools inline
@@ -878,7 +927,14 @@ class LiteLLMExecutor(BaseExecutor):
                     "tool_call_id": tc_id,
                     "content": result,
                 })
-                yield {"type": "tool_end", "tool_id": tc_id, "tool_name": fn_name}
+                yield {
+                    "type": "tool_end", "tool_id": tc_id, "tool_name": fn_name,
+                    "record": ToolCallRecord(
+                        tool_name=fn_name, tool_id=tc_id,
+                        input_summary=_truncate_for_record(str(fn_args), 200),
+                        result_summary=_truncate_for_record(result, 300),
+                    ),
+                }
                 continue
 
             pending_calls.append((tc, fn_args))
@@ -913,23 +969,33 @@ class LiteLLMExecutor(BaseExecutor):
             ]
             results = await asyncio.gather(*coros, return_exceptions=True)
             for i, r in enumerate(results):
+                shim = parallel[i]
                 if isinstance(r, Exception):
                     logger.warning("Parallel tool execution error: %s", r)
+                    error_content = _json.dumps({
+                        "status": "error",
+                        "error_type": "ExecutionError",
+                        "message": str(r),
+                    }, ensure_ascii=False)
                     messages.append({
                         "role": "tool",
-                        "tool_call_id": parallel[i].id,
-                        "content": _json.dumps({
-                            "status": "error",
-                            "error_type": "ExecutionError",
-                            "message": str(r),
-                        }, ensure_ascii=False),
+                        "tool_call_id": shim.id,
+                        "content": error_content,
                     })
+                    result_summary = _truncate_for_record(error_content, 300)
                 else:
                     messages.append(r)
+                    result_summary = _truncate_for_record(r.get("content", ""), 300)
                 yield {
                     "type": "tool_end",
-                    "tool_id": parallel[i].id,
-                    "tool_name": parallel[i].function.name,
+                    "tool_id": shim.id,
+                    "tool_name": shim.function.name,
+                    "record": ToolCallRecord(
+                        tool_name=shim.function.name,
+                        tool_id=shim.id,
+                        input_summary=_truncate_for_record(str(args_map[shim.id]), 200),
+                        result_summary=result_summary,
+                    ),
                 }
 
         for batch in serial_batches:
@@ -937,21 +1003,30 @@ class LiteLLMExecutor(BaseExecutor):
                 try:
                     r = await self._execute_tool_call(shim, args_map[shim.id])
                     messages.append(r)
+                    result_summary = _truncate_for_record(r.get("content", ""), 300)
                 except Exception as e:
                     logger.warning("Serial tool execution error: %s", e)
+                    error_content = _json.dumps({
+                        "status": "error",
+                        "error_type": "ExecutionError",
+                        "message": str(e),
+                    }, ensure_ascii=False)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": shim.id,
-                        "content": _json.dumps({
-                            "status": "error",
-                            "error_type": "ExecutionError",
-                            "message": str(e),
-                        }, ensure_ascii=False),
+                        "content": error_content,
                     })
+                    result_summary = _truncate_for_record(error_content, 300)
                 yield {
                     "type": "tool_end",
                     "tool_id": shim.id,
                     "tool_name": shim.function.name,
+                    "record": ToolCallRecord(
+                        tool_name=shim.function.name,
+                        tool_id=shim.id,
+                        input_summary=_truncate_for_record(str(args_map[shim.id]), 200),
+                        result_summary=result_summary,
+                    ),
                 }
 
 

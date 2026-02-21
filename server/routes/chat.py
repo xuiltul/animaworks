@@ -44,6 +44,7 @@ class ImageAttachment(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     from_person: str = "human"
+    intent: str = ""
     images: list[ImageAttachment] = []
     resume: str | None = None
     last_event_id: str | None = None
@@ -319,6 +320,7 @@ async def _stream_events(
 
         async for chunk in anima.process_message_stream(
             body.message, from_person=body.from_person,
+            intent=body.intent,
             images=images, attachment_paths=attachment_paths,
         ):
             frame, response_text = _handle_chunk(
@@ -384,6 +386,7 @@ def create_chat_router() -> APIRouter:
                 params={
                     "message": body.message,
                     "from_person": body.from_person,
+                    "intent": body.intent,
                     "images": [img.model_dump() for img in body.images] if body.images else [],
                     "attachment_paths": saved_paths,
                 },
@@ -562,6 +565,7 @@ def create_chat_router() -> APIRouter:
                     params={
                         "message": body.message,
                         "from_person": body.from_person,
+                        "intent": body.intent,
                         "stream": True,
                         "images": [img.model_dump() for img in body.images] if body.images else [],
                         "attachment_paths": saved_paths,

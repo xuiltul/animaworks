@@ -252,6 +252,11 @@ class AgentCore:
         m = self.model_config.model
         return m.startswith("claude-") or m.startswith("anthropic/")
 
+    @property
+    def execution_mode(self) -> str:
+        """Public access to the resolved execution mode."""
+        return self._resolve_execution_mode()
+
     def _resolve_execution_mode(self) -> str:
         """Determine the effective execution mode: ``a1``, ``a2``, or ``b``.
 
@@ -456,7 +461,7 @@ class AgentCore:
             return None
         return getattr(engine, "_retriever", None)
 
-    async def _run_priming(self, prompt: str, trigger: str) -> str:
+    async def _run_priming(self, prompt: str, trigger: str, *, message_intent: str = "") -> str:
         """Run priming layer to automatically retrieve relevant memories.
 
         Args:
@@ -481,7 +486,17 @@ class AgentCore:
             if not hasattr(self, "_priming_engine"):
                 from core.paths import get_shared_dir
                 self._priming_engine = PrimingEngine(self.anima_dir, get_shared_dir())
-            result = await self._priming_engine.prime_memories(message, sender_name)
+            channel = (
+                "heartbeat" if trigger == "heartbeat"
+                else "cron" if trigger.startswith("cron")
+                else "chat"
+            )
+            result = await self._priming_engine.prime_memories(
+                message,
+                sender_name,
+                channel=channel,
+                intent=message_intent,
+            )
 
             if result.is_empty():
                 logger.debug("Priming: No memories found")
@@ -571,6 +586,7 @@ class AgentCore:
         priming_section: str,
         mode: str,
         message: str,
+        trigger: str = "",
     ) -> tuple[str, str, bool]:
         """Check combined prompt size and shrink if necessary.
 
@@ -605,6 +621,7 @@ class AgentCore:
                     execution_mode=mode,
                     message=prompt,
                     retriever=self._get_retriever(),
+                    trigger=trigger,
                 ).system_prompt
             except Exception:
                 logger.exception("Forced compression failed")
@@ -642,6 +659,8 @@ class AgentCore:
         prompt: str,
         trigger: str = "manual",
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
+        message_intent: str = "",
     ) -> CycleResult:
         """Run one agent cycle with autonomous memory search.
 
@@ -654,13 +673,21 @@ class AgentCore:
         externalized to short-term memory and automatically continued.
         """
         async with self._agent_lock:
-            return await self._run_cycle_inner(prompt, trigger, images=images)
+            return await self._run_cycle_inner(
+                prompt,
+                trigger,
+                images=images,
+                prior_messages=prior_messages,
+                message_intent=message_intent,
+            )
 
     async def _run_cycle_inner(
         self,
         prompt: str,
         trigger: str,
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
+        message_intent: str = "",
     ) -> CycleResult:
         start = time.monotonic()
         mode = self._resolve_execution_mode()
@@ -670,7 +697,11 @@ class AgentCore:
         )
 
         # ── Priming: Automatic memory retrieval ────────────────
-        priming_section = await self._run_priming(prompt, trigger)
+        priming_section = await self._run_priming(
+            prompt,
+            trigger,
+            message_intent=message_intent,
+        )
 
         shortterm = ShortTermMemory(self.anima_dir)
         tracker = ContextTracker(
@@ -688,6 +719,7 @@ class AgentCore:
             execution_mode=mode,
             message=prompt,
             retriever=self._get_retriever(),
+            trigger=trigger,
         )
         system_prompt = build_result.system_prompt
         injected_procedures = build_result.injected_procedures
@@ -718,6 +750,11 @@ class AgentCore:
             session_id=self._tool_handler.session_id,
         )
 
+        # ── Helper: convert ExecutionResult tool records to dicts ──
+        def _tool_records_to_dicts(result: "ExecutionResult") -> list[dict]:
+            from dataclasses import asdict as _asdict
+            return [_asdict(r) for r in result.tool_call_records]
+
         # ── Mode B: text-based tool-call loop ─────────────
         if mode == "b":
             result = await self._executor.execute(
@@ -736,6 +773,7 @@ class AgentCore:
                 action="responded",
                 summary=result.text,
                 duration_ms=duration_ms,
+                tool_call_records=_tool_records_to_dicts(result),
             )
 
         # ── Mode A2: LiteLLM tool_use loop ────────────────
@@ -746,6 +784,7 @@ class AgentCore:
                 tracker=tracker,
                 shortterm=shortterm,
                 images=images,
+                prior_messages=prior_messages,
             )
             shortterm.clear()
             duration_ms = int((time.monotonic() - start) * 1000)
@@ -759,6 +798,7 @@ class AgentCore:
                 summary=result.text,
                 duration_ms=duration_ms,
                 context_usage_ratio=tracker.usage_ratio,
+                tool_call_records=_tool_records_to_dicts(result),
             )
 
         # ── Mode A1: Claude Agent SDK ─────────────────────
@@ -770,6 +810,7 @@ class AgentCore:
             priming_section=priming_section,
             mode=mode,
             message=prompt,
+            trigger=trigger,
         )
         if use_fallback:
             executor = self._create_fallback_executor()
@@ -778,6 +819,7 @@ class AgentCore:
                 system_prompt=system_prompt,
                 tracker=tracker,
                 images=images,
+                prior_messages=prior_messages,
             )
         else:
             result = await self._executor.execute(
@@ -791,6 +833,7 @@ class AgentCore:
             self._tool_handler.merge_replied_to(result.replied_to_from_transcript)
             logger.info("Merged transcript replied_to: %s", result.replied_to_from_transcript)
         result_msg = result.result_message
+        accumulated_tool_records = _tool_records_to_dicts(result)
 
         # Session chaining: if threshold was crossed, continue in a new session
         session_chained = False
@@ -834,6 +877,7 @@ class AgentCore:
                     execution_mode=mode,
                     message=prompt,
                     retriever=self._get_retriever(),
+                    trigger=trigger,
                 ).system_prompt,
                 shortterm,
             )
@@ -854,6 +898,7 @@ class AgentCore:
                 )
                 break
             accumulated_text = accumulated_text + "\n" + result_2.text
+            accumulated_tool_records.extend(_tool_records_to_dicts(result_2))
             result_msg = result_2.result_message
             if result_msg:
                 total_turns += result_msg.num_turns
@@ -873,6 +918,7 @@ class AgentCore:
             context_usage_ratio=tracker.usage_ratio,
             session_chained=session_chained,
             total_turns=total_turns,
+            tool_call_records=accumulated_tool_records,
         )
 
     # ── Streaming ──────────────────────────────────────────
@@ -882,6 +928,8 @@ class AgentCore:
         prompt: str,
         trigger: str = "manual",
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
+        message_intent: str = "",
     ) -> AsyncGenerator[dict, None]:
         """Streaming version of run_cycle.
 
@@ -899,7 +947,11 @@ class AgentCore:
         if not self._executor.supports_streaming:
             async with self._agent_lock:
                 cycle = await self._run_cycle_inner(
-                    prompt, trigger, images=images,
+                    prompt,
+                    trigger,
+                    images=images,
+                    prior_messages=prior_messages,
+                    message_intent=message_intent,
                 )
             yield {"type": "text_delta", "text": cycle.summary}
             yield {
@@ -910,7 +962,11 @@ class AgentCore:
 
         # ── Streaming executor (A1 / A2 / all modes) ─────────────
         # Priming: Automatic memory retrieval
-        priming_section = await self._run_priming(prompt, trigger)
+        priming_section = await self._run_priming(
+            prompt,
+            trigger,
+            message_intent=message_intent,
+        )
 
         shortterm = ShortTermMemory(self.anima_dir)
         tracker = ContextTracker(
@@ -927,6 +983,7 @@ class AgentCore:
             execution_mode=mode,
             message=prompt,
             retriever=self._get_retriever(),
+            trigger=trigger,
         )
         system_prompt = build_result.system_prompt
         # Persist injected procedures for heartbeat-triggered finalization
@@ -948,12 +1005,18 @@ class AgentCore:
             priming_section=priming_section,
             mode=mode,
             message=prompt,
+            trigger=trigger,
         )
         if use_fallback:
             # Fall back to non-streaming execution
             logger.warning("Streaming fallback: using blocking A1 Fallback for oversized prompt")
             async with self._agent_lock:
-                cycle = await self._run_cycle_inner(prompt, trigger, images=images)
+                cycle = await self._run_cycle_inner(
+                    prompt,
+                    trigger,
+                    message_intent=message_intent,
+                    images=images,
+                )
             yield {"type": "text_delta", "text": cycle.summary}
             yield {
                 "type": "cycle_done",
@@ -982,6 +1045,7 @@ class AgentCore:
 
         # Primary session with checkpoint + retry support
         full_text_parts: list[str] = []
+        all_tool_call_records: list[dict] = []
         result_message: Any = None
         current_prompt = prompt
         current_system_prompt = system_prompt
@@ -996,11 +1060,16 @@ class AgentCore:
                 async for chunk in self._executor.execute_streaming(
                     current_system_prompt, current_prompt, tracker,
                     images=images,
+                    prior_messages=prior_messages,
                 ):
                     if chunk["type"] == "done":
                         full_text_parts.append(chunk["full_text"])
                         text_parts_this_attempt.append(chunk["full_text"])
                         result_message = chunk["result_message"]
+                        # Accumulate tool call records from executor
+                        all_tool_call_records.extend(
+                            chunk.get("tool_call_records", [])
+                        )
                         # Merge transcript replied_to
                         transcript_replied = chunk.get("replied_to_from_transcript", set())
                         if transcript_replied:
@@ -1093,6 +1162,7 @@ class AgentCore:
                     execution_mode=mode,
                     message=prompt,
                     retriever=self._get_retriever(),
+                    trigger=trigger,
                 ).system_prompt
 
                 await asyncio.sleep(retry_delay)
@@ -1146,6 +1216,7 @@ class AgentCore:
                     execution_mode=mode,
                     message=prompt,
                     retriever=self._get_retriever(),
+                    trigger=trigger,
                 ).system_prompt,
                 shortterm,
             )
@@ -1158,6 +1229,9 @@ class AgentCore:
                     if chunk["type"] == "done":
                         full_text_parts.append(chunk["full_text"])
                         result_message = chunk["result_message"]
+                        all_tool_call_records.extend(
+                            chunk.get("tool_call_records", [])
+                        )
                         if result_message:
                             total_turns += result_message.num_turns
                         # Merge transcript replied_to
@@ -1192,5 +1266,6 @@ class AgentCore:
                 context_usage_ratio=tracker.usage_ratio,
                 session_chained=session_chained,
                 total_turns=total_turns,
+                tool_call_records=all_tool_call_records,
             ).model_dump(mode="json"),
         }

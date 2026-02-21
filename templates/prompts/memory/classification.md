@@ -20,9 +20,9 @@
 
 ## procedure抽出
 - ファイル名: procedures/zzz.md
-  description: この手順の概要（1行）
+  description: 手順の目的が一目でわかる具体的な1行（例: "Chatwork重要案件のエスカレーション判断と通知"）。内容の第1見出しと一致させること
   tags: tag1, tag2
-  内容: (手順の本文をMarkdown形式で記述。具体的なステップを含むこと)
+  内容: (手順の本文をMarkdown形式で記述。第1見出しはdescriptionと同じ。具体的なステップを含むこと)
 
 【ルール】
 - 既存手順と重複する場合はスキップ

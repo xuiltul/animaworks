@@ -63,19 +63,50 @@ _MAX_STORED_CONTENT_CHARS = 3000
 _CHARS_PER_TOKEN = 4
 
 # Maximum number of turns to include in the chat prompt.
-# Industry standard is 10 (JetBrains NeurIPS 2025); 20 provides headroom
-# for manager-role Animas with frequent heartbeat + chat turns.
-_MAX_DISPLAY_TURNS = 20
+# Industry standard is 10 (JetBrains NeurIPS 2025).
+_MAX_DISPLAY_TURNS = 10
 
 # Trigger compression when stored turns exceed this count,
 # regardless of token estimate.  Prevents conversation.json bloat
 # even when the token-budget heuristic underestimates.
 _MAX_TURNS_BEFORE_COMPRESS = 50
 
+# ── Tool record limits ─────────────────────────────────────
+_MAX_TOOL_INPUT_SUMMARY = 200
+_MAX_TOOL_RESULT_SUMMARY = 300
+_MAX_TOOL_RECORDS_PER_TURN = 10
+_MAX_RENDERED_TOOL_RECORDS = 30
+
 
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class ToolRecord:
+    """A single tool call + result pair stored in conversation memory."""
+
+    tool_name: str
+    tool_id: str = ""
+    input_summary: str = ""   # max _MAX_TOOL_INPUT_SUMMARY chars
+    result_summary: str = ""  # max _MAX_TOOL_RESULT_SUMMARY chars
+
+    def __post_init__(self) -> None:
+        if len(self.input_summary) > _MAX_TOOL_INPUT_SUMMARY:
+            self.input_summary = self.input_summary[:_MAX_TOOL_INPUT_SUMMARY] + "..."
+        if len(self.result_summary) > _MAX_TOOL_RESULT_SUMMARY:
+            self.result_summary = self.result_summary[:_MAX_TOOL_RESULT_SUMMARY] + "..."
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ToolRecord":
+        """Create a ToolRecord from a dict (e.g., from CycleResult)."""
+        return cls(
+            tool_name=d.get("tool_name", ""),
+            tool_id=d.get("tool_id", ""),
+            input_summary=d.get("input_summary", ""),
+            result_summary=d.get("result_summary", ""),
+        )
 
 
 @dataclass
@@ -87,6 +118,7 @@ class ConversationTurn:
     timestamp: str = ""
     token_estimate: int = 0
     attachments: list[str] = field(default_factory=list)
+    tool_records: list[ToolRecord] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.timestamp:
@@ -175,9 +207,15 @@ class ConversationMemory:
                 data = json.loads(
                     self._state_path.read_text(encoding="utf-8")
                 )
-                turns = [
-                    ConversationTurn(**t) for t in data.get("turns", [])
-                ]
+                turns = []
+                for t in data.get("turns", []):
+                    raw_records = t.get("tool_records", [])
+                    filtered = {k: v for k, v in t.items() if k != "tool_records"}
+                    turn = ConversationTurn(**filtered)
+                    turn.tool_records = [
+                        ToolRecord(**r) for r in raw_records
+                    ]
+                    turns.append(turn)
                 self._state = ConversationState(
                     anima_name=data.get("anima_name", self.anima_name),
                     turns=turns,
@@ -298,6 +336,7 @@ class ConversationMemory:
         role: str,
         content: str,
         attachments: list[str] | None = None,
+        tool_records: list[ToolRecord] | None = None,
     ) -> None:
         """Record a conversation turn.
 
@@ -314,8 +353,14 @@ class ConversationMemory:
                 role, len(content), _MAX_STORED_CONTENT_CHARS,
             )
             content = content[:_MAX_STORED_CONTENT_CHARS] + f"\n[...truncated, original {len(content)} chars]"
+        # Cap tool records per turn
+        records = tool_records or []
+        if len(records) > _MAX_TOOL_RECORDS_PER_TURN:
+            records = records[:_MAX_TOOL_RECORDS_PER_TURN]
         turn = ConversationTurn(
-            role=role, content=content, attachments=attachments or [],
+            role=role, content=content,
+            attachments=attachments or [],
+            tool_records=records,
         )
         state.turns.append(turn)
 
@@ -349,6 +394,158 @@ class ConversationMemory:
                 content=content,
             )
 
+    def build_structured_messages(
+        self,
+        content: str,
+        fmt: str = "openai",
+    ) -> list[dict[str, Any]]:
+        """Build structured message history for A2/Fallback modes.
+
+        Preserves tool_use/tool_result structure to prevent the LLM
+        from learning to describe tool calls in text instead of actually
+        calling them.
+
+        Args:
+            content: The current user message content.
+            fmt: Message format — ``"openai"`` for LiteLLM/OpenAI-style
+                or ``"anthropic"`` for native Anthropic API format.
+
+        Returns:
+            List of message dicts ready to pass to the LLM API.
+        """
+        state = self.load()
+        messages: list[dict[str, Any]] = []
+
+        # Compressed summary as context
+        if state.compressed_summary:
+            messages.append({
+                "role": "user",
+                "content": (
+                    f"[会話の要約（{state.compressed_turn_count}ターン分）]"
+                    f"\n\n{state.compressed_summary}"
+                ),
+            })
+            messages.append({
+                "role": "assistant",
+                "content": "承知しました。これまでの会話内容を把握しました。",
+            })
+
+        # Track total tool records rendered
+        rendered_tool_count = 0
+        display_turns = state.turns[-_MAX_DISPLAY_TURNS:]
+
+        # Track pending tool_result blocks for Anthropic format merging
+        pending_tool_results: list[dict[str, Any]] = []
+
+        for turn in display_turns:
+            if turn.role == "human":
+                display = turn.content
+                if len(display) > _MAX_HUMAN_CHARS_IN_HISTORY:
+                    display = display[:_MAX_HUMAN_CHARS_IN_HISTORY] + "..."
+                if fmt == "anthropic" and pending_tool_results:
+                    # Merge tool_result blocks with this user message
+                    merged_content = pending_tool_results + [
+                        {"type": "text", "text": display}
+                    ]
+                    messages.append({"role": "user", "content": merged_content})
+                    pending_tool_results = []
+                else:
+                    messages.append({"role": "user", "content": display})
+
+            elif turn.role == "assistant":
+                display = turn.content
+                if len(display) > _MAX_RESPONSE_CHARS_IN_HISTORY:
+                    display = display[:_MAX_RESPONSE_CHARS_IN_HISTORY] + "..."
+
+                has_tools = (
+                    turn.tool_records
+                    and rendered_tool_count < _MAX_RENDERED_TOOL_RECORDS
+                )
+
+                if has_tools and fmt == "openai":
+                    # OpenAI/LiteLLM format
+                    tool_calls: list[dict[str, Any]] = []
+                    for tr in turn.tool_records:
+                        if rendered_tool_count >= _MAX_RENDERED_TOOL_RECORDS:
+                            break
+                        tool_calls.append({
+                            "id": tr.tool_id or f"hist_{rendered_tool_count}",
+                            "type": "function",
+                            "function": {
+                                "name": tr.tool_name,
+                                "arguments": json.dumps(
+                                    {"_summary": tr.input_summary},
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        })
+                        rendered_tool_count += 1
+                    messages.append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": tool_calls,
+                    })
+                    # Tool results — match by index (tool_calls and tool_records are built in same order)
+                    for i, tc in enumerate(tool_calls):
+                        result_text = (
+                            turn.tool_records[i].result_summary
+                            if i < len(turn.tool_records)
+                            else ""
+                        )
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": result_text or "(completed)",
+                        })
+
+                elif has_tools and fmt == "anthropic":
+                    # Anthropic format
+                    content_blocks: list[dict[str, Any]] = []
+                    if display:
+                        content_blocks.append({"type": "text", "text": display})
+                    for tr in turn.tool_records:
+                        if rendered_tool_count >= _MAX_RENDERED_TOOL_RECORDS:
+                            break
+                        tid = tr.tool_id or f"hist_{rendered_tool_count}"
+                        content_blocks.append({
+                            "type": "tool_use",
+                            "id": tid,
+                            "name": tr.tool_name,
+                            "input": {"_summary": tr.input_summary},
+                        })
+                        pending_tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tid,
+                            "content": tr.result_summary or "(completed)",
+                        })
+                        rendered_tool_count += 1
+                    messages.append({"role": "assistant", "content": content_blocks})
+
+                else:
+                    # No tool records or budget exceeded — plain text
+                    messages.append({"role": "assistant", "content": display})
+
+        # Current user message (merge with any pending tool_results)
+        if pending_tool_results:
+            merged_content = pending_tool_results + [
+                {"type": "text", "text": content}
+            ]
+            messages.append({"role": "user", "content": merged_content})
+        elif fmt == "anthropic" and messages and messages[-1]["role"] == "user":
+            # Merge to avoid consecutive user roles (Anthropic API requirement)
+            existing = messages[-1]["content"]
+            if isinstance(existing, list):
+                existing.append({"type": "text", "text": content})
+            else:
+                messages[-1]["content"] = [
+                    {"type": "text", "text": existing},
+                    {"type": "text", "text": content},
+                ]
+        else:
+            messages.append({"role": "user", "content": content})
+
+        return messages
+
     def _format_history(self, state: ConversationState) -> str:
         """Format conversation history for prompt injection."""
         parts: list[str] = []
@@ -371,6 +568,9 @@ class ConversationMemory:
                     display = display[:_MAX_RESPONSE_CHARS_IN_HISTORY] + "..."
                 elif t.role != "assistant" and len(display) > _MAX_HUMAN_CHARS_IN_HISTORY:
                     display = display[:_MAX_HUMAN_CHARS_IN_HISTORY] + "..."
+                if t.role == "assistant" and t.tool_records:
+                    tool_names = ", ".join(tr.tool_name for tr in t.tool_records)
+                    display += f"\n[実行ツール: {tool_names}]"
                 turn_lines.append(f"**[{ts}] {role_label}:**\n{display}")
 
             if parts:
@@ -462,7 +662,11 @@ class ConversationMemory:
         lines: list[str] = []
         for t in turns:
             role = "あなた" if t.role == "assistant" else t.role
-            lines.append(f"[{t.timestamp}] {role}: {t.content}")
+            text = f"[{t.timestamp}] {role}: {t.content}"
+            if t.tool_records:
+                tools = ", ".join(tr.tool_name for tr in t.tool_records)
+                text += f"\n  [使用ツール: {tools}]"
+            lines.append(text)
         return "\n\n".join(lines)
 
     async def _call_llm(self, system: str, user_content: str, max_tokens: int = 1000) -> str:

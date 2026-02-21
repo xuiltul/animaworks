@@ -40,6 +40,7 @@ def _make_test_app(animas: dict | None = None, supervisor: MagicMock | None = No
                 result = await p.process_message(
                     params.get("message", ""),
                     from_person=params.get("from_person", "human"),
+                    intent=params.get("intent", ""),
                 )
                 return {"response": result, "replied_to": []}
             if method == "greet":
@@ -55,6 +56,7 @@ def _make_test_app(animas: dict | None = None, supervisor: MagicMock | None = No
             async for chunk in p.process_message_stream(
                 params.get("message", ""),
                 from_person=params.get("from_person", "human"),
+                intent=params.get("intent", ""),
             ):
                 event_type = chunk.get("type", "unknown")
                 if event_type == "cycle_done":
@@ -119,7 +121,7 @@ class TestChat:
                 json={"message": "Hi", "from_person": "bob"},
             )
         assert resp.status_code == 200
-        alice.process_message.assert_awaited_once_with("Hi", from_person="bob")
+        alice.process_message.assert_awaited_once_with("Hi", from_person="bob", intent="")
 
     async def test_chat_default_from_anima(self):
         alice = _make_mock_anima("alice")
@@ -130,7 +132,23 @@ class TestChat:
                 "/api/animas/alice/chat",
                 json={"message": "Hi"},
             )
-        alice.process_message.assert_awaited_once_with("Hi", from_person="human")
+        alice.process_message.assert_awaited_once_with("Hi", from_person="human", intent="")
+
+    async def test_chat_forwards_intent_to_supervisor(self):
+        supervisor = MagicMock()
+        supervisor.send_request = AsyncMock(return_value={"response": "ok", "replied_to": []})
+        app = _make_test_app(supervisor=supervisor)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/alice/chat",
+                json={"message": "Hi", "intent": "delegation"},
+            )
+
+        assert resp.status_code == 200
+        supervisor.send_request.assert_awaited_once()
+        _, kwargs = supervisor.send_request.await_args
+        assert kwargs["params"]["intent"] == "delegation"
 
     async def test_chat_anima_not_found(self):
         app = _make_test_app({})
@@ -192,7 +210,7 @@ class TestChatStream:
     async def test_stream_success(self):
         alice = _make_mock_anima("alice")
 
-        async def mock_stream(msg, from_person="human"):
+        async def mock_stream(msg, from_person="human", intent=""):
             yield {"type": "text_delta", "text": "Hello"}
             yield {"type": "cycle_done", "cycle_result": {"summary": "Hello"}}
 
@@ -211,10 +229,37 @@ class TestChatStream:
         assert "event: text_delta" in body
         assert "event: done" in body
 
+    async def test_stream_forwards_intent_to_supervisor(self):
+        supervisor = MagicMock()
+        supervisor.processes = {"alice"}
+        captured_kwargs = {}
+
+        async def _stream(*args, **kwargs):
+            from core.supervisor.ipc import IPCResponse
+            captured_kwargs.update(kwargs)
+            yield IPCResponse(
+                id="test",
+                stream=True,
+                done=True,
+                result={"response": "ok", "replied_to": [], "cycle_result": {"summary": "ok"}},
+            )
+
+        supervisor.send_request_stream = _stream
+        app = _make_test_app(supervisor=supervisor)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/alice/chat/stream",
+                json={"message": "Hi", "intent": "report"},
+            )
+
+        assert resp.status_code == 200
+        assert captured_kwargs["params"]["intent"] == "report"
+
     async def test_stream_tool_events(self):
         alice = _make_mock_anima("alice")
 
-        async def mock_stream(msg, from_person="human"):
+        async def mock_stream(msg, from_person="human", intent=""):
             yield {"type": "tool_start", "tool_name": "web_search", "tool_id": "t1"}
             yield {"type": "tool_end", "tool_id": "t1", "tool_name": "web_search"}
             yield {"type": "chain_start", "chain": 2}
@@ -237,7 +282,7 @@ class TestChatStream:
     async def test_stream_error_event(self):
         alice = _make_mock_anima("alice")
 
-        async def mock_stream(msg, from_person="human"):
+        async def mock_stream(msg, from_person="human", intent=""):
             yield {"type": "error", "message": "Something went wrong"}
 
         alice.process_message_stream = mock_stream
@@ -255,7 +300,7 @@ class TestChatStream:
     async def test_stream_exception_handling(self):
         alice = _make_mock_anima("alice")
 
-        async def mock_stream(msg, from_person="human"):
+        async def mock_stream(msg, from_person="human", intent=""):
             raise RuntimeError("unexpected error")
 
         alice.process_message_stream = mock_stream

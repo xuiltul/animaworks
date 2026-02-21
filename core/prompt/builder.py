@@ -13,10 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from core.memory import MemoryManager
-from core.memory.manager import match_skills_by_description
 from core.paths import PROJECT_DIR, get_data_dir, load_prompt
 from core.memory.shortterm import ShortTermMemory
-from core.schemas import SkillMeta
 from core.time_utils import now_jst
 
 logger = logging.getLogger("animaworks.prompt_builder")
@@ -62,50 +60,7 @@ class BuildResult:
         return self.system_prompt.count(sub, *args)
 
 
-# ── Skill Injection Budget ────────────────────────────────
-
-SKILL_INJECTION_BUDGET: dict[str, int] = {
-    "greeting": 1000,
-    "question": 3000,
-    "request": 5000,
-    "heartbeat": 2000,
-}
-
-
-def _classify_message_for_skill_budget(message: str) -> str:
-    """Classify message type for skill injection budget."""
-    if not message:
-        return "question"  # default
-    msg_lower = message.lower()
-
-    greeting_patterns = [
-        "こんにちは", "おはよう", "こんばんは", "よろしく",
-        "hello", "hi ", "hey", "good morning", "good evening",
-    ]
-    if any(p in msg_lower for p in greeting_patterns) and len(message) < 50:
-        return "greeting"
-
-    if len(message) > 100:
-        return "request"
-
-    question_patterns = [
-        "?", "？", "教えて", "どう", "なぜ", "いつ", "どこ", "誰",
-        "what", "why", "when", "where", "who", "how", "can you",
-    ]
-    if any(p in msg_lower for p in question_patterns):
-        return "question"
-
-    return "request"
-
-
-def _build_skill_body(path: Path) -> str:
-    """Read a skill file and return its body (after frontmatter)."""
-    text = path.read_text(encoding="utf-8")
-    if text.startswith("---"):
-        parts = text.split("---", 2)
-        if len(parts) >= 3:
-            return parts[2].strip()
-    return text.strip()
+_CURRENT_TASK_MAX_CHARS = 3000
 
 # ── Emotion Instruction ───────────────────────────────────
 
@@ -181,7 +136,7 @@ def _build_full_org_tree(
     return "\n".join(lines)
 
 
-def _build_org_context(anima_name: str, other_animas: list[str]) -> str:
+def _build_org_context(anima_name: str, other_animas: list[str], execution_mode: str = "a1") -> str:
     """Build organisation context section from supervisor chain.
 
     Reads config.json to derive each Anima's relationship
@@ -214,7 +169,8 @@ def _build_org_context(anima_name: str, other_animas: list[str]) -> str:
             ),
         ]
         if other_animas:
-            parts.append(load_prompt("communication_rules"))
+            cr_template = "communication_rules_a1" if execution_mode == "a1" else "communication_rules"
+            parts.append(load_prompt(cr_template))
         return "\n\n".join(parts)
 
     # Non-top-level: existing logic
@@ -262,7 +218,8 @@ def _build_org_context(anima_name: str, other_animas: list[str]) -> str:
 
     # Communication rules: only when there are other animas
     if other_animas:
-        parts.append(load_prompt("communication_rules"))
+        cr_template = "communication_rules_a1" if execution_mode == "a1" else "communication_rules"
+        parts.append(load_prompt(cr_template))
 
     return "\n\n".join(parts)
 
@@ -315,38 +272,53 @@ def build_system_prompt(
     execution_mode: str = "a1",
     message: str = "",
     retriever: object | None = None,
+    *,
+    trigger: str = "",
 ) -> BuildResult:
     """Construct the full system prompt from Markdown files.
 
-    System prompt =
-        environment (guardrails, folder structure, boundaries)
-        + company vision
-        + identity.md (who you are)
-        + injection.md (role/philosophy)
-        + permissions.md (what you can do)
-        + state/current_task.md (what you're doing now)
-        + priming memories (automatic recall) ← NEW
-        + memory directory guide
-        + personal skills + common skills
-        + behavior rules (search-before-decide)
-        + messaging instructions
+    Sections are organised into 6 hierarchical groups:
+      1. 動作環境と行動ルール
+      2. あなた自身
+      3. 現在の状況
+      4. 記憶と能力
+      5. 組織とコミュニケーション
+      6. メタ設定
     """
     parts: list[str] = []
-
-    # Environment guardrails (always first)
     pd = memory.anima_dir
     data_dir = get_data_dir()
+
+    # ── Pre-compute values needed across multiple groups ──────────
+
+    # other_animas is needed by Group 5 (org_context, messaging)
+    other_animas = _discover_other_animas(pd)
+
+    # Skill/procedure metadata needed by Group 4
+    skill_metas = memory.list_skill_metas()
+    common_skill_metas = memory.list_common_skill_metas()
+    procedure_metas = memory.list_procedure_metas()
+
+    # Read permissions early (needed by Group 2 and Group 4 external tools check)
+    permissions = memory.read_permissions()
+
+    # ── Group 1: 動作環境と行動ルール ─────────────────────────
+    parts.append("# 1. 動作環境と行動ルール")
+
     parts.append(load_prompt(
         "environment",
         data_dir=data_dir,
         anima_name=pd.name,
     ))
 
-    # Current time injection (immediately after environment)
     current_time = now_jst().strftime("%Y-%m-%d %H:%M (%Z)")
     parts.append(f"**現在時刻**: {current_time}")
 
-    # Bootstrap instructions (highest priority after environment)
+    parts.append(load_prompt("behavior_rules"))
+
+    # ── Group 2: あなた自身 ───────────────────────────────────
+    parts.append("# 2. あなた自身")
+
     bootstrap = memory.read_bootstrap()
     if bootstrap:
         parts.append(bootstrap)
@@ -363,17 +335,25 @@ def build_system_prompt(
     if injection:
         parts.append(injection)
 
-    # Role-specific specialty prompt (injected between injection and permissions)
     specialty = memory.read_specialty_prompt()
     if specialty:
         parts.append(specialty)
 
-    permissions = memory.read_permissions()
     if permissions:
         parts.append(permissions)
 
+    # ── Group 3: 現在の状況 ───────────────────────────────────
+    parts.append("# 3. 現在の状況")
+
+    # current_state with size limit
     state = memory.read_current_state()
     if state and state.strip() != "status: idle":
+        if len(state) > _CURRENT_TASK_MAX_CHARS:
+            truncated = state[-_CURRENT_TASK_MAX_CHARS:]
+            first_nl = truncated.find("\n")
+            if first_nl != -1 and first_nl < _CURRENT_TASK_MAX_CHARS * 0.2:
+                truncated = truncated[first_nl + 1:]
+            state = "（前半省略）\n\n" + truncated
         parts.append(load_prompt("builder/task_in_progress", state=state))
     elif state:
         parts.append(f"## 現在の状態\n\n{state}")
@@ -382,7 +362,7 @@ def build_system_prompt(
     if pending:
         parts.append(f"## 未完了タスク\n\n{pending}")
 
-    # ── Task Queue (structured persistent queue) ──
+    # Task Queue (structured persistent queue)
     try:
         from core.memory.task_queue import TaskQueueManager
         task_queue = TaskQueueManager(memory.anima_dir)
@@ -392,13 +372,18 @@ def build_system_prompt(
     except Exception:
         logger.debug("Failed to inject task queue", exc_info=True)
 
-    # Resolution registry injection (cross-org resolved issues)
+    # Resolution registry with dedup (cross-org resolved issues)
     try:
         resolutions = memory.read_resolutions(days=7)
         if resolutions:
+            seen_issues: dict[str, dict] = {}
+            for r in resolutions:
+                key = r.get("issue", "")
+                seen_issues[key] = r  # 後勝ち = 最新
+            deduped = sorted(seen_issues.values(), key=lambda x: x.get("ts", ""))
             res_lines = []
-            for r in resolutions[-10:]:  # Latest 10 entries
-                ts_short = r.get("ts", "")[:16]  # YYYY-MM-DDTHH:MM
+            for r in deduped[-10:]:
+                ts_short = r.get("ts", "")[:16]
                 resolver = r.get("resolver", "unknown")
                 issue = r.get("issue", "")
                 res_lines.append(f"- [{ts_short}] {resolver}: {issue}")
@@ -413,18 +398,17 @@ def build_system_prompt(
     if priming_section:
         parts.append(priming_section)
 
+    # ── Group 4: 記憶と能力 ───────────────────────────────────
+    parts.append("# 4. 記憶と能力")
+
     # Memory directory guide
     knowledge_list = ", ".join(memory.list_knowledge_files()) or "(なし)"
     episode_list = ", ".join(memory.list_episode_files()[:7]) or "(なし)"
     procedure_list = ", ".join(memory.list_procedure_files()) or "(なし)"
-    skill_metas = memory.list_skill_metas()
-    common_skill_metas = memory.list_common_skill_metas()
-    all_metas = skill_metas + common_skill_metas
     all_skill_names = [m.name for m in skill_metas] + [
         f"{m.name}(共通)" for m in common_skill_metas
     ]
     skill_names = ", ".join(all_skill_names) or "(なし)"
-
     shared_users_list = ", ".join(memory.list_shared_users()) or "(なし)"
 
     parts.append(load_prompt(
@@ -442,105 +426,22 @@ def build_system_prompt(
     if common_knowledge_dir.exists() and any(common_knowledge_dir.rglob("*.md")):
         parts.append(load_prompt("builder/common_knowledge_hint"))
 
-    # ── Skill + procedure injection (description-based matching) ──────
-    procedure_metas = memory.list_procedure_metas()
-    anima_name = memory.anima_dir.name if hasattr(memory, "anima_dir") else ""
-    all_metas_with_procedures = all_metas + procedure_metas
-    matched_skills = match_skills_by_description(
-        message, all_metas_with_procedures, retriever=retriever, anima_name=anima_name,
-    )
-    matched_names: set[str] = set()
-    msg_type = _classify_message_for_skill_budget(message)
-    budget = SKILL_INJECTION_BUDGET.get(msg_type, 3000)
-    used_tokens = 0
+    # Unified skills/procedures table
+    rows: list[str] = []
+    for m in skill_metas:
+        rows.append(f"| {m.name} | 個人 | {m.description} |")
+    for m in common_skill_metas:
+        rows.append(f"| {m.name} | 共通 | {m.description} |")
+    for m in procedure_metas:
+        rows.append(f"| {m.name} | 手順 | {m.description} |")
+    if rows:
+        table_header = "| 名前 | 種別 | 概要 |\n|------|------|------|\n"
+        table = table_header + "\n".join(rows)
+        parts.append(load_prompt("skills_guide") + "\n\n" + table)
 
-    # Track injected procedures for outcome tracking (Phase 3)
-    injected_procedure_paths: list[Path] = []
-
-    # Inject matched skill/procedure full text (within budget)
-    procedure_name_set = {m.name for m in procedure_metas}
-    for skill in matched_skills:
-        body = _build_skill_body(skill.path)
-        # Rough token estimate: 1 char ≈ 1 token for CJK text
-        body_len = len(body)
-        if used_tokens + body_len > budget:
-            break
-        is_procedure = skill.name in procedure_name_set
-        if is_procedure:
-            label = "(手順)"
-            injected_procedure_paths.append(skill.path)
-        elif skill.is_common:
-            label = "(共通スキル)"
-        else:
-            label = "(個人スキル)"
-        section_title = "手順" if is_procedure else "スキル"
-        parts.append(load_prompt(
-            "builder/skill_injection",
-            section_title=section_title,
-            skill_name=skill.name,
-            label=label,
-            body=body,
-        ))
-        matched_names.add(skill.name)
-        used_tokens += body_len
-
-    # injected_procedure_paths is returned in BuildResult for the caller
-    # to pass to finalize_session() (replaces former module-level dict).
-
-    # Non-matched personal skills → table
-    unmatched_personal = [
-        m for m in skill_metas if m.name not in matched_names
-    ]
-    if unmatched_personal:
-        skill_lines = "\n".join(
-            f"| {m.name} | {m.description} |" for m in unmatched_personal
-        )
-        parts.append(load_prompt(
-            "skills_guide",
-            anima_dir=pd,
-            skill_lines=skill_lines,
-        ))
-
-    # Non-matched common skills → table
-    unmatched_common = [
-        m for m in common_skill_metas if m.name not in matched_names
-    ]
-    if unmatched_common:
-        common_skill_lines = "\n".join(
-            f"| {m.name} | {m.description} |" for m in unmatched_common
-        )
-        common_skills_dir = memory.common_skills_dir
-        parts.append(load_prompt(
-            "builder/common_skills_header",
-            common_skills_dir=common_skills_dir,
-            common_skill_lines=common_skill_lines,
-        ))
-
-    # Non-matched procedures → table
-    unmatched_procedures = [
-        m for m in procedure_metas if m.name not in matched_names
-    ]
-    if unmatched_procedures:
-        proc_lines = "\n".join(
-            f"| {m.name} | {m.description} |" for m in unmatched_procedures
-        )
-        parts.append(load_prompt(
-            "builder/procedures_header",
-            proc_lines=proc_lines,
-        ))
-
-    # Commander hiring guardrail: force create_anima tool/CLI usage
-    has_newstaff = any(m.name == "newstaff" for m in skill_metas)
-    if has_newstaff:
-        if execution_mode == "a1":
-            parts.append(load_prompt("builder/hiring_rules_a1"))
-        else:
-            parts.append(load_prompt("builder/hiring_rules_other"))
-
-    # Inject dynamically generated external tools guide (filtered by registry)
+    # External tools guide (filtered by registry)
     if permissions and "外部ツール" in permissions and (tool_registry or personal_tools):
         if execution_mode == "a2":
-            # A2: guide users to discover_tools instead of CLI guide
             categories = ", ".join(sorted(tool_registry or []))
             if personal_tools:
                 personal_cats = ", ".join(sorted(personal_tools.keys()))
@@ -550,26 +451,15 @@ def build_system_prompt(
                 categories=categories,
             ))
         else:
-            # A1/B: CLI guide via animaworks-tool
             from core.tooling.guide import build_tools_guide
             tools_guide = build_tools_guide(tool_registry or [], personal_tools)
             if tools_guide:
                 parts.append(tools_guide)
 
-    # A2 reflection prompt for self-correction
-    if execution_mode == "a2":
-        reflection = _load_a2_reflection()
-        if reflection:
-            parts.append(reflection)
-
-    # Emotion metadata instruction for bustup expression
-    parts.append(EMOTION_INSTRUCTION)
-
-    # Organisation context (supervisor / subordinates / peers)
-    other_animas = _discover_other_animas(pd)
+    # ── Group 5: 組織とコミュニケーション ─────────────────────
+    parts.append("# 5. 組織とコミュニケーション")
 
     # Hiring context: suggest team building when top-level anima has no peers
-    # Placed before behavior_rules so the directive is not buried at the end.
     if not other_animas:
         try:
             model_config = memory.read_model_config()
@@ -578,13 +468,10 @@ def build_system_prompt(
         except Exception:
             logger.debug("Skipped hiring context injection", exc_info=True)
 
-    parts.append(load_prompt("behavior_rules"))
-
-    org_context = _build_org_context(pd.name, other_animas)
+    org_context = _build_org_context(pd.name, other_animas, execution_mode)
     if org_context:
         parts.append(org_context)
 
-    # Messaging instructions
     parts.append(_build_messaging_section(pd, other_animas, execution_mode))
 
     # Human notification guidance for top-level Animas
@@ -598,6 +485,17 @@ def build_system_prompt(
     except Exception:
         logger.debug("Skipped human notification guidance injection", exc_info=True)
 
+    # ── Group 6: メタ設定 ─────────────────────────────────────
+    parts.append("# 6. メタ設定")
+
+    parts.append(EMOTION_INSTRUCTION)
+
+    if execution_mode == "a2":
+        reflection = _load_a2_reflection()
+        if reflection:
+            parts.append(reflection)
+
+    # ── Final assembly ────────────────────────────────────────
     prompt = "\n\n---\n\n".join(parts)
     logger.debug(
         "System prompt built: %d sections, total_len=%d",
@@ -605,7 +503,6 @@ def build_system_prompt(
     )
     return BuildResult(
         system_prompt=prompt,
-        injected_procedures=injected_procedure_paths,
     )
 
 

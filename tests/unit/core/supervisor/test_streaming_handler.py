@@ -126,3 +126,29 @@ class TestStreamHandleBasicFlow:
         error_responses = [r for r in responses if r.error is not None]
         assert len(error_responses) == 1
         assert error_responses[0].error["code"] == "STREAM_ERROR"
+
+    @pytest.mark.asyncio
+    async def test_forwards_intent_and_normalizes_none(self):
+        """intent should be passed through and None should normalize to empty string."""
+        handler = _make_handler()
+        captured_kwargs = {}
+
+        async def mock_stream(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+            yield {"type": "cycle_done", "cycle_result": {"summary": "ok"}}
+
+        handler._anima.process_message_stream = mock_stream
+        handler._anima.needs_bootstrap = False
+
+        request = IPCRequest(
+            id="req-1",
+            method="process_message",
+            params={"message": "test", "stream": True, "intent": None},
+        )
+
+        with patch("core.config.load_config") as mock_config:
+            mock_config.return_value.server.keepalive_interval = 30
+            async for _ in handler.handle_stream(request):
+                pass
+
+        assert captured_kwargs["intent"] == ""

@@ -36,15 +36,15 @@ class TestHiringContextE2E:
         assert "チーム構成について" in prompt
         assert "唯一の社員" in prompt
 
-    def test_hiring_context_before_behavior_rules(self, data_dir: Path, make_anima):
-        """hiring_context must appear before behavior_rules."""
+    def test_behavior_rules_before_hiring_context(self, data_dir: Path, make_anima):
+        """behavior_rules (Group 1) must appear before hiring_context (Group 5)."""
         make_anima("solo")
 
         prompt = self._build_prompt_for(data_dir, "solo")
 
-        hiring_pos = prompt.index("チーム構成について")
         rules_pos = prompt.index("行動ルール")
-        assert hiring_pos < rules_pos
+        hiring_pos = prompt.index("チーム構成について")
+        assert rules_pos < hiring_pos
 
     def test_anima_with_peers_no_hiring_context(self, data_dir: Path, make_anima):
         """Anima with peers should NOT see hiring context."""

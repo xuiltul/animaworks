@@ -558,37 +558,41 @@ class TestCompressKeepCount:
     """Verify that _compress() uses keep_count = min(_MAX_DISPLAY_TURNS, len-1)."""
 
     @pytest.mark.asyncio
-    async def test_51_turns_keeps_20_compresses_31(self, conv):
-        """51 turns → keep 20, compress 31."""
+    async def test_51_turns_keeps_max_display_compresses_rest(self, conv):
+        """51 turns → keep _MAX_DISPLAY_TURNS, compress the rest."""
         for i in range(51):
             conv.append_turn("human" if i % 2 == 0 else "assistant", f"turn-{i}")
 
+        keep = _MAX_DISPLAY_TURNS
+        compress = 51 - keep
         with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = "Compressed summary of 31 turns"
+            mock_llm.return_value = f"Compressed summary of {compress} turns"
             await conv._compress()
 
             state = conv.load()
-            assert len(state.turns) == 20
-            assert state.compressed_turn_count == 31
-            assert state.compressed_summary == "Compressed summary of 31 turns"
-            # The kept turns should be the last 20
-            assert state.turns[0].content == "turn-31"
+            assert len(state.turns) == keep
+            assert state.compressed_turn_count == compress
+            assert state.compressed_summary == f"Compressed summary of {compress} turns"
+            # The kept turns should be the last _MAX_DISPLAY_TURNS
+            assert state.turns[0].content == f"turn-{compress}"
             assert state.turns[-1].content == "turn-50"
 
     @pytest.mark.asyncio
-    async def test_25_turns_keeps_20_compresses_5(self, conv):
-        """25 turns → keep 20 (min(20, 24)=20), compress 5."""
+    async def test_25_turns_keeps_max_display_compresses_rest(self, conv):
+        """25 turns → keep min(_MAX_DISPLAY_TURNS, 24), compress the rest."""
         for i in range(25):
             conv.append_turn("human" if i % 2 == 0 else "assistant", f"turn-{i}")
 
+        keep = min(_MAX_DISPLAY_TURNS, 24)
+        compress = 25 - keep
         with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
-            mock_llm.return_value = "Compressed summary of 5 turns"
+            mock_llm.return_value = f"Compressed summary of {compress} turns"
             await conv._compress()
 
             state = conv.load()
-            assert len(state.turns) == 20
-            assert state.compressed_turn_count == 5
-            assert state.compressed_summary == "Compressed summary of 5 turns"
-            # The kept turns should be the last 20
-            assert state.turns[0].content == "turn-5"
+            assert len(state.turns) == keep
+            assert state.compressed_turn_count == compress
+            assert state.compressed_summary == f"Compressed summary of {compress} turns"
+            # The kept turns should be the last `keep`
+            assert state.turns[0].content == f"turn-{compress}"
             assert state.turns[-1].content == "turn-24"

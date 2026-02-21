@@ -350,11 +350,13 @@ class AnimaRunner:
 
         message = params.get("message", "")
         from_person = params.get("from_person", "human")
+        intent = params.get("intent") or ""
         images = params.get("images") or None
         attachment_paths = params.get("attachment_paths") or None
 
         result = await self.anima.process_message(
             message, from_person=from_person,
+            intent=intent,
             images=images, attachment_paths=attachment_paths,
         )
 

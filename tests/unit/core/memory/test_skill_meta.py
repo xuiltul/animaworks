@@ -6,8 +6,6 @@
 Covers:
 - MemoryManager._extract_skill_meta()  (core/memory/manager.py)
 - match_skills_by_description()        (core/memory/manager.py)
-- _classify_message_for_skill_budget() (core/prompt/builder.py)
-- _build_skill_body()                  (core/prompt/builder.py)
 """
 from __future__ import annotations
 
@@ -24,7 +22,6 @@ from core.memory.manager import (
     _match_tier1,
     _match_tier2,
 )
-from core.prompt.builder import _classify_message_for_skill_budget, _build_skill_body
 from core.tooling.handler import _validate_skill_format
 
 
@@ -217,69 +214,6 @@ class TestMatchSkillsByDescription:
         """Empty message always returns an empty list."""
         result = match_skills_by_description("", [skill_with_keywords])
         assert result == []
-
-
-# ── _classify_message_for_skill_budget ───────────────────
-
-
-class TestClassifyMessageForSkillBudget:
-    """Tests for _classify_message_for_skill_budget()."""
-
-    def test_greeting_message(self) -> None:
-        assert _classify_message_for_skill_budget("おはよう") == "greeting"
-
-    def test_question_message(self) -> None:
-        assert _classify_message_for_skill_budget("この関数はどう使うの？") == "question"
-
-    def test_long_request_message(self) -> None:
-        """Messages longer than 100 characters are classified as 'request'."""
-        long_msg = "このタスクを実行してください。" * 10  # well over 100 chars
-        assert len(long_msg) > 100
-        assert _classify_message_for_skill_budget(long_msg) == "request"
-
-    def test_empty_message_defaults_to_question(self) -> None:
-        assert _classify_message_for_skill_budget("") == "question"
-
-
-# ── _build_skill_body ────────────────────────────────────
-
-
-class TestBuildSkillBody:
-    """Tests for _build_skill_body()."""
-
-    def test_file_with_frontmatter(self, tmp_path: Path) -> None:
-        """Body after frontmatter delimiters is returned."""
-        skill_file = tmp_path / "skill.md"
-        skill_file.write_text(
-            "---\n"
-            "name: my-skill\n"
-            "description: テスト\n"
-            "---\n"
-            "\n"
-            "# Skill Body\n"
-            "\n"
-            "Do the thing.\n",
-            encoding="utf-8",
-        )
-
-        body = _build_skill_body(skill_file)
-
-        assert body.startswith("# Skill Body")
-        assert "Do the thing." in body
-        # Frontmatter fields must not appear in the body
-        assert "name: my-skill" not in body
-
-    def test_file_without_frontmatter(self, tmp_path: Path) -> None:
-        """Full content is returned when there is no frontmatter."""
-        skill_file = tmp_path / "plain.md"
-        skill_file.write_text(
-            "# Plain Skill\n\nJust instructions.\n",
-            encoding="utf-8",
-        )
-
-        body = _build_skill_body(skill_file)
-
-        assert body == "# Plain Skill\n\nJust instructions."
 
 
 # ── Tier 1: Comma/delimiter keyword matching ────────────

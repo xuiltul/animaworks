@@ -28,11 +28,12 @@ import json
 import logging
 import re
 from collections.abc import AsyncGenerator
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from core.exceptions import LLMAPIError, ToolExecutionError, ConfigError  # noqa: F401
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record
 from core.execution._streaming import stream_error_boundary
 from core.memory import MemoryManager
 from core.messenger import Messenger
@@ -306,6 +307,7 @@ class AssistedExecutor(BaseExecutor):
         shortterm: ShortTermMemory | None = None,
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> ExecutionResult:
         """Run the text-based tool-call loop.
 
@@ -330,6 +332,7 @@ class AssistedExecutor(BaseExecutor):
             {"role": "user", "content": prompt},
         ]
         all_response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         max_iterations = self._model_config.max_turns
 
         # ── 2. Tool-call loop ────────────────────────────────
@@ -397,6 +400,7 @@ class AssistedExecutor(BaseExecutor):
                 tool_name, list(tool_args.keys()),
             )
 
+            tool_id = f"assisted_{iteration}_{tool_name}"
             try:
                 loop = asyncio.get_running_loop()
                 result = await loop.run_in_executor(
@@ -410,6 +414,12 @@ class AssistedExecutor(BaseExecutor):
                 result = f"ツール実行エラー: {e}"
 
             result = _truncate_tool_output(str(result))
+            all_tool_records.append(ToolCallRecord(
+                tool_name=tool_name,
+                tool_id=tool_id,
+                input_summary=_truncate_for_record(str(tool_args), 200),
+                result_summary=_truncate_for_record(result, 300),
+            ))
 
             # ── 6. Inject result and continue ─────────────────
             narrative = _strip_tool_call_block(content)
@@ -429,7 +439,10 @@ class AssistedExecutor(BaseExecutor):
 
         final_text = "\n".join(filter(None, all_response_text))
         logger.info("Mode B text-loop END total_len=%d", len(final_text))
-        return ExecutionResult(text=final_text or "(max iterations reached)")
+        return ExecutionResult(
+            text=final_text or "(max iterations reached)",
+            tool_call_records=all_tool_records,
+        )
 
     async def execute_streaming(
         self,
@@ -469,6 +482,7 @@ class AssistedExecutor(BaseExecutor):
             {"role": "user", "content": prompt},
         ]
         all_response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         max_iterations = self._model_config.max_turns
 
         # ── 2. Tool-call loop ────────────────────────────────
@@ -567,6 +581,12 @@ class AssistedExecutor(BaseExecutor):
                     result = f"ツール実行エラー: {e}"
 
                 result = _truncate_tool_output(str(result))
+                all_tool_records.append(ToolCallRecord(
+                    tool_name=tool_name,
+                    tool_id=tool_id,
+                    input_summary=_truncate_for_record(str(tool_args), 200),
+                    result_summary=_truncate_for_record(result, 300),
+                ))
 
                 # ── 8. Yield tool_end ────────────────────────
                 yield {
@@ -594,4 +614,5 @@ class AssistedExecutor(BaseExecutor):
             "type": "done",
             "full_text": final_text or "(max iterations reached)",
             "result_message": None,
+            "tool_call_records": [asdict(r) for r in all_tool_records],
         }

@@ -477,6 +477,6 @@ class MemoryManager:
         """Facade: FrontmatterService.list_procedure_metas."""
         return self._frontmatter.list_procedure_metas(self._extract_skill_meta)
 
-    def migrate_legacy_procedures(self) -> int:
-        """Facade: FrontmatterService.migrate_legacy_procedures."""
-        return self._frontmatter.migrate_legacy_procedures()
+    def ensure_procedure_frontmatter(self) -> int:
+        """Facade: FrontmatterService.ensure_procedure_frontmatter."""
+        return self._frontmatter.ensure_procedure_frontmatter()

@@ -48,6 +48,13 @@ class SlackChannel(NotificationChannel):
         bot_token = self._config.get("bot_token", "")
         if not bot_token:
             bot_token = self._resolve_env("bot_token_env")
+        if not bot_token:
+            # Fall back to credentials.json
+            try:
+                from core.tools._base import get_credential
+                bot_token = get_credential("slack", "notification", env_var="SLACK_BOT_TOKEN")
+            except Exception:
+                bot_token = ""
 
         if bot_token:
             return await self._send_via_bot(bot_token, subject, body, priority, anima_name)

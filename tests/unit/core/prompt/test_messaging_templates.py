@@ -14,15 +14,15 @@ class TestMessagingTemplates:
         path = PROMPTS_DIR / "messaging_a1.md"
         assert path.exists(), f"Missing template: {path}"
 
-    def test_messaging_a1_no_send_message_tool(self):
-        """A1 template must NOT reference send_message tool."""
+    def test_messaging_a1_has_mcp_send_message(self):
+        """A1 template must reference MCP send_message tool."""
         content = (PROMPTS_DIR / "messaging_a1.md").read_text(encoding="utf-8")
-        assert "send_message" not in content
+        assert "mcp__aw__send_message" in content
 
-    def test_messaging_a1_has_bash_send(self):
-        """A1 template must reference bash send command."""
+    def test_messaging_a1_no_bash_send(self):
+        """A1 template must NOT reference bash send command (abolished)."""
         content = (PROMPTS_DIR / "messaging_a1.md").read_text(encoding="utf-8")
-        assert "bash send" in content
+        assert "bash send" not in content
 
     def test_messaging_a1_has_placeholders(self):
         """A1 template must have the required format placeholders."""

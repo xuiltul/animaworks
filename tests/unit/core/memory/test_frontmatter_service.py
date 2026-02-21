@@ -262,50 +262,55 @@ class TestListProcedureMetas:
         assert all(m.is_common is False for m in result)
 
 
-class TestMigrateLegacyProcedures:
+class TestEnsureProcedureFrontmatter:
     def test_adds_frontmatter_to_bare_files(
         self, svc: FrontmatterService, anima_dir: Path, procedures_dir: Path,
     ) -> None:
-        """migrate_legacy_procedures adds YAML frontmatter to bare files."""
+        """ensure_procedure_frontmatter adds YAML frontmatter to bare files."""
         bare = procedures_dir / "my_procedure.md"
         bare.write_text("Bare procedure content", encoding="utf-8")
 
-        count = svc.migrate_legacy_procedures()
+        count = svc.ensure_procedure_frontmatter()
         assert count == 1
 
         text = bare.read_text(encoding="utf-8")
         assert text.startswith("---\n")
+        # No heading in content, so description falls back to filename stem
         assert "description: my procedure" in text
         assert "Bare procedure content" in text
 
-        # Backup should exist
-        backup = anima_dir / "archive" / "pre_migration_procedures" / "my_procedure.md"
-        assert backup.exists()
-        assert backup.read_text(encoding="utf-8") == "Bare procedure content"
-
-    def test_idempotent_with_migrated_marker(
+    def test_description_from_heading(
         self, svc: FrontmatterService, procedures_dir: Path,
     ) -> None:
-        """migrate_legacy_procedures is idempotent via .migrated marker."""
+        """ensure_procedure_frontmatter extracts description from first heading."""
+        f = procedures_dir / "deploy_app.md"
+        f.write_text("# Deploy Application\n\n1. Pull\n2. Build", encoding="utf-8")
+
+        count = svc.ensure_procedure_frontmatter()
+        assert count == 1
+
+        text = f.read_text(encoding="utf-8")
+        assert "description: Deploy Application" in text
+
+    def test_idempotent_per_file(
+        self, svc: FrontmatterService, procedures_dir: Path,
+    ) -> None:
+        """ensure_procedure_frontmatter is idempotent per-file (checks frontmatter existence)."""
         bare = procedures_dir / "task.md"
         bare.write_text("Task content", encoding="utf-8")
 
-        # First migration
-        count1 = svc.migrate_legacy_procedures()
+        # First run
+        count1 = svc.ensure_procedure_frontmatter()
         assert count1 == 1
 
-        # Marker file should exist
-        marker = procedures_dir / ".migrated"
-        assert marker.exists()
-
-        # Second migration should be a no-op
-        count2 = svc.migrate_legacy_procedures()
+        # Second run should be a no-op because frontmatter already exists
+        count2 = svc.ensure_procedure_frontmatter()
         assert count2 == 0
 
     def test_skips_files_with_existing_frontmatter(
         self, svc: FrontmatterService, anima_dir: Path, procedures_dir: Path,
     ) -> None:
-        """migrate_legacy_procedures skips files that already have frontmatter."""
+        """ensure_procedure_frontmatter skips files that already have frontmatter."""
         already_migrated = procedures_dir / "existing.md"
         already_migrated.write_text(
             "---\ndescription: already done\n---\n\nContent",
@@ -314,15 +319,9 @@ class TestMigrateLegacyProcedures:
         bare = procedures_dir / "bare.md"
         bare.write_text("Bare content", encoding="utf-8")
 
-        count = svc.migrate_legacy_procedures()
+        count = svc.ensure_procedure_frontmatter()
         assert count == 1  # only the bare file
 
         # The file with existing frontmatter should be unchanged
         text = already_migrated.read_text(encoding="utf-8")
         assert text == "---\ndescription: already done\n---\n\nContent"
-
-        # Backup should only exist for the bare file
-        backup_dir = anima_dir / "archive" / "pre_migration_procedures"
-        backups = list(backup_dir.glob("*.md"))
-        assert len(backups) == 1
-        assert backups[0].name == "bare.md"

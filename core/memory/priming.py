@@ -124,6 +124,7 @@ class PrimingEngine:
         message: str,
         sender_name: str = "human",
         channel: str = "chat",
+        intent: str = "",
         enable_dynamic_budget: bool = False,
     ) -> PrimingResult:
         """Prime memories based on incoming message.
@@ -132,6 +133,7 @@ class PrimingEngine:
             message: The incoming message text
             sender_name: Name of the sender (for sender profile lookup)
             channel: Message channel (chat, heartbeat, cron, etc.)
+            intent: Sender-declared message intent ("delegation" | "report" | "question")
             enable_dynamic_budget: Enable dynamic budget adjustment (Phase 3)
 
         Returns:
@@ -146,7 +148,7 @@ class PrimingEngine:
 
         # Phase 3: Adjust token budget based on message type
         if enable_dynamic_budget:
-            token_budget = self._adjust_token_budget(message, channel)
+            token_budget = self._adjust_token_budget(message, channel, intent=intent)
         else:
             token_budget = _DEFAULT_MAX_PRIMING_TOKENS
 
@@ -160,7 +162,7 @@ class PrimingEngine:
             self._channel_a_sender_profile(sender_name),
             self._channel_b_recent_activity(sender_name, keywords),  # Unified channel
             self._channel_c_related_knowledge(keywords),
-            self._channel_d_skill_match(message, keywords),
+            self._channel_d_skill_match(message, keywords, channel=channel),
             self._channel_e_pending_tasks(),
             return_exceptions=True,
         )
@@ -629,6 +631,7 @@ class PrimingEngine:
 
     async def _channel_d_skill_match(
         self, message: str, keywords: list[str],
+        channel: str = "chat",
     ) -> list[str]:
         """Channel D: Skill matching via description-based 3-tier search.
 
@@ -639,8 +642,12 @@ class PrimingEngine:
 
         Returns list of skill/procedure names (not full content, max 5).
         Searches personal skills/, common_skills/, and procedures/.
+        Skipped for heartbeat/cron triggers to avoid false positives.
         """
         _MAX_SKILL_MATCHES = 5
+
+        if channel in ("heartbeat", "cron"):
+            return []
 
         if not message and not keywords:
             return []
@@ -746,12 +753,13 @@ class PrimingEngine:
 
     # ── Dynamic budget adjustment (Phase 3) ─────────────────────
 
-    def _classify_message_type(self, message: str, channel: str) -> str:
+    def _classify_message_type(self, message: str, channel: str, *, intent: str = "") -> str:
         """Classify message type for budget adjustment.
 
         Args:
             message: Message text
             channel: Message channel
+            intent: Sender-declared intent (preferred when provided)
 
         Returns:
             Message type: "greeting", "question", "request", "heartbeat"
@@ -759,6 +767,17 @@ class PrimingEngine:
         # Heartbeat channel has fixed budget
         if channel == "heartbeat":
             return "heartbeat"
+
+        # Sender-declared intent takes priority over keyword heuristics.
+        intent_map = {
+            "delegation": "request",
+            "report": "question",
+            "question": "question",
+        }
+        intent_norm = str(intent or "").strip().lower()
+        mapped = intent_map.get(intent_norm)
+        if mapped:
+            return mapped
 
         message_lower = message.lower()
 
@@ -785,17 +804,18 @@ class PrimingEngine:
         # Default to question
         return "question"
 
-    def _adjust_token_budget(self, message: str, channel: str) -> int:
+    def _adjust_token_budget(self, message: str, channel: str, *, intent: str = "") -> int:
         """Adjust token budget based on message type.
 
         Args:
             message: Message text
             channel: Message channel
+            intent: Sender-declared intent (preferred when provided)
 
         Returns:
             Adjusted token budget
         """
-        msg_type = self._classify_message_type(message, channel)
+        msg_type = self._classify_message_type(message, channel, intent=intent)
 
         budget_map = {
             "greeting": _BUDGET_GREETING,

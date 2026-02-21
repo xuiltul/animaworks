@@ -209,10 +209,10 @@ class TestStripFrontmatter:
         assert MemoryIndexer._strip_frontmatter(content) == content
 
 
-# ── 1-4: migrate_legacy_procedures ───────────────────────
+# ── 1-4: ensure_procedure_frontmatter ────────────────────
 
 
-class TestMigrateLegacyProcedures:
+class TestEnsureProcedureFrontmatter:
     def test_migrates_plain_files(self, memory, anima_dir: Path) -> None:
         proc_dir = anima_dir / "procedures"
         (proc_dir / "deploy_app.md").write_text(
@@ -224,32 +224,27 @@ class TestMigrateLegacyProcedures:
             encoding="utf-8",
         )
 
-        count = memory.migrate_legacy_procedures()
+        count = memory.ensure_procedure_frontmatter()
         assert count == 2
 
-        # Verify frontmatter was added
-        for name in ("deploy_app.md", "backup-db.md"):
-            text = (proc_dir / name).read_text(encoding="utf-8")
-            assert text.startswith("---\n")
-            assert "description:" in text
+        # Verify frontmatter was added with descriptions from headings
+        text_deploy = (proc_dir / "deploy_app.md").read_text(encoding="utf-8")
+        assert text_deploy.startswith("---\n")
+        assert "description: Deploy App" in text_deploy
 
-        # Verify backups
-        backup_dir = anima_dir / "archive" / "pre_migration_procedures"
-        assert (backup_dir / "deploy_app.md").exists()
-        assert (backup_dir / "backup-db.md").exists()
+        text_backup = (proc_dir / "backup-db.md").read_text(encoding="utf-8")
+        assert text_backup.startswith("---\n")
+        assert "description: Backup DB" in text_backup
 
-        # Verify marker
-        assert (proc_dir / ".migrated").exists()
-
-    def test_skips_already_migrated(self, memory, anima_dir: Path) -> None:
-        (anima_dir / "procedures" / ".migrated").write_text("done", encoding="utf-8")
+    def test_idempotent_per_file(self, memory, anima_dir: Path) -> None:
         (anima_dir / "procedures" / "test.md").write_text("# Plain", encoding="utf-8")
 
-        count = memory.migrate_legacy_procedures()
-        assert count == 0  # marker blocks re-migration
-        # File should remain unmodified
-        text = (anima_dir / "procedures" / "test.md").read_text(encoding="utf-8")
-        assert not text.startswith("---")
+        count1 = memory.ensure_procedure_frontmatter()
+        assert count1 == 1
+
+        # Second run is a no-op because frontmatter already exists
+        count2 = memory.ensure_procedure_frontmatter()
+        assert count2 == 0
 
     def test_skips_files_with_frontmatter(self, memory, anima_dir: Path) -> None:
         proc_dir = anima_dir / "procedures"
@@ -259,20 +254,32 @@ class TestMigrateLegacyProcedures:
         )
         (proc_dir / "legacy.md").write_text("# Legacy content", encoding="utf-8")
 
-        count = memory.migrate_legacy_procedures()
+        count = memory.ensure_procedure_frontmatter()
         assert count == 1  # only legacy.md migrated
 
     def test_empty_directory(self, memory, anima_dir: Path) -> None:
-        count = memory.migrate_legacy_procedures()
+        count = memory.ensure_procedure_frontmatter()
         assert count == 0
-        assert (anima_dir / "procedures" / ".migrated").exists()
 
-    def test_description_from_filename(self, memory, anima_dir: Path) -> None:
+    def test_description_from_heading(self, memory, anima_dir: Path) -> None:
         proc_dir = anima_dir / "procedures"
         (proc_dir / "run_daily_backup.md").write_text("# Steps", encoding="utf-8")
 
-        memory.migrate_legacy_procedures()
+        memory.ensure_procedure_frontmatter()
         meta = memory.read_procedure_metadata(Path("run_daily_backup.md"))
+        # Description comes from first heading, not filename
+        assert meta["description"] == "Steps"
+        assert meta["confidence"] == 0.5
+
+    def test_description_fallback_to_filename(self, memory, anima_dir: Path) -> None:
+        proc_dir = anima_dir / "procedures"
+        (proc_dir / "run_daily_backup.md").write_text(
+            "No heading here, just plain text.",
+            encoding="utf-8",
+        )
+
+        memory.ensure_procedure_frontmatter()
+        meta = memory.read_procedure_metadata(Path("run_daily_backup.md"))
+        # No heading, so description falls back to filename stem
         assert meta["description"] == "run daily backup"
         assert meta["confidence"] == 0.5
-        assert meta["version"] == 1

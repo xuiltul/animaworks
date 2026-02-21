@@ -75,8 +75,6 @@ def create_from_template(
     _ensure_runtime_subdirs(anima_dir)
     _init_state_files(anima_dir)
     _place_bootstrap(anima_dir)
-    _place_send_script(anima_dir)
-    _place_board_script(anima_dir)
     _ensure_status_json(anima_dir)
 
     logger.info("Created anima '%s' from template '%s'", name, template_name)
@@ -116,8 +114,6 @@ def create_blank(animas_dir: Path, name: str) -> Path:
         _ensure_runtime_subdirs(anima_dir)
         _init_state_files(anima_dir)
         _place_bootstrap(anima_dir)
-        _place_send_script(anima_dir)
-        _place_board_script(anima_dir)
         # Create a minimal status.json so the reconciliation loop
         # recognises this anima as a valid on-disk entry.
         _ensure_status_json(anima_dir)
@@ -566,70 +562,6 @@ def _place_bootstrap(anima_dir: Path) -> None:
     if BOOTSTRAP_TEMPLATE.exists():
         shutil.copy2(BOOTSTRAP_TEMPLATE, anima_dir / "bootstrap.md")
         logger.debug("Placed bootstrap.md in %s", anima_dir)
-
-
-def _place_send_script(anima_dir: Path) -> None:
-    """Place (or update) the send wrapper script in anima_dir from template."""
-    src = BLANK_TEMPLATE_DIR / "send"
-    dst = anima_dir / "send"
-    if not src.exists():
-        return
-    shutil.copy2(src, dst)
-    dst.chmod(0o755)
-    logger.debug("Updated send script in %s", anima_dir)
-
-
-def _place_board_script(anima_dir: Path) -> None:
-    """Place (or update) the board wrapper script in anima_dir from template."""
-    src = BLANK_TEMPLATE_DIR / "board"
-    dst = anima_dir / "board"
-    if not src.exists():
-        return
-    shutil.copy2(src, dst)
-    dst.chmod(0o755)
-    logger.debug("Updated board script in %s", anima_dir)
-
-
-def ensure_send_scripts(animas_dir: Path) -> None:
-    """Ensure every anima directory has the send wrapper script.
-
-    Iterates all subdirectories under *animas_dir* that contain an
-    ``identity.md`` file (i.e. valid anima directories) and calls
-    :func:`_place_send_script` for each.  Existing send scripts are overwritten to ensure
-    they match the latest template.
-
-    This should be called during server startup so that animas created
-    before the send script feature was added also get the script.
-
-    Args:
-        animas_dir: Runtime animas directory (e.g. ``~/.animaworks/animas/``).
-    """
-    if not animas_dir.exists():
-        return
-    for anima_dir in sorted(animas_dir.iterdir()):
-        if anima_dir.is_dir() and (anima_dir / "identity.md").exists():
-            _place_send_script(anima_dir)
-
-
-def ensure_board_scripts(animas_dir: Path) -> None:
-    """Ensure every anima directory has the board wrapper script.
-
-    Iterates all subdirectories under *animas_dir* that contain an
-    ``identity.md`` file (i.e. valid anima directories) and calls
-    :func:`_place_board_script` for each.  Existing board scripts are
-    overwritten to ensure they match the latest template.
-
-    This should be called during server startup so that animas created
-    before the board script feature was added also get the script.
-
-    Args:
-        animas_dir: Runtime animas directory (e.g. ``~/.animaworks/animas/``).
-    """
-    if not animas_dir.exists():
-        return
-    for anima_dir in sorted(animas_dir.iterdir()):
-        if anima_dir.is_dir() and (anima_dir / "identity.md").exists():
-            _place_board_script(anima_dir)
 
 
 def validate_anima_name(name: str) -> str | None:

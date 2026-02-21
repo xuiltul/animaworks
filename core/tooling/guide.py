@@ -20,78 +20,73 @@ from core.exceptions import ToolConfigError  # noqa: F401
 logger = logging.getLogger("animaworks.tool_guide")
 
 
+# ── Public API ───────────────────────────────────────────────────
+
+
 def build_tools_guide(
     tool_registry: list[str],
     personal_tools: dict[str, str] | None = None,
 ) -> str:
-    """Build a markdown CLI guide for allowed tools."""
+    """Build a compact summary table of allowed external tools.
+
+    Replaces the previous verbose CLI-example format with a concise
+    table that saves ~60-80% of system prompt tokens.  Agents can use
+    ``animaworks-tool <tool> --help`` or the ``discover_tools`` MCP tool
+    for detailed usage.
+    """
     if not tool_registry and not personal_tools:
         return ""
 
     from core.tools import TOOL_MODULES
-    from core.tools._base import auto_cli_guide, load_execution_profiles
+    from core.tools._base import load_execution_profiles
 
-    # Load execution profiles for background task annotations
     profiles = load_execution_profiles(TOOL_MODULES, personal_tools)
 
     parts: list[str] = [
         "## 外部ツール",
         "",
-        "以下の外部ツールが `animaworks-tool` コマンド経由で使えます。",
-        "Bashツールから実行してください。出力はJSON形式（`-j` オプション）を推奨します。",
+        "以下の外部ツールが利用可能です。使い方の詳細は `discover_tools` ツールまたは "
+        "`animaworks-tool <ツール名> --help` で確認してください。",
         "",
+        "| ツール | 概要 | サブコマンド |",
+        "|--------|------|------------|",
     ]
+
+    bg_tools: list[str] = []
 
     for tool_name in sorted(tool_registry):
         if tool_name not in TOOL_MODULES:
             continue
-        guide = _guide_from_module_path(tool_name, TOOL_MODULES[tool_name])
-        if guide:
-            # Add background task warning if any subcommand is eligible
-            profile = profiles.get(tool_name, {})
-            bg_warning = _build_background_warning(tool_name, profile)
-            if bg_warning:
-                parts.append(bg_warning)
-            parts.append(guide)
-            parts.append("")
+        row = _get_tool_summary(tool_name, TOOL_MODULES[tool_name])
+        if row:
+            parts.append(row)
+        # Track background-eligible subcommands
+        profile = profiles.get(tool_name, {})
+        bg_subcmds = [name for name, info in profile.items() if info.get("background_eligible")]
+        if bg_subcmds:
+            bg_tools.append(f"{tool_name} ({', '.join(sorted(bg_subcmds))})")
 
     if personal_tools:
         for tool_name in sorted(personal_tools):
-            guide = _guide_from_file(tool_name, personal_tools[tool_name])
-            if guide:
-                profile = profiles.get(tool_name, {})
-                bg_warning = _build_background_warning(tool_name, profile)
-                if bg_warning:
-                    parts.append(bg_warning)
-                parts.append(guide)
-                parts.append("")
+            row = _get_tool_summary_from_file(tool_name, personal_tools[tool_name])
+            if row:
+                parts.append(row)
+            profile = profiles.get(tool_name, {})
+            bg_subcmds = [name for name, info in profile.items() if info.get("background_eligible")]
+            if bg_subcmds:
+                bg_tools.append(f"{tool_name} ({', '.join(sorted(bg_subcmds))})")
 
-    # Check if any tool has background-eligible subcommands
-    has_bg_tools = any(
-        any(info.get("background_eligible") for info in subcmds.values())
-        for subcmds in profiles.values()
-    )
+    parts.append("")
 
-    parts.extend([
-        "### 注意事項",
-        "- 使えるツールは上記のみ（permissions.mdで許可されたもの）",
-        "- APIキーが未設定のツールはエラーになる。エラー内容を確認して報告すること",
-    ])
-
-    if has_bg_tools:
+    if bg_tools:
+        parts.append(f"長時間ツール: {', '.join(bg_tools)}")
         parts.append(
-            "- ⚠ マークのある長時間ツールは `animaworks-tool submit <tool> <args...>` で"
-            "非同期実行すること。直接実行するとロックが保持され、"
-            "メッセージ受信やheartbeatが停止する"
+            "`animaworks-tool submit <tool> <subcommand>` で非同期実行すること。"
+            "直接実行するとロックが保持される。"
         )
-        parts.append(
-            "- submit したタスクの結果は state/background_notifications/ に通知される。"
-            "次回の heartbeat で確認すること"
-        )
+        parts.append("")
 
-    parts.append(
-        "- 検索結果やメッセージ一覧は記憶に保存すべきか判断すること"
-    )
+    parts.append("使えるツールは上記のみ（permissions.mdで許可されたもの）。APIキー未設定はエラーになる。")
 
     return "\n".join(parts)
 
@@ -113,85 +108,73 @@ def load_tool_schemas(
     )
 
 
-# ── Helpers ───────────────────────────────────────────────────
+# ── Summary table helpers ────────────────────────────────────────
 
 
-def _build_background_warning(
-    tool_name: str,
-    profile: dict[str, dict[str, object]],
-) -> str:
-    """Build a warning block for tools with background-eligible subcommands."""
-    if not profile:
-        return ""
-
-    bg_subcmds = {
-        name: info
-        for name, info in profile.items()
-        if info.get("background_eligible")
-    }
-
-    if not bg_subcmds:
-        return ""
-
-    max_seconds = max(
-        int(info.get("expected_seconds", 60)) for info in bg_subcmds.values()
-    )
-
-    if max_seconds >= 600:
-        time_desc = f"最大{max_seconds // 60}分"
-    else:
-        time_desc = f"最大{max_seconds}秒"
-
-    subcmd_list = ", ".join(sorted(bg_subcmds.keys()))
-
-    lines = [
-        f"⚠ **長時間ツール** ({tool_name}): "
-        f"以下のサブコマンドは実行に{time_desc}かかります。",
-        f"`animaworks-tool submit {tool_name} <subcommand> ...` で非同期実行してください。",
-        f"結果は次回のheartbeatで通知されます。",
-        f"対象サブコマンド: {subcmd_list}",
-        "",
-    ]
-    return "\n".join(lines)
-
-
-def _guide_from_module_path(tool_name: str, module_path: str) -> str | None:
-    """Generate a CLI guide from a package-importable module."""
-    from core.tools._base import auto_cli_guide
-
+def _get_tool_summary(tool_name: str, module_path: str) -> str | None:
+    """Generate a table row: ``| name | description | subcommands |``."""
     try:
         mod = importlib.import_module(module_path)
-        return _extract_guide(tool_name, mod)
+        return _build_summary_row(tool_name, mod)
     except Exception:
-        logger.debug("Failed to generate guide for %s", tool_name, exc_info=True)
+        logger.debug("Failed to get summary for %s", tool_name, exc_info=True)
         return None
 
 
-def _guide_from_file(tool_name: str, file_path: str) -> str | None:
-    """Generate a CLI guide from a file-based personal tool module."""
-    from core.tools._base import auto_cli_guide
-
+def _get_tool_summary_from_file(tool_name: str, file_path: str) -> str | None:
+    """Generate a table row from a file-based tool."""
     try:
         mod = _import_file(tool_name, file_path)
-        return _extract_guide(tool_name, mod)
+        return _build_summary_row(tool_name, mod)
     except Exception:
-        logger.debug(
-            "Failed to generate guide for personal tool %s",
-            tool_name, exc_info=True,
-        )
+        logger.debug("Failed to get summary for personal tool %s", tool_name, exc_info=True)
         return None
 
 
-def _extract_guide(tool_name: str, mod: Any) -> str | None:
-    """Extract CLI guide from a loaded module (hand-crafted or auto)."""
-    from core.tools._base import auto_cli_guide
+def _build_summary_row(tool_name: str, mod: Any) -> str | None:
+    """Build a Markdown table row from a loaded module."""
+    if not hasattr(mod, "get_tool_schemas"):
+        return None
+    schemas = mod.get_tool_schemas()
+    if not schemas:
+        return None
+    subcmds = _extract_subcommand_names(tool_name, schemas)
+    desc = _get_module_description(mod, tool_name)
+    subcmd_str = ", ".join(subcmds[:6])
+    if len(subcmds) > 6:
+        subcmd_str += ", ..."
+    return f"| {tool_name} | {desc} | {subcmd_str} |"
 
-    if hasattr(mod, "get_cli_guide"):
-        return mod.get_cli_guide()
-    if hasattr(mod, "get_tool_schemas"):
-        schemas = mod.get_tool_schemas()
-        return auto_cli_guide(tool_name, schemas)
-    return None
+
+def _extract_subcommand_names(tool_name: str, schemas: list[dict]) -> list[str]:
+    """Extract clean subcommand names from tool schemas."""
+    names: list[str] = []
+    for s in schemas:
+        raw = s.get("name", s.get("function", {}).get("name", ""))
+        # Remove tool prefix (e.g. "chatwork_send" -> "send")
+        clean = raw.replace(f"{tool_name}_", "").replace(f"{tool_name}.", "")
+        if clean:
+            names.append(clean)
+    return names
+
+
+def _get_module_description(mod: Any, tool_name: str) -> str:
+    """Extract a short description from a tool module."""
+    # Try explicit TOOL_DESCRIPTION constant
+    if hasattr(mod, "TOOL_DESCRIPTION"):
+        return str(mod.TOOL_DESCRIPTION)
+    # Use first line of module docstring
+    if mod.__doc__:
+        first_line = mod.__doc__.strip().split("\n")[0]
+        # Strip trailing period for table consistency
+        first_line = first_line.rstrip(".")
+        if len(first_line) > 60:
+            first_line = first_line[:57] + "..."
+        return first_line
+    return tool_name
+
+
+# ── Utilities ────────────────────────────────────────────────────
 
 
 def _import_file(name: str, file_path: str) -> Any:

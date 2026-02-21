@@ -1,10 +1,6 @@
-Bashツールから以下のコマンドで人間の管理者に連絡してください:
-
-```
-animaworks-tool call_human "件名" "本文" [--priority high]
-```
-
-優先度: `low` / `normal`（デフォルト）/ `high` / `urgent`
-例: `animaworks-tool call_human "障害発生" "本番サーバーがダウンしています" --priority urgent`
+**mcp__aw__call_human** ツールで人間の管理者に連絡してください:
+- `subject`: 件名
+- `body`: 本文
+- `priority`: 優先度（`low` / `normal` / `high` / `urgent`、省略時: `normal`）
 
 連絡内容は外部通知チャネル（Slack等）に届きます。

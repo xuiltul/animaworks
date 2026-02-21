@@ -4,9 +4,9 @@
 """E2E tests for A1 messaging integration.
 
 Verifies that:
-- A1 mode system prompts contain bash send instructions (not send_message tool)
+- A1 mode system prompts contain MCP tool instructions (mcp__aw__send_message)
 - A2 mode system prompts still reference send_message tool
-- Anima creation places the send wrapper script
+- Anima creation does NOT place legacy send/board wrapper scripts
 - Heartbeat default checklist includes tool failure escalation
 """
 
@@ -23,8 +23,8 @@ from core.prompt.builder import build_system_prompt
 class TestA1MessagingPrompt:
     """Verify system prompts differ by execution mode for messaging."""
 
-    def test_a1_prompt_has_bash_send_not_send_message_tool(self, data_dir, make_anima):
-        """A1 system prompt should reference bash send, not send_message tool."""
+    def test_a1_prompt_has_mcp_send_message(self, data_dir, make_anima):
+        """A1 system prompt should reference mcp__aw__send_message tool."""
         anima_dir = make_anima("alice")
         # Create a second anima so messaging section is populated
         make_anima("bob", supervisor="alice")
@@ -32,12 +32,9 @@ class TestA1MessagingPrompt:
         memory = MemoryManager(anima_dir)
         prompt = build_system_prompt(memory, execution_mode="a1")
 
-        assert "bash send" in prompt
-        # The messaging section should NOT recommend send_message tool
-        # Note: send_message may appear elsewhere (e.g., unread_messages template),
-        # but the messaging section itself should not recommend it
-        # Check that the A1-specific content is present
-        assert "bash send <宛先>" in prompt or "bash send" in prompt
+        assert "mcp__aw__send_message" in prompt
+        # bash send should NOT appear (abolished)
+        assert "bash send" not in prompt
 
     def test_a2_prompt_has_send_message_tool(self, data_dir, make_anima):
         """A2 system prompt should reference send_message tool."""
@@ -63,11 +60,11 @@ class TestA1MessagingPrompt:
         assert "bob" in a2_prompt
 
 
-class TestSendScriptPlacement:
-    """Verify that anima creation places the send script."""
+class TestSendScriptRemoved:
+    """Verify that anima creation does NOT place legacy send/board scripts."""
 
-    def test_create_blank_places_send_script(self, tmp_path):
-        """create_blank should place the send script in new anima dirs."""
+    def test_create_blank_does_not_place_send_script(self, tmp_path):
+        """create_blank should NOT place the send script (MCP replaces it)."""
         from core.anima_factory import create_blank
 
         animas_dir = tmp_path / "animas"
@@ -76,10 +73,9 @@ class TestSendScriptPlacement:
         anima_dir = create_blank(animas_dir, "testanima")
         send_script = anima_dir / "send"
 
-        assert send_script.exists(), "send script should be placed in anima dir"
-        content = send_script.read_text(encoding="utf-8")
-        assert "send" in content
-        assert send_script.stat().st_mode & 0o100, "send script should be executable"
+        assert not send_script.exists(), (
+            "send script should NOT exist — MCP tools replaced bash send"
+        )
 
 
 class TestHeartbeatEscalation:

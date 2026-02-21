@@ -144,9 +144,9 @@ class TestLogToolActivityWarning:
         memory = MagicMock()
         handler = ToolHandler(anima_dir=tmp_path, memory=memory)
 
-        with patch("core.tooling.handler.ActivityLogger") as mock_activity:
-            mock_activity.side_effect = RuntimeError("DB error")
-            with caplog.at_level(logging.WARNING, logger="animaworks.tool_handler"):
-                handler._log_tool_activity("test_tool", {"key": "value"})
+        handler._activity = MagicMock()
+        handler._activity.log = MagicMock(side_effect=RuntimeError("DB error"))
+        with caplog.at_level(logging.WARNING, logger="animaworks.tool_handler"):
+            handler._log_tool_activity("test_tool", {"key": "value"})
 
         assert any("Activity logging failed" in r.message for r in caplog.records)

@@ -79,6 +79,7 @@ class StreamingIPCHandler:
 
         message = request.params.get("message", "")
         from_person = request.params.get("from_person", "human")
+        intent = request.params.get("intent") or ""
         images = request.params.get("images") or None
         attachment_paths = request.params.get("attachment_paths") or None
         full_response = ""
@@ -113,6 +114,7 @@ class StreamingIPCHandler:
 
                 async for chunk in self._anima.process_message_stream(
                     message, from_person=from_person,
+                    intent=intent,
                     images=images, attachment_paths=attachment_paths,
                 ):
                     event_type = chunk.get("type", "unknown")

@@ -44,6 +44,7 @@ class ConcreteExecutor(BaseExecutor):
         shortterm: ShortTermMemory | None = None,
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> ExecutionResult:
         return ExecutionResult(text=f"response: {prompt}")
 

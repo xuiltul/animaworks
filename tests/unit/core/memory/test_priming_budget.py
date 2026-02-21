@@ -49,6 +49,16 @@ def test_message_type_classification(temp_anima_dir):
     assert engine._classify_message_type("任意の内容", "heartbeat") == "heartbeat"
 
 
+def test_message_type_classification_prefers_intent(temp_anima_dir):
+    """Sender-declared intent should override keyword heuristics."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    # Even short/greeting-like text should be treated as request for delegation intent.
+    assert engine._classify_message_type("こんにちは", "chat", intent="delegation") == "request"
+    assert engine._classify_message_type("進捗です", "chat", intent="report") == "question"
+    assert engine._classify_message_type("?", "chat", intent="question") == "question"
+
+
 def test_budget_adjustment(temp_anima_dir):
     """Test token budget adjustment based on message type."""
     engine = PrimingEngine(temp_anima_dir)
@@ -69,6 +79,31 @@ def test_budget_adjustment(temp_anima_dir):
     # Test heartbeat budget (200 tokens)
     heartbeat_budget = engine._adjust_token_budget("任意の内容", "heartbeat")
     assert heartbeat_budget == 200
+
+
+def test_budget_adjustment_by_intent(temp_anima_dir):
+    """Intent-based budget mapping should be stable and explicit."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    assert engine._adjust_token_budget("ok", "chat", intent="delegation") == 3000
+    assert engine._adjust_token_budget("ok", "chat", intent="report") == 1500
+    assert engine._adjust_token_budget("ok", "chat", intent="question") == 1500
+    # Unknown/empty intent falls back to keyword heuristics
+    assert engine._adjust_token_budget("こんにちは", "chat", intent="unknown") == 500
+
+
+def test_budget_adjustment_handles_none_intent(temp_anima_dir):
+    """None intent should be treated as empty (fallback classification)."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    assert engine._adjust_token_budget("こんにちは", "chat", intent=None) == 500
+
+
+def test_heartbeat_channel_overrides_intent(temp_anima_dir):
+    """Heartbeat channel must keep fixed heartbeat budget regardless of intent."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    assert engine._adjust_token_budget("任意の内容", "heartbeat", intent="delegation") == 200
 
 
 @pytest.mark.asyncio

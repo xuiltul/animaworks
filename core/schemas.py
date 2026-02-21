@@ -122,6 +122,7 @@ class CycleResult(BaseModel):
     context_usage_ratio: float = 0.0
     session_chained: bool = False
     total_turns: int = 0
+    tool_call_records: list[dict] = Field(default_factory=list)
 
 
 class AnimaStatus(BaseModel):

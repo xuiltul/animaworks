@@ -5,15 +5,20 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from core.execution.agent_sdk import (
+    _BASH_BLOCKED_PATTERNS,
     _PROTECTED_FILES,
     _WRITE_COMMANDS,
     _check_a1_bash_command,
     _check_a1_file_access,
+    _log_tool_use,
+    _sanitise_tool_args,
+    _summarise_tool_input,
 )
 
 
@@ -196,3 +201,178 @@ class TestCheckA1BashCommand:
         """Arguments starting with - should be skipped."""
         result = _check_a1_bash_command("cp -r --verbose file1 file2", anima_dir)
         assert result is None
+
+
+# ── _BASH_BLOCKED_PATTERNS / blocklist ──────────────────────
+
+
+class TestBashBlockedPatterns:
+    def test_chatwork_send_blocked(self, anima_dir: Path):
+        result = _check_a1_bash_command("chatwork send room1 hello", anima_dir)
+        assert result is not None
+        assert "Chatwork send" in result
+
+    def test_chatwork_cli_send_blocked(self, anima_dir: Path):
+        result = _check_a1_bash_command("chatwork_cli.py send room1 hello", anima_dir)
+        assert result is not None
+
+    def test_curl_chatwork_api_blocked(self, anima_dir: Path):
+        cmd = "curl -X POST https://api.chatwork.com/v2/rooms/123/messages -d 'body=hello'"
+        result = _check_a1_bash_command(cmd, anima_dir)
+        assert result is not None
+
+    def test_chatwork_send_case_insensitive(self, anima_dir: Path):
+        result = _check_a1_bash_command("CHATWORK SEND room1 msg", anima_dir)
+        assert result is not None
+
+    def test_chatwork_messages_read_allowed(self, anima_dir: Path):
+        """Read operations (no 'send') should not be blocked."""
+        result = _check_a1_bash_command("chatwork messages room1", anima_dir)
+        assert result is None
+
+    def test_chatwork_unreplied_allowed(self, anima_dir: Path):
+        result = _check_a1_bash_command("chatwork unreplied --json", anima_dir)
+        assert result is None
+
+    def test_normal_curl_allowed(self, anima_dir: Path):
+        result = _check_a1_bash_command("curl https://example.com", anima_dir)
+        assert result is None
+
+    def test_wget_chatwork_api_blocked(self, anima_dir: Path):
+        cmd = "wget --post-data='body=hello' https://api.chatwork.com/v2/rooms/123/messages"
+        result = _check_a1_bash_command(cmd, anima_dir)
+        assert result is not None
+        assert "wget" in result
+
+    def test_blocked_patterns_is_nonempty_list(self):
+        assert len(_BASH_BLOCKED_PATTERNS) >= 4
+
+
+# ── _summarise_tool_input ───────────────────────────────────
+
+
+class TestSummariseToolInput:
+    def test_bash_returns_command(self):
+        result = _summarise_tool_input("Bash", {"command": "ls -la"})
+        assert result == "ls -la"
+
+    def test_bash_truncates_long_command(self):
+        long_cmd = "x" * 500
+        result = _summarise_tool_input("Bash", {"command": long_cmd})
+        assert len(result) <= 300
+
+    def test_read_returns_file_path(self):
+        result = _summarise_tool_input("Read", {"file_path": "/tmp/foo"})
+        assert result == "/tmp/foo"
+
+    def test_grep_returns_pattern(self):
+        result = _summarise_tool_input("Grep", {"pattern": "hello"})
+        assert result == "hello"
+
+    def test_glob_returns_pattern(self):
+        result = _summarise_tool_input("Glob", {"pattern": "*.py"})
+        assert result == "*.py"
+
+    def test_empty_bash_command(self):
+        result = _summarise_tool_input("Bash", {})
+        assert result == "(empty)"
+
+
+# ── _log_tool_use ───────────────────────────────────────────
+
+
+class TestLogToolUse:
+    def test_log_creates_activity_entry(self, tmp_path: Path):
+        anima_dir = tmp_path / "animas" / "test-anima"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "activity_log").mkdir()
+
+        _log_tool_use(anima_dir, "Bash", {"command": "ls -la"})
+
+        log_files = list((anima_dir / "activity_log").glob("*.jsonl"))
+        assert len(log_files) == 1
+        entries = [json.loads(line) for line in log_files[0].read_text().strip().split("\n")]
+        assert len(entries) == 1
+        assert entries[0]["type"] == "tool_use"
+        assert entries[0]["tool"] == "Bash"
+
+    def test_log_blocked_includes_meta(self, tmp_path: Path):
+        anima_dir = tmp_path / "animas" / "test-anima"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "activity_log").mkdir()
+
+        _log_tool_use(anima_dir, "Bash", {"command": "chatwork send"}, blocked=True, block_reason="test")
+
+        log_files = list((anima_dir / "activity_log").glob("*.jsonl"))
+        entries = [json.loads(line) for line in log_files[0].read_text().strip().split("\n")]
+        assert entries[0]["meta"]["blocked"] is True
+        assert entries[0]["meta"]["reason"] == "test"
+
+    def test_log_never_raises(self):
+        """Calling with an invalid anima_dir must not raise."""
+        _log_tool_use(Path("/nonexistent"), "Bash", {"command": "echo hi"})
+
+    def test_log_write_sanitises_content(self, tmp_path: Path):
+        """Write tool content should be stripped, only length kept."""
+        anima_dir = tmp_path / "animas" / "test-anima"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "activity_log").mkdir()
+
+        big_content = "x" * 10_000
+        _log_tool_use(anima_dir, "Write", {"file_path": "/tmp/f.py", "content": big_content})
+
+        log_files = list((anima_dir / "activity_log").glob("*.jsonl"))
+        entries = [json.loads(line) for line in log_files[0].read_text().strip().split("\n")]
+        args = entries[0]["meta"]["args"]
+        assert "content" not in args
+        assert args["content_length"] == 10_000
+        assert args["file_path"] == "/tmp/f.py"
+
+    def test_log_edit_truncates_strings(self, tmp_path: Path):
+        """Edit tool old_string/new_string should be truncated to 200 chars."""
+        anima_dir = tmp_path / "animas" / "test-anima"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "activity_log").mkdir()
+
+        _log_tool_use(anima_dir, "Edit", {
+            "file_path": "/tmp/f.py",
+            "old_string": "a" * 500,
+            "new_string": "b" * 500,
+        })
+
+        log_files = list((anima_dir / "activity_log").glob("*.jsonl"))
+        entries = [json.loads(line) for line in log_files[0].read_text().strip().split("\n")]
+        args = entries[0]["meta"]["args"]
+        assert len(args["old_string"]) == 200
+        assert len(args["new_string"]) == 200
+        assert args["file_path"] == "/tmp/f.py"
+
+
+# ── _sanitise_tool_args ──────────────────────────────────
+
+
+class TestSanitiseToolArgs:
+    def test_write_strips_content(self):
+        result = _sanitise_tool_args("Write", {"file_path": "/f.py", "content": "x" * 5000})
+        assert "content" not in result
+        assert result["content_length"] == 5000
+        assert result["file_path"] == "/f.py"
+
+    def test_edit_truncates_old_new(self):
+        result = _sanitise_tool_args("Edit", {
+            "file_path": "/f.py",
+            "old_string": "a" * 500,
+            "new_string": "b" * 500,
+        })
+        assert len(result["old_string"]) == 200
+        assert len(result["new_string"]) == 200
+
+    def test_bash_passthrough(self):
+        inp = {"command": "ls -la"}
+        result = _sanitise_tool_args("Bash", inp)
+        assert result is inp
+
+    def test_read_passthrough(self):
+        inp = {"file_path": "/tmp/foo"}
+        result = _sanitise_tool_args("Read", inp)
+        assert result is inp

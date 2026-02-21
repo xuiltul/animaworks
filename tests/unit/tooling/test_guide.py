@@ -8,9 +8,11 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from core.tooling.guide import (
-    _extract_guide,
-    _guide_from_file,
-    _guide_from_module_path,
+    _build_summary_row,
+    _extract_subcommand_names,
+    _get_module_description,
+    _get_tool_summary,
+    _get_tool_summary_from_file,
     _import_file,
     build_tools_guide,
     load_tool_schemas,
@@ -29,58 +31,59 @@ class TestBuildToolsGuide:
         result = build_tools_guide([], {})
         assert result == ""
 
-    @patch("core.tooling.guide._guide_from_module_path")
-    def test_includes_core_tools(self, mock_guide):
-        mock_guide.return_value = "### web_search\nSearch the web."
+    @patch("core.tooling.guide._get_tool_summary")
+    def test_includes_core_tools(self, mock_summary):
+        mock_summary.return_value = "| web_search | Search the web | search |"
         with patch.dict("core.tools.TOOL_MODULES", {"web_search": "core.tools.web_search"}):
             result = build_tools_guide(["web_search"])
 
         assert "web_search" in result
-        assert "Search the web." in result
+        assert "Search the web" in result
 
-    @patch("core.tooling.guide._guide_from_module_path")
-    def test_skips_tools_not_in_tool_modules(self, mock_guide):
+    @patch("core.tooling.guide._get_tool_summary")
+    def test_skips_tools_not_in_tool_modules(self, mock_summary):
         with patch.dict("core.tools.TOOL_MODULES", {}, clear=True):
             result = build_tools_guide(["nonexistent"])
 
-        mock_guide.assert_not_called()
+        mock_summary.assert_not_called()
         assert "外部ツール" in result
 
-    @patch("core.tooling.guide._guide_from_file")
-    def test_includes_personal_tools(self, mock_guide_file):
-        mock_guide_file.return_value = "### my_tool\nMy custom tool."
+    @patch("core.tooling.guide._get_tool_summary_from_file")
+    def test_includes_personal_tools(self, mock_summary_file):
+        mock_summary_file.return_value = "| my_tool | My custom tool | action |"
         with patch.dict("core.tools.TOOL_MODULES", {}, clear=True):
             result = build_tools_guide([], {"my_tool": "/path/to/my_tool.py"})
 
         assert "my_tool" in result
-        assert "My custom tool." in result
+        assert "My custom tool" in result
 
-    @patch("core.tooling.guide._guide_from_module_path")
-    def test_includes_header_and_footer(self, mock_guide):
-        mock_guide.return_value = "### test\nguide"
+    @patch("core.tooling.guide._get_tool_summary")
+    def test_includes_header_and_table_format(self, mock_summary):
+        mock_summary.return_value = "| test | Test tool | cmd |"
         with patch.dict("core.tools.TOOL_MODULES", {"test": "core.tools.test"}):
             result = build_tools_guide(["test"])
 
         assert "外部ツール" in result
-        assert "注意事項" in result
+        assert "| ツール | 概要 | サブコマンド |" in result
+        assert "|--------|------|------------|" in result
 
-    @patch("core.tooling.guide._guide_from_module_path")
-    def test_skips_none_guides(self, mock_guide):
-        mock_guide.return_value = None
+    @patch("core.tooling.guide._get_tool_summary")
+    def test_skips_none_summaries(self, mock_summary):
+        mock_summary.return_value = None
         with patch.dict("core.tools.TOOL_MODULES", {"test": "core.tools.test"}):
             result = build_tools_guide(["test"])
 
         assert "外部ツール" in result
 
-    @patch("core.tooling.guide._guide_from_module_path")
-    def test_sorts_core_tools(self, mock_guide):
+    @patch("core.tooling.guide._get_tool_summary")
+    def test_sorts_core_tools(self, mock_summary):
         calls = []
 
         def track_calls(tool_name, module_path):
             calls.append(tool_name)
-            return f"### {tool_name}\nguide"
+            return f"| {tool_name} | desc | cmd |"
 
-        mock_guide.side_effect = track_calls
+        mock_summary.side_effect = track_calls
         with patch.dict(
             "core.tools.TOOL_MODULES",
             {"charlie": "core.tools.c", "alpha": "core.tools.a", "bravo": "core.tools.b"},
@@ -161,70 +164,111 @@ class TestLoadToolSchemas:
         assert result[0]["parameters"] == {"type": "object"}
 
 
-# ── _extract_guide ────────────────────────────────────────────
+# ── _build_summary_row ───────────────────────────────────────
 
 
-class TestExtractGuide:
-    def test_uses_get_cli_guide_if_available(self):
+class TestBuildSummaryRow:
+    def test_generates_table_row(self):
         mod = MagicMock()
-        mod.get_cli_guide.return_value = "Custom CLI guide"
-        result = _extract_guide("test", mod)
-        assert result == "Custom CLI guide"
+        mod.__doc__ = "Test tool for testing."
+        mod.get_tool_schemas.return_value = [
+            {"name": "test_cmd1"},
+            {"name": "test_cmd2"},
+        ]
+        row = _build_summary_row("test", mod)
+        assert row is not None
+        assert row.startswith("| test |")
+        assert "cmd1" in row
+        assert "cmd2" in row
 
-    def test_falls_back_to_auto_cli_guide(self):
-        mod = MagicMock(spec=["get_tool_schemas"])
-        mod.get_tool_schemas.return_value = [{"name": "t", "description": "d"}]
-
-        with patch("core.tools._base.auto_cli_guide", return_value="Auto guide"):
-            result = _extract_guide("test", mod)
-        assert result == "Auto guide"
-
-    def test_returns_none_without_methods(self):
+    def test_no_get_tool_schemas_returns_none(self):
         mod = MagicMock(spec=[])
-        result = _extract_guide("test", mod)
+        result = _build_summary_row("test", mod)
+        assert result is None
+
+    def test_empty_schemas_returns_none(self):
+        mod = MagicMock()
+        mod.get_tool_schemas.return_value = []
+        result = _build_summary_row("test", mod)
         assert result is None
 
 
-# ── _guide_from_module_path ───────────────────────────────────
+# ── _get_tool_summary ────────────────────────────────────────
 
 
-class TestGuideFromModulePath:
+class TestGetToolSummary:
     def test_success(self):
         mock_mod = MagicMock()
-        mock_extract = MagicMock(return_value="Guide text")
+        mock_mod.__doc__ = "My tool."
+        mock_mod.get_tool_schemas.return_value = [{"name": "test_action"}]
         import core.tooling.guide as _guide_mod
-        with patch.object(_guide_mod, "_extract_guide", mock_extract), \
-             patch.object(_guide_mod.importlib, "import_module", return_value=mock_mod):
-            result = _guide_from_module_path("test", "core.tools.test")
-        assert result == "Guide text"
-        mock_extract.assert_called_once_with("test", mock_mod)
+        with patch.object(_guide_mod.importlib, "import_module", return_value=mock_mod):
+            result = _get_tool_summary("test", "core.tools.test")
+        assert result is not None
+        assert "test" in result
+        assert "action" in result
 
     def test_import_error_returns_none(self):
         import core.tooling.guide as _guide_mod
         with patch.object(_guide_mod.importlib, "import_module", side_effect=ImportError("fail")):
-            result = _guide_from_module_path("test", "core.tools.test")
+            result = _get_tool_summary("test", "core.tools.test")
         assert result is None
 
 
-# ── _guide_from_file ──────────────────────────────────────────
+# ── _get_tool_summary_from_file ──────────────────────────────
 
 
-class TestGuideFromFile:
-    @patch("core.tooling.guide._extract_guide")
+class TestGetToolSummaryFromFile:
+    @patch("core.tooling.guide._build_summary_row")
     @patch("core.tooling.guide._import_file")
-    def test_success(self, mock_import, mock_extract):
+    def test_success(self, mock_import, mock_row):
         mock_mod = MagicMock()
         mock_import.return_value = mock_mod
-        mock_extract.return_value = "Personal guide"
+        mock_row.return_value = "| my_tool | Personal tool | cmd |"
 
-        result = _guide_from_file("my_tool", "/path/to/tool.py")
-        assert result == "Personal guide"
+        result = _get_tool_summary_from_file("my_tool", "/path/to/tool.py")
+        assert result == "| my_tool | Personal tool | cmd |"
 
     @patch("core.tooling.guide._import_file")
     def test_import_error_returns_none(self, mock_import):
         mock_import.side_effect = ImportError("fail")
-        result = _guide_from_file("my_tool", "/path/to/tool.py")
+        result = _get_tool_summary_from_file("my_tool", "/path/to/tool.py")
         assert result is None
+
+
+# ── _extract_subcommand_names ────────────────────────────────
+
+
+class TestExtractSubcommandNames:
+    def test_strips_prefix(self):
+        schemas = [{"name": "chatwork_send"}, {"name": "chatwork_rooms"}]
+        result = _extract_subcommand_names("chatwork", schemas)
+        assert result == ["send", "rooms"]
+
+    def test_no_prefix(self):
+        schemas = [{"name": "search"}]
+        result = _extract_subcommand_names("web_search", schemas)
+        assert result == ["search"]
+
+
+# ── _get_module_description ──────────────────────────────────
+
+
+class TestGetModuleDescription:
+    def test_tool_description_attr(self):
+        mod = MagicMock()
+        mod.TOOL_DESCRIPTION = "Custom desc"
+        assert _get_module_description(mod, "t") == "Custom desc"
+
+    def test_docstring(self):
+        mod = MagicMock(spec=[])
+        mod.__doc__ = "First line.\nSecond line."
+        assert _get_module_description(mod, "t") == "First line"
+
+    def test_no_doc(self):
+        mod = MagicMock(spec=[])
+        mod.__doc__ = None
+        assert _get_module_description(mod, "my_tool") == "my_tool"
 
 
 # ── _import_file ──────────────────────────────────────────────

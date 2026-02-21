@@ -4,8 +4,6 @@ from __future__ import annotations
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
-import shutil
-from datetime import datetime
 from pathlib import Path
 
 from core.memory._io import atomic_write_text
@@ -133,54 +131,46 @@ class FrontmatterService:
             for f in sorted(self._procedures_dir.glob("*.md"))
         ]
 
-    def migrate_legacy_procedures(self) -> int:
-        """Add YAML frontmatter to procedure files that lack it.
+    def ensure_procedure_frontmatter(self) -> int:
+        """Ensure all procedure files have YAML frontmatter with description.
 
-        Idempotent: uses ``{procedures_dir}/.migrated`` as a marker.
-        Backs up originals to ``archive/pre_migration_procedures/``.
+        Scans every .md file in procedures/. Files without frontmatter
+        get auto-generated metadata with description extracted from the
+        first Markdown heading. Idempotent per-file (not marker-based).
 
         Returns:
-            Number of files migrated.
+            Number of files that had frontmatter added.
         """
-        marker = self._procedures_dir / ".migrated"
-        if marker.exists():
-            logger.debug("Procedures already migrated (marker exists)")
+        if not self._procedures_dir.exists():
             return 0
 
         md_files = sorted(self._procedures_dir.glob("*.md"))
-        if not md_files:
-            marker.write_text(datetime.now().isoformat(), encoding="utf-8")
-            return 0
-
-        backup_dir = self._anima_dir / "archive" / "pre_migration_procedures"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-
         migrated = 0
         for f in md_files:
             text = f.read_text(encoding="utf-8")
-            if text.startswith("---"):
+            if text.lstrip().startswith("---"):
                 continue  # already has frontmatter
 
-            # Backup original
-            shutil.copy2(f, backup_dir / f.name)
-
-            # Derive description from filename
-            desc = f.stem.replace("_", " ").replace("-", " ")
+            # Extract description from first heading
+            desc = ""
+            for line in text.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("# "):
+                    desc = stripped.lstrip("# ").strip()
+                    break
+            if not desc:
+                desc = f.stem.replace("_", " ").replace("-", " ")
 
             metadata = {
                 "description": desc,
-                "tags": [],
                 "success_count": 0,
                 "failure_count": 0,
-                "last_used": None,
                 "confidence": 0.5,
-                "version": 1,
-                "created_at": datetime.now().isoformat(),
             }
             self.write_procedure_with_meta(f, text, metadata)
             migrated += 1
-            logger.info("Migrated procedure: %s", f.name)
+            logger.info("Added frontmatter to procedure: %s", f.name)
 
-        marker.write_text(datetime.now().isoformat(), encoding="utf-8")
-        logger.info("Migrated %d legacy procedures", migrated)
+        if migrated:
+            logger.info("Added frontmatter to %d procedures", migrated)
         return migrated

@@ -18,12 +18,14 @@ import logging
 import os
 import re
 import shutil
+import sys
 from collections.abc import AsyncGenerator, Callable
+from dataclasses import asdict
 from typing import Any
 
 from core.prompt.context import ContextTracker
 from core.exceptions import ExecutionError, LLMAPIError, MemoryWriteError  # noqa: F401
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record
 from core.schemas import ModelConfig
 from core.memory.shortterm import ShortTermMemory
 from pathlib import Path
@@ -35,7 +37,23 @@ logger = logging.getLogger("animaworks.execution.agent_sdk")
 __all__ = ["AgentSDKExecutor", "StreamDisconnectedError"]
 
 
-_BASH_SEND_RE = re.compile(r"^\s*(?:bash\s+)?send\s+(\S+)\s+")
+# ── A1 Bash blocklist ────────────────────────────────────────
+
+# Patterns that are unconditionally blocked in Bash tool calls.
+# Each entry is (compiled_regex, human-readable reason).
+# NOTE: Patterns are intentionally broad (security over convenience).
+# False positives (e.g. "echo chatwork send") are acceptable — the LLM
+# can retry with a different phrasing, while a missed send is unrecoverable.
+_BASH_BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"chatwork.*\bsend\b", re.IGNORECASE),
+     "Chatwork send is blocked"),
+    (re.compile(r"chatwork_cli.*\bsend\b", re.IGNORECASE),
+     "Chatwork CLI send is blocked"),
+    (re.compile(r"curl.*api\.chatwork\.com.*/messages", re.IGNORECASE),
+     "Direct Chatwork API post is blocked"),
+    (re.compile(r"wget.*api\.chatwork\.com.*/messages", re.IGNORECASE),
+     "Direct Chatwork API post via wget is blocked"),
+]
 
 # ── A1 mode security ──────────────────────────────────────────
 
@@ -87,10 +105,20 @@ def _check_a1_file_access(
 
 
 def _check_a1_bash_command(command: str, anima_dir: Path) -> str | None:
-    """Check bash commands for obvious file operation violations.
+    """Check bash commands against blocklist patterns and file operation violations.
+
+    Blocklist patterns are matched against the raw command string (before
+    shlex parsing) to prevent bypass via pipes/subshells.  Path traversal
+    checks use parsed argv for precision.
 
     This is a best-effort heuristic — not a complete sandbox.
     """
+    # Blocklist check (raw command string, before shlex parsing)
+    for pattern, reason in _BASH_BLOCKED_PATTERNS:
+        if pattern.search(command):
+            logger.warning("Bash command blocked: %s (command: %s)", reason, command[:200])
+            return reason
+
     import shlex
 
     try:
@@ -215,11 +243,72 @@ def _cleanup_tool_outputs(anima_dir: Path) -> None:
         logger.debug("Cleaned up tool output directory: %s", tool_output_dir)
 
 
+def _summarise_tool_input(tool_name: str, tool_input: dict[str, Any]) -> str:
+    """Return a concise one-line summary of tool_input for activity log content."""
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "")
+        return cmd[:300] if cmd else "(empty)"
+    if tool_name in ("Read", "Write", "Edit"):
+        return tool_input.get("file_path", "(no path)")
+    if tool_name == "Grep":
+        return tool_input.get("pattern", "(no pattern)")
+    if tool_name == "Glob":
+        return tool_input.get("pattern", "(no pattern)")
+    return str(tool_input)[:300]
+
+
+def _sanitise_tool_args(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    """Strip large payload fields from tool_input before logging."""
+    if tool_name == "Write":
+        # content can be an entire file — only keep the path and length.
+        sanitised = {k: v for k, v in tool_input.items() if k != "content"}
+        if "content" in tool_input:
+            sanitised["content_length"] = len(tool_input["content"])
+        return sanitised
+    if tool_name == "Edit":
+        # old_string / new_string can be large diffs.
+        sanitised = {}
+        for k, v in tool_input.items():
+            if k in ("old_string", "new_string"):
+                sanitised[k] = v[:200] if isinstance(v, str) else v
+            else:
+                sanitised[k] = v
+        return sanitised
+    return tool_input
+
+
+def _log_tool_use(
+    anima_dir: Path,
+    tool_name: str,
+    tool_input: dict[str, Any],
+    *,
+    blocked: bool = False,
+    block_reason: str = "",
+) -> None:
+    """Record a tool call to the activity log (best-effort, never raises)."""
+    try:
+        from core.memory.activity import ActivityLogger
+
+        activity = ActivityLogger(anima_dir)
+        meta: dict[str, Any] = {"args": _sanitise_tool_args(tool_name, tool_input)}
+        if blocked:
+            meta["blocked"] = True
+            meta["reason"] = block_reason
+        activity.log(
+            "tool_use",
+            tool=tool_name,
+            content=_summarise_tool_input(tool_name, tool_input),
+            meta=meta,
+        )
+    except Exception:
+        # Never let logging failures disrupt tool execution.
+        logger.debug("Failed to log tool_use for %s", tool_name, exc_info=True)
+
+
 def _build_pre_tool_hook(
     anima_dir: Path,
-    pending_sends: list[dict],
 ) -> Callable:
-    """Build a PreToolUse hook with security checks, output guards, and send tracking."""
+    """Build a PreToolUse hook with security checks, output guards, and tool logging."""
     from claude_agent_sdk.types import (
         HookContext,
         HookInput,
@@ -242,6 +331,7 @@ def _build_pre_tool_hook(
                 file_path, anima_dir, write=True,
             )
             if violation:
+                _log_tool_use(anima_dir, tool_name, tool_input, blocked=True, block_reason=violation)
                 return SyncHookJSONOutput(
                     hookSpecificOutput=PreToolUseHookSpecificOutput(
                         hookEventName="PreToolUse",
@@ -257,6 +347,7 @@ def _build_pre_tool_hook(
                 file_path, anima_dir, write=False,
             )
             if violation:
+                _log_tool_use(anima_dir, tool_name, tool_input, blocked=True, block_reason=violation)
                 return SyncHookJSONOutput(
                     hookSpecificOutput=PreToolUseHookSpecificOutput(
                         hookEventName="PreToolUse",
@@ -270,6 +361,7 @@ def _build_pre_tool_hook(
             command = tool_input.get("command", "")
             violation = _check_a1_bash_command(command, anima_dir)
             if violation:
+                _log_tool_use(anima_dir, tool_name, tool_input, blocked=True, block_reason=violation)
                 return SyncHookJSONOutput(
                     hookSpecificOutput=PreToolUseHookSpecificOutput(
                         hookEventName="PreToolUse",
@@ -278,16 +370,8 @@ def _build_pre_tool_hook(
                     )
                 )
 
-            # Send intent tracking — intentionally matched against the
-            # original command *before* output-guard rewriting, so that
-            # "send <recipient> <msg>" is detected regardless of any
-            # output-guard prefix injected later in this hook.
-            m = _BASH_SEND_RE.match(command)
-            if m:
-                pending_sends.append({
-                    "to": m.group(1),
-                    "command": command,
-                })
+        # Log the tool call (allowed)
+        _log_tool_use(anima_dir, tool_name, tool_input)
 
         # Output guard
         updated = _build_output_guard(tool_name, tool_input, anima_dir)
@@ -343,11 +427,9 @@ class AgentSDKExecutor(BaseExecutor):
         instead of consuming API credits.
 
         Sets ``ANIMAWORKS_ANIMA_DIR`` so that ``animaworks-tool`` can
-        discover personal tools in the anima's ``tools/`` directory,
-        and prepends ``anima_dir`` to ``PATH`` so the ``send`` script is
-        discoverable via ``bash send``.
-        ``ANIMAWORKS_PROJECT_DIR`` is propagated so the send script can
-        locate ``main.py``.
+        discover personal tools in the anima's ``tools/`` directory.
+        ``ANIMAWORKS_PROJECT_DIR`` is propagated so tools can locate
+        ``main.py``.
         """
         from core.paths import PROJECT_DIR
 
@@ -356,43 +438,28 @@ class AgentSDKExecutor(BaseExecutor):
             "ANIMAWORKS_PROJECT_DIR": str(PROJECT_DIR),
             "PATH": f"{self._anima_dir}:{os.environ.get('PATH', '/usr/bin:/bin')}",
             "CLAUDE_CODE_DISABLE_SKILL_IMPROVEMENT": "true",
+            # Block API key leaking from parent (load_dotenv) — force Max plan auth.
+            "ANTHROPIC_API_KEY": "",
         }
-        # Do NOT pass ANTHROPIC_API_KEY — let Claude Code use its own
-        # subscription auth.  Only pass ANTHROPIC_BASE_URL if a custom
-        # endpoint is configured (e.g. proxy).
+        # Only pass ANTHROPIC_BASE_URL if a custom endpoint is configured.
         if self._model_config.api_base_url:
             env["ANTHROPIC_BASE_URL"] = self._model_config.api_base_url
         return env
 
-    def _check_unconfirmed_sends(
-        self,
-        pending_sends: list[dict],
-        confirmed: set[str],
-    ) -> list[dict]:
-        """Compare send intents with confirmed sends, log unconfirmed."""
-        if not pending_sends:
-            return []
-        unconfirmed = [
-            s for s in pending_sends
-            if s["to"] not in confirmed
-        ]
-        if unconfirmed:
-            names = ", ".join(s["to"] for s in unconfirmed)
-            logger.warning(
-                "Unconfirmed sends detected: %s (attempted %d, confirmed %d)",
-                names, len(pending_sends), len(confirmed),
-            )
-            try:
-                from core.memory.activity import ActivityLogger
-                activity = ActivityLogger(self._anima_dir)
-                activity.log(
-                    "error",
-                    content=f"Unconfirmed message sends to: {names}",
-                    meta={"unconfirmed_sends": unconfirmed},
-                )
-            except Exception as e:
-                logger.warning("Failed to log unconfirmed sends: %s", e)
-        return unconfirmed
+    def _build_mcp_env(self) -> dict[str, str]:
+        """Build env dict for the MCP server subprocess.
+
+        The MCP server needs ANIMAWORKS_ANIMA_DIR and ANIMAWORKS_PROJECT_DIR
+        to initialize ToolHandler, plus PYTHONPATH so it can import core modules.
+        """
+        from core.paths import PROJECT_DIR
+
+        return {
+            "ANIMAWORKS_ANIMA_DIR": str(self._anima_dir),
+            "ANIMAWORKS_PROJECT_DIR": str(PROJECT_DIR),
+            "PYTHONPATH": str(PROJECT_DIR),
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        }
 
     # ── Blocking execution ───────────────────────────────────
 
@@ -404,6 +471,7 @@ class AgentSDKExecutor(BaseExecutor):
         shortterm: ShortTermMemory | None = None,
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> ExecutionResult:
         """Run a session via Claude Agent SDK with context monitoring hook.
 
@@ -420,6 +488,7 @@ class AgentSDKExecutor(BaseExecutor):
             ClaudeAgentOptions,
             HookMatcher,
             ResultMessage,
+            SystemMessage,
             TextBlock,
             query,
         )
@@ -433,7 +502,6 @@ class AgentSDKExecutor(BaseExecutor):
         threshold = self._model_config.context_threshold
         _hook_fired = False
         _transcript_path = ""
-        pending_sends: list[dict] = []
 
         async def _post_tool_hook(
             input_data: HookInput,
@@ -467,23 +535,32 @@ class AgentSDKExecutor(BaseExecutor):
 
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
-            allowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+            allowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob",
+                           "mcp__aw__*"],
             permission_mode="acceptEdits",
             cwd=str(self._anima_dir),
             max_turns=self._model_config.max_turns,
             model=self._resolve_agent_sdk_model(),
             env=self._build_env(),
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,
+            mcp_servers={
+                "aw": {
+                    "command": sys.executable,
+                    "args": ["-m", "core.mcp.server"],
+                    "env": self._build_mcp_env(),
+                },
+            },
             hooks={
                 "PreToolUse": [HookMatcher(
                     matcher="Write|Edit|Bash|Read|Grep|Glob",
-                    hooks=[_build_pre_tool_hook(self._anima_dir, pending_sends)],
+                    hooks=[_build_pre_tool_hook(self._anima_dir)],
                 )],
                 "PostToolUse": [HookMatcher(matcher=None, hooks=[_post_tool_hook])],
             },
         )
 
         response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         result_message: ResultMessage | None = None
         message_count = 0
 
@@ -498,10 +575,34 @@ class AgentSDKExecutor(BaseExecutor):
                     for block in message.content:
                         if isinstance(block, TextBlock):
                             response_text.append(block.text)
+                        elif hasattr(block, 'name') and hasattr(block, 'id'):
+                            # ToolUseBlock from Agent SDK
+                            all_tool_records.append(ToolCallRecord(
+                                tool_name=block.name,
+                                tool_id=block.id,
+                                input_summary=_truncate_for_record(
+                                    str(getattr(block, 'input', '')), 200,
+                                ),
+                                result_summary="",  # Not available - managed by Agent SDK internally
+                            ))
+                elif isinstance(message, SystemMessage):
+                    if message.subtype == "init" and message.data:
+                        mcp_servers = message.data.get("mcp_servers", [])
+                        for srv in mcp_servers:
+                            name = srv.get("name", "unknown")
+                            status = srv.get("status", "unknown")
+                            if status != "connected":
+                                logger.error(
+                                    "MCP server '%s' failed to connect: status=%s",
+                                    name, status,
+                                )
+                            else:
+                                logger.info("MCP server '%s' connected successfully", name)
         except Exception as e:
             logger.exception("Agent SDK execution error")
             return ExecutionResult(
                 text="\n".join(response_text) or f"[Agent SDK Error: {e}]",
+                tool_call_records=all_tool_records,
             )
         finally:
             _cleanup_tool_outputs(self._anima_dir)
@@ -511,12 +612,11 @@ class AgentSDKExecutor(BaseExecutor):
             message_count, len(response_text),
         )
         replied_to = self._read_replied_to_file()
-        unconfirmed = self._check_unconfirmed_sends(pending_sends, replied_to)
         return ExecutionResult(
             text="\n".join(response_text) or "(no response)",
             result_message=result_message,
             replied_to_from_transcript=replied_to,
-            unconfirmed_sends=unconfirmed,
+            tool_call_records=all_tool_records,
         )
 
     # ── Streaming execution ──────────────────────────────────
@@ -546,6 +646,7 @@ class AgentSDKExecutor(BaseExecutor):
             ClaudeAgentOptions,
             HookMatcher,
             ResultMessage,
+            SystemMessage,
             TextBlock,
             ToolUseBlock,
             query,
@@ -561,7 +662,6 @@ class AgentSDKExecutor(BaseExecutor):
         threshold = self._model_config.context_threshold
         _hook_fired = False
         _transcript_path = ""
-        pending_sends: list[dict] = []
 
         async def _post_tool_hook(
             input_data: HookInput,
@@ -593,7 +693,8 @@ class AgentSDKExecutor(BaseExecutor):
 
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
-            allowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+            allowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob",
+                           "mcp__aw__*"],
             permission_mode="acceptEdits",
             cwd=str(self._anima_dir),
             max_turns=self._model_config.max_turns,
@@ -601,18 +702,28 @@ class AgentSDKExecutor(BaseExecutor):
             env=self._build_env(),
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,
             include_partial_messages=True,
+            mcp_servers={
+                "aw": {
+                    "command": sys.executable,
+                    "args": ["-m", "core.mcp.server"],
+                    "env": self._build_mcp_env(),
+                },
+            },
             hooks={
                 "PreToolUse": [HookMatcher(
                     matcher="Write|Edit|Bash|Read|Grep|Glob",
-                    hooks=[_build_pre_tool_hook(self._anima_dir, pending_sends)],
+                    hooks=[_build_pre_tool_hook(self._anima_dir)],
                 )],
                 "PostToolUse": [HookMatcher(matcher=None, hooks=[_post_tool_hook])],
             },
         )
 
         response_text: list[str] = []
+        all_tool_records: list[ToolCallRecord] = []
         result_message: ResultMessage | None = None
         active_tool_ids: set[str] = set()
+        # Track tool names from content_block_start for streaming records
+        active_tool_names: dict[str, str] = {}
         message_count = 0
 
         try:
@@ -625,10 +736,12 @@ class AgentSDKExecutor(BaseExecutor):
                         block = event.get("content_block", {})
                         if block.get("type") == "tool_use":
                             tool_id = block.get("id", "")
+                            tool_name = block.get("name", "")
                             active_tool_ids.add(tool_id)
+                            active_tool_names[tool_id] = tool_name
                             yield {
                                 "type": "tool_start",
-                                "tool_name": block.get("name", ""),
+                                "tool_name": tool_name,
                                 "tool_id": tool_id,
                             }
 
@@ -645,6 +758,14 @@ class AgentSDKExecutor(BaseExecutor):
                         if isinstance(block, TextBlock):
                             response_text.append(block.text)
                         elif isinstance(block, ToolUseBlock):
+                            all_tool_records.append(ToolCallRecord(
+                                tool_name=block.name,
+                                tool_id=block.id,
+                                input_summary=_truncate_for_record(
+                                    str(getattr(block, 'input', '')), 200,
+                                ),
+                                result_summary="",  # Not available - managed by Agent SDK internally
+                            ))
                             if block.id in active_tool_ids:
                                 active_tool_ids.discard(block.id)
                                 yield {
@@ -656,6 +777,20 @@ class AgentSDKExecutor(BaseExecutor):
                 elif isinstance(message, ResultMessage):
                     result_message = message
                     tracker.update_from_result_message(message.usage)
+
+                elif isinstance(message, SystemMessage):
+                    if message.subtype == "init" and message.data:
+                        mcp_servers = message.data.get("mcp_servers", [])
+                        for srv in mcp_servers:
+                            name = srv.get("name", "unknown")
+                            status = srv.get("status", "unknown")
+                            if status != "connected":
+                                logger.error(
+                                    "MCP server '%s' failed to connect: status=%s",
+                                    name, status,
+                                )
+                            else:
+                                logger.info("MCP server '%s' connected successfully", name)
         except Exception as e:
             logger.exception("Agent SDK streaming error")
             partial = "\n".join(response_text)
@@ -672,11 +807,10 @@ class AgentSDKExecutor(BaseExecutor):
         )
         full_text = "\n".join(response_text) or "(no response)"
         replied_to = self._read_replied_to_file()
-        unconfirmed = self._check_unconfirmed_sends(pending_sends, replied_to)
         yield {
             "type": "done",
             "full_text": full_text,
             "result_message": result_message,
             "replied_to_from_transcript": replied_to,
-            "unconfirmed_sends": unconfirmed,
+            "tool_call_records": [asdict(r) for r in all_tool_records],
         }

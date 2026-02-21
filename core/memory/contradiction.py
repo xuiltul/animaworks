@@ -603,7 +603,7 @@ class ContradictionDetector:
         history_path.parent.mkdir(parents=True, exist_ok=True)
 
         entry = {
-            "ts": datetime.now().isoformat(),
+            "ts": now_iso(),
             "anima": self.anima_name,
             "file_a": pair.file_a.name,
             "file_b": pair.file_b.name,

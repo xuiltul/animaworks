@@ -113,9 +113,9 @@ class TestProcedureSkillMatching:
 class TestBuilderProcedureInjection:
     """Test that build_system_prompt includes procedure matching."""
 
-    def test_matched_procedure_injected(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Matched procedures should be injected as full text."""
-        # Write a procedure that matches "deploy"
+    def test_procedure_appears_in_unified_table(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Procedures should appear in the unified skills/procedures table."""
+        # Write a procedure
         (anima_dir / "procedures" / "deploy.md").write_text(
             "---\ndescription: \"「デプロイ」手順\"\n---\n\n# Deploy Steps\n\n1. Pull\n2. Build\n3. Deploy",
             encoding="utf-8",
@@ -123,11 +123,11 @@ class TestBuilderProcedureInjection:
 
         # Mock load_prompt to avoid needing template files
         def mock_load_prompt(name, **kwargs):
-            if name == "builder/skill_injection":
+            if name == "skills_guide":
                 return (
-                    f"## {kwargs.get('section_title', '')}: "
-                    f"{kwargs.get('skill_name', '')} {kwargs.get('label', '')}\n\n"
-                    f"{kwargs.get('body', '')}"
+                    "## スキルと手順書\n\n"
+                    "スキルと手順書はあなたが持つ能力・作業手順です。\n"
+                    "使用する際は該当ファイルをReadで読んでから実行してください。"
                 )
             return f"[{name}]"
 
@@ -147,25 +147,21 @@ class TestBuilderProcedureInjection:
         )
         prompt = result.system_prompt
 
-        assert "手順: deploy (手順)" in prompt
-        assert "# Deploy Steps" in prompt
+        assert "| deploy | 手順 |" in prompt
 
-    def test_unmatched_procedures_table(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Unmatched procedures should appear in a table."""
+    def test_all_procedures_in_unified_table(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ALL procedures always appear in the unified table regardless of message content."""
         (anima_dir / "procedures" / "backup.md").write_text(
             "---\ndescription: backup procedure\n---\n\n# Backup",
             encoding="utf-8",
         )
 
         def mock_load_prompt(name, **kwargs):
-            if name == "builder/procedures_header":
-                proc_lines = kwargs.get("proc_lines", "")
-                return f"## 手順書\n\n| 手順名 | 概要 |\n|---------|------|\n{proc_lines}"
-            if name == "builder/skill_injection":
+            if name == "skills_guide":
                 return (
-                    f"## {kwargs.get('section_title', '')}: "
-                    f"{kwargs.get('skill_name', '')} {kwargs.get('label', '')}\n\n"
-                    f"{kwargs.get('body', '')}"
+                    "## スキルと手順書\n\n"
+                    "スキルと手順書はあなたが持つ能力・作業手順です。\n"
+                    "使用する際は該当ファイルをReadで読んでから実行してください。"
                 )
             return f"[{name}]"
 
@@ -180,26 +176,25 @@ class TestBuilderProcedureInjection:
 
         result = build_system_prompt(
             memory,
-            message="こんにちは",  # Won't match "backup"
+            message="こんにちは",  # Unrelated message — procedure still appears
         )
         prompt = result.system_prompt
 
-        assert "## 手順書" in prompt
-        assert "| backup |" in prompt
+        assert "| backup | 手順 |" in prompt
 
-    def test_injected_procedures_tracked(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Injected procedures should be recorded in BuildResult.injected_procedures."""
+    def test_injected_procedures_always_empty(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """BuildResult.injected_procedures is always an empty list."""
         (anima_dir / "procedures" / "deploy.md").write_text(
             "---\ndescription: \"「デプロイ」手順\"\n---\n\n# Deploy",
             encoding="utf-8",
         )
 
         def mock_load_prompt(name, **kwargs):
-            if name == "builder/skill_injection":
+            if name == "skills_guide":
                 return (
-                    f"## {kwargs.get('section_title', '')}: "
-                    f"{kwargs.get('skill_name', '')} {kwargs.get('label', '')}\n\n"
-                    f"{kwargs.get('body', '')}"
+                    "## スキルと手順書\n\n"
+                    "スキルと手順書はあなたが持つ能力・作業手順です。\n"
+                    "使用する際は該当ファイルをReadで読んでから実行してください。"
                 )
             return f"[{name}]"
 
@@ -210,8 +205,7 @@ class TestBuilderProcedureInjection:
 
         result = build_system_prompt(memory, message="デプロイをお願いします")
 
-        assert len(result.injected_procedures) >= 1
-        assert any("deploy" in str(p) for p in result.injected_procedures)
+        assert result.injected_procedures == []
 
 
 # ── 2-3: Priming Channel D with procedures ──────────────

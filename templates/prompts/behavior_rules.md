@@ -61,6 +61,8 @@ Prioritize technical accuracy and truthfulness over validating the user's belief
 以下の場合のみ、write_memory_file で直接書き込むこと:
 - 重要な方針・教訓を即座に記録したい時 → knowledge/ に書き込み
 - 作業手順をまとめたい時 → procedures/ に書き込み
+  - 第1見出し（`# ...`）は手順の目的が一目でわかる具体的な1行にすること（例: `# Chatwork重要案件のエスカレーション判断と通知`）
+  - YAMLフロントマターは不要（システムが自動付与する）
 - 新しいスキルを習得した時 → skills/ に書き込み
 - これは「メモを取る」行為であり、記録義務ではない
 

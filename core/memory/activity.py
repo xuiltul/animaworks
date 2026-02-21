@@ -470,9 +470,18 @@ class ActivityLogger:
 
         # Truncate long content with pointer (0 = no trim)
         if content_trim > 0 and len(text) > content_trim:
-            trim_at = max(1, content_trim - 20)
             date_str = entry.ts[:10] if len(entry.ts) >= 10 else "unknown"
-            text = text[:trim_at] + f"...(-> activity_log/{date_str}.jsonl)"
+            pointer = f"\n  -> activity_log/{date_str}.jsonl"
+            trim_window = text[:content_trim]
+            last_boundary = max(
+                trim_window.rfind("\u3002"),
+                trim_window.rfind("\n"),
+                trim_window.rfind(". "),
+            )
+            if last_boundary > content_trim * 0.5:
+                text = trim_window[:last_boundary + 1] + pointer
+            else:
+                text = trim_window[:max(1, content_trim - 20)] + "..." + pointer
 
         type_map: dict[str, str] = {
             "message_received": "MSG<",
@@ -633,8 +642,9 @@ class ActivityLogger:
         )
 
         if group.type == "dm":
-            # Header: [HH:MM-HH:MM] DM {label}
-            lines = [f"{time_range} DM {group.label}"]
+            # Header: [HH:MM-HH:MM] DM {peer}:
+            peer = _get_peer(group)
+            lines = [f"{time_range} DM {peer}:"]
             # Child lines: indented DM direction + summary
             for e in group.entries:
                 direction = "DM<" if e.type == "dm_received" else "DM>"

@@ -26,9 +26,6 @@ def _mock_load_prompt_with_builder(default: str = "section"):
     """Return a side_effect function that renders builder/* templates minimally."""
 
     def _mock(name: str, **kwargs) -> str:
-        if name == "builder/common_skills_header":
-            lines = kwargs.get("common_skill_lines", "")
-            return f"## 共通スキル\n\n| スキル名 | 概要 |\n|---------|------|\n{lines}"
         if name == "builder/task_in_progress":
             return f"## ⚠️ 進行中タスク\n\n{kwargs.get('state', '')}"
         if name == "builder/task_queue":
@@ -43,14 +40,8 @@ def _mock_load_prompt_with_builder(default: str = "section"):
             return "## 雇用ルール\n\ncreate-anima"
         if name == "builder/hiring_rules_other":
             return "## 雇用ルール\n\ncreate-anima"
-        if name == "builder/skill_injection":
-            return (
-                f"## {kwargs.get('section_title', '')}: "
-                f"{kwargs.get('skill_name', '')} {kwargs.get('label', '')}\n\n"
-                f"{kwargs.get('body', '')}"
-            )
-        if name == "builder/procedures_header":
-            return f"## 手順書\n\n{kwargs.get('proc_lines', '')}"
+        if name == "skills_guide":
+            return "## スキルと手順書\n\nスキルと手順書はあなたが持つ能力・作業手順です。\n使用する際は該当ファイルをReadで読んでから実行してください。"
         return default
 
     return _mock
@@ -241,18 +232,20 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = [("deploy", "Deploy apps")]
         memory.list_skill_metas.return_value = [SkillMeta(name="coding", description="Write code", path=Path("/tmp/test/skills/coding.md"), is_common=False)]
         memory.list_common_skill_metas.return_value = [SkillMeta(name="deploy", description="Deploy apps", path=Path("/tmp/test/common_skills/deploy.md"), is_common=True)]
+        memory.list_procedure_metas.return_value = []
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
         with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(memory)
-            # Common skills section is built inline (not via load_prompt)
-            assert "共通スキル" in result
+            # Unified skills/procedures table with "スキルと手順書" header
+            assert "スキルと手順書" in result
+            # Personal skill appears as 個人 type in the unified table
+            assert "coding" in result
+            assert "個人" in result
+            # Common skill appears as 共通 type in the unified table
             assert "deploy" in result
-            # Personal skills are built via load_prompt("skills_guide", ...)
-            # which returns "section" in mock; verify it was called
-            # The memory_guide template gets skill names as kwargs
-            assert "coding" in result or "section" in result
+            assert "共通" in result
 
     def test_includes_bootstrap(self, tmp_path, data_dir):
         anima_dir = tmp_path / "animas" / "alice"
@@ -531,18 +524,21 @@ class TestHiringContextPlacement:
 
         return memory
 
-    def test_hiring_context_before_behavior_rules(self, tmp_path, data_dir):
-        """hiring_context must appear before behavior_rules in the prompt."""
+    def test_behavior_rules_in_group1_hiring_context_in_group5(self, tmp_path, data_dir):
+        """behavior_rules is in Group 1, hiring_context is in Group 5."""
         memory = self._build_solo_prompt(tmp_path, data_dir)
 
         # Use real load_prompt so both templates are loaded with real content
         result = build_system_prompt(memory)
 
-        # hiring_context contains "チーム構成について"
-        # behavior_rules contains "行動ルール"
+        # behavior_rules is in Group 1 (動作環境と行動ルール)
+        assert "# 1. 動作環境と行動ルール" in result
+        assert "## 行動ルール" in result
+        # hiring_context is in Group 5 (組織とコミュニケーション)
+        assert "# 5. 組織とコミュニケーション" in result
         assert "チーム構成について" in result
-        assert "行動ルール" in result
-        assert result.index("チーム構成について") < result.index("行動ルール")
+        # behavior_rules section appears before hiring_context
+        assert result.index("## 行動ルール") < result.index("チーム構成について")
 
     def test_hiring_context_not_injected_with_peers(self, tmp_path, data_dir):
         """hiring_context must NOT be injected when other animas exist."""

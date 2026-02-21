@@ -25,7 +25,6 @@ from core.anima_factory import (
     _init_state_files,
     _parse_character_sheet_info,
     _place_bootstrap,
-    _place_send_script,
     _should_create_bootstrap,
     _validate_character_sheet,
     create_blank,
@@ -472,96 +471,6 @@ class TestCreateFromMd:
                 (anima_dir / "status.json").read_text(encoding="utf-8")
             )
             assert status["supervisor"] == "tanaka"
-
-
-# ── _place_send_script ───────────────────────────────────
-
-
-class TestPlaceSendScript:
-    def test_copies_send_script(self, tmp_path):
-        """Send script is copied from blank template to anima dir."""
-        blank_dir = tmp_path / "blank"
-        blank_dir.mkdir()
-        send_src = blank_dir / "send"
-        send_src.write_text("#!/bin/bash\necho send", encoding="utf-8")
-
-        anima_dir = tmp_path / "anima"
-        anima_dir.mkdir()
-
-        with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir):
-            _place_send_script(anima_dir)
-
-        dst = anima_dir / "send"
-        assert dst.exists()
-        assert dst.read_text(encoding="utf-8") == "#!/bin/bash\necho send"
-        # Check executable permission
-        assert dst.stat().st_mode & 0o755
-
-    def test_overwrites_existing(self, tmp_path):
-        """Send script is always overwritten to match the latest template."""
-        blank_dir = tmp_path / "blank"
-        blank_dir.mkdir()
-        (blank_dir / "send").write_text("#!/bin/bash\nnew", encoding="utf-8")
-
-        anima_dir = tmp_path / "anima"
-        anima_dir.mkdir()
-        (anima_dir / "send").write_text("#!/bin/bash\nold", encoding="utf-8")
-
-        with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir):
-            _place_send_script(anima_dir)
-
-        # Should be updated to match the template
-        assert (anima_dir / "send").read_text(encoding="utf-8") == "#!/bin/bash\nnew"
-
-    def test_no_source_script(self, tmp_path):
-        """If blank template has no send script, do nothing."""
-        blank_dir = tmp_path / "blank"
-        blank_dir.mkdir()
-        # No send script in blank_dir
-
-        anima_dir = tmp_path / "anima"
-        anima_dir.mkdir()
-
-        with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir):
-            _place_send_script(anima_dir)
-
-        assert not (anima_dir / "send").exists()
-
-    def test_create_blank_includes_send_script(self, tmp_path):
-        """create_blank() should call _place_send_script."""
-        blank_dir = tmp_path / "blank"
-        blank_dir.mkdir()
-        (blank_dir / "send").write_text("#!/bin/bash\ntest", encoding="utf-8")
-        (blank_dir / "identity.md").write_text("{name}", encoding="utf-8")
-
-        animas_dir = tmp_path / "animas"
-        animas_dir.mkdir()
-
-        with patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir), \
-             patch("core.anima_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
-            anima_dir = create_blank(animas_dir, "alice")
-
-        assert (anima_dir / "send").exists()
-
-    def test_create_from_template_includes_send_script(self, tmp_path):
-        """create_from_template() should also include send script."""
-        tpl_dir = tmp_path / "tpl"
-        (tpl_dir / "dev").mkdir(parents=True)
-        (tpl_dir / "dev" / "identity.md").write_text("dev", encoding="utf-8")
-
-        blank_dir = tmp_path / "blank"
-        blank_dir.mkdir()
-        (blank_dir / "send").write_text("#!/bin/bash\ntest", encoding="utf-8")
-
-        animas_dir = tmp_path / "animas"
-        animas_dir.mkdir()
-
-        with patch("core.anima_factory.ANIMA_TEMPLATES_DIR", tpl_dir), \
-             patch("core.anima_factory.BLANK_TEMPLATE_DIR", blank_dir), \
-             patch("core.anima_factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"):
-            anima_dir = create_from_template(animas_dir, "dev")
-
-        assert (anima_dir / "send").exists()
 
 
 # ── _parse_character_sheet_info ──────────────────────────

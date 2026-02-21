@@ -30,6 +30,22 @@ from core.exceptions import StreamDisconnectedError  # noqa: F401 – re-export
 # ── Result ───────────────────────────────────────────────────
 
 
+def _truncate_for_record(text: str, max_len: int) -> str:
+    """Truncate text for tool call record storage."""
+    s = str(text)
+    return s[:max_len] + "..." if len(s) > max_len else s
+
+
+@dataclass
+class ToolCallRecord:
+    """Lightweight tool call record for propagation through the execution chain."""
+
+    tool_name: str
+    tool_id: str = ""
+    input_summary: str = ""
+    result_summary: str = ""
+
+
 @dataclass
 class ExecutionResult:
     """Result of a single execution session.
@@ -38,12 +54,14 @@ class ExecutionResult:
         text: The textual response from the LLM.
         result_message: Provider-specific metadata (e.g. ResultMessage
             from Claude Agent SDK).  Used for session chaining in A1 mode.
+        tool_call_records: Tool calls made during this execution session.
     """
 
     text: str
     result_message: Any = field(default=None, repr=False)
     replied_to_from_transcript: set[str] = field(default_factory=set)
     unconfirmed_sends: list[dict] = field(default_factory=list)
+    tool_call_records: list[ToolCallRecord] = field(default_factory=list)
 
 
 class BaseExecutor(ABC):
@@ -146,6 +164,7 @@ class BaseExecutor(ABC):
         shortterm: ShortTermMemory | None = None,
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> ExecutionResult:
         """Run the execution engine and return the response.
 
@@ -174,6 +193,7 @@ class BaseExecutor(ABC):
         prompt: str,
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the engine.
 
@@ -189,21 +209,26 @@ class BaseExecutor(ABC):
             prompt: The user/trigger prompt.
             tracker: Context usage tracker.
             images: Optional list of image dicts for multimodal input.
+            prior_messages: Optional structured conversation history.
 
         Yields:
             Dicts with at least a type key. Common types:
                 - {"type": "text_delta", "text": "..."}
                 - {"type": "done", "full_text": "...", "result_message": ...}
         """
+        from dataclasses import asdict
+
         result = await self.execute(
             prompt=prompt,
             system_prompt=system_prompt,
             tracker=tracker,
             images=images,
+            prior_messages=prior_messages,
         )
         yield {"type": "text_delta", "text": result.text}
         yield {
             "type": "done",
             "full_text": result.text,
             "result_message": result.result_message,
+            "tool_call_records": [asdict(r) for r in result.tool_call_records],
         }
