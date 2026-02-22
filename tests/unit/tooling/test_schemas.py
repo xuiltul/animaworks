@@ -27,7 +27,7 @@ from core.tooling.schemas import (
 class TestMemoryTools:
     def test_memory_tools_is_list(self):
         assert isinstance(MEMORY_TOOLS, list)
-        assert len(MEMORY_TOOLS) == 4
+        assert len(MEMORY_TOOLS) == 5
 
     def test_search_memory_schema(self):
         schema = next(t for t in MEMORY_TOOLS if t["name"] == "search_memory")
@@ -64,7 +64,7 @@ class TestMemoryTools:
         props = schema["parameters"]["properties"]
         assert "to" in props
         assert "content" in props
-        assert set(schema["parameters"]["required"]) == {"to", "content"}
+        assert set(schema["parameters"]["required"]) == {"to", "content", "intent"}
 
 
 class TestSendMessageSchema:
@@ -72,9 +72,9 @@ class TestSendMessageSchema:
         send_msg = next(t for t in MEMORY_TOOLS if t["name"] == "send_message")
         assert "intent" in send_msg["parameters"]["properties"]
 
-    def test_intent_not_required(self):
+    def test_intent_required(self):
         send_msg = next(t for t in MEMORY_TOOLS if t["name"] == "send_message")
-        assert "intent" not in send_msg["parameters"]["required"]
+        assert "intent" in send_msg["parameters"]["required"]
 
     def test_intent_type_is_string(self):
         send_msg = next(t for t in MEMORY_TOOLS if t["name"] == "send_message")
@@ -275,8 +275,8 @@ class TestBuildToolList:
             include_tool_management=True,
         )
         names = [t["name"] for t in result]
-        # 4 memory + 3 channel + 1 report_procedure_outcome + 1 report_knowledge_outcome + 4 file + 2 search + 1 discovery + 2 tool_management = 18
-        assert len(result) == 18
+        # 5 memory + 3 channel + 1 report_procedure_outcome + 1 report_knowledge_outcome + 4 file + 2 search + 1 discovery + 2 tool_management = 19
+        assert len(result) == 19
         assert "search_code" in names
         assert "list_directory" in names
         assert "discover_tools" in names

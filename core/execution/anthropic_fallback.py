@@ -22,10 +22,11 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from core.prompt.context import ContextTracker
+from core.prompt.context import ContextTracker, resolve_context_window
 from core.execution._session import build_continuation_prompt, handle_session_chaining
 from core.execution._streaming import stream_error_boundary
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
+from core.execution.reminder import MSG_CONTEXT_THRESHOLD, MSG_OUTPUT_TRUNCATED, SystemReminderQueue
 from core.memory import MemoryManager
 from core.prompt.builder import build_system_prompt
 from core.schemas import ModelConfig
@@ -39,6 +40,39 @@ from core.tooling.schemas import (
 import httpx
 
 logger = logging.getLogger("animaworks.execution.anthropic_fallback")
+
+
+def _extract_tool_uses_from_messages(messages: list[dict]) -> list[dict]:
+    """Extract tool_use info from Anthropic-format messages."""
+    tool_uses: list[dict] = []
+    for msg in messages:
+        if msg.get("role") == "assistant":
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        tool_uses.append({
+                            "name": block.get("name", ""),
+                            "input": str(block.get("input", ""))[:500],
+                        })
+                    elif hasattr(block, "type") and block.type == "tool_use":
+                        tool_uses.append({
+                            "name": getattr(block, "name", ""),
+                            "input": str(getattr(block, "input", ""))[:500],
+                        })
+        elif msg.get("role") == "user":
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_result" and tool_uses:
+                        result_content = block.get("content", "")
+                        if isinstance(result_content, list):
+                            result_content = " ".join(
+                                b.get("text", "") for b in result_content
+                                if isinstance(b, dict) and b.get("type") == "text"
+                            )
+                        tool_uses[-1]["result"] = str(result_content)[:500]
+    return tool_uses[-20:]  # Keep last 20 entries
 
 
 class AnthropicFallbackExecutor(BaseExecutor):
@@ -71,8 +105,13 @@ class AnthropicFallbackExecutor(BaseExecutor):
             include_file_tools=False,
             include_notification_tools=self._tool_handler._human_notifier is not None,
             include_admin_tools=(self._anima_dir / "skills" / "newstaff.md").exists(),
+            include_supervisor_tools=self._has_subordinates(),
             include_tool_management=True,
             include_task_tools=True,
+            include_skill_tools=True,
+            skill_metas=self._memory.list_skill_metas(),
+            common_skill_metas=self._memory.list_common_skill_metas(),
+            procedure_metas=self._memory.list_procedure_metas(),
             external_schemas=external,
         )
         return to_anthropic_format(canonical)
@@ -119,10 +158,12 @@ class AnthropicFallbackExecutor(BaseExecutor):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run Anthropic SDK with tool_use loop."""
         client = self._build_client()
         tools = self._build_tools()
+        context_window = resolve_context_window(self._model_config.model)
         if prior_messages:
             messages = prior_messages  # Structured history including current msg
         else:
@@ -130,8 +171,9 @@ class AnthropicFallbackExecutor(BaseExecutor):
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
         chain_count = 0
+        max_iterations = max_turns_override or self._model_config.max_turns
 
-        for iteration in range(10):
+        for iteration in range(max_iterations):
             logger.debug(
                 "API call iteration=%d messages_count=%d",
                 iteration, len(messages),
@@ -157,6 +199,16 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 }
                 tracker.update_from_usage(usage_dict)
 
+                # P1-1: context threshold reminder
+                if tracker.threshold_exceeded:
+                    try:
+                        ratio = float(tracker.usage_ratio)
+                    except (TypeError, ValueError):
+                        ratio = 0.0
+                    self.reminder_queue.push_sync(
+                        MSG_CONTEXT_THRESHOLD.format(ratio=ratio)
+                    )
+
                 current_text = "\n".join(
                     b.text for b in response.content if b.type == "text"
                 )
@@ -179,6 +231,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     original_prompt=prompt,
                     accumulated_response="\n".join(all_response_text),
                     turn_count=iteration,
+                    tool_uses=_extract_tool_uses_from_messages(messages),
                 )
                 if new_sys is not None:
                     all_response_text.append(current_text)
@@ -188,6 +241,10 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     ]
                     continue
 
+            # ── P1-2: output truncation reminder ─────────────────
+            if response.stop_reason == "max_tokens":
+                self.reminder_queue.push_sync(MSG_OUTPUT_TRUNCATED)
+
             # ── Check for tool use ────────────────────────────
             tool_uses = [b for b in response.content if b.type == "tool_use"]
             if not tool_uses:
@@ -196,6 +253,10 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     b.text for b in response.content if b.type == "text"
                 )
                 all_response_text.append(final_text)
+                # ── Final drain: deliver any undelivered reminders ──
+                final_reminder = self.reminder_queue.drain_formatted()
+                if final_reminder:
+                    all_response_text.append(final_reminder)
                 return ExecutionResult(
                     text="\n".join(all_response_text),
                     tool_call_records=all_tool_records,
@@ -219,12 +280,25 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 all_tool_records.append(ToolCallRecord(
                     tool_name=tu.name,
                     tool_id=tu.id,
-                    input_summary=_truncate_for_record(str(tu.input), 200),
-                    result_summary=_truncate_for_record(str(result), 300),
+                    input_summary=_truncate_for_record(str(tu.input), tool_input_save_budget(context_window)),
+                    result_summary=_truncate_for_record(str(result), tool_result_save_budget(tu.name, context_window)),
                 ))
             messages.append({"role": "user", "content": tool_results})
 
-        logger.warning("Max iterations (10) reached, returning fallback response")
+            # ── Drain reminder queue into tool result message ──
+            reminder = self.reminder_queue.drain_sync()
+            if reminder:
+                formatted = SystemReminderQueue.format_reminder(reminder)
+                last_content = messages[-1]["content"]
+                if isinstance(last_content, list):
+                    last_content.append({
+                        "type": "text",
+                        "text": formatted,
+                    })
+                elif isinstance(last_content, str):
+                    messages[-1]["content"] += "\n\n" + formatted
+
+        logger.warning("Max iterations (%d) reached, returning fallback response", max_iterations)
         return ExecutionResult(
             text="\n".join(all_response_text) or "(max iterations reached)",
             tool_call_records=all_tool_records,
@@ -239,6 +313,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events using the Anthropic SDK messages.stream().
 
@@ -253,6 +328,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         """
         client = self._build_client()
         tools = self._build_tools()
+        context_window = resolve_context_window(self._model_config.model)
         if prior_messages:
             messages = prior_messages
         else:
@@ -260,7 +336,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
 
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
-        _MAX_ITERATIONS = 10
+        _MAX_ITERATIONS = max_turns_override or self._model_config.max_turns
 
         async with stream_error_boundary(
             all_response_text, executor_name="AnthropicFallback",
@@ -309,6 +385,20 @@ class AnthropicFallbackExecutor(BaseExecutor):
                         "output_tokens": final_message.usage.output_tokens,
                     }
                     tracker.update_from_usage(usage_dict)
+
+                    # P1-1: context threshold reminder
+                    if tracker.threshold_exceeded:
+                        try:
+                            ratio = float(tracker.usage_ratio)
+                        except (TypeError, ValueError):
+                            ratio = 0.0
+                        self.reminder_queue.push_sync(
+                            MSG_CONTEXT_THRESHOLD.format(ratio=ratio)
+                        )
+
+                # P1-2: output truncation reminder
+                if final_message and getattr(final_message, "stop_reason", None) == "max_tokens":
+                    self.reminder_queue.push_sync(MSG_OUTPUT_TRUNCATED)
 
                 # ── Check for tool use ────────────────────────
                 tool_uses = [
@@ -359,8 +449,8 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     all_tool_records.append(ToolCallRecord(
                         tool_name=tu.name,
                         tool_id=tu.id,
-                        input_summary=_truncate_for_record(str(tu.input), 200),
-                        result_summary=_truncate_for_record(str(result), 300),
+                        input_summary=_truncate_for_record(str(tu.input), tool_input_save_budget(context_window)),
+                        result_summary=_truncate_for_record(str(result), tool_result_save_budget(tu.name, context_window)),
                     ))
                     yield {
                         "type": "tool_end",
@@ -368,6 +458,19 @@ class AnthropicFallbackExecutor(BaseExecutor):
                         "tool_name": tu.name,
                     }
                 messages.append({"role": "user", "content": tool_results})
+
+                # ── Drain reminder queue into tool result message ──
+                reminder = self.reminder_queue.drain_sync()
+                if reminder:
+                    formatted = SystemReminderQueue.format_reminder(reminder)
+                    last_content = messages[-1]["content"]
+                    if isinstance(last_content, list):
+                        last_content.append({
+                            "type": "text",
+                            "text": formatted,
+                        })
+                    elif isinstance(last_content, str):
+                        messages[-1]["content"] += "\n\n" + formatted
             else:
                 # for-else: max iterations reached without break
                 logger.warning(

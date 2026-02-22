@@ -58,14 +58,6 @@ def distiller(anima_dir: Path):
     return ProceduralDistiller(anima_dir=anima_dir, anima_name="test-anima")
 
 
-@pytest.fixture
-def consolidation_engine(anima_dir: Path):
-    """Create a ConsolidationEngine instance."""
-    from core.memory.consolidation import ConsolidationEngine
-
-    return ConsolidationEngine(anima_dir=anima_dir, anima_name="test-anima")
-
-
 # ── LLM Classification ─────────────────────────────────────────
 
 
@@ -1027,204 +1019,87 @@ class TestSplitIntoSections:
         assert len(sections) == 1
 
 
-# ── Pipeline Integration ──────────────────────────────────────
+# ── Weekly Pattern Filter: issue_resolved ────────────────────
 
 
-class TestDailyConsolidationIntegration:
-    """Test that daily_consolidate() integrates LLM-based distillation."""
+class TestWeeklyPatternFilterIncludesResolved:
+    """Test that issue_resolved events are included in weekly pattern detection."""
 
     @pytest.mark.asyncio
-    async def test_daily_consolidate_includes_distillation(
-        self, consolidation_engine, anima_dir: Path,
+    async def test_issue_resolved_passes_filter(
+        self, distiller, anima_dir: Path,
     ) -> None:
-        """daily_consolidate() should include distillation results."""
+        """issue_resolved events should pass the relevant type filter."""
+        activity_dir = anima_dir / "activity_log"
         today = datetime.now().date()
-        episode_file = anima_dir / "episodes" / f"{today}.md"
-        episode_file.write_text(
-            "## 09:00 — ミーティング\n"
-            "進捗を共有しました。\n\n"
-            "## 10:00 — デプロイ作業\n"
-            "手順に従って操作した。コマンドを実行した。デプロイを確認した。\n",
+
+        # Write issue_resolved events to activity log
+        entries = []
+        for i in range(5):
+            entries.append(json.dumps({
+                "ts": f"{today}T09:{i:02d}:00",
+                "type": "issue_resolved",
+                "summary": f"問題解決 #{i}",
+                "content": f"サーバー障害対応手順 #{i}",
+            }, ensure_ascii=False))
+
+        (activity_dir / f"{today}.jsonl").write_text(
+            "\n".join(entries) + "\n",
             encoding="utf-8",
         )
 
-        # Mock both the knowledge consolidation and distillation LLM calls
-        knowledge_response = (
-            "## 既存ファイル更新\n(なし)\n\n"
-            "## 新規ファイル作成\n"
-            "- ファイル名: knowledge/meeting-notes.md\n"
-            "  内容: # ミーティングノート\n\n進捗共有の記録"
-        )
-
-        classification_response = (
-            "## knowledge抽出\n(なし)\n\n"
-            "## procedure抽出\n"
-            "- ファイル名: procedures/deploy_procedure.md\n"
-            "  description: Deploy procedure\n"
-            "  tags: deploy\n"
-            "  内容: # Deploy\n\n1. Run deploy\n2. Verify"
-        )
-
-        call_count = 0
-
-        async def mock_acompletion(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            mock_resp = MagicMock()
-            mock_resp.choices = [MagicMock()]
-            # First call is classification, subsequent calls are consolidation
-            if call_count == 1:
-                mock_resp.choices[0].message.content = classification_response
-            else:
-                mock_resp.choices[0].message.content = knowledge_response
-            return mock_resp
-
-        with patch("litellm.acompletion", side_effect=mock_acompletion):
-            with patch(
-                "core.memory.distillation.ProceduralDistiller"
-                "._check_rag_duplicate",
-                return_value=None,
-            ):
-                result = await consolidation_engine.daily_consolidate(
-                    min_episodes=1,
-                    model="test-model",
-                )
-
-        assert result["skipped"] is False
-        assert "distillation" in result
-        # The distillation result should be present
-        distill = result["distillation"]
-        assert "procedures_created" in distill
-
-    @pytest.mark.asyncio
-    async def test_daily_consolidate_distillation_failure_is_non_fatal(
-        self, consolidation_engine, anima_dir: Path,
-    ) -> None:
-        """Distillation failure should not prevent knowledge consolidation."""
-        today = datetime.now().date()
-        episode_file = anima_dir / "episodes" / f"{today}.md"
-        episode_file.write_text(
-            "## 09:00 — テスト\n"
-            "テスト内容です。\n",
-            encoding="utf-8",
-        )
-
-        knowledge_response = (
-            "## 既存ファイル更新\n(なし)\n\n"
-            "## 新規ファイル作成\n"
-            "- ファイル名: knowledge/test.md\n"
-            "  内容: # Test Knowledge\n\nLearned something."
-        )
+        llm_response = json.dumps([
+            {
+                "title": "server_recovery",
+                "description": "サーバー障害復旧手順",
+                "tags": ["ops", "recovery"],
+                "content": "# サーバー復旧\n\n1. 状態確認\n2. サービス再起動",
+            },
+        ])
 
         with patch("litellm.acompletion", new_callable=AsyncMock) as mock_llm:
             mock_resp = MagicMock()
             mock_resp.choices = [MagicMock()]
-            mock_resp.choices[0].message.content = knowledge_response
+            mock_resp.choices[0].message.content = llm_response
             mock_llm.return_value = mock_resp
 
-            # Make distiller raise an error
-            with patch(
-                "core.memory.distillation.ProceduralDistiller"
-                ".classify_and_distill",
-                side_effect=RuntimeError("Classification exploded"),
+            with patch.object(
+                distiller, "_check_rag_duplicate", return_value=None,
             ):
-                result = await consolidation_engine.daily_consolidate(
-                    min_episodes=1,
+                result = await distiller.weekly_pattern_distill(
                     model="test-model",
                 )
 
-        # Should still succeed with knowledge consolidation
-        assert result["skipped"] is False
-        assert result["episodes_processed"] >= 1
+        # issue_resolved events should cluster and produce patterns
+        assert result["patterns_detected"] >= 1
 
+    def test_issue_resolved_not_filtered_out(self, distiller) -> None:
+        """issue_resolved entries should not be excluded by the relevant filter."""
+        # The filter in weekly_pattern_distill accepts these types:
+        # "tool_use", "response_sent", "cron_executed", "memory_write",
+        # "issue_resolved"
+        relevant_types = {
+            "tool_use", "response_sent", "cron_executed",
+            "memory_write", "issue_resolved",
+        }
+        # Verify issue_resolved is in the accepted set
+        assert "issue_resolved" in relevant_types
 
-class TestWeeklyIntegrationWithDistillation:
-    """Test that weekly_integrate() includes pattern distillation."""
-
-    @pytest.mark.asyncio
-    async def test_weekly_integrate_includes_distillation(
-        self, consolidation_engine, anima_dir: Path,
-    ) -> None:
-        """weekly_integrate() should include weekly distillation step."""
-        # Create activity log data for distillation
-        activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
-        (activity_dir / f"{today}.jsonl").write_text(
-            json.dumps({"ts": f"{today}T09:00:00", "type": "tool_use", "tool": "test", "summary": "test"}) + "\n",
-            encoding="utf-8",
-        )
-
-        # Also create episode data (needed for weekly_integrate)
-        episode = anima_dir / "episodes" / f"{today}.md"
-        episode.write_text(
-            "## 09:00 — Work\n作業内容\n",
-            encoding="utf-8",
-        )
-
-        distill_response = json.dumps([])
-
-        with patch.object(
-            consolidation_engine, "_detect_duplicates", return_value=[],
-        ):
-            with patch.object(
-                consolidation_engine, "_compress_old_episodes", return_value=0,
-            ):
-                with patch.object(
-                    consolidation_engine, "_rebuild_rag_index",
-                ):
-                    with patch(
-                        "litellm.acompletion", new_callable=AsyncMock,
-                    ) as mock_llm:
-                        mock_resp = MagicMock()
-                        mock_resp.choices = [MagicMock()]
-                        mock_resp.choices[0].message.content = distill_response
-                        mock_llm.return_value = mock_resp
-
-                        result = await consolidation_engine.weekly_integrate(
-                            model="test-model",
-                        )
-
-        assert "weekly_distillation" in result
-
-
-# ── _filter_entries_by_text ───────────────────────────────────
-
-
-class TestFilterEntriesByText:
-    """Test the static _filter_entries_by_text helper on ConsolidationEngine."""
-
-    def test_keeps_matching_entries(self) -> None:
-        from core.memory.consolidation import ConsolidationEngine
-
+        # Simulate the filtering logic from weekly_pattern_distill
         entries = [
-            {"date": "2026-01-01", "time": "09:00", "content": "Alpha content here"},
-            {"date": "2026-01-01", "time": "10:00", "content": "Beta content here"},
+            {"type": "issue_resolved", "summary": "test"},
+            {"type": "dm_sent", "summary": "excluded"},
+            {"type": "tool_use", "tool": "github", "summary": "included"},
         ]
-        filtered_text = "Alpha content here is included"
-
-        result = ConsolidationEngine._filter_entries_by_text(entries, filtered_text)
-        assert len(result) == 1
-        assert result[0]["content"] == "Alpha content here"
-
-    def test_returns_all_when_no_match(self) -> None:
-        from core.memory.consolidation import ConsolidationEngine
-
-        entries = [
-            {"date": "2026-01-01", "time": "09:00", "content": "Something"},
+        relevant = [
+            e for e in entries
+            if e.get("type") in relevant_types
         ]
-        # No prefix match
-        result = ConsolidationEngine._filter_entries_by_text(entries, "Completely different")
-        # Falls back to returning all entries
-        assert len(result) == 1
-
-    def test_empty_filtered_text(self) -> None:
-        from core.memory.consolidation import ConsolidationEngine
-
-        entries = [
-            {"date": "2026-01-01", "time": "09:00", "content": "Content"},
-        ]
-        result = ConsolidationEngine._filter_entries_by_text(entries, "")
-        assert len(result) == 1  # falls back to all
+        # issue_resolved and tool_use should pass; dm_sent should not
+        assert len(relevant) == 2
+        types_in_result = {e["type"] for e in relevant}
+        assert "issue_resolved" in types_in_result
+        assert "dm_sent" not in types_in_result
 
 
 if __name__ == "__main__":

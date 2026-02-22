@@ -188,7 +188,7 @@ class ContradictionDetector:
             from core.memory.rag.retriever import MemoryRetriever
             from core.memory.rag.singleton import get_vector_store
 
-            vector_store = get_vector_store()
+            vector_store = get_vector_store(self.anima_name)
             indexer = MemoryIndexer(vector_store, self.anima_name, self.anima_dir)
             retriever = MemoryRetriever(
                 vector_store, indexer, self.knowledge_dir,

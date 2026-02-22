@@ -384,7 +384,7 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            delegation_parts = [p for p in parts if "heartbeat_delegation_check" in p]
+            delegation_parts = [p for p in parts if "heartbeat_subordinate_check" in p]
             assert len(delegation_parts) == 1
         finally:
             _stop_patches(mocks)
@@ -405,7 +405,7 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            delegation_parts = [p for p in parts if "heartbeat_delegation_check" in p]
+            delegation_parts = [p for p in parts if "heartbeat_subordinate_check" in p]
             assert len(delegation_parts) == 0
         finally:
             _stop_patches(mocks)
@@ -426,7 +426,7 @@ class TestBuildHeartbeatPrompt:
                 # Should not raise
                 parts = await dp._build_heartbeat_prompt()
 
-            delegation_parts = [p for p in parts if "heartbeat_delegation_check" in p]
+            delegation_parts = [p for p in parts if "heartbeat_subordinate_check" in p]
             assert len(delegation_parts) == 0
         finally:
             _stop_patches(mocks)
@@ -638,7 +638,7 @@ class TestExecuteHeartbeatCycle:
             dp.agent.replied_to = set()
             dp._heartbeat_stream_queue = None
 
-            async def mock_stream(prompt, trigger="heartbeat"):
+            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
                 yield {"type": "text_delta", "text": "Hello "}
                 yield {"type": "text_delta", "text": "world"}
                 yield {
@@ -681,7 +681,7 @@ class TestExecuteHeartbeatCycle:
             dp.agent.replied_to = set()
             dp._heartbeat_stream_queue = None
 
-            async def mock_stream(prompt, trigger="heartbeat"):
+            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
                 yield {"type": "text_delta", "text": "Some text"}
                 # No cycle_done event
 
@@ -716,7 +716,7 @@ class TestExecuteHeartbeatCycle:
             checkpoint_path = anima_dir / "state" / "heartbeat_checkpoint.json"
             checkpoint_observed = {"exists_during_run": False}
 
-            async def mock_stream(prompt, trigger="heartbeat"):
+            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
                 # Check if checkpoint was written before streaming starts
                 checkpoint_observed["exists_during_run"] = checkpoint_path.exists()
                 yield {
@@ -753,7 +753,7 @@ class TestExecuteHeartbeatCycle:
             queue = asyncio.Queue()
             dp._heartbeat_stream_queue = queue
 
-            async def mock_stream(prompt, trigger="heartbeat"):
+            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
                 yield {"type": "text_delta", "text": "chunk1"}
                 yield {"type": "text_delta", "text": "chunk2"}
                 yield {
@@ -794,7 +794,7 @@ class TestExecuteHeartbeatCycle:
             dp.agent.replied_to = set()
             dp._heartbeat_stream_queue = None
 
-            async def mock_stream(prompt, trigger="heartbeat"):
+            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {"summary": "ok", "duration_ms": 10},
@@ -827,7 +827,7 @@ class TestExecuteHeartbeatCycle:
             dp.agent.replied_to = set()
             dp._heartbeat_stream_queue = None
 
-            async def mock_stream(prompt, trigger="heartbeat"):
+            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -865,7 +865,7 @@ class TestExecuteHeartbeatCycle:
             dp.agent.replied_to = set()
             dp._heartbeat_stream_queue = None
 
-            async def mock_stream(prompt, trigger="heartbeat"):
+            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -903,7 +903,7 @@ class TestExecuteHeartbeatCycle:
             replied_to_path = anima_dir / "run" / "replied_to.jsonl"
             replied_to_path.write_text("old data", encoding="utf-8")
 
-            async def mock_stream(prompt, trigger="heartbeat"):
+            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {"summary": "ok", "duration_ms": 10},

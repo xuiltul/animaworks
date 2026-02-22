@@ -22,6 +22,33 @@ from core.exceptions import ToolConfigError  # noqa: F401
 
 logger = logging.getLogger("animaworks.tool_schemas")
 
+
+# ── DB description overlay ──────────────────────────────────
+
+
+def apply_db_descriptions(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Override tool descriptions from DB if available.
+
+    Uses a single ``list_descriptions()`` call to avoid N+1 queries.
+    """
+    from core.tooling.prompt_db import get_prompt_store
+
+    store = get_prompt_store()
+    if store is None:
+        return tools
+    all_descs = store.list_descriptions()
+    if not all_descs:
+        return tools
+    desc_map = {d["name"]: d["description"] for d in all_descs}
+    result = []
+    for t in tools:
+        db_desc = desc_map.get(t["name"])
+        if db_desc is not None:
+            t = {**t, "description": db_desc}
+        result.append(t)
+    return result
+
+
 # ── Canonical definitions ────────────────────────────────────
 #
 # Format: {"name", "description", "parameters"} where ``parameters`` is a
@@ -76,11 +103,35 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "archive_memory_file",
+        "description": (
+            "Archive a memory file (knowledge, procedures) that is no longer needed. "
+            "The file is moved to archive/ directory, not permanently deleted. "
+            "Use this to clean up stale, outdated, or redundant memory files."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path within anima dir (e.g. 'knowledge/old-info.md')",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Reason for archiving (e.g. 'superseded by new-info.md')",
+                },
+            },
+            "required": ["path", "reason"],
+        },
+    },
+    {
         "name": "send_message",
         "description": (
-            "Send a message to another anima or a human user. "
-            "For human users, the message is automatically routed "
-            "to the configured preferred channel (e.g. Slack, Chatwork)."
+            "Send a direct message to another anima or a human user. "
+            "DM is limited to max 2 recipients per run, 1 message each, "
+            "with intent 'report' or 'delegation' only. "
+            "For acknowledgments, questions, FYI, or messages to 3+ people, "
+            "use post_channel (Board) instead."
         ),
         "parameters": {
             "type": "object",
@@ -100,18 +151,16 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                 "intent": {
                     "type": "string",
                     "description": (
-                        "Message intent. delegation/report/question triggers "
-                        "immediate processing by the recipient. "
-                        "Unset messages are processed at the recipient's next "
-                        "scheduled heartbeat (every 30 min). "
-                        "Values: 'delegation' (task assignment), "
-                        "'report' (status/result — use report template), "
-                        "'question' (question/confirmation), "
-                        "'' (default — acknowledgment, thanks, FYI)."
+                        "Message intent (REQUIRED for DM). "
+                        "Only 'report' and 'delegation' are permitted. "
+                        "Values: 'delegation' (task assignment to subordinate), "
+                        "'report' (status/result to supervisor — use report template). "
+                        "Questions, acknowledgments, thanks, and FYI must use "
+                        "post_channel (Board) instead of DM."
                     ),
                 },
             },
-            "required": ["to", "content"],
+            "required": ["to", "content", "intent"],
         },
     },
 ]
@@ -443,6 +492,47 @@ ADMIN_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+SUPERVISOR_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "disable_subordinate",
+        "description": (
+            "部下のAnimaを休止させる（プロセス停止 + 自動復帰防止）。"
+            "自分の直属部下のみ操作可能。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "休止させる部下のAnima名（例: hinata）",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "休止理由（activity_logに記録される）",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "enable_subordinate",
+        "description": (
+            "休止中の部下のAnimaを復帰させる。"
+            "自分の直属部下のみ操作可能。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "復帰させる部下のAnima名（例: hinata）",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+]
+
 PROCEDURE_TOOLS: list[dict[str, Any]] = [
     {
         "name": "report_procedure_outcome",
@@ -507,6 +597,27 @@ KNOWLEDGE_TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": ["path", "success"],
+        },
+    },
+]
+
+SKILL_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "skill",
+        "description": "スキル・手順書を発動する。skill_nameで指定したスキルの全文を返す。",  # Enriched at runtime via build_skill_tool_description()
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "skill_name": {
+                    "type": "string",
+                    "description": "発動するスキル名（個人スキル、共通スキル、手順書）",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "スキルに渡す補足コンテキスト（任意）",
+                },
+            },
+            "required": ["skill_name"],
         },
     },
 ]
@@ -675,8 +786,13 @@ def build_tool_list(
     include_discovery_tools: bool = False,
     include_notification_tools: bool = False,
     include_admin_tools: bool = False,
+    include_supervisor_tools: bool = False,
     include_tool_management: bool = False,
     include_task_tools: bool = False,
+    include_skill_tools: bool = False,
+    skill_metas: list[Any] | None = None,
+    common_skill_metas: list[Any] | None = None,
+    procedure_metas: list[Any] | None = None,
     external_schemas: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Assemble a tool list from canonical definitions.
@@ -687,8 +803,13 @@ def build_tool_list(
         include_discovery_tools: Include discover_tools tool.
         include_notification_tools: Include call_human tool (for top-level Animas).
         include_admin_tools: Include admin tools (create_anima etc.).
+        include_supervisor_tools: Include supervisor tools (disable/enable subordinate).
         include_tool_management: Include refresh_tools/share_tool tools.
         include_task_tools: Include task queue tools (add_task, update_task, list_tasks).
+        include_skill_tools: Include skill on-demand loading tool.
+        skill_metas: Personal skill metadata for dynamic description generation.
+        common_skill_metas: Common skill metadata for dynamic description generation.
+        procedure_metas: Procedure metadata for dynamic description generation.
         external_schemas: Additional tool schemas in canonical format.
 
     Returns:
@@ -711,12 +832,28 @@ def build_tool_list(
         tools.extend(NOTIFICATION_TOOLS)
     if include_admin_tools:
         tools.extend(ADMIN_TOOLS)
+    if include_supervisor_tools:
+        tools.extend(SUPERVISOR_TOOLS)
     if include_tool_management:
         tools.extend(TOOL_MANAGEMENT_TOOLS)
     if include_task_tools:
         tools.extend(TASK_TOOLS)
     if external_schemas:
         tools.extend(external_schemas)
+    tools = apply_db_descriptions(tools)
+
+    # Skill tool description is dynamically generated — append AFTER
+    # apply_db_descriptions to prevent DB overwrite of <available_skills>.
+    if include_skill_tools:
+        from core.tooling.skill_tool import build_skill_tool_description
+
+        desc = build_skill_tool_description(
+            skill_metas or [],
+            common_skill_metas or [],
+            procedure_metas or [],
+        )
+        skill_tool_schema = {**SKILL_TOOLS[0], "description": desc}
+        tools.append(skill_tool_schema)
     return tools
 
 

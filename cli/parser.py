@@ -208,6 +208,7 @@ def cli_main() -> None:
     # ── Config ────────────────────────────────────────────
     from core.config.cli import (
         cmd_config_dispatch,
+        cmd_config_export_sections,
         cmd_config_get,
         cmd_config_list,
         cmd_config_set,
@@ -239,6 +240,16 @@ def cli_main() -> None:
         "--show-secrets", action="store_true", help="Show API key values",
     )
     p_cfg_list.set_defaults(func=cmd_config_list)
+
+    p_cfg_export = config_sub.add_parser(
+        "export-sections",
+        help="Export system sections from DB to template files",
+    )
+    p_cfg_export.add_argument(
+        "--dry-run", action="store_true",
+        help="Show what would change without writing files",
+    )
+    p_cfg_export.set_defaults(func=cmd_config_export_sections)
 
     # ── Anima Management ─────────────────────────────────────
     p_anima = sub.add_parser("anima", help="Manage anima processes")

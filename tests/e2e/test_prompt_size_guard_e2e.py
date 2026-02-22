@@ -80,9 +80,9 @@ class TestLargeMessageHandling:
         # conversation.json should not exceed a reasonable size
         conv_path = anima_dir / "state" / "conversation.json"
         size = conv_path.stat().st_size
-        # 50 turns * 3000 chars max + JSON overhead = ~170KB max
-        # Without truncation this would be ~250KB+
-        assert size < 200_000, f"conversation.json too large: {size} bytes"
+        # 50 turns * 5000 chars max + JSON overhead = ~280KB max
+        # Without truncation this would be ~400KB+
+        assert size < 350_000, f"conversation.json too large: {size} bytes"
 
     def test_history_with_mixed_lengths(self, anima_dir):
         """Mix of short and long messages produces bounded history."""

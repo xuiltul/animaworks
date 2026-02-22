@@ -311,17 +311,17 @@ class TestParseSchedule:
 class TestParseHeartbeatConfig:
     """Tests for heartbeat.md parsing (unchanged from previous format)."""
 
-    def test_basic_interval(self):
-        """Parse interval from heartbeat content."""
-        interval, start, end = parse_heartbeat_config("30分ごとにチェック\n9:00-22:00")
-        assert interval == 30
+    def test_basic_active_hours(self):
+        """Parse active hours from heartbeat content."""
+        start, end = parse_heartbeat_config("30分ごとにチェック\n9:00-22:00")
         assert start == 9
         assert end == 22
 
-    def test_custom_interval(self):
-        """Parse custom interval."""
-        interval, _, _ = parse_heartbeat_config("15分間隔")
-        assert interval == 15
+    def test_defaults_without_time_range(self):
+        """None returned when no time range in content."""
+        start, end = parse_heartbeat_config("15分間隔")
+        assert start is None
+        assert end is None
 
 
 # ── skip_pattern tests ───────────────────────────────────

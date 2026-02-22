@@ -172,7 +172,7 @@ class ForgettingEngine:
     def _get_vector_store(self):
         """Get vector store singleton."""
         from core.memory.rag.singleton import get_vector_store
-        return get_vector_store()
+        return get_vector_store(self.anima_name)
 
     def _get_all_chunks(self, collection_name: str) -> list[dict]:
         """Get all chunks from a collection with their metadata."""
@@ -471,7 +471,7 @@ class ForgettingEngine:
             from core.memory.rag.singleton import get_vector_store
             from core.memory.rag.store import Document
 
-            store = get_vector_store()
+            store = get_vector_store(self.anima_name)
             indexer = MemoryIndexer(store, self.anima_name, self.anima_dir)
 
             # Generate new ID

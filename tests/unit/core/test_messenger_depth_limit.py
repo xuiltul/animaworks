@@ -11,7 +11,8 @@ from __future__ import annotations
 Covers:
 - send() blocks when depth limit exceeded for internal Anima
 - send() returns error Message with type="error"
-- send() allows ack/error/system_alert/board_mention messages even when depth exceeded
+- send() allows ack/error/system_alert messages even when depth exceeded
+- send() blocks board_mention when depth exceeded (praise-loop-prevention)
 - send() skips check for external recipients
 - send() allows when depth not exceeded
 """
@@ -99,7 +100,7 @@ class TestDepthLimitAllowed:
 
 
 class TestDepthLimitBypass:
-    """Test that ack/error/system_alert/board_mention messages bypass the depth check."""
+    """Test that ack/error/system_alert messages bypass the depth check."""
 
     def test_ack_bypasses_depth_check(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
@@ -143,7 +144,8 @@ class TestDepthLimitBypass:
         assert result.type == "system_alert"
         assert result.from_person == "alice"
 
-    def test_board_mention_bypasses_depth_check(self, shared_dir, animas_dir):
+    def test_board_mention_does_not_bypass_depth_check(self, shared_dir, animas_dir):
+        """board_mention no longer bypasses depth check (praise-loop-prevention)."""
         messenger = Messenger(shared_dir, "alice")
         limiter = ConversationDepthLimiter(max_depth=1)
         limiter.check_and_record("alice", "bob")  # exhaust
@@ -154,8 +156,8 @@ class TestDepthLimitBypass:
         ):
             result = messenger.send("bob", "mentioned you", msg_type="board_mention")
 
-        assert result.type == "board_mention"
-        assert result.from_person == "alice"
+        assert result.type == "error"
+        assert "ConversationDepthExceeded" in result.content
 
 
 class TestExternalRecipientSkip:

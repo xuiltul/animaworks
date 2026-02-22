@@ -121,6 +121,11 @@ class ContextTracker:
     def threshold_exceeded(self) -> bool:
         return self._threshold_hit
 
+    def force_threshold(self) -> None:
+        """Force the threshold flag for external triggers (e.g. A1 auto-compact)."""
+        if not self._threshold_hit:
+            self._threshold_hit = True
+
     # ── Transcript-based estimation (Agent SDK) ────────────
 
     def estimate_from_transcript(self, transcript_path: str) -> float:

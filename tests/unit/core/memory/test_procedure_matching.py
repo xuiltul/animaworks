@@ -113,27 +113,19 @@ class TestProcedureSkillMatching:
 class TestBuilderProcedureInjection:
     """Test that build_system_prompt includes procedure matching."""
 
-    def test_procedure_appears_in_unified_table(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Procedures should appear in the unified skills/procedures table."""
+    def test_procedure_not_in_system_prompt_table(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Procedures must NOT appear as table rows in the system prompt (table removed)."""
         # Write a procedure
         (anima_dir / "procedures" / "deploy.md").write_text(
             "---\ndescription: \"「デプロイ」手順\"\n---\n\n# Deploy Steps\n\n1. Pull\n2. Build\n3. Deploy",
             encoding="utf-8",
         )
 
-        # Mock load_prompt to avoid needing template files
         def mock_load_prompt(name, **kwargs):
-            if name == "skills_guide":
-                return (
-                    "## スキルと手順書\n\n"
-                    "スキルと手順書はあなたが持つ能力・作業手順です。\n"
-                    "使用する際は該当ファイルをReadで読んでから実行してください。"
-                )
             return f"[{name}]"
 
         monkeypatch.setattr("core.prompt.builder.load_prompt", mock_load_prompt)
 
-        # Mock load_config to avoid needing real config
         mock_config = MagicMock()
         mock_config.animas = {}
         mock_config.human_notification.enabled = False
@@ -147,22 +139,18 @@ class TestBuilderProcedureInjection:
         )
         prompt = result.system_prompt
 
-        assert "| deploy | 手順 |" in prompt
+        # Table was removed — no table rows for procedures in system prompt
+        assert "| deploy | 手順 |" not in prompt
+        assert "| 名前 | 種別 | 概要 |" not in prompt
 
-    def test_all_procedures_in_unified_table(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """ALL procedures always appear in the unified table regardless of message content."""
+    def test_procedures_not_in_system_prompt_regardless_of_message(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Procedures must NOT appear in the system prompt table regardless of message content."""
         (anima_dir / "procedures" / "backup.md").write_text(
             "---\ndescription: backup procedure\n---\n\n# Backup",
             encoding="utf-8",
         )
 
         def mock_load_prompt(name, **kwargs):
-            if name == "skills_guide":
-                return (
-                    "## スキルと手順書\n\n"
-                    "スキルと手順書はあなたが持つ能力・作業手順です。\n"
-                    "使用する際は該当ファイルをReadで読んでから実行してください。"
-                )
             return f"[{name}]"
 
         monkeypatch.setattr("core.prompt.builder.load_prompt", mock_load_prompt)
@@ -176,11 +164,13 @@ class TestBuilderProcedureInjection:
 
         result = build_system_prompt(
             memory,
-            message="こんにちは",  # Unrelated message — procedure still appears
+            message="こんにちは",
         )
         prompt = result.system_prompt
 
-        assert "| backup | 手順 |" in prompt
+        # Table was removed — no table rows in system prompt
+        assert "| backup | 手順 |" not in prompt
+        assert "| 名前 | 種別 | 概要 |" not in prompt
 
     def test_injected_procedures_always_empty(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """BuildResult.injected_procedures is always an empty list."""

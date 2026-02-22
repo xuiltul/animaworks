@@ -59,7 +59,7 @@ class TestResolveRecipientError:
         mock_resolve.side_effect = RuntimeError("Unexpected DB error")
 
         handler = self._make_handler(tmp_path)
-        result = handler._handle_send_message({"to": "someone", "content": "hello"})
+        result = handler._handle_send_message({"to": "someone", "content": "hello", "intent": "report"})
 
         parsed = json.loads(result)
         assert parsed["status"] == "error"
@@ -80,7 +80,7 @@ class TestResolveRecipientError:
         mock_resolve.side_effect = ValueError("Unknown recipient 'ghost'")
 
         handler = self._make_handler(tmp_path)
-        result = handler._handle_send_message({"to": "ghost", "content": "hello"})
+        result = handler._handle_send_message({"to": "ghost", "content": "hello", "intent": "report"})
 
         parsed = json.loads(result)
         assert parsed["status"] == "error"

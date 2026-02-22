@@ -33,11 +33,12 @@ from pathlib import Path
 from typing import Any
 
 from core.exceptions import LLMAPIError, ToolExecutionError, ConfigError  # noqa: F401
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
+from core.execution.reminder import MSG_OUTPUT_TRUNCATED, SystemReminderQueue
 from core.execution._streaming import stream_error_boundary
 from core.memory import MemoryManager
 from core.messenger import Messenger
-from core.prompt.context import ContextTracker
+from core.prompt.context import ContextTracker, resolve_context_window
 from core.schemas import ModelConfig
 from core.memory.shortterm import ShortTermMemory
 from core.tooling.handler import ToolHandler
@@ -183,6 +184,10 @@ class AssistedExecutor(BaseExecutor):
             include_discovery_tools=False,  # Not needed in text mode
             include_notification_tools=self._tool_handler._human_notifier is not None,
             include_tool_management=False,  # Not needed in text mode
+            include_skill_tools=True,
+            skill_metas=self._memory.list_skill_metas(),
+            common_skill_metas=self._memory.list_common_skill_metas(),
+            procedure_metas=self._memory.list_procedure_metas(),
         )
 
         # Load external tool schemas
@@ -308,6 +313,7 @@ class AssistedExecutor(BaseExecutor):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run the text-based tool-call loop.
 
@@ -327,13 +333,14 @@ class AssistedExecutor(BaseExecutor):
         tool_spec = self._build_tool_spec_text()
         full_system = system_prompt + "\n\n" + tool_spec if system_prompt else tool_spec
 
+        context_window = resolve_context_window(self._model_config.model)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": full_system},
             {"role": "user", "content": prompt},
         ]
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
-        max_iterations = self._model_config.max_turns
+        max_iterations = max_turns_override or self._model_config.max_turns
 
         # ── 2. Tool-call loop ────────────────────────────────
         for iteration in range(max_iterations):
@@ -360,7 +367,12 @@ class AssistedExecutor(BaseExecutor):
                 logger.exception("LiteLLM API error in Mode B")
                 return ExecutionResult(text=f"[LLM API Error: {e}]")
 
-            content = response.choices[0].message.content or ""
+            choice = response.choices[0]
+            content = choice.message.content or ""
+
+            # P1-2: output truncation reminder
+            if choice.finish_reason == "length":
+                self.reminder_queue.push_sync(MSG_OUTPUT_TRUNCATED)
 
             # ── 3. Extract tool call ─────────────────────────
             tool_call = extract_tool_call(content)
@@ -417,8 +429,8 @@ class AssistedExecutor(BaseExecutor):
             all_tool_records.append(ToolCallRecord(
                 tool_name=tool_name,
                 tool_id=tool_id,
-                input_summary=_truncate_for_record(str(tool_args), 200),
-                result_summary=_truncate_for_record(result, 300),
+                input_summary=_truncate_for_record(str(tool_args), tool_input_save_budget(context_window)),
+                result_summary=_truncate_for_record(result, tool_result_save_budget(tool_name, context_window)),
             ))
 
             # ── 6. Inject result and continue ─────────────────
@@ -431,12 +443,21 @@ class AssistedExecutor(BaseExecutor):
                 "role": "user",
                 "content": f"ツール実行結果:\n{result}",
             })
+
+            # ── Drain reminder queue into tool result message ──
+            reminder = self.reminder_queue.drain_sync()
+            if reminder:
+                messages[-1]["content"] += "\n\n" + SystemReminderQueue.format_reminder(reminder)
         else:
             # max_turns reached
             logger.warning(
                 "Mode B max iterations (%d) reached", max_iterations,
             )
 
+        # ── Final drain: deliver any undelivered reminders ──
+        final_reminder = self.reminder_queue.drain_formatted()
+        if final_reminder:
+            all_response_text.append(final_reminder)
         final_text = "\n".join(filter(None, all_response_text))
         logger.info("Mode B text-loop END total_len=%d", len(final_text))
         return ExecutionResult(
@@ -450,6 +471,8 @@ class AssistedExecutor(BaseExecutor):
         prompt: str,
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the text-based tool-call loop.
 
@@ -477,13 +500,14 @@ class AssistedExecutor(BaseExecutor):
         tool_spec = self._build_tool_spec_text()
         full_system = system_prompt + "\n\n" + tool_spec if system_prompt else tool_spec
 
+        context_window = resolve_context_window(self._model_config.model)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": full_system},
             {"role": "user", "content": prompt},
         ]
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
-        max_iterations = self._model_config.max_turns
+        max_iterations = max_turns_override or self._model_config.max_turns
 
         # ── 2. Tool-call loop ────────────────────────────────
         async with stream_error_boundary(
@@ -509,7 +533,12 @@ class AssistedExecutor(BaseExecutor):
                     messages,
                     max_tokens_override=preflight.get("max_tokens"),
                 )
-                content = response.choices[0].message.content or ""
+                choice = response.choices[0]
+                content = choice.message.content or ""
+
+                # P1-2: output truncation reminder
+                if choice.finish_reason == "length":
+                    self.reminder_queue.push_sync(MSG_OUTPUT_TRUNCATED)
 
                 # ── 3. Extract tool call ─────────────────────
                 tool_call = extract_tool_call(content)
@@ -584,8 +613,8 @@ class AssistedExecutor(BaseExecutor):
                 all_tool_records.append(ToolCallRecord(
                     tool_name=tool_name,
                     tool_id=tool_id,
-                    input_summary=_truncate_for_record(str(tool_args), 200),
-                    result_summary=_truncate_for_record(result, 300),
+                    input_summary=_truncate_for_record(str(tool_args), tool_input_save_budget(context_window)),
+                    result_summary=_truncate_for_record(result, tool_result_save_budget(tool_name, context_window)),
                 ))
 
                 # ── 8. Yield tool_end ────────────────────────
@@ -601,6 +630,11 @@ class AssistedExecutor(BaseExecutor):
                     "role": "user",
                     "content": f"ツール実行結果:\n{result}",
                 })
+
+                # ── Drain reminder queue into tool result message ──
+                reminder = self.reminder_queue.drain_sync()
+                if reminder:
+                    messages[-1]["content"] += "\n\n" + SystemReminderQueue.format_reminder(reminder)
             else:
                 # max_turns reached
                 logger.warning(

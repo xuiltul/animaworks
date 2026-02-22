@@ -11,9 +11,11 @@ from __future__ import annotations
 
 Runs Claude as a fully autonomous agent with Read/Write/Edit/Bash/Grep/Glob
 tools via the Agent SDK subprocess.  Supports both blocking and streaming
-execution, plus a ``PostToolUse`` hook for context monitoring.
+execution.  Tool results are captured from UserMessage ToolResultBlock
+instead of PostToolUse hooks.
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -23,9 +25,10 @@ from collections.abc import AsyncGenerator, Callable
 from dataclasses import asdict
 from typing import Any
 
-from core.prompt.context import ContextTracker
+from core.prompt.context import CHARS_PER_TOKEN, ContextTracker, resolve_context_window
 from core.exceptions import ExecutionError, LLMAPIError, MemoryWriteError  # noqa: F401
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
+from core.execution.reminder import MSG_CONTEXT_THRESHOLD
 from core.schemas import ModelConfig
 from core.memory.shortterm import ShortTermMemory
 from pathlib import Path
@@ -75,9 +78,18 @@ _WRITE_COMMANDS = frozenset({
 # comfortable headroom while still catching genuinely broken messages.
 _SDK_MAX_BUFFER_SIZE = 4 * 1024 * 1024  # 4 MB
 
+# When estimated context usage leaves fewer than max_tokens * this factor
+# free, the PreToolUse hook triggers session termination for auto-compact.
+_CONTEXT_AUTOCOMPACT_SAFETY = 2
+
 
 def _check_a1_file_access(
-    file_path: str, anima_dir: Path, *, write: bool,
+    file_path: str,
+    anima_dir: Path,
+    *,
+    write: bool,
+    subordinate_activity_dirs: list[Path] | None = None,
+    subordinate_management_files: list[Path] | None = None,
 ) -> str | None:
     """Check if a file path is allowed for A1 mode tools.
 
@@ -93,6 +105,18 @@ def _check_a1_file_access(
     # Block access to other animas' directories
     if resolved.is_relative_to(animas_root):
         if not resolved.is_relative_to(anima_resolved):
+            # Supervisor can read subordinate's activity_log
+            if not write and subordinate_activity_dirs:
+                for sub_activity in subordinate_activity_dirs:
+                    if resolved.is_relative_to(sub_activity):
+                        return None
+
+            # Supervisor can read/write subordinate's cron.md & heartbeat.md
+            if subordinate_management_files:
+                for mgmt_file in subordinate_management_files:
+                    if resolved == mgmt_file:
+                        return None
+
             return f"Access to other anima's directory is not allowed: {file_path}"
 
         # Block writes to protected files within own directory
@@ -305,16 +329,77 @@ def _log_tool_use(
         logger.debug("Failed to log tool_use for %s", tool_name, exc_info=True)
 
 
+def _log_tool_result(
+    anima_dir: Path,
+    tool_name: str,
+    tool_use_id: str,
+    result_content: str,
+    *,
+    is_error: bool = False,
+) -> None:
+    """Record a tool result to the activity log (best-effort, never raises)."""
+    try:
+        from core.memory.activity import ActivityLogger
+
+        activity = ActivityLogger(anima_dir)
+        activity.log(
+            "tool_result",
+            tool=tool_name,
+            content=result_content,
+            meta={"tool_use_id": tool_use_id, "is_error": is_error},
+        )
+    except Exception:
+        logger.debug("Failed to log tool_result for %s", tool_name, exc_info=True)
+
+
+def _cache_subordinate_paths(
+    anima_dir: Path,
+) -> tuple[list[Path], list[Path]]:
+    """Cache subordinate paths for permission checks at hook build time."""
+    sub_activity_dirs: list[Path] = []
+    sub_mgmt_files: list[Path] = []
+    try:
+        from core.config.models import load_config
+        from core.paths import get_animas_dir
+
+        cfg = load_config()
+        animas_dir = get_animas_dir()
+        anima_name = anima_dir.name
+        for sub_name, sub_cfg in cfg.animas.items():
+            if sub_cfg.supervisor == anima_name:
+                sub_dir = (animas_dir / sub_name).resolve()
+                sub_activity_dirs.append(sub_dir / "activity_log")
+                sub_mgmt_files.append(sub_dir / "cron.md")
+                sub_mgmt_files.append(sub_dir / "heartbeat.md")
+    except Exception:
+        logger.debug("Failed to cache subordinate paths for A1 hook", exc_info=True)
+    return sub_activity_dirs, sub_mgmt_files
+
+
 def _build_pre_tool_hook(
     anima_dir: Path,
+    *,
+    max_tokens: int = 4096,
+    context_window: int = 200_000,
+    session_stats: dict[str, Any] | None = None,
 ) -> Callable:
-    """Build a PreToolUse hook with security checks, output guards, and tool logging."""
+    """Build a PreToolUse hook with security checks, output guards, and tool logging.
+
+    When *session_stats* is provided the hook also performs mid-session
+    context budget estimation.  If the estimated token usage leaves fewer
+    than ``max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY`` tokens free, the
+    hook returns ``continue_=False`` to trigger session termination so
+    that AgentCore can chain into a fresh session.
+    """
     from claude_agent_sdk.types import (
         HookContext,
         HookInput,
         PreToolUseHookSpecificOutput,
         SyncHookJSONOutput,
     )
+
+    # Cache subordinate paths once at hook build time
+    _sub_activity_dirs, _sub_mgmt_files = _cache_subordinate_paths(anima_dir)
 
     async def _pre_tool_hook(
         input_data: HookInput,
@@ -324,11 +409,48 @@ def _build_pre_tool_hook(
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input", {})
 
+        # ── Context budget check ──────────────────────────
+        if session_stats is not None:
+            session_stats["tool_call_count"] += 1
+            estimated_tokens = (
+                session_stats["system_prompt_tokens"]
+                + session_stats["user_prompt_tokens"]
+                + session_stats["total_result_bytes"] // CHARS_PER_TOKEN
+            )
+            remaining = context_window - estimated_tokens
+            budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY
+            if remaining < budget:
+                session_stats["force_chain"] = True
+                _log_tool_use(
+                    anima_dir, tool_name, tool_input,
+                    blocked=True,
+                    block_reason=(
+                        f"context_autocompact: estimated {estimated_tokens} tokens, "
+                        f"remaining {remaining} < max_tokens*{_CONTEXT_AUTOCOMPACT_SAFETY}"
+                    ),
+                )
+                logger.warning(
+                    "Context auto-compact triggered: estimated=%d remaining=%d "
+                    "budget=%d (max_tokens=%d * %d) context_window=%d",
+                    estimated_tokens, remaining, budget,
+                    max_tokens, _CONTEXT_AUTOCOMPACT_SAFETY, context_window,
+                )
+                return SyncHookJSONOutput(
+                    continue_=False,
+                    stopReason=(
+                        f"Context auto-compact: approaching context window limit "
+                        f"(estimated {estimated_tokens}/{context_window} tokens). "
+                        f"Session will be chained."
+                    ),
+                )
+
         # Write / Edit: check file path
         if tool_name in ("Write", "Edit"):
             file_path = tool_input.get("file_path", "")
             violation = _check_a1_file_access(
                 file_path, anima_dir, write=True,
+                subordinate_activity_dirs=_sub_activity_dirs,
+                subordinate_management_files=_sub_mgmt_files,
             )
             if violation:
                 _log_tool_use(anima_dir, tool_name, tool_input, blocked=True, block_reason=violation)
@@ -345,6 +467,8 @@ def _build_pre_tool_hook(
             file_path = tool_input.get("file_path", "")
             violation = _check_a1_file_access(
                 file_path, anima_dir, write=False,
+                subordinate_activity_dirs=_sub_activity_dirs,
+                subordinate_management_files=_sub_mgmt_files,
             )
             if violation:
                 _log_tool_use(anima_dir, tool_name, tool_input, blocked=True, block_reason=violation)
@@ -389,12 +513,129 @@ def _build_pre_tool_hook(
     return _pre_tool_hook
 
 
+# ── Common tool record helpers ───────────────────────────────
+
+
+def _handle_tool_use_block(
+    block: Any,
+    pending_records: dict[str, ToolCallRecord],
+    journal: Any | None,
+    model: str,
+) -> ToolCallRecord:
+    """Process a ToolUseBlock from AssistantMessage.
+
+    Registers the block in ``pending_records`` and writes a WAL entry
+    via the streaming journal (if provided).
+    """
+    context_window = resolve_context_window(model)
+    record = ToolCallRecord(
+        tool_name=block.name,
+        tool_id=block.id,
+        input_summary=_truncate_for_record(
+            str(getattr(block, "input", "")),
+            tool_input_save_budget(context_window),
+        ),
+        result_summary="",
+        is_error=False,
+    )
+    pending_records[block.id] = record
+    if journal:
+        journal.write_tool_start(block.name, record.input_summary, tool_id=block.id)
+    logger.debug("ToolUseBlock registered: tool=%s id=%s", block.name, block.id)
+    return record
+
+
+def _tool_result_content_len(block: Any) -> int:
+    """Return the character length of a ToolResultBlock's textual content.
+
+    Used by session_stats tracking to estimate context consumption
+    without duplicating the full content extraction in the outer loop.
+    """
+    content = block.content
+    if isinstance(content, list):
+        return sum(
+            len(str(c.get("text", "")))
+            for c in content
+            if isinstance(c, dict)
+        )
+    return len(str(content)) if content else 0
+
+
+def _handle_tool_result_block(
+    block: Any,
+    pending_records: dict[str, ToolCallRecord],
+    journal: Any | None,
+    model: str,
+    *,
+    anima_dir: Path | None = None,
+) -> None:
+    """Process a ToolResultBlock from UserMessage.
+
+    Updates the matching entry in ``pending_records`` and writes a WAL
+    entry via the streaming journal (if provided).  When *anima_dir* is
+    given, the full result is also recorded in the activity log.
+    """
+    content = block.content
+    if isinstance(content, list):
+        content = " ".join(
+            str(c.get("text", "")) for c in content if isinstance(c, dict)
+        )
+    content_str = str(content) if content else ""
+    is_error = block.is_error if block.is_error is not None else False
+
+    record = pending_records.get(block.tool_use_id)
+    if record:
+        context_window = resolve_context_window(model)
+        record.result_summary = _truncate_for_record(
+            content_str,
+            tool_result_save_budget(record.tool_name, context_window),
+        )
+        record.is_error = is_error
+        logger.info(
+            "ToolResult captured: tool=%s id=%s result_len=%d is_error=%s",
+            record.tool_name, block.tool_use_id, len(content_str), is_error,
+        )
+    else:
+        logger.warning("ToolResultBlock for unknown tool_use_id=%s", block.tool_use_id)
+
+    if journal:
+        tool_name = record.tool_name if record else "unknown"
+        journal.write_tool_end(tool_name, content_str[:500], tool_id=block.tool_use_id)
+
+    # Record full tool result in activity log
+    if anima_dir is not None:
+        tool_name = record.tool_name if record else "unknown"
+        _log_tool_result(
+            anima_dir, tool_name, block.tool_use_id,
+            content_str, is_error=is_error,
+        )
+
+
+def _finalize_pending_records(
+    pending_records: dict[str, ToolCallRecord],
+) -> list[ToolCallRecord]:
+    """Collect all tool records after the message loop ends.
+
+    Marks any record that never received a result as an error.
+    """
+    records: list[ToolCallRecord] = []
+    for tool_id, record in pending_records.items():
+        if not record.result_summary:
+            record.is_error = True
+            logger.warning(
+                "ToolCallRecord without result: tool=%s id=%s",
+                record.tool_name, tool_id,
+            )
+        records.append(record)
+    return records
+
+
 class AgentSDKExecutor(BaseExecutor):
     """Execute via Claude Agent SDK (Mode A1).
 
     The SDK spawns a subprocess where Claude has full tool access.
-    Context monitoring is handled via a PostToolUse hook that fires
-    when token usage crosses the configured threshold.
+    Tool results are captured from UserMessage ToolResultBlock content
+    via ``_handle_tool_result_block``.
     """
 
     def __init__(
@@ -472,6 +713,7 @@ class AgentSDKExecutor(BaseExecutor):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run a session via Claude Agent SDK with context monitoring hook.
 
@@ -486,52 +728,29 @@ class AgentSDKExecutor(BaseExecutor):
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeAgentOptions,
+            ClaudeSDKClient,
             HookMatcher,
             ResultMessage,
             SystemMessage,
             TextBlock,
-            query,
-        )
-        from claude_agent_sdk.types import (
-            HookContext,
-            HookInput,
-            PostToolUseHookSpecificOutput,
-            SyncHookJSONOutput,
+            ToolResultBlock,
+            ToolUseBlock,
+            UserMessage,
         )
 
-        threshold = self._model_config.context_threshold
-        _hook_fired = False
-        _transcript_path = ""
-
-        async def _post_tool_hook(
-            input_data: HookInput,
-            tool_use_id: str | None,
-            context: HookContext,
-        ) -> SyncHookJSONOutput:
-            nonlocal _hook_fired, _transcript_path
-            if tracker is None:
-                return SyncHookJSONOutput()
-            transcript_path = input_data.get("transcript_path", "")
-            _transcript_path = transcript_path or _transcript_path
-            ratio = tracker.estimate_from_transcript(transcript_path)
-            if ratio >= threshold and not _hook_fired:
-                _hook_fired = True
-                logger.info(
-                    "PostToolUse hook: context at %.1f%%, injecting save instruction",
-                    ratio * 100,
-                )
-                return SyncHookJSONOutput(
-                    hookSpecificOutput=PostToolUseHookSpecificOutput(
-                        hookEventName="PostToolUse",
-                        additionalContext=(
-                            f"\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u4f7f\u7528\u7387\u304c{ratio:.0%}\u306b\u9054\u3057\u307e\u3057\u305f\u3002"
-                            "shortterm/session_state.md \u306b\u73fe\u5728\u306e\u4f5c\u696d\u72b6\u614b\u3092\u66f8\u304d\u51fa\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
-                            "\u5185\u5bb9: \u4f55\u3092\u3057\u3066\u3044\u305f\u304b\u3001\u3069\u3053\u307e\u3067\u9032\u3093\u3060\u304b\u3001\u6b21\u306b\u4f55\u3092\u3059\u3079\u304d\u304b\u3002"
-                            "\u66f8\u304d\u51fa\u3057\u5f8c\u3001\u4f5c\u696d\u3092\u4e2d\u65ad\u3057\u3066\u305d\u306e\u65e8\u3092\u5831\u544a\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
-                        ),
-                    )
-                )
-            return SyncHookJSONOutput()
+        # ── Session stats: shared between PreToolUse hook closure and this
+        #    outer message loop.  The hook reads these values to decide
+        #    whether to terminate the session for auto-compact; the loop
+        #    updates total_result_bytes after each ToolResultBlock.
+        #    Both run in the same async task — no concurrent access.
+        _cw = resolve_context_window(self._model_config.model)
+        session_stats: dict[str, Any] = {
+            "tool_call_count": 0,
+            "total_result_bytes": 0,
+            "system_prompt_tokens": len(system_prompt) // CHARS_PER_TOKEN,
+            "user_prompt_tokens": len(prompt) // CHARS_PER_TOKEN,
+            "force_chain": False,
+        }
 
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
@@ -539,10 +758,11 @@ class AgentSDKExecutor(BaseExecutor):
                            "mcp__aw__*"],
             permission_mode="acceptEdits",
             cwd=str(self._anima_dir),
-            max_turns=self._model_config.max_turns,
+            max_turns=max_turns_override or self._model_config.max_turns,
             model=self._resolve_agent_sdk_model(),
             env=self._build_env(),
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,
+            setting_sources=[],  # CLI内蔵hook(settings.json)の読み込みを防止
             mcp_servers={
                 "aw": {
                     "command": sys.executable,
@@ -552,54 +772,71 @@ class AgentSDKExecutor(BaseExecutor):
             },
             hooks={
                 "PreToolUse": [HookMatcher(
-                    matcher="Write|Edit|Bash|Read|Grep|Glob",
-                    hooks=[_build_pre_tool_hook(self._anima_dir)],
+                    matcher=".*",
+                    hooks=[_build_pre_tool_hook(
+                        self._anima_dir,
+                        max_tokens=self._model_config.max_tokens or 4096,
+                        context_window=_cw,
+                        session_stats=session_stats,
+                    )],
                 )],
-                "PostToolUse": [HookMatcher(matcher=None, hooks=[_post_tool_hook])],
             },
         )
 
         response_text: list[str] = []
-        all_tool_records: list[ToolCallRecord] = []
+        pending_records: dict[str, ToolCallRecord] = {}
         result_message: ResultMessage | None = None
         message_count = 0
 
         try:
-            async for message in query(prompt=prompt, options=options):
-                if isinstance(message, ResultMessage):
-                    result_message = message
-                    if tracker:
-                        tracker.update_from_result_message(message.usage)
-                elif isinstance(message, AssistantMessage):
-                    message_count += 1
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            response_text.append(block.text)
-                        elif hasattr(block, 'name') and hasattr(block, 'id'):
-                            # ToolUseBlock from Agent SDK
-                            all_tool_records.append(ToolCallRecord(
-                                tool_name=block.name,
-                                tool_id=block.id,
-                                input_summary=_truncate_for_record(
-                                    str(getattr(block, 'input', '')), 200,
-                                ),
-                                result_summary="",  # Not available - managed by Agent SDK internally
-                            ))
-                elif isinstance(message, SystemMessage):
-                    if message.subtype == "init" and message.data:
-                        mcp_servers = message.data.get("mcp_servers", [])
-                        for srv in mcp_servers:
-                            name = srv.get("name", "unknown")
-                            status = srv.get("status", "unknown")
-                            if status != "connected":
-                                logger.error(
-                                    "MCP server '%s' failed to connect: status=%s",
-                                    name, status,
+            logger.info("ClaudeSDKClient connecting (blocking mode)")
+            async with ClaudeSDKClient(options=options) as client:
+                logger.info("ClaudeSDKClient connected")
+                await client.query(prompt)
+                async for message in client.receive_response():
+                    if isinstance(message, ResultMessage):
+                        result_message = message
+                        if tracker:
+                            tracker.update_from_result_message(message.usage)
+                    elif isinstance(message, AssistantMessage):
+                        message_count += 1
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                response_text.append(block.text)
+                            elif isinstance(block, ToolUseBlock):
+                                _handle_tool_use_block(
+                                    block, pending_records, None,
+                                    self._model_config.model,
                                 )
-                            else:
-                                logger.info("MCP server '%s' connected successfully", name)
+                    elif isinstance(message, UserMessage):
+                        if isinstance(message.content, list):
+                            for block in message.content:
+                                if isinstance(block, ToolResultBlock):
+                                    session_stats["total_result_bytes"] += (
+                                        _tool_result_content_len(block)
+                                    )
+                                    _handle_tool_result_block(
+                                        block, pending_records, None,
+                                        self._model_config.model,
+                                        anima_dir=self._anima_dir,
+                                    )
+                    elif isinstance(message, SystemMessage):
+                        if message.subtype == "init" and message.data:
+                            mcp_servers = message.data.get("mcp_servers", [])
+                            for srv in mcp_servers:
+                                name = srv.get("name", "unknown")
+                                status = srv.get("status", "unknown")
+                                if status != "connected":
+                                    logger.error(
+                                        "MCP server '%s' failed to connect: status=%s",
+                                        name, status,
+                                    )
+                                else:
+                                    logger.info("MCP server '%s' connected successfully", name)
+            logger.debug("ClaudeSDKClient disconnected")
         except Exception as e:
             logger.exception("Agent SDK execution error")
+            all_tool_records = _finalize_pending_records(pending_records)
             return ExecutionResult(
                 text="\n".join(response_text) or f"[Agent SDK Error: {e}]",
                 tool_call_records=all_tool_records,
@@ -607,9 +844,10 @@ class AgentSDKExecutor(BaseExecutor):
         finally:
             _cleanup_tool_outputs(self._anima_dir)
 
+        all_tool_records = _finalize_pending_records(pending_records)
         logger.debug(
-            "Agent SDK completed, messages=%d text_blocks=%d",
-            message_count, len(response_text),
+            "Agent SDK completed, messages=%d text_blocks=%d tools=%d",
+            message_count, len(response_text), len(all_tool_records),
         )
         replied_to = self._read_replied_to_file()
         return ExecutionResult(
@@ -617,6 +855,7 @@ class AgentSDKExecutor(BaseExecutor):
             result_message=result_message,
             replied_to_from_transcript=replied_to,
             tool_call_records=all_tool_records,
+            force_chain=session_stats.get("force_chain", False),
         )
 
     # ── Streaming execution ──────────────────────────────────
@@ -627,6 +866,8 @@ class AgentSDKExecutor(BaseExecutor):
         prompt: str,
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream events from Claude Agent SDK.
 
@@ -644,52 +885,27 @@ class AgentSDKExecutor(BaseExecutor):
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeAgentOptions,
+            ClaudeSDKClient,
             HookMatcher,
             ResultMessage,
             SystemMessage,
             TextBlock,
+            ToolResultBlock,
             ToolUseBlock,
-            query,
+            UserMessage,
         )
-        from claude_agent_sdk.types import (
-            HookContext,
-            HookInput,
-            PostToolUseHookSpecificOutput,
-            StreamEvent,
-            SyncHookJSONOutput,
-        )
+        from claude_agent_sdk.types import StreamEvent
 
-        threshold = self._model_config.context_threshold
-        _hook_fired = False
-        _transcript_path = ""
-
-        async def _post_tool_hook(
-            input_data: HookInput,
-            tool_use_id: str | None,
-            context: HookContext,
-        ) -> SyncHookJSONOutput:
-            nonlocal _hook_fired, _transcript_path
-            transcript_path = input_data.get("transcript_path", "")
-            _transcript_path = transcript_path or _transcript_path
-            ratio = tracker.estimate_from_transcript(transcript_path)
-            if ratio >= threshold and not _hook_fired:
-                _hook_fired = True
-                logger.info(
-                    "PostToolUse hook (stream): context at %.1f%%",
-                    ratio * 100,
-                )
-                return SyncHookJSONOutput(
-                    hookSpecificOutput=PostToolUseHookSpecificOutput(
-                        hookEventName="PostToolUse",
-                        additionalContext=(
-                            f"\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u4f7f\u7528\u7387\u304c{ratio:.0%}\u306b\u9054\u3057\u307e\u3057\u305f\u3002"
-                            "shortterm/session_state.md \u306b\u73fe\u5728\u306e\u4f5c\u696d\u72b6\u614b\u3092\u66f8\u304d\u51fa\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
-                            "\u5185\u5bb9: \u4f55\u3092\u3057\u3066\u3044\u305f\u304b\u3001\u3069\u3053\u307e\u3067\u9032\u3093\u3060\u304b\u3001\u6b21\u306b\u4f55\u3092\u3059\u3079\u304d\u304b\u3002"
-                            "\u66f8\u304d\u51fa\u3057\u5f8c\u3001\u4f5c\u696d\u3092\u4e2d\u65ad\u3057\u3066\u305d\u306e\u65e8\u3092\u5831\u544a\u3057\u3066\u304f\u3060\u3055\u3044\u3002"
-                        ),
-                    )
-                )
-            return SyncHookJSONOutput()
+        # ── Session stats: shared between PreToolUse hook closure and this
+        #    outer message loop (see execute() for detailed comment).
+        _cw = resolve_context_window(self._model_config.model)
+        session_stats: dict[str, Any] = {
+            "tool_call_count": 0,
+            "total_result_bytes": 0,
+            "system_prompt_tokens": len(system_prompt) // CHARS_PER_TOKEN,
+            "user_prompt_tokens": len(prompt) // CHARS_PER_TOKEN,
+            "force_chain": False,
+        }
 
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
@@ -697,11 +913,12 @@ class AgentSDKExecutor(BaseExecutor):
                            "mcp__aw__*"],
             permission_mode="acceptEdits",
             cwd=str(self._anima_dir),
-            max_turns=self._model_config.max_turns,
+            max_turns=max_turns_override or self._model_config.max_turns,
             model=self._resolve_agent_sdk_model(),
             env=self._build_env(),
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,
             include_partial_messages=True,
+            setting_sources=[],  # CLI内蔵hook(settings.json)の読み込みを防止
             mcp_servers={
                 "aw": {
                     "command": sys.executable,
@@ -711,99 +928,129 @@ class AgentSDKExecutor(BaseExecutor):
             },
             hooks={
                 "PreToolUse": [HookMatcher(
-                    matcher="Write|Edit|Bash|Read|Grep|Glob",
-                    hooks=[_build_pre_tool_hook(self._anima_dir)],
+                    matcher=".*",
+                    hooks=[_build_pre_tool_hook(
+                        self._anima_dir,
+                        max_tokens=self._model_config.max_tokens or 4096,
+                        context_window=_cw,
+                        session_stats=session_stats,
+                    )],
                 )],
-                "PostToolUse": [HookMatcher(matcher=None, hooks=[_post_tool_hook])],
             },
         )
 
         response_text: list[str] = []
-        all_tool_records: list[ToolCallRecord] = []
+        pending_records: dict[str, ToolCallRecord] = {}
         result_message: ResultMessage | None = None
         active_tool_ids: set[str] = set()
-        # Track tool names from content_block_start for streaming records
-        active_tool_names: dict[str, str] = {}
         message_count = 0
 
         try:
-            async for message in query(prompt=prompt, options=options):
-                if isinstance(message, StreamEvent):
-                    event = message.event
-                    event_type = event.get("type", "")
+            logger.info("ClaudeSDKClient connecting (streaming mode)")
+            async with ClaudeSDKClient(options=options) as client:
+                logger.info("ClaudeSDKClient connected")
+                await client.query(prompt)
+                async for message in client.receive_messages():
+                    if isinstance(message, StreamEvent):
+                        event = message.event
+                        event_type = event.get("type", "")
 
-                    if event_type == "content_block_start":
-                        block = event.get("content_block", {})
-                        if block.get("type") == "tool_use":
-                            tool_id = block.get("id", "")
-                            tool_name = block.get("name", "")
-                            active_tool_ids.add(tool_id)
-                            active_tool_names[tool_id] = tool_name
-                            yield {
-                                "type": "tool_start",
-                                "tool_name": tool_name,
-                                "tool_id": tool_id,
-                            }
-
-                    elif event_type == "content_block_delta":
-                        delta = event.get("delta", {})
-                        if delta.get("type") == "text_delta":
-                            text = delta.get("text", "")
-                            if text:
-                                yield {"type": "text_delta", "text": text}
-
-                elif isinstance(message, AssistantMessage):
-                    message_count += 1
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            response_text.append(block.text)
-                        elif isinstance(block, ToolUseBlock):
-                            all_tool_records.append(ToolCallRecord(
-                                tool_name=block.name,
-                                tool_id=block.id,
-                                input_summary=_truncate_for_record(
-                                    str(getattr(block, 'input', '')), 200,
-                                ),
-                                result_summary="",  # Not available - managed by Agent SDK internally
-                            ))
-                            if block.id in active_tool_ids:
-                                active_tool_ids.discard(block.id)
+                        if event_type == "content_block_start":
+                            block = event.get("content_block", {})
+                            if block.get("type") == "tool_use":
+                                tool_id = block.get("id", "")
+                                tool_name = block.get("name", "")
+                                active_tool_ids.add(tool_id)
                                 yield {
-                                    "type": "tool_end",
-                                    "tool_id": block.id,
-                                    "tool_name": block.name,
+                                    "type": "tool_start",
+                                    "tool_name": tool_name,
+                                    "tool_id": tool_id,
                                 }
 
-                elif isinstance(message, ResultMessage):
-                    result_message = message
-                    tracker.update_from_result_message(message.usage)
+                        elif event_type == "content_block_delta":
+                            delta = event.get("delta", {})
+                            if delta.get("type") == "text_delta":
+                                text = delta.get("text", "")
+                                if text:
+                                    yield {"type": "text_delta", "text": text}
 
-                elif isinstance(message, SystemMessage):
-                    if message.subtype == "init" and message.data:
-                        mcp_servers = message.data.get("mcp_servers", [])
-                        for srv in mcp_servers:
-                            name = srv.get("name", "unknown")
-                            status = srv.get("status", "unknown")
-                            if status != "connected":
-                                logger.error(
-                                    "MCP server '%s' failed to connect: status=%s",
-                                    name, status,
+                    elif isinstance(message, AssistantMessage):
+                        message_count += 1
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                response_text.append(block.text)
+                            elif isinstance(block, ToolUseBlock):
+                                _handle_tool_use_block(
+                                    block, pending_records, None,
+                                    self._model_config.model,
                                 )
-                            else:
-                                logger.info("MCP server '%s' connected successfully", name)
-        except Exception as e:
-            logger.exception("Agent SDK streaming error")
+                                if block.id in active_tool_ids:
+                                    active_tool_ids.discard(block.id)
+                                    yield {
+                                        "type": "tool_end",
+                                        "tool_id": block.id,
+                                        "tool_name": block.name,
+                                    }
+
+                    elif isinstance(message, UserMessage):
+                        if isinstance(message.content, list):
+                            for block in message.content:
+                                if isinstance(block, ToolResultBlock):
+                                    session_stats["total_result_bytes"] += (
+                                        _tool_result_content_len(block)
+                                    )
+                                    _handle_tool_result_block(
+                                        block, pending_records, None,
+                                        self._model_config.model,
+                                        anima_dir=self._anima_dir,
+                                    )
+
+                    elif isinstance(message, ResultMessage):
+                        result_message = message
+                        tracker.update_from_result_message(message.usage)
+                        break  # receive_messages() does not auto-stop on ResultMessage
+
+                    elif isinstance(message, SystemMessage):
+                        if message.subtype == "init" and message.data:
+                            mcp_servers = message.data.get("mcp_servers", [])
+                            for srv in mcp_servers:
+                                name = srv.get("name", "unknown")
+                                status = srv.get("status", "unknown")
+                                if status != "connected":
+                                    logger.error(
+                                        "MCP server '%s' failed to connect: status=%s",
+                                        name, status,
+                                    )
+                                else:
+                                    logger.info("MCP server '%s' connected successfully", name)
+            logger.debug("ClaudeSDKClient disconnected")
+        except BaseException as e:
+            # CancelledError は正常な asyncio ライフサイクル（SIGTERM等）。
+            # 捕捉せずそのまま伝播させる。
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            # BaseException を捕捉して StreamDisconnectedError に変換。
+            # Agent SDK hook callback の "Stream closed" が SystemExit を
+            # 発生させ、except Exception をすり抜ける問題への対策。
+            if not isinstance(e, Exception):
+                logger.critical(
+                    "Agent SDK raised %s during streaming: %s",
+                    type(e).__name__, e,
+                )
+            else:
+                logger.exception("Agent SDK streaming error")
             partial = "\n".join(response_text)
             raise StreamDisconnectedError(
-                f"Agent SDK stream error: {e}",
+                f"Agent SDK stream error ({type(e).__name__}): {e}",
                 partial_text=partial,
             ) from e
         finally:
             _cleanup_tool_outputs(self._anima_dir)
 
+        all_tool_records = _finalize_pending_records(pending_records)
         logger.debug(
-            "Agent SDK streaming completed, messages=%d text_blocks=%d",
-            message_count, len(response_text),
+            "Agent SDK streaming completed, messages=%d text_blocks=%d tools=%d",
+            message_count, len(response_text), len(all_tool_records),
         )
         full_text = "\n".join(response_text) or "(no response)"
         replied_to = self._read_replied_to_file()
@@ -813,4 +1060,5 @@ class AgentSDKExecutor(BaseExecutor):
             "result_message": result_message,
             "replied_to_from_transcript": replied_to,
             "tool_call_records": [asdict(r) for r in all_tool_records],
+            "force_chain": session_stats.get("force_chain", False),
         }

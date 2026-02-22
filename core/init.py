@@ -22,6 +22,189 @@ logger = logging.getLogger("animaworks.init")
 _INFRASTRUCTURE_DIRS = {"prompts", "company", "common_skills", "common_knowledge"}
 
 
+def _ensure_tool_prompt_db(data_dir: Path) -> None:
+    """Create and seed the tool prompt DB if needed."""
+    from core.tooling.prompt_db import (
+        DEFAULT_DESCRIPTIONS,
+        DEFAULT_GUIDES,
+        SECTION_CONDITIONS,
+        ToolPromptStore,
+    )
+
+    tool_db_path = data_dir / "tool_prompts.sqlite3"
+    tool_store = ToolPromptStore(tool_db_path)
+
+    # Load section content from runtime prompts directory
+    sections: dict[str, tuple[str, str | None]] = {}
+    prompts_dir = data_dir / "prompts"
+
+    _SECTION_FILES: dict[str, str] = {
+        "behavior_rules": "behavior_rules.md",
+        "environment": "environment.md",
+        "messaging_a1": "messaging_a1.md",
+        "messaging": "messaging.md",
+        "communication_rules_a1": "communication_rules_a1.md",
+        "communication_rules": "communication_rules.md",
+        "a2_reflection": "a2_reflection.md",
+        "hiring_context": "hiring_context.md",
+    }
+
+    for key, filename in _SECTION_FILES.items():
+        filepath = prompts_dir / filename
+        if filepath.exists():
+            try:
+                content = filepath.read_text(encoding="utf-8").strip()
+                if content:
+                    condition = SECTION_CONDITIONS.get(key)
+                    sections[key] = (content, condition)
+            except Exception:
+                logger.warning("Failed to read section template: %s", filepath)
+
+    # emotion_instruction: built at runtime from valid emotions list
+    try:
+        from core.prompt.builder import _build_emotion_instruction
+
+        emotion = _build_emotion_instruction()
+        if emotion:
+            sections["emotion_instruction"] = (emotion, None)
+    except Exception:
+        logger.warning("Failed to build emotion instruction for seeding")
+
+    tool_store.seed_defaults(
+        descriptions=DEFAULT_DESCRIPTIONS,
+        guides=DEFAULT_GUIDES,
+        sections=sections,
+    )
+
+    # Apply incremental migrations for existing DBs
+    _migrate_memory_prompts_v1(tool_store, prompts_dir)
+    _migrate_praise_loop_prevention_v1(tool_store, prompts_dir)
+
+    logger.info("Tool prompt DB initialised: %s", tool_db_path)
+
+
+def _migrate_memory_prompts_v1(
+    tool_store: "ToolPromptStore",  # noqa: F821
+    prompts_dir: Path,
+) -> None:
+    """One-shot migration: update memory-related prompts to v1 (active style).
+
+    Idempotent — records migration key ``memory_prompt_v1`` in a ``migrations``
+    table and skips if already applied.
+    """
+    from core.tooling.prompt_db import (
+        DEFAULT_DESCRIPTIONS,
+        DEFAULT_GUIDES,
+        SECTION_CONDITIONS,
+    )
+
+    # Ensure migrations table exists
+    conn = tool_store._connect()
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS migrations "
+            "(key TEXT PRIMARY KEY, applied_at TEXT)"
+        )
+        row = conn.execute(
+            "SELECT 1 FROM migrations WHERE key = ?",
+            ("memory_prompt_v1",),
+        ).fetchone()
+        if row:
+            return  # already applied
+
+        # 1-4: Update tool descriptions
+        for name in (
+            "search_memory",
+            "write_memory_file",
+            "report_procedure_outcome",
+            "report_knowledge_outcome",
+        ):
+            desc = DEFAULT_DESCRIPTIONS.get(name)
+            if desc:
+                tool_store.set_description(name, desc)
+
+        # 5-6: Update tool guides
+        for key in ("a1_mcp", "non_a1"):
+            guide = DEFAULT_GUIDES.get(key)
+            if guide:
+                tool_store.set_guide(key, guide)
+
+        # 7: Update behavior_rules section from runtime prompts file
+        br_path = prompts_dir / "behavior_rules.md"
+        if br_path.exists():
+            content = br_path.read_text(encoding="utf-8").strip()
+            if content:
+                condition = SECTION_CONDITIONS.get("behavior_rules")
+                tool_store.set_section("behavior_rules", content, condition)
+
+        # Record migration
+        from core.time_utils import now_jst
+
+        conn.execute(
+            "INSERT INTO migrations (key, applied_at) VALUES (?, ?)",
+            ("memory_prompt_v1", now_jst().isoformat()),
+        )
+        conn.commit()
+        logger.info("Applied migration: memory_prompt_v1")
+    finally:
+        conn.close()
+
+
+def _migrate_praise_loop_prevention_v1(
+    tool_store: "ToolPromptStore",  # noqa: F821
+    prompts_dir: Path,
+) -> None:
+    """One-shot migration: update communication/messaging prompts to prevent praise loops.
+
+    Updates system_sections with new rules:
+    - 1往復ルール (1-round-trip rule) in communication_rules
+    - Board投稿ルール in messaging templates
+    - 送信禁止ルール in unread_messages (via messaging sections)
+
+    Idempotent — records migration key ``praise_loop_prevention_v1`` in a
+    ``migrations`` table and skips if already applied.
+    """
+    from core.tooling.prompt_db import SECTION_CONDITIONS
+
+    conn = tool_store._connect()
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS migrations "
+            "(key TEXT PRIMARY KEY, applied_at TEXT)"
+        )
+        row = conn.execute(
+            "SELECT 1 FROM migrations WHERE key = ?",
+            ("praise_loop_prevention_v1",),
+        ).fetchone()
+        if row:
+            return  # already applied
+
+        # Update sections from runtime prompts files
+        for key in (
+            "communication_rules_a1",
+            "communication_rules",
+            "messaging_a1",
+            "messaging",
+        ):
+            path = prompts_dir / f"{key}.md"
+            if path.exists():
+                content = path.read_text(encoding="utf-8").strip()
+                if content:
+                    condition = SECTION_CONDITIONS.get(key)
+                    tool_store.set_section(key, content, condition)
+
+        from core.time_utils import now_jst
+
+        conn.execute(
+            "INSERT INTO migrations (key, applied_at) VALUES (?, ?)",
+            ("praise_loop_prevention_v1", now_jst().isoformat()),
+        )
+        conn.commit()
+        logger.info("Applied migration: praise_loop_prevention_v1")
+    finally:
+        conn.close()
+
+
 def ensure_runtime_dir(*, skip_animas: bool = False) -> Path:
     """Ensure the runtime data directory exists, seeding from templates if needed.
 
@@ -82,6 +265,8 @@ def ensure_runtime_dir(*, skip_animas: bool = False) -> Path:
 
     # Generate default config.json
     _create_default_config(data_dir)
+
+    _ensure_tool_prompt_db(data_dir)
 
     logger.info("Runtime directory initialized: %s", data_dir)
     return data_dir
@@ -154,6 +339,8 @@ def merge_templates(data_dir: Path) -> list[str]:
 
     # Ensure runtime-only directories exist
     _ensure_runtime_only_dirs(data_dir)
+
+    _ensure_tool_prompt_db(data_dir)
 
     return added
 

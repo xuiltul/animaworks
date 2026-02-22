@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Mock factories for LLM API calls.
 
-Provides helpers to mock litellm.acompletion, claude_agent_sdk.query,
+Provides helpers to mock litellm.acompletion, claude_agent_sdk.ClaudeSDKClient,
 and anthropic.AsyncAnthropic for isolated testing.
 """
 
@@ -150,6 +150,63 @@ class MockStreamEvent:
         self.event = event
 
 
+class MockToolResultBlock:
+    """Mock for ``claude_agent_sdk.ToolResultBlock``."""
+
+    def __init__(
+        self, tool_use_id: str, content: Any = "", is_error: bool | None = None,
+    ) -> None:
+        self.tool_use_id = tool_use_id
+        self.content = content
+        self.is_error = is_error
+        self.type = "tool_result"
+
+
+class MockUserMessage:
+    """Mock for ``claude_agent_sdk.UserMessage``."""
+
+    def __init__(self, content: list[Any]) -> None:
+        self.content = content
+
+
+class MockSystemMessage:
+    """Mock for ``claude_agent_sdk.SystemMessage``."""
+
+    def __init__(
+        self, subtype: str = "", data: dict[str, Any] | None = None,
+    ) -> None:
+        self.subtype = subtype
+        self.data = data or {}
+
+
+class MockClaudeSDKClient:
+    """Mock for ``claude_agent_sdk.ClaudeSDKClient``.
+
+    Works as an async context manager with ``query()``,
+    ``receive_response()`` and ``receive_messages()`` methods.
+    """
+
+    def __init__(self, messages: list[Any], **kwargs: Any) -> None:
+        self._messages = messages
+
+    async def __aenter__(self) -> "MockClaudeSDKClient":
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        pass
+
+    async def query(self, prompt: str) -> None:
+        pass
+
+    async def receive_response(self):
+        for msg in self._messages:
+            yield msg
+
+    async def receive_messages(self):
+        for msg in self._messages:
+            yield msg
+
+
 @contextmanager
 def patch_agent_sdk(
     response_text: str = "Mock A1 response.",
@@ -157,9 +214,11 @@ def patch_agent_sdk(
     usage: dict[str, int] | None = None,
     num_turns: int = 1,
 ):
-    """Patch ``claude_agent_sdk.query`` with an async generator mock.
+    """Patch ``claude_agent_sdk.ClaudeSDKClient`` with a mock client.
 
     Injects the mock module into ``sys.modules`` so lazy imports work.
+    The mock ``ClaudeSDKClient`` yields messages via ``receive_response()``
+    and ``receive_messages()``.
     """
     content_blocks: list[Any] = []
     if tool_uses:
@@ -171,17 +230,21 @@ def patch_agent_sdk(
         usage=usage, num_turns=num_turns,
     )
 
-    async def mock_query(prompt, options):
-        yield assistant_msg
-        yield result_msg
+    messages = [assistant_msg, result_msg]
+
+    def _client_factory(**kwargs: Any) -> MockClaudeSDKClient:
+        return MockClaudeSDKClient(messages=messages, **kwargs)
 
     # Build mock module
     mock_module = MagicMock()
-    mock_module.query = mock_query
+    mock_module.ClaudeSDKClient = _client_factory
     mock_module.AssistantMessage = MockAssistantMessage
     mock_module.ResultMessage = MockResultMessage
     mock_module.TextBlock = MockTextBlock
     mock_module.ToolUseBlock = MockToolUseBlock
+    mock_module.ToolResultBlock = MockToolResultBlock
+    mock_module.UserMessage = MockUserMessage
+    mock_module.SystemMessage = MockSystemMessage
     mock_module.ClaudeAgentOptions = MagicMock
     mock_module.HookMatcher = MagicMock
 
@@ -189,6 +252,7 @@ def patch_agent_sdk(
     mock_types = MagicMock()
     mock_types.HookContext = MagicMock
     mock_types.HookInput = MagicMock
+    mock_types.PreToolUseHookSpecificOutput = MagicMock
     mock_types.PostToolUseHookSpecificOutput = MagicMock
     mock_types.SyncHookJSONOutput = MagicMock
     mock_types.StreamEvent = MockStreamEvent
@@ -219,9 +283,11 @@ def patch_agent_sdk_streaming(
     usage: dict[str, int] | None = None,
     num_turns: int = 1,
 ):
-    """Patch ``claude_agent_sdk.query`` for streaming tests.
+    """Patch ``claude_agent_sdk.ClaudeSDKClient`` for streaming tests.
 
-    Yields ``StreamEvent`` objects simulating real streaming behavior.
+    The mock client yields ``StreamEvent``, ``AssistantMessage``, and
+    ``ResultMessage`` objects via ``receive_messages()`` simulating real
+    streaming behavior.
     """
     if text_deltas is None:
         text_deltas = ["Mock ", "streaming ", "response."]
@@ -229,25 +295,29 @@ def patch_agent_sdk_streaming(
     full_text = "".join(text_deltas)
     result_msg = MockResultMessage(usage=usage, num_turns=num_turns)
 
-    async def mock_query(prompt, options):
-        # Yield text deltas as StreamEvents
-        for delta in text_deltas:
-            yield MockStreamEvent({
-                "type": "content_block_delta",
-                "delta": {"type": "text_delta", "text": delta},
-                "index": 0,
-            })
-        # Yield assistant message with full text
-        yield MockAssistantMessage([MockTextBlock(full_text)])
-        # Yield result
-        yield result_msg
+    # Build the message sequence for streaming
+    messages: list[Any] = []
+    for delta in text_deltas:
+        messages.append(MockStreamEvent({
+            "type": "content_block_delta",
+            "delta": {"type": "text_delta", "text": delta},
+            "index": 0,
+        }))
+    messages.append(MockAssistantMessage([MockTextBlock(full_text)]))
+    messages.append(result_msg)
+
+    def _client_factory(**kwargs: Any) -> MockClaudeSDKClient:
+        return MockClaudeSDKClient(messages=messages, **kwargs)
 
     mock_module = MagicMock()
-    mock_module.query = mock_query
+    mock_module.ClaudeSDKClient = _client_factory
     mock_module.AssistantMessage = MockAssistantMessage
     mock_module.ResultMessage = MockResultMessage
     mock_module.TextBlock = MockTextBlock
     mock_module.ToolUseBlock = MockToolUseBlock
+    mock_module.ToolResultBlock = MockToolResultBlock
+    mock_module.UserMessage = MockUserMessage
+    mock_module.SystemMessage = MockSystemMessage
     mock_module.ClaudeAgentOptions = MagicMock
     mock_module.HookMatcher = MagicMock
 
@@ -255,6 +325,7 @@ def patch_agent_sdk_streaming(
     mock_types.StreamEvent = MockStreamEvent
     mock_types.HookContext = MagicMock
     mock_types.HookInput = MagicMock
+    mock_types.PreToolUseHookSpecificOutput = MagicMock
     mock_types.PostToolUseHookSpecificOutput = MagicMock
     mock_types.SyncHookJSONOutput = MagicMock
     mock_module.types = mock_types

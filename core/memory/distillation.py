@@ -237,7 +237,7 @@ class ProceduralDistiller:
             e for e in entries
             if e.get("type") in (
                 "tool_use", "response_sent", "cron_executed",
-                "memory_write",
+                "memory_write", "issue_resolved",
             )
         ]
         if not relevant:
@@ -681,7 +681,7 @@ class ProceduralDistiller:
             from core.memory.rag.retriever import MemoryRetriever
             from core.memory.rag.singleton import get_vector_store
 
-            vector_store = get_vector_store()
+            vector_store = get_vector_store(self.anima_name)
             indexer = MemoryIndexer(
                 vector_store, self.anima_name, self.anima_dir,
             )

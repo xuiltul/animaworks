@@ -90,7 +90,10 @@ class TestMcpServerConfig:
         mock_module.AssistantMessage = type("AssistantMessage", (), {})
         mock_module.ResultMessage = type("ResultMessage", (), {})
         mock_module.SystemMessage = type("SystemMessage", (), {})
+        mock_module.UserMessage = type("UserMessage", (), {})
         mock_module.TextBlock = type("TextBlock", (), {})
+        mock_module.ToolUseBlock = type("ToolUseBlock", (), {})
+        mock_module.ToolResultBlock = type("ToolResultBlock", (), {})
         mock_module.HookMatcher = MagicMock()
 
         # ClaudeAgentOptions: capture kwargs on construction
@@ -102,19 +105,31 @@ class TestMcpServerConfig:
 
         mock_module.ClaudeAgentOptions = FakeClaudeAgentOptions
 
-        # query: return an async iterator that yields a ResultMessage
-        result_msg = MagicMock()
+        # ClaudeSDKClient: async context manager with query() and receive_response()
+        result_msg = MagicMock(spec=[])
+        result_msg.__class__ = mock_module.ResultMessage
         result_msg.usage = {"input_tokens": 100, "output_tokens": 50}
 
-        async def fake_query(**kwargs):
-            # Yield a ResultMessage-like object
-            msg = MagicMock(spec=[])
-            # Make it an instance of our mock ResultMessage via type tag
-            msg.__class__ = mock_module.ResultMessage
-            msg.usage = {"input_tokens": 100, "output_tokens": 50}
-            yield msg
+        class FakeClaudeSDKClient:
+            def __init__(self, **kwargs):
+                pass
 
-        mock_module.query = fake_query
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def query(self, prompt):
+                pass
+
+            async def receive_response(self):
+                yield result_msg
+
+            async def receive_messages(self):
+                yield result_msg
+
+        mock_module.ClaudeSDKClient = FakeClaudeSDKClient
 
         # Types sub-module
         mock_types = MagicMock()
@@ -234,7 +249,10 @@ class TestMcpStatusLogging:
         # Real-ish classes for isinstance checks
         mock_module.AssistantMessage = type("AssistantMessage", (), {})
         mock_module.ResultMessage = type("ResultMessage", (), {})
+        mock_module.UserMessage = type("UserMessage", (), {})
         mock_module.TextBlock = type("TextBlock", (), {})
+        mock_module.ToolUseBlock = type("ToolUseBlock", (), {})
+        mock_module.ToolResultBlock = type("ToolResultBlock", (), {})
         mock_module.HookMatcher = MagicMock()
 
         # SystemMessage with controllable subtype and data
@@ -272,11 +290,24 @@ class TestMcpStatusLogging:
         result_msg.__class__ = mock_module.ResultMessage
         result_msg.usage = {"input_tokens": 100, "output_tokens": 50}
 
-        async def fake_query(**kwargs):
-            yield sys_msg
-            yield result_msg
+        class FakeClient:
+            def __init__(self, **kwargs):
+                pass
 
-        mock_module.query = fake_query
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def query(self, prompt):
+                pass
+
+            async def receive_response(self):
+                yield sys_msg
+                yield result_msg
+
+        mock_module.ClaudeSDKClient = FakeClient
 
         executor = _make_executor(tmp_path / "animas" / "test-anima")
 
@@ -310,11 +341,24 @@ class TestMcpStatusLogging:
         result_msg.__class__ = mock_module.ResultMessage
         result_msg.usage = {"input_tokens": 100, "output_tokens": 50}
 
-        async def fake_query(**kwargs):
-            yield sys_msg
-            yield result_msg
+        class FakeClient:
+            def __init__(self, **kwargs):
+                pass
 
-        mock_module.query = fake_query
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def query(self, prompt):
+                pass
+
+            async def receive_response(self):
+                yield sys_msg
+                yield result_msg
+
+        mock_module.ClaudeSDKClient = FakeClient
 
         executor = _make_executor(tmp_path / "animas" / "test-anima")
 

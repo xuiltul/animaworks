@@ -37,7 +37,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -83,7 +83,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -153,7 +153,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -206,7 +206,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -261,7 +261,7 @@ class TestHeartbeatMessageEpisodeE2E:
             original_append = dp.memory.append_episode
             dp.memory.append_episode = MagicMock(side_effect=OSError("Disk full"))
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {

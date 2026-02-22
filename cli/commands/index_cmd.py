@@ -133,14 +133,7 @@ def index_command(args: argparse.Namespace) -> None:
         logger.warning("No animas found to index")
         return
 
-    # Initialize vector store
-    vector_store = ChromaVectorStore()
-
-    # Full rebuild: delete existing collections
-    if args.full and not args.dry_run:
-        logger.info("Full rebuild requested, deleting existing collections")
-        for collection in vector_store.list_collections():
-            vector_store.delete_collection(collection)
+    from core.paths import get_anima_vectordb_dir
 
     # Index each anima
     total_chunks = 0
@@ -149,6 +142,15 @@ def index_command(args: argparse.Namespace) -> None:
         logger.info("=" * 60)
         logger.info("Indexing anima: %s", anima_name)
         logger.info("=" * 60)
+
+        # Per-anima vector store
+        vector_store = ChromaVectorStore(persist_dir=get_anima_vectordb_dir(anima_name))
+
+        # Full rebuild: delete existing collections for this anima
+        if args.full and not args.dry_run:
+            logger.info("Full rebuild: deleting collections for %s", anima_name)
+            for collection in vector_store.list_collections():
+                vector_store.delete_collection(collection)
 
         # Initialize indexer
         indexer = MemoryIndexer(vector_store, anima_name, anima_dir)
@@ -189,10 +191,10 @@ def index_command(args: argparse.Namespace) -> None:
         logger.info("Indexing shared user memories")
         logger.info("=" * 60)
 
-        # Use a dummy anima name for shared memories
-        # (each anima will access the same shared_users collection)
+        # Use shared vector store for user memories
+        shared_store = ChromaVectorStore()  # defaults to ~/.animaworks/vectordb
         indexer = MemoryIndexer(
-            vector_store, "shared", shared_users_dir.parent
+            shared_store, "shared", shared_users_dir.parent
         )
 
         if args.dry_run:
@@ -213,6 +215,5 @@ def index_command(args: argparse.Namespace) -> None:
         logger.info("Dry run complete (no actual indexing performed)")
     else:
         logger.info("Indexing complete: %d total chunks indexed", total_chunks)
-        logger.info("Vector database: %s", vector_store.persist_dir)
         # Record the embedding model used for future change detection
         _save_global_index_meta(base_dir, current_model)

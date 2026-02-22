@@ -44,7 +44,7 @@ server = Server("aw")
 
 # ── Tool selection ───────────────────────────────────────
 #
-# The 12 tools to expose, drawn from canonical schema lists in
+# The tools to expose, drawn from canonical schema lists in
 # ``core/tooling/schemas.py``.  We pick them by name to build a
 # stable, curated subset suitable for A1 mode.
 
@@ -61,6 +61,9 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset({
     "report_procedure_outcome",
     "report_knowledge_outcome",
     "discover_tools",
+    "disable_subordinate",
+    "enable_subordinate",
+    "skill",
 })
 
 
@@ -68,7 +71,8 @@ def _build_mcp_tools() -> list[Tool]:
     """Convert canonical AnimaWorks schemas to MCP Tool objects.
 
     Reads all relevant schema lists from ``core.tooling.schemas`` and
-    filters to the 12 exposed tools.
+    filters to the exposed tools.  The ``skill`` tool gets a dynamically
+    generated description that enumerates available skills.
     """
     from core.tooling.schemas import (
         CHANNEL_TOOLS,
@@ -77,6 +81,8 @@ def _build_mcp_tools() -> list[Tool]:
         MEMORY_TOOLS,
         NOTIFICATION_TOOLS,
         PROCEDURE_TOOLS,
+        SKILL_TOOLS,
+        SUPERVISOR_TOOLS,
         TASK_TOOLS,
     )
 
@@ -88,22 +94,36 @@ def _build_mcp_tools() -> list[Tool]:
         *PROCEDURE_TOOLS,
         *KNOWLEDGE_TOOLS,
         *DISCOVERY_TOOLS,
+        *SUPERVISOR_TOOLS,
+        *SKILL_TOOLS,
     ]
+
+    # Apply DB description overrides
+    from core.tooling.schemas import apply_db_descriptions
+
+    all_schemas = apply_db_descriptions(all_schemas)
+
+    # Generate dynamic description for the skill tool
+    _skill_description = _build_skill_description()
 
     tools: list[Tool] = []
     for schema in all_schemas:
         name = schema["name"]
         if name not in _EXPOSED_TOOL_NAMES:
             continue
+        desc = schema.get("description", "")
+        # Override skill tool description with dynamic content
+        if name == "skill" and _skill_description:
+            desc = _skill_description
         tools.append(
             Tool(
                 name=name,
-                description=schema.get("description", ""),
+                description=desc,
                 inputSchema=schema.get("parameters", {"type": "object", "properties": {}}),
             )
         )
 
-    # Verify we found all 12
+    # Verify we found all expected tools
     found = {t.name for t in tools}
     missing = _EXPOSED_TOOL_NAMES - found
     if missing:
@@ -112,7 +132,51 @@ def _build_mcp_tools() -> list[Tool]:
     return tools
 
 
-# Build once at import time (schemas are static dicts, no I/O needed).
+def _build_skill_description() -> str:
+    """Build dynamic skill tool description from available skills.
+
+    Called once at MCP server startup.  Returns empty string on failure
+    (the static empty description from SKILL_TOOLS will be used instead).
+    """
+    try:
+        anima_dir_env = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
+        if not anima_dir_env:
+            return ""
+
+        anima_dir = Path(anima_dir_env).resolve()
+        if not anima_dir.is_dir():
+            return ""
+
+        from core.memory.skill_metadata import SkillMetadataService
+        from core.paths import get_common_skills_dir
+        from core.tooling.skill_tool import build_skill_tool_description
+
+        svc = SkillMetadataService(
+            skills_dir=anima_dir / "skills",
+            common_skills_dir=get_common_skills_dir(),
+        )
+        skill_metas = svc.list_skill_metas()
+        common_metas = svc.list_common_skill_metas()
+
+        # Procedures use the same SkillMetadataService extraction
+        procedures_dir = anima_dir / "procedures"
+        procedure_metas = []
+        if procedures_dir.is_dir():
+            procedure_metas = [
+                SkillMetadataService.extract_skill_meta(f)
+                for f in sorted(procedures_dir.glob("*.md"))
+            ]
+
+        return build_skill_tool_description(skill_metas, common_metas, procedure_metas)
+
+    except Exception:
+        logger.debug("Failed to build skill description for MCP", exc_info=True)
+        return ""
+
+
+# Build once at import time.  DB descriptions are baked in at this point;
+# WebUI edits to tool descriptions will not take effect until the MCP
+# subprocess is restarted (i.e. the parent Anima process restarts).
 MCP_TOOLS: list[Tool] = _build_mcp_tools()
 
 # ── Lazy ToolHandler initialisation ──────────────────────

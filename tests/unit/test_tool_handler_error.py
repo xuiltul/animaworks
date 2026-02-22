@@ -73,7 +73,7 @@ class TestToolHandlerDepthLimitError:
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
             patch("core.outbound.resolve_recipient", return_value=None),
         ):
-            result = handler._handle_send_message({"to": "bob", "content": "hello"})
+            result = handler._handle_send_message({"to": "bob", "content": "hello", "intent": "report"})
 
         assert "Error:" in result
         assert "ConversationDepthExceeded" in result
@@ -100,7 +100,7 @@ class TestToolHandlerDepthLimitError:
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
             patch("core.outbound.resolve_recipient", return_value=None),
         ):
-            handler._handle_send_message({"to": "bob", "content": "hello"})
+            handler._handle_send_message({"to": "bob", "content": "hello", "intent": "report"})
 
         assert "bob" not in handler._replied_to
 
@@ -126,7 +126,7 @@ class TestToolHandlerDepthLimitError:
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
             patch("core.outbound.resolve_recipient", return_value=None),
         ):
-            result = handler._handle_send_message({"to": "bob", "content": "hello"})
+            result = handler._handle_send_message({"to": "bob", "content": "hello", "intent": "report"})
 
         assert "bob" in handler._replied_to
         assert "Message sent to bob" in result

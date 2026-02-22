@@ -76,6 +76,14 @@ RATE_LIMIT_WAIT_DEFAULT = 60
 DEFAULT_CACHE_DIR = Path.home() / ".animaworks" / "cache" / "chatwork"
 
 
+def _load_chatwork_tool_config() -> dict:
+    """Load tool-local config from DEFAULT_CACHE_DIR / config.json."""
+    config_path = DEFAULT_CACHE_DIR / "config.json"
+    if config_path.exists():
+        return json.loads(config_path.read_text())
+    return {}
+
+
 # ============================================================
 # Text utility
 # ============================================================
@@ -864,8 +872,10 @@ def cli_main(argv: list[str] | None = None) -> None:
                 )
                 _sync_rooms(client, cache, args.sync_limit)
                 print("Sync complete.\n", file=sys.stderr)
+            cli_config = _load_chatwork_tool_config()
             unreplied = cache.find_unreplied(
-                my_id, exclude_toall=(not args.include_toall)
+                my_id, exclude_toall=(not args.include_toall),
+                config=cli_config,
             )
             if getattr(args, "json", False):
                 output = []
@@ -1065,15 +1075,18 @@ def cli_main(argv: list[str] | None = None) -> None:
                 )
                 _sync_rooms(client, cache, args.sync_limit)
                 print("Sync complete.\n", file=sys.stderr)
+            cli_config = _load_chatwork_tool_config()
             mentions = cache.find_mentions(
                 my_id,
                 exclude_toall=(not args.include_toall),
                 limit=args.num,
+                config=cli_config,
             )
             unreplied_set: set[tuple[str, str]] = set()
             if mentions:
                 unreplied_list = cache.find_unreplied(
-                    my_id, exclude_toall=(not args.include_toall)
+                    my_id, exclude_toall=(not args.include_toall),
+                    config=cli_config,
                 )
                 unreplied_set = {
                     (m["room_id"], m["message_id"]) for m in unreplied_list
@@ -1170,8 +1183,10 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
         try:
             my_info = client.me()
             my_id = str(my_info["account_id"])
+            cli_config = _load_chatwork_tool_config()
             return cache.find_unreplied(
                 my_id, exclude_toall=not args.get("include_toall", False),
+                config=cli_config,
             )
         finally:
             cache.close()
@@ -1193,10 +1208,12 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
         try:
             my_info = client.me()
             my_id = str(my_info["account_id"])
+            cli_config = _load_chatwork_tool_config()
             return cache.find_mentions(
                 my_id,
                 exclude_toall=not args.get("include_toall", False),
                 limit=args.get("limit", 200),
+                config=cli_config,
             )
         finally:
             cache.close()

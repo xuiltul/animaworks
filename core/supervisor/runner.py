@@ -175,6 +175,18 @@ class AnimaRunner:
             logger.exception("Fatal error in AnimaRunner: %s", e)
             sys.exit(1)
 
+        except BaseException as e:
+            # CancelledError は SIGTERM 時の正常な asyncio シャットダウン。
+            # 捕捉せず伝播させて asyncio.run() の正常終了フローに委ねる。
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            # 全内部ハンドラをすり抜けた BaseException の最終安全弁。
+            logger.critical(
+                "FATAL BaseException in AnimaRunner (%s): %s: %s",
+                self.anima_name, type(e).__name__, e,
+            )
+            sys.exit(getattr(e, "code", 1) if isinstance(e, SystemExit) else 1)
+
         finally:
             await self._cleanup()
 
@@ -337,6 +349,7 @@ class AnimaRunner:
             "run_bootstrap": self._handle_run_bootstrap,
             "run_heartbeat": self._handle_run_heartbeat,
             "run_cron_task": self._handle_run_cron_task,
+            "run_consolidation": self._handle_run_consolidation,
             "get_status": self._handle_get_status,
             "ping": self._handle_ping,
             "shutdown": self._handle_shutdown,
@@ -408,6 +421,25 @@ class AnimaRunner:
         await self.anima.run_cron_task(task_name, task_description)
 
         return {"status": "completed"}
+
+    async def _handle_run_consolidation(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle run_consolidation request (Anima-driven memory consolidation)."""
+        if not self.anima:
+            raise RuntimeError("Anima not initialized")
+
+        consolidation_type = params.get("consolidation_type", "daily")
+        max_turns = params.get("max_turns", 30)
+
+        result = await self.anima.run_consolidation(
+            consolidation_type=consolidation_type,
+            max_turns=max_turns,
+        )
+
+        return {
+            "status": "completed",
+            "summary": result.summary[:500] if result and result.summary else "",
+            "duration_ms": result.duration_ms if result else 0,
+        }
 
     async def _handle_get_status(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle get_status request."""
@@ -530,11 +562,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _install_signal_diagnostics(anima_name: str) -> None:
+    """Install signal handlers that log before exiting.
+
+    Helps diagnose unexpected process termination by recording
+    which signal killed the child process.
+    """
+    import signal as _sig
+
+    def _handler(signum: int, frame: Any) -> None:
+        sig_name = _sig.Signals(signum).name if signum in _sig.Signals._value2member_map_ else str(signum)
+        logger.error(
+            "SIGNAL RECEIVED: %s (%d) in anima=%s — exiting",
+            sig_name, signum, anima_name,
+        )
+        sys.exit(128 + signum)
+
+    for sig in (_sig.SIGTERM, _sig.SIGINT, _sig.SIGHUP):
+        _sig.signal(sig, _handler)
+
+
 async def main() -> None:
     """Main entry point."""
     args = parse_args()
 
     setup_logging(args.anima_name, args.log_dir)
+
+    _install_signal_diagnostics(args.anima_name)
 
     runner = AnimaRunner(
         anima_name=args.anima_name,

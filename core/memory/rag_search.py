@@ -41,10 +41,24 @@ class RAGMemorySearch:
             from core.memory.rag import MemoryIndexer
             from core.memory.rag.singleton import get_vector_store
 
-            vector_store = get_vector_store()
             anima_name = self._anima_dir.name
+            vector_store = get_vector_store(anima_name)
             self._indexer = MemoryIndexer(vector_store, anima_name, self._anima_dir)
             logger.debug("RAG indexer initialized for anima=%s", anima_name)
+
+            # Index procedures directory alongside knowledge
+            procedures_dir = self._anima_dir / "procedures"
+            if procedures_dir.is_dir() and any(procedures_dir.glob("*.md")):
+                try:
+                    indexed = self._indexer.index_directory(
+                        procedures_dir, "procedures",
+                    )
+                    if indexed > 0:
+                        logger.debug(
+                            "Indexed %d chunks from procedures/", indexed,
+                        )
+                except Exception as e:
+                    logger.warning("Failed to index procedures: %s", e)
 
             # Ensure shared collections exist
             self._ensure_shared_knowledge_indexed(vector_store)
@@ -154,7 +168,9 @@ class RAGMemorySearch:
                         results.append((f.name, line.strip()))
 
         # Hybrid: append vector search results when RAG is available
-        if self._indexer is not None and scope in ("knowledge", "common_knowledge", "all"):
+        if self._indexer is not None and scope in (
+            "knowledge", "common_knowledge", "procedures", "all",
+        ):
             try:
                 vector_hits = self._vector_search_memory(query, scope, knowledge_dir)
                 seen_files = {r[0] for r in results}
@@ -166,6 +182,19 @@ class RAGMemorySearch:
                 logger.debug("Vector search augmentation failed: %s", e)
 
         return results
+
+    @staticmethod
+    def _resolve_search_types(scope: str) -> list[str]:
+        """Map scope to memory_type list for vector search."""
+        if scope == "knowledge":
+            return ["knowledge"]
+        if scope == "procedures":
+            return ["procedures"]
+        if scope == "common_knowledge":
+            return ["knowledge"]
+        if scope == "all":
+            return ["knowledge", "procedures"]
+        return ["knowledge"]
 
     def _vector_search_memory(
         self, query: str, scope: str, knowledge_dir: Path,
@@ -181,23 +210,26 @@ class RAGMemorySearch:
         )
 
         include_shared = scope in ("common_knowledge", "all")
-        rag_results = retriever.search(
-            query=query,
-            anima_name=anima_name,
-            memory_type="knowledge",
-            top_k=5,
-            include_shared=include_shared,
-        )
-
-        # Record access (Hebbian LTP)
-        if rag_results:
-            retriever.record_access(rag_results, anima_name)
-
         hits: list[tuple[str, str]] = []
-        for r in rag_results:
-            source = r.metadata.get("source_file", r.doc_id)
-            first_line = r.content.split("\n", 1)[0].strip()
-            hits.append((str(source), first_line))
+
+        for memory_type in self._resolve_search_types(scope):
+            rag_results = retriever.search(
+                query=query,
+                anima_name=anima_name,
+                memory_type=memory_type,
+                top_k=5,
+                include_shared=include_shared,
+            )
+
+            # Record access (Hebbian LTP)
+            if rag_results:
+                retriever.record_access(rag_results, anima_name)
+
+            for r in rag_results:
+                source = r.metadata.get("source_file", r.doc_id)
+                first_line = r.content.split("\n", 1)[0].strip()
+                hits.append((str(source), first_line))
+
         return hits
 
     def search_knowledge(self, query: str, knowledge_dir: Path) -> list[tuple[str, str]]:

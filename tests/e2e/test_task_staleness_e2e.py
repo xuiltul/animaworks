@@ -452,7 +452,7 @@ class TestDeadlineMandatoryEnforcement:
 
 
 class TestHeartbeatDelegationInjection:
-    """Verify load_prompt('heartbeat_delegation_check', ...) works correctly."""
+    """Verify load_prompt('heartbeat_subordinate_check', ...) works correctly."""
 
     @pytest.fixture(autouse=True)
     def _clear_prompt_cache(self):
@@ -465,20 +465,24 @@ class TestHeartbeatDelegationInjection:
         """load_prompt substitutes {subordinates} into the template."""
         subordinates = "rin, sakura, taka"
         result = load_prompt(
-            "heartbeat_delegation_check",
+            "heartbeat_subordinate_check",
             subordinates=subordinates,
+            animas_dir="/home/test/.animaworks/animas",
         )
 
         assert "rin, sakura, taka" in result
         assert "STALE" in result
         assert "OVERDUE" in result
         assert "委任" in result
+        assert "報告検証" in result
+        assert "activity_log" in result
 
     def test_template_contains_delegation_checklist(self):
         """The delegation template includes key decision criteria."""
         result = load_prompt(
-            "heartbeat_delegation_check",
+            "heartbeat_subordinate_check",
             subordinates="alice, bob",
+            animas_dir="/home/test/.animaworks/animas",
         )
 
         # Verify the template contains the expected decision sections
@@ -490,8 +494,9 @@ class TestHeartbeatDelegationInjection:
     def test_template_mentions_idle_check(self):
         """The delegation template instructs checking subordinate availability."""
         result = load_prompt(
-            "heartbeat_delegation_check",
+            "heartbeat_subordinate_check",
             subordinates="rin",
+            animas_dir="/home/test/.animaworks/animas",
         )
 
         assert "idle" in result or "稼働" in result
@@ -499,8 +504,9 @@ class TestHeartbeatDelegationInjection:
     def test_load_prompt_with_single_subordinate(self):
         """Template works with a single subordinate name."""
         result = load_prompt(
-            "heartbeat_delegation_check",
+            "heartbeat_subordinate_check",
             subordinates="rin",
+            animas_dir="/home/test/.animaworks/animas",
         )
         assert "rin" in result
         assert "部下" in result

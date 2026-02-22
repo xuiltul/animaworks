@@ -43,11 +43,12 @@ def handler(anima_dir: Path) -> ToolHandler:
 # ── Dispatch dict completeness ────────────────────────────────
 
 
-# All 21 built-in tool names that must be in the dispatch dict
+# All built-in tool names that must be in the dispatch dict
 EXPECTED_BUILTIN_TOOLS = frozenset({
     "search_memory",
     "read_memory_file",
     "write_memory_file",
+    "archive_memory_file",
     "send_message",
     "post_channel",
     "read_channel",
@@ -60,6 +61,8 @@ EXPECTED_BUILTIN_TOOLS = frozenset({
     "list_directory",
     "call_human",
     "create_anima",
+    "disable_subordinate",
+    "enable_subordinate",
     "refresh_tools",
     "share_tool",
     "report_procedure_outcome",
@@ -67,6 +70,7 @@ EXPECTED_BUILTIN_TOOLS = frozenset({
     "add_task",
     "update_task",
     "list_tasks",
+    "skill",
 })
 
 
@@ -86,8 +90,8 @@ class TestDispatchDictCompleteness:
         assert extra == set(), f"Unexpected tools in dispatch dict: {extra}"
 
     def test_dispatch_count(self, handler: ToolHandler):
-        """Dispatch dict should have exactly 22 entries."""
-        assert len(handler._dispatch) == 22
+        """Dispatch dict should have exactly 25 entries."""
+        assert len(handler._dispatch) == 25
 
     def test_all_dispatch_values_are_callable(self, handler: ToolHandler):
         """Every value in the dispatch dict must be callable."""

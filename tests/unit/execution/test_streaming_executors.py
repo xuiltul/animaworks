@@ -45,6 +45,7 @@ class ConcreteExecutor(BaseExecutor):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         return ExecutionResult(text=f"response: {prompt}")
 
@@ -660,7 +661,7 @@ class TestA2TokenLevelWithToolCall:
                 return _fake_async_stream(iter1_chunks)
             return _fake_async_stream(iter2_chunks)
 
-        async def mock_process_tool_calls(parsed_calls, messages, tools, active_categories):
+        async def mock_process_tool_calls(parsed_calls, messages, tools, active_categories, **kwargs):
             """Mock _process_streaming_tool_calls as an async generator yielding tool_end events."""
             for tc in parsed_calls:
                 yield {

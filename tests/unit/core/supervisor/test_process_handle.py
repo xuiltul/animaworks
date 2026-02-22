@@ -117,28 +117,17 @@ class TestIsAlive:
 
         assert handle.is_alive() is True
 
-    def test_is_alive_returns_false_when_ipc_writer_closing(self, handle: ProcessHandle):
-        """is_alive() should return False when IPC writer is closing (connection dead)."""
-        mock_process = MagicMock()
-        mock_process.poll.return_value = None  # process still alive at OS level
-        handle.process = mock_process
+    def test_is_alive_returns_true_when_process_running_with_ipc_client(self, handle: ProcessHandle):
+        """is_alive() returns True when OS process is running, regardless of IPC client state.
 
-        mock_client = MagicMock()
-        mock_writer = MagicMock()
-        mock_writer.is_closing.return_value = True  # IPC connection dead
-        mock_client.writer = mock_writer
-        handle.ipc_client = mock_client
-
-        assert handle.is_alive() is False
-
-    def test_is_alive_returns_true_when_ipc_client_has_no_writer(self, handle: ProcessHandle):
-        """is_alive() should return True when IPC client exists but writer is None."""
+        With per-request dedicated connections, there is no persistent IPC
+        writer to check.  Liveness is determined solely by OS process status.
+        """
         mock_process = MagicMock()
         mock_process.poll.return_value = None
         handle.process = mock_process
 
         mock_client = MagicMock()
-        mock_client.writer = None
         handle.ipc_client = mock_client
 
         assert handle.is_alive() is True

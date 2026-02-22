@@ -21,7 +21,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
 
 from core.exceptions import ConfigError  # noqa: F401
 
@@ -131,6 +133,7 @@ class ConsolidationConfig(BaseModel):
     daily_time: str = "02:00"  # Format: HH:MM
     min_episodes_threshold: int = 1
     llm_model: str = "anthropic/claude-sonnet-4-20250514"
+    max_turns: int = 30  # Tool-call loop limit for consolidation tasks
     weekly_enabled: bool = True  # Phase 3 implementation
     weekly_time: str = "sun:03:00"  # Format: day:HH:MM
     duplicate_threshold: float = 0.85  # Similarity threshold for duplicate detection
@@ -233,9 +236,20 @@ class BackgroundTaskConfig(BaseModel):
     result_retention_hours: int = 24
 
 
+class ActivityLogConfig(BaseModel):
+    """Configuration for activity log rotation."""
+
+    rotation_enabled: bool = True
+    rotation_mode: Literal["size", "time", "both"] = "size"
+    max_size_mb: int = Field(default=1024, ge=0)   # per-anima total, default 1GB
+    max_age_days: int = Field(default=7, ge=0)     # mode="time"|"both" で使用
+    rotation_time: str = "05:00"                   # 実行時刻 (JST)
+
+
 class HeartbeatConfig(BaseModel):
     """Heartbeat scheduling and cascade prevention settings."""
 
+    interval_minutes: int = Field(default=30, ge=1, le=60)  # heartbeat interval (config-driven, not parsed from heartbeat.md)
     msg_heartbeat_cooldown_s: int = 300  # message-triggered heartbeat cooldown
     cascade_window_s: int = 1800  # sliding window for cascade detection
     cascade_threshold: int = 3  # max round-trips per pair within window
@@ -262,6 +276,7 @@ class AnimaWorksConfig(BaseModel):
     server: ServerConfig = ServerConfig()
     external_messaging: ExternalMessagingConfig = ExternalMessagingConfig()
     background_task: BackgroundTaskConfig = BackgroundTaskConfig()
+    activity_log: ActivityLogConfig = ActivityLogConfig()
     heartbeat: HeartbeatConfig = HeartbeatConfig()
 
 

@@ -65,3 +65,12 @@ markers = [
     "ollama: tests requiring Ollama server access",
     "timeout: set per-test timeout in seconds (requires pytest-timeout)",
 ]
+
+[dependency-groups]
+dev = [
+    "boto3>=1.42.54",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-timeout>=2.4.0",
+    "watchdog>=6.0.0",
+]

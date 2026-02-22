@@ -412,6 +412,10 @@ class DigitalAnima:
                         content, fmt=fmt,
                     )
                     prompt = content  # Raw message; history is in prior_messages
+                elif mode == "b":
+                    prompt = conv_memory.build_chat_prompt(
+                        content, from_person, max_history_chars=2000,
+                    )
                 else:
                     prompt = conv_memory.build_chat_prompt(content, from_person)
 
@@ -567,6 +571,10 @@ class DigitalAnima:
                         content, fmt=fmt,
                     )
                     prompt = content
+                elif mode == "b":
+                    prompt = conv_memory.build_chat_prompt(
+                        content, from_person, max_history_chars=2000,
+                    )
                 else:
                     prompt = conv_memory.build_chat_prompt(content, from_person)
 
@@ -787,6 +795,17 @@ class DigitalAnima:
 
     # ── Heartbeat private methods ──────────────────────────
 
+    def _build_prior_messages(
+        self, prompt_text: str,
+    ) -> list[dict[str, Any]] | None:
+        """Build prior_messages for A2/A1F modes, None otherwise."""
+        mode = self.agent.execution_mode
+        if mode not in ("a2", "a1_fallback"):
+            return None
+        conv = ConversationMemory(self.anima_dir, self.model_config)
+        fmt = "openai" if mode == "a2" else "anthropic"
+        return conv.build_structured_messages(prompt_text, fmt=fmt)
+
     async def _build_heartbeat_prompt(self) -> list[str]:
         """Build heartbeat prompt parts.
 
@@ -864,9 +883,10 @@ class DigitalAnima:
         # NOTE: Task queue is injected via builder.py (system prompt)
         # and priming Channel E. No separate heartbeat injection needed.
 
-        # ── Delegation check for animas with subordinates ──
+        # ── Subordinate management check for animas with subordinates ──
         try:
             from core.config.models import load_config
+            from core.paths import get_animas_dir
             _cfg = load_config()
             _subordinates = [
                 _name for _name, _pcfg in _cfg.animas.items()
@@ -874,8 +894,9 @@ class DigitalAnima:
             ]
             if _subordinates:
                 parts.append(load_prompt(
-                    "heartbeat_delegation_check",
+                    "heartbeat_subordinate_check",
                     subordinates=", ".join(_subordinates),
+                    animas_dir=str(get_animas_dir()),
                 ))
         except Exception:
             logger.debug(
@@ -1067,8 +1088,15 @@ class DigitalAnima:
         prompt: str,
         inbox_items: list[InboxItem],
         unread_count: int,
+        prior_messages: list[dict[str, Any]] | None = None,
     ) -> CycleResult:
         """Write checkpoint, execute agent cycle, record results.
+
+        Args:
+            prompt: The heartbeat prompt text.
+            inbox_items: Inbox items being processed.
+            unread_count: Number of unread messages.
+            prior_messages: Structured conversation history for A2/A1F modes.
 
         Returns the CycleResult from the agent execution.
         """
@@ -1102,7 +1130,8 @@ class DigitalAnima:
 
         try:
             async for chunk in self.agent.run_cycle_streaming(
-                prompt, trigger="heartbeat"
+                prompt, trigger="heartbeat",
+                prior_messages=prior_messages,
             ):
                 # Relay text_delta chunks to waiting user stream
                 if chunk.get("type") == "text_delta":
@@ -1376,11 +1405,23 @@ class DigitalAnima:
                         self._heartbeat_context = "定期巡回中"
 
                     # 3. Execute agent cycle
-                    result = await self._execute_heartbeat_cycle(
-                        "\n\n".join(parts),
-                        inbox_items,
-                        unread_count,
+                    # Suppress board fanout when replying to board_mention
+                    # to prevent praise/acknowledgement loops.
+                    has_board_mention = any(
+                        item.msg.type == "board_mention"
+                        for item in inbox_items
                     )
+                    if has_board_mention:
+                        self.agent._tool_handler._suppress_board_fanout = True
+                    heartbeat_text = "\n\n".join(parts)
+                    prior_msgs = self._build_prior_messages(heartbeat_text)
+                    try:
+                        result = await self._execute_heartbeat_cycle(
+                            heartbeat_text, inbox_items, unread_count,
+                            prior_messages=prior_msgs,
+                        )
+                    finally:
+                        self.agent._tool_handler._suppress_board_fanout = False
 
                     # 4. Archive processed messages
                     if unread_count > 0:
@@ -1401,6 +1442,147 @@ class DigitalAnima:
                     self._status = "idle"
                     self._current_task = ""
                     self._heartbeat_context = ""
+        finally:
+            self._notify_lock_released()
+
+    # ── Consolidation helpers ──────────────────────────────────
+
+    def _collect_episodes_summary(self) -> tuple[str, str]:
+        """Collect recent episodes and resolved events as formatted text.
+
+        Returns:
+            Tuple of (episodes_summary, resolved_events_summary).
+            If no episodes are found, returns a placeholder message.
+        """
+        from core.memory.consolidation import ConsolidationEngine
+
+        engine = ConsolidationEngine(self.anima_dir, self.name)
+        episodes = engine._collect_recent_episodes(hours=24)
+        resolved = engine._collect_resolved_events(hours=24)
+
+        # Format episodes
+        if episodes:
+            episodes_summary = "\n\n".join(
+                f"## {e['date']} {e['time']}\n{e['content']}"
+                for e in episodes
+            )
+        else:
+            return ("(本日のエピソードはありません)", "")
+
+        # Format resolved events
+        if resolved:
+            resolved_events_summary = "\n".join(
+                f"- {r['ts'][:16]}: {r['content']}" for r in resolved
+            )
+        else:
+            resolved_events_summary = ""
+
+        return (episodes_summary, resolved_events_summary)
+
+    def count_recent_episodes(self, hours: int = 24) -> int:
+        """Count recent episode entries within the given time window.
+
+        Used by lifecycle.py to skip consolidation when no episodes exist.
+
+        Args:
+            hours: Number of hours to look back.
+
+        Returns:
+            Number of episode entries found.
+        """
+        from core.memory.consolidation import ConsolidationEngine
+
+        engine = ConsolidationEngine(self.anima_dir, self.name)
+        episodes = engine._collect_recent_episodes(hours=hours)
+        return len(episodes)
+
+    async def run_consolidation(
+        self,
+        consolidation_type: str = "daily",
+        max_turns: int = 30,
+    ) -> CycleResult:
+        """Run memory consolidation as an Anima-driven task.
+
+        The Anima uses its own tools (search_memory, read_memory_file,
+        write_memory_file, archive_memory_file) to organize, consolidate,
+        and clean up its memories within a tool-call loop.
+
+        Works with all execution modes: A1, A2, A1 Fallback, and B.
+
+        Args:
+            consolidation_type: "daily" or "weekly"
+            max_turns: Maximum tool-call loop iterations for this task
+        """
+        logger.info(
+            "[%s] run_consolidation START type=%s max_turns=%d",
+            self.name, consolidation_type, max_turns,
+        )
+        try:
+            async with self._lock:
+                self._status = "consolidating"
+                self._current_task = f"Memory consolidation ({consolidation_type})"
+
+                try:
+                    # Build consolidation prompt
+                    if consolidation_type == "daily":
+                        episodes_summary, resolved_events_summary = self._collect_episodes_summary()
+                        prompt = load_prompt(
+                            "memory/consolidation_instruction",
+                            anima_name=self.name,
+                            episodes_summary=episodes_summary,
+                            resolved_events_summary=resolved_events_summary,
+                        )
+                    else:
+                        prompt = load_prompt(
+                            "memory/weekly_consolidation_instruction",
+                            anima_name=self.name,
+                        )
+
+                    # Activity log
+                    self._activity.log(
+                        "consolidation_start",
+                        summary=f"{consolidation_type}記憶統合開始",
+                    )
+
+                    result = await self.agent.run_cycle(
+                        prompt,
+                        trigger=f"consolidation:{consolidation_type}",
+                        message_intent="request",
+                        max_turns_override=max_turns,
+                    )
+                    self._last_activity = now_jst()
+
+                    # Activity log: completion
+                    self._activity.log(
+                        "consolidation_end",
+                        summary=f"{consolidation_type}記憶統合完了",
+                        content=result.summary[:500] if result.summary else "",
+                        meta={
+                            "type": consolidation_type,
+                            "duration_ms": result.duration_ms,
+                        },
+                    )
+
+                    logger.info(
+                        "[%s] run_consolidation END type=%s duration_ms=%d",
+                        self.name, consolidation_type, result.duration_ms,
+                    )
+                    return result
+
+                except Exception as exc:
+                    logger.exception(
+                        "[%s] run_consolidation FAILED type=%s",
+                        self.name, consolidation_type,
+                    )
+                    self._activity.log(
+                        "error",
+                        summary=f"記憶統合エラー: {type(exc).__name__}",
+                        meta={"phase": "run_consolidation", "error": str(exc)[:200]},
+                    )
+                    raise
+                finally:
+                    self._status = "idle"
+                    self._current_task = ""
         finally:
             self._notify_lock_released()
 

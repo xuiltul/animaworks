@@ -133,9 +133,15 @@ class ProcessSupervisor:
         """
         logger.info("Starting %d Anima processes", len(anima_names))
 
-        # Create socket directory
+        # Create socket directory and clean up stale sockets from previous runs
         socket_dir = self.run_dir / "sockets"
         socket_dir.mkdir(parents=True, exist_ok=True)
+        for stale_sock in socket_dir.glob("*.sock"):
+            try:
+                stale_sock.unlink()
+                logger.debug("Removed stale socket: %s", stale_sock)
+            except OSError as exc:
+                logger.warning("Failed to remove stale socket %s: %s", stale_sock, exc)
 
         # Start each process
         for anima_name in anima_names:
@@ -536,6 +542,10 @@ class ProcessSupervisor:
                 )
             return
 
+        # RESTARTING 状態ならヘルスチェックをスキップ
+        if handle.state == ProcessState.RESTARTING:
+            return
+
         # During streaming: skip ping (IPC lock held) but still check
         # process liveness and streaming duration timeout.
         if handle.is_streaming:
@@ -598,9 +608,14 @@ class ProcessSupervisor:
 
         # Check if process is alive
         if not handle.is_alive():
+            # Read actual return code from the Popen object (poll() sets it)
+            actual_rc = handle.process.returncode if handle.process else None
+            handle.stats.exit_code = actual_rc
             logger.error(
-                "Process exited unexpectedly: %s (exit_code=%s)",
-                anima_name, handle.stats.exit_code
+                "Process exited unexpectedly: %s (exit_code=%s, signal=%s)",
+                anima_name,
+                actual_rc,
+                -actual_rc if actual_rc is not None and actual_rc < 0 else "N/A",
             )
             asyncio.create_task(self._handle_process_failure(anima_name, handle))
             return
@@ -641,6 +656,9 @@ class ProcessSupervisor:
         if anima_name in self._restarting:
             return
         self._restarting.add(anima_name)
+
+        # リスタート中であることをハンドルに反映
+        handle.state = ProcessState.RESTARTING
 
         try:
             # Check restart count (supervisor-level, survives handle recreation)
@@ -941,6 +959,35 @@ class ProcessSupervisor:
                 day_of_month, hour, minute,
             )
 
+        # Activity log rotation
+        try:
+            from core.config.models import ActivityLogConfig
+
+            activity_cfg: ActivityLogConfig | None = None
+            try:
+                from core.config import load_config as _load_cfg
+                _al = getattr(_load_cfg(), "activity_log", None)
+                if isinstance(_al, ActivityLogConfig):
+                    activity_cfg = _al
+            except Exception:
+                logger.debug("Config load failed for activity_log rotation schedule", exc_info=True)
+
+            if activity_cfg is None:
+                activity_cfg = ActivityLogConfig()
+
+            if activity_cfg.rotation_enabled:
+                r_hour, r_minute = (int(x) for x in activity_cfg.rotation_time.split(":"))
+                self.scheduler.add_job(
+                    self._run_activity_log_rotation,
+                    CronTrigger(hour=r_hour, minute=r_minute),
+                    id="system_activity_log_rotation",
+                    name="System: Activity Log Rotation",
+                    replace_existing=True,
+                )
+                logger.info("System cron: Activity log rotation at %s JST", activity_cfg.rotation_time)
+        except Exception:
+            logger.debug("Activity log rotation schedule setup failed", exc_info=True)
+
     def _iter_consolidation_targets(self) -> list[tuple[str, Path]]:
         """Return (anima_name, anima_dir) for all initialized and enabled animas.
 
@@ -964,7 +1011,12 @@ class ProcessSupervisor:
         return targets
 
     async def _run_daily_consolidation(self) -> None:
-        """Run daily consolidation for all animas."""
+        """Run daily consolidation for all animas via IPC.
+
+        Sends ``run_consolidation`` IPC requests to running Anima processes,
+        then performs metadata-based post-processing (synaptic downscaling,
+        RAG index rebuild) from the supervisor process.
+        """
         logger.info("Starting system-wide daily consolidation")
 
         try:
@@ -976,47 +1028,84 @@ class ProcessSupervisor:
             consolidation_cfg = None
 
         from core.config.models import ConsolidationConfig
-        model = ConsolidationConfig().llm_model
-        min_episodes = 1
+        max_turns = ConsolidationConfig().max_turns
         if consolidation_cfg:
-            model = getattr(consolidation_cfg, "llm_model", model)
-            min_episodes = getattr(consolidation_cfg, "min_episodes_threshold", 1)
+            max_turns = getattr(consolidation_cfg, "max_turns", max_turns)
 
         for anima_name, anima_dir in self._iter_consolidation_targets():
+            handle = self.processes.get(anima_name)
+            if not handle or handle.state != ProcessState.RUNNING:
+                logger.info(
+                    "Daily consolidation skipped for %s: process not running",
+                    anima_name,
+                )
+                continue
+
             try:
-                from core.memory.consolidation import ConsolidationEngine
-
-                # Inject shared RAG store to avoid independent re-creation
-                rag_store = None
-                try:
-                    from core.memory.rag.singleton import get_vector_store
-                    rag_store = get_vector_store()
-                except Exception:
-                    logger.debug("RAG store not available for consolidation")
-
-                engine = ConsolidationEngine(
-                    anima_dir=anima_dir,
-                    anima_name=anima_name,
-                    rag_store=rag_store,
+                # Anima-driven consolidation via IPC (tool-call loop)
+                response = await handle.send_request(
+                    "run_consolidation",
+                    {"consolidation_type": "daily", "max_turns": max_turns},
+                    timeout=600.0,
                 )
 
-                result = await engine.daily_consolidate(
-                    model=model,
-                    min_episodes=min_episodes,
-                )
-
-                logger.info("Daily consolidation for %s: %s", anima_name, result)
-
-                if not result.get("skipped"):
-                    await self._broadcast_event(
-                        "system.consolidation",
-                        {"anima": anima_name, "type": "daily", "result": result},
+                if response.error:
+                    logger.error(
+                        "Daily consolidation IPC error for %s: %s",
+                        anima_name, response.error,
                     )
+                    continue
+
+                result = response.result or {}
+                logger.info(
+                    "Daily consolidation for %s: duration_ms=%d",
+                    anima_name,
+                    result.get("duration_ms", 0),
+                )
+
+                # Post-processing: Synaptic downscaling (metadata-based, no LLM)
+                try:
+                    from core.memory.forgetting import ForgettingEngine
+                    forgetter = ForgettingEngine(anima_dir, anima_name)
+                    downscaling_result = forgetter.synaptic_downscaling()
+                    logger.info(
+                        "Synaptic downscaling for %s: %s",
+                        anima_name, downscaling_result,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Synaptic downscaling failed for anima=%s", anima_name,
+                    )
+
+                # Post-processing: Rebuild RAG index
+                try:
+                    from core.memory.consolidation import ConsolidationEngine
+                    engine = ConsolidationEngine(anima_dir, anima_name)
+                    engine._rebuild_rag_index()
+                except Exception:
+                    logger.exception(
+                        "RAG index rebuild failed for anima=%s", anima_name,
+                    )
+
+                await self._broadcast_event(
+                    "system.consolidation",
+                    {
+                        "anima": anima_name,
+                        "type": "daily",
+                        "summary": result.get("summary", ""),
+                        "duration_ms": result.get("duration_ms", 0),
+                    },
+                )
             except Exception:
                 logger.exception("Daily consolidation failed for %s", anima_name)
 
     async def _run_weekly_integration(self) -> None:
-        """Run weekly integration for all animas."""
+        """Run weekly integration for all animas via IPC.
+
+        Sends ``run_consolidation`` IPC requests to running Anima processes,
+        then performs metadata-based post-processing (neurogenesis reorganization,
+        RAG index rebuild) from the supervisor process.
+        """
         logger.info("Starting system-wide weekly integration")
 
         try:
@@ -1028,50 +1117,75 @@ class ProcessSupervisor:
             consolidation_cfg = None
 
         from core.config.models import ConsolidationConfig as _CC
-        model = _CC().llm_model
-        duplicate_threshold = 0.85
-        episode_retention_days = 30
+        max_turns = _CC().max_turns
         if consolidation_cfg:
-            model = getattr(consolidation_cfg, "llm_model", model)
-            duplicate_threshold = getattr(consolidation_cfg, "duplicate_threshold", 0.85)
-            episode_retention_days = getattr(consolidation_cfg, "episode_retention_days", 30)
+            max_turns = getattr(consolidation_cfg, "max_turns", max_turns)
 
         for anima_name, anima_dir in self._iter_consolidation_targets():
-            try:
-                from core.memory.consolidation import ConsolidationEngine
-
-                # Inject shared RAG store to avoid independent re-creation
-                rag_store = None
-                try:
-                    from core.memory.rag.singleton import get_vector_store
-                    rag_store = get_vector_store()
-                except Exception:
-                    logger.debug("RAG store not available for consolidation")
-
-                engine = ConsolidationEngine(
-                    anima_dir=anima_dir,
-                    anima_name=anima_name,
-                    rag_store=rag_store,
-                )
-
-                result = await engine.weekly_integrate(
-                    model=model,
-                    duplicate_threshold=duplicate_threshold,
-                    episode_retention_days=episode_retention_days,
-                )
-
+            handle = self.processes.get(anima_name)
+            if not handle or handle.state != ProcessState.RUNNING:
                 logger.info(
-                    "Weekly integration for %s: merged=%d compressed=%d",
+                    "Weekly integration skipped for %s: process not running",
                     anima_name,
-                    len(result.get("knowledge_files_merged", [])),
-                    result.get("episodes_compressed", 0),
+                )
+                continue
+
+            try:
+                # Anima-driven consolidation via IPC (tool-call loop)
+                response = await handle.send_request(
+                    "run_consolidation",
+                    {"consolidation_type": "weekly", "max_turns": max_turns},
+                    timeout=600.0,
                 )
 
-                if not result.get("skipped"):
-                    await self._broadcast_event(
-                        "system.consolidation",
-                        {"anima": anima_name, "type": "weekly", "result": result},
+                if response.error:
+                    logger.error(
+                        "Weekly integration IPC error for %s: %s",
+                        anima_name, response.error,
                     )
+                    continue
+
+                result = response.result or {}
+                logger.info(
+                    "Weekly integration for %s: duration_ms=%d",
+                    anima_name,
+                    result.get("duration_ms", 0),
+                )
+
+                # Post-processing: Neurogenesis reorganization (metadata-based)
+                try:
+                    from core.memory.forgetting import ForgettingEngine
+                    forgetter = ForgettingEngine(anima_dir, anima_name)
+                    reorg_result = forgetter.neurogenesis_reorganize()
+                    logger.info(
+                        "Neurogenesis reorganization for %s: %s",
+                        anima_name, reorg_result,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Neurogenesis reorganization failed for anima=%s",
+                        anima_name,
+                    )
+
+                # Post-processing: Rebuild RAG index
+                try:
+                    from core.memory.consolidation import ConsolidationEngine
+                    engine = ConsolidationEngine(anima_dir, anima_name)
+                    engine._rebuild_rag_index()
+                except Exception:
+                    logger.exception(
+                        "RAG index rebuild failed for anima=%s", anima_name,
+                    )
+
+                await self._broadcast_event(
+                    "system.consolidation",
+                    {
+                        "anima": anima_name,
+                        "type": "weekly",
+                        "summary": result.get("summary", ""),
+                        "duration_ms": result.get("duration_ms", 0),
+                    },
+                )
             except Exception:
                 logger.exception("Weekly integration failed for %s", anima_name)
 
@@ -1104,6 +1218,44 @@ class ProcessSupervisor:
                     )
             except Exception:
                 logger.exception("Monthly forgetting failed for %s", anima_name)
+
+    async def _run_activity_log_rotation(self) -> None:
+        """Run activity log rotation for all animas."""
+        logger.info("Starting system-wide activity log rotation")
+
+        try:
+            from core.config import load_config
+            activity_cfg = getattr(load_config(), "activity_log", None)
+        except Exception:
+            logger.debug("Config load failed for activity log rotation", exc_info=True)
+            activity_cfg = None
+
+        from core.config.models import ActivityLogConfig
+        defaults = ActivityLogConfig()
+        mode = getattr(activity_cfg, "rotation_mode", defaults.rotation_mode) if activity_cfg else defaults.rotation_mode
+        max_size_mb = getattr(activity_cfg, "max_size_mb", defaults.max_size_mb) if activity_cfg else defaults.max_size_mb
+        max_age_days = getattr(activity_cfg, "max_age_days", defaults.max_age_days) if activity_cfg else defaults.max_age_days
+
+        try:
+            from core.memory.activity import ActivityLogger
+
+            results = ActivityLogger.rotate_all(
+                self.animas_dir,
+                mode=mode,
+                max_size_mb=max_size_mb,
+                max_age_days=max_age_days,
+            )
+            if results:
+                total_freed = sum(r.get("freed_bytes", 0) for r in results.values())
+                total_deleted = sum(r.get("deleted_files", 0) for r in results.values())
+                logger.info(
+                    "Activity log rotation complete: %d animas, %d files deleted, %d bytes freed",
+                    len(results), total_deleted, total_freed,
+                )
+            else:
+                logger.info("Activity log rotation: no files needed rotation")
+        except Exception:
+            logger.exception("Activity log rotation failed")
 
     # ── Status ───────────────────────────────────────────────────
 

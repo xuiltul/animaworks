@@ -54,8 +54,8 @@ class TestUnreadMessagesTemplate:
     def test_delegation_receipt_steps(self):
         path = TEMPLATES_DIR / "unread_messages.md"
         content = path.read_text(encoding="utf-8")
-        assert "Ack返答" in content or "Ack" in content
-        assert "パラフレーズ" in content
+        assert "パラフレーズ確認" in content
+        assert "不明点の質問" in content
 
     def test_existing_sections_preserved(self):
         path = TEMPLATES_DIR / "unread_messages.md"

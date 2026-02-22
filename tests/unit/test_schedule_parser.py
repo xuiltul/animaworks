@@ -18,37 +18,31 @@ from core.schedule_parser import (
 class TestParseHeartbeatConfig:
     """Tests for parse_heartbeat_config()."""
 
-    def test_basic_interval_and_active_hours(self):
+    def test_basic_active_hours(self):
         content = """# Heartbeat
-## 実行間隔
-5分ごと
 ## 活動時間
 8:00 - 23:00（JST）
 """
-        interval, start, end = parse_heartbeat_config(content)
-        assert interval == 5
+        start, end = parse_heartbeat_config(content)
         assert start == 8
         assert end == 23
 
-    def test_30min_interval(self):
-        content = "30分ごと\n活動時間\n9:00 - 22:00"
-        interval, start, end = parse_heartbeat_config(content)
-        assert interval == 30
+    def test_standard_active_hours(self):
+        content = "活動時間\n9:00 - 22:00"
+        start, end = parse_heartbeat_config(content)
         assert start == 9
         assert end == 22
 
     def test_defaults_when_no_match(self):
         content = "some random content without patterns"
-        interval, start, end = parse_heartbeat_config(content)
-        assert interval == 30
-        assert start == 9
-        assert end == 22
+        start, end = parse_heartbeat_config(content)
+        assert start is None
+        assert end is None
 
     def test_empty_content(self):
-        interval, start, end = parse_heartbeat_config("")
-        assert interval == 30
-        assert start == 9
-        assert end == 22
+        start, end = parse_heartbeat_config("")
+        assert start is None
+        assert end is None
 
 
 class TestParseCronMd:

@@ -17,20 +17,29 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-_vector_store = None
+_vector_stores: dict[str | None, object] = {}
 _embedding_model = None
 _embedding_model_name: str | None = None
 
 
-def get_vector_store():
-    """Return process-level singleton ChromaVectorStore."""
-    global _vector_store
-    if _vector_store is None:
+def get_vector_store(anima_name: str | None = None):
+    """Return process-level singleton ChromaVectorStore per anima.
+
+    Args:
+        anima_name: Anima name for per-anima DB isolation.
+            When ``None``, uses the legacy shared directory.
+    """
+    if anima_name not in _vector_stores:
         with _lock:
-            if _vector_store is None:
+            if anima_name not in _vector_stores:
                 from core.memory.rag.store import ChromaVectorStore
-                _vector_store = ChromaVectorStore()
-    return _vector_store
+                if anima_name:
+                    from core.paths import get_anima_vectordb_dir
+                    persist_dir = get_anima_vectordb_dir(anima_name)
+                else:
+                    persist_dir = None  # ChromaVectorStore defaults to ~/.animaworks/vectordb
+                _vector_stores[anima_name] = ChromaVectorStore(persist_dir=persist_dir)
+    return _vector_stores[anima_name]
 
 
 def _get_configured_model_name() -> str:
@@ -106,8 +115,8 @@ def get_embedding_model_name() -> str:
 
 def _reset_for_testing():
     """Reset singletons for test isolation."""
-    global _vector_store, _embedding_model, _embedding_model_name
+    global _embedding_model, _embedding_model_name
     with _lock:
-        _vector_store = None
+        _vector_stores.clear()
         _embedding_model = None
         _embedding_model_name = None

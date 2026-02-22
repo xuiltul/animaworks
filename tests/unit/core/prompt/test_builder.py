@@ -210,7 +210,11 @@ class TestBuildSystemPrompt:
             result = build_system_prompt(memory)
             assert "I am Alice" in result
 
-    def test_includes_skills(self, tmp_path, data_dir):
+    def test_skills_not_in_system_prompt_table(self, tmp_path, data_dir):
+        """Skills are no longer injected as a table in the system prompt.
+
+        They are available via the skill tool instead.
+        """
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
@@ -238,14 +242,13 @@ class TestBuildSystemPrompt:
 
         with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(memory)
-            # Unified skills/procedures table with "スキルと手順書" header
-            assert "スキルと手順書" in result
-            # Personal skill appears as 個人 type in the unified table
-            assert "coding" in result
-            assert "個人" in result
-            # Common skill appears as 共通 type in the unified table
-            assert "deploy" in result
-            assert "共通" in result
+            # The unified table header must NOT appear (table removed)
+            assert "| 名前 | 種別 | 概要 |" not in result
+            # Skills/procedures table section header must NOT appear
+            assert "スキルと手順書" not in result
+            # Skill names may appear in memory_guide listing but NOT as table rows
+            assert "| coding |" not in result
+            assert "| deploy |" not in result
 
     def test_includes_bootstrap(self, tmp_path, data_dir):
         anima_dir = tmp_path / "animas" / "alice"

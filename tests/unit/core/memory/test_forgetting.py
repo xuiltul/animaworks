@@ -480,97 +480,116 @@ class TestCompleteForgetting:
 
 
 class TestConsolidationForgettingHooks:
-    """Test that ConsolidationEngine hooks into ForgettingEngine correctly."""
+    """Test that lifecycle hooks into ForgettingEngine correctly.
 
-    @pytest.fixture
-    def consolidation_engine(self, tmp_path: Path):
-        """Create a ConsolidationEngine instance."""
-        from core.memory.consolidation import ConsolidationEngine
-
-        anima_dir = tmp_path / "test_anima"
-        (anima_dir / "episodes").mkdir(parents=True)
-        (anima_dir / "knowledge").mkdir(parents=True)
-        return ConsolidationEngine(
-            anima_dir=anima_dir,
-            anima_name="test_anima",
-        )
+    After the Anima-driven consolidation refactoring, forgetting hooks
+    are called from lifecycle.py as post-processing steps:
+    - Daily: lifecycle._handle_daily_consolidation calls synaptic_downscaling
+    - Weekly: lifecycle._handle_weekly_integration calls neurogenesis_reorganize
+    """
 
     @pytest.mark.asyncio
-    async def test_consolidation_daily_calls_downscaling(self, consolidation_engine):
-        """Test that daily_consolidate() calls synaptic_downscaling().
+    async def test_consolidation_daily_calls_downscaling(self, tmp_path: Path):
+        """Test that _handle_daily_consolidation calls synaptic_downscaling().
 
-        After processing episodes, the daily consolidation should invoke
-        the ForgettingEngine's synaptic_downscaling and include the result
-        in the return dict.
+        After the Anima-driven consolidation, the lifecycle handler
+        invokes ForgettingEngine.synaptic_downscaling as post-processing.
         """
-        # Create a minimal episode so consolidation doesn't skip
-        today = datetime.now().date()
-        episode_file = consolidation_engine.episodes_dir / f"{today}.md"
-        episode_file.write_text(
-            f"## {datetime.now().strftime('%H:%M')} — Test episode\n\n"
-            "**相手**: test\n**要点**: test content\n",
-            encoding="utf-8",
-        )
+        from core.lifecycle import LifecycleManager
 
-        mock_llm_response = """## 既存ファイル更新
-(なし)
+        manager = LifecycleManager()
 
-## 新規ファイル作成
-(なし)
-"""
+        anima_dir = tmp_path / "test_anima"
+        anima_dir.mkdir(parents=True)
+
+        # Mock anima
+        mock_anima = MagicMock()
+        mock_anima.name = "test_anima"
+        mock_anima.memory = MagicMock()
+        mock_anima.memory.anima_dir = anima_dir
+        mock_anima.count_recent_episodes.return_value = 3
+
+        mock_result = MagicMock()
+        mock_result.duration_ms = 100
+        mock_result.summary = "consolidated"
+        mock_anima.run_consolidation = AsyncMock(return_value=mock_result)
+
+        manager.animas["test_anima"] = mock_anima
+
+        mock_config = MagicMock()
+        mock_consolidation_cfg = MagicMock()
+        mock_consolidation_cfg.daily_enabled = True
+        mock_consolidation_cfg.min_episodes_threshold = 1
+        mock_consolidation_cfg.max_turns = 30
+        mock_config.consolidation = mock_consolidation_cfg
+
         mock_downscaling_result = {"scanned": 10, "marked_low": 2}
 
-        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_llm:
-            mock_response = MagicMock()
-            mock_response.choices = [MagicMock()]
-            mock_response.choices[0].message.content = mock_llm_response
-            mock_llm.return_value = mock_response
+        with patch("core.config.load_config", return_value=mock_config), \
+             patch(
+                 "core.memory.forgetting.ForgettingEngine"
+             ) as MockForgettingEngine, \
+             patch("core.memory.consolidation.ConsolidationEngine"):
+            mock_forgetter = MagicMock()
+            mock_forgetter.synaptic_downscaling.return_value = mock_downscaling_result
+            MockForgettingEngine.return_value = mock_forgetter
 
-            with patch(
-                "core.memory.forgetting.ForgettingEngine"
-            ) as MockForgettingEngine:
-                mock_forgetter = MagicMock()
-                mock_forgetter.synaptic_downscaling.return_value = mock_downscaling_result
-                MockForgettingEngine.return_value = mock_forgetter
-
-                result = await consolidation_engine.daily_consolidate(min_episodes=1)
+            await manager._handle_daily_consolidation()
 
         # Verify downscaling was called
         mock_forgetter.synaptic_downscaling.assert_called_once()
 
-        # Verify result contains downscaling data
-        assert result["skipped"] is False
-        assert result["downscaling"] == mock_downscaling_result
-
     @pytest.mark.asyncio
-    async def test_consolidation_weekly_calls_reorganization(self, consolidation_engine):
-        """Test that weekly_integrate() calls neurogenesis_reorganize().
+    async def test_consolidation_weekly_calls_reorganization(self, tmp_path: Path):
+        """Test that _handle_weekly_integration calls neurogenesis_reorganize().
 
-        The weekly integration should invoke the ForgettingEngine's
-        neurogenesis_reorganize and include the result in the return dict.
+        After the Anima-driven consolidation, the lifecycle handler
+        invokes ForgettingEngine.neurogenesis_reorganize as post-processing.
         """
+        from core.lifecycle import LifecycleManager
+
+        manager = LifecycleManager()
+
+        anima_dir = tmp_path / "test_anima"
+        anima_dir.mkdir(parents=True)
+
+        # Mock anima
+        mock_anima = MagicMock()
+        mock_anima.name = "test_anima"
+        mock_anima.memory = MagicMock()
+        mock_anima.memory.anima_dir = anima_dir
+
+        mock_result = MagicMock()
+        mock_result.duration_ms = 200
+        mock_result.summary = "weekly integration done"
+        mock_anima.run_consolidation = AsyncMock(return_value=mock_result)
+
+        manager.animas["test_anima"] = mock_anima
+
+        mock_config = MagicMock()
+        mock_consolidation_cfg = MagicMock()
+        mock_consolidation_cfg.weekly_enabled = True
+        mock_consolidation_cfg.llm_model = "anthropic/claude-sonnet-4-20250514"
+        mock_consolidation_cfg.max_turns = 30
+        mock_config.consolidation = mock_consolidation_cfg
+
         mock_reorg_result = {"merged_count": 3, "merged_pairs": ["a+b", "c+d", "e+f"]}
 
-        with patch.object(consolidation_engine, "_detect_duplicates", return_value=[]):
-            with patch.object(consolidation_engine, "_compress_old_episodes", return_value=0):
-                with patch.object(consolidation_engine, "_rebuild_rag_index"):
-                    with patch(
-                        "core.memory.forgetting.ForgettingEngine"
-                    ) as MockForgettingEngine:
-                        mock_forgetter = MagicMock()
-                        mock_forgetter.neurogenesis_reorganize = AsyncMock(
-                            return_value=mock_reorg_result,
-                        )
-                        MockForgettingEngine.return_value = mock_forgetter
+        with patch("core.config.load_config", return_value=mock_config), \
+             patch(
+                 "core.memory.forgetting.ForgettingEngine"
+             ) as MockForgettingEngine, \
+             patch("core.memory.consolidation.ConsolidationEngine"):
+            mock_forgetter = MagicMock()
+            mock_forgetter.neurogenesis_reorganize = AsyncMock(
+                return_value=mock_reorg_result,
+            )
+            MockForgettingEngine.return_value = mock_forgetter
 
-                        result = await consolidation_engine.weekly_integrate()
+            await manager._handle_weekly_integration()
 
         # Verify neurogenesis_reorganize was called
         mock_forgetter.neurogenesis_reorganize.assert_called_once()
-
-        # Verify result contains reorganization data
-        assert result["skipped"] is False
-        assert result["reorganization"] == mock_reorg_result
 
 
 # ── Monthly Forgetting Hook Test ────────────────────────────────────

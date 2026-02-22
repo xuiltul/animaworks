@@ -33,23 +33,20 @@ _CRON_EXPR_RE = re.compile(r"^[\d\*\/\-\,]+(\s+[\d\*\/\-\,]+){4}$")
 # ── Heartbeat parsing ────────────────────────────────────
 
 
-def parse_heartbeat_config(content: str) -> tuple[int, int, int]:
-    """Parse heartbeat.md content to extract scheduling parameters.
+def parse_heartbeat_config(content: str) -> tuple[int | None, int | None]:
+    """Parse heartbeat.md content to extract active hours.
+
+    Interval is managed by config.json (heartbeat.interval_minutes),
+    NOT parsed from heartbeat.md content.
 
     Returns:
-        Tuple of (interval_minutes, active_start_hour, active_end_hour)
+        Tuple of (active_start_hour, active_end_hour).
+        Both are None if no time range found in content.
     """
-    interval = 30
-    m = re.search(r"(\d+)\s*分", content)
-    if m:
-        interval = int(m.group(1))
-
-    active_start, active_end = 9, 22
     m = re.search(r"(\d{1,2}):\d{0,2}\s*-\s*(\d{1,2})", content)
     if m:
-        active_start, active_end = int(m.group(1)), int(m.group(2))
-
-    return interval, active_start, active_end
+        return int(m.group(1)), int(m.group(2))
+    return None, None
 
 
 # ── Cron parsing ─────────────────────────────────────────
@@ -175,11 +172,21 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
 
         i += 1
 
+    # Warn if type=llm but description contains code blocks
+    # (likely should be type=command instead)
+    description = "\n".join(description_lines).strip()
+    if task_type == "llm" and "```" in description:
+        logger.warning(
+            "Cron task '%s' is type=llm but contains a code block. "
+            "If the command is deterministic, use type=command instead.",
+            name,
+        )
+
     return CronTask(
         name=name,
         schedule=schedule,
         type=task_type,
-        description="\n".join(description_lines).strip(),
+        description=description,
         command=command,
         tool=tool,
         args=args,

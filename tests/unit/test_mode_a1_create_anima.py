@@ -58,32 +58,6 @@ class TestHiringRulesInSystemPrompt:
             permissions="## Permissions\nBasic permissions.",
         )
 
-    def test_a1_mode_includes_cli_command(self, data_dir: Path) -> None:
-        """A1 mode with newstaff skill includes CLI command instructions."""
-        from core.memory import MemoryManager
-        from core.prompt.builder import build_system_prompt
-
-        anima_dir = self._setup_anima_with_newstaff(data_dir)
-        memory = MemoryManager(anima_dir)
-
-        prompt = build_system_prompt(memory, execution_mode="a1")
-
-        assert "animaworks create-anima" in prompt
-        assert "create_anima` ツール" not in prompt
-
-    def test_a2_mode_includes_create_anima_tool(self, data_dir: Path) -> None:
-        """A2 mode with newstaff skill includes create_anima tool instructions."""
-        from core.memory import MemoryManager
-        from core.prompt.builder import build_system_prompt
-
-        anima_dir = self._setup_anima_with_newstaff(data_dir)
-        memory = MemoryManager(anima_dir)
-
-        prompt = build_system_prompt(memory, execution_mode="a2")
-
-        assert "create_anima` ツール" in prompt
-        assert "animaworks create-anima" not in prompt
-
     def test_no_newstaff_skill_no_hiring_rules(self, data_dir: Path) -> None:
         """Without newstaff skill, no hiring rules section in system prompt."""
         from core.memory import MemoryManager

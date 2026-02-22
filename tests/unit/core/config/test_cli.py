@@ -268,3 +268,114 @@ class TestCmdConfigList:
         captured = capsys.readouterr()
         assert "sk-abcde..." in captured.out
         assert "sk-abcdef1234567890" not in captured.out
+
+
+# ── cmd_config_export_sections ───────────────────────────
+
+
+class TestCmdConfigExportSections:
+    """Tests for ``animaworks config export-sections``."""
+
+    @pytest.fixture(autouse=True)
+    def _clear(self):
+        invalidate_cache()
+        yield
+        invalidate_cache()
+
+    def test_dry_run_shows_diff(self, data_dir, tmp_path, capsys):
+        """Dry run reports diffs without writing files."""
+        from core.config.cli import cmd_config_export_sections
+        from core.tooling.prompt_db import ToolPromptStore
+
+        # Create a DB with one section
+        db_path = data_dir / "tool_prompts.sqlite3"
+        store = ToolPromptStore(db_path)
+        store.set_section("environment", "NEW CONTENT FROM DB", None)
+
+        # Create a templates dir with different content
+        templates_dir = tmp_path / "templates" / "prompts"
+        templates_dir.mkdir(parents=True)
+        (templates_dir / "environment.md").write_text("OLD CONTENT", encoding="utf-8")
+
+        args = argparse.Namespace(dry_run=True)
+        with patch("core.config.cli.Path") as mock_path_cls:
+            # Mock __file__ resolution to point to tmp_path
+            mock_path_cls.return_value.resolve.return_value.parent.parent.parent = tmp_path
+            with patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
+                cmd_config_export_sections(args)
+
+        captured = capsys.readouterr()
+        assert "DIFF" in captured.out
+        assert "environment" in captured.out
+        # File should NOT be written in dry-run
+        assert (templates_dir / "environment.md").read_text(encoding="utf-8") == "OLD CONTENT"
+
+    def test_write_updates_file(self, data_dir, tmp_path, capsys):
+        """Non-dry-run writes updated content to template files."""
+        from core.config.cli import cmd_config_export_sections
+        from core.tooling.prompt_db import ToolPromptStore
+
+        db_path = data_dir / "tool_prompts.sqlite3"
+        store = ToolPromptStore(db_path)
+        store.set_section("environment", "UPDATED ENVIRONMENT", None)
+
+        templates_dir = tmp_path / "templates" / "prompts"
+        templates_dir.mkdir(parents=True)
+        (templates_dir / "environment.md").write_text("OLD", encoding="utf-8")
+
+        args = argparse.Namespace(dry_run=False)
+        with patch("core.config.cli.Path") as mock_path_cls:
+            mock_path_cls.return_value.resolve.return_value.parent.parent.parent = tmp_path
+            with patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
+                cmd_config_export_sections(args)
+
+        captured = capsys.readouterr()
+        assert "WRITE" in captured.out
+        content = (templates_dir / "environment.md").read_text(encoding="utf-8")
+        assert content.strip() == "UPDATED ENVIRONMENT"
+
+    def test_unchanged_section_skipped(self, data_dir, tmp_path, capsys):
+        """Sections with identical content are reported as unchanged."""
+        from core.config.cli import cmd_config_export_sections
+        from core.tooling.prompt_db import ToolPromptStore
+
+        db_path = data_dir / "tool_prompts.sqlite3"
+        store = ToolPromptStore(db_path)
+        store.set_section("environment", "SAME CONTENT", None)
+
+        templates_dir = tmp_path / "templates" / "prompts"
+        templates_dir.mkdir(parents=True)
+        (templates_dir / "environment.md").write_text("SAME CONTENT\n", encoding="utf-8")
+
+        args = argparse.Namespace(dry_run=False)
+        with patch("core.config.cli.Path") as mock_path_cls:
+            mock_path_cls.return_value.resolve.return_value.parent.parent.parent = tmp_path
+            with patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
+                cmd_config_export_sections(args)
+
+        captured = capsys.readouterr()
+        assert "===" in captured.out
+        assert "unchanged" in captured.out
+
+    def test_emotion_instruction_skipped(self, data_dir, tmp_path, capsys):
+        """emotion_instruction is skipped with a notice."""
+        from core.config.cli import cmd_config_export_sections
+        from core.tooling.prompt_db import ToolPromptStore
+
+        db_path = data_dir / "tool_prompts.sqlite3"
+        store = ToolPromptStore(db_path)
+        store.set_section("emotion_instruction", "emotions here", None)
+
+        templates_dir = tmp_path / "templates" / "prompts"
+        templates_dir.mkdir(parents=True)
+
+        args = argparse.Namespace(dry_run=False)
+        with patch("core.config.cli.Path") as mock_path_cls:
+            mock_path_cls.return_value.resolve.return_value.parent.parent.parent = tmp_path
+            with patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
+                cmd_config_export_sections(args)
+
+        captured = capsys.readouterr()
+        assert "SKIP" in captured.out
+        assert "emotion_instruction" in captured.out
+        assert "dynamically generated" in captured.out

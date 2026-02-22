@@ -44,6 +44,7 @@ async def handle_session_chaining(
     original_prompt: str = "",
     accumulated_response: str = "",
     turn_count: int = 0,
+    tool_uses: list[dict] | None = None,
 ) -> tuple[str | None, int]:
     """Handle context-threshold session chaining for inline executors.
 
@@ -75,6 +76,8 @@ async def handle_session_chaining(
         accumulated_response: All response text accumulated before this
             call (the ``current_text`` is appended automatically).
         turn_count: Number of LLM turns executed so far.
+        tool_uses: List of tool-use dicts (``name``, ``input``,
+            ``result``) extracted from the conversation messages.
 
     Returns:
         A 2-tuple ``(new_system_prompt, new_chain_count)``:
@@ -115,6 +118,7 @@ async def handle_session_chaining(
             trigger=trigger,
             original_prompt=original_prompt,
             accumulated_response=full_accumulated,
+            tool_uses=tool_uses or [],
             context_usage_ratio=tracker.usage_ratio,
             turn_count=turn_count,
         )

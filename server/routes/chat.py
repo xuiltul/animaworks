@@ -662,8 +662,36 @@ def create_chat_router() -> APIRouter:
                     })
 
             except RuntimeError as e:
-                if "IPC protocol error" in str(e):
-                    elapsed = _time.monotonic() - _stream_start_time
+                elapsed = _time.monotonic() - _stream_start_time
+                error_str = str(e)
+                if "Process restarting" in error_str:
+                    logger.warning(
+                        "[SSE-STREAM] ANIMA_RESTARTING anima=%s stream=%s elapsed=%.1fs",
+                        name, stream.response_id, elapsed,
+                    )
+                    yield registry.format_sse(stream, "error", {
+                        "code": "ANIMA_RESTARTING",
+                        "message": "Animaが再起動中です。しばらく待ってから再試行してください。",
+                    })
+                elif "Not connected" in error_str:
+                    logger.error(
+                        "[SSE-STREAM] ANIMA_UNAVAILABLE anima=%s stream=%s elapsed=%.1fs error=%s",
+                        name, stream.response_id, elapsed, e,
+                    )
+                    yield registry.format_sse(stream, "error", {
+                        "code": "ANIMA_UNAVAILABLE",
+                        "message": "Animaのプロセスに接続できません。再起動中の可能性があります。",
+                    })
+                elif "Connection closed during stream" in error_str:
+                    logger.error(
+                        "[SSE-STREAM] CONNECTION_LOST anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d error=%s",
+                        name, stream.response_id, elapsed, ipc_chunk_count, e,
+                    )
+                    yield registry.format_sse(stream, "error", {
+                        "code": "CONNECTION_LOST",
+                        "message": "通信が切断されました。再試行してください。",
+                    })
+                elif "IPC protocol error" in error_str:
                     logger.error(
                         "[SSE-STREAM] IPC_PROTOCOL_ERROR anima=%s stream=%s elapsed=%.1fs error=%s",
                         name, stream.response_id, elapsed, e,
@@ -673,12 +701,14 @@ def create_chat_router() -> APIRouter:
                         "message": "通信エラーが発生しました。再試行してください。",
                     })
                 else:
-                    elapsed = _time.monotonic() - _stream_start_time
                     logger.exception(
                         "[SSE-STREAM] RUNTIME_ERROR anima=%s stream=%s elapsed=%.1fs error=%s",
                         name, stream.response_id, elapsed, e,
                     )
-                    yield registry.format_sse(stream, "error", {"code": "STREAM_ERROR", "message": "Internal server error"})
+                    yield registry.format_sse(stream, "error", {
+                        "code": "STREAM_ERROR",
+                        "message": "内部エラーが発生しました。再試行してください。",
+                    })
             except ValueError as e:
                 elapsed = _time.monotonic() - _stream_start_time
                 logger.error(

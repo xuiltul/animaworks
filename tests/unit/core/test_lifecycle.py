@@ -295,13 +295,25 @@ class TestCronWrapper:
         await lm._cron_wrapper("nobody", task)
 
 
+def _expected_minute_spec(name: str, interval: int = 30) -> str:
+    """Compute the expected minute spec for a given anima name and interval."""
+    import zlib
+    offset = zlib.crc32(name.encode()) % 10
+    slots = []
+    m = offset
+    while m < 60:
+        slots.append(str(m))
+        m += interval
+    return ",".join(slots)
+
+
 class TestSetupHeartbeat:
-    def test_interval_is_always_30_minutes(self):
-        """Heartbeat interval is fixed at 30 minutes regardless of config."""
+    def test_interval_from_config_with_offset(self):
+        """Heartbeat uses config interval_minutes with hash-based offset."""
         lm = LifecycleManager()
         dp = MagicMock()
         dp.name = "alice"
-        # Even if config says 15 minutes, interval should remain 30
+        # heartbeat.md content is ignored for interval; config.json is used
         dp.memory.read_heartbeat_config.return_value = "巡回間隔: 15分"
         dp.memory.read_cron_config.return_value = ""
         dp.set_on_lock_released = MagicMock()
@@ -309,11 +321,11 @@ class TestSetupHeartbeat:
         lm.register_anima(dp)
         jobs = lm.scheduler.get_jobs()
         hb_job = next(j for j in jobs if j.id == "alice_heartbeat")
-        # CronTrigger fields: verify minute is */30
-        assert str(hb_job.trigger).find("*/30") != -1
+        expected = _expected_minute_spec("alice")
+        assert f"minute='{expected}'" in str(hb_job.trigger)
 
     def test_interval_fixed_with_5min_config(self):
-        """Ensure 5-minute config is ignored; interval stays 30."""
+        """Ensure 5-minute config in heartbeat.md is ignored; config.json interval is used."""
         lm = LifecycleManager()
         dp = MagicMock()
         dp.name = "bob"
@@ -324,7 +336,8 @@ class TestSetupHeartbeat:
         lm.register_anima(dp)
         jobs = lm.scheduler.get_jobs()
         hb_job = next(j for j in jobs if j.id == "bob_heartbeat")
-        assert str(hb_job.trigger).find("*/30") != -1
+        expected = _expected_minute_spec("bob")
+        assert f"minute='{expected}'" in str(hb_job.trigger)
 
     def test_default_24h_when_no_time_range(self):
         """No time range in heartbeat.md means 24h heartbeat (hour='*')."""
@@ -339,8 +352,9 @@ class TestSetupHeartbeat:
         jobs = lm.scheduler.get_jobs()
         hb_job = next(j for j in jobs if j.id == "carol_heartbeat")
         trigger_str = str(hb_job.trigger)
-        # hour should not be restricted — no "hour=" range like "9-21"
-        assert "*/30" in trigger_str
+        expected = _expected_minute_spec("carol")
+        assert f"minute='{expected}'" in trigger_str
+        assert "hour='*'" in trigger_str
 
     def test_parses_active_hours_from_heartbeat_md(self):
         """Time range in heartbeat.md restricts heartbeat hours."""
@@ -684,18 +698,19 @@ class TestReloadAnimaSchedule:
         initial_jobs = [j.id for j in lm.scheduler.get_jobs() if j.id.startswith("alice_")]
         assert len(initial_jobs) >= 1
 
-        # Change active hours only; interval stays 30
+        # Change active hours only; interval stays config value
         dp.memory.read_heartbeat_config.return_value = "8:00 - 23:00"
         result = lm.reload_anima_schedule("alice")
 
         assert result["reloaded"] == "alice"
         assert result["removed"] >= 1
         assert len(result["new_jobs"]) >= 1
-        # Verify interval is still 30 after reload
+        # Verify offset-based minute spec after reload
         hb_job = next(
             j for j in lm.scheduler.get_jobs() if j.id == "alice_heartbeat"
         )
-        assert str(hb_job.trigger).find("*/30") != -1
+        expected = _expected_minute_spec("alice")
+        assert f"minute='{expected}'" in str(hb_job.trigger)
 
     def test_reload_with_cron_tasks(self):
         lm = LifecycleManager()

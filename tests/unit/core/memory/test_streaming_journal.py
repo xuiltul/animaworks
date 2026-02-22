@@ -463,5 +463,151 @@ class TestRecoverStreamingJournal:
         activity_cls.assert_not_called()
 
 
+# ── Tool ID Persistence ────────────────────────────────────────────
+
+
+class TestToolIdPersistence:
+    """Test that tool_id is persisted in journal events."""
+
+    def test_tool_id_persisted_in_journal_events(
+        self, journal: StreamingJournal, anima_dir: Path,
+    ):
+        """tool_id passed to write_tool_start/end should appear in journal events."""
+        journal.open(trigger="chat")
+        journal.write_tool_start("web_search", args_summary="q=hello", tool_id="toolu_abc")
+        journal.write_tool_end("web_search", result_summary="3 results", tool_id="toolu_abc")
+        journal.close()
+
+        # Read raw journal to verify tool_id is stored
+        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        raw = journal_path.read_text(encoding="utf-8")
+        lines = [json.loads(line) for line in raw.strip().splitlines()]
+
+        tool_start = [ev for ev in lines if ev.get("ev") == "tool_start"][0]
+        tool_end = [ev for ev in lines if ev.get("ev") == "tool_end"][0]
+
+        assert tool_start["tool_id"] == "toolu_abc"
+        assert tool_end["tool_id"] == "toolu_abc"
+
+    def test_tool_id_absent_when_empty(
+        self, journal: StreamingJournal, anima_dir: Path,
+    ):
+        """When tool_id is empty, it should not appear in the journal event."""
+        journal.open(trigger="chat")
+        journal.write_tool_start("web_search", args_summary="q=hello")
+        journal.write_tool_end("web_search", result_summary="3 results")
+        journal.close()
+
+        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        raw = journal_path.read_text(encoding="utf-8")
+        lines = [json.loads(line) for line in raw.strip().splitlines()]
+
+        tool_start = [ev for ev in lines if ev.get("ev") == "tool_start"][0]
+        tool_end = [ev for ev in lines if ev.get("ev") == "tool_end"][0]
+
+        assert "tool_id" not in tool_start
+        assert "tool_id" not in tool_end
+
+
+# ── Tool ID Based Recovery Matching ────────────────────────────────
+
+
+class TestToolIdRecoveryMatching:
+    """Test tool_id-based matching in recovery and tool_name fallback."""
+
+    def test_tool_id_based_matching_in_recovery(self, anima_dir: Path):
+        """Recovery should match tool_end to tool_start by tool_id."""
+        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        events = [
+            json.dumps({"ev": "start", "trigger": "chat", "ts": "2026-02-22T10:00:00"}),
+            json.dumps({"ev": "tool_start", "tool": "web_search", "args_summary": "q=test", "tool_id": "toolu_1", "ts": "2026-02-22T10:00:01"}),
+            json.dumps({"ev": "tool_end", "tool": "web_search", "result_summary": "found it", "tool_id": "toolu_1", "ts": "2026-02-22T10:00:02"}),
+        ]
+        journal_path.write_text("\n".join(events) + "\n", encoding="utf-8")
+
+        recovery = StreamingJournal.recover(anima_dir)
+        assert recovery is not None
+        assert len(recovery.tool_calls) == 1
+        tc = recovery.tool_calls[0]
+        assert tc["tool"] == "web_search"
+        assert tc["tool_id"] == "toolu_1"
+        assert tc["status"] == "completed"
+        assert tc["result_summary"] == "found it"
+
+    def test_tool_name_fallback_when_tool_id_absent(self, anima_dir: Path):
+        """Recovery should fall back to tool_name matching when tool_id is absent."""
+        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        events = [
+            json.dumps({"ev": "start", "trigger": "chat", "ts": "2026-02-22T10:00:00"}),
+            json.dumps({"ev": "tool_start", "tool": "web_search", "args_summary": "q=old", "ts": "2026-02-22T10:00:01"}),
+            json.dumps({"ev": "tool_end", "tool": "web_search", "result_summary": "old result", "ts": "2026-02-22T10:00:02"}),
+        ]
+        journal_path.write_text("\n".join(events) + "\n", encoding="utf-8")
+
+        recovery = StreamingJournal.recover(anima_dir)
+        assert recovery is not None
+        assert len(recovery.tool_calls) == 1
+        tc = recovery.tool_calls[0]
+        assert tc["tool"] == "web_search"
+        assert tc["status"] == "completed"
+        assert tc["result_summary"] == "old result"
+        # No tool_id should be present (backward compat)
+        assert "tool_id" not in tc
+
+    def test_multiple_tools_same_name_different_ids(self, anima_dir: Path):
+        """Multiple tools with same name but different tool_ids are matched correctly."""
+        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        events = [
+            json.dumps({"ev": "start", "trigger": "chat", "ts": "2026-02-22T10:00:00"}),
+            json.dumps({"ev": "tool_start", "tool": "Bash", "args_summary": "ls", "tool_id": "toolu_A", "ts": "2026-02-22T10:00:01"}),
+            json.dumps({"ev": "tool_start", "tool": "Bash", "args_summary": "pwd", "tool_id": "toolu_B", "ts": "2026-02-22T10:00:02"}),
+            json.dumps({"ev": "tool_end", "tool": "Bash", "result_summary": "result-B", "tool_id": "toolu_B", "ts": "2026-02-22T10:00:03"}),
+            json.dumps({"ev": "tool_end", "tool": "Bash", "result_summary": "result-A", "tool_id": "toolu_A", "ts": "2026-02-22T10:00:04"}),
+        ]
+        journal_path.write_text("\n".join(events) + "\n", encoding="utf-8")
+
+        recovery = StreamingJournal.recover(anima_dir)
+        assert recovery is not None
+        assert len(recovery.tool_calls) == 2
+
+        # Build a lookup by tool_id
+        by_id = {tc["tool_id"]: tc for tc in recovery.tool_calls}
+        assert by_id["toolu_A"]["args_summary"] == "ls"
+        assert by_id["toolu_A"]["result_summary"] == "result-A"
+        assert by_id["toolu_A"]["status"] == "completed"
+
+        assert by_id["toolu_B"]["args_summary"] == "pwd"
+        assert by_id["toolu_B"]["result_summary"] == "result-B"
+        assert by_id["toolu_B"]["status"] == "completed"
+
+    def test_tool_id_match_preferred_over_tool_name(self, anima_dir: Path):
+        """When both tool_id and tool_name could match, tool_id match takes priority."""
+        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        # Two Bash starts: first without tool_id, second with tool_id.
+        # The tool_end with tool_id should match the second, not the first.
+        events = [
+            json.dumps({"ev": "start", "trigger": "chat", "ts": "2026-02-22T10:00:00"}),
+            json.dumps({"ev": "tool_start", "tool": "Bash", "args_summary": "echo 1", "ts": "2026-02-22T10:00:01"}),
+            json.dumps({"ev": "tool_start", "tool": "Bash", "args_summary": "echo 2", "tool_id": "toolu_X", "ts": "2026-02-22T10:00:02"}),
+            json.dumps({"ev": "tool_end", "tool": "Bash", "result_summary": "result-X", "tool_id": "toolu_X", "ts": "2026-02-22T10:00:03"}),
+        ]
+        journal_path.write_text("\n".join(events) + "\n", encoding="utf-8")
+
+        recovery = StreamingJournal.recover(anima_dir)
+        assert recovery is not None
+        assert len(recovery.tool_calls) == 2
+
+        # The tool_id-matched entry should have result_summary
+        id_matched = [tc for tc in recovery.tool_calls if tc.get("tool_id") == "toolu_X"]
+        assert len(id_matched) == 1
+        assert id_matched[0]["result_summary"] == "result-X"
+        assert id_matched[0]["status"] == "completed"
+
+        # The first entry (no tool_id) should still be "started"
+        no_id = [tc for tc in recovery.tool_calls if "tool_id" not in tc]
+        assert len(no_id) == 1
+        assert no_id[0]["status"] == "started"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

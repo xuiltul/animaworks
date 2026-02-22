@@ -15,8 +15,9 @@ from pathlib import Path
 
 logger = logging.getLogger("animaworks")
 
-# Command pattern used to identify the animaworks server process.
-_SERVER_CMD_MARKER = "main.py start"
+# Command patterns used to identify the animaworks server process.
+# Matches both direct invocation (main.py start) and entry point (animaworks start).
+_SERVER_CMD_MARKERS = ("main.py start", "animaworks start")
 
 
 # ── PID helpers ───────────────────────────────────────────
@@ -99,7 +100,7 @@ def _find_server_pid_by_process() -> int | None:
             cmdline = (entry / "cmdline").read_bytes().decode(
                 "utf-8", errors="replace"
             ).replace("\x00", " ")
-            if _SERVER_CMD_MARKER in cmdline:
+            if any(m in cmdline for m in _SERVER_CMD_MARKERS):
                 pid = int(entry.name)
                 # Exclude ourselves
                 if pid == os.getpid():
@@ -162,6 +163,59 @@ def _stop_server(timeout: int = 10) -> bool:
     return False
 
 
+# ── Orphan runner cleanup ─────────────────────────────────
+
+_RUNNER_CMD_MARKER = "core.supervisor.runner"
+
+
+def _kill_orphan_runners() -> int:
+    """Kill orphaned Anima runner processes from previous server instances.
+
+    Scans /proc for processes whose cmdline contains the runner module marker
+    and references the ~/.animaworks/ data directory.  Sends SIGTERM and waits
+    briefly for each.
+
+    Returns the number of processes killed.
+    """
+    from core.paths import get_data_dir
+
+    data_prefix = str(get_data_dir())
+    my_uid = os.getuid()
+    proc = Path("/proc")
+    if not proc.exists():
+        return 0
+
+    killed = 0
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = entry.stat()
+            if stat.st_uid != my_uid:
+                continue
+            cmdline = (entry / "cmdline").read_bytes().decode(
+                "utf-8", errors="replace",
+            ).replace("\x00", " ")
+            if _RUNNER_CMD_MARKER not in cmdline:
+                continue
+            if data_prefix not in cmdline:
+                continue
+            pid = int(entry.name)
+            if pid == os.getpid():
+                continue
+            logger.info("Killing orphan runner (PID %d): %s", pid, cmdline[:120])
+            os.kill(pid, signal.SIGTERM)
+            killed += 1
+        except (OSError, ValueError, PermissionError):
+            continue
+
+    # Brief wait for processes to exit
+    if killed:
+        time.sleep(1)
+
+    return killed
+
+
 # ── Server commands ───────────────────────────────────────
 
 
@@ -220,6 +274,11 @@ def cmd_start(args: argparse.Namespace) -> None:
         print(f"Error: Server is already running (pid={orphan_pid}, PID file was missing).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
         sys.exit(1)
+
+    # Kill orphan runner processes from previous server instances
+    orphan_count = _kill_orphan_runners()
+    if orphan_count:
+        print(f"Killed {orphan_count} orphan runner process(es) from previous server.")
 
     ensure_runtime_dir()
     _write_pid_file()

@@ -187,8 +187,15 @@ def create_animas_router() -> APIRouter:
             )
 
         status_file = anima_dir / "status.json"
+        existing = {}
+        if status_file.exists():
+            try:
+                existing = json.loads(status_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+        existing["enabled"] = True
         status_file.write_text(
-            json.dumps({"enabled": True}, indent=2), encoding="utf-8"
+            json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
         # Start immediately (don't wait for reconciliation)
@@ -211,8 +218,15 @@ def create_animas_router() -> APIRouter:
             )
 
         status_file = anima_dir / "status.json"
+        existing = {}
+        if status_file.exists():
+            try:
+                existing = json.loads(status_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+        existing["enabled"] = False
         status_file.write_text(
-            json.dumps({"enabled": False}, indent=2), encoding="utf-8"
+            json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
         # Stop immediately

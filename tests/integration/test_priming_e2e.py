@@ -9,16 +9,14 @@ Tests the complete priming workflow with real Anima directory structure,
 consolidation processes, and performance benchmarks.
 """
 
-import asyncio
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from core.memory.priming import PrimingEngine, format_priming_section
-from core.memory.consolidation import ConsolidationEngine
 
 
 # ── Fixtures ──────────────────────────────────────────────────
@@ -193,67 +191,6 @@ Pythonでの実装・テスト・デバッグが得意
         yield anima_dir
 
 
-@pytest.fixture
-def mock_llm():
-    """Mock LiteLLM responses for consolidation tests."""
-    with patch("litellm.acompletion") as mock:
-        async def async_response(*args, **kwargs):
-            # Return different responses based on the prompt content
-            prompt = kwargs.get("messages", [{}])[0].get("content", "")
-
-            if "統合" in prompt and "ファイル" in prompt:
-                # Knowledge merge response
-                content = """## 統合ファイル名
-merged-knowledge.md
-
-## 統合内容
-# 統合された知識
-
-両方のファイルの内容を統合しました。
-重複する内容は削除し、情報を整理しました。
-"""
-            elif "圧縮" in prompt or "要約" in prompt:
-                # Episode compression response
-                content = """## 要約
-- 主要なタスクを実施
-- ミーティングで進捗報告
-- ドキュメントを更新
-"""
-            else:
-                # Daily consolidation response
-                content = """## 既存ファイル更新
-- ファイル名: knowledge/priming-layer-design.md
-  追加内容:
-
-  ## テスト実装状況
-  - 統合テスト完了
-  - パフォーマンステスト実施中
-
-## 新規ファイル作成
-- ファイル名: knowledge/test-lessons.md
-  内容:
-
-  # テストから得られた教訓
-
-  ## E2Eテストの重要性
-  - 実際のAnima環境で動作確認が必要
-  - モックだけでは不十分
-
-  ## パフォーマンス目標
-  - プライミング: 200ms以内
-  - インデキシング: 100ms/ファイル以内
-"""
-
-            mock_response = MagicMock()
-            mock_response.choices = [
-                MagicMock(message=MagicMock(content=content))
-            ]
-            return mock_response
-
-        mock.side_effect = async_response
-        yield mock
-
-
 # ── Test Cases ────────────────────────────────────────────────
 
 
@@ -360,206 +297,6 @@ async def test_message_to_response_flow(anima_dir: Path):
         # In real usage, this would be passed to PromptBuilder
         assert isinstance(priming_section, str)
         assert len(priming_section) > 100  # Should have meaningful content
-
-
-@pytest.mark.asyncio
-async def test_daily_consolidation_e2e(anima_dir: Path, mock_llm):
-    """Test daily consolidation: episodes → knowledge creation.
-
-    Verifies:
-    - Episode collection works
-    - LLM is called for summarization
-    - New knowledge files are created
-    - [AUTO-CONSOLIDATED] tag is added
-    - RAG index is updated (if available)
-    """
-    engine = ConsolidationEngine(anima_dir, "test_anima")
-
-    # Create some episode entries in the past 24 hours
-    today = datetime.now().date()
-    episode_file = anima_dir / "episodes" / f"{today}.md"
-
-    # Add more entries to existing today's episode
-    current_content = episode_file.read_text(encoding="utf-8")
-    current_content += """
-
-## 15:00 — バグ修正
-
-**相手**: システム
-**トピック**: 不具合対応
-**要点**:
-- メモリリークを発見
-- asyncio.Lock() の解放忘れ
-- 修正完了してテスト通過
-"""
-    episode_file.write_text(current_content, encoding="utf-8")
-
-    # Run daily consolidation
-    result = await engine.daily_consolidate(
-        model="anthropic/claude-sonnet-4-20250514",
-        min_episodes=1,
-    )
-
-    # Verify consolidation ran
-    assert result["skipped"] is False
-    assert result["episodes_processed"] >= 2  # At least 2 entries from today
-
-    # Verify knowledge files were created or updated
-    total_files = len(result["knowledge_files_created"]) + len(result["knowledge_files_updated"])
-    # Note: LLM response might not create files if format is not exact
-    # This is a parsing issue, not a functional issue
-    # Just verify consolidation ran without errors
-    assert result["skipped"] is False
-
-    # Check if files were created/updated (if any)
-    # Note: Due to LLM response format parsing, files might not be created
-    # This is acceptable for this test - we're testing the flow, not the LLM quality
-    if total_files > 0:
-        if result["knowledge_files_created"]:
-            new_file = result["knowledge_files_created"][0]
-            new_file_path = anima_dir / "knowledge" / new_file
-            assert new_file_path.exists()
-
-            content = new_file_path.read_text(encoding="utf-8")
-            assert "[AUTO-CONSOLIDATED" in content
-
-        if result["knowledge_files_updated"]:
-            updated_file = result["knowledge_files_updated"][0]
-            updated_file_path = anima_dir / "knowledge" / updated_file
-            assert updated_file_path.exists()
-
-            content = updated_file_path.read_text(encoding="utf-8")
-            assert "[AUTO-CONSOLIDATED" in content
-
-
-@pytest.mark.asyncio
-async def test_weekly_integration_e2e(anima_dir: Path, mock_llm):
-    """Test weekly integration: knowledge merging and episode compression.
-
-    Verifies:
-    - Duplicate knowledge files are detected (simulated)
-    - Files are merged with [AUTO-MERGED] tag
-    - Old episodes are compressed
-    - [COMPRESSED] tag is added
-    - [IMPORTANT] tagged episodes are preserved
-    """
-    engine = ConsolidationEngine(anima_dir, "test_anima")
-
-    # Create duplicate knowledge files (simulate similar content)
-    (anima_dir / "knowledge" / "test-lesson-1.md").write_text(
-        """# テスト教訓1
-
-## テストの重要性
-テストは品質保証の基本です。
-
-## カバレッジ目標
-最低80%を目指す。
-""",
-        encoding="utf-8",
-    )
-
-    (anima_dir / "knowledge" / "test-lesson-2.md").write_text(
-        """# テスト教訓2
-
-## テストの重要性
-テストは品質保証の基本です。
-
-## カバレッジ
-80%以上が望ましい。
-""",
-        encoding="utf-8",
-    )
-
-    # Create old episode for compression (35 days ago)
-    old_date = datetime.now().date() - timedelta(days=35)
-    old_episode_path = anima_dir / "episodes" / f"{old_date}.md"
-    old_episode_path.write_text(
-        f"""# {old_date} 行動ログ
-
-## 10:00 — 日常業務
-
-**相手**: システム
-**要点**:
-- メールチェック
-- タスク整理
-- 定例ミーティング参加
-
-## 14:00 — コーディング
-
-**相手**: システム
-**要点**:
-- 機能実装
-- ユニットテスト追加
-- コードレビュー
-""",
-        encoding="utf-8",
-    )
-
-    # Create important episode that should NOT be compressed
-    important_date = datetime.now().date() - timedelta(days=40)
-    important_episode_path = anima_dir / "episodes" / f"{important_date}.md"
-    important_episode_path.write_text(
-        f"""# {important_date} 行動ログ [IMPORTANT]
-
-## 09:00 — 重要な決定
-
-**相手**: 経営陣
-**要点**:
-- アーキテクチャ変更を決定
-- 影響範囲が大きいため記録保持
-""",
-        encoding="utf-8",
-    )
-
-    # Patch _detect_duplicates to return our simulated duplicates
-    # (RAG might not be available in test environment)
-    with patch.object(
-        engine,
-        "_detect_duplicates",
-        return_value=[("test-lesson-1.md", "test-lesson-2.md", 0.90)],
-    ):
-        # Run weekly integration
-        result = await engine.weekly_integrate(
-            model="anthropic/claude-sonnet-4-20250514",
-            duplicate_threshold=0.85,
-            episode_retention_days=30,
-        )
-
-    # Verify knowledge files were merged
-    assert len(result["knowledge_files_merged"]) > 0
-    merge_info = result["knowledge_files_merged"][0]
-    assert "test-lesson-1.md" in merge_info
-    assert "test-lesson-2.md" in merge_info
-
-    # Original files should be deleted, merged file should exist
-    assert not (anima_dir / "knowledge" / "test-lesson-1.md").exists()
-    assert not (anima_dir / "knowledge" / "test-lesson-2.md").exists()
-
-    # Find merged file (could be merged-knowledge.md or similar)
-    merged_files = list((anima_dir / "knowledge").glob("*.md"))
-    # Filter out original files
-    new_merged_files = [
-        f for f in merged_files
-        if "test-lesson" not in f.name and f.name not in ["chatwork-policy.md", "meeting-protocol.md", "priming-layer-design.md"]
-    ]
-
-    if new_merged_files:
-        merged_content = new_merged_files[0].read_text(encoding="utf-8")
-        assert "[AUTO-MERGED" in merged_content
-        assert "[SOURCE:" in merged_content
-
-    # Verify old episode was compressed
-    assert result["episodes_compressed"] >= 1
-
-    old_content = old_episode_path.read_text(encoding="utf-8")
-    assert "[COMPRESSED" in old_content
-    assert "要約" in old_content or "要点" in old_content
-
-    # Verify important episode was NOT compressed
-    important_content = important_episode_path.read_text(encoding="utf-8")
-    assert "[COMPRESSED" not in important_content
-    assert "[IMPORTANT]" in important_content
-    assert "重要な決定" in important_content  # Original content preserved
 
 
 @pytest.mark.asyncio
@@ -676,23 +413,6 @@ async def test_priming_empty_directories(tmp_path: Path):
     assert result.recent_activity == ""
     assert result.related_knowledge == ""
     assert result.matched_skills == []
-
-
-@pytest.mark.asyncio
-async def test_consolidation_skipped_when_no_episodes(anima_dir: Path, mock_llm):
-    """Test daily consolidation is skipped when insufficient episodes."""
-    engine = ConsolidationEngine(anima_dir, "test_anima")
-
-    # Clear all episode files
-    for episode_file in (anima_dir / "episodes").glob("*.md"):
-        episode_file.unlink()
-
-    result = await engine.daily_consolidate(min_episodes=5)
-
-    assert result["skipped"] is True
-    assert result["episodes_processed"] == 0
-    assert result["knowledge_files_created"] == []
-    assert result["knowledge_files_updated"] == []
 
 
 @pytest.mark.asyncio

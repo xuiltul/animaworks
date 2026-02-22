@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
+import zlib
 from typing import Any, Callable, Coroutine
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -19,6 +19,7 @@ from apscheduler.triggers.cron import CronTrigger
 from core.anima import DigitalAnima
 from core.config.models import load_config
 from core.exceptions import AnimaWorksError  # noqa: F401
+from core.schedule_parser import parse_heartbeat_config
 from core.schemas import CronTask
 
 logger = logging.getLogger("animaworks.lifecycle")
@@ -128,16 +129,26 @@ class LifecycleManager:
     # ── Heartbeat ─────────────────────────────────────────
 
     def _setup_heartbeat(self, anima: DigitalAnima) -> None:
-        config = anima.memory.read_heartbeat_config()
+        hb_content = anima.memory.read_heartbeat_config()
 
-        _HEARTBEAT_INTERVAL = 30  # Fixed system-wide; not configurable per anima
+        # Interval from config.json (not parsed from heartbeat.md)
+        app_config = load_config()
+        interval = app_config.heartbeat.interval_minutes
 
-        # Determine active hours:
-        # 1. heartbeat.md explicit time range takes priority
-        # 2. Default: 24h (hour="*")
-        m = re.search(r"(\d{1,2}):\d{0,2}\s*-\s*(\d{1,2})", config)
-        if m:
-            active_start, active_end = int(m.group(1)), int(m.group(2))
+        # Fixed offset: crc32(anima_name) % 10 → deterministic 0-9 min spread
+        offset = zlib.crc32(anima.name.encode()) % 10
+
+        # Build minute spec: base slots + offset
+        slots = []
+        m = offset
+        while m < 60:
+            slots.append(str(m))
+            m += interval
+        minute_spec = ",".join(slots)
+
+        # Determine active hours from heartbeat.md
+        active_start, active_end = parse_heartbeat_config(hb_content)
+        if active_start is not None:
             hour_spec = f"{active_start}-{active_end - 1}"
             log_active = f"active {active_start}:00-{active_end}:00"
         else:
@@ -147,7 +158,7 @@ class LifecycleManager:
         self.scheduler.add_job(
             self._heartbeat_wrapper,
             CronTrigger(
-                minute=f"*/{_HEARTBEAT_INTERVAL}",
+                minute=minute_spec,
                 hour=hour_spec,
             ),
             id=f"{anima.name}_heartbeat",
@@ -156,9 +167,11 @@ class LifecycleManager:
             replace_existing=True,
         )
         logger.info(
-            "Heartbeat '%s': every %dmin, %s",
+            "Heartbeat '%s': minute=%s (offset=%d, interval=%dmin), %s",
             anima.name,
-            _HEARTBEAT_INTERVAL,
+            minute_spec,
+            offset,
+            interval,
             log_active,
         )
 
@@ -658,7 +671,11 @@ class LifecycleManager:
             )
 
     async def _handle_daily_consolidation(self) -> None:
-        """Run daily consolidation for all animas."""
+        """Run daily consolidation for all animas.
+
+        New flow: Anima-driven consolidation via run_consolidation(),
+        followed by metadata-based synaptic downscaling and RAG rebuild.
+        """
         logger.info("Starting system-wide daily consolidation")
 
         # Load consolidation config
@@ -669,13 +686,13 @@ class LifecycleManager:
         # Default config if not present
         enabled = True
         from core.config.models import ConsolidationConfig
-        model = ConsolidationConfig().llm_model
-        min_episodes = 1
+        min_episodes = ConsolidationConfig().min_episodes_threshold
+        max_turns = ConsolidationConfig().max_turns
 
         if consolidation_cfg:
             enabled = getattr(consolidation_cfg, "daily_enabled", True)
-            model = getattr(consolidation_cfg, "llm_model", model)
-            min_episodes = getattr(consolidation_cfg, "min_episodes_threshold", 1)
+            min_episodes = getattr(consolidation_cfg, "min_episodes_threshold", min_episodes)
+            max_turns = getattr(consolidation_cfg, "max_turns", max_turns)
 
         if not enabled:
             logger.info("Daily consolidation is disabled in config")
@@ -684,33 +701,62 @@ class LifecycleManager:
         # Run consolidation for each anima
         for anima_name, anima in self.animas.items():
             try:
-                from core.memory.consolidation import ConsolidationEngine
+                # Check if anima has recent episodes worth consolidating
+                episode_count = anima.count_recent_episodes(hours=24)
+                if episode_count < min_episodes:
+                    logger.info(
+                        "Daily consolidation skipped for %s: "
+                        "episodes=%d < threshold=%d",
+                        anima_name, episode_count, min_episodes,
+                    )
+                    continue
 
-                engine = ConsolidationEngine(
-                    anima_dir=anima.memory.anima_dir,
-                    anima_name=anima_name,
-                )
-
-                result = await engine.daily_consolidate(
-                    model=model,
-                    min_episodes=min_episodes,
+                # Anima-driven consolidation (tool-call loop)
+                result = await anima.run_consolidation(
+                    consolidation_type="daily",
+                    max_turns=max_turns,
                 )
 
                 logger.info(
-                    "Daily consolidation for %s: %s",
+                    "Daily consolidation for %s: duration_ms=%d",
                     anima_name,
-                    result
+                    result.duration_ms,
                 )
 
+                # Post-processing: Synaptic downscaling (metadata-based, no LLM)
+                try:
+                    from core.memory.forgetting import ForgettingEngine
+                    forgetter = ForgettingEngine(anima.memory.anima_dir, anima_name)
+                    downscaling_result = forgetter.synaptic_downscaling()
+                    logger.info(
+                        "Synaptic downscaling for %s: %s",
+                        anima_name, downscaling_result,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Synaptic downscaling failed for anima=%s", anima_name,
+                    )
+
+                # Post-processing: Rebuild RAG index
+                try:
+                    from core.memory.consolidation import ConsolidationEngine
+                    engine = ConsolidationEngine(anima.memory.anima_dir, anima_name)
+                    engine._rebuild_rag_index()
+                except Exception:
+                    logger.exception(
+                        "RAG index rebuild failed for anima=%s", anima_name,
+                    )
+
                 # Broadcast result via WebSocket
-                if self._ws_broadcast and not result.get("skipped"):
+                if self._ws_broadcast:
                     await self._ws_broadcast(
                         {
                             "type": "system.consolidation",
                             "data": {
                                 "anima": anima_name,
                                 "type": "daily",
-                                "result": result,
+                                "summary": result.summary[:500] if result else "",
+                                "duration_ms": result.duration_ms if result else 0,
                             },
                         }
                     )
@@ -722,7 +768,11 @@ class LifecycleManager:
                 )
 
     async def _handle_weekly_integration(self) -> None:
-        """Run weekly integration for all animas."""
+        """Run weekly integration for all animas.
+
+        New flow: Anima-driven consolidation via run_consolidation(),
+        followed by neurogenesis reorganization and RAG rebuild.
+        """
         logger.info("Starting system-wide weekly integration")
 
         # Load config
@@ -731,17 +781,15 @@ class LifecycleManager:
         consolidation_cfg = getattr(config, "consolidation", None)
 
         # Default config
-        enabled = True  # Phase 3 implementation
+        enabled = True
         from core.config.models import ConsolidationConfig as _CC
         model = _CC().llm_model
-        duplicate_threshold = 0.85
-        episode_retention_days = 30
+        max_turns = _CC().max_turns
 
         if consolidation_cfg:
             enabled = getattr(consolidation_cfg, "weekly_enabled", True)
             model = getattr(consolidation_cfg, "llm_model", model)
-            duplicate_threshold = getattr(consolidation_cfg, "duplicate_threshold", 0.85)
-            episode_retention_days = getattr(consolidation_cfg, "episode_retention_days", 30)
+            max_turns = getattr(consolidation_cfg, "max_turns", max_turns)
 
         if not enabled:
             logger.info("Weekly integration is disabled in config")
@@ -750,35 +798,53 @@ class LifecycleManager:
         # Run integration for each anima
         for anima_name, anima in self.animas.items():
             try:
-                from core.memory.consolidation import ConsolidationEngine
-
-                engine = ConsolidationEngine(
-                    anima_dir=anima.memory.anima_dir,
-                    anima_name=anima_name,
-                )
-
-                result = await engine.weekly_integrate(
-                    model=model,
-                    duplicate_threshold=duplicate_threshold,
-                    episode_retention_days=episode_retention_days,
+                # Anima-driven consolidation (tool-call loop)
+                result = await anima.run_consolidation(
+                    consolidation_type="weekly",
+                    max_turns=max_turns,
                 )
 
                 logger.info(
-                    "Weekly integration for %s: merged=%d compressed=%d",
+                    "Weekly integration for %s: duration_ms=%d",
                     anima_name,
-                    len(result.get("knowledge_files_merged", [])),
-                    result.get("episodes_compressed", 0)
+                    result.duration_ms,
                 )
 
-                # Broadcast result
-                if self._ws_broadcast and not result.get("skipped"):
+                # Post-processing: Neurogenesis reorganization (LLM-based merge)
+                try:
+                    from core.memory.forgetting import ForgettingEngine
+                    forgetter = ForgettingEngine(anima.memory.anima_dir, anima_name)
+                    reorg_result = await forgetter.neurogenesis_reorganize(model=model)
+                    logger.info(
+                        "Neurogenesis reorganization for %s: %s",
+                        anima_name, reorg_result,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Neurogenesis reorganization failed for anima=%s",
+                        anima_name,
+                    )
+
+                # Post-processing: Rebuild RAG index
+                try:
+                    from core.memory.consolidation import ConsolidationEngine
+                    engine = ConsolidationEngine(anima.memory.anima_dir, anima_name)
+                    engine._rebuild_rag_index()
+                except Exception:
+                    logger.exception(
+                        "RAG index rebuild failed for anima=%s", anima_name,
+                    )
+
+                # Broadcast result via WebSocket
+                if self._ws_broadcast:
                     await self._ws_broadcast(
                         {
                             "type": "system.consolidation",
                             "data": {
                                 "anima": anima_name,
                                 "type": "weekly",
-                                "result": result,
+                                "summary": result.summary[:500] if result else "",
+                                "duration_ms": result.duration_ms if result else 0,
                             },
                         }
                     )

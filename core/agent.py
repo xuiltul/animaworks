@@ -21,10 +21,11 @@ import logging
 import re
 import time
 from collections.abc import AsyncGenerator, Callable
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from core.time_utils import now_iso
+from core.time_utils import now_iso, now_jst
 
 from core.background import BackgroundTaskManager
 from core.prompt.context import ContextTracker
@@ -48,6 +49,32 @@ _PROMPT_SOFT_LIMIT_BYTES = 600_000   # Force compression
 _PROMPT_HARD_LIMIT_BYTES = 1_200_000  # Fall back to A1 Fallback
 
 
+_PROMPT_LOG_RETENTION_DAYS = 3
+_last_rotation_date: str = ""
+
+
+def _rotate_prompt_logs(log_dir: Path) -> None:
+    """Delete prompt_log files older than *_PROMPT_LOG_RETENTION_DAYS*.
+
+    Uses the filename date (``YYYY-MM-DD.jsonl``) for comparison so no
+    filesystem stat is required.  Runs at most once per calendar day
+    (module-level ``_last_rotation_date`` cache).
+    """
+    global _last_rotation_date
+    today = now_jst().strftime("%Y-%m-%d")
+    if _last_rotation_date == today:
+        return  # already rotated today
+    _last_rotation_date = today
+
+    cutoff = now_jst() - timedelta(days=_PROMPT_LOG_RETENTION_DAYS)
+    cutoff_str = cutoff.strftime("%Y-%m-%d")
+    for f in log_dir.glob("*.jsonl"):
+        # Filename expected format: YYYY-MM-DD.jsonl
+        date_str = f.stem
+        if date_str < cutoff_str:
+            f.unlink(missing_ok=True)
+
+
 def _save_prompt_log(
     anima_dir: Path,
     *,
@@ -59,6 +86,9 @@ def _save_prompt_log(
     user_message: str,
     tools: list[str],
     session_id: str,
+    context_window: int = 0,
+    prior_messages: list | None = None,
+    tool_schemas: list | None = None,
 ) -> None:
     """Persist the full prompt payload to a JSONL log for post-hoc debugging.
 
@@ -68,9 +98,14 @@ def _save_prompt_log(
     try:
         log_dir = anima_dir / "prompt_logs"
         log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Auto-rotate old log files (at most once per day)
+        _rotate_prompt_logs(log_dir)
+
         today = now_iso()[:10]  # YYYY-MM-DD
         entry = {
             "ts": now_iso(),
+            "type": "request_start",
             "trigger": trigger,
             "from": sender,
             "model": model,
@@ -80,13 +115,50 @@ def _save_prompt_log(
             "user_message": user_message,
             "tools": tools,
             "session_id": session_id,
+            "context_window": context_window,
+            "prior_messages": prior_messages,
+            "prior_messages_count": len(prior_messages) if prior_messages else 0,
+            "tool_schemas": tool_schemas,
         }
         log_file = log_dir / f"{today}.jsonl"
         with log_file.open("a", encoding="utf-8") as f:
-            f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+            f.write(_json.dumps(entry, ensure_ascii=False, default=str) + "\n")
         logger.debug("Prompt log saved: %s (%d bytes)", log_file, len(system_prompt))
     except Exception:
         logger.warning("Failed to save prompt log", exc_info=True)
+
+
+def _save_prompt_log_end(
+    anima_dir: Path,
+    session_id: str,
+    final_messages: list[dict] | None = None,
+    tool_call_count: int = 0,
+    total_tokens_estimate: int = 0,
+) -> None:
+    """Persist post-execution metadata to the same JSONL log.
+
+    Writes a ``request_end`` entry after the tool loop completes, capturing
+    final message counts and token estimates.
+    """
+    try:
+        log_dir = anima_dir / "prompt_logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        today = now_iso()[:10]
+        log_file = log_dir / f"{today}.jsonl"
+
+        entry = {
+            "ts": now_iso(),
+            "type": "request_end",
+            "session_id": session_id,
+            "final_messages_count": len(final_messages) if final_messages else 0,
+            "final_messages": final_messages,
+            "tool_call_count": tool_call_count,
+            "total_tokens_estimate": total_tokens_estimate,
+        }
+        with log_file.open("a", encoding="utf-8") as f:
+            f.write(_json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+    except Exception:
+        logger.warning("Failed to save prompt log end", exc_info=True)
 
 
 class AgentCore:
@@ -461,12 +533,54 @@ class AgentCore:
             return None
         return getattr(engine, "_retriever", None)
 
-    async def _run_priming(self, prompt: str, trigger: str, *, message_intent: str = "") -> str:
+    def _compute_overflow_files(self) -> list[str] | None:
+        """Pre-compute overflow files for distilled knowledge injection.
+
+        Returns:
+            List of file stems that didn't fit in the knowledge budget,
+            empty list if all fit, or None if collection failed.
+        """
+        try:
+            from core.prompt.context import resolve_context_window
+
+            model_config = self.memory.read_model_config()
+            ctx_window = resolve_context_window(model_config.model)
+            knowledge_budget = int(ctx_window * 0.10)
+            distilled = self.memory.collect_distilled_knowledge()
+
+            if not distilled:
+                return []
+
+            used_tokens = 0
+            overflow: list[str] = []
+            for entry in distilled:
+                est_tokens = len(entry["content"]) // 3
+                if used_tokens + est_tokens <= knowledge_budget:
+                    used_tokens += est_tokens
+                else:
+                    overflow.append(entry["name"])
+
+            return overflow
+        except Exception:
+            logger.debug("Failed to compute overflow files", exc_info=True)
+            return None
+
+    async def _run_priming(
+        self,
+        prompt: str,
+        trigger: str,
+        *,
+        message_intent: str = "",
+        overflow_files: list[str] | None = None,
+    ) -> str:
         """Run priming layer to automatically retrieve relevant memories.
 
         Args:
             prompt: The user message (may include conversation history)
             trigger: Trigger type (e.g., "message:yamada")
+            overflow_files: File stems that didn't fit in knowledge injection.
+                None = legacy (full Channel C), [] = all injected (skip C),
+                [...] = overflow files only for Channel C.
 
         Returns:
             Formatted priming section for system prompt injection, or empty string.
@@ -491,11 +605,24 @@ class AgentCore:
                 else "cron" if trigger.startswith("cron")
                 else "chat"
             )
+
+            # Compute overflow_files for Channel C control
+            try:
+                from core.prompt.context import resolve_context_window
+                distilled = self.memory.collect_distilled_knowledge()
+                ctx_window = resolve_context_window(self.model_config.model)
+                _, overflow_files = MemoryManager.compute_injection_plan(
+                    distilled, ctx_window,
+                )
+            except Exception:
+                overflow_files = None  # Fallback to legacy behaviour
+
             result = await self._priming_engine.prime_memories(
                 message,
                 sender_name,
                 channel=channel,
                 intent=message_intent,
+                overflow_files=overflow_files,
             )
 
             if result.is_empty():
@@ -661,6 +788,7 @@ class AgentCore:
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         message_intent: str = "",
+        max_turns_override: int | None = None,
     ) -> CycleResult:
         """Run one agent cycle with autonomous memory search.
 
@@ -679,6 +807,7 @@ class AgentCore:
                 images=images,
                 prior_messages=prior_messages,
                 message_intent=message_intent,
+                max_turns_override=max_turns_override,
             )
 
     async def _run_cycle_inner(
@@ -688,6 +817,7 @@ class AgentCore:
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         message_intent: str = "",
+        max_turns_override: int | None = None,
     ) -> CycleResult:
         start = time.monotonic()
         mode = self._resolve_execution_mode()
@@ -697,10 +827,12 @@ class AgentCore:
         )
 
         # ── Priming: Automatic memory retrieval ────────────────
+        overflow_files = self._compute_overflow_files()
         priming_section = await self._run_priming(
             prompt,
             trigger,
             message_intent=message_intent,
+            overflow_files=overflow_files,
         )
 
         shortterm = ShortTermMemory(self.anima_dir)
@@ -738,6 +870,16 @@ class AgentCore:
             logger.info("Injected short-term memory into system prompt")
 
         # ── Prompt log: save full payload for debugging ───
+        from core.prompt.context import resolve_context_window
+        from core.tooling.schemas import load_all_tool_schemas
+        _ctx_win = resolve_context_window(
+            self.model_config.model,
+            overrides=self._load_context_window_overrides(),
+        )
+        _tool_schemas = load_all_tool_schemas(
+            tool_registry=self._tool_registry,
+            personal_tools=self._personal_tools,
+        )
         _save_prompt_log(
             self.anima_dir,
             trigger=trigger,
@@ -748,6 +890,9 @@ class AgentCore:
             user_message=prompt,
             tools=self._tool_registry,
             session_id=self._tool_handler.session_id,
+            context_window=_ctx_win,
+            prior_messages=prior_messages,
+            tool_schemas=_tool_schemas,
         )
 
         # ── Helper: convert ExecutionResult tool records to dicts ──
@@ -762,6 +907,12 @@ class AgentCore:
                 system_prompt=system_prompt,
                 trigger=trigger,
                 images=images,
+                max_turns_override=max_turns_override,
+            )
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(result.tool_call_records),
             )
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.info(
@@ -785,6 +936,12 @@ class AgentCore:
                 shortterm=shortterm,
                 images=images,
                 prior_messages=prior_messages,
+                max_turns_override=max_turns_override,
+            )
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(result.tool_call_records),
             )
             shortterm.clear()
             duration_ms = int((time.monotonic() - start) * 1000)
@@ -820,6 +977,7 @@ class AgentCore:
                 tracker=tracker,
                 images=images,
                 prior_messages=prior_messages,
+                max_turns_override=max_turns_override,
             )
         else:
             result = await self._executor.execute(
@@ -827,6 +985,7 @@ class AgentCore:
                 system_prompt=system_prompt,
                 tracker=tracker,
                 images=images,
+                max_turns_override=max_turns_override,
             )
         # Merge transcript-parsed replied_to for A1 mode
         if result.replied_to_from_transcript:
@@ -835,7 +994,17 @@ class AgentCore:
         result_msg = result.result_message
         accumulated_tool_records = _tool_records_to_dicts(result)
 
-        # Session chaining: if threshold was crossed, continue in a new session
+        # Session chaining: if threshold was crossed, continue in a new session.
+        # force_chain is set by A1 mid-session context auto-compact (PreToolUse
+        # hook returned continue_=False).  In that case ResultMessage.usage may
+        # not have updated the tracker, so we force the threshold flag.
+        if result.force_chain and not tracker.threshold_exceeded:
+            tracker.force_threshold()
+            logger.info(
+                "Context auto-compact: forcing threshold_exceeded for session "
+                "chaining (A1 mid-session context budget exceeded)"
+            )
+
         session_chained = False
         total_turns = result_msg.num_turns if result_msg else 0
         chain_count = 0
@@ -887,6 +1056,7 @@ class AgentCore:
                     prompt=continuation_prompt,
                     system_prompt=system_prompt_2,
                     tracker=tracker,
+                    max_turns_override=max_turns_override,
                 )
                 # Merge from chained session too
                 if result_2.replied_to_from_transcript:
@@ -904,6 +1074,12 @@ class AgentCore:
                 total_turns += result_msg.num_turns
 
         shortterm.clear()
+
+        _save_prompt_log_end(
+            self.anima_dir,
+            session_id=self._tool_handler.session_id,
+            tool_call_count=len(accumulated_tool_records),
+        )
 
         duration_ms = int((time.monotonic() - start) * 1000)
         logger.info(
@@ -930,6 +1106,7 @@ class AgentCore:
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         message_intent: str = "",
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Streaming version of run_cycle.
 
@@ -952,6 +1129,7 @@ class AgentCore:
                     images=images,
                     prior_messages=prior_messages,
                     message_intent=message_intent,
+                    max_turns_override=max_turns_override,
                 )
             yield {"type": "text_delta", "text": cycle.summary}
             yield {
@@ -962,10 +1140,12 @@ class AgentCore:
 
         # ── Streaming executor (A1 / A2 / all modes) ─────────────
         # Priming: Automatic memory retrieval
+        overflow_files = self._compute_overflow_files()
         priming_section = await self._run_priming(
             prompt,
             trigger,
             message_intent=message_intent,
+            overflow_files=overflow_files,
         )
 
         shortterm = ShortTermMemory(self.anima_dir)
@@ -1016,6 +1196,7 @@ class AgentCore:
                     trigger,
                     message_intent=message_intent,
                     images=images,
+                    max_turns_override=max_turns_override,
                 )
             yield {"type": "text_delta", "text": cycle.summary}
             yield {
@@ -1025,6 +1206,16 @@ class AgentCore:
             return
 
         # ── Prompt log: save full payload for debugging ───
+        from core.prompt.context import resolve_context_window as _rcw
+        from core.tooling.schemas import load_all_tool_schemas as _lats
+        _ctx_win_s = _rcw(
+            self.model_config.model,
+            overrides=self._load_context_window_overrides(),
+        )
+        _tool_schemas_s = _lats(
+            tool_registry=self._tool_registry,
+            personal_tools=self._personal_tools,
+        )
         _save_prompt_log(
             self.anima_dir,
             trigger=trigger,
@@ -1035,6 +1226,9 @@ class AgentCore:
             user_message=prompt,
             tools=self._tool_registry,
             session_id=self._tool_handler.session_id,
+            context_window=_ctx_win_s,
+            prior_messages=prior_messages,
+            tool_schemas=_tool_schemas_s,
         )
 
         # ── Stream retry configuration ────────────────────
@@ -1047,6 +1241,7 @@ class AgentCore:
         full_text_parts: list[str] = []
         all_tool_call_records: list[dict] = []
         result_message: Any = None
+        _stream_force_chain = False
         current_prompt = prompt
         current_system_prompt = system_prompt
         retry_count = 0
@@ -1061,6 +1256,7 @@ class AgentCore:
                     current_system_prompt, current_prompt, tracker,
                     images=images,
                     prior_messages=prior_messages,
+                    max_turns_override=max_turns_override,
                 ):
                     if chunk["type"] == "done":
                         full_text_parts.append(chunk["full_text"])
@@ -1074,6 +1270,9 @@ class AgentCore:
                         transcript_replied = chunk.get("replied_to_from_transcript", set())
                         if transcript_replied:
                             self._tool_handler.merge_replied_to(transcript_replied)
+                        # Capture force_chain from A1 auto-compact
+                        if chunk.get("force_chain", False):
+                            _stream_force_chain = True
                         stream_succeeded = True
                     elif chunk["type"] == "tool_end" and checkpoint_enabled:
                         completed_tools.append({
@@ -1173,7 +1372,14 @@ class AgentCore:
                 shortterm.clear_checkpoint()
                 break
 
-        # Session chaining
+        # Session chaining — force_chain from A1 mid-session auto-compact.
+        if _stream_force_chain and not tracker.threshold_exceeded:
+            tracker.force_threshold()
+            logger.info(
+                "Context auto-compact (stream): forcing threshold_exceeded "
+                "for session chaining"
+            )
+
         session_chained = False
         total_turns = result_message.num_turns if result_message else 0
         chain_count = 0
@@ -1224,7 +1430,8 @@ class AgentCore:
 
             try:
                 async for chunk in self._executor.execute_streaming(
-                    system_prompt_2, continuation_prompt, tracker
+                    system_prompt_2, continuation_prompt, tracker,
+                    max_turns_override=max_turns_override,
                 ):
                     if chunk["type"] == "done":
                         full_text_parts.append(chunk["full_text"])
@@ -1248,6 +1455,12 @@ class AgentCore:
                 break
 
         shortterm.clear()
+
+        _save_prompt_log_end(
+            self.anima_dir,
+            session_id=self._tool_handler.session_id,
+            tool_call_count=len(all_tool_call_records),
+        )
 
         full_text = "\n".join(full_text_parts)
         duration_ms = int((time.monotonic() - start) * 1000)

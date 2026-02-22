@@ -61,7 +61,7 @@ const filterDefs = [
   { label: "All", types: [] },
   { label: "💬", types: ["message_received", "response_sent", "dm_received", "dm_sent", "message", "chat"] },
   { label: "📋", types: ["channel_read", "channel_post", "board"] },
-  { label: "💗", types: ["heartbeat_start", "heartbeat_end", "heartbeat"] },
+  { label: "💗", types: ["heartbeat_start", "heartbeat_end", "heartbeat", "heartbeat_reflection"] },
   { label: "⏰", types: ["cron_executed", "cron"] },
   { label: "🔧", types: ["tool_use", "memory_write"] },
   { label: "📣", types: ["human_notify", "notification"] },
@@ -387,6 +387,7 @@ function _replayEvent(event, el) {
     case "heartbeat":
     case "heartbeat_start":
     case "heartbeat_end":
+    case "heartbeat_reflection":
     case "cron":
     case "cron_executed":
       if (_highlightDesk && anima) {

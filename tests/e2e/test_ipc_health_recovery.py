@@ -5,7 +5,7 @@
 
 Tests the full chain:
 1. IPC buffer limit allows large messages
-2. IPC connection death is detected by is_alive()
+2. Process death is detected by is_alive()
 3. ping() increments missed_pings even when FAILED
 4. Health check detects FAILED state and triggers recovery
 """
@@ -13,14 +13,13 @@ Tests the full chain:
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock
 
 import pytest
 
-from core.supervisor.ipc import IPCClient, IPCServer, IPCRequest, IPCResponse, IPC_BUFFER_LIMIT
+from core.supervisor.ipc import IPCClient, IPCServer, IPCRequest, IPCResponse
 from core.supervisor.process_handle import ProcessHandle, ProcessState
 
 
@@ -62,46 +61,30 @@ async def test_large_message_roundtrip():
 
 
 @pytest.mark.asyncio
-async def test_ipc_connection_death_detected_by_is_alive():
-    """E2E: When IPC connection is forcefully closed, is_alive() should detect it."""
+async def test_process_death_detected_by_is_alive():
+    """E2E: When the OS process exits, is_alive() should detect it."""
     with TemporaryDirectory() as tmpdir:
-        socket_path = Path(tmpdir) / "death_e2e.sock"
+        handle = ProcessHandle(
+            anima_name="test-anima",
+            socket_path=Path(tmpdir) / "death_e2e.sock",
+            animas_dir=Path(tmpdir) / "animas",
+            shared_dir=Path(tmpdir) / "shared",
+        )
 
-        async def handler(request: IPCRequest) -> IPCResponse:
-            return IPCResponse(id=request.id, result={"status": "ok"})
+        # Simulate a running process
+        mock_process = MagicMock()
+        mock_process.poll.return_value = None  # OS-level alive
+        handle.process = mock_process
+        handle.state = ProcessState.RUNNING
 
-        server = IPCServer(socket_path, handler)
-        await server.start()
+        # is_alive() should be True when process is running
+        assert handle.is_alive() is True
 
-        try:
-            handle = ProcessHandle(
-                anima_name="test-anima",
-                socket_path=socket_path,
-                animas_dir=Path(tmpdir) / "animas",
-                shared_dir=Path(tmpdir) / "shared",
-            )
+        # Simulate process death (poll returns exit code)
+        mock_process.poll.return_value = 1
 
-            # Simulate a running process with IPC connected
-            mock_process = MagicMock()
-            mock_process.poll.return_value = None  # OS-level alive
-            handle.process = mock_process
-
-            handle.ipc_client = IPCClient(socket_path)
-            await handle.ipc_client.connect()
-            handle.state = ProcessState.RUNNING
-
-            # is_alive() should be True initially
-            assert handle.is_alive() is True
-
-            # Forcefully close the writer (simulates IPC death)
-            handle.ipc_client.writer.close()
-            await handle.ipc_client.writer.wait_closed()
-
-            # is_alive() should now detect the dead IPC connection
-            assert handle.is_alive() is False
-
-        finally:
-            await server.stop()
+        # is_alive() should now detect the dead process
+        assert handle.is_alive() is False
 
 
 @pytest.mark.asyncio

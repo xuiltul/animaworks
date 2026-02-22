@@ -133,3 +133,60 @@ class TestResolveLlmTimeout:
         config = ModelConfig(model="ollama/gemma3:27b", llm_timeout=60)
         executor = ConcreteExecutor(model_config=config, anima_dir=tmp_path)
         assert executor._resolve_llm_timeout() == 60
+
+
+# ── ToolCallRecord ───────────────────────────────────────────
+
+
+class TestToolCallRecord:
+    """Test ToolCallRecord dataclass including is_error field."""
+
+    def test_is_error_defaults_to_false(self):
+        """is_error should default to False when not specified."""
+        from core.execution.base import ToolCallRecord
+
+        record = ToolCallRecord(tool_name="web_search")
+        assert record.is_error is False
+
+    def test_is_error_can_be_set_to_true(self):
+        """is_error should accept True as an explicit value."""
+        from core.execution.base import ToolCallRecord
+
+        record = ToolCallRecord(tool_name="web_search", is_error=True)
+        assert record.is_error is True
+
+    def test_is_error_included_in_dataclass_fields(self):
+        """is_error should be a recognized field in the dataclass."""
+        from dataclasses import fields
+
+        from core.execution.base import ToolCallRecord
+
+        field_names = {f.name for f in fields(ToolCallRecord)}
+        assert "is_error" in field_names
+
+    def test_all_fields_set(self):
+        """All fields should be settable via constructor."""
+        from core.execution.base import ToolCallRecord
+
+        record = ToolCallRecord(
+            tool_name="Bash",
+            tool_id="toolu_123",
+            input_summary="ls -la",
+            result_summary="file listing",
+            is_error=True,
+        )
+        assert record.tool_name == "Bash"
+        assert record.tool_id == "toolu_123"
+        assert record.input_summary == "ls -la"
+        assert record.result_summary == "file listing"
+        assert record.is_error is True
+
+    def test_default_field_values(self):
+        """Fields with defaults should use their defaults."""
+        from core.execution.base import ToolCallRecord
+
+        record = ToolCallRecord(tool_name="Read")
+        assert record.tool_id == ""
+        assert record.input_summary == ""
+        assert record.result_summary == ""
+        assert record.is_error is False

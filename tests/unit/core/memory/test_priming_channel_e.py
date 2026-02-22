@@ -165,7 +165,7 @@ class TestPrimeMemoriesWithActivity:
         async def _stub_b(self, sender_name, keywords):
             return "some activity content"
 
-        async def _stub_c(self, kw):
+        async def _stub_c(self, kw, **kwargs):
             return ""
 
         async def _stub_d(self, msg, kw, channel="chat"):
@@ -191,7 +191,7 @@ class TestPrimeMemoriesWithActivity:
         async def _stub_a(self, name):
             return ""
 
-        async def _stub_c(self, kw):
+        async def _stub_c(self, kw, **kwargs):
             return ""
 
         async def _stub_d(self, msg, kw, channel="chat"):

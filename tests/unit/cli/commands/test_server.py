@@ -238,11 +238,12 @@ class TestCmdStart:
     @patch("core.paths.get_animas_dir", return_value=Path("/tmp/animas"))
     @patch("core.init.ensure_runtime_dir")
     @patch("cli.commands.server._write_pid_file")
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server._find_server_pid_by_process", return_value=None)
     @patch("cli.commands.server._is_process_alive", return_value=False)
     @patch("cli.commands.server._read_pid", return_value=999)
     def test_stale_pid_cleanup_and_start(
-        self, mock_pid, mock_alive, mock_find, mock_write_pid,
+        self, mock_pid, mock_alive, mock_find, mock_kill, mock_write_pid,
         mock_ensure, mock_animas, mock_shared, mock_create, mock_uvicorn,
         mock_watchdog, mock_remove,
     ):
@@ -273,10 +274,11 @@ class TestCmdStart:
     @patch("core.paths.get_animas_dir", return_value=Path("/tmp/animas"))
     @patch("core.init.ensure_runtime_dir")
     @patch("cli.commands.server._write_pid_file")
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server._find_server_pid_by_process", return_value=None)
     @patch("cli.commands.server._read_pid", return_value=None)
     def test_uvicorn_timeout_keep_alive(
-        self, mock_pid, mock_find, mock_write_pid,
+        self, mock_pid, mock_find, mock_kill, mock_write_pid,
         mock_ensure, mock_animas, mock_shared, mock_create, mock_uvicorn,
         mock_watchdog, mock_remove,
     ):
@@ -299,10 +301,11 @@ class TestCmdStart:
     @patch("core.paths.get_animas_dir", return_value=Path("/tmp/animas"))
     @patch("core.init.ensure_runtime_dir")
     @patch("cli.commands.server._write_pid_file")
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server._find_server_pid_by_process", return_value=None)
     @patch("cli.commands.server._read_pid", return_value=None)
     def test_uvicorn_ws_ping_settings(
-        self, mock_pid, mock_find, mock_write_pid,
+        self, mock_pid, mock_find, mock_kill, mock_write_pid,
         mock_ensure, mock_animas, mock_shared, mock_create, mock_uvicorn,
         mock_watchdog, mock_remove,
     ):

@@ -7,9 +7,12 @@ from __future__ import annotations
 """Unit tests for ConsolidationEngine rag_store injection (Fix N2).
 
 Verifies that when a ``rag_store`` is injected via the constructor,
-all RAG-consuming methods (``_update_rag_index``, ``_fetch_related_knowledge``,
-``_rebuild_rag_index``) use the injected store instead of calling the
-``get_vector_store`` singleton.
+RAG-consuming methods (``_update_rag_index``, ``_rebuild_rag_index``)
+use the injected store instead of calling the ``get_vector_store``
+singleton.
+
+Note: ``_fetch_related_knowledge`` was removed in the consolidation
+refactor; its tests have been removed accordingly.
 """
 
 import pytest
@@ -104,7 +107,7 @@ class TestUpdateRagIndexInjection:
             engine._update_rag_index(["test.md"])
 
             # Should call get_vector_store since no injected store
-            mock_get_vs.assert_called_once()
+            mock_get_vs.assert_called_once_with("test")
             MockIndexer.assert_called_once_with(
                 singleton_store, "test", anima_dir,
             )
@@ -117,60 +120,6 @@ class TestUpdateRagIndexInjection:
         with patch("core.memory.rag.MemoryIndexer") as MockIndexer:
             engine._update_rag_index([])
             MockIndexer.assert_not_called()
-
-
-# ── _fetch_related_knowledge Tests ──────────────────────
-
-
-class TestFetchRelatedKnowledgeInjection:
-    """Tests for _fetch_related_knowledge using injected vs singleton store."""
-
-    def test_uses_injected_store(self, anima_dir: Path):
-        """When rag_store is injected, get_vector_store should NOT be called."""
-        mock_store = MagicMock()
-        engine = ConsolidationEngine(anima_dir, "test", rag_store=mock_store)
-
-        with patch(
-            "core.memory.rag.retriever.MemoryRetriever",
-        ) as MockRetriever, \
-             patch("core.memory.rag.MemoryIndexer") as MockIndexer, \
-             patch(
-                 "core.memory.rag.singleton.get_vector_store",
-             ) as mock_get_vs:
-            mock_retriever_inst = MagicMock()
-            mock_retriever_inst.search.return_value = []
-            MockRetriever.return_value = mock_retriever_inst
-
-            engine._fetch_related_knowledge("some episode text")
-
-            mock_get_vs.assert_not_called()
-            MockIndexer.assert_called_once_with(
-                mock_store, "test", anima_dir,
-            )
-
-    def test_falls_back_to_singleton(self, anima_dir: Path):
-        """When rag_store is None, get_vector_store() IS called."""
-        engine = ConsolidationEngine(anima_dir, "test")
-
-        with patch(
-            "core.memory.rag.retriever.MemoryRetriever",
-        ) as MockRetriever, \
-             patch("core.memory.rag.MemoryIndexer") as MockIndexer, \
-             patch(
-                 "core.memory.rag.singleton.get_vector_store",
-             ) as mock_get_vs:
-            singleton_store = MagicMock()
-            mock_get_vs.return_value = singleton_store
-            mock_retriever_inst = MagicMock()
-            mock_retriever_inst.search.return_value = []
-            MockRetriever.return_value = mock_retriever_inst
-
-            engine._fetch_related_knowledge("some episode text")
-
-            mock_get_vs.assert_called_once()
-            MockIndexer.assert_called_once_with(
-                singleton_store, "test", anima_dir,
-            )
 
 
 # ── _rebuild_rag_index Tests ────────────────────────────
@@ -225,7 +174,7 @@ class TestRebuildRagIndexInjection:
 
             engine._rebuild_rag_index()
 
-            mock_get_vs.assert_called_once()
+            mock_get_vs.assert_called_once_with("test")
             MockIndexer.assert_called_once_with(
                 singleton_store, "test", anima_dir,
             )

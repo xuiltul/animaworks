@@ -181,6 +181,129 @@ class ReconsolidationEngine:
         )
         return results
 
+    # ── Procedure Creation from Resolved Events ──────────────
+
+    async def create_procedures_from_resolved(
+        self,
+        model: str = "",
+        days: int = 1,
+    ) -> dict[str, Any]:
+        """Create new procedures from issue_resolved activity events.
+
+        Scans recent ``issue_resolved`` entries in the activity log and,
+        for each entry that does not already have a matching procedure
+        (checked via RAG similarity), uses an LLM to extract a reusable
+        procedure from the resolution details.
+
+        Args:
+            model: LLM model identifier (LiteLLM format) for generation.
+            days: Number of days of activity history to scan.
+
+        Returns:
+            Dict with counts: ``created``, ``skipped``, ``errors``.
+        """
+        if not model:
+            from core.config.models import ConsolidationConfig
+            model = ConsolidationConfig().llm_model
+
+        results: dict[str, int] = {"created": 0, "skipped": 0, "errors": 0}
+
+        # Collect resolved events
+        try:
+            from core.memory.activity import ActivityLogger
+            activity = ActivityLogger(self.anima_dir)
+            entries = activity.recent(days=days, limit=50, types=["issue_resolved"])
+        except Exception:
+            logger.debug("Failed to collect resolved events", exc_info=True)
+            return results
+
+        if not entries:
+            logger.info(
+                "No issue_resolved events for procedure creation, anima=%s",
+                self.anima_name,
+            )
+            return results
+
+        from core.memory.distillation import ProceduralDistiller
+        distiller = ProceduralDistiller(self.anima_dir, self.anima_name)
+        existing_procedures = distiller._load_existing_procedures()
+
+        for entry in entries:
+            resolution_text = entry.content or entry.summary or ""
+            if not resolution_text.strip():
+                results["skipped"] += 1
+                continue
+
+            # RAG duplicate check
+            existing = distiller._check_rag_duplicate(resolution_text)
+            if existing:
+                logger.debug(
+                    "Skipping resolved event (similar to %s): %.80s",
+                    existing, resolution_text,
+                )
+                results["skipped"] += 1
+                continue
+
+            # Use LLM to extract procedure from resolution
+            try:
+                prompt = load_prompt(
+                    "memory/procedure_from_resolved",
+                    resolution_text=resolution_text[:3000],
+                    existing_procedures=existing_procedures[:2000],
+                )
+
+                import litellm
+
+                response = await litellm.acompletion(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2048,
+                )
+                text = response.choices[0].message.content or ""
+
+                # Sanitize and parse
+                from core.memory.consolidation import ConsolidationEngine
+                text = ConsolidationEngine._sanitize_llm_output(text)
+
+                procedure_items = distiller._parse_procedure_items(text)
+                for item in procedure_items:
+                    filename = item.get("filename", "")
+                    title = filename.replace("procedures/", "").replace(".md", "")
+                    if not title or not item.get("content"):
+                        continue
+                    proc_item = {
+                        "title": title,
+                        "description": item.get("description", ""),
+                        "tags": item.get("tags", []),
+                        "content": item["content"],
+                    }
+                    path = distiller.save_procedure(proc_item)
+                    if path is not None:
+                        results["created"] += 1
+                        logger.info(
+                            "Created procedure from resolved event: %s",
+                            path.name,
+                        )
+
+                if not procedure_items:
+                    results["skipped"] += 1
+
+            except Exception as e:
+                logger.warning(
+                    "Failed to create procedure from resolved event: %s", e,
+                )
+                results["errors"] += 1
+
+        logger.info(
+            "Resolved-to-procedure complete for anima=%s: "
+            "created=%d skipped=%d errors=%d",
+            self.anima_name,
+            results["created"],
+            results["skipped"],
+            results["errors"],
+        )
+        return results
+
     # ── LLM Procedure Revision ─────────────────────────────────
 
     async def _revise_procedure(

@@ -214,6 +214,7 @@ class SkillMetadataService:
         text = path.read_text(encoding="utf-8")
         name = path.stem
         description = ""
+        allowed_tools: list[str] = []
 
         # Parse YAML frontmatter (--- delimited)
         if text.startswith("---"):
@@ -227,6 +228,9 @@ class SkillMetadataService:
                         description = fm.get("description", "")
                         if description:
                             description = str(description).strip()
+                        allowed_tools = fm.get("allowed_tools", [])
+                        if not isinstance(allowed_tools, list):
+                            allowed_tools = []
                 except Exception:
                     logger.debug("Failed to parse YAML frontmatter in %s", path, exc_info=True)
 
@@ -250,6 +254,7 @@ class SkillMetadataService:
             description=description,
             path=path,
             is_common=is_common,
+            allowed_tools=allowed_tools,
         )
 
     def list_skill_metas(self) -> list[SkillMeta]:

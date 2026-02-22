@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 from typing import Any
 
 from core.config.models import (
@@ -295,3 +296,88 @@ def _interactive_setup() -> None:
     invalidate_cache()
     save_config(config)
     print(f"Configuration saved to {get_config_path()}")
+
+
+# ---------------------------------------------------------------------------
+# Export sections
+# ---------------------------------------------------------------------------
+
+# DB key → template filename mapping (emotion_instruction is dynamic, no file)
+_SECTION_FILES: dict[str, str] = {
+    "behavior_rules": "behavior_rules.md",
+    "environment": "environment.md",
+    "messaging_a1": "messaging_a1.md",
+    "messaging": "messaging.md",
+    "communication_rules_a1": "communication_rules_a1.md",
+    "communication_rules": "communication_rules.md",
+    "a2_reflection": "a2_reflection.md",
+    "hiring_context": "hiring_context.md",
+}
+
+
+def cmd_config_export_sections(args: argparse.Namespace) -> None:
+    """Export system sections from the runtime DB back to template files.
+
+    Reads all file-backed sections from ``tool_prompts.sqlite3`` and writes
+    them to ``templates/prompts/``.  ``emotion_instruction`` is skipped
+    (dynamically generated from ``VALID_EMOTIONS``).
+    """
+    from core.init import ensure_runtime_dir
+    from core.tooling.prompt_db import get_prompt_store
+
+    ensure_runtime_dir()
+    store = get_prompt_store()
+    if store is None:
+        print("Error: Tool prompt DB not available", file=sys.stderr)
+        sys.exit(1)
+
+    dry_run: bool = getattr(args, "dry_run", False)
+
+    # Resolve template directory
+    project_root = Path(__file__).resolve().parent.parent.parent
+    templates_dir = project_root / "templates" / "prompts"
+    if not templates_dir.is_dir():
+        print(f"Error: templates directory not found: {templates_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    sections = store.list_sections()
+    section_map = {s["key"]: s["content"] for s in sections}
+
+    changed = 0
+    skipped = 0
+    unchanged = 0
+
+    for key, filename in _SECTION_FILES.items():
+        db_content = section_map.get(key)
+        if db_content is None:
+            print(f"  SKIP  {key}: not in DB")
+            skipped += 1
+            continue
+
+        filepath = templates_dir / filename
+        current = filepath.read_text(encoding="utf-8").strip() if filepath.exists() else ""
+
+        if db_content.strip() == current:
+            print(f"  ===   {key} ({filename}): unchanged")
+            unchanged += 1
+            continue
+
+        if dry_run:
+            print(f"  DIFF  {key} ({filename}): {len(current)} → {len(db_content.strip())} chars")
+        else:
+            filepath.write_text(db_content.strip() + "\n", encoding="utf-8")
+            print(f"  WRITE {key} ({filename}): {len(db_content.strip())} chars")
+        changed += 1
+
+    # emotion_instruction — skip with notice
+    if "emotion_instruction" in section_map:
+        print(f"  SKIP  emotion_instruction: dynamically generated (no template file)")
+        skipped += 1
+
+    print()
+    if dry_run:
+        print(f"Dry run: {changed} would change, {unchanged} unchanged, {skipped} skipped")
+    else:
+        print(f"Done: {changed} written, {unchanged} unchanged, {skipped} skipped")
+        if changed:
+            print(f"Files written to: {templates_dir}/")

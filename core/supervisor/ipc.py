@@ -275,9 +275,6 @@ class IPCClient:
 
     def __init__(self, socket_path: Path):
         self.socket_path = socket_path
-        self.reader: asyncio.StreamReader | None = None
-        self.writer: asyncio.StreamWriter | None = None
-        self._lock = asyncio.Lock()
 
     @staticmethod
     def _resolve_ipc_timeout() -> float:
@@ -291,40 +288,34 @@ class IPCClient:
             return 60.0
 
     async def connect(self, timeout: float = 5.0) -> None:
-        """Connect to the Unix socket."""
+        """Test connectivity to the Unix socket.
+
+        Opens a temporary connection to verify the socket is reachable,
+        then closes it immediately.  Used by ``_wait_for_ready()`` during
+        process startup to confirm the IPC server is listening.
+
+        Actual request traffic uses per-request dedicated connections
+        opened inside :meth:`send_request` and :meth:`send_request_stream`.
+        """
         async with asyncio.timeout(timeout):
-            self.reader, self.writer = await asyncio.open_unix_connection(
+            reader, writer = await asyncio.open_unix_connection(
                 path=str(self.socket_path),
                 limit=IPC_BUFFER_LIMIT,
             )
-            logger.debug("IPC client connected to %s", self.socket_path)
-
-    async def _reconnect(self) -> None:
-        """Reconnect the shared connection (discard stale reader/writer).
-
-        MUST be called while self._lock is held — callers are responsible
-        for acquiring the lock before invoking this method.
-        """
-        logger.warning("[IPC] reconnecting socket=%s", self.socket_path)
-        if self.writer:
-            try:
-                self.writer.close()
-                await self.writer.wait_closed()
-            except Exception:
-                logger.debug("Failed to close stale connection", exc_info=True)
-        self.reader, self.writer = await asyncio.open_unix_connection(
-            path=str(self.socket_path),
-            limit=IPC_BUFFER_LIMIT,
-        )
-        logger.info("[IPC] reconnected socket=%s", self.socket_path)
+            writer.close()
+            await writer.wait_closed()
+            logger.debug("IPC client connectivity verified: %s", self.socket_path)
 
     async def send_request(
         self,
         request: IPCRequest,
         timeout: float = 60.0
     ) -> IPCResponse:
-        """
-        Send a request and wait for response.
+        """Send a request over a dedicated connection and wait for response.
+
+        Opens a fresh Unix socket connection for each request so that
+        concurrent traffic cannot contaminate the response with stale
+        buffered data (the same pattern used by :meth:`send_request_stream`).
 
         Args:
             request: The request to send
@@ -335,21 +326,25 @@ class IPCClient:
 
         Raises:
             asyncio.TimeoutError: If timeout exceeded
-            RuntimeError: If not connected or response ID mismatch
+            RuntimeError: If socket not available or response ID mismatch
         """
-        if not self.reader or not self.writer:
-            raise RuntimeError("Not connected")
+        request_line = request.to_json() + "\n"
 
-        async with self._lock:
-            # Send request
-            request_line = request.to_json() + "\n"
-            self.writer.write(request_line.encode("utf-8"))
-            await self.writer.drain()
-            logger.debug("IPC request sent: %s (id=%s)", request.method, request.id)
+        async with asyncio.timeout(timeout):
+            try:
+                reader, writer = await asyncio.open_unix_connection(
+                    path=str(self.socket_path),
+                    limit=IPC_BUFFER_LIMIT,
+                )
+            except (ConnectionRefusedError, FileNotFoundError, OSError) as e:
+                raise RuntimeError(f"Not connected: {e}") from e
 
-            # Wait for response
-            async with asyncio.timeout(timeout):
-                response_line_bytes = await self.reader.readline()
+            try:
+                writer.write(request_line.encode("utf-8"))
+                await writer.drain()
+                logger.debug("IPC request sent: %s (id=%s)", request.method, request.id)
+
+                response_line_bytes = await reader.readline()
                 if not response_line_bytes:
                     raise RuntimeError("Connection closed")
 
@@ -363,13 +358,15 @@ class IPCClient:
                         "[IPC] ID_MISMATCH method=%s expected=%s got=%s",
                         request.method, request.id, response.id,
                     )
-                    await self._reconnect()
                     raise RuntimeError(
                         f"IPC protocol error: response ID mismatch "
                         f"(expected={request.id}, got={response.id})"
                     )
 
                 return response
+            finally:
+                writer.close()
+                await writer.wait_closed()
 
     async def send_request_stream(
         self,
@@ -379,9 +376,8 @@ class IPCClient:
         """
         Send a request and yield streaming responses over a dedicated connection.
 
-        Opens a fresh Unix socket connection for each streaming request so that
-        concurrent unary traffic on the shared connection cannot contaminate the
-        stream with stale responses (e.g. delayed ping replies).
+        Opens a fresh Unix socket connection for each streaming request (the
+        same per-request pattern used by :meth:`send_request`).
 
         The first readline uses a generous timeout (``max(timeout, 120s)``)
         because the initial response may carry large payloads such as RAG
@@ -410,9 +406,7 @@ class IPCClient:
         # The first chunk may include large RAG data, so allow extra time.
         first_chunk_timeout = max(timeout, 120.0)
 
-        # Open a dedicated connection for this streaming request so that
-        # concurrent unary traffic (e.g. pings) on the shared connection
-        # cannot contaminate the response stream.
+        # Open a dedicated connection for this streaming request.
         logger.info(
             "[IPC-STREAM] opening dedicated connection socket=%s method=%s id=%s",
             self.socket_path, request.method, request.id,
@@ -510,8 +504,10 @@ class IPCClient:
             )
 
     async def close(self) -> None:
-        """Close the connection."""
-        if self.writer:
-            self.writer.close()
-            await self.writer.wait_closed()
-            logger.debug("IPC client disconnected from %s", self.socket_path)
+        """No-op — kept for backward compatibility.
+
+        With per-request dedicated connections there is no persistent
+        connection to close.  Each :meth:`send_request` and
+        :meth:`send_request_stream` call manages its own connection
+        lifecycle.
+        """

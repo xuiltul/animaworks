@@ -64,13 +64,14 @@ class TestMemoryManagerSingleton:
             # Trigger lazy initialization
             indexer = mgr._get_indexer()
 
-            mock_get_store.assert_called_once()
+            mock_get_store.assert_called_once_with("test-anima")
             assert indexer is not None
             assert indexer.vector_store is mock_store
 
-    def test_multiple_managers_share_vector_store(self, anima_dir, tmp_path):
-        """Multiple MemoryManager instances should share the same ChromaVectorStore."""
-        mock_store = MagicMock()
+    def test_different_animas_get_per_anima_vector_store(self, anima_dir, tmp_path):
+        """Different animas should get separate vector stores (per-anima isolation)."""
+        mock_store_1 = MagicMock(name="store-1")
+        mock_store_2 = MagicMock(name="store-2")
         mock_model = MagicMock()
 
         # Create a second anima dir
@@ -79,10 +80,15 @@ class TestMemoryManagerSingleton:
         for sub in ("episodes", "knowledge", "procedures", "skills", "state"):
             (anima2 / sub).mkdir()
 
+        def per_anima_store(anima_name=None):
+            if anima_name == "test-anima":
+                return mock_store_1
+            return mock_store_2
+
         with (
             patch(
                 "core.memory.rag.singleton.get_vector_store",
-                return_value=mock_store,
+                side_effect=per_anima_store,
             ) as mock_get_store,
             patch(
                 "core.memory.rag.singleton.get_embedding_model",
@@ -97,13 +103,15 @@ class TestMemoryManagerSingleton:
             indexer1 = mgr1._get_indexer()
             indexer2 = mgr2._get_indexer()
 
-            # Both should share the same vector store instance
-            assert indexer1.vector_store is indexer2.vector_store
-            assert indexer1.vector_store is mock_store
+            # Different animas should get different vector stores
+            assert indexer1.vector_store is not indexer2.vector_store
+            assert indexer1.vector_store is mock_store_1
+            assert indexer2.vector_store is mock_store_2
 
-            # get_vector_store should still return the singleton
-            # (called twice, one for each manager, but returns same object)
+            # get_vector_store called once per anima with anima name
             assert mock_get_store.call_count == 2
+            mock_get_store.assert_any_call("test-anima")
+            mock_get_store.assert_any_call("test-anima-2")
 
     def test_multiple_managers_share_embedding_model(self, anima_dir, tmp_path):
         """Multiple MemoryManager instances should share the same embedding model."""

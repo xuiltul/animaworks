@@ -215,6 +215,26 @@ class StreamingIPCHandler:
                         "message": str(e),
                     },
                 ))
+            except BaseException as e:
+                # CancelledError は正常な asyncio ライフサイクル。
+                if isinstance(e, asyncio.CancelledError):
+                    raise
+                # A1 で捕捉されなかった BaseException の安全弁。
+                # エラーレスポンスをキューに入れ、親プロセスに正常通知。
+                logger.critical(
+                    "BaseException in streaming process_message: %s: %s",
+                    type(e).__name__, e,
+                )
+                try:
+                    await queue.put(IPCResponse(
+                        id=request.id,
+                        error={
+                            "code": "FATAL_STREAM_ERROR",
+                            "message": f"{type(e).__name__}: {e}",
+                        },
+                    ))
+                except Exception:
+                    pass  # キュー破損時は SENTINEL に委ねる
             finally:
                 await queue.put(_SENTINEL)
 

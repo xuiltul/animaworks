@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from core.prompt.context import ContextTracker
+from core.execution.reminder import SystemReminderQueue
 from core.schemas import ModelConfig
 from core.memory.shortterm import ShortTermMemory
 
@@ -25,6 +26,47 @@ from core.memory.shortterm import ShortTermMemory
 
 from core.exceptions import StreamDisconnectedError  # noqa: F401 – re-export
 
+
+
+# ── Dynamic tool-record budget ───────────────────────────────
+
+# Per-tool base budgets (character count) calibrated for a 128K context model.
+_TOOL_RESULT_BASE_BUDGET: dict[str, int] = {
+    "Read": 4000, "Grep": 4000, "Glob": 4000,
+    "Bash": 2000,
+    "web_search": 1500, "x_search": 1500,
+    "write_file": 500, "edit_file": 500,
+    "search_memory": 1500, "read_file": 4000,
+}
+_TOOL_RESULT_DEFAULT_BUDGET = 1000
+_TOOL_INPUT_BASE_BUDGET = 500
+_REFERENCE_CONTEXT_WINDOW = 128_000
+_BUDGET_SCALE_MAX = 2.0
+_BUDGET_SCALE_MIN = 0.25
+_BUDGET_FLOOR = 300
+
+
+def tool_result_save_budget(tool_name: str, context_window: int) -> int:
+    """Return a context-window-proportional budget for tool result storage.
+
+    Larger context windows get proportionally larger budgets so that
+    tool results are not over-truncated.  The scale factor is clamped
+    between ``_BUDGET_SCALE_MIN`` and ``_BUDGET_SCALE_MAX`` and a floor
+    of ``_BUDGET_FLOOR`` characters is enforced.
+    """
+    base = _TOOL_RESULT_BASE_BUDGET.get(tool_name, _TOOL_RESULT_DEFAULT_BUDGET)
+    scale = context_window / _REFERENCE_CONTEXT_WINDOW
+    scale = min(scale, _BUDGET_SCALE_MAX)
+    scale = max(scale, _BUDGET_SCALE_MIN)
+    return max(_BUDGET_FLOOR, int(base * scale))
+
+
+def tool_input_save_budget(context_window: int) -> int:
+    """Return a context-window-proportional budget for tool input storage."""
+    scale = context_window / _REFERENCE_CONTEXT_WINDOW
+    scale = min(scale, _BUDGET_SCALE_MAX)
+    scale = max(scale, _BUDGET_SCALE_MIN)
+    return max(200, int(_TOOL_INPUT_BASE_BUDGET * scale))
 
 
 # ── Result ───────────────────────────────────────────────────
@@ -44,6 +86,7 @@ class ToolCallRecord:
     tool_id: str = ""
     input_summary: str = ""
     result_summary: str = ""
+    is_error: bool = False
 
 
 @dataclass
@@ -55,6 +98,10 @@ class ExecutionResult:
         result_message: Provider-specific metadata (e.g. ResultMessage
             from Claude Agent SDK).  Used for session chaining in A1 mode.
         tool_call_records: Tool calls made during this execution session.
+        force_chain: When True, AgentCore should force session chaining
+            regardless of the ContextTracker state.  Set by the A1 executor
+            when mid-session context auto-compact triggers via PreToolUse
+            ``continue_=False``.
     """
 
     text: str
@@ -62,6 +109,7 @@ class ExecutionResult:
     replied_to_from_transcript: set[str] = field(default_factory=set)
     unconfirmed_sends: list[dict] = field(default_factory=list)
     tool_call_records: list[ToolCallRecord] = field(default_factory=list)
+    force_chain: bool = False
 
 
 class BaseExecutor(ABC):
@@ -94,6 +142,7 @@ class BaseExecutor(ABC):
     ) -> None:
         self._model_config = model_config
         self._anima_dir = anima_dir
+        self.reminder_queue: SystemReminderQueue = SystemReminderQueue()
 
     # -- Properties ----------------------------------------
 
@@ -106,6 +155,21 @@ class BaseExecutor(ABC):
         A2 non-Ollama) or iteration-level (A2 Ollama, B).
         """
         return True
+
+    # -- Subordinate detection ----------------------------
+
+    def _has_subordinates(self) -> bool:
+        """Check if this anima has any subordinates (is a supervisor)."""
+        try:
+            from core.config.models import load_config
+            config = load_config()
+            my_name = self._anima_dir.name
+            return any(
+                cfg.supervisor == my_name
+                for cfg in config.animas.values()
+            )
+        except Exception:
+            return False
 
     # -- Credential helpers --------------------------------
 
@@ -165,6 +229,7 @@ class BaseExecutor(ABC):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run the execution engine and return the response.
 
@@ -181,6 +246,8 @@ class BaseExecutor(ABC):
                 ignore this parameter.
             images: Optional list of image dicts with ``data`` (base64) and
                 ``media_type`` keys. Supported by A1 Fallback and A2 modes.
+            max_turns_override: If provided, overrides ``max_turns`` from
+                ModelConfig for this single execution.
 
         Returns:
             ExecutionResult with the response text and optional metadata.
@@ -194,6 +261,7 @@ class BaseExecutor(ABC):
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the engine.
 
@@ -210,6 +278,8 @@ class BaseExecutor(ABC):
             tracker: Context usage tracker.
             images: Optional list of image dicts for multimodal input.
             prior_messages: Optional structured conversation history.
+            max_turns_override: If provided, overrides ``max_turns`` from
+                ModelConfig for this single execution.
 
         Yields:
             Dicts with at least a type key. Common types:
@@ -224,6 +294,7 @@ class BaseExecutor(ABC):
             tracker=tracker,
             images=images,
             prior_messages=prior_messages,
+            max_turns_override=max_turns_override,
         )
         yield {"type": "text_delta", "text": result.text}
         yield {

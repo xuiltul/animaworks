@@ -7,7 +7,7 @@ from __future__ import annotations
 # See LICENSE for the full license text.
 
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -27,6 +27,7 @@ class SkillMeta:
     description: str    # frontmatter の description（なければ空文字列）
     path: Path          # ファイルパス
     is_common: bool     # common_skills/ に配置されているか
+    allowed_tools: list[str] = field(default_factory=list)  # frontmatter の allowed_tools
 
 
 # ── Emotion Constants ─────────────────────────────────────

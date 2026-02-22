@@ -33,7 +33,8 @@ from core.execution._streaming import (
     parse_accumulated_tool_calls,
     stream_error_boundary,
 )
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
+from core.execution.reminder import MSG_CONTEXT_THRESHOLD, MSG_OUTPUT_TRUNCATED, SystemReminderQueue
 from core.memory import MemoryManager
 from core.prompt.builder import build_system_prompt
 from core.schemas import ModelConfig
@@ -112,6 +113,24 @@ def _partition_tool_calls(
     return parallel, serial_batches
 
 
+def _extract_tool_uses_from_messages(messages: list[dict]) -> list[dict]:
+    """Extract tool_use info from LiteLLM-format messages."""
+    tool_uses: list[dict] = []
+    for msg in messages:
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            for tc in msg["tool_calls"]:
+                fn = tc.get("function", {})
+                tool_uses.append({
+                    "name": fn.get("name", ""),
+                    "input": fn.get("arguments", "")[:500],
+                })
+        elif msg.get("role") == "tool":
+            # Attach result to the most recent tool_use entry
+            if tool_uses:
+                tool_uses[-1]["result"] = str(msg.get("content", ""))[:500]
+    return tool_uses[-20:]  # Keep last 20 entries
+
+
 class LiteLLMExecutor(BaseExecutor):
     """Execute via LiteLLM with a tool_use loop (Mode A2).
 
@@ -148,8 +167,13 @@ class LiteLLMExecutor(BaseExecutor):
             include_discovery_tools=True,
             include_notification_tools=self._tool_handler._human_notifier is not None,
             include_admin_tools=(self._anima_dir / "skills" / "newstaff.md").exists(),
+            include_supervisor_tools=self._has_subordinates(),
             include_tool_management=True,
             include_task_tools=True,
+            include_skill_tools=True,
+            skill_metas=self._memory.list_skill_metas(),
+            common_skill_metas=self._memory.list_common_skill_metas(),
+            procedure_metas=self._memory.list_procedure_metas(),
         )
         return to_litellm_format(canonical)
 
@@ -277,6 +301,7 @@ class LiteLLMExecutor(BaseExecutor):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run the LiteLLM tool-use loop.
 
@@ -286,6 +311,7 @@ class LiteLLMExecutor(BaseExecutor):
 
         tools = self._build_base_tools()
         active_categories: set[str] = set()
+        context_window = resolve_context_window(self._model_config.model)
 
         messages = self._build_initial_messages(
             system_prompt, prompt, images, prior_messages=prior_messages,
@@ -293,7 +319,7 @@ class LiteLLMExecutor(BaseExecutor):
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
         llm_kwargs = self._build_llm_kwargs()
-        max_iterations = self._model_config.max_turns
+        max_iterations = max_turns_override or self._model_config.max_turns
         chain_count = 0
 
         for iteration in range(max_iterations):
@@ -334,6 +360,16 @@ class LiteLLMExecutor(BaseExecutor):
                 }
                 tracker.update_from_usage(usage_dict)
 
+                # P1-1: context threshold reminder
+                if tracker.threshold_exceeded:
+                    try:
+                        ratio = float(tracker.usage_ratio)
+                    except (TypeError, ValueError):
+                        ratio = 0.0
+                    self.reminder_queue.push_sync(
+                        MSG_CONTEXT_THRESHOLD.format(ratio=ratio)
+                    )
+
                 current_text = message.content or ""
                 new_sys, chain_count = await handle_session_chaining(
                     tracker=tracker,
@@ -355,6 +391,7 @@ class LiteLLMExecutor(BaseExecutor):
                     original_prompt=prompt,
                     accumulated_response="\n".join(all_response_text),
                     turn_count=iteration,
+                    tool_uses=_extract_tool_uses_from_messages(messages),
                 )
                 if new_sys is not None:
                     if current_text:
@@ -365,12 +402,20 @@ class LiteLLMExecutor(BaseExecutor):
                     ]
                     continue
 
+            # ── P1-2: output truncation reminder ─────────────────
+            if choice.finish_reason == "length":
+                self.reminder_queue.push_sync(MSG_OUTPUT_TRUNCATED)
+
             # ── Check for tool calls ──────────────────────────
             tool_calls = message.tool_calls
             if not tool_calls:
                 final_text = message.content or ""
                 all_response_text.append(final_text)
                 logger.debug("A2 final response at iteration=%d", iteration)
+                # ── Final drain: deliver any undelivered reminders ──
+                final_reminder = self.reminder_queue.drain_formatted()
+                if final_reminder:
+                    all_response_text.append(final_reminder)
                 return ExecutionResult(
                     text="\n".join(all_response_text),
                     tool_call_records=all_tool_records,
@@ -388,9 +433,18 @@ class LiteLLMExecutor(BaseExecutor):
             parsed_calls = _convert_litellm_tool_calls(tool_calls)
             async for _event in self._process_streaming_tool_calls(
                 parsed_calls, messages, tools, active_categories,
+                context_window=context_window,
             ):
                 if "record" in _event:
                     all_tool_records.append(_event["record"])
+
+            # ── Drain reminder queue after tool results ────────
+            reminder = self.reminder_queue.drain_sync()
+            if reminder:
+                messages.append({
+                    "role": "user",
+                    "content": SystemReminderQueue.format_reminder(reminder),
+                })
 
         logger.warning("A2 max iterations (%d) reached", max_iterations)
         return ExecutionResult(
@@ -407,6 +461,7 @@ class LiteLLMExecutor(BaseExecutor):
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the LiteLLM tool-use loop.
 
@@ -420,12 +475,14 @@ class LiteLLMExecutor(BaseExecutor):
             async for event in self._stream_iteration_level(
                 system_prompt, prompt, tracker, images,
                 prior_messages=prior_messages,
+                max_turns_override=max_turns_override,
             ):
                 yield event
         else:
             async for event in self._stream_token_level(
                 system_prompt, prompt, tracker, images,
                 prior_messages=prior_messages,
+                max_turns_override=max_turns_override,
             ):
                 yield event
 
@@ -438,6 +495,7 @@ class LiteLLMExecutor(BaseExecutor):
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Token-level streaming via ``litellm.acompletion(stream=True)``.
 
@@ -448,12 +506,13 @@ class LiteLLMExecutor(BaseExecutor):
 
         tools = self._build_base_tools()
         active_categories: set[str] = set()
+        context_window = resolve_context_window(self._model_config.model)
 
         messages = self._build_initial_messages(system_prompt, prompt, images, prior_messages=prior_messages)
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
         llm_kwargs = self._build_llm_kwargs()
-        max_iterations = self._model_config.max_turns
+        max_iterations = max_turns_override or self._model_config.max_turns
 
         async with stream_error_boundary(
             all_response_text, executor_name="A2-stream",
@@ -548,6 +607,20 @@ class LiteLLMExecutor(BaseExecutor):
                 if tracker and usage_data:
                     tracker.update_from_usage(usage_data)
 
+                    # P1-1: context threshold reminder
+                    if tracker.threshold_exceeded:
+                        try:
+                            ratio = float(tracker.usage_ratio)
+                        except (TypeError, ValueError):
+                            ratio = 0.0
+                        self.reminder_queue.push_sync(
+                            MSG_CONTEXT_THRESHOLD.format(ratio=ratio)
+                        )
+
+                # P1-2: output truncation reminder
+                if finish_reason == "length":
+                    self.reminder_queue.push_sync(MSG_OUTPUT_TRUNCATED)
+
                 iter_text = "".join(iter_text_parts)
                 if iter_text:
                     all_response_text.append(iter_text)
@@ -599,10 +672,19 @@ class LiteLLMExecutor(BaseExecutor):
                 # H2: Execute tool calls and yield tool_end per-tool
                 async for event in self._process_streaming_tool_calls(
                     parsed_calls, messages, tools, active_categories,
+                    context_window=context_window,
                 ):
                     if "record" in event:
                         all_tool_records.append(event["record"])
                     yield event
+
+                # ── Drain reminder queue after tool results ────
+                reminder = self.reminder_queue.drain_sync()
+                if reminder:
+                    messages.append({
+                        "role": "user",
+                        "content": SystemReminderQueue.format_reminder(reminder),
+                    })
 
         # If we exit the loop without returning, max iterations reached
         full_text = "\n".join(all_response_text) or "(max iterations reached)"
@@ -623,6 +705,7 @@ class LiteLLMExecutor(BaseExecutor):
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Iteration-level streaming for Ollama models.
 
@@ -636,12 +719,13 @@ class LiteLLMExecutor(BaseExecutor):
 
         tools = self._build_base_tools()
         active_categories: set[str] = set()
+        context_window = resolve_context_window(self._model_config.model)
 
         messages = self._build_initial_messages(system_prompt, prompt, images, prior_messages=prior_messages)
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
         llm_kwargs = self._build_llm_kwargs()
-        max_iterations = self._model_config.max_turns
+        max_iterations = max_turns_override or self._model_config.max_turns
 
         async with stream_error_boundary(
             all_response_text, executor_name="A2-ollama-stream",
@@ -685,6 +769,20 @@ class LiteLLMExecutor(BaseExecutor):
                         "output_tokens": response.usage.completion_tokens or 0,
                     }
                     tracker.update_from_usage(usage_dict)
+
+                    # P1-1: context threshold reminder
+                    if tracker.threshold_exceeded:
+                        try:
+                            ratio = float(tracker.usage_ratio)
+                        except (TypeError, ValueError):
+                            ratio = 0.0
+                        self.reminder_queue.push_sync(
+                            MSG_CONTEXT_THRESHOLD.format(ratio=ratio)
+                        )
+
+                # P1-2: output truncation reminder
+                if choice.finish_reason == "length":
+                    self.reminder_queue.push_sync(MSG_OUTPUT_TRUNCATED)
 
                 # ── Yield iteration text ──
                 iter_text = message.content or ""
@@ -735,10 +833,19 @@ class LiteLLMExecutor(BaseExecutor):
                 # H2: Execute and yield tool_end per-tool in real-time
                 async for event in self._process_streaming_tool_calls(
                     parsed_calls, messages, tools, active_categories,
+                    context_window=context_window,
                 ):
                     if "record" in event:
                         all_tool_records.append(event["record"])
                     yield event
+
+                # ── Drain reminder queue after tool results ────
+                reminder = self.reminder_queue.drain_sync()
+                if reminder:
+                    messages.append({
+                        "role": "user",
+                        "content": SystemReminderQueue.format_reminder(reminder),
+                    })
 
         # Max iterations reached
         full_text = "\n".join(all_response_text) or "(max iterations reached)"
@@ -773,6 +880,20 @@ class LiteLLMExecutor(BaseExecutor):
         ]
         if prior_messages:
             msgs.extend(prior_messages)
+            if images and msgs and msgs[-1].get("role") == "user":
+                # Inject images into the last user message
+                last = msgs[-1]
+                text = last["content"] if isinstance(last["content"], str) else ""
+                content_parts: list[dict[str, Any]] = []
+                for img in images:
+                    content_parts.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{img['media_type']};base64,{img['data']}",
+                        },
+                    })
+                content_parts.append({"type": "text", "text": text})
+                msgs[-1] = {"role": "user", "content": content_parts}
             return msgs  # prior_messages already includes the current user msg
         if images:
             content_parts: list[dict[str, Any]] = []
@@ -851,6 +972,7 @@ class LiteLLMExecutor(BaseExecutor):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         active_categories: set[str],
+        context_window: int = 128_000,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Process parsed tool calls: discover_tools, refresh_tools, and execute.
 
@@ -884,7 +1006,7 @@ class LiteLLMExecutor(BaseExecutor):
                     "record": ToolCallRecord(
                         tool_name=fn_name, tool_id=tc_id,
                         input_summary="(invalid arguments)",
-                        result_summary=_truncate_for_record(error_content, 300),
+                        result_summary=_truncate_for_record(error_content, tool_result_save_budget(fn_name, context_window)),
                     ),
                 }
                 continue
@@ -913,8 +1035,8 @@ class LiteLLMExecutor(BaseExecutor):
                     "type": "tool_end", "tool_id": tc_id, "tool_name": fn_name,
                     "record": ToolCallRecord(
                         tool_name=fn_name, tool_id=tc_id,
-                        input_summary=_truncate_for_record(str(fn_args), 200),
-                        result_summary=_truncate_for_record(result, 300),
+                        input_summary=_truncate_for_record(str(fn_args), tool_input_save_budget(context_window)),
+                        result_summary=_truncate_for_record(result, tool_result_save_budget(fn_name, context_window)),
                     ),
                 }
                 continue
@@ -931,8 +1053,8 @@ class LiteLLMExecutor(BaseExecutor):
                     "type": "tool_end", "tool_id": tc_id, "tool_name": fn_name,
                     "record": ToolCallRecord(
                         tool_name=fn_name, tool_id=tc_id,
-                        input_summary=_truncate_for_record(str(fn_args), 200),
-                        result_summary=_truncate_for_record(result, 300),
+                        input_summary=_truncate_for_record(str(fn_args), tool_input_save_budget(context_window)),
+                        result_summary=_truncate_for_record(result, tool_result_save_budget(fn_name, context_window)),
                     ),
                 }
                 continue
@@ -982,10 +1104,10 @@ class LiteLLMExecutor(BaseExecutor):
                         "tool_call_id": shim.id,
                         "content": error_content,
                     })
-                    result_summary = _truncate_for_record(error_content, 300)
+                    result_summary = _truncate_for_record(error_content, tool_result_save_budget(shim.function.name, context_window))
                 else:
                     messages.append(r)
-                    result_summary = _truncate_for_record(r.get("content", ""), 300)
+                    result_summary = _truncate_for_record(r.get("content", ""), tool_result_save_budget(shim.function.name, context_window))
                 yield {
                     "type": "tool_end",
                     "tool_id": shim.id,
@@ -993,7 +1115,7 @@ class LiteLLMExecutor(BaseExecutor):
                     "record": ToolCallRecord(
                         tool_name=shim.function.name,
                         tool_id=shim.id,
-                        input_summary=_truncate_for_record(str(args_map[shim.id]), 200),
+                        input_summary=_truncate_for_record(str(args_map[shim.id]), tool_input_save_budget(context_window)),
                         result_summary=result_summary,
                     ),
                 }
@@ -1003,7 +1125,7 @@ class LiteLLMExecutor(BaseExecutor):
                 try:
                     r = await self._execute_tool_call(shim, args_map[shim.id])
                     messages.append(r)
-                    result_summary = _truncate_for_record(r.get("content", ""), 300)
+                    result_summary = _truncate_for_record(r.get("content", ""), tool_result_save_budget(shim.function.name, context_window))
                 except Exception as e:
                     logger.warning("Serial tool execution error: %s", e)
                     error_content = _json.dumps({
@@ -1016,7 +1138,7 @@ class LiteLLMExecutor(BaseExecutor):
                         "tool_call_id": shim.id,
                         "content": error_content,
                     })
-                    result_summary = _truncate_for_record(error_content, 300)
+                    result_summary = _truncate_for_record(error_content, tool_result_save_budget(shim.function.name, context_window))
                 yield {
                     "type": "tool_end",
                     "tool_id": shim.id,
@@ -1024,7 +1146,7 @@ class LiteLLMExecutor(BaseExecutor):
                     "record": ToolCallRecord(
                         tool_name=shim.function.name,
                         tool_id=shim.id,
-                        input_summary=_truncate_for_record(str(args_map[shim.id]), 200),
+                        input_summary=_truncate_for_record(str(args_map[shim.id]), tool_input_save_budget(context_window)),
                         result_summary=result_summary,
                     ),
                 }

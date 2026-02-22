@@ -4,9 +4,9 @@
 """E2E tests for conversation history turn limit feature.
 
 Verifies the full workflow of the turn limit mechanism:
-  1. _format_history() caps output to the last 20 turns (_MAX_DISPLAY_TURNS)
+  1. _format_history() caps output to the last _MAX_DISPLAY_TURNS turns
   2. needs_compression() triggers when turns exceed _MAX_TURNS_BEFORE_COMPRESS (50)
-  3. compress_if_needed() reduces stored turns to 20 (_MAX_DISPLAY_TURNS)
+  3. compress_if_needed() reduces stored turns to _MAX_DISPLAY_TURNS
 
 Uses real file I/O with tmp_path; only the LLM call and context window
 resolution are mocked.
@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from core.memory.conversation import ConversationMemory, ConversationTurn
+from core.memory.conversation import ConversationMemory, ConversationTurn, _MAX_DISPLAY_TURNS
 from core.schemas import ModelConfig
 
 
@@ -70,9 +70,9 @@ def _read_conversation_json(anima_dir: Path) -> dict:
 class TestConversationTurnLimitE2E:
     """E2E tests for the conversation turn limit feature."""
 
-    def test_format_history_limits_to_20_turns_e2e(self, tmp_path: Path):
-        """Append 100 turns, build_chat_prompt, verify only last 20 turns
-        appear in the formatted output."""
+    def test_format_history_limits_to_max_display_turns_e2e(self, tmp_path: Path):
+        """Append 100 turns, build_chat_prompt, verify only last
+        _MAX_DISPLAY_TURNS turns appear in the formatted output."""
         anima_dir = tmp_path / "animas" / "turn-limit-format"
         conv = _make_conv_memory(anima_dir)
 
@@ -83,17 +83,17 @@ class TestConversationTurnLimitE2E:
         data = _read_conversation_json(anima_dir)
         assert len(data["turns"]) == 100
 
-        # Build prompt - should only include last 20 turns
+        # Build prompt - should only include last _MAX_DISPLAY_TURNS turns
         prompt = conv.build_chat_prompt("New message", from_person="human")
 
         # The last turn appended was Turn 99 (assistant).
-        # The 20 display turns are indices 80..99.
-        # Turn 80 (human) should be the oldest visible turn.
-        assert "Turn 80:" in prompt
+        # The display turns are indices (100 - _MAX_DISPLAY_TURNS)..99.
+        oldest_visible = 100 - _MAX_DISPLAY_TURNS
+        assert f"Turn {oldest_visible}:" in prompt
         assert "Turn 99:" in prompt
 
-        # Turn 79 should NOT appear (it's the 21st from the end)
-        assert "Turn 79:" not in prompt
+        # The turn just before the display window should NOT appear
+        assert f"Turn {oldest_visible - 1}:" not in prompt
 
         # Verify a few more boundary turns are absent
         assert "Turn 0:" not in prompt
@@ -102,7 +102,7 @@ class TestConversationTurnLimitE2E:
     @pytest.mark.asyncio
     async def test_compression_triggers_at_51_turns_e2e(self, tmp_path: Path):
         """Append 51 turns, verify needs_compression() is True, run
-        compress_if_needed(), verify only 20 turns remain."""
+        compress_if_needed(), verify only _MAX_DISPLAY_TURNS turns remain."""
         anima_dir = tmp_path / "animas" / "turn-limit-compress"
         conv = _make_conv_memory(anima_dir)
 
@@ -141,15 +141,16 @@ class TestConversationTurnLimitE2E:
         conv_fresh = _make_conv_memory(anima_dir)
         state = conv_fresh.load()
 
-        # After compression, exactly 20 recent turns are kept
-        assert len(state.turns) == 20
+        # After compression, exactly _MAX_DISPLAY_TURNS recent turns are kept
+        assert len(state.turns) == _MAX_DISPLAY_TURNS
         # Compressed summary should be set
         assert "Summary" in state.compressed_summary
         # Compressed turn count should reflect the removed turns
-        assert state.compressed_turn_count == 31  # 51 - 20
+        assert state.compressed_turn_count == 51 - _MAX_DISPLAY_TURNS
 
-        # The kept turns should be the last 20 (Turn 31..50)
-        assert "Turn 31:" in state.turns[0].content
+        # The kept turns should be the last _MAX_DISPLAY_TURNS
+        first_kept = 51 - _MAX_DISPLAY_TURNS
+        assert f"Turn {first_kept}:" in state.turns[0].content
         assert "Turn 50:" in state.turns[-1].content
 
     @pytest.mark.asyncio

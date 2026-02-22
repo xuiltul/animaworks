@@ -83,34 +83,41 @@ class TestLifecycleConsolidationIntegration:
 
     @pytest.mark.asyncio
     async def test_handle_daily_consolidation_with_anima(self, tmp_path: Path):
-        """Test daily consolidation runs for registered anima."""
+        """Test daily consolidation runs for registered anima via run_consolidation."""
         from core.lifecycle import LifecycleManager
         from core.anima import DigitalAnima
-        from core.time_utils import now_jst
 
         manager = LifecycleManager()
 
-        # Create anima with episodes
+        # Create anima directory structure
         anima_dir = tmp_path / "test_anima"
-        episodes_dir = anima_dir / "episodes"
         knowledge_dir = anima_dir / "knowledge"
-        episodes_dir.mkdir(parents=True)
         knowledge_dir.mkdir(parents=True)
 
-        # Create sample episode
-        today = now_jst().date()
-        now = now_jst()
-        episode_file = episodes_dir / f"{today}.md"
-        episode_file.write_text(f"""## {now.strftime('%H:%M')} — Test Episode
-
-**要点**: Test content
-""", encoding="utf-8")
-
-        # Mock anima
+        # Mock anima with run_consolidation() (new Anima-driven flow)
         mock_anima = MagicMock(spec=DigitalAnima)
         mock_anima.name = "test_anima"
         mock_anima.memory = MagicMock()
         mock_anima.memory.anima_dir = anima_dir
+        # count_recent_episodes returns enough episodes to proceed
+        mock_anima.count_recent_episodes.return_value = 3
+
+        # run_consolidation side-effect: simulate knowledge file creation
+        mock_result = MagicMock()
+        mock_result.duration_ms = 1234
+        mock_result.summary = "Consolidated 3 episodes"
+
+        async def _fake_run_consolidation(**kwargs):
+            # Simulate the Anima writing a knowledge file during consolidation
+            kf = knowledge_dir / "test-knowledge.md"
+            kf.write_text(
+                "---\nauto_consolidated: true\n---\n# Test Knowledge\n\n"
+                "Test content from consolidation\n",
+                encoding="utf-8",
+            )
+            return mock_result
+
+        mock_anima.run_consolidation = AsyncMock(side_effect=_fake_run_consolidation)
 
         manager.animas["test_anima"] = mock_anima
 
@@ -118,31 +125,22 @@ class TestLifecycleConsolidationIntegration:
         mock_config = MagicMock()
         mock_consolidation_cfg = MagicMock()
         mock_consolidation_cfg.daily_enabled = True
-        mock_consolidation_cfg.llm_model = "anthropic/claude-sonnet-4-20250514"
         mock_consolidation_cfg.min_episodes_threshold = 1
+        mock_consolidation_cfg.max_turns = 30
         mock_config.consolidation = mock_consolidation_cfg
 
-        # Mock LLM response
-        mock_llm_response = """## 既存ファイル更新
-(なし)
+        with patch("core.config.load_config", return_value=mock_config), \
+             patch("core.memory.forgetting.ForgettingEngine"), \
+             patch("core.memory.consolidation.ConsolidationEngine"):
+            await manager._handle_daily_consolidation()
 
-## 新規ファイル作成
-- ファイル名: knowledge/test-knowledge.md
-  内容: # Test Knowledge
+        # Verify anima.count_recent_episodes was called
+        mock_anima.count_recent_episodes.assert_called_once_with(hours=24)
 
-Test content from consolidation
-"""
+        # Verify anima.run_consolidation was called
+        mock_anima.run_consolidation.assert_called_once()
 
-        with patch("core.config.load_config", return_value=mock_config):
-            with patch("litellm.acompletion", new_callable=AsyncMock) as mock_llm:
-                mock_response = MagicMock()
-                mock_response.choices = [MagicMock()]
-                mock_response.choices[0].message.content = mock_llm_response
-                mock_llm.return_value = mock_response
-
-                await manager._handle_daily_consolidation()
-
-        # Verify knowledge file was created
+        # Verify knowledge file was created by the (mocked) Anima
         knowledge_file = knowledge_dir / "test-knowledge.md"
         assert knowledge_file.exists()
         content = knowledge_file.read_text(encoding="utf-8")

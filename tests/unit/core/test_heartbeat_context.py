@@ -334,7 +334,7 @@ class TestHeartbeatEpisodeRecording:
             dp.agent.replied_to = set()
 
             # Simulate streaming that yields a cycle_done with HEARTBEAT_OK
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -375,7 +375,7 @@ class TestHeartbeatEpisodeRecording:
             dp.agent.replied_to = set()
 
             # Simulate streaming that yields a cycle_done with actual activity
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -439,7 +439,7 @@ class TestHeartbeatDialogueContext:
             # Capture the prompt passed to run_cycle_streaming
             captured_prompts: list[str] = []
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 captured_prompts.append(prompt)
                 yield {
                     "type": "cycle_done",
@@ -489,7 +489,7 @@ class TestHeartbeatDialogueContext:
 
             captured_prompts: list[str] = []
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 captured_prompts.append(prompt)
                 yield {
                     "type": "cycle_done",
@@ -542,7 +542,7 @@ class TestHeartbeatDialogueContext:
 
             captured_prompts: list[str] = []
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 captured_prompts.append(prompt)
                 yield {
                     "type": "cycle_done",

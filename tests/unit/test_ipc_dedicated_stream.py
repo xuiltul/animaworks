@@ -1,8 +1,8 @@
 """
 Unit tests for IPC dedicated stream connection and ID validation.
 
-Tests the dedicated connection per streaming request, response ID validation,
-and _reconnect() recovery mechanism.
+Tests the per-request dedicated connection design, response ID validation,
+and connection isolation between concurrent requests.
 """
 
 # AnimaWorks - Digital Anima Framework
@@ -65,12 +65,12 @@ class MockStreamWriter:
 
 @pytest.mark.asyncio
 async def test_stream_uses_dedicated_connection():
-    """Streaming opens a DEDICATED UDS connection separate from the shared one.
+    """Streaming opens a DEDICATED UDS connection per request.
 
-    Start a real IPCServer, connect a client (shared connection), then call
+    Start a real IPCServer, call connect() (connectivity check), then call
     send_request_stream. The server should see 2 distinct connections: one
-    from connect() and one from the dedicated stream connection opened by
-    send_request_stream().
+    from connect() (opened and immediately closed) and one from the dedicated
+    stream connection opened by send_request_stream().
     """
     with TemporaryDirectory() as tmpdir:
         socket_path = Path(tmpdir) / "dedicated.sock"
@@ -119,7 +119,7 @@ async def test_stream_uses_dedicated_connection():
             await client.connect()
             # Allow event loop to run the connection handler callback
             await asyncio.sleep(0.05)
-            # Connection 1: the shared connection from connect()
+            # Connection 1: the connectivity check from connect()
             assert connection_count == 1
 
             request = IPCRequest(
@@ -136,7 +136,7 @@ async def test_stream_uses_dedicated_connection():
             # Verify the stream worked correctly
             assert received_chunks == chunks
 
-            # Connection 2: the dedicated connection from send_request_stream
+            # Connection 2: the dedicated connection from send_request_stream()
             assert connection_count == 2
 
             await client.close()
@@ -199,7 +199,7 @@ async def test_stream_dedicated_connection_closes_on_completion():
             # Allow server-side cleanup to finish
             await asyncio.sleep(0.1)
 
-            # server_writers[0] = shared connection, server_writers[1] = dedicated
+            # server_writers[0] = connect() probe, server_writers[1] = stream
             assert len(server_writers) == 2
             dedicated_writer = server_writers[1]
             # The dedicated connection writer should be closing or closed
@@ -223,8 +223,6 @@ async def test_stream_dedicated_connection_closes_on_cancel():
     was closed by the finally block in send_request_stream.
     """
     client = IPCClient(Path("/tmp/test_cancel.sock"))
-    client.reader = asyncio.StreamReader()
-    client.writer = MockStreamWriter()
 
     mock_reader = asyncio.StreamReader()
     mock_writer = MockStreamWriter()
@@ -262,9 +260,6 @@ async def test_stream_dedicated_connection_closes_on_timeout():
     finally block closes the dedicated writer even on timeout.
     """
     client = IPCClient(Path("/tmp/test_timeout.sock"))
-    # Set up the shared connection so the "not connected" guard passes
-    client.reader = asyncio.StreamReader()
-    client.writer = MockStreamWriter()
 
     mock_reader = asyncio.StreamReader()
     mock_writer = MockStreamWriter()
@@ -337,8 +332,9 @@ async def test_send_request_id_mismatch_raises():
     """send_request raises RuntimeError when response ID does not match.
 
     The handler intentionally returns a response with a WRONG ID to
-    simulate a stale response read from the buffer. After the error,
-    the client should have called _reconnect().
+    simulate a stale response. With per-request dedicated connections,
+    each send_request() opens its own connection, so no shared state
+    is corrupted by the mismatch.
     """
     with TemporaryDirectory() as tmpdir:
         socket_path = Path(tmpdir) / "id_mismatch.sock"
@@ -354,8 +350,6 @@ async def test_send_request_id_mismatch_raises():
             client = IPCClient(socket_path)
             await client.connect()
 
-            old_writer = client.writer
-
             request = IPCRequest(
                 id="req_123",
                 method="test",
@@ -364,10 +358,6 @@ async def test_send_request_id_mismatch_raises():
 
             with pytest.raises(RuntimeError, match="IPC protocol error"):
                 await client.send_request(request, timeout=5.0)
-
-            # After ID mismatch, _reconnect() should have created new
-            # reader/writer objects (the connection was re-established)
-            assert client.writer is not old_writer
 
             await client.close()
 
@@ -386,8 +376,6 @@ async def test_stream_id_mismatch_raises():
     feeds back a response with a WRONG ID.
     """
     client = IPCClient(Path("/tmp/test_stream_mismatch.sock"))
-    client.reader = asyncio.StreamReader()
-    client.writer = MockStreamWriter()
 
     mock_reader = asyncio.StreamReader()
     mock_writer = MockStreamWriter()
@@ -427,8 +415,6 @@ async def test_stream_non_streaming_response_with_wrong_id():
     stale response.
     """
     client = IPCClient(Path("/tmp/test_nonstream_mismatch.sock"))
-    client.reader = asyncio.StreamReader()
-    client.writer = MockStreamWriter()
 
     mock_reader = asyncio.StreamReader()
     mock_writer = MockStreamWriter()
@@ -455,19 +441,21 @@ async def test_stream_non_streaming_response_with_wrong_id():
     assert mock_writer._closed
 
 
-# ── Test 9: _reconnect after ID mismatch ─────────────────────
+# ── Test 9: Fresh connection after ID mismatch ──────────────
 
 
 @pytest.mark.asyncio
-async def test_reconnect_after_id_mismatch():
-    """After ID mismatch triggers _reconnect, the next request succeeds.
+async def test_fresh_connection_after_id_mismatch():
+    """After an ID mismatch error, the next request succeeds on a fresh connection.
 
+    With per-request dedicated connections there is no shared state to corrupt.
     Uses a real server where the handler alternates: first returns a wrong ID,
     second returns the correct ID. The first send_request should raise
-    RuntimeError, and the second should succeed (proving _reconnect worked).
+    RuntimeError, and the second should succeed because it opens its own
+    fresh connection (no reconnect needed).
     """
     with TemporaryDirectory() as tmpdir:
-        socket_path = Path(tmpdir) / "reconnect.sock"
+        socket_path = Path(tmpdir) / "fresh_conn.sock"
 
         call_count = 0
 
@@ -493,26 +481,18 @@ async def test_reconnect_after_id_mismatch():
             client = IPCClient(socket_path)
             await client.connect()
 
-            old_writer = client.writer
-
             # First request: should raise RuntimeError due to ID mismatch
             req1 = IPCRequest(id="req_first", method="test", params={})
             with pytest.raises(RuntimeError, match="IPC protocol error"):
                 await client.send_request(req1, timeout=5.0)
 
-            # After mismatch, writer should have been replaced by _reconnect
-            assert client.writer is not old_writer
-            new_writer = client.writer
-
-            # Second request: should succeed (proves _reconnect worked)
+            # Second request: should succeed because each request opens
+            # its own fresh connection (no shared state to corrupt)
             req2 = IPCRequest(id="req_second", method="test", params={})
             response = await client.send_request(req2, timeout=5.0)
 
             assert response.id == "req_second"
             assert response.result == {"correct": True}
-
-            # Writer should still be the reconnected one
-            assert client.writer is new_writer
 
             await client.close()
 
@@ -525,11 +505,12 @@ async def test_reconnect_after_id_mismatch():
 
 @pytest.mark.asyncio
 async def test_concurrent_ping_and_stream():
-    """Pings on the shared connection and streaming on a dedicated connection
-    work concurrently without ID mismatch errors.
+    """Pings and streaming on separate dedicated connections work concurrently
+    without ID mismatch errors.
 
-    The dedicated stream connection ensures that ping responses never
-    contaminate the stream reader buffer, and vice versa.
+    Each send_request() and send_request_stream() opens its own connection,
+    ensuring that ping responses never contaminate the stream reader buffer,
+    and vice versa.
     """
     with TemporaryDirectory() as tmpdir:
         socket_path = Path(tmpdir) / "concurrent.sock"
@@ -699,3 +680,193 @@ async def test_ready_check_uses_unique_id():
     assert second_id != first_id, (
         f"Expected unique IDs across calls, but both were '{first_id}'"
     )
+
+
+# ── Test 12: Concurrent unary requests don't interfere ─────────
+
+
+@pytest.mark.asyncio
+async def test_concurrent_unary_requests_no_interference():
+    """Multiple simultaneous send_request() calls to the same Anima return
+    the correct response with matching IDs — no ID_MISMATCH errors.
+
+    This is the key test that proves the per-request dedicated connection
+    design eliminates the ID_MISMATCH problem: five concurrent requests
+    each open their own Unix socket connection, so response data cannot
+    leak between them.
+    """
+    with TemporaryDirectory() as tmpdir:
+        socket_path = Path(tmpdir) / "concurrent_unary.sock"
+
+        async def handler(request: IPCRequest) -> IPCResponse:
+            # Small delay to simulate real processing and ensure overlap
+            await asyncio.sleep(0.1)
+            return IPCResponse(
+                id=request.id,
+                result={"echo_id": request.id, "method": request.method},
+            )
+
+        server = IPCServer(socket_path, handler)
+        await server.start()
+
+        try:
+            client = IPCClient(socket_path)
+            await client.connect()
+
+            num_requests = 5
+            request_ids = [f"conc_unary_{i:03d}" for i in range(num_requests)]
+
+            async def do_request(req_id: str) -> IPCResponse:
+                req = IPCRequest(id=req_id, method="echo", params={"idx": req_id})
+                return await client.send_request(req, timeout=10.0)
+
+            # Fire all 5 requests concurrently
+            results = await asyncio.gather(
+                *(do_request(rid) for rid in request_ids)
+            )
+
+            # Verify all 5 returned the correct response with matching IDs
+            for i, response in enumerate(results):
+                expected_id = request_ids[i]
+                assert response.id == expected_id, (
+                    f"Response {i}: expected id={expected_id}, got id={response.id}"
+                )
+                assert response.result is not None
+                assert response.result["echo_id"] == expected_id
+                assert response.error is None
+
+            await client.close()
+
+        finally:
+            await server.stop()
+
+
+# ── Test 13: send_request opens and closes connection per call ──
+
+
+@pytest.mark.asyncio
+async def test_send_request_opens_connection_per_call():
+    """Each send_request() opens a new connection and closes it after completion.
+
+    Patches asyncio.open_unix_connection to count calls while delegating
+    to the real implementation, then verifies 3 sequential send_request()
+    calls result in 3 open_unix_connection invocations (not 1).
+    """
+    with TemporaryDirectory() as tmpdir:
+        socket_path = Path(tmpdir) / "per_call.sock"
+
+        async def handler(request: IPCRequest) -> IPCResponse:
+            return IPCResponse(id=request.id, result={"ok": True})
+
+        server = IPCServer(socket_path, handler)
+        await server.start()
+
+        try:
+            client = IPCClient(socket_path)
+            await client.connect()
+
+            open_call_count = 0
+            real_open = asyncio.open_unix_connection
+
+            async def counting_open(*args, **kwargs):
+                nonlocal open_call_count
+                open_call_count += 1
+                return await real_open(*args, **kwargs)
+
+            with patch("asyncio.open_unix_connection", side_effect=counting_open):
+                for i in range(3):
+                    req = IPCRequest(id=f"seq_{i:03d}", method="test", params={})
+                    resp = await client.send_request(req, timeout=5.0)
+                    assert resp.id == f"seq_{i:03d}"
+                    assert resp.result == {"ok": True}
+
+            # Each send_request should have opened its own connection
+            assert open_call_count == 3, (
+                f"Expected 3 open_unix_connection calls, got {open_call_count}"
+            )
+
+            await client.close()
+
+        finally:
+            await server.stop()
+
+
+# ── Test 14: connect() only tests connectivity ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_connect_only_tests_connectivity():
+    """connect() opens a temporary connection to verify the socket is reachable,
+    then closes it immediately — it does not leave a persistent connection.
+
+    A server-side connection counter tracks how many connections are made.
+    After connect() returns and a brief wait, the server-side writer for
+    that connection should be closed (the client disconnected).
+    """
+    with TemporaryDirectory() as tmpdir:
+        socket_path = Path(tmpdir) / "connectivity.sock"
+
+        server_writers: list[asyncio.StreamWriter] = []
+
+        async def handler(request: IPCRequest) -> IPCResponse:
+            return IPCResponse(id=request.id, result={"pong": True})
+
+        server = IPCServer(socket_path, handler)
+
+        original_handle = server._handle_connection
+
+        async def tracking_handle(reader, writer):
+            server_writers.append(writer)
+            await original_handle(reader, writer)
+
+        server._handle_connection = tracking_handle
+
+        await server.start()
+
+        try:
+            client = IPCClient(socket_path)
+            await client.connect()
+
+            # Allow the event loop to process the connection handler
+            await asyncio.sleep(0.1)
+
+            # Exactly one connection should have been made
+            assert len(server_writers) == 1, (
+                f"Expected 1 connection, got {len(server_writers)}"
+            )
+
+            # The connection should already be closed (connect() closes it)
+            assert server_writers[0].is_closing(), (
+                "connect() should close the connection after verifying connectivity"
+            )
+
+            await client.close()
+
+        finally:
+            await server.stop()
+
+
+# ── Test 15: send_request raises RuntimeError for missing socket ─
+
+
+@pytest.mark.asyncio
+async def test_send_request_raises_runtime_error_for_missing_socket():
+    """send_request() raises RuntimeError (not AttributeError or other)
+    when the socket file doesn't exist.
+
+    With per-request dedicated connections, each send_request() attempts
+    to open a new connection. If the socket file is absent, the
+    open_unix_connection call raises FileNotFoundError, which is wrapped
+    into a RuntimeError by send_request().
+    """
+    nonexistent_socket = Path("/tmp/this_socket_does_not_exist_test.sock")
+    # Ensure it really doesn't exist
+    if nonexistent_socket.exists():
+        nonexistent_socket.unlink()
+
+    client = IPCClient(nonexistent_socket)
+
+    req = IPCRequest(id="missing_001", method="test", params={})
+
+    with pytest.raises(RuntimeError, match="Not connected"):
+        await client.send_request(req, timeout=5.0)

@@ -16,6 +16,7 @@ from core.memory.conversation import (
     ConversationMemory,
     ConversationState,
     ConversationTurn,
+    ToolRecord,
     _CHARS_PER_TOKEN,
     _MAX_DISPLAY_TURNS,
     _MAX_RESPONSE_CHARS_IN_HISTORY,
@@ -483,7 +484,7 @@ class TestFormatHistoryDisplayLimit:
             assert f"turn-{i}" in result
 
     def test_at_limit_all_displayed(self, conv):
-        state = self._make_state(_MAX_DISPLAY_TURNS)  # 20
+        state = self._make_state(_MAX_DISPLAY_TURNS)
         result = conv._format_history(state)
         for i in range(_MAX_DISPLAY_TURNS):
             assert f"turn-{i}" in result
@@ -596,3 +597,65 @@ class TestCompressKeepCount:
             # The kept turns should be the last `keep`
             assert state.turns[0].content == f"turn-{compress}"
             assert state.turns[-1].content == "turn-24"
+
+
+# ── ToolRecord ───────────────────────────────────────────
+
+
+class TestToolRecord:
+    """Test ToolRecord dataclass including is_error field."""
+
+    def test_is_error_defaults_to_false(self):
+        """is_error should default to False when not specified."""
+        record = ToolRecord(tool_name="web_search")
+        assert record.is_error is False
+
+    def test_is_error_can_be_set_to_true(self):
+        """is_error should accept True as an explicit value."""
+        record = ToolRecord(tool_name="web_search", is_error=True)
+        assert record.is_error is True
+
+    def test_from_dict_with_is_error_true(self):
+        """from_dict should correctly set is_error=True from dict."""
+        d = {
+            "tool_name": "Bash",
+            "tool_id": "toolu_123",
+            "input_summary": "ls -la",
+            "result_summary": "error output",
+            "is_error": True,
+        }
+        record = ToolRecord.from_dict(d)
+        assert record.tool_name == "Bash"
+        assert record.tool_id == "toolu_123"
+        assert record.input_summary == "ls -la"
+        assert record.result_summary == "error output"
+        assert record.is_error is True
+
+    def test_from_dict_with_is_error_false(self):
+        """from_dict should correctly set is_error=False from dict."""
+        d = {
+            "tool_name": "Read",
+            "is_error": False,
+        }
+        record = ToolRecord.from_dict(d)
+        assert record.is_error is False
+
+    def test_from_dict_without_is_error_key(self):
+        """from_dict should default is_error to False when key is absent (backward compat)."""
+        d = {
+            "tool_name": "web_search",
+            "tool_id": "toolu_456",
+            "input_summary": "query=test",
+            "result_summary": "3 results",
+        }
+        record = ToolRecord.from_dict(d)
+        assert record.is_error is False
+
+    def test_from_dict_empty_dict(self):
+        """from_dict with empty dict should use all defaults."""
+        record = ToolRecord.from_dict({})
+        assert record.tool_name == ""
+        assert record.tool_id == ""
+        assert record.input_summary == ""
+        assert record.result_summary == ""
+        assert record.is_error is False

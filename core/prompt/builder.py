@@ -26,6 +26,8 @@ class BuildResult:
 
     system_prompt: str
     injected_procedures: list[Path] = field(default_factory=list)
+    injected_knowledge_files: list[str] = field(default_factory=list)
+    overflow_files: list[str] = field(default_factory=list)
 
     def __str__(self) -> str:
         """Backward compatibility: str() returns prompt."""
@@ -144,6 +146,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     and returns a formatted prompt section.
     """
     from core.config import load_config
+    from core.tooling.prompt_db import get_prompt_store
 
     try:
         config = load_config()
@@ -169,8 +172,13 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             ),
         ]
         if other_animas:
-            cr_template = "communication_rules_a1" if execution_mode == "a1" else "communication_rules"
-            parts.append(load_prompt(cr_template))
+            cr_key = "communication_rules_a1" if execution_mode == "a1" else "communication_rules"
+            _cr_store = get_prompt_store()
+            _cr = (
+                _cr_store.get_section(cr_key) if _cr_store else None
+            ) or load_prompt(cr_key)
+            if _cr:
+                parts.append(_cr)
         return "\n\n".join(parts)
 
     # Non-top-level: existing logic
@@ -218,8 +226,13 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
 
     # Communication rules: only when there are other animas
     if other_animas:
-        cr_template = "communication_rules_a1" if execution_mode == "a1" else "communication_rules"
-        parts.append(load_prompt(cr_template))
+        cr_key = "communication_rules_a1" if execution_mode == "a1" else "communication_rules"
+        _cr_store = get_prompt_store()
+        _cr = (
+            _cr_store.get_section(cr_key) if _cr_store else None
+        ) or load_prompt(cr_key)
+        if _cr:
+            parts.append(_cr)
 
     return "\n\n".join(parts)
 
@@ -230,15 +243,26 @@ def _build_messaging_section(
     execution_mode: str = "a1",
 ) -> str:
     """Build the messaging instructions with resolved paths."""
+    from core.tooling.prompt_db import get_prompt_store
+
     self_name = anima_dir.name
     main_py = PROJECT_DIR / "main.py"
     animas_line = (
         ", ".join(other_animas) if other_animas else "(まだ他の社員はいません)"
     )
 
-    template_name = "messaging_a1" if execution_mode == "a1" else "messaging"
+    db_key = "messaging_a1" if execution_mode == "a1" else "messaging"
+    _msg_store = get_prompt_store()
+    raw = (_msg_store.get_section(db_key) if _msg_store else None)
+    if raw:
+        try:
+            return raw.format(
+                animas_line=animas_line, main_py=main_py, self_name=self_name,
+            )
+        except (KeyError, IndexError):
+            return raw
     return load_prompt(
-        template_name,
+        db_key,
         animas_line=animas_line,
         main_py=main_py,
         self_name=self_name,
@@ -252,6 +276,40 @@ def _load_a2_reflection() -> str:
     except Exception:
         logger.debug("a2_reflection template not found, skipping")
         return ""
+
+
+def _build_recent_tool_section(anima_dir: Path, model_config: Any) -> str:
+    """Build a summary of recent tool results for system prompt injection.
+
+    Reads the last few turns from ConversationMemory and extracts tool
+    records with result summaries, constrained to a ~2000 token budget.
+    """
+    try:
+        from core.memory.conversation import ConversationMemory
+        conv_memory = ConversationMemory(anima_dir, model_config)
+        state = conv_memory.load()
+    except Exception:
+        return ""
+    if not state.turns:
+        return ""
+
+    tool_lines: list[str] = []
+    budget_remaining = 2000  # approximate token budget (~8000 chars)
+    for turn in reversed(state.turns[-3:]):
+        for tr in turn.tool_records[:5]:
+            if not tr.result_summary:
+                continue
+            line = f"- {tr.tool_name}: {tr.result_summary[:500]}"
+            budget_remaining -= len(line) // 4
+            if budget_remaining <= 0:
+                break
+            tool_lines.append(line)
+        if budget_remaining <= 0:
+            break
+
+    if not tool_lines:
+        return ""
+    return "## Recent Tool Results\n\n" + "\n".join(tool_lines)
 
 
 def _build_human_notification_guidance(execution_mode: str = "") -> str:
@@ -291,6 +349,10 @@ def build_system_prompt(
 
     # ── Pre-compute values needed across multiple groups ──────────
 
+    # DB-first prompt store (singleton); used for system sections & tool guides
+    from core.tooling.prompt_db import DEFAULT_GUIDES, get_prompt_store
+    _prompt_store = get_prompt_store()
+
     # other_animas is needed by Group 5 (org_context, messaging)
     other_animas = _discover_other_animas(pd)
 
@@ -305,16 +367,25 @@ def build_system_prompt(
     # ── Group 1: 動作環境と行動ルール ─────────────────────────
     parts.append("# 1. 動作環境と行動ルール")
 
-    parts.append(load_prompt(
-        "environment",
-        data_dir=data_dir,
-        anima_name=pd.name,
-    ))
+    _env = (_prompt_store.get_section("environment") if _prompt_store else None)
+    if _env:
+        try:
+            _env = _env.format(data_dir=data_dir, anima_name=pd.name)
+        except (KeyError, IndexError):
+            pass
+    else:
+        _env = load_prompt("environment", data_dir=data_dir, anima_name=pd.name)
+    if _env:
+        parts.append(_env)
 
     current_time = now_jst().strftime("%Y-%m-%d %H:%M (%Z)")
     parts.append(f"**現在時刻**: {current_time}")
 
-    parts.append(load_prompt("behavior_rules"))
+    _br = (
+        _prompt_store.get_section("behavior_rules") if _prompt_store else None
+    ) or load_prompt("behavior_rules")
+    if _br:
+        parts.append(_br)
 
     # ── Group 2: あなた自身 ───────────────────────────────────
     parts.append("# 2. あなた自身")
@@ -398,6 +469,15 @@ def build_system_prompt(
     if priming_section:
         parts.append(priming_section)
 
+    # Recent tool results (last few turns)
+    try:
+        _model_cfg = memory.read_model_config()
+        recent_tools = _build_recent_tool_section(pd, _model_cfg)
+        if recent_tools:
+            parts.append(recent_tools)
+    except Exception:
+        logger.debug("Failed to inject recent tool results", exc_info=True)
+
     # ── Group 4: 記憶と能力 ───────────────────────────────────
     parts.append("# 4. 記憶と能力")
 
@@ -421,23 +501,75 @@ def build_system_prompt(
         shared_users_list=shared_users_list,
     ))
 
+    # ── Distilled Knowledge Injection ─────────────────────
+    # CLS theory: knowledge/ + procedures/ = neocortex (always-active)
+    from core.prompt.context import resolve_context_window
+
+    injected_knowledge_files: list[str] = []
+    overflow_files: list[str] = []
+
+    try:
+        _model_config = memory.read_model_config()
+        ctx_window = resolve_context_window(_model_config.model)
+    except Exception:
+        ctx_window = 128_000
+
+    knowledge_budget = int(ctx_window * 0.10)
+    distilled = memory.collect_distilled_knowledge()
+
+    used_tokens = 0
+    injection_parts: list[str] = []
+    for entry in distilled:
+        est_tokens = len(entry["content"]) // 3
+        if used_tokens + est_tokens <= knowledge_budget:
+            injection_parts.append(
+                f"### {entry['name']}\n\n{entry['content']}"
+            )
+            used_tokens += est_tokens
+            injected_knowledge_files.append(entry["name"])
+        else:
+            overflow_files.append(entry["name"])
+
+    if injection_parts:
+        parts.append(
+            "## Distilled Knowledge\n\n"
+            + "\n\n---\n\n".join(injection_parts)
+        )
+
     # Common knowledge reference hint
     common_knowledge_dir = data_dir / "common_knowledge"
     if common_knowledge_dir.exists() and any(common_knowledge_dir.rglob("*.md")):
         parts.append(load_prompt("builder/common_knowledge_hint"))
 
-    # Unified skills/procedures table
-    rows: list[str] = []
-    for m in skill_metas:
-        rows.append(f"| {m.name} | 個人 | {m.description} |")
-    for m in common_skill_metas:
-        rows.append(f"| {m.name} | 共通 | {m.description} |")
-    for m in procedure_metas:
-        rows.append(f"| {m.name} | 手順 | {m.description} |")
-    if rows:
-        table_header = "| 名前 | 種別 | 概要 |\n|------|------|------|\n"
-        table = table_header + "\n".join(rows)
-        parts.append(load_prompt("skills_guide") + "\n\n" + table)
+    # Commander hiring guardrail: force create_anima tool/CLI usage
+    has_newstaff = any(m.name == "newstaff" for m in skill_metas)
+    if has_newstaff:
+        if execution_mode == "a1":
+            parts.append(load_prompt("builder/hiring_rules_a1"))
+        else:
+            parts.append(load_prompt("builder/hiring_rules_other"))
+
+    # ── Tool usage guides from DB (with hardcoded fallback) ──
+    if not _prompt_store:
+        logger.warning("Tool prompt DB unavailable; using hardcoded fallback guides")
+
+    if execution_mode == "a1":
+        _a1_builtin = (
+            _prompt_store.get_guide("a1_builtin") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("a1_builtin", "")
+        if _a1_builtin:
+            parts.append(_a1_builtin)
+        _a1_mcp = (
+            _prompt_store.get_guide("a1_mcp") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("a1_mcp", "")
+        if _a1_mcp:
+            parts.append(_a1_mcp)
+    else:
+        _non_a1 = (
+            _prompt_store.get_guide("non_a1") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("non_a1", "")
+        if _non_a1:
+            parts.append(_non_a1)
 
     # External tools guide (filtered by registry)
     if permissions and "外部ツール" in permissions and (tool_registry or personal_tools):
@@ -464,7 +596,12 @@ def build_system_prompt(
         try:
             model_config = memory.read_model_config()
             if model_config.supervisor is None:
-                parts.append(load_prompt("hiring_context"))
+                _hc = (
+                    _prompt_store.get_section("hiring_context")
+                    if _prompt_store else None
+                ) or load_prompt("hiring_context")
+                if _hc:
+                    parts.append(_hc)
         except Exception:
             logger.debug("Skipped hiring context injection", exc_info=True)
 
@@ -488,12 +625,20 @@ def build_system_prompt(
     # ── Group 6: メタ設定 ─────────────────────────────────────
     parts.append("# 6. メタ設定")
 
-    parts.append(EMOTION_INSTRUCTION)
+    _ei = (
+        _prompt_store.get_section("emotion_instruction")
+        if _prompt_store else None
+    ) or EMOTION_INSTRUCTION
+    if _ei:
+        parts.append(_ei)
 
     if execution_mode == "a2":
-        reflection = _load_a2_reflection()
-        if reflection:
-            parts.append(reflection)
+        _ar = (
+            _prompt_store.get_section("a2_reflection")
+            if _prompt_store else None
+        ) or _load_a2_reflection()
+        if _ar:
+            parts.append(_ar)
 
     # ── Final assembly ────────────────────────────────────────
     prompt = "\n\n---\n\n".join(parts)
@@ -503,6 +648,8 @@ def build_system_prompt(
     )
     return BuildResult(
         system_prompt=prompt,
+        injected_knowledge_files=injected_knowledge_files,
+        overflow_files=overflow_files,
     )
 
 

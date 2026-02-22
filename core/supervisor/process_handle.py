@@ -268,6 +268,8 @@ class ProcessHandle:
             RuntimeError: If process is not running
             asyncio.TimeoutError: If timeout exceeded
         """
+        if self.state == ProcessState.RESTARTING:
+            raise RuntimeError(f"Process restarting: {self.anima_name}")
         if self.state != ProcessState.RUNNING:
             raise RuntimeError(f"Process not running: {self.state}")
 
@@ -308,6 +310,8 @@ class ProcessHandle:
             RuntimeError: If process is not running
             asyncio.TimeoutError: If timeout exceeded
         """
+        if self.state == ProcessState.RESTARTING:
+            raise RuntimeError(f"Process restarting: {self.anima_name}")
         if self.state != ProcessState.RUNNING:
             raise RuntimeError(f"Process not running: {self.state}")
 
@@ -396,8 +400,15 @@ class ProcessHandle:
             timeout: Total timeout in seconds for graceful shutdown
         """
         if self.state in (ProcessState.STOPPED, ProcessState.FAILED):
-            logger.debug("Process already stopped: %s", self.anima_name)
-            return
+            if self.process and self.process.poll() is None:
+                logger.warning(
+                    "Process %s in %s state but still alive (PID %s), forcing stop",
+                    self.anima_name, self.state.value, self.process.pid,
+                )
+            else:
+                logger.debug("Process already stopped: %s", self.anima_name)
+                await self._cleanup()
+                return
 
         logger.info("Stopping process: %s", self.anima_name)
 
@@ -462,9 +473,25 @@ class ProcessHandle:
         await self._cleanup()
 
     async def _cleanup(self) -> None:
-        """Clean up resources."""
+        """Clean up resources (including killing orphaned subprocesses)."""
+        # Kill subprocess if still alive
+        if self.process and self.process.poll() is None:
+            logger.warning(
+                "Killing orphaned subprocess: %s (PID %s)",
+                self.anima_name, self.process.pid,
+            )
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+
         if self.ipc_client:
-            await self.ipc_client.close()
+            try:
+                await self.ipc_client.close()
+            except OSError:
+                logger.debug("IPC close error during cleanup", exc_info=True)
             self.ipc_client = None
 
         if self._stderr_file:
@@ -479,15 +506,11 @@ class ProcessHandle:
             logger.debug("Socket file removed: %s", self.socket_path)
 
     def is_alive(self) -> bool:
-        """Check if process is alive and IPC connection is active."""
+        """Check if process is alive."""
         if not self.process:
             return False
         if self.process.poll() is not None:
             return False
-        # IPC connection check: detect dead connections
-        if self.ipc_client and self.ipc_client.writer:
-            if self.ipc_client.writer.is_closing():
-                return False
         return True
 
     def get_pid(self) -> int | None:

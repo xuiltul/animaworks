@@ -213,8 +213,8 @@ class TestModeBSkillInjection:
 
         assert len(captured_system) >= 1
         sys_prompt = captured_system[0]
-        # Personal skills appear under "あなたのスキル" (from skills_guide.md template)
-        assert "あなたのスキル" in sys_prompt
+        # Personal skills appear under "スキルと手順書" (from skills_guide.md template)
+        assert "スキルと手順書" in sys_prompt
         assert "test_skill" in sys_prompt
         assert "A test skill for validation" in sys_prompt
 

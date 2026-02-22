@@ -57,7 +57,7 @@ def _attach_mock_stream(dp, cycle_result_overrides: dict | None = None):
     if cycle_result_overrides:
         defaults.update(cycle_result_overrides)
 
-    async def mock_stream(prompt, trigger="manual"):
+    async def mock_stream(prompt, trigger="manual", **kwargs):
         yield {
             "type": "cycle_done",
             "cycle_result": defaults,
@@ -70,7 +70,7 @@ def _attach_failing_stream(dp, error: Exception | None = None):
     """Wire up a mock streaming generator that raises an exception."""
     exc = error or RuntimeError("Agent execution failed")
 
-    async def mock_stream(prompt, trigger="manual"):
+    async def mock_stream(prompt, trigger="manual", **kwargs):
         raise exc
         yield  # noqa: unreachable — makes this an async generator
 
@@ -199,7 +199,7 @@ class TestHeartbeatWithInboxMessages:
             dp.agent.replied_to = {"episode_sender"}
             dp.agent.background_manager = None
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -351,7 +351,7 @@ class TestHeartbeatRecoveryNoteInjectedOnNextRun:
         # Track what prompt is passed to the agent
         captured_prompts: list[str] = []
 
-        async def mock_stream(prompt, trigger="manual"):
+        async def mock_stream(prompt, trigger="manual", **kwargs):
             captured_prompts.append(prompt)
             yield {
                 "type": "cycle_done",

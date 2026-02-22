@@ -1,8 +1,8 @@
 """
-E2E tests for IPC dedicated stream connection.
+E2E tests for IPC per-request dedicated connections.
 
-Tests verify that streaming requests use a dedicated connection,
-isolating them from concurrent unary traffic on the shared connection.
+Tests verify that each request (streaming or unary) uses its own
+dedicated connection, isolating concurrent traffic from each other.
 """
 
 # AnimaWorks - Digital Anima Framework
@@ -28,11 +28,12 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.e2e]
 
 async def test_e2e_stream_with_interleaved_pings() -> None:
     """Streaming on a dedicated connection should not interfere with
-    concurrent unary (ping) requests on the shared connection.
+    concurrent unary (ping) requests on their own connections.
 
     Start a server that handles both 'ping' and 'stream_test'.  Kick off
-    a streaming request in one task and send 3 pings on the shared
-    connection in a second task.  Both should complete without errors.
+    a streaming request in one task and send 3 pings in a second task.
+    Each request opens its own connection, so both should complete
+    without errors.
     """
     with TemporaryDirectory() as tmpdir:
         socket_path = Path(tmpdir) / "interleaved.sock"
@@ -70,7 +71,7 @@ async def test_e2e_stream_with_interleaved_pings() -> None:
         try:
             await client.connect()
 
-            # Task 1: collect streaming responses on a dedicated connection
+            # Task 1: collect streaming responses
             stream_results: list[IPCResponse] = []
 
             async def _do_stream() -> None:
@@ -78,7 +79,7 @@ async def test_e2e_stream_with_interleaved_pings() -> None:
                 async for resp in client.send_request_stream(req, timeout=5.0):
                     stream_results.append(resp)
 
-            # Task 2: send 3 pings on the shared connection
+            # Task 2: send 3 pings (each opens its own connection)
             ping_results: list[IPCResponse] = []
 
             async def _do_pings() -> None:
@@ -192,16 +193,16 @@ async def test_e2e_heartbeat_relay_over_dedicated_connection() -> None:
 
 async def test_e2e_stale_response_isolation() -> None:
     """KEY TEST: A delayed unary response must NOT contaminate the
-    dedicated stream connection.
+    stream connection.
 
-    Before the dedicated-connection fix, if a slow_ping response arrived
-    after a streaming request started on the *same* connection, the stream
-    would receive the slow_ping response (wrong ID) and raise an
-    IPC protocol error.
+    Before the per-request connection design, if a slow_ping response
+    arrived after a streaming request started on the *same* connection,
+    the stream would receive the slow_ping response (wrong ID) and raise
+    an IPC protocol error.
 
-    With dedicated connections:
-    - slow_ping travels on the shared connection
-    - stream_test travels on its own dedicated connection
+    With per-request dedicated connections:
+    - slow_ping travels on its own connection
+    - stream_test travels on its own connection
     - They never cross.
     """
     with TemporaryDirectory() as tmpdir:
@@ -241,7 +242,7 @@ async def test_e2e_stale_response_isolation() -> None:
         try:
             await client.connect()
 
-            # Step 1: Send slow_ping on the shared connection (takes 0.2s).
+            # Step 1: Send slow_ping (takes 0.2s, opens its own connection).
             # We do NOT await it yet — launch it as a task.
             slow_ping_req = IPCRequest(id="slow_ping_001", method="slow_ping")
             ping_task = asyncio.create_task(
@@ -274,7 +275,7 @@ async def test_e2e_stale_response_isolation() -> None:
 
             assert stream_results[-1].done is True
 
-            # Verify slow ping also succeeded (on the shared connection)
+            # Verify slow ping also succeeded (on its own connection)
             assert ping_resp.error is None, (
                 f"Slow ping returned error: {ping_resp.error}"
             )
@@ -294,8 +295,8 @@ async def test_e2e_multiple_sequential_streams() -> None:
     connection and close it when the stream ends.
 
     The server tracks how many connections have been handled.  After N
-    streaming requests, there should be N+1 connections total (1 shared
-    + N dedicated).
+    streaming requests, there should be N+1 connections total (1 from
+    connect() probe + N from stream requests).
     """
     with TemporaryDirectory() as tmpdir:
         socket_path = Path(tmpdir) / "multi_stream.sock"
@@ -338,7 +339,7 @@ async def test_e2e_multiple_sequential_streams() -> None:
         client = IPCClient(socket_path)
         try:
             await client.connect()
-            # The shared connection is connection #1
+            # The connect() probe is connection #1
             # Give the server a moment to register the connection
             await asyncio.sleep(0.05)
             initial_connections = connection_count
@@ -366,7 +367,7 @@ async def test_e2e_multiple_sequential_streams() -> None:
             # Allow server to process connection closes
             await asyncio.sleep(0.1)
 
-            # Verify connection count: initial (shared) + 3 dedicated
+            # Verify connection count: initial (probe) + 3 dedicated
             dedicated_connections = connection_count - initial_connections
             assert dedicated_connections == 3, (
                 f"Expected 3 dedicated connections, got {dedicated_connections} "

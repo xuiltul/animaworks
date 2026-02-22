@@ -175,6 +175,7 @@ def test_heartbeat_history_from_activity_log(anima_dir: Path) -> None:
             self.anima_dir = anima_dir
             self.name = "test-anima"
             self._HEARTBEAT_HISTORY_N = 3
+            self._activity = ActivityLogger(anima_dir)
 
     # Bind the method
     import types

@@ -29,10 +29,13 @@ class TestUvicornConfigE2E:
     @patch("core.paths.get_animas_dir", return_value=Path("/tmp/animas"))
     @patch("core.init.ensure_runtime_dir")
     @patch("cli.commands.server._write_pid_file")
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
+    @patch("cli.commands.server._find_server_pid_by_process", return_value=None)
     @patch("cli.commands.server._is_process_alive", return_value=False)
     @patch("cli.commands.server._read_pid", return_value=None)
     def test_server_start_passes_all_uvicorn_settings(
-        self, mock_pid, mock_alive, mock_write_pid,
+        self, mock_pid, mock_alive, mock_find, mock_kill,
+        mock_write_pid,
         mock_ensure, mock_animas, mock_shared, mock_create, mock_uvicorn,
         mock_remove,
     ):
@@ -98,7 +101,7 @@ class TestAgentSDKEnvE2E:
             env = executor._build_env()
 
         assert env["ANIMAWORKS_ANIMA_DIR"] == str(anima_dir)
-        # A1 mode does NOT pass ANTHROPIC_API_KEY (uses subscription auth)
-        assert "ANTHROPIC_API_KEY" not in env
+        # A1 mode sets ANTHROPIC_API_KEY to empty string to block parent leakage
+        assert env["ANTHROPIC_API_KEY"] == ""
         assert env["ANTHROPIC_BASE_URL"] == "https://custom.api"
         assert env["CLAUDE_CODE_DISABLE_SKILL_IMPROVEMENT"] == "true"

@@ -16,10 +16,14 @@ pytestmark = pytest.mark.asyncio
 from core.schemas import ModelConfig
 from tests.helpers.mocks import (
     MockAssistantMessage,
+    MockClaudeSDKClient,
     MockResultMessage,
     MockStreamEvent,
+    MockSystemMessage,
     MockTextBlock,
+    MockToolResultBlock,
     MockToolUseBlock,
+    MockUserMessage,
     patch_agent_sdk,
     patch_agent_sdk_streaming,
 )
@@ -78,8 +82,8 @@ class TestAgentSDKExecutor:
             executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
             env = executor._build_env()
             assert env["ANIMAWORKS_ANIMA_DIR"] == str(anima_dir)
-            # A1 mode does NOT pass ANTHROPIC_API_KEY (uses subscription auth)
-            assert "ANTHROPIC_API_KEY" not in env
+            # A1 mode blocks ANTHROPIC_API_KEY leaking (sets to empty string)
+            assert env["ANTHROPIC_API_KEY"] == ""
             assert env["ANTHROPIC_BASE_URL"] == "https://custom.api"
 
     def test_build_env_disables_skill_improvement(self, model_config, anima_dir):
@@ -97,7 +101,8 @@ class TestAgentSDKExecutor:
             with patch.dict(os.environ, {}, clear=False):
                 os.environ.pop("NONEXISTENT_XYZ", None)
                 env = executor._build_env()
-                assert "ANTHROPIC_API_KEY" not in env
+                # A1 mode blocks ANTHROPIC_API_KEY leaking (sets to empty string)
+                assert env["ANTHROPIC_API_KEY"] == ""
 
     async def test_execute_returns_text(self, model_config, anima_dir):
         with patch_agent_sdk(response_text="Hello from Agent SDK"):

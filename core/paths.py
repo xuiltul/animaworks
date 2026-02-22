@@ -58,6 +58,11 @@ def get_tmp_dir() -> Path:
     return get_data_dir() / "tmp"
 
 
+def get_anima_vectordb_dir(anima_name: str) -> Path:
+    """Return per-anima vectordb directory: {data_dir}/animas/{anima_name}/vectordb."""
+    return get_animas_dir() / anima_name / "vectordb"
+
+
 # --- Prompt templates ---
 
 PROMPTS_DIR = TEMPLATES_DIR / "prompts"

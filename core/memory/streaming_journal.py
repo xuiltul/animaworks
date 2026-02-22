@@ -128,28 +128,50 @@ class StreamingJournal:
         ):
             self._flush_buffer()
 
-    def write_tool_start(self, tool: str, args_summary: str = "") -> None:
-        """Record tool execution start."""
+    def write_tool_start(
+        self, tool: str, args_summary: str = "", *, tool_id: str = "",
+    ) -> None:
+        """Record tool execution start.
+
+        Args:
+            tool: Tool name.
+            args_summary: Truncated summary of tool arguments.
+            tool_id: Provider-assigned tool call ID for correlation.
+        """
         if not self._fd or self._finalized:
             return
         # Flush pending text before tool event
         self._flush_buffer()
-        self._write_event({
+        event: dict[str, Any] = {
             "ev": "tool_start",
             "tool": tool,
             "args_summary": args_summary[:200],
-        })
+        }
+        if tool_id:
+            event["tool_id"] = tool_id
+        self._write_event(event)
 
-    def write_tool_end(self, tool: str, result_summary: str = "") -> None:
-        """Record tool execution end."""
+    def write_tool_end(
+        self, tool: str, result_summary: str = "", *, tool_id: str = "",
+    ) -> None:
+        """Record tool execution end.
+
+        Args:
+            tool: Tool name.
+            result_summary: Truncated summary of tool result.
+            tool_id: Provider-assigned tool call ID for correlation.
+        """
         if not self._fd or self._finalized:
             return
         self._flush_buffer()
-        self._write_event({
+        event: dict[str, Any] = {
             "ev": "tool_end",
             "tool": tool,
             "result_summary": result_summary[:200],
-        })
+        }
+        if tool_id:
+            event["tool_id"] = tool_id
+        self._write_event(event)
 
     def finalize(self, summary: str = "") -> None:
         """Write done event, close file handle, and delete journal."""
@@ -212,7 +234,7 @@ class StreamingJournal:
         is_complete = False
 
         try:
-            raw = path.read_text(encoding="utf-8")
+            raw = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             logger.warning("Failed to read orphan journal: %s", path)
             return None
@@ -241,25 +263,46 @@ class StreamingJournal:
             elif ev == "text":
                 text_parts.append(entry.get("t", ""))
             elif ev == "tool_start":
-                tool_calls.append({
+                tc_entry: dict[str, Any] = {
                     "tool": entry.get("tool", ""),
                     "args_summary": entry.get("args_summary", ""),
                     "status": "started",
-                })
+                }
+                if entry.get("tool_id"):
+                    tc_entry["tool_id"] = entry["tool_id"]
+                tool_calls.append(tc_entry)
             elif ev == "tool_end":
                 tool_name = entry.get("tool", "")
-                # Update matching tool_start entry
-                for tc in reversed(tool_calls):
-                    if tc["tool"] == tool_name and tc["status"] == "started":
-                        tc["status"] = "completed"
-                        tc["result_summary"] = entry.get("result_summary", "")
-                        break
-                else:
-                    tool_calls.append({
+                end_tool_id = entry.get("tool_id", "")
+                # Update matching tool_start entry:
+                # prefer tool_id match, fall back to tool_name (backward compat)
+                matched = False
+                if end_tool_id:
+                    for tc in reversed(tool_calls):
+                        if (
+                            tc.get("tool_id") == end_tool_id
+                            and tc["status"] == "started"
+                        ):
+                            tc["status"] = "completed"
+                            tc["result_summary"] = entry.get("result_summary", "")
+                            matched = True
+                            break
+                if not matched:
+                    for tc in reversed(tool_calls):
+                        if tc["tool"] == tool_name and tc["status"] == "started":
+                            tc["status"] = "completed"
+                            tc["result_summary"] = entry.get("result_summary", "")
+                            matched = True
+                            break
+                if not matched:
+                    tc_entry = {
                         "tool": tool_name,
                         "result_summary": entry.get("result_summary", ""),
                         "status": "completed",
-                    })
+                    }
+                    if end_tool_id:
+                        tc_entry["tool_id"] = end_tool_id
+                    tool_calls.append(tc_entry)
             elif ev == "done":
                 is_complete = True
 

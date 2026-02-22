@@ -142,7 +142,7 @@ class TestHeartbeatReflectionE2E:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {"type": "text_delta", "text": "メッセージを確認しました。\n\n"}
                 yield {"type": "text_delta", "text": "[REFLECTION]\n"}
                 yield {"type": "text_delta", "text": f"{reflection_content}\n"}
@@ -207,7 +207,7 @@ class TestHeartbeatReflectionE2E:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {"type": "text_delta", "text": "確認完了。\n\n"}
                 yield {"type": "text_delta", "text": f"[REFLECTION]\n{short_reflection}\n[/REFLECTION]"}
                 yield {
@@ -264,7 +264,7 @@ class TestHeartbeatReflectionE2E:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {"type": "text_delta", "text": "全てのタスクを確認しました。特に問題ありません。"}
                 yield {
                     "type": "cycle_done",

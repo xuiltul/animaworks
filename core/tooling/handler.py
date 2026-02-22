@@ -293,11 +293,29 @@ class ToolHandler:
             personal_tools=personal_tools,
         )
 
+        # ── Cache subordinate paths for permission checks ──
+        self._subordinate_activity_dirs: list[Path] = []
+        self._subordinate_management_files: list[Path] = []
+        try:
+            from core.config.models import load_config
+            from core.paths import get_animas_dir
+            _cfg = load_config()
+            _animas_dir = get_animas_dir()
+            for _sub_name, _sub_cfg in _cfg.animas.items():
+                if _sub_cfg.supervisor == self._anima_name:
+                    _sub_dir = (_animas_dir / _sub_name).resolve()
+                    self._subordinate_activity_dirs.append(_sub_dir / "activity_log")
+                    self._subordinate_management_files.append(_sub_dir / "cron.md")
+                    self._subordinate_management_files.append(_sub_dir / "heartbeat.md")
+        except Exception:
+            logger.debug("Failed to cache subordinate paths for %s", self._anima_name, exc_info=True)
+
         # ── Dispatch table: tool name → handler method ──
         self._dispatch: dict[str, Callable[[dict[str, Any]], str]] = {
             "search_memory": self._handle_search_memory,
             "read_memory_file": self._handle_read_memory_file,
             "write_memory_file": self._handle_write_memory_file,
+            "archive_memory_file": self._handle_archive_memory_file,
             "send_message": self._handle_send_message,
             "post_channel": self._handle_post_channel,
             "read_channel": self._handle_read_channel,
@@ -310,10 +328,13 @@ class ToolHandler:
             "list_directory": self._handle_list_directory,
             "call_human": self._handle_call_human,
             "create_anima": self._handle_create_anima,
+            "disable_subordinate": self._handle_disable_subordinate,
+            "enable_subordinate": self._handle_enable_subordinate,
             "refresh_tools": self._handle_refresh_tools,
             "share_tool": self._handle_share_tool,
             "report_procedure_outcome": self._handle_report_procedure_outcome,
             "report_knowledge_outcome": self._handle_report_knowledge_outcome,
+            "skill": self._handle_skill,
             "add_task": self._handle_add_task,
             "update_task": self._handle_update_task,
             "list_tasks": self._handle_list_tasks,
@@ -416,6 +437,7 @@ class ToolHandler:
                         result = f"Unknown tool: {name}"
 
             self._log_tool_activity(name, args)
+            self._log_tool_result_activity(name, result)
             return self._truncate_output(result)
 
         except Exception as e:
@@ -469,6 +491,17 @@ class ToolHandler:
         except Exception as e:
             logger.warning("Activity logging failed for tool '%s': %s", name, e)
 
+    def _log_tool_result_activity(self, name: str, result: str) -> None:
+        """Record tool result in unified activity log (full text, pre-truncation)."""
+        try:
+            self._activity.log(
+                "tool_result",
+                tool=name,
+                content=result,
+            )
+        except Exception as e:
+            logger.warning("Activity result logging failed for tool '%s': %s", name, e)
+
     # ── Memory tool handlers ─────────────────────────────────
 
     def _handle_search_memory(self, args: dict[str, Any]) -> str:
@@ -492,12 +525,25 @@ class ToolHandler:
             path = get_common_knowledge_dir() / suffix
         else:
             path = self._anima_dir / rel
-            # Prevent path traversal outside anima_dir
-            if not path.resolve().is_relative_to(self._anima_dir.resolve()):
-                return _error_result(
-                    "PermissionDenied",
-                    "Path resolves outside anima directory",
-                )
+            resolved = path.resolve()
+            # Allow if within own anima_dir
+            if not resolved.is_relative_to(self._anima_dir.resolve()):
+                # Check subordinate read permissions (activity_log, cron.md, heartbeat.md)
+                allowed = False
+                for sub_activity in self._subordinate_activity_dirs:
+                    if resolved.is_relative_to(sub_activity):
+                        allowed = True
+                        break
+                if not allowed:
+                    for mgmt_file in self._subordinate_management_files:
+                        if resolved == mgmt_file:
+                            allowed = True
+                            break
+                if not allowed:
+                    return _error_result(
+                        "PermissionDenied",
+                        "Path resolves outside anima directory",
+                    )
         if path.exists() and path.is_file():
             logger.debug("read_memory_file path=%s", rel)
             return path.read_text(encoding="utf-8")
@@ -511,7 +557,15 @@ class ToolHandler:
         # Security check: block protected files and path traversal
         err = _is_protected_write(self._anima_dir, path)
         if err:
-            return err
+            # Before denying, check if this is a subordinate's cron.md/heartbeat.md
+            resolved = path.resolve()
+            subordinate_allowed = False
+            for mgmt_file in self._subordinate_management_files:
+                if resolved == mgmt_file:
+                    subordinate_allowed = True
+                    break
+            if not subordinate_allowed:
+                return err
 
         # Tool creation permission check
         if rel.startswith("tools/") and rel.endswith(".py"):
@@ -598,13 +652,104 @@ class ToolHandler:
 
         return result
 
+    def _handle_archive_memory_file(self, args: dict[str, Any]) -> str:
+        """Archive a memory file by moving it to archive/superseded/.
+
+        Only files under ``knowledge/`` and ``procedures/`` can be archived.
+        Protected files (identity.md, injection.md, etc.) are blocked.
+        """
+        import shutil
+
+        rel = args.get("path", "")
+        reason = args.get("reason", "")
+
+        if not rel:
+            return _error_result("InvalidArguments", "path is required")
+        if not reason:
+            return _error_result("InvalidArguments", "reason is required")
+
+        # Only allow archiving from knowledge/ and procedures/
+        if not (rel.startswith("knowledge/") or rel.startswith("procedures/")):
+            return _error_result(
+                "PermissionDenied",
+                "Only files under knowledge/ and procedures/ can be archived",
+                suggestion="Specify a path like 'knowledge/old-info.md' or 'procedures/old-proc.md'",
+            )
+
+        target = self._anima_dir / rel
+
+        # Security: block protected files and path traversal
+        err = _is_protected_write(self._anima_dir, target)
+        if err:
+            return err
+
+        if not target.exists():
+            return _error_result(
+                "FileNotFound",
+                f"File not found: {rel}",
+                suggestion="Check the path with list_directory or search_memory",
+            )
+
+        if not target.is_file():
+            return _error_result(
+                "InvalidArguments",
+                f"Not a file: {rel}",
+            )
+
+        # Move to archive/superseded/
+        archive_dir = self._anima_dir / "archive" / "superseded"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        dest = archive_dir / target.name
+
+        # Handle name collision in archive
+        if dest.exists():
+            stem = target.stem
+            suffix = target.suffix
+            counter = 1
+            while dest.exists():
+                dest = archive_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
+
+        shutil.move(str(target), str(dest))
+
+        logger.info("archive_memory_file: %s -> %s (reason: %s)", rel, dest.name, reason)
+
+        # Activity log
+        self._activity.log(
+            "memory_write",
+            summary=f"archived {rel}: {reason}",
+            meta={"path": rel, "reason": reason, "action": "archive"},
+        )
+
+        return f"Archived {rel} -> archive/superseded/{dest.name} (reason: {reason})"
+
     def _handle_send_message(self, args: dict[str, Any]) -> str:
         if not self._messenger:
             return "Error: messenger not configured"
 
         to = args["to"]
         content = args["content"]
-        intent = args.get("intent", "")[:50]
+        intent = args.get("intent", "")
+
+        # ── Per-run DM limits ──
+        # 1. Intent restriction: only report/delegation allowed for DM
+        if intent not in ("report", "delegation"):
+            return (
+                "Error: DMのintentは 'report' または 'delegation' のみ許可されています。"
+                "質問はBoardに投稿してください。acknowledgment・感謝・FYIも"
+                "Boardを使用してください（post_channel ツール）。"
+            )
+
+        # 2. Per-recipient limit: 1 message per recipient per run
+        if to in self._replied_to:
+            return f"Error: このrunで既に {to} にメッセージを送信済みです。追加の連絡はBoardを使用してください。"
+
+        # 3. Max recipients limit: 2 people per run
+        if len(self._replied_to) >= 2 and to not in self._replied_to:
+            return (
+                "Error: 1回のrunでDMを送れるのは最大2人までです。"
+                "3人以上への伝達はBoardを使用してください（post_channel ツール）。"
+            )
 
         # ── Resolve recipient: internal Anima or external user ──
         try:
@@ -708,7 +853,14 @@ class ToolHandler:
         logger.info("post_channel channel=%s anima=%s", channel, self._anima_name)
 
         # ── Board mention fanout ──────────────────────────────
-        self._fanout_board_mentions(channel, text)
+        # Suppress re-fanout when this post is a reply triggered by a board_mention.
+        if not getattr(self, "_suppress_board_fanout", False):
+            self._fanout_board_mentions(channel, text)
+        else:
+            logger.info(
+                "Suppressed board fanout for board_mention reply: channel=%s anima=%s",
+                channel, self._anima_name,
+            )
 
         return f"Posted to #{channel}"
 
@@ -952,6 +1104,153 @@ class ToolHandler:
         logger.info("create_anima: created '%s' at %s", anima_dir.name, anima_dir)
         return f"Anima '{anima_dir.name}' created successfully at {anima_dir}. Reload the server to activate."
 
+    # ── Supervisor tool handlers ─────────────────────────────
+
+    def _check_subordinate(self, target_name: str) -> str | None:
+        """Verify that *target_name* is a direct subordinate of this anima.
+
+        Returns ``None`` if allowed, or an error JSON string if denied.
+        """
+        from core.config.models import load_config
+
+        if target_name == self._anima_name:
+            return _error_result(
+                "PermissionDenied",
+                "自分自身を操作することはできません",
+            )
+
+        try:
+            config = load_config()
+        except Exception as e:
+            return _error_result("ConfigError", f"設定読み込みに失敗: {e}")
+
+        target_cfg = config.animas.get(target_name)
+        if target_cfg is None:
+            return _error_result(
+                "AnimaNotFound",
+                f"Anima '{target_name}' は存在しません",
+            )
+
+        if target_cfg.supervisor != self._anima_name:
+            return _error_result(
+                "PermissionDenied",
+                f"'{target_name}' はあなたの直属部下ではありません",
+                context={"supervisor": target_cfg.supervisor or "(なし)"},
+            )
+
+        return None
+
+    def _handle_disable_subordinate(self, args: dict[str, Any]) -> str:
+        """Disable a subordinate anima (set enabled=false in status.json).
+
+        The Reconciliation loop will stop the process within 30 seconds.
+        """
+        target_name = args.get("name", "")
+        reason = args.get("reason", "")
+
+        if not target_name:
+            return _error_result("InvalidArguments", "name is required")
+
+        # Permission check: must be direct subordinate
+        err = self._check_subordinate(target_name)
+        if err:
+            return err
+
+        # Read-modify-write status.json
+        from core.paths import get_animas_dir
+
+        target_dir = get_animas_dir() / target_name
+        status_file = target_dir / "status.json"
+
+        existing: dict[str, Any] = {}
+        if status_file.exists():
+            try:
+                existing = _json.loads(status_file.read_text(encoding="utf-8"))
+            except (_json.JSONDecodeError, OSError):
+                pass
+
+        if not existing.get("enabled", True):
+            return f"'{target_name}' は既に休止中です"
+
+        existing["enabled"] = False
+        status_file.write_text(
+            _json.dumps(existing, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        # Activity log
+        log_summary = f"{target_name} を休止"
+        if reason:
+            log_summary += f" (理由: {reason})"
+        self._activity.log(
+            "tool_use",
+            tool="disable_subordinate",
+            summary=log_summary,
+            meta={"target": target_name, "reason": reason},
+        )
+
+        logger.info(
+            "disable_subordinate: %s disabled %s (reason=%s)",
+            self._anima_name, target_name, reason or "(none)",
+        )
+
+        result = f"'{target_name}' を休止にしました。Reconciliation が30秒以内にプロセスを停止します。"
+        if reason:
+            result += f"\n理由: {reason}"
+        return result
+
+    def _handle_enable_subordinate(self, args: dict[str, Any]) -> str:
+        """Enable a subordinate anima (set enabled=true in status.json).
+
+        The Reconciliation loop will start the process within 30 seconds.
+        """
+        target_name = args.get("name", "")
+
+        if not target_name:
+            return _error_result("InvalidArguments", "name is required")
+
+        # Permission check: must be direct subordinate
+        err = self._check_subordinate(target_name)
+        if err:
+            return err
+
+        # Read-modify-write status.json
+        from core.paths import get_animas_dir
+
+        target_dir = get_animas_dir() / target_name
+        status_file = target_dir / "status.json"
+
+        existing: dict[str, Any] = {}
+        if status_file.exists():
+            try:
+                existing = _json.loads(status_file.read_text(encoding="utf-8"))
+            except (_json.JSONDecodeError, OSError):
+                pass
+
+        if existing.get("enabled", True):
+            return f"'{target_name}' は既に有効です"
+
+        existing["enabled"] = True
+        status_file.write_text(
+            _json.dumps(existing, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        # Activity log
+        self._activity.log(
+            "tool_use",
+            tool="enable_subordinate",
+            summary=f"{target_name} を復帰",
+            meta={"target": target_name},
+        )
+
+        logger.info(
+            "enable_subordinate: %s enabled %s",
+            self._anima_name, target_name,
+        )
+
+        return f"'{target_name}' を有効にしました。Reconciliation が30秒以内にプロセスを起動します。"
+
     # ── Tool management handlers ─────────────────────────────
 
     def _check_tool_creation_permission(self, kind: str) -> bool:
@@ -1174,6 +1473,28 @@ class ToolHandler:
             result += f"\nnotes: {notes}"
 
         return result
+
+    # ── Skill tool handler ──────────────────────────────────
+
+    def _handle_skill(self, args: dict[str, Any]) -> str:
+        """Handle skill tool invocation — load and return skill content."""
+        from core.tooling.skill_tool import load_and_render_skill
+        from core.paths import get_common_skills_dir
+
+        skill_name = args.get("skill_name", "")
+        context = args.get("context", "")
+
+        if not skill_name:
+            return "skill_name パラメータは必須です。"
+
+        return load_and_render_skill(
+            skill_name=skill_name,
+            anima_dir=self._anima_dir,
+            skills_dir=self._anima_dir / "skills",
+            common_skills_dir=get_common_skills_dir(),
+            procedures_dir=self._anima_dir / "procedures",
+            context=context,
+        )
 
     # ── Task queue handlers ─────────────────────────────────
 
@@ -1509,8 +1830,10 @@ class ToolHandler:
 
         Access rules (evaluated in order):
           1. Own anima_dir -- always allowed for reads; writes to protected files blocked
-          2. Paths listed under ``ファイル操作`` section in permissions.md
-          3. Everything else -- denied
+          2. Subordinate's activity_log/ -- read-only for direct supervisors
+          3. Subordinate's cron.md & heartbeat.md -- read/write for direct supervisors
+          4. Paths listed under ``ファイル操作`` section in permissions.md
+          5. Everything else -- denied
         """
         resolved = Path(path).resolve()
 
@@ -1522,6 +1845,17 @@ class ToolHandler:
                     logger.warning("permission_denied anima=%s path=%s reason=protected_file", self._anima_name, path)
                     return err
             return None
+
+        # Supervisor can read direct subordinate's activity_log (work records)
+        if not write:
+            for sub_activity in self._subordinate_activity_dirs:
+                if resolved.is_relative_to(sub_activity):
+                    return None
+
+        # Supervisor can read/write subordinate's cron.md & heartbeat.md
+        for mgmt_file in self._subordinate_management_files:
+            if resolved == mgmt_file:
+                return None
 
         permissions = self._memory.read_permissions()
         if "ファイル操作" not in permissions:

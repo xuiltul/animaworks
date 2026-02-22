@@ -48,7 +48,7 @@ _RESOLVED_PATTERN = re.compile(
 )
 
 # Truncate assistant responses to this length in the history display.
-_MAX_RESPONSE_CHARS_IN_HISTORY = 1500
+_MAX_RESPONSE_CHARS_IN_HISTORY = 2500
 
 # Truncate human messages to this length in the history display.
 # Human messages are typically short (questions/instructions); long
@@ -57,14 +57,13 @@ _MAX_HUMAN_CHARS_IN_HISTORY = 800
 
 # Hard cap on content stored in conversation.json per turn.
 # Prevents unbounded file growth even before compression kicks in.
-_MAX_STORED_CONTENT_CHARS = 3000
+_MAX_STORED_CONTENT_CHARS = 5000
 
 # Rough characters-per-token for estimation (conservative for Japanese).
 _CHARS_PER_TOKEN = 4
 
 # Maximum number of turns to include in the chat prompt.
-# Industry standard is 10 (JetBrains NeurIPS 2025).
-_MAX_DISPLAY_TURNS = 10
+_MAX_DISPLAY_TURNS = 15
 
 # Trigger compression when stored turns exceed this count,
 # regardless of token estimate.  Prevents conversation.json bloat
@@ -72,10 +71,10 @@ _MAX_DISPLAY_TURNS = 10
 _MAX_TURNS_BEFORE_COMPRESS = 50
 
 # ── Tool record limits ─────────────────────────────────────
-_MAX_TOOL_INPUT_SUMMARY = 200
-_MAX_TOOL_RESULT_SUMMARY = 300
+_MAX_TOOL_INPUT_SUMMARY = 500
+_MAX_TOOL_RESULT_SUMMARY = 2000
 _MAX_TOOL_RECORDS_PER_TURN = 10
-_MAX_RENDERED_TOOL_RECORDS = 30
+_MAX_RENDERED_TOOL_RECORDS = 50
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +90,7 @@ class ToolRecord:
     tool_id: str = ""
     input_summary: str = ""   # max _MAX_TOOL_INPUT_SUMMARY chars
     result_summary: str = ""  # max _MAX_TOOL_RESULT_SUMMARY chars
+    is_error: bool = False
 
     def __post_init__(self) -> None:
         if len(self.input_summary) > _MAX_TOOL_INPUT_SUMMARY:
@@ -106,6 +106,7 @@ class ToolRecord:
             tool_id=d.get("tool_id", ""),
             input_summary=d.get("input_summary", ""),
             result_summary=d.get("result_summary", ""),
+            is_error=d.get("is_error", False),
         )
 
 
@@ -374,11 +375,21 @@ class ConversationMemory:
     # ── Prompt building ──────────────────────────────────────
 
     def build_chat_prompt(
-        self, content: str, from_person: str = "human"
+        self,
+        content: str,
+        from_person: str = "human",
+        max_history_chars: int | None = None,
     ) -> str:
-        """Build the user prompt with conversation history injected."""
+        """Build the user prompt with conversation history injected.
+
+        Args:
+            content: The current user message.
+            from_person: Sender identifier.
+            max_history_chars: If set, truncate the rendered history text
+                to at most this many characters (tail-preserving).
+        """
         state = self.load()
-        history_block = self._format_history(state)
+        history_block = self._format_history(state, max_chars=max_history_chars)
 
         if history_block:
             return load_prompt(
@@ -546,8 +557,19 @@ class ConversationMemory:
 
         return messages
 
-    def _format_history(self, state: ConversationState) -> str:
-        """Format conversation history for prompt injection."""
+    def _format_history(
+        self,
+        state: ConversationState,
+        max_chars: int | None = None,
+    ) -> str:
+        """Format conversation history for prompt injection.
+
+        Args:
+            state: The conversation state to render.
+            max_chars: If set, truncate the rendered text to at most this
+                many characters, keeping the tail (most recent turns) and
+                prepending an ellipsis marker.
+        """
         parts: list[str] = []
 
         if state.compressed_summary:
@@ -578,7 +600,13 @@ class ConversationMemory:
             else:
                 parts.append("\n\n".join(turn_lines))
 
-        return "\n\n---\n\n".join(parts) if parts else ""
+        result = "\n\n---\n\n".join(parts) if parts else ""
+
+        if max_chars and len(result) > max_chars:
+            result = result[-max_chars:]
+            result = "...(前半省略)...\n" + result
+
+        return result
 
     # ── Compression ──────────────────────────────────────────
 

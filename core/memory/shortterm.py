@@ -25,7 +25,7 @@ from core.time_utils import now_jst
 logger = logging.getLogger("animaworks.shortterm_memory")
 
 # Maximum characters for accumulated_response in the markdown dump.
-_MAX_RESPONSE_CHARS = 4000
+_MAX_RESPONSE_CHARS = 8000
 
 
 @dataclass
@@ -223,14 +223,17 @@ class ShortTermMemory:
         if len(response) > _MAX_RESPONSE_CHARS:
             response = "...(前半省略)...\n" + response[-_MAX_RESPONSE_CHARS:]
 
-        # Tool use summary (last 10)
+        # Tool use summary (last 20)
         tool_lines = ""
         if state.tool_uses:
             entries = []
-            for tu in state.tool_uses[-10:]:
+            for tu in state.tool_uses[-20:]:
                 name = tu.get("name", "?")
-                inp = str(tu.get("input", ""))[:200]
+                inp = str(tu.get("input", ""))[:500]
                 entries.append(f"- {name}: {inp}")
+                result = str(tu.get("result", ""))[:500]
+                if result:
+                    entries.append(f"  → {result}")
             tool_lines = "\n".join(entries)
 
         return f"""\

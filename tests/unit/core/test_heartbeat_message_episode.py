@@ -57,7 +57,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -116,7 +116,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -180,7 +180,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -235,7 +235,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -294,7 +294,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -348,7 +348,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -398,7 +398,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {
@@ -450,7 +450,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
 
-            async def mock_stream(prompt, trigger="manual"):
+            async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
                     "type": "cycle_done",
                     "cycle_result": {

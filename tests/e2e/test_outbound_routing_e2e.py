@@ -103,7 +103,7 @@ class TestSendMessageToAlias:
 
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
-            result = handler.handle("send_message", {"to": "user", "content": "hello"})
+            result = handler.handle("send_message", {"to": "user", "content": "hello", "intent": "report"})
 
         data = json.loads(result)
         assert data["status"] == "sent"
@@ -119,7 +119,7 @@ class TestSendMessageToAlias:
 
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
-            result = handler.handle("send_message", {"to": "kotoha", "content": "hi"})
+            result = handler.handle("send_message", {"to": "kotoha", "content": "hi", "intent": "report"})
 
         assert "Message sent to kotoha" in result
 
@@ -138,7 +138,7 @@ class TestSendMessageToAlias:
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
             result = handler.handle(
-                "send_message", {"to": "slack:U06MJKLV0TG", "content": "hi"},
+                "send_message", {"to": "slack:U06MJKLV0TG", "content": "hi", "intent": "report"},
             )
 
         data = json.loads(result)
@@ -154,7 +154,7 @@ class TestSendMessageToAlias:
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
             result = handler.handle(
-                "send_message", {"to": "nobody", "content": "hi"},
+                "send_message", {"to": "nobody", "content": "hi", "intent": "report"},
             )
 
         data = json.loads(result)
@@ -177,7 +177,7 @@ class TestRobustRecipientHandling:
 
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
-            result = handler.handle("send_message", {"to": variant, "content": "hi"})
+            result = handler.handle("send_message", {"to": variant, "content": "hi", "intent": "report"})
 
         data = json.loads(result)
         assert data["status"] == "sent"
@@ -194,7 +194,7 @@ class TestRobustRecipientHandling:
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
             result = handler.handle(
-                "send_message", {"to": "U06MJKLV0TG", "content": "hi"},
+                "send_message", {"to": "U06MJKLV0TG", "content": "hi", "intent": "report"},
             )
 
         data = json.loads(result)
@@ -209,7 +209,7 @@ class TestRobustRecipientHandling:
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
             result = handler.handle(
-                "send_message", {"to": "SAKURA", "content": "hi"},
+                "send_message", {"to": "SAKURA", "content": "hi", "intent": "report"},
             )
 
         assert "Message sent to sakura" in result
@@ -226,7 +226,7 @@ class TestRobustRecipientHandling:
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
             result = handler.handle(
-                "send_message", {"to": "  user  ", "content": "hi"},
+                "send_message", {"to": "  user  ", "content": "hi", "intent": "report"},
             )
 
         data = json.loads(result)
@@ -245,7 +245,7 @@ class TestFallbackBehavior:
 
         with patch("core.config.models.load_config", side_effect=RuntimeError("boom")):
             result = handler.handle(
-                "send_message", {"to": "user", "content": "hi"},
+                "send_message", {"to": "user", "content": "hi", "intent": "report"},
             )
 
         # Should return a RecipientResolutionError instead of silently
@@ -268,7 +268,7 @@ class TestFallbackBehavior:
 
         with patch("core.paths.get_animas_dir", return_value=animas_dir), \
              patch("core.config.models.load_config", return_value=config_with_aliases):
-            handler.handle("send_message", {"to": "user", "content": "hello"})
+            handler.handle("send_message", {"to": "user", "content": "hello", "intent": "report"})
 
         # ToolHandler._log_tool_activity records dm_sent in unified activity log
         from core.memory.activity import ActivityLogger

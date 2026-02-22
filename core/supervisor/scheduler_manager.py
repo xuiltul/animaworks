@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -19,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from core.config.models import load_config
 from core.schedule_parser import parse_cron_md, parse_schedule, parse_heartbeat_config
 from core.schemas import CronTask
 from core.time_utils import now_jst
@@ -85,21 +87,34 @@ class SchedulerManager:
             self.scheduler = None
 
     def _setup_heartbeat(self) -> None:
-        """Register heartbeat job from heartbeat.md."""
+        """Register heartbeat job from heartbeat.md + config.json."""
         if not self._anima or not self.scheduler:
             return
 
-        config = self._anima.memory.read_heartbeat_config()
-        if not config:
+        hb_content = self._anima.memory.read_heartbeat_config()
+        if not hb_content:
             return
 
-        interval, active_start, active_end = parse_heartbeat_config(config)
+        active_start, active_end = parse_heartbeat_config(hb_content)
 
-        # Determine active hours:
-        # 1. heartbeat.md explicit time range (already parsed above)
-        # 2. Default: 24h (hour="*")
-        m = re.search(r"(\d{1,2}):\d{0,2}\s*-\s*(\d{1,2})", config)
-        if m:
+        # Interval from config.json (not parsed from heartbeat.md)
+        app_config = load_config()
+        interval = app_config.heartbeat.interval_minutes
+
+        # Fixed offset: crc32(anima_name) % 10 → deterministic 0-9 min spread
+        offset = zlib.crc32(self._anima_name.encode()) % 10
+
+        # Build minute spec: base slots (0, 30 for 30min interval) + offset
+        # e.g. offset=3, interval=30 → minute="3,33"
+        slots = []
+        m = offset
+        while m < 60:
+            slots.append(str(m))
+            m += interval
+        minute_spec = ",".join(slots)
+
+        # Determine active hours
+        if active_start is not None:
             hour_spec = f"{active_start}-{active_end - 1}"
             log_active = f"active {active_start}:00-{active_end}:00"
         else:
@@ -109,7 +124,7 @@ class SchedulerManager:
         self.scheduler.add_job(
             self.heartbeat_tick,
             CronTrigger(
-                minute=f"*/{interval}",
+                minute=minute_spec,
                 hour=hour_spec,
             ),
             id=f"{self._anima_name}_heartbeat",
@@ -119,8 +134,8 @@ class SchedulerManager:
             max_instances=1,
         )
         logger.info(
-            "Heartbeat registered: %s every %dmin, %s",
-            self._anima_name, interval, log_active,
+            "Heartbeat registered: %s minute=%s (offset=%d, interval=%dmin), %s",
+            self._anima_name, minute_spec, offset, interval, log_active,
         )
 
     def _setup_cron_tasks(self) -> None:

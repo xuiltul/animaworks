@@ -480,3 +480,44 @@ class MemoryManager:
     def ensure_procedure_frontmatter(self) -> int:
         """Facade: FrontmatterService.ensure_procedure_frontmatter."""
         return self._frontmatter.ensure_procedure_frontmatter()
+
+    # ── Distilled Knowledge Collection ───────────────────
+
+    def collect_distilled_knowledge(self) -> list[dict]:
+        """Collect all knowledge/ and procedures/ files with confidence metadata.
+
+        Returns list of dicts sorted by confidence descending:
+            {path, name, content, confidence, source_type}
+        """
+        entries: list[dict] = []
+        source_dirs = [
+            (self.knowledge_dir, "knowledge"),
+            (self.procedures_dir, "procedures"),
+        ]
+        for directory, source_type in source_dirs:
+            if not directory.is_dir():
+                continue
+            for f in sorted(directory.glob("*.md")):
+                try:
+                    if source_type == "knowledge":
+                        meta = self._frontmatter.read_knowledge_metadata(f)
+                        body = self._frontmatter.read_knowledge_content(f)
+                    else:
+                        meta = self._frontmatter.read_procedure_metadata(f)
+                        body = self._frontmatter.read_procedure_content(f)
+                    if not body.strip():
+                        continue
+                    confidence = float(meta.get("confidence", 0.5))
+                    entries.append({
+                        "path": str(f),
+                        "name": f.stem,
+                        "content": body,
+                        "confidence": confidence,
+                        "source_type": source_type,
+                    })
+                except Exception:
+                    logger.warning(
+                        "Failed to read %s for knowledge injection", f,
+                    )
+        entries.sort(key=lambda d: d["confidence"], reverse=True)
+        return entries
