@@ -133,6 +133,7 @@ class ConsolidationConfig(BaseModel):
     daily_time: str = "02:00"  # Format: HH:MM
     min_episodes_threshold: int = 1
     llm_model: str = "anthropic/claude-sonnet-4-20250514"
+    max_turns: int = 30  # Tool-call loop limit for consolidation tasks
     weekly_enabled: bool = True  # Phase 3 implementation
     weekly_time: str = "sun:03:00"  # Format: day:HH:MM
     duplicate_threshold: float = 0.85  # Similarity threshold for duplicate detection

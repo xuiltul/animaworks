@@ -103,6 +103,28 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "archive_memory_file",
+        "description": (
+            "Archive a memory file (knowledge, procedures) that is no longer needed. "
+            "The file is moved to archive/ directory, not permanently deleted. "
+            "Use this to clean up stale, outdated, or redundant memory files."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path within anima dir (e.g. 'knowledge/old-info.md')",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Reason for archiving (e.g. 'superseded by new-info.md')",
+                },
+            },
+            "required": ["path", "reason"],
+        },
+    },
+    {
         "name": "send_message",
         "description": (
             "Send a direct message to another anima or a human user. "

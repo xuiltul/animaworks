@@ -229,6 +229,7 @@ class BaseExecutor(ABC):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run the execution engine and return the response.
 
@@ -245,6 +246,8 @@ class BaseExecutor(ABC):
                 ignore this parameter.
             images: Optional list of image dicts with ``data`` (base64) and
                 ``media_type`` keys. Supported by A1 Fallback and A2 modes.
+            max_turns_override: If provided, overrides ``max_turns`` from
+                ModelConfig for this single execution.
 
         Returns:
             ExecutionResult with the response text and optional metadata.
@@ -258,6 +261,7 @@ class BaseExecutor(ABC):
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the engine.
 
@@ -274,6 +278,8 @@ class BaseExecutor(ABC):
             tracker: Context usage tracker.
             images: Optional list of image dicts for multimodal input.
             prior_messages: Optional structured conversation history.
+            max_turns_override: If provided, overrides ``max_turns`` from
+                ModelConfig for this single execution.
 
         Yields:
             Dicts with at least a type key. Common types:
@@ -288,6 +294,7 @@ class BaseExecutor(ABC):
             tracker=tracker,
             images=images,
             prior_messages=prior_messages,
+            max_turns_override=max_turns_override,
         )
         yield {"type": "text_delta", "text": result.text}
         yield {

@@ -713,6 +713,7 @@ class AgentSDKExecutor(BaseExecutor):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run a session via Claude Agent SDK with context monitoring hook.
 
@@ -757,7 +758,7 @@ class AgentSDKExecutor(BaseExecutor):
                            "mcp__aw__*"],
             permission_mode="acceptEdits",
             cwd=str(self._anima_dir),
-            max_turns=self._model_config.max_turns,
+            max_turns=max_turns_override or self._model_config.max_turns,
             model=self._resolve_agent_sdk_model(),
             env=self._build_env(),
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,
@@ -866,6 +867,7 @@ class AgentSDKExecutor(BaseExecutor):
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream events from Claude Agent SDK.
 
@@ -911,7 +913,7 @@ class AgentSDKExecutor(BaseExecutor):
                            "mcp__aw__*"],
             permission_mode="acceptEdits",
             cwd=str(self._anima_dir),
-            max_turns=self._model_config.max_turns,
+            max_turns=max_turns_override or self._model_config.max_turns,
             model=self._resolve_agent_sdk_model(),
             env=self._build_env(),
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,

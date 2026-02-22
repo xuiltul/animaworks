@@ -1445,6 +1445,147 @@ class DigitalAnima:
         finally:
             self._notify_lock_released()
 
+    # ── Consolidation helpers ──────────────────────────────────
+
+    def _collect_episodes_summary(self) -> tuple[str, str]:
+        """Collect recent episodes and resolved events as formatted text.
+
+        Returns:
+            Tuple of (episodes_summary, resolved_events_summary).
+            If no episodes are found, returns a placeholder message.
+        """
+        from core.memory.consolidation import ConsolidationEngine
+
+        engine = ConsolidationEngine(self.anima_dir, self.name)
+        episodes = engine._collect_recent_episodes(hours=24)
+        resolved = engine._collect_resolved_events(hours=24)
+
+        # Format episodes
+        if episodes:
+            episodes_summary = "\n\n".join(
+                f"## {e['date']} {e['time']}\n{e['content']}"
+                for e in episodes
+            )
+        else:
+            return ("(本日のエピソードはありません)", "")
+
+        # Format resolved events
+        if resolved:
+            resolved_events_summary = "\n".join(
+                f"- {r['ts'][:16]}: {r['content']}" for r in resolved
+            )
+        else:
+            resolved_events_summary = ""
+
+        return (episodes_summary, resolved_events_summary)
+
+    def count_recent_episodes(self, hours: int = 24) -> int:
+        """Count recent episode entries within the given time window.
+
+        Used by lifecycle.py to skip consolidation when no episodes exist.
+
+        Args:
+            hours: Number of hours to look back.
+
+        Returns:
+            Number of episode entries found.
+        """
+        from core.memory.consolidation import ConsolidationEngine
+
+        engine = ConsolidationEngine(self.anima_dir, self.name)
+        episodes = engine._collect_recent_episodes(hours=hours)
+        return len(episodes)
+
+    async def run_consolidation(
+        self,
+        consolidation_type: str = "daily",
+        max_turns: int = 30,
+    ) -> CycleResult:
+        """Run memory consolidation as an Anima-driven task.
+
+        The Anima uses its own tools (search_memory, read_memory_file,
+        write_memory_file, archive_memory_file) to organize, consolidate,
+        and clean up its memories within a tool-call loop.
+
+        Works with all execution modes: A1, A2, A1 Fallback, and B.
+
+        Args:
+            consolidation_type: "daily" or "weekly"
+            max_turns: Maximum tool-call loop iterations for this task
+        """
+        logger.info(
+            "[%s] run_consolidation START type=%s max_turns=%d",
+            self.name, consolidation_type, max_turns,
+        )
+        try:
+            async with self._lock:
+                self._status = "consolidating"
+                self._current_task = f"Memory consolidation ({consolidation_type})"
+
+                try:
+                    # Build consolidation prompt
+                    if consolidation_type == "daily":
+                        episodes_summary, resolved_events_summary = self._collect_episodes_summary()
+                        prompt = load_prompt(
+                            "memory/consolidation_instruction",
+                            anima_name=self.name,
+                            episodes_summary=episodes_summary,
+                            resolved_events_summary=resolved_events_summary,
+                        )
+                    else:
+                        prompt = load_prompt(
+                            "memory/weekly_consolidation_instruction",
+                            anima_name=self.name,
+                        )
+
+                    # Activity log
+                    self._activity.log(
+                        "consolidation_start",
+                        summary=f"{consolidation_type}記憶統合開始",
+                    )
+
+                    result = await self.agent.run_cycle(
+                        prompt,
+                        trigger=f"consolidation:{consolidation_type}",
+                        message_intent="request",
+                        max_turns_override=max_turns,
+                    )
+                    self._last_activity = now_jst()
+
+                    # Activity log: completion
+                    self._activity.log(
+                        "consolidation_end",
+                        summary=f"{consolidation_type}記憶統合完了",
+                        content=result.summary[:500] if result.summary else "",
+                        meta={
+                            "type": consolidation_type,
+                            "duration_ms": result.duration_ms,
+                        },
+                    )
+
+                    logger.info(
+                        "[%s] run_consolidation END type=%s duration_ms=%d",
+                        self.name, consolidation_type, result.duration_ms,
+                    )
+                    return result
+
+                except Exception as exc:
+                    logger.exception(
+                        "[%s] run_consolidation FAILED type=%s",
+                        self.name, consolidation_type,
+                    )
+                    self._activity.log(
+                        "error",
+                        summary=f"記憶統合エラー: {type(exc).__name__}",
+                        meta={"phase": "run_consolidation", "error": str(exc)[:200]},
+                    )
+                    raise
+                finally:
+                    self._status = "idle"
+                    self._current_task = ""
+        finally:
+            self._notify_lock_released()
+
     async def run_cron_task(
         self, task_name: str, description: str
     ) -> CycleResult:

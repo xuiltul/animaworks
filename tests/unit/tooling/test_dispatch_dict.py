@@ -48,6 +48,7 @@ EXPECTED_BUILTIN_TOOLS = frozenset({
     "search_memory",
     "read_memory_file",
     "write_memory_file",
+    "archive_memory_file",
     "send_message",
     "post_channel",
     "read_channel",

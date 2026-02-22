@@ -349,6 +349,7 @@ class AnimaRunner:
             "run_bootstrap": self._handle_run_bootstrap,
             "run_heartbeat": self._handle_run_heartbeat,
             "run_cron_task": self._handle_run_cron_task,
+            "run_consolidation": self._handle_run_consolidation,
             "get_status": self._handle_get_status,
             "ping": self._handle_ping,
             "shutdown": self._handle_shutdown,
@@ -420,6 +421,25 @@ class AnimaRunner:
         await self.anima.run_cron_task(task_name, task_description)
 
         return {"status": "completed"}
+
+    async def _handle_run_consolidation(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle run_consolidation request (Anima-driven memory consolidation)."""
+        if not self.anima:
+            raise RuntimeError("Anima not initialized")
+
+        consolidation_type = params.get("consolidation_type", "daily")
+        max_turns = params.get("max_turns", 30)
+
+        result = await self.anima.run_consolidation(
+            consolidation_type=consolidation_type,
+            max_turns=max_turns,
+        )
+
+        return {
+            "status": "completed",
+            "summary": result.summary[:500] if result and result.summary else "",
+            "duration_ms": result.duration_ms if result else 0,
+        }
 
     async def _handle_get_status(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle get_status request."""

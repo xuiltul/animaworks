@@ -158,6 +158,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run Anthropic SDK with tool_use loop."""
         client = self._build_client()
@@ -170,8 +171,9 @@ class AnthropicFallbackExecutor(BaseExecutor):
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
         chain_count = 0
+        max_iterations = max_turns_override or self._model_config.max_turns
 
-        for iteration in range(10):
+        for iteration in range(max_iterations):
             logger.debug(
                 "API call iteration=%d messages_count=%d",
                 iteration, len(messages),
@@ -296,7 +298,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 elif isinstance(last_content, str):
                     messages[-1]["content"] += "\n\n" + formatted
 
-        logger.warning("Max iterations (10) reached, returning fallback response")
+        logger.warning("Max iterations (%d) reached, returning fallback response", max_iterations)
         return ExecutionResult(
             text="\n".join(all_response_text) or "(max iterations reached)",
             tool_call_records=all_tool_records,
@@ -311,6 +313,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         tracker: ContextTracker,
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events using the Anthropic SDK messages.stream().
 
@@ -333,7 +336,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
 
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
-        _MAX_ITERATIONS = 10
+        _MAX_ITERATIONS = max_turns_override or self._model_config.max_turns
 
         async with stream_error_boundary(
             all_response_text, executor_name="AnthropicFallback",

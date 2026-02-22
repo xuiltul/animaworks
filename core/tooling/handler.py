@@ -315,6 +315,7 @@ class ToolHandler:
             "search_memory": self._handle_search_memory,
             "read_memory_file": self._handle_read_memory_file,
             "write_memory_file": self._handle_write_memory_file,
+            "archive_memory_file": self._handle_archive_memory_file,
             "send_message": self._handle_send_message,
             "post_channel": self._handle_post_channel,
             "read_channel": self._handle_read_channel,
@@ -650,6 +651,77 @@ class ToolHandler:
                     logger.warning("Failed to update RAG index for %s: %s", rel, e)
 
         return result
+
+    def _handle_archive_memory_file(self, args: dict[str, Any]) -> str:
+        """Archive a memory file by moving it to archive/superseded/.
+
+        Only files under ``knowledge/`` and ``procedures/`` can be archived.
+        Protected files (identity.md, injection.md, etc.) are blocked.
+        """
+        import shutil
+
+        rel = args.get("path", "")
+        reason = args.get("reason", "")
+
+        if not rel:
+            return _error_result("InvalidArguments", "path is required")
+        if not reason:
+            return _error_result("InvalidArguments", "reason is required")
+
+        # Only allow archiving from knowledge/ and procedures/
+        if not (rel.startswith("knowledge/") or rel.startswith("procedures/")):
+            return _error_result(
+                "PermissionDenied",
+                "Only files under knowledge/ and procedures/ can be archived",
+                suggestion="Specify a path like 'knowledge/old-info.md' or 'procedures/old-proc.md'",
+            )
+
+        target = self._anima_dir / rel
+
+        # Security: block protected files and path traversal
+        err = _is_protected_write(self._anima_dir, target)
+        if err:
+            return err
+
+        if not target.exists():
+            return _error_result(
+                "FileNotFound",
+                f"File not found: {rel}",
+                suggestion="Check the path with list_directory or search_memory",
+            )
+
+        if not target.is_file():
+            return _error_result(
+                "InvalidArguments",
+                f"Not a file: {rel}",
+            )
+
+        # Move to archive/superseded/
+        archive_dir = self._anima_dir / "archive" / "superseded"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        dest = archive_dir / target.name
+
+        # Handle name collision in archive
+        if dest.exists():
+            stem = target.stem
+            suffix = target.suffix
+            counter = 1
+            while dest.exists():
+                dest = archive_dir / f"{stem}_{counter}{suffix}"
+                counter += 1
+
+        shutil.move(str(target), str(dest))
+
+        logger.info("archive_memory_file: %s -> %s (reason: %s)", rel, dest.name, reason)
+
+        # Activity log
+        self._activity.log(
+            "memory_write",
+            summary=f"archived {rel}: {reason}",
+            meta={"path": rel, "reason": reason, "action": "archive"},
+        )
+
+        return f"Archived {rel} -> archive/superseded/{dest.name} (reason: {reason})"
 
     def _handle_send_message(self, args: dict[str, Any]) -> str:
         if not self._messenger:

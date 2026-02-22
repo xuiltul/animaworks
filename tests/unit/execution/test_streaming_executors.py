@@ -45,6 +45,7 @@ class ConcreteExecutor(BaseExecutor):
         trigger: str = "",
         images: list[dict[str, Any]] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
+        max_turns_override: int | None = None,
     ) -> ExecutionResult:
         return ExecutionResult(text=f"response: {prompt}")
 
