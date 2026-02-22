@@ -554,6 +554,14 @@ def build_system_prompt(
         table = table_header + "\n".join(rows)
         parts.append(load_prompt("skills_guide") + "\n\n" + table)
 
+    # Commander hiring guardrail: force create_anima tool/CLI usage
+    has_newstaff = any(m.name == "newstaff" for m in skill_metas)
+    if has_newstaff:
+        if execution_mode == "a1":
+            parts.append(load_prompt("builder/hiring_rules_a1"))
+        else:
+            parts.append(load_prompt("builder/hiring_rules_other"))
+
     # ── Tool usage guides from DB (with hardcoded fallback) ──
     if not _prompt_store:
         logger.warning("Tool prompt DB unavailable; using hardcoded fallback guides")
