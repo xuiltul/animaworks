@@ -22,6 +22,33 @@ from core.exceptions import ToolConfigError  # noqa: F401
 
 logger = logging.getLogger("animaworks.tool_schemas")
 
+
+# ── DB description overlay ──────────────────────────────────
+
+
+def apply_db_descriptions(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Override tool descriptions from DB if available.
+
+    Uses a single ``list_descriptions()`` call to avoid N+1 queries.
+    """
+    from core.tooling.prompt_db import get_prompt_store
+
+    store = get_prompt_store()
+    if store is None:
+        return tools
+    all_descs = store.list_descriptions()
+    if not all_descs:
+        return tools
+    desc_map = {d["name"]: d["description"] for d in all_descs}
+    result = []
+    for t in tools:
+        db_desc = desc_map.get(t["name"])
+        if db_desc is not None:
+            t = {**t, "description": db_desc}
+        result.append(t)
+    return result
+
+
 # ── Canonical definitions ────────────────────────────────────
 #
 # Format: {"name", "description", "parameters"} where ``parameters`` is a
@@ -762,6 +789,7 @@ def build_tool_list(
         tools.extend(TASK_TOOLS)
     if external_schemas:
         tools.extend(external_schemas)
+    tools = apply_db_descriptions(tools)
     return tools
 
 

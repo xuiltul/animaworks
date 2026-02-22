@@ -22,6 +22,16 @@ logger = logging.getLogger("animaworks.init")
 _INFRASTRUCTURE_DIRS = {"prompts", "company", "common_skills", "common_knowledge"}
 
 
+def _ensure_tool_prompt_db(data_dir: Path) -> None:
+    """Create and seed the tool prompt DB if needed."""
+    from core.tooling.prompt_db import DEFAULT_DESCRIPTIONS, DEFAULT_GUIDES, ToolPromptStore
+
+    tool_db_path = data_dir / "tool_prompts.sqlite3"
+    tool_store = ToolPromptStore(tool_db_path)
+    tool_store.seed_defaults(descriptions=DEFAULT_DESCRIPTIONS, guides=DEFAULT_GUIDES)
+    logger.info("Tool prompt DB initialised: %s", tool_db_path)
+
+
 def ensure_runtime_dir(*, skip_animas: bool = False) -> Path:
     """Ensure the runtime data directory exists, seeding from templates if needed.
 
@@ -82,6 +92,8 @@ def ensure_runtime_dir(*, skip_animas: bool = False) -> Path:
 
     # Generate default config.json
     _create_default_config(data_dir)
+
+    _ensure_tool_prompt_db(data_dir)
 
     logger.info("Runtime directory initialized: %s", data_dir)
     return data_dir
@@ -154,6 +166,8 @@ def merge_templates(data_dir: Path) -> list[str]:
 
     # Ensure runtime-only directories exist
     _ensure_runtime_only_dirs(data_dir)
+
+    _ensure_tool_prompt_db(data_dir)
 
     return added
 

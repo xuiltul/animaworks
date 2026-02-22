@@ -482,6 +482,31 @@ def build_system_prompt(
         table = table_header + "\n".join(rows)
         parts.append(load_prompt("skills_guide") + "\n\n" + table)
 
+    # ── Tool usage guides from DB (with hardcoded fallback) ──
+    from core.tooling.prompt_db import DEFAULT_GUIDES, get_prompt_store
+
+    _prompt_store = get_prompt_store()
+    if not _prompt_store:
+        logger.warning("Tool prompt DB unavailable; using hardcoded fallback guides")
+
+    if execution_mode == "a1":
+        _a1_builtin = (
+            _prompt_store.get_guide("a1_builtin") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("a1_builtin", "")
+        if _a1_builtin:
+            parts.append(_a1_builtin)
+        _a1_mcp = (
+            _prompt_store.get_guide("a1_mcp") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("a1_mcp", "")
+        if _a1_mcp:
+            parts.append(_a1_mcp)
+    else:
+        _non_a1 = (
+            _prompt_store.get_guide("non_a1") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("non_a1", "")
+        if _non_a1:
+            parts.append(_non_a1)
+
     # External tools guide (filtered by registry)
     if permissions and "外部ツール" in permissions and (tool_registry or personal_tools):
         if execution_mode == "a2":

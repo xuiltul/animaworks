@@ -94,6 +94,11 @@ def _build_mcp_tools() -> list[Tool]:
         *SUPERVISOR_TOOLS,
     ]
 
+    # Apply DB description overrides
+    from core.tooling.schemas import apply_db_descriptions
+
+    all_schemas = apply_db_descriptions(all_schemas)
+
     tools: list[Tool] = []
     for schema in all_schemas:
         name = schema["name"]
@@ -116,7 +121,9 @@ def _build_mcp_tools() -> list[Tool]:
     return tools
 
 
-# Build once at import time (schemas are static dicts, no I/O needed).
+# Build once at import time.  DB descriptions are baked in at this point;
+# WebUI edits to tool descriptions will not take effect until the MCP
+# subprocess is restarted (i.e. the parent Anima process restarts).
 MCP_TOOLS: list[Tool] = _build_mcp_tools()
 
 # ── Lazy ToolHandler initialisation ──────────────────────
