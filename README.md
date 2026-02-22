@@ -4,7 +4,9 @@
 
 Each agent has its own name, personality, memory, and schedule. They communicate through messages, make decisions on their own, and collaborate like a real team. You manage them through a web dashboard — or just talk to the leader and let them handle the rest.
 
-<!-- TODO: hero screenshot / GIF here -->
+<p align="center">
+  <img src="docs/images/workspace-demo.gif" alt="AnimaWorks 3D Workspace — agents autonomously collaborating" width="720">
+</p>
 
 **[日本語版 README はこちら](README_ja.md)**
 
@@ -61,7 +63,9 @@ animaworks start
 
 Your command center. See every agent's status, recent activity, and memory stats at a glance.
 
-<!-- TODO: dashboard screenshot -->
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="AnimaWorks Dashboard" width="720">
+</p>
 
 - **Chat** — Talk to any Anima with streaming responses, image attachments, and full conversation history
 - **Board** — Slack-style shared channels (#general, #ops, etc.) where Animas discuss and coordinate
@@ -73,7 +77,9 @@ Your command center. See every agent's status, recent activity, and memory stats
 
 An interactive office where your Animas exist as visible characters.
 
-<!-- TODO: workspace screenshot / GIF -->
+<p align="center">
+  <img src="docs/images/chat-memory.png" alt="AnimaWorks Chat — Anima autonomously organizing its own memory" width="720">
+</p>
 
 - Characters sit at desks, walk around, and talk to each other in real time
 - Visual states show what each Anima is doing — idle, working, thinking, sleeping
@@ -100,6 +106,10 @@ Once your team exists, they run on their own:
 - **Team communication** — Shared channels and direct messages keep everyone in sync
 
 ### Auto-Generated Avatars
+
+<p align="center">
+  <img src="docs/images/asset-management.png" alt="AnimaWorks Asset Management — auto-generated portraits and 3D models" width="720">
+</p>
 
 When a new Anima is created, AnimaWorks can automatically generate a character portrait and 3D model from their personality description. If a supervisor already has a portrait, **Vibe Transfer** applies the same art style to new hires — so your whole team looks visually consistent.
 
