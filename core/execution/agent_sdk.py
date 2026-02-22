@@ -514,6 +514,8 @@ class AgentSDKExecutor(BaseExecutor):
             ResultMessage,
             SystemMessage,
             TextBlock,
+            ToolResultBlock,
+            UserMessage,
             query,
         )
         from claude_agent_sdk.types import (
@@ -646,6 +648,23 @@ class AgentSDKExecutor(BaseExecutor):
                                     tool_result_save_budget(block.name, context_window),
                                 ),
                             ))
+                elif isinstance(message, UserMessage):
+                    if hasattr(message, "content") and isinstance(
+                        message.content, list
+                    ):
+                        for block in message.content:
+                            if isinstance(block, ToolResultBlock):
+                                content = block.content
+                                if isinstance(content, list):
+                                    content = " ".join(
+                                        str(c.get("text", ""))
+                                        for c in content
+                                        if isinstance(c, dict)
+                                    )
+                                if content and block.tool_use_id:
+                                    _tool_results_cache[block.tool_use_id] = str(
+                                        content
+                                    )
                 elif isinstance(message, SystemMessage):
                     if message.subtype == "init" and message.data:
                         mcp_servers = message.data.get("mcp_servers", [])
@@ -710,7 +729,9 @@ class AgentSDKExecutor(BaseExecutor):
             ResultMessage,
             SystemMessage,
             TextBlock,
+            ToolResultBlock,
             ToolUseBlock,
+            UserMessage,
             query,
         )
         from claude_agent_sdk.types import (
@@ -782,6 +803,7 @@ class AgentSDKExecutor(BaseExecutor):
                 )
             return SyncHookJSONOutput()
 
+        _system_cli = shutil.which("claude")
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
             allowed_tools=["Read", "Write", "Edit", "Bash", "Grep", "Glob",
@@ -793,6 +815,7 @@ class AgentSDKExecutor(BaseExecutor):
             env=self._build_env(),
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,
             include_partial_messages=True,
+            **({"cli_path": _system_cli} if _system_cli else {}),
             mcp_servers={
                 "aw": {
                     "command": sys.executable,
@@ -872,6 +895,25 @@ class AgentSDKExecutor(BaseExecutor):
                                     "tool_id": block.id,
                                     "tool_name": block.name,
                                 }
+
+                elif isinstance(message, UserMessage):
+                    # Extract tool results from UserMessage content
+                    if hasattr(message, "content") and isinstance(
+                        message.content, list
+                    ):
+                        for block in message.content:
+                            if isinstance(block, ToolResultBlock):
+                                content = block.content
+                                if isinstance(content, list):
+                                    content = " ".join(
+                                        str(c.get("text", ""))
+                                        for c in content
+                                        if isinstance(c, dict)
+                                    )
+                                if content and block.tool_use_id:
+                                    _tool_results_cache[block.tool_use_id] = str(
+                                        content
+                                    )
 
                 elif isinstance(message, ResultMessage):
                     result_message = message
