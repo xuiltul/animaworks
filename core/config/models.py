@@ -21,6 +21,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 from core.exceptions import ConfigError  # noqa: F401
@@ -233,6 +235,16 @@ class BackgroundTaskConfig(BaseModel):
     result_retention_hours: int = 24
 
 
+class ActivityLogConfig(BaseModel):
+    """Configuration for activity log rotation."""
+
+    rotation_enabled: bool = True
+    rotation_mode: Literal["size", "time", "both"] = "size"
+    max_size_mb: int = Field(default=1024, ge=0)   # per-anima total, default 1GB
+    max_age_days: int = Field(default=7, ge=0)     # mode="time"|"both" で使用
+    rotation_time: str = "05:00"                   # 実行時刻 (JST)
+
+
 class HeartbeatConfig(BaseModel):
     """Heartbeat scheduling and cascade prevention settings."""
 
@@ -263,6 +275,7 @@ class AnimaWorksConfig(BaseModel):
     server: ServerConfig = ServerConfig()
     external_messaging: ExternalMessagingConfig = ExternalMessagingConfig()
     background_task: BackgroundTaskConfig = BackgroundTaskConfig()
+    activity_log: ActivityLogConfig = ActivityLogConfig()
     heartbeat: HeartbeatConfig = HeartbeatConfig()
 
 

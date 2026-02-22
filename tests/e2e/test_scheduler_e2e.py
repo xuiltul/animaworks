@@ -179,7 +179,7 @@ class TestProcessSupervisorSystemCronE2E:
 
         assert sup.is_scheduler_running() is True
         jobs = sup.scheduler.get_jobs()
-        assert len(jobs) == 3
+        assert len(jobs) == 4  # daily + weekly + monthly + activity_log_rotation
 
         # Check job details
         daily = sup.scheduler.get_job("system_daily_consolidation")

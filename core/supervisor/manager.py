@@ -947,6 +947,35 @@ class ProcessSupervisor:
                 day_of_month, hour, minute,
             )
 
+        # Activity log rotation
+        try:
+            from core.config.models import ActivityLogConfig
+
+            activity_cfg: ActivityLogConfig | None = None
+            try:
+                from core.config import load_config as _load_cfg
+                _al = getattr(_load_cfg(), "activity_log", None)
+                if isinstance(_al, ActivityLogConfig):
+                    activity_cfg = _al
+            except Exception:
+                logger.debug("Config load failed for activity_log rotation schedule", exc_info=True)
+
+            if activity_cfg is None:
+                activity_cfg = ActivityLogConfig()
+
+            if activity_cfg.rotation_enabled:
+                r_hour, r_minute = (int(x) for x in activity_cfg.rotation_time.split(":"))
+                self.scheduler.add_job(
+                    self._run_activity_log_rotation,
+                    CronTrigger(hour=r_hour, minute=r_minute),
+                    id="system_activity_log_rotation",
+                    name="System: Activity Log Rotation",
+                    replace_existing=True,
+                )
+                logger.info("System cron: Activity log rotation at %s JST", activity_cfg.rotation_time)
+        except Exception:
+            logger.debug("Activity log rotation schedule setup failed", exc_info=True)
+
     def _iter_consolidation_targets(self) -> list[tuple[str, Path]]:
         """Return (anima_name, anima_dir) for all initialized and enabled animas.
 
@@ -1110,6 +1139,44 @@ class ProcessSupervisor:
                     )
             except Exception:
                 logger.exception("Monthly forgetting failed for %s", anima_name)
+
+    async def _run_activity_log_rotation(self) -> None:
+        """Run activity log rotation for all animas."""
+        logger.info("Starting system-wide activity log rotation")
+
+        try:
+            from core.config import load_config
+            activity_cfg = getattr(load_config(), "activity_log", None)
+        except Exception:
+            logger.debug("Config load failed for activity log rotation", exc_info=True)
+            activity_cfg = None
+
+        from core.config.models import ActivityLogConfig
+        defaults = ActivityLogConfig()
+        mode = getattr(activity_cfg, "rotation_mode", defaults.rotation_mode) if activity_cfg else defaults.rotation_mode
+        max_size_mb = getattr(activity_cfg, "max_size_mb", defaults.max_size_mb) if activity_cfg else defaults.max_size_mb
+        max_age_days = getattr(activity_cfg, "max_age_days", defaults.max_age_days) if activity_cfg else defaults.max_age_days
+
+        try:
+            from core.memory.activity import ActivityLogger
+
+            results = ActivityLogger.rotate_all(
+                self.animas_dir,
+                mode=mode,
+                max_size_mb=max_size_mb,
+                max_age_days=max_age_days,
+            )
+            if results:
+                total_freed = sum(r.get("freed_bytes", 0) for r in results.values())
+                total_deleted = sum(r.get("deleted_files", 0) for r in results.values())
+                logger.info(
+                    "Activity log rotation complete: %d animas, %d files deleted, %d bytes freed",
+                    len(results), total_deleted, total_freed,
+                )
+            else:
+                logger.info("Activity log rotation: no files needed rotation")
+        except Exception:
+            logger.exception("Activity log rotation failed")
 
     # ── Status ───────────────────────────────────────────────────
 
