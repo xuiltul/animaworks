@@ -563,11 +563,24 @@ class AgentCore:
                 else "cron" if trigger.startswith("cron")
                 else "chat"
             )
+
+            # Compute overflow_files for Channel C control
+            try:
+                from core.prompt.context import resolve_context_window
+                distilled = self.memory.collect_distilled_knowledge()
+                ctx_window = resolve_context_window(self.model_config.model)
+                _, overflow_files = MemoryManager.compute_injection_plan(
+                    distilled, ctx_window,
+                )
+            except Exception:
+                overflow_files = None  # Fallback to legacy behaviour
+
             result = await self._priming_engine.prime_memories(
                 message,
                 sender_name,
                 channel=channel,
                 intent=message_intent,
+                overflow_files=overflow_files,
             )
 
             if result.is_empty():

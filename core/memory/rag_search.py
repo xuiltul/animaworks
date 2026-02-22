@@ -49,6 +49,16 @@ class RAGMemorySearch:
             # Ensure shared collections exist
             self._ensure_shared_knowledge_indexed(vector_store)
             self._ensure_shared_skills_indexed(vector_store)
+
+            # Index procedures directory
+            procedures_dir = self._anima_dir / "procedures"
+            if procedures_dir.is_dir() and any(procedures_dir.glob("*.md")):
+                try:
+                    indexed = self._indexer.index_directory(procedures_dir, "procedures")
+                    if indexed > 0:
+                        logger.info("Indexed %d chunks into procedures collection", indexed)
+                except Exception as e:
+                    logger.warning("Failed to index procedures directory: %s", e)
         except ImportError:
             logger.debug("RAG dependencies not installed, indexing disabled")
         except Exception as e:
@@ -154,7 +164,7 @@ class RAGMemorySearch:
                         results.append((f.name, line.strip()))
 
         # Hybrid: append vector search results when RAG is available
-        if self._indexer is not None and scope in ("knowledge", "common_knowledge", "all"):
+        if self._indexer is not None and scope in ("knowledge", "common_knowledge", "procedures", "all"):
             try:
                 vector_hits = self._vector_search_memory(query, scope, knowledge_dir)
                 seen_files = {r[0] for r in results}
@@ -181,24 +191,37 @@ class RAGMemorySearch:
         )
 
         include_shared = scope in ("common_knowledge", "all")
-        rag_results = retriever.search(
-            query=query,
-            anima_name=anima_name,
-            memory_type="knowledge",
-            top_k=5,
-            include_shared=include_shared,
-        )
-
-        # Record access (Hebbian LTP)
-        if rag_results:
-            retriever.record_access(rag_results, anima_name)
-
         hits: list[tuple[str, str]] = []
-        for r in rag_results:
-            source = r.metadata.get("source_file", r.doc_id)
-            first_line = r.content.split("\n", 1)[0].strip()
-            hits.append((str(source), first_line))
+
+        for memory_type in self._resolve_search_types(scope):
+            rag_results = retriever.search(
+                query=query,
+                anima_name=anima_name,
+                memory_type=memory_type,
+                top_k=5,
+                include_shared=include_shared,
+            )
+            if rag_results:
+                retriever.record_access(rag_results, anima_name)
+            for r in rag_results:
+                source = r.metadata.get("source_file", r.doc_id)
+                first_line = r.content.split("\n", 1)[0].strip()
+                hits.append((str(source), first_line))
+
         return hits
+
+    @staticmethod
+    def _resolve_search_types(scope: str) -> list[str]:
+        """Map scope to memory_type list for vector search."""
+        if scope == "knowledge":
+            return ["knowledge"]
+        if scope == "procedures":
+            return ["procedures"]
+        if scope == "all":
+            return ["knowledge", "procedures"]
+        if scope == "common_knowledge":
+            return ["knowledge"]  # shared collection
+        return ["knowledge"]
 
     def search_knowledge(self, query: str, knowledge_dir: Path) -> list[tuple[str, str]]:
         """Search knowledge/ by keyword."""

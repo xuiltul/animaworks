@@ -26,6 +26,7 @@ class BuildResult:
 
     system_prompt: str
     injected_procedures: list[Path] = field(default_factory=list)
+    overflow_files: list[str] = field(default_factory=list)
 
     def __str__(self) -> str:
         """Backward compatibility: str() returns prompt."""
@@ -330,6 +331,8 @@ def build_system_prompt(
     retriever: object | None = None,
     *,
     trigger: str = "",
+    distilled_entries: list[dict] | None = None,
+    overflow_files: list[str] | None = None,
 ) -> BuildResult:
     """Construct the full system prompt from Markdown files.
 
@@ -499,6 +502,31 @@ def build_system_prompt(
         shared_users_list=shared_users_list,
     ))
 
+    # ── Distilled Knowledge Injection ─────────────────────
+    _overflow_files: list[str] = overflow_files if overflow_files is not None else []
+    if distilled_entries is None:
+        try:
+            from core.prompt.context import resolve_context_window as _rcw_inj
+            _model_cfg = memory.read_model_config()
+            _distilled = memory.collect_distilled_knowledge()
+            _ctx_window = _rcw_inj(_model_cfg.model)
+            distilled_entries, _overflow_files = MemoryManager.compute_injection_plan(
+                _distilled, _ctx_window,
+            )
+        except Exception:
+            logger.debug("Failed to collect distilled knowledge", exc_info=True)
+            distilled_entries = []
+            _overflow_files = []
+    if distilled_entries:
+        injection_parts: list[str] = []
+        for entry in distilled_entries:
+            injection_parts.append(f"### {entry['name']}\n\n{entry['content']}")
+        if injection_parts:
+            parts.append(
+                "## Distilled Knowledge\n\n"
+                + "\n\n---\n\n".join(injection_parts)
+            )
+
     # Common knowledge reference hint
     common_knowledge_dir = data_dir / "common_knowledge"
     if common_knowledge_dir.exists() and any(common_knowledge_dir.rglob("*.md")):
@@ -616,6 +644,7 @@ def build_system_prompt(
     )
     return BuildResult(
         system_prompt=prompt,
+        overflow_files=_overflow_files,
     )
 
 

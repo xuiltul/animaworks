@@ -126,6 +126,7 @@ class PrimingEngine:
         channel: str = "chat",
         intent: str = "",
         enable_dynamic_budget: bool = False,
+        overflow_files: list[str] | None = None,
     ) -> PrimingResult:
         """Prime memories based on incoming message.
 
@@ -161,7 +162,7 @@ class PrimingEngine:
         results = await asyncio.gather(
             self._channel_a_sender_profile(sender_name),
             self._channel_b_recent_activity(sender_name, keywords),  # Unified channel
-            self._channel_c_related_knowledge(keywords),
+            self._channel_c_related_knowledge(keywords, overflow_files=overflow_files),
             self._channel_d_skill_match(message, keywords, channel=channel),
             self._channel_e_pending_tasks(),
             return_exceptions=True,
@@ -568,13 +569,29 @@ class PrimingEngine:
 
         return "\n".join(parts)
 
-    async def _channel_c_related_knowledge(self, keywords: list[str]) -> str:
+    async def _channel_c_related_knowledge(
+        self,
+        keywords: list[str],
+        *,
+        overflow_files: list[str] | None = None,
+    ) -> str:
         """Channel C: Related knowledge search (vector search).
 
         Uses dense vector retrieval via MemoryRetriever.
         Searches both personal knowledge and shared common_knowledge,
         merging results by score.
+
+        When *overflow_files* is an empty list (all distilled knowledge was
+        injected into the system prompt), Channel C is skipped entirely.
+        When *overflow_files* has entries, Channel C runs normally as a
+        fallback for the files that did not fit.  When *overflow_files* is
+        ``None`` (legacy path), full Channel C behaviour is preserved.
         """
+        # Skip when all distilled knowledge was injected
+        if overflow_files is not None and len(overflow_files) == 0:
+            logger.debug("Channel C: All distilled knowledge injected, skipping")
+            return ""
+
         if not self.knowledge_dir.is_dir() or not keywords:
             logger.debug("Channel C: No knowledge dir or no keywords")
             return ""
