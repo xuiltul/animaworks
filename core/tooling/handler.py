@@ -418,6 +418,7 @@ class ToolHandler:
                         result = f"Unknown tool: {name}"
 
             self._log_tool_activity(name, args)
+            self._log_tool_result_activity(name, result)
             return self._truncate_output(result)
 
         except Exception as e:
@@ -470,6 +471,17 @@ class ToolHandler:
                 self._activity.log(activity_type, content=args.get("body", "")[:200], via="configured_channels")
         except Exception as e:
             logger.warning("Activity logging failed for tool '%s': %s", name, e)
+
+    def _log_tool_result_activity(self, name: str, result: str) -> None:
+        """Record tool result in unified activity log (full text, pre-truncation)."""
+        try:
+            self._activity.log(
+                "tool_result",
+                tool=name,
+                content=result,
+            )
+        except Exception as e:
+            logger.warning("Activity result logging failed for tool '%s': %s", name, e)
 
     # ── Memory tool handlers ─────────────────────────────────
 

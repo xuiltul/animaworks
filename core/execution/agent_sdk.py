@@ -307,6 +307,29 @@ def _log_tool_use(
         logger.debug("Failed to log tool_use for %s", tool_name, exc_info=True)
 
 
+def _log_tool_result(
+    anima_dir: Path,
+    tool_name: str,
+    tool_use_id: str,
+    result_content: str,
+    *,
+    is_error: bool = False,
+) -> None:
+    """Record a tool result to the activity log (best-effort, never raises)."""
+    try:
+        from core.memory.activity import ActivityLogger
+
+        activity = ActivityLogger(anima_dir)
+        activity.log(
+            "tool_result",
+            tool=tool_name,
+            content=result_content,
+            meta={"tool_use_id": tool_use_id, "is_error": is_error},
+        )
+    except Exception:
+        logger.debug("Failed to log tool_result for %s", tool_name, exc_info=True)
+
+
 def _build_pre_tool_hook(
     anima_dir: Path,
 ) -> Callable:
@@ -428,11 +451,14 @@ def _handle_tool_result_block(
     pending_records: dict[str, ToolCallRecord],
     journal: Any | None,
     model: str,
+    *,
+    anima_dir: Path | None = None,
 ) -> None:
     """Process a ToolResultBlock from UserMessage.
 
     Updates the matching entry in ``pending_records`` and writes a WAL
-    entry via the streaming journal (if provided).
+    entry via the streaming journal (if provided).  When *anima_dir* is
+    given, the full result is also recorded in the activity log.
     """
     content = block.content
     if isinstance(content, list):
@@ -460,6 +486,14 @@ def _handle_tool_result_block(
     if journal:
         tool_name = record.tool_name if record else "unknown"
         journal.write_tool_end(tool_name, content_str[:500], tool_id=block.tool_use_id)
+
+    # Record full tool result in activity log
+    if anima_dir is not None:
+        tool_name = record.tool_name if record else "unknown"
+        _log_tool_result(
+            anima_dir, tool_name, block.tool_use_id,
+            content_str, is_error=is_error,
+        )
 
 
 def _finalize_pending_records(
@@ -648,6 +682,7 @@ class AgentSDKExecutor(BaseExecutor):
                                     _handle_tool_result_block(
                                         block, pending_records, None,
                                         self._model_config.model,
+                                        anima_dir=self._anima_dir,
                                     )
                     elif isinstance(message, SystemMessage):
                         if message.subtype == "init" and message.data:
@@ -812,6 +847,7 @@ class AgentSDKExecutor(BaseExecutor):
                                     _handle_tool_result_block(
                                         block, pending_records, None,
                                         self._model_config.model,
+                                        anima_dir=self._anima_dir,
                                     )
 
                     elif isinstance(message, ResultMessage):
