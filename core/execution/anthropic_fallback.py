@@ -111,19 +111,6 @@ class AnthropicFallbackExecutor(BaseExecutor):
         )
         return to_anthropic_format(canonical)
 
-    def _has_subordinates(self) -> bool:
-        """Check if this anima has any subordinates (is a supervisor)."""
-        try:
-            from core.config.models import load_config
-            config = load_config()
-            my_name = self._anima_dir.name
-            return any(
-                cfg.supervisor == my_name
-                for cfg in config.animas.values()
-            )
-        except Exception:
-            return False
-
     def _build_client(self):
         """Create an AsyncAnthropic client with resolved credentials."""
         import anthropic

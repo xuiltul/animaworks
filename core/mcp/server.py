@@ -44,7 +44,7 @@ server = Server("aw")
 
 # ── Tool selection ───────────────────────────────────────
 #
-# The 12 tools to expose, drawn from canonical schema lists in
+# The tools to expose, drawn from canonical schema lists in
 # ``core/tooling/schemas.py``.  We pick them by name to build a
 # stable, curated subset suitable for A1 mode.
 
@@ -70,7 +70,7 @@ def _build_mcp_tools() -> list[Tool]:
     """Convert canonical AnimaWorks schemas to MCP Tool objects.
 
     Reads all relevant schema lists from ``core.tooling.schemas`` and
-    filters to the 12 exposed tools.
+    filters to the exposed tools.
     """
     from core.tooling.schemas import (
         CHANNEL_TOOLS,
@@ -112,7 +112,7 @@ def _build_mcp_tools() -> list[Tool]:
             )
         )
 
-    # Verify we found all 12
+    # Verify we found all expected tools
     found = {t.name for t in tools}
     missing = _EXPOSED_TOOL_NAMES - found
     if missing:

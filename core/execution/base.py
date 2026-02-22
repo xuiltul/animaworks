@@ -148,6 +148,21 @@ class BaseExecutor(ABC):
         """
         return True
 
+    # -- Subordinate detection ----------------------------
+
+    def _has_subordinates(self) -> bool:
+        """Check if this anima has any subordinates (is a supervisor)."""
+        try:
+            from core.config.models import load_config
+            config = load_config()
+            my_name = self._anima_dir.name
+            return any(
+                cfg.supervisor == my_name
+                for cfg in config.animas.values()
+            )
+        except Exception:
+            return False
+
     # -- Credential helpers --------------------------------
 
     def _resolve_api_key(self) -> str | None:

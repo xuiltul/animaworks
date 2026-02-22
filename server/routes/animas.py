@@ -195,7 +195,7 @@ def create_animas_router() -> APIRouter:
                 pass
         existing["enabled"] = True
         status_file.write_text(
-            json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
         # Start immediately (don't wait for reconciliation)
@@ -226,7 +226,7 @@ def create_animas_router() -> APIRouter:
                 pass
         existing["enabled"] = False
         status_file.write_text(
-            json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
 
         # Stop immediately

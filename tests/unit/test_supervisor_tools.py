@@ -203,6 +203,86 @@ class TestEnableSubordinate:
         assert "PermissionDenied" in result
 
 
+class TestEdgeCases:
+    """Tests for edge cases: config failure, invalid JSON, missing status.json."""
+
+    def test_config_load_failure(self, tmp_path):
+        """When load_config() raises, return ConfigError."""
+        handler = _make_handler(tmp_path, "sakura")
+
+        with patch(
+            "core.config.models.load_config",
+            side_effect=RuntimeError("config broken"),
+        ):
+            result = handler.handle("disable_subordinate", {"name": "hinata"})
+
+        assert "ConfigError" in result
+
+    def test_disable_with_invalid_status_json(self, tmp_path):
+        """When status.json contains invalid JSON, treat as empty and proceed."""
+        handler = _make_handler(tmp_path, "sakura")
+        anima_dir = tmp_path / "animas" / "hinata"
+        anima_dir.mkdir(parents=True, exist_ok=True)
+        (anima_dir / "status.json").write_text("not valid json{{{", encoding="utf-8")
+
+        mock_cfg = _mock_config(tmp_path, {
+            "sakura": {},
+            "hinata": {"supervisor": "sakura"},
+        })
+
+        with (
+            patch("core.config.models.load_config", return_value=mock_cfg),
+            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+        ):
+            result = handler.handle("disable_subordinate", {"name": "hinata"})
+
+        assert "休止" in result
+        status = json.loads((anima_dir / "status.json").read_text())
+        assert status["enabled"] is False
+
+    def test_disable_with_missing_status_json(self, tmp_path):
+        """When status.json doesn't exist, create it with enabled=false."""
+        handler = _make_handler(tmp_path, "sakura")
+        anima_dir = tmp_path / "animas" / "hinata"
+        anima_dir.mkdir(parents=True, exist_ok=True)
+        # No status.json created
+
+        mock_cfg = _mock_config(tmp_path, {
+            "sakura": {},
+            "hinata": {"supervisor": "sakura"},
+        })
+
+        with (
+            patch("core.config.models.load_config", return_value=mock_cfg),
+            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+        ):
+            result = handler.handle("disable_subordinate", {"name": "hinata"})
+
+        assert "休止" in result
+        status = json.loads((anima_dir / "status.json").read_text())
+        assert status["enabled"] is False
+
+    def test_enable_with_missing_status_json(self, tmp_path):
+        """When status.json doesn't exist, treat as enabled=true (already enabled)."""
+        handler = _make_handler(tmp_path, "sakura")
+        anima_dir = tmp_path / "animas" / "hinata"
+        anima_dir.mkdir(parents=True, exist_ok=True)
+        # No status.json
+
+        mock_cfg = _mock_config(tmp_path, {
+            "sakura": {},
+            "hinata": {"supervisor": "sakura"},
+        })
+
+        with (
+            patch("core.config.models.load_config", return_value=mock_cfg),
+            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+        ):
+            result = handler.handle("enable_subordinate", {"name": "hinata"})
+
+        assert "既に有効" in result
+
+
 class TestStatusJsonPreservation:
     """Verify that enable/disable preserves all existing status.json fields."""
 
