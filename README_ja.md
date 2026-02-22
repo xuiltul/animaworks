@@ -4,7 +4,9 @@
 
 各エージェントは固有の名前・性格・記憶・スケジュールを持つ。メッセージで連携し、自分で判断し、チームとして協働する。管理はWebダッシュボードから — あるいはリーダーに話しかけるだけで、あとは任せられる。
 
-<!-- TODO: ヒーロースクリーンショット / GIF -->
+<p align="center">
+  <img src="docs/images/workspace-demo.gif" alt="AnimaWorks 3Dワークスペース — エージェントが自律的に協働" width="720">
+</p>
 
 **[English README](README.md)**
 
@@ -61,7 +63,9 @@ animaworks start
 
 組織全体のコマンドセンター。全エージェントの状態・活動・記憶統計をひと目で把握。
 
-<!-- TODO: ダッシュボードのスクリーンショット -->
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="AnimaWorks ダッシュボード" width="720">
+</p>
 
 - **チャット** — 任意のAnimaとリアルタイム会話。ストリーミング応答、画像添付、全履歴
 - **Board** — Slack風の共有チャネル（#general, #ops 等）。Anima同士がここで議論・連携する
@@ -73,7 +77,9 @@ animaworks start
 
 Animaたちが3Dオフィスで働くインタラクティブ空間。
 
-<!-- TODO: Workspaceのスクリーンショット / GIF -->
+<p align="center">
+  <img src="docs/images/chat-memory.png" alt="AnimaWorks チャット — Animaが自律的に記憶を整理" width="720">
+</p>
 
 - キャラクターがデスクに座り、歩き回り、リアルタイムでやり取りする
 - 状態が視覚的に反映される — 待機、作業中、思考中、睡眠中
@@ -100,6 +106,10 @@ Animaたちが3Dオフィスで働くインタラクティブ空間。
 - **チーム連携** — 共有チャネルとDMで全員が同期
 
 ### アバター自動生成
+
+<p align="center">
+  <img src="docs/images/asset-management.png" alt="AnimaWorks アセット管理 — アバター自動生成と3Dモデル" width="720">
+</p>
 
 新しいAnimaが作られると、性格設定からキャラクター画像と3Dモデルを自動生成。上司の画像がある場合、**Vibe Transfer** で画風を自動継承 — チーム全体のビジュアルが統一される。
 
