@@ -62,12 +62,12 @@ _BASH_BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 # ── A1 mode security ──────────────────────────────────────────
 
-# Files that animas cannot modify themselves (identity/privilege protection).
+# Files that animas cannot modify themselves (privilege/bootstrap protection).
+# identity.md and specialty_prompt.md are intentionally editable —
+# Animas can evolve their personality and specialization over time.
 _PROTECTED_FILES = frozenset({
     "permissions.md",
-    "identity.md",
     "bootstrap.md",
-    "specialty_prompt.md",
 })
 
 # Commands that can write files (checked for path traversal).
