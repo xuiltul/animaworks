@@ -122,6 +122,7 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
     tool = None
     args = None
     skip_pattern = None
+    trigger_heartbeat = True
     description_lines: list[str] = []
 
     i = 0
@@ -145,6 +146,9 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
                     skip_pattern = val
                 except re.error as e:
                     logger.warning("Invalid skip_pattern for task %s: %s", name, e)
+        elif stripped.startswith("trigger_heartbeat:"):
+            val = stripped.split(":", 1)[1].strip().lower()
+            trigger_heartbeat = val not in ("false", "no", "0")
         elif stripped.startswith("args:"):
             # Parse YAML args block (indented lines following "args:")
             yaml_lines = [line]
@@ -191,6 +195,7 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
         tool=tool,
         args=args,
         skip_pattern=skip_pattern,
+        trigger_heartbeat=trigger_heartbeat,
     )
 
 

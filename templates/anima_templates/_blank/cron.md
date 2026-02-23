@@ -40,6 +40,10 @@
   1. LLM型 (type: llm) - 判断・思考が必要なタスク
   2. Command型 (type: command) - 決定的なbash/tool実行
 
+■ オプション（command型のみ）
+  skip_pattern: <正規表現>       — stdoutがマッチしたらHBスキップ
+  trigger_heartbeat: false       — 出力があってもHBをトリガーしない
+
 ■ 詳細リファレンス
   → common_skills/cron-management.md を参照
 -->
@@ -66,7 +70,7 @@ command: /usr/local/bin/backup.sh
 ## Slack通知
 schedule: 0 9 * * 0-4
 type: command
-tool: slack_send_message
+tool: slack_send
 args:
   channel: "#general"
   message: "おはようございます！"

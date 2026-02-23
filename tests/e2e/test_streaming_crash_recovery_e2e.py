@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -39,8 +40,8 @@ async def test_health_check_detects_crash_during_streaming(tmp_path: Path):
     )
     handle.state = ProcessState.RUNNING
     handle._streaming = True
-    handle._streaming_started_at = datetime.now()
-    handle.stats = ProcessStats(started_at=datetime.now())
+    handle._streaming_started_at = now_jst()
+    handle.stats = ProcessStats(started_at=now_jst())
     handle.process = MagicMock()
     handle.process.poll.return_value = 1  # Process died
     handle.process.pid = 99999
@@ -82,7 +83,7 @@ async def test_streaming_timestamp_lifecycle(tmp_path: Path):
 
     # Simulate streaming start
     handle._streaming = True
-    handle._streaming_started_at = datetime.now()
+    handle._streaming_started_at = now_jst()
     assert handle._streaming_started_at is not None
     assert handle._streaming is True
 

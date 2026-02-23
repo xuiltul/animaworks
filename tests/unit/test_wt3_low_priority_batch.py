@@ -19,6 +19,7 @@ import asyncio
 import json
 import re
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -420,7 +421,7 @@ class TestJournalOpenRecoversOrphan:
             "trigger": "heartbeat",
             "from": "old-session",
             "session_id": "orphan-sess",
-            "ts": datetime.now().isoformat(),
+            "ts": now_jst().isoformat(),
         })
         journal_path.write_text(orphan_data + "\n", encoding="utf-8")
 
@@ -451,9 +452,9 @@ class TestJournalOpenRecoversOrphan:
         lines = [
             json.dumps({"ev": "start", "trigger": "chat", "from": "tester",
                          "session_id": "orphan-1",
-                         "ts": datetime.now().isoformat()}),
+                         "ts": now_jst().isoformat()}),
             json.dumps({"ev": "text", "t": "orphan content",
-                         "ts": datetime.now().isoformat()}),
+                         "ts": now_jst().isoformat()}),
         ]
         journal_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

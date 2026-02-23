@@ -86,11 +86,11 @@ class TestDistilledKnowledgeInjectionE2E:
     """E2E tests for distilled knowledge injection pipeline."""
 
     def test_full_injection_pipeline(self, data_dir: Path, make_anima: object) -> None:
-        """Full pipeline: collect -> plan -> inject into system prompt.
+        """Full pipeline: collect -> inject into system prompt.
 
         Creates 5 files (3 knowledge, 2 procedures) with varying confidence,
-        verifies collect returns all entries, compute_injection_plan places
-        all within budget, and build_system_prompt contains the section.
+        verifies collect returns all entries, and build_system_prompt contains
+        the section.
         """
         anima_dir = make_anima("test-inject")
         knowledge_dir = anima_dir / "knowledge"
@@ -128,15 +128,10 @@ class TestDistilledKnowledgeInjectionE2E:
         assert confidence_map["deploy-procedure"] == pytest.approx(0.8)
         assert confidence_map["rollback-procedure"] == pytest.approx(0.3)
 
-        # Step 2: compute_injection_plan with large budget (all fit)
-        injected, overflow = MemoryManager.compute_injection_plan(
-            entries, context_window=200_000,
-        )
-        assert len(injected) == 5
-        assert overflow == []
-
-        # Step 3: build_system_prompt with pre-computed entries
+        # Step 2: build_system_prompt with entries supplied via mock
         mock_memory = _make_mock_memory(anima_dir, data_dir)
+        mock_memory.collect_distilled_knowledge.return_value = entries
+
         with (
             patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
             patch("core.prompt.builder._build_org_context", return_value=""),
@@ -146,8 +141,6 @@ class TestDistilledKnowledgeInjectionE2E:
             result = build_system_prompt(
                 mock_memory,
                 message="test",
-                distilled_entries=injected,
-                overflow_files=overflow,
             )
 
         prompt = result.system_prompt
@@ -163,7 +156,7 @@ class TestDistilledKnowledgeInjectionE2E:
     async def test_overflow_triggers_channel_c(
         self, data_dir: Path, make_anima: object,
     ) -> None:
-        """Channel C is skipped when overflow is empty, active when files overflow.
+        """Channel C is skipped when restrict_to is empty, active when files overflow.
 
         Creates many large files that exceed 10% budget, verifies that
         some overflow, and checks Channel C conditional behavior.
@@ -182,11 +175,20 @@ class TestDistilledKnowledgeInjectionE2E:
         entries = mm.collect_distilled_knowledge()
         assert len(entries) == 30
 
-        # Use a small context window so that 10% budget is tiny
-        # 10% of 5000 = 500 tokens, each file ~500 tokens, so only ~1 fits
-        injected, overflow = MemoryManager.compute_injection_plan(
-            entries, context_window=5000,
-        )
+        # Simulate budget computation inline (same logic as builder.py)
+        context_window = 5000
+        knowledge_budget = int(context_window * 0.10)  # 500 tokens
+        used_tokens = 0
+        injected = []
+        overflow = []
+        for entry in entries:
+            est_tokens = len(entry["content"]) // 3
+            if used_tokens + est_tokens <= knowledge_budget:
+                injected.append(entry)
+                used_tokens += est_tokens
+            else:
+                overflow.append(entry["name"])
+
         assert len(overflow) > 0, "Expected some files to overflow"
         assert len(injected) < 30, "Not all files should be injected"
 
@@ -195,25 +197,22 @@ class TestDistilledKnowledgeInjectionE2E:
 
         engine = PrimingEngine(anima_dir, shared_dir=data_dir / "shared")
 
-        # With empty overflow_files list -> Channel C should short-circuit
+        # With empty restrict_to list -> Channel C should short-circuit
         result_empty = await engine._channel_c_related_knowledge(
-            ["test"], overflow_files=[],
+            ["test"], restrict_to=[],
         )
-        assert result_empty == "", "Channel C should be empty when overflow_files=[]"
+        assert result_empty == "", "Channel C should be empty when restrict_to=[]"
 
-        # With overflow_files having entries -> Channel C should NOT short-circuit
-        # (it may still return empty if no RAG index, but should attempt to run)
+        # With restrict_to having entries -> Channel C should NOT short-circuit
         result_overflow = await engine._channel_c_related_knowledge(
-            ["test"], overflow_files=["knowledge-00"],
+            ["test"], restrict_to=["knowledge-00"],
         )
-        # Channel C may still be empty (no RAG index in test env), but the key
-        # test is that it did NOT short-circuit (the empty-list guard was NOT hit).
-        # We verify this by confirming the path with overflow_files=None also works.
-        result_none = await engine._channel_c_related_knowledge(
-            ["test"], overflow_files=None,
-        )
-        # Both overflow and None paths should reach the same logic (not short-circuit)
         assert isinstance(result_overflow, str)
+
+        # restrict_to=None -> legacy path, should not short-circuit
+        result_none = await engine._channel_c_related_knowledge(
+            ["test"], restrict_to=None,
+        )
         assert isinstance(result_none, str)
 
     def test_procedures_keyword_and_vector_search_scope(
@@ -284,32 +283,33 @@ class TestDistilledKnowledgeInjectionE2E:
         mm = MemoryManager(anima_dir)
         entries = mm.collect_distilled_knowledge()
 
-        # Compute plan with tight budget: 10% of 5000 = 500 tokens
-        injected, overflow = MemoryManager.compute_injection_plan(
-            entries, context_window=5000,
+        # Build system prompt with mock memory that returns these entries
+        # and a tiny context window to force overflow
+        mock_memory = _make_mock_memory(anima_dir, data_dir)
+        mock_memory.collect_distilled_knowledge.return_value = entries
+        # Use a small model to get a small context window
+        mock_memory.read_model_config.return_value = MagicMock(
+            model="unknown-tiny-model",
+            supervisor=None,
         )
 
-        # Verify high-confidence file is injected, low-confidence overflows
-        injected_names = [e["name"] for e in injected]
-        assert "important-knowledge" in injected_names
-        assert "bulk-data" in overflow
-
-        # Build system prompt with these computed values
-        mock_memory = _make_mock_memory(anima_dir, data_dir)
         with (
             patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
+            patch(
+                "core.prompt.context.resolve_context_window",
+                return_value=5000,  # 10% = 500 tokens budget
+            ),
         ):
             result = build_system_prompt(
                 mock_memory,
                 message="test",
-                distilled_entries=injected,
-                overflow_files=overflow,
             )
 
         assert isinstance(result, BuildResult)
+        # bulk-data (~1000 tokens) should overflow with 500 token budget
         assert "bulk-data" in result.overflow_files
         assert "## Distilled Knowledge" in result.system_prompt
         assert "Critical information." in result.system_prompt

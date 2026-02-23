@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from core.time_utils import now_jst
 
 import pytest
 
@@ -228,7 +229,7 @@ class TestAnimaStatus:
         assert ps.pending_messages == 0
 
     def test_custom_values(self):
-        now = datetime.now()
+        now = now_jst()
         ps = AnimaStatus(
             name="bob",
             status="thinking",

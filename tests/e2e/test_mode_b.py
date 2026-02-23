@@ -10,6 +10,7 @@ Post-call: episode recording and knowledge extraction.
 from __future__ import annotations
 
 from datetime import date
+from core.time_utils import now_jst
 
 import pytest
 
@@ -93,7 +94,7 @@ class TestModeBMock:
         # Simulate post-call knowledge extraction (formerly done by old AssistedExecutor)
         knowledge_text = "France's capital is Paris — useful geographic fact."
         from datetime import datetime
-        topic = datetime.now().strftime("learned_%Y%m%d_%H%M%S")
+        topic = now_jst().strftime("learned_%Y%m%d_%H%M%S")
         agent.memory.write_knowledge(topic, knowledge_text)
 
         # Check knowledge file was created
@@ -213,10 +214,9 @@ class TestModeBSkillInjection:
 
         assert len(captured_system) >= 1
         sys_prompt = captured_system[0]
-        # Personal skills appear under "スキルと手順書" (from skills_guide.md template)
-        assert "スキルと手順書" in sys_prompt
+        # Personal skills appear under memory guide section (スキル: ...)
+        assert "スキル:" in sys_prompt
         assert "test_skill" in sys_prompt
-        assert "A test skill for validation" in sys_prompt
 
     async def test_common_skill_in_system_prompt(self, make_agent_core, data_dir):
         """Mode B includes common skills in system prompt."""

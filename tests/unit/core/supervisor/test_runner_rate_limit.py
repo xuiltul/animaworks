@@ -45,9 +45,12 @@ class TestCooldown:
     """Tests for is_in_cooldown() method."""
 
     def test_no_cooldown_initially(self):
-        """is_in_cooldown() returns False when _last_msg_heartbeat_end is 0."""
+        """is_in_cooldown() returns False when _last_msg_heartbeat_end is far in the past."""
         limiter = _make_limiter()
-        # Default is 0.0, which is far in the past relative to monotonic()
+        # Ensure _last_msg_heartbeat_end is far enough in the past
+        # (default 0.0 may be within cooldown on freshly booted CI runners
+        # where time.monotonic() < cooldown_sec)
+        limiter._last_msg_heartbeat_end = time.monotonic() - limiter._cooldown_sec - 1
         assert limiter.is_in_cooldown() is False
 
     def test_in_cooldown_within_60s(self):

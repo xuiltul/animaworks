@@ -70,8 +70,7 @@ IMPORTANT: You must NEVER generate or guess URLs for the user. You may use URLs 
 3. **共通スキル** (`{data_dir}/common_skills/`): 司令塔メンバーのみ書き込み可能。その他のメンバーは書き込み不可。全員が使えるスキル
 4. **会社情報** (`{data_dir}/company/`): 司令塔メンバーのみ書き込み可能
 5. **プロンプト** (`{data_dir}/prompts/`): 読み取り専用。キャラクター設計ガイド等のテンプレート
-6. **部下のディレクトリ**（直属の部下のみ）: `cron.md` と `heartbeat.md` の読み書き、`activity_log/` の読み取りが可能。パスは `../部下名/cron.md` のように相対パスで指定
-7. **他の社員のディレクトリ**: 上記以外は permissions.md に明示された範囲のみアクセス可能
+6. **他の社員のディレクトリ**: permissions.md に明示された範囲のみアクセス可能
 
 ### 禁止事項
 

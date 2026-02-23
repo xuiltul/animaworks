@@ -14,7 +14,7 @@ Digital Anima is the minimal unit that encapsulates an AI agent as "a single per
 
 **Technical Direction:**
 
-- Agent execution operates in **4 modes**: **A1** (Claude Agent SDK), **A1 Fallback** (Anthropic SDK direct), **A2** (LiteLLM + tool_use), **B** (one-shot assisted)
+- Agent execution operates in **3 modes**: **S** (Claude Agent SDK — session management delegated to SDK), **A** (Anthropic SDK / LiteLLM + tool_use), **B** (one-shot assisted)
 - Configuration is unified in **config.json** (Pydantic validation); memories are written in **Markdown**
 - Multiple Animas operate collaboratively in a **hierarchical structure** (hierarchy defined by the `supervisor` field, synchronous delegation)
 
@@ -27,13 +27,11 @@ Digital Anima is the minimal unit that encapsulates an AI agent as "a single per
 │                   Digital Anima                      │
 │                                                       │
 │  Identity ──── Who I am (always resident)             │
-│  Agent Core ── 4 execution modes                      │
-│    ├ A1: Claude Agent SDK (Claude-only, autonomous)   │
-│    ├ A1 Fallback: Anthropic SDK direct (when SDK      │
-│    │  not installed)                                  │
-│    ├ A2: LiteLLM + tool_use (GPT-4o, Gemini, etc.,   │
-│    │  autonomous)                                     │
-│    └ B:  One-shot assisted (Ollama, etc., FW-managed) │
+│  Agent Core ── 3 execution modes                      │
+│    ├ S: Claude Agent SDK (session delegated to SDK)   │
+│    ├ A: Anthropic SDK / LiteLLM + tool_use            │
+│    │  (GPT-4o, Gemini, Claude, etc., autonomous)      │
+│    └ B: One-shot assisted (Ollama, etc., FW-managed)  │
 │  Memory ───── Archive-based long-term memory          │
 │    │           (autonomous search for recall)          │
 │    ├ Conversation memory (rolling compression)        │
@@ -92,9 +90,9 @@ animaworks/
 │   │   └── dispatch.py        #   External tool routing
 │   ├── execution/             # Execution engines
 │   │   ├── base.py            #   BaseExecutor ABC
-│   │   ├── agent_sdk.py       #   Mode A1: Claude Agent SDK
-│   │   ├── anthropic_fallback.py # Mode A1 Fallback: Anthropic SDK direct
-│   │   ├── litellm_loop.py    #   Mode A2: LiteLLM + tool_use
+│   │   ├── agent_sdk.py       #   Mode S: Claude Agent SDK
+│   │   ├── anthropic_fallback.py # Mode A: Anthropic SDK direct
+│   │   ├── litellm_loop.py    #   Mode A: LiteLLM + tool_use
 │   │   ├── assisted.py        #   Mode B: Framework-assisted
 │   │   └── _session.py        #   Session continuity and chaining
 │   └── tools/                 # External tool implementations
@@ -165,7 +163,7 @@ All settings are consolidated in `~/.animaworks/config.json`. Validated with the
 |-----------------------|-------------------------------------|
 |`system`               |Operation mode, log level            |
 |`credentials`          |Per-provider API keys and endpoints (named map)|
-|`model_modes`          |Model name to execution mode (A1/A2/B) custom mapping|
+|`model_modes`          |Model name to execution mode (S/A/B) custom mapping|
 |`anima_defaults`       |Default values applied to all Animas |
 |`animas`               |Per-Anima overrides (unspecified fields fall back to defaults)|
 |`consolidation`        |Memory consolidation settings (daily/weekly execution times and thresholds)|
@@ -388,7 +386,7 @@ Rolling chat history. When the accumulated size exceeds `conversation_history_th
 
 ### 4.9 Short-Term Memory (ShortTermMemory)
 
-Externalized memory for session continuity. When the context threshold is exceeded in A2 mode, `session_state.json` (machine-readable) and `session_state.md` (for next prompt injection) are generated. Automatically archived to `shortterm/archive/` (up to 100 entries).
+Externalized memory for session continuity. When the context threshold is exceeded in A mode, `session_state.json` (machine-readable) and `session_state.md` (for next prompt injection) are generated. Automatically archived to `shortterm/archive/` (up to 100 entries).
 
 ### 4.10 Unified Activity Log (ActivityLogger)
 
@@ -587,7 +585,7 @@ Activation (message or heartbeat or cron)
   ↓
 Recall: Search the archive for relevant memories
   ↓
-Think & Act: Agent Core (A1/A2/B mode) processes
+Think & Act: Agent Core (S/A/B mode) processes
   ↓
 Communicate: Summarize results and send as text or create files
   ↓
@@ -650,7 +648,7 @@ System Prompt =
   15. Unmatched common skills (table format)
   16. Hiring rules (only when newstaff skill is present — conditional)
   17. External tool guide (only when permitted — conditional)
-  18. A2 reflection (self-correction prompt for A2 mode)
+  18. A reflection (self-correction prompt for A mode)
   19. emotion metadata (facial expression metadata instructions)
   20. hiring context (only when no other Animas exist — conditional)
   21. behavior_rules (search before deciding)
@@ -670,7 +668,7 @@ Including "Making decisions without searching memory is prohibited" in `behavior
 ## 11. Implemented Features
 
 - **Digital Anima class** --- Encapsulation and autonomous operation. 1 Anima = 1 directory
-- **4 execution modes** --- A1: Claude Agent SDK / A1 Fallback: Anthropic SDK direct / A2: LiteLLM + tool_use / B: Assisted (one-shot)
+- **3 execution modes** --- S: Claude Agent SDK (session delegated to SDK) / A: Anthropic SDK or LiteLLM + tool_use / B: Assisted (one-shot)
 - **Archive-based memory** --- episodes (daily logs) / knowledge (lessons and knowledge) / procedures (runbooks) / state (working memory)
 - **Conversation memory** --- Rolling compression. Older turns compressed via LLM summarization when threshold exceeded
 - **Short-term memory** --- Session continuity. Externalized as JSON+MD when context threshold exceeded
@@ -687,7 +685,8 @@ Including "Making decisions without searching memory is prohibited" in `behavior
 - **Trigger-based skill injection** --- Description-based matching from message content. Full text of matched skills injected within budget
 - **External messaging integration** --- Slack Socket Mode (real-time bidirectional), Chatwork Webhook (inbound)
 - **Embedding model configuration** --- RAG embedding model selectable via config.json
-- **A1 Fallback executor** --- When Claude Agent SDK is not installed, executes tool_use loop directly via the Anthropic SDK
+- **Persistent task queue** --- Structured JSONL-based task management with staleness detection and delegation prompts
+- **Resolution registry** --- Cross-Anima issue resolution tracking via shared/resolutions.jsonl
 
 -----
 

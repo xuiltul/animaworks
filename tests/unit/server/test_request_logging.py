@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from core.time_utils import now_jst
 import logging
 from pathlib import Path
 from unittest.mock import patch
@@ -149,7 +150,7 @@ class TestFrontendLogEndpoints:
 
         log_dir = tmp_path / "logs" / "frontend"
         log_dir.mkdir(parents=True, exist_ok=True)
-        today = datetime.now().strftime("%Y%m%d")
+        today = now_jst().strftime("%Y%m%d")
         log_file = log_dir / "frontend.jsonl"
         log_file.write_text(
             '{"level":"ERROR","module":"ws","msg":"err1"}\n'
@@ -171,7 +172,7 @@ class TestFrontendLogEndpoints:
 
         log_dir = tmp_path / "logs" / "frontend"
         log_dir.mkdir(parents=True, exist_ok=True)
-        today = datetime.now().strftime("%Y%m%d")
+        today = now_jst().strftime("%Y%m%d")
         log_file = log_dir / "frontend.jsonl"
         log_file.write_text(
             '{"level":"ERROR","module":"websocket","msg":"err1"}\n'

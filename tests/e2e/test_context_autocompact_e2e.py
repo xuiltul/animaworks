@@ -175,8 +175,8 @@ class TestPreToolHookContextAutoCompact:
             session_stats=session_stats,
         )
 
-        # Attempt to write to a protected file (identity.md)
-        protected_path = str(anima_dir / "identity.md")
+        # Attempt to write to a protected file (permissions.md)
+        protected_path = str(anima_dir / "permissions.md")
         input_data = {
             "tool_name": "Write",
             "tool_input": {"file_path": protected_path, "content": "hacked"},

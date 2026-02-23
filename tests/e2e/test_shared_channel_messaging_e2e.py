@@ -26,6 +26,12 @@ def shared_dir(tmp_path: Path) -> Path:
 class TestE2EDMFlow:
     """Full DM flow: send → inbox + dm_logs parallel write."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_depth_limiter(self):
+        """Reset the global cascade limiter between tests."""
+        from core.cascade_limiter import depth_limiter
+        depth_limiter._exchanges.clear()
+
     def test_send_creates_inbox_and_dm_log(self, shared_dir):
         """send() creates inbox file and writes dm_log (parallel fallback)."""
         alice = Messenger(shared_dir, "alice")

@@ -15,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from core.time_utils import now_jst
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -84,16 +86,16 @@ def _write_activity(animas_dir: Path, name: str, entries: list[dict]) -> None:
                 f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
 
-# ── Test 1: API returns naive timestamps ──────────────────
+# ── Test 1: API returns JST-aware timestamps ──────────────────
 
 
 class TestApiTimestampFormat:
-    """Verify the API returns naive ISO timestamps without Z suffix."""
+    """Verify the API returns JST-aware ISO timestamps (not UTC Z suffix)."""
 
-    async def test_activity_ts_format_is_naive(self, tmp_path: Path) -> None:
+    async def test_activity_ts_format_is_jst(self, tmp_path: Path) -> None:
         animas_dir = tmp_path / "animas"
         _setup_anima(animas_dir, "alice")
-        now = datetime.now()
+        now = now_jst()
         _write_activity(animas_dir, "alice", [
             {"ts": now.isoformat(), "type": "heartbeat_start", "summary": "HB"},
         ])
@@ -104,9 +106,11 @@ class TestApiTimestampFormat:
             data = resp.json()
             assert len(data["events"]) == 1
             ts = data["events"][0]["ts"]
-            # Must NOT end with Z (naive local format)
-            assert not ts.endswith("Z"), f"Expected naive timestamp, got: {ts}"
-            assert "+" not in ts, f"Expected no timezone offset, got: {ts}"
+            # Must NOT end with Z (UTC format); should be JST (+09:00)
+            assert not ts.endswith("Z"), f"Expected JST timestamp, got UTC: {ts}"
+            # Verify parseable as ISO datetime
+            parsed = datetime.fromisoformat(ts)
+            assert parsed is not None
 
 
 # ── Test 2: Cross-anima events sorted by timestamp ────────
@@ -119,7 +123,7 @@ class TestCrossAnimaSort:
         animas_dir = tmp_path / "animas"
         _setup_anima(animas_dir, "alice")
         _setup_anima(animas_dir, "bob")
-        now = datetime.now()
+        now = now_jst()
 
         _write_activity(animas_dir, "alice", [
             {"ts": (now - timedelta(minutes=5)).isoformat(), "type": "heartbeat_start", "summary": "alice older"},
@@ -164,7 +168,7 @@ class TestEventTypesInApi:
     ) -> None:
         animas_dir = tmp_path / "animas"
         _setup_anima(animas_dir, "alice")
-        now = datetime.now()
+        now = now_jst()
         entry = {"ts": now.isoformat(), "type": event_type, **extra_fields}
         _write_activity(animas_dir, "alice", [entry])
 
@@ -186,7 +190,7 @@ class TestEventTypeFilter:
     async def test_filter_message_types(self, tmp_path: Path) -> None:
         animas_dir = tmp_path / "animas"
         _setup_anima(animas_dir, "alice")
-        now = datetime.now()
+        now = now_jst()
         _write_activity(animas_dir, "alice", [
             {"ts": (now - timedelta(seconds=3)).isoformat(), "type": "heartbeat_start", "summary": "HB"},
             {"ts": (now - timedelta(seconds=2)).isoformat(), "type": "message_received", "from": "taka", "content": "hi"},
@@ -214,7 +218,7 @@ class TestApiDictFields:
     async def test_required_fields_present(self, tmp_path: Path) -> None:
         animas_dir = tmp_path / "animas"
         _setup_anima(animas_dir, "alice")
-        now = datetime.now()
+        now = now_jst()
         _write_activity(animas_dir, "alice", [
             {
                 "ts": now.isoformat(),

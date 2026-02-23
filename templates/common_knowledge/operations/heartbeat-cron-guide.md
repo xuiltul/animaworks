@@ -211,7 +211,7 @@ command: /usr/local/bin/backup.sh
 ```markdown
 ## Slack朝の挨拶（平日 9:00 JST）
 type: command
-tool: slack_send_message
+tool: slack_send
 args:
   channel: "#general"
   message: "おはようございます！本日もよろしくお願いします。"
@@ -322,7 +322,7 @@ type: llm
 ```markdown
 ## Slack日報送信（平日 18:00 JST）
 type: command
-tool: slack_send_message
+tool: slack_send
 args:
   channel: "#daily-report"
   message: "本日の業務完了しました。詳細は明日の朝礼で共有します。"

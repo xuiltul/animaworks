@@ -424,7 +424,7 @@ class TestDeadlineMandatory:
 class TestFormatForPrimingWithStaleness:
     """Tests for staleness and deadline markers in format_for_priming().
 
-    Uses unittest.mock.patch to control datetime.now() in the task_queue module.
+    Uses unittest.mock.patch to control now_jst() in the task_queue module.
     Tasks are written directly to JSONL with specific timestamps.
     """
 

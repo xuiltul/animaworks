@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, MagicMock
@@ -116,7 +117,7 @@ async def test_health_check_recovers_stuck_stopping_e2e():
 
         # Set the handle to STOPPING with stopping_since > 30 seconds ago
         handle.state = ProcessState.STOPPING
-        handle.stopping_since = datetime.now() - timedelta(seconds=60)
+        handle.stopping_since = now_jst() - timedelta(seconds=60)
 
         supervisor.processes["test-stuck"] = handle
 

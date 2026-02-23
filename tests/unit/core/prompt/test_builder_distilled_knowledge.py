@@ -39,6 +39,11 @@ def _make_mock_memory(anima_dir: Path, data_dir: Path) -> MagicMock:
     memory.common_skills_dir = data_dir / "common_skills"
     memory.list_shared_users.return_value = []
     memory.collect_distilled_knowledge.return_value = []
+    # read_model_config for context window resolution
+    model_cfg = MagicMock()
+    model_cfg.model = "claude-sonnet-4-20250514"
+    model_cfg.supervisor = None
+    memory.read_model_config.return_value = model_cfg
     return memory
 
 
@@ -47,14 +52,15 @@ def _make_mock_memory(anima_dir: Path, data_dir: Path) -> MagicMock:
 
 class TestDistilledEntriesInjected:
     def test_distilled_entries_injected(self, tmp_path: Path, data_dir: Path) -> None:
-        """Pre-computed entries appear in system prompt as 'Distilled Knowledge'."""
+        """collect_distilled_knowledge entries appear in system prompt as 'Distilled Knowledge'."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
 
-        distilled_entries = [
+        # Mock collect_distilled_knowledge to return entries
+        memory.collect_distilled_knowledge.return_value = [
             {
                 "name": "python-basics",
                 "content": "Python is a dynamically typed language.",
@@ -69,11 +75,7 @@ class TestDistilledEntriesInjected:
             },
         ]
 
-        result = build_system_prompt(
-            memory,
-            distilled_entries=distilled_entries,
-            overflow_files=[],
-        )
+        result = build_system_prompt(memory)
         assert isinstance(result, BuildResult)
         assert "## Distilled Knowledge" in result
         assert "python-basics" in result
@@ -90,37 +92,49 @@ class TestDistilledEntriesEmpty:
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
+        memory.collect_distilled_knowledge.return_value = []
 
-        result = build_system_prompt(
-            memory,
-            distilled_entries=[],
-            overflow_files=[],
-        )
+        result = build_system_prompt(memory)
         assert "## Distilled Knowledge" not in result
 
 
 class TestOverflowFilesInBuildResult:
     def test_overflow_files_in_build_result(self, tmp_path: Path, data_dir: Path) -> None:
-        """overflow_files is correctly returned in BuildResult."""
+        """Files exceeding budget are returned in BuildResult.overflow_files."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
 
-        overflow = ["overflow_file1", "overflow_file2"]
-        result = build_system_prompt(
-            memory,
-            distilled_entries=[],
-            overflow_files=overflow,
-        )
+        # Create entries where one is too large for the budget
+        small_content = "Critical information."
+        large_content = "B" * 900_000  # ~300k tokens, exceeds any 10% budget
+
+        memory.collect_distilled_knowledge.return_value = [
+            {
+                "name": "small-knowledge",
+                "content": small_content,
+                "confidence": 0.95,
+                "path": "/tmp/knowledge/small-knowledge.md",
+            },
+            {
+                "name": "huge-knowledge",
+                "content": large_content,
+                "confidence": 0.1,
+                "path": "/tmp/knowledge/huge-knowledge.md",
+            },
+        ]
+
+        result = build_system_prompt(memory)
         assert isinstance(result, BuildResult)
-        assert result.overflow_files == overflow
+        # The huge file should overflow
+        assert "huge-knowledge" in result.overflow_files
 
 
 class TestAutoComputeWhenNoEntries:
     def test_auto_compute_when_no_entries(self, tmp_path: Path, data_dir: Path) -> None:
-        """When distilled_entries=None, builder computes from memory."""
+        """Builder auto-computes distilled knowledge from memory."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
@@ -135,41 +149,25 @@ class TestAutoComputeWhenNoEntries:
             },
         ]
 
-        with patch(
-            "core.prompt.builder.MemoryManager.compute_injection_plan",
-            return_value=(
-                [
-                    {
-                        "name": "auto-computed",
-                        "content": "Auto computed knowledge",
-                        "confidence": 0.8,
-                    },
-                ],
-                [],
-            ),
-        ):
-            result = build_system_prompt(
-                memory,
-                distilled_entries=None,
-            )
-            assert isinstance(result, BuildResult)
-            # collect_distilled_knowledge should have been called
-            memory.collect_distilled_knowledge.assert_called_once()
-            assert "auto-computed" in result
-            assert "Auto computed knowledge" in result
+        result = build_system_prompt(memory)
+        assert isinstance(result, BuildResult)
+        # collect_distilled_knowledge should have been called
+        memory.collect_distilled_knowledge.assert_called_once()
+        assert "auto-computed" in result
+        assert "Auto computed knowledge" in result
 
 
 class TestConfidenceSortingInOutput:
     def test_confidence_sorting_in_output(self, tmp_path: Path, data_dir: Path) -> None:
-        """Higher confidence entries appear first in the output."""
+        """Entries are injected in the order returned by collect_distilled_knowledge."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
 
-        # Entries are already sorted by confidence desc from compute_injection_plan
-        distilled_entries = [
+        # Return entries in confidence-descending order (as collect_distilled_knowledge does)
+        memory.collect_distilled_knowledge.return_value = [
             {
                 "name": "high-conf",
                 "content": "HIGH_CONFIDENCE_CONTENT",
@@ -184,11 +182,7 @@ class TestConfidenceSortingInOutput:
             },
         ]
 
-        result = build_system_prompt(
-            memory,
-            distilled_entries=distilled_entries,
-            overflow_files=[],
-        )
+        result = build_system_prompt(memory)
         # Both should appear
         assert "HIGH_CONFIDENCE_CONTENT" in result
         assert "LOW_CONFIDENCE_CONTENT" in result

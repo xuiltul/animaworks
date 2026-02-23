@@ -11,6 +11,7 @@ Install with: pip install 'animaworks[rag]'
 
 import pytest
 from pathlib import Path
+from core.time_utils import now_jst
 import tempfile
 import shutil
 
@@ -375,7 +376,7 @@ def test_temporal_decay(temp_anima_dir, temp_vector_store):
     )
 
     # Create results with different ages
-    now = datetime.now()
+    now = now_jst()
     recent_date = now - timedelta(days=1)
     old_date = now - timedelta(days=60)
 

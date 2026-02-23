@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from core.time_utils import now_jst
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock
 
@@ -133,7 +134,7 @@ async def test_health_check_detects_failed_state():
 
         # Set started_at far enough back to pass startup grace period
         from datetime import datetime, timedelta
-        handle.stats.started_at = datetime.now() - timedelta(seconds=60)
+        handle.stats.started_at = now_jst() - timedelta(seconds=60)
 
         supervisor.processes["test-anima"] = handle
 

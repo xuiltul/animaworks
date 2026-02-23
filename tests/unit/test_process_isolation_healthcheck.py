@@ -17,6 +17,7 @@ import json
 import os
 import signal
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -325,7 +326,7 @@ class TestFailedLogSpamSuppression:
         supervisor.processes["test-anima"] = handle
         handle.state = ProcessState.FAILED
         # NOT added to _permanently_failed
-        handle.stats.started_at = datetime.now() - timedelta(seconds=60)
+        handle.stats.started_at = now_jst() - timedelta(seconds=60)
 
         with patch.object(
             supervisor, "_handle_process_failure", new_callable=AsyncMock,

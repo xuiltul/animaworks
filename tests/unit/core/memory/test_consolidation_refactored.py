@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 
 from core.memory.consolidation import ConsolidationEngine
 
@@ -28,7 +29,7 @@ class TestCollectRecentEpisodes:
 
     def test_collects_today_episodes(self, engine, anima_dir):
         """Collect episodes from today's file."""
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = now_jst().strftime("%Y-%m-%d")
         ep_file = anima_dir / "episodes" / f"{today}.md"
         ep_file.write_text("## 10:00 \u2014 Did some work\n\nDetails here\n\n## 14:00 \u2014 Meeting notes\n\nMore details\n")
 

@@ -24,6 +24,7 @@ References:
 import json
 import logging
 from datetime import date, datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import patch
 
@@ -114,7 +115,7 @@ class TestSharedChannelVisibleInPriming:
         After the degradation fix, PrimingEngine._channel_b_recent_activity()
         reads shared/channels/*.jsonl to restore cross-Anima visibility.
         """
-        now = datetime.now()
+        now = now_jst()
 
         # Write some channel posts from other animas
         posts = [
@@ -273,7 +274,7 @@ class TestFormatForPrimingContentTrim:
         long_text = "A" * 600
         entries = [
             ActivityEntry(
-                ts=datetime.now().isoformat(),
+                ts=now_jst().isoformat(),
                 type="message_received",
                 content=long_text,
                 from_person="alice",
@@ -303,7 +304,7 @@ class TestFormatForPrimingContentTrim:
         long_text = "B" * 300
         entries = [
             ActivityEntry(
-                ts=datetime.now().isoformat(),
+                ts=now_jst().isoformat(),
                 type="message_received",
                 content=long_text,
                 from_person="bob",
@@ -340,7 +341,7 @@ class TestReadDmHistoryExcludesMessageTypes:
         anima_dir = tmp_path / "animas" / "test-anima"
         (anima_dir / "activity_log").mkdir(parents=True)
 
-        now = datetime.now()
+        now = now_jst()
         today = date.today().isoformat()
 
         # Write mixed activity log entries involving "peer-anima"

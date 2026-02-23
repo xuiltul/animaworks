@@ -404,6 +404,105 @@ args:
         assert tasks[0].args == {"sync": True, "sync_limit": 10}
 
 
+# ── trigger_heartbeat tests ──────────────────────────────
+
+
+class TestTriggerHeartbeat:
+    """Tests for trigger_heartbeat directive parsing."""
+
+    def test_trigger_heartbeat_default_true(self):
+        """trigger_heartbeat defaults to True when not specified."""
+        content = """\
+## Check
+schedule: */5 * * * *
+type: command
+tool: check_something
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].trigger_heartbeat is True
+
+    def test_trigger_heartbeat_false(self):
+        """trigger_heartbeat: false is parsed correctly."""
+        content = """\
+## Check
+schedule: */5 * * * *
+type: command
+tool: check_something
+trigger_heartbeat: false
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].trigger_heartbeat is False
+
+    def test_trigger_heartbeat_no(self):
+        """trigger_heartbeat: no is treated as False."""
+        content = """\
+## Check
+schedule: */5 * * * *
+type: command
+tool: check_something
+trigger_heartbeat: no
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].trigger_heartbeat is False
+
+    def test_trigger_heartbeat_zero(self):
+        """trigger_heartbeat: 0 is treated as False."""
+        content = """\
+## Check
+schedule: */5 * * * *
+type: command
+tool: check_something
+trigger_heartbeat: 0
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].trigger_heartbeat is False
+
+    def test_trigger_heartbeat_true_explicit(self):
+        """trigger_heartbeat: true is parsed correctly."""
+        content = """\
+## Check
+schedule: */5 * * * *
+type: command
+tool: check_something
+trigger_heartbeat: true
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].trigger_heartbeat is True
+
+    def test_trigger_heartbeat_with_skip_pattern(self):
+        """trigger_heartbeat works alongside skip_pattern."""
+        content = """\
+## Check
+schedule: */5 * * * *
+type: command
+tool: check_something
+skip_pattern: ^\\[\\s*\\]$
+trigger_heartbeat: false
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].skip_pattern == "^\\[\\s*\\]$"
+        assert tasks[0].trigger_heartbeat is False
+
+    def test_trigger_heartbeat_case_insensitive(self):
+        """trigger_heartbeat: False (capitalized) is treated as False."""
+        content = """\
+## Check
+schedule: */5 * * * *
+type: command
+tool: check_something
+trigger_heartbeat: False
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].trigger_heartbeat is False
+
+
 # ── Blank template format tests ──────────────────────────
 
 

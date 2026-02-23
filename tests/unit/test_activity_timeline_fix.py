@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 
 import pytest
@@ -167,5 +168,5 @@ class TestBackendTimestampFormat:
         import inspect
         source = inspect.getsource(ActivityLogger.log)
         assert "now_iso()" in source
-        # Must not use raw datetime.now()
-        assert "datetime.now()" not in source
+        # Must not use raw now_jst()
+        assert "now_jst()" not in source

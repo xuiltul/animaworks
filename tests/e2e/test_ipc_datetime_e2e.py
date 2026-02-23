@@ -14,6 +14,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Union
@@ -209,7 +210,7 @@ async def test_non_streaming_response_with_datetime():
                 id=request.id,
                 result={
                     "response": "done",
-                    "completed_at": datetime.now(),
+                    "completed_at": now_jst(),
                 },
             )
 
@@ -241,7 +242,7 @@ async def test_non_streaming_response_with_datetime():
 @pytest.mark.asyncio
 async def test_event_with_datetime():
     """E2E: IPCEvent.to_json() with datetime in data should serialize correctly."""
-    now = datetime.now()
+    now = now_jst()
     event = IPCEvent(
         event="anima_activity",
         data={

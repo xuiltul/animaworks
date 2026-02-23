@@ -19,6 +19,7 @@ Tests cover:
 import math
 import tempfile
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -97,7 +98,7 @@ class TestScoreAdjustmentsFrequency:
         A RetrievalResult with access_count=10 should receive a higher
         frequency boost than one with access_count=0.
         """
-        now = datetime.now()
+        now = now_jst()
         recent = (now - timedelta(days=1)).isoformat()
 
         high_access = _make_result(
@@ -128,7 +129,7 @@ class TestScoreAdjustmentsFrequency:
         """Test that access_count=0 gives frequency_boost=0 (log1p(0) == 0)."""
         result = _make_result(
             doc_id="zero", score=0.5, access_count=0,
-            updated_at=datetime.now().isoformat(),
+            updated_at=now_jst().isoformat(),
         )
 
         adjusted = retriever._apply_score_adjustments([result])
@@ -143,7 +144,7 @@ class TestScoreAdjustmentsFrequency:
         100 accesses should NOT give 100x the boost of 1 access.
         The ratio should be much smaller due to log scaling.
         """
-        now_iso = datetime.now().isoformat()
+        now_iso = now_jst().isoformat()
 
         one_access = _make_result(
             doc_id="one", score=0.5, access_count=1, updated_at=now_iso,

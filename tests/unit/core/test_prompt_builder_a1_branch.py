@@ -20,8 +20,9 @@ from core.paths import PROMPTS_DIR
 class TestMessagingSectionBranching:
     """Verify _build_messaging_section selects the correct template by execution_mode."""
 
+    @patch("core.tooling.prompt_db.get_prompt_store", return_value=None)
     @patch("core.prompt.builder.load_prompt", return_value="mocked prompt")
-    def test_s_mode_loads_messaging_s_template(self, mock_load: MagicMock) -> None:
+    def test_s_mode_loads_messaging_s_template(self, mock_load: MagicMock, _mock_store: MagicMock) -> None:
         """When execution_mode='s', the messaging_s template must be loaded."""
         from core.prompt.builder import _build_messaging_section
 
@@ -44,8 +45,9 @@ class TestMessagingSectionBranching:
         assert "messaging" in template_names
         assert "messaging_s" not in template_names
 
+    @patch("core.tooling.prompt_db.get_prompt_store", return_value=None)
     @patch("core.prompt.builder.load_prompt", return_value="mocked prompt")
-    def test_default_execution_mode_is_s(self, mock_load: MagicMock) -> None:
+    def test_default_execution_mode_is_s(self, mock_load: MagicMock, _mock_store: MagicMock) -> None:
         """Default execution_mode should be 's', loading messaging_s template."""
         from core.prompt.builder import _build_messaging_section
 
@@ -63,9 +65,10 @@ class TestOrgContextCommunicationRules:
     """Verify _build_org_context selects the correct communication_rules template."""
 
     @patch("core.config.load_config")
+    @patch("core.tooling.prompt_db.get_prompt_store", return_value=None)
     @patch("core.prompt.builder.load_prompt", return_value="mocked prompt")
     def test_s_mode_loads_communication_rules_s(
-        self, mock_load: MagicMock, mock_config: MagicMock
+        self, mock_load: MagicMock, _mock_store: MagicMock, mock_config: MagicMock
     ) -> None:
         """When execution_mode='s' and other_animas exist, communication_rules_s is loaded."""
         from core.prompt.builder import _build_org_context
@@ -119,9 +122,10 @@ class TestOrgContextCommunicationRules:
         assert "communication_rules_s" not in template_names
 
     @patch("core.config.load_config")
+    @patch("core.tooling.prompt_db.get_prompt_store", return_value=None)
     @patch("core.prompt.builder.load_prompt", return_value="mocked prompt")
     def test_empty_other_animas_skips_communication_rules(
-        self, mock_load: MagicMock, mock_config: MagicMock
+        self, mock_load: MagicMock, _mock_store: MagicMock, mock_config: MagicMock
     ) -> None:
         """When other_animas is empty, no communication_rules template should be loaded."""
         from core.prompt.builder import _build_org_context

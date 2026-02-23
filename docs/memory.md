@@ -3,7 +3,7 @@
 **[日本語版](memory.ja.md)**
 
 > Created: 2026-02-14
-> Updated: 2026-02-18
+> Updated: 2026-02-23
 > Related: [vision.md](vision.md), [spec.md](spec.md), [implemented/20260214_priming-layer_design.md](implemented/20260214_priming-layer_design.md)
 > Research: [AI Agent Memory Architecture Survey](research/20260212_AI_Agent記憶アーキテクチャ調査.md) Section 10
 
@@ -176,11 +176,11 @@ Human memory recall is not a single process but consists of two stages: **automa
 
 ```
 Message received -> Context extraction -> Priming search -> Context assembly -> Agent execution
-                   (sender, keywords)   (4 channels       (within token      (memories already
+                   (sender, keywords)   (5 channels       (within token      (memories already
                                          in parallel)       budget)            present)
 ```
 
-Four search channels (`core/memory/priming.py`):
+Five search channels (`core/memory/priming.py`):
 
 | Channel | Target | Budget | Method | Brain Analog |
 |---|---|---|---|---|
@@ -188,10 +188,13 @@ Four search channels (`core/memory/priming.py`):
 | **B: Recent Activity** | activity_log/ | 1300 tokens | Chronological retrieval from ActivityLogger | Short-to-recent memory. "What happened recently" |
 | **C: Related Knowledge** | knowledge/ | 700 tokens | Dense vector similarity search (RAG) | Associative recall via spreading activation |
 | **D: Skill/Procedure Match** | skills/, procedures/, common_skills/ | 200 tokens | Description-based matching | List recall of "what I can do" and "how to do it" |
+| **E: Pending Tasks** | state/task_queue.jsonl | 300 tokens | TaskQueueManager formatting | "What I need to do." Outstanding tasks and deadlines |
 
 Channel B consolidates the legacy `episodes/` date-filtered retrieval and shared channel reads into a unified retrieval from the `ActivityLogger` unified activity log. When the activity log is empty, it falls back to the legacy format (episodes/ + channels/).
 
 Channel D searches `procedures/` in addition to `skills/`. A 3-stage matching approach (bracket keywords, lexical matching, RAG vector search) enhances procedural memory recall accuracy (see the "Procedural Memory Lifecycle" section for details).
+
+Channel E injects pending task entries from the persistent task queue into the priming context, ensuring Animas remain aware of outstanding work during heartbeat and conversation cycles.
 
 Dynamic budget allocation by message type:
 
@@ -789,6 +792,38 @@ Broken JSONL lines (partial writes at crash time) are skipped.
 7. **Active forgetting maintains system health** -- Memory does not only accumulate; actively pruning low-activity memories maintains search accuracy (signal-to-noise ratio)
 8. **Procedural memory is strengthened through use** -- Procedure confidence is dynamically updated via success/failure feedback. Procedures that have repeatedly succeeded gain greater forgetting resistance
 9. **Contradictions are detected and resolved** -- Knowledge contradictions are not left unaddressed; they are automatically detected and resolved via the NLI+LLM cascade
+
+---
+
+## core/memory/ Module Reference
+
+The memory subsystem is implemented as a set of specialized modules under `core/memory/`:
+
+| Module | Class / Role | Description |
+|---|---|---|
+| `manager.py` | `MemoryManager` | Top-level memory facade. Coordinates file-based memory operations, skill matching, and RAG search |
+| `conversation.py` | `ConversationMemory` | Conversation history with rolling LLM compression and structured message building |
+| `shortterm.py` | `ShortTermMemory` | Session state externalization for context continuity across chained sessions |
+| `priming.py` | `PrimingEngine` | 5-channel automatic memory recall injected into the system prompt before agent execution |
+| `activity.py` | `ActivityLogger` | Unified append-only JSONL timeline recording all Anima interactions |
+| `consolidation.py` | Daily/weekly consolidation | Episode-to-knowledge extraction with NLI+LLM validation pipeline |
+| `forgetting.py` | 3-stage active forgetting | Synaptic downscaling, neurogenesis reorganization, and complete forgetting |
+| `streaming_journal.py` | `StreamingJournal` | WAL-based crash-resilient persistence of streaming LLM output |
+| `task_queue.py` | `TaskQueueManager` | Persistent structured task queue with JSONL append-only log and staleness detection |
+| `distillation.py` | `ProceduralDistiller` | Episodic memory classification and procedural knowledge auto-distillation |
+| `resolution_tracker.py` | `ResolutionTracker` | Cross-Anima issue resolution tracking via shared/resolutions.jsonl |
+| `cron_logger.py` | `CronLogger` | Cron task execution log recorder and reader under state/cron_logs/ |
+| `skill_metadata.py` | Skill matching functions | NFKC normalization, bracket/comma keyword extraction, and description-based skill matching |
+| `validation.py` | `KnowledgeValidator` | NLI + LLM cascade validation preventing hallucination in consolidated knowledge |
+| `dedup.py` | Message deduplication | Resolved-topic detection, same-sender consolidation, and rate limiting for heartbeat |
+| `frontmatter.py` | `FrontmatterService` | YAML frontmatter read/write for knowledge and procedure files |
+| `rag_search.py` | `RAGMemorySearch` | RAG vector search and indexer management wrapper |
+| `rag/indexer.py` | Chunking and embedding | Markdown-section chunking, embedding generation, and incremental indexing |
+| `rag/retriever.py` | Vector search | Dense vector similarity retrieval from ChromaDB |
+| `rag/graph.py` | Graph spreading activation | NetworkX + Personalized PageRank for multi-hop associative propagation |
+| `rag/store.py` | ChromaDB store | ChromaDB collection management |
+| `rag/singleton.py` | Singleton management | Ensures single embedding model instance across the process |
+| `rag/watcher.py` | File change watcher | Monitors memory files for incremental re-indexing |
 
 ---
 

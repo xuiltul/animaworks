@@ -2,7 +2,7 @@
 
 **[日本語版](brain-mapping.ja.md)**
 
-> Created: 2026-02-19
+> Created: 2026-02-19 | Updated: 2026-02-23
 > Related: [vision.md](vision.md), [memory.md](memory.md)
 
 > **Note:** Diagrams and illustrations will be added in a future update.
@@ -76,7 +76,7 @@ Following Cowan (2005), working memory is understood as a "spotlight on activate
 
 | Recall Pathway | Brain Process | AnimaWorks Implementation |
 |---|---|---|
-| **Automatic recall** | Pattern completion by the CA3 auto-associative network of the hippocampus. Unconscious, fast (250-500 ms), unsuppressible | Priming layer (4-channel parallel search) |
+| **Automatic recall** | Pattern completion by the CA3 auto-associative network of the hippocampus. Unconscious, fast (250-500 ms), unsuppressible | Priming layer (5-channel parallel search) |
 | **Deliberate recall** | Strategic search by the prefrontal cortex (PFC). Conscious, slow | `search_memory` / `read_memory_file` tools |
 
 ### Spreading Activation -- Collins & Loftus (1975)
@@ -87,6 +87,35 @@ Following Cowan (2005), working memory is understood as a "spotlight on activate
 | Prioritization of recent memories | Recency effect | Time-decay function (half-life: 30 days) |
 | Strengthening of frequently used memories | Hebb's rule / Long-term potentiation (LTP) | Access frequency boost |
 | Multi-hop association | Propagation through associative networks | Knowledge graph + Personalized PageRank |
+
+### Priming Channels and Dynamic Budget -- Selective Attention
+
+The PrimingEngine executes 5-channel parallel memory retrieval, each corresponding to a distinct neurocognitive function:
+
+| Channel | Function | Brain Counterpart | Token Budget |
+|---|---|---|---|
+| A: Sender profile | "Who is talking to me?" | Fusiform face area / temporal pole (person recognition) | 500 |
+| B: Recent activity | "What happened recently?" | Hippocampal replay (recent episode reactivation) | 1300 |
+| C: Related knowledge | "What do I know about this?" | Semantic memory retrieval (temporal cortex) | 700 |
+| D: Skill matching | "Can I handle this?" | Procedural memory activation (basal ganglia) | 200 |
+| E: Pending tasks | "What am I supposed to be doing?" | Prospective memory / intention monitoring (rostral PFC) | 300 |
+
+Channel E (pending tasks) corresponds to **prospective memory** -- the ability to hold future intentions in mind. The rostral prefrontal cortex (Brodmann area 10) maintains pending intentions at a low activation level until the appropriate context triggers retrieval, analogous to how AnimaWorks' task queue surfaces unfinished tasks to the agent's awareness.
+
+#### Dynamic Budget Allocation -- Attentional Resource Management
+
+When `priming.dynamic_budget = true`, the token budget for priming is dynamically adjusted based on message type, implementing **selective attention** at the system level:
+
+| Message Type | Budget | Brain Analogy |
+|---|---|---|
+| Greeting | 500 | Low attentional load (routine social interaction) |
+| Question | 1500 | Moderate attentional load (retrieval-oriented) |
+| Request | 3000 | High attentional load (task-oriented, maximal resource allocation) |
+| Heartbeat | max(200, context_window * 5%) | Tonic alertness (minimum arousal maintenance) |
+
+The heartbeat budget formula `max(budget_heartbeat, int(context_window * heartbeat_context_pct))` ensures that models with larger context windows receive proportionally more priming data during autonomous patrol -- analogous to how the tonic firing rate of the reticular activating system scales with overall cortical capacity.
+
+This dynamic budget allocation mirrors Kahneman's (1973) attention-as-resource theory: the system allocates more cognitive resources to demanding tasks and fewer to routine stimuli, optimizing the signal-to-noise ratio within the limited context window.
 
 ---
 
@@ -112,6 +141,25 @@ Based on the synaptic homeostasis hypothesis of Tononi & Cirelli (2003):
 | **Neurogenesis-inspired reorganization** | Memory circuit reorganization via neurogenesis in the hippocampal dentate gyrus | LLM-driven merging of low-activity + similar chunks |
 | **Complete forgetting** | Elimination of sub-threshold synapses | Archive -> deletion |
 | **Forgetting resistance** (procedures, skills) | Procedural memory in basal ganglia is resistant to forgetting | Protected by version >= 3 or protected: true |
+
+### Procedural Distillation and Metaplasticity
+
+Beyond the 3-stage forgetting cycle, AnimaWorks implements additional memory subsystems that correspond to more nuanced aspects of neural plasticity:
+
+| AnimaWorks | Brain Process | Description |
+|---|---|---|
+| **Procedural distillation** (`distillation.py`) | Skill consolidation in the basal ganglia-cerebellar circuit | LLM-based classification of episodic memories into knowledge and procedures. Repeated action patterns are detected from activity logs and distilled into reusable procedure files -- analogous to how repeated motor sequences become automated through basal ganglia loop consolidation |
+| **Weekly pattern detection** | Metaplasticity (Abraham & Bear, 1996) | Activity log clustering identifies recurrent behavioral patterns across 7-day windows. Represents "learning how to learn" -- the system adapts not just memory content but memory formation processes themselves |
+| **RAG duplicate detection** (similarity >= 0.85) | Hippocampal pattern separation | Before saving a new procedure, vector similarity checks prevent redundant encoding -- mirroring how the dentate gyrus performs orthogonalization to keep similar memories distinct |
+| **Resolution tracking** (`resolution_tracker.py`) | Organizational long-term memory (transactive memory systems) | Cross-Anima shared resolution log. Records which Anima resolved which issue, enabling organizational knowledge about "who knows what" -- corresponding to Wegner's (1987) transactive memory theory |
+| **Persistent task queue** (`task_queue.py`) | Prospective memory / working memory extension | Append-only JSONL task queue with deadline tracking and stale-task detection. Extends working memory beyond the context window, like an external notepad for the central executive |
+
+The procedural distillation pipeline operates on two timescales:
+
+- **Daily**: LLM classifies episode sections into knowledge / procedures / skip categories, writing structured procedure files with YAML frontmatter (confidence scores, success/failure counts)
+- **Weekly**: Vector-based clustering of activity log entries detects repeated behavioral patterns and distills them into generalized procedures
+
+This dual-timescale architecture mirrors the neuroscience of skill acquisition: initial explicit learning (daily classification) transitions to implicit procedural knowledge (weekly pattern distillation) through repeated exposure -- the same progression from hippocampal-dependent to basal ganglia-dependent processing described by Doyon & Benali (2005).
 
 ---
 
@@ -148,6 +196,18 @@ The Ascending Reticular Activating System (ARAS) projects from the brainstem's r
 | **Message-based communication** | Linguistic communication | Connected only through text. No shared memory or direct references |
 | **identity.md (personality)** | Personality (stable PFC-limbic patterns) | Immutable baseline. Foundation for judgment |
 | **injection.md (role)** | Social role / occupational identity | Mutable. Behavioral guidelines within the organization |
+
+### Execution Modes -- Levels of Autonomy
+
+AnimaWorks defines three execution modes, each corresponding to a different level of cognitive autonomy:
+
+| Mode | Executor | Brain Analogy | Description |
+|---|---|---|---|
+| **S** (SDK) | Claude Agent SDK | Full cortical function with executive control | Native Claude tool use with session continuity. The most autonomous mode -- corresponds to a fully awake brain with intact prefrontal executive function |
+| **A** (Autonomous) | LiteLLM + tool_use loop | Cortical function via external mediation | Multi-provider tool use (GPT-4o, Gemini, etc.) with framework-managed tool loop. Like a patient who can think and act but requires external scaffolding for some executive functions |
+| **B** (Basic) | 1-shot assisted | Cortical function with external executive support | Framework handles memory I/O on behalf of the LLM. Analogous to a patient with executive dysfunction who can reason locally but needs external cues and structure for task management |
+
+The mode naming (S/A/B) replaces the earlier A1/A2/B convention. Mode is automatically resolved from the model name via wildcard pattern matching, with explicit per-Anima override available.
 
 ---
 

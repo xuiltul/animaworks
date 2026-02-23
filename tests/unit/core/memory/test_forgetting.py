@@ -17,6 +17,7 @@ Tests cover:
 """
 
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -135,7 +136,7 @@ class TestSynapticDownscaling:
         Chunks that are >90 days old with access_count=0 should be marked
         with activation_level='low'.
         """
-        old_date = (datetime.now() - timedelta(days=120)).isoformat()
+        old_date = (now_jst() - timedelta(days=120)).isoformat()
         knowledge_chunks = [
             _make_chunk(
                 doc_id="old_chunk",
@@ -174,7 +175,7 @@ class TestSynapticDownscaling:
 
         Protected chunks should be skipped even if they are old and unaccessed.
         """
-        old_date = (datetime.now() - timedelta(days=120)).isoformat()
+        old_date = (now_jst() - timedelta(days=120)).isoformat()
         knowledge_chunks = [
             _make_chunk(
                 doc_id="important_chunk",
@@ -208,7 +209,7 @@ class TestSynapticDownscaling:
         Frequently accessed chunks (access_count >= DOWNSCALING_ACCESS_THRESHOLD)
         should be skipped even if they are old.
         """
-        old_date = (datetime.now() - timedelta(days=120)).isoformat()
+        old_date = (now_jst() - timedelta(days=120)).isoformat()
         chunks = [
             _make_chunk(
                 doc_id="accessed_chunk",
@@ -235,7 +236,7 @@ class TestSynapticDownscaling:
         Chunks accessed within the last 90 days should not be marked
         regardless of access_count.
         """
-        recent_date = (datetime.now() - timedelta(days=30)).isoformat()
+        recent_date = (now_jst() - timedelta(days=30)).isoformat()
         chunks = [
             _make_chunk(
                 doc_id="recent_chunk",
@@ -258,7 +259,7 @@ class TestSynapticDownscaling:
 
     def test_synaptic_downscaling_skips_already_low(self, forgetting_engine):
         """Test that chunks already at low activation are skipped."""
-        old_date = (datetime.now() - timedelta(days=120)).isoformat()
+        old_date = (now_jst() - timedelta(days=120)).isoformat()
         chunks = [
             _make_chunk(
                 doc_id="already_low",
@@ -329,7 +330,7 @@ class TestCompleteForgetting:
         should have their source files moved to archive/forgotten/ and
         be deleted from the vector store.
         """
-        old_low_since = (datetime.now() - timedelta(days=90)).isoformat()
+        old_low_since = (now_jst() - timedelta(days=90)).isoformat()
 
         # Create source file in the anima dir
         source_file = anima_dir / "knowledge" / "forgotten-topic.md"
@@ -383,7 +384,7 @@ class TestCompleteForgetting:
         Even if low_activation_since is old, access_count above the threshold
         (FORGETTING_MAX_ACCESS_COUNT=2) means the memory should survive.
         """
-        old_low_since = (datetime.now() - timedelta(days=120)).isoformat()
+        old_low_since = (now_jst() - timedelta(days=120)).isoformat()
         chunks = [
             _make_chunk(
                 doc_id="accessed_low",
@@ -407,7 +408,7 @@ class TestCompleteForgetting:
 
     def test_complete_forgetting_skips_protected(self, forgetting_engine, anima_dir):
         """Test that protected chunks are not forgotten even if low-activation."""
-        old_low_since = (datetime.now() - timedelta(days=90)).isoformat()
+        old_low_since = (now_jst() - timedelta(days=90)).isoformat()
         chunks = [
             _make_chunk(
                 doc_id="protected_chunk",
@@ -455,7 +456,7 @@ class TestCompleteForgetting:
         Chunks that have been low for less than FORGETTING_LOW_ACTIVATION_DAYS
         should not be deleted yet.
         """
-        recent_low = (datetime.now() - timedelta(days=10)).isoformat()
+        recent_low = (now_jst() - timedelta(days=10)).isoformat()
         chunks = [
             _make_chunk(
                 doc_id="recent_low",

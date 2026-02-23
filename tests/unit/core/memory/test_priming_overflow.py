@@ -35,10 +35,10 @@ class TestChannelCSkippedWhenAllInjected:
     async def test_channel_c_skipped_when_all_injected(
         self, priming_engine: PrimingEngine,
     ) -> None:
-        """overflow_files=[] -> Channel C returns empty string."""
+        """restrict_to=[] -> Channel C returns empty string."""
         result = await priming_engine._channel_c_related_knowledge(
             keywords=["test", "keyword"],
-            overflow_files=[],
+            restrict_to=[],
         )
         assert result == ""
 
@@ -48,7 +48,7 @@ class TestChannelCRunsWhenOverflowExists:
     async def test_channel_c_runs_when_overflow_exists(
         self, priming_engine: PrimingEngine,
     ) -> None:
-        """overflow_files=["file1"] -> Channel C runs normally.
+        """restrict_to=["file1"] -> Channel C runs normally.
 
         When overflow files exist, Channel C should attempt to run
         (though it may return empty if no retriever is available).
@@ -58,11 +58,11 @@ class TestChannelCRunsWhenOverflowExists:
             "Test knowledge content", encoding="utf-8",
         )
 
-        # Channel C should NOT short-circuit (overflow_files is non-empty)
+        # Channel C should NOT short-circuit (restrict_to is non-empty)
         # It will attempt to run but return "" because retriever is unavailable
         result = await priming_engine._channel_c_related_knowledge(
             keywords=["test"],
-            overflow_files=["file1"],
+            restrict_to=["file1"],
         )
         # The function ran (didn't skip), but retriever is None so returns ""
         assert isinstance(result, str)
@@ -73,19 +73,19 @@ class TestChannelCLegacyWhenNone:
     async def test_channel_c_legacy_when_none(
         self, priming_engine: PrimingEngine,
     ) -> None:
-        """overflow_files=None -> Channel C runs full (legacy behavior).
+        """restrict_to=None -> Channel C runs full (legacy behavior).
 
-        When overflow_files is None, Channel C should not short-circuit.
+        When restrict_to is None, Channel C should not short-circuit.
         """
         # Create a knowledge file
         (priming_engine.knowledge_dir / "topic.md").write_text(
             "Legacy knowledge content", encoding="utf-8",
         )
 
-        # overflow_files=None -> legacy path, should not skip
+        # restrict_to=None -> legacy path, should not skip
         result = await priming_engine._channel_c_related_knowledge(
             keywords=["legacy"],
-            overflow_files=None,
+            restrict_to=None,
         )
         # Runs normally but returns "" because retriever is None in test
         assert isinstance(result, str)
@@ -96,7 +96,7 @@ class TestPrimeMemoriesPassesOverflowToChannelC:
     async def test_prime_memories_passes_overflow_to_channel_c(
         self, priming_engine: PrimingEngine,
     ) -> None:
-        """Verify overflow_files parameter flows through to Channel C."""
+        """Verify overflow_files parameter flows through to Channel C as restrict_to."""
         overflow = ["overflow_file1", "overflow_file2"]
 
         with patch.object(
@@ -135,8 +135,7 @@ class TestPrimeMemoriesPassesOverflowToChannelC:
                 overflow_files=overflow,
             )
 
-            # Verify Channel C was called with the overflow_files parameter
+            # Verify Channel C was called with restrict_to (renamed from overflow_files)
             mock_channel_c.assert_called_once()
             call_kwargs = mock_channel_c.call_args
-            # The keywords arg is positional, overflow_files is keyword
-            assert call_kwargs.kwargs.get("overflow_files") == overflow
+            assert call_kwargs.kwargs.get("restrict_to") == overflow

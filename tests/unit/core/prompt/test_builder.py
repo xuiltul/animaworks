@@ -105,14 +105,16 @@ class TestBuildMessagingSection:
     def test_with_animas(self, tmp_path):
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
-        with patch("core.prompt.builder.load_prompt", return_value="messaging section"):
+        with patch("core.tooling.prompt_db.get_prompt_store", return_value=None), \
+             patch("core.prompt.builder.load_prompt", return_value="messaging section"):
             result = _build_messaging_section(anima_dir, ["bob", "charlie"])
             assert result == "messaging section"
 
     def test_no_animas(self, tmp_path):
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
-        with patch("core.prompt.builder.load_prompt", return_value="messaging section") as mock_lp:
+        with patch("core.tooling.prompt_db.get_prompt_store", return_value=None), \
+             patch("core.prompt.builder.load_prompt", return_value="messaging section") as mock_lp:
             _build_messaging_section(anima_dir, [])
             call_kwargs = mock_lp.call_args[1]
             assert "(まだ他の社員はいません)" in call_kwargs["animas_line"]
@@ -121,7 +123,8 @@ class TestBuildMessagingSection:
         """S mode should load the messaging_s template."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
-        with patch("core.prompt.builder.load_prompt", return_value="s messaging") as mock_lp:
+        with patch("core.tooling.prompt_db.get_prompt_store", return_value=None), \
+             patch("core.prompt.builder.load_prompt", return_value="s messaging") as mock_lp:
             result = _build_messaging_section(anima_dir, ["bob"], execution_mode="s")
             assert result == "s messaging"
             mock_lp.assert_called_once()
@@ -142,7 +145,8 @@ class TestBuildMessagingSection:
         """Default execution_mode should be s, using messaging_s template."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
-        with patch("core.prompt.builder.load_prompt", return_value="section") as mock_lp:
+        with patch("core.tooling.prompt_db.get_prompt_store", return_value=None), \
+             patch("core.prompt.builder.load_prompt", return_value="section") as mock_lp:
             _build_messaging_section(anima_dir, ["bob"])
             assert mock_lp.call_args[0][0] == "messaging_s"
 

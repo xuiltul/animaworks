@@ -65,7 +65,7 @@ def _write_task_entry_to_jsonl(
     This allows tests to inject tasks with specific timestamps that would
     be impossible to achieve through the normal add_task() API.
     """
-    now = datetime.now().isoformat()
+    now = now_jst().isoformat()
     entry = {
         "task_id": task_id,
         "ts": ts or now,
@@ -162,8 +162,8 @@ class TestFullTaskLifecycleWithStaleness:
         )
 
         # Write an old task directly with updated_at 45 minutes ago
-        old_updated = (datetime.now() - timedelta(minutes=45)).isoformat()
-        old_deadline = (datetime.now() + timedelta(hours=1)).isoformat()
+        old_updated = (now_jst() - timedelta(minutes=45)).isoformat()
+        old_deadline = (now_jst() + timedelta(hours=1)).isoformat()
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
             task_id="old_task_001",
@@ -204,14 +204,14 @@ class TestFullTaskLifecycleWithStaleness:
         )
 
         # Old task: updated 45 minutes ago
-        old_updated = (datetime.now() - timedelta(minutes=45)).isoformat()
+        old_updated = (now_jst() - timedelta(minutes=45)).isoformat()
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
             task_id="stale_task_01",
             source="anima",
             summary="Stale task",
             assignee="test-anima",
-            deadline=(datetime.now() + timedelta(hours=2)).isoformat(),
+            deadline=(now_jst() + timedelta(hours=2)).isoformat(),
             updated_at=old_updated,
             ts=old_updated,
         )
@@ -239,7 +239,7 @@ class TestFullTaskLifecycleWithStaleness:
         """Task updated exactly at the threshold boundary is stale."""
         # Exactly 30 minutes ago (the threshold)
         boundary_updated = (
-            datetime.now() - timedelta(seconds=_STALE_TASK_THRESHOLD_SEC)
+            now_jst() - timedelta(seconds=_STALE_TASK_THRESHOLD_SEC)
         ).isoformat()
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
@@ -247,7 +247,7 @@ class TestFullTaskLifecycleWithStaleness:
             source="human",
             summary="Boundary task",
             assignee="test-anima",
-            deadline=(datetime.now() + timedelta(hours=1)).isoformat(),
+            deadline=(now_jst() + timedelta(hours=1)).isoformat(),
             updated_at=boundary_updated,
         )
 
@@ -259,7 +259,7 @@ class TestFullTaskLifecycleWithStaleness:
         self, task_queue: TaskQueueManager, anima_dir: Path,
     ):
         """Completed tasks should not appear in stale results even if old."""
-        old_updated = (datetime.now() - timedelta(hours=2)).isoformat()
+        old_updated = (now_jst() - timedelta(hours=2)).isoformat()
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
             task_id="done_old_task",
@@ -267,7 +267,7 @@ class TestFullTaskLifecycleWithStaleness:
             summary="Old done task",
             assignee="test-anima",
             status="done",
-            deadline=(datetime.now() - timedelta(hours=1)).isoformat(),
+            deadline=(now_jst() - timedelta(hours=1)).isoformat(),
             updated_at=old_updated,
         )
 
@@ -285,7 +285,7 @@ class TestOverdueDetection:
         self, task_queue: TaskQueueManager, anima_dir: Path,
     ):
         """Task with a deadline in the past gets the OVERDUE marker."""
-        past_deadline = (datetime.now() - timedelta(hours=1)).isoformat()
+        past_deadline = (now_jst() - timedelta(hours=1)).isoformat()
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
             task_id="overdue_001",
@@ -293,7 +293,7 @@ class TestOverdueDetection:
             summary="Overdue deployment",
             assignee="test-anima",
             deadline=past_deadline,
-            updated_at=datetime.now().isoformat(),
+            updated_at=now_jst().isoformat(),
         )
 
         output = task_queue.format_for_priming()
@@ -320,8 +320,8 @@ class TestOverdueDetection:
         self, task_queue: TaskQueueManager, anima_dir: Path,
     ):
         """A task that is both stale and overdue should show both markers."""
-        old_time = (datetime.now() - timedelta(hours=2)).isoformat()
-        past_deadline = (datetime.now() - timedelta(hours=1)).isoformat()
+        old_time = (now_jst() - timedelta(hours=2)).isoformat()
+        past_deadline = (now_jst() - timedelta(hours=1)).isoformat()
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
             task_id="stale_overdue",
@@ -345,14 +345,14 @@ class TestOverdueDetection:
         self, task_queue: TaskQueueManager, anima_dir: Path,
     ):
         """Priming output includes elapsed time indicator."""
-        updated = (datetime.now() - timedelta(minutes=15)).isoformat()
+        updated = (now_jst() - timedelta(minutes=15)).isoformat()
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
             task_id="elapsed_task",
             source="anima",
             summary="Task with elapsed time",
             assignee="test-anima",
-            deadline=(datetime.now() + timedelta(hours=1)).isoformat(),
+            deadline=(now_jst() + timedelta(hours=1)).isoformat(),
             updated_at=updated,
         )
 
@@ -563,14 +563,14 @@ class TestPrimingOutputStructure:
     ):
         """Human-origin tasks appear before anima-origin tasks."""
         # Add anima task first (chronologically earlier)
-        early_ts = (datetime.now() - timedelta(minutes=10)).isoformat()
+        early_ts = (now_jst() - timedelta(minutes=10)).isoformat()
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
             task_id="anima_first",
             source="anima",
             summary="Anima task first",
             assignee="test-anima",
-            deadline=(datetime.now() + timedelta(hours=1)).isoformat(),
+            deadline=(now_jst() + timedelta(hours=1)).isoformat(),
             updated_at=early_ts,
             ts=early_ts,
         )
@@ -582,8 +582,8 @@ class TestPrimingOutputStructure:
             source="human",
             summary="Human task second",
             assignee="test-anima",
-            deadline=(datetime.now() + timedelta(hours=1)).isoformat(),
-            updated_at=datetime.now().isoformat(),
+            deadline=(now_jst() + timedelta(hours=1)).isoformat(),
+            updated_at=now_jst().isoformat(),
         )
 
         output = task_queue.format_for_priming()
@@ -626,7 +626,7 @@ class TestPrimingOutputStructure:
         self, task_queue: TaskQueueManager, anima_dir: Path,
     ):
         """Future deadline shows target time in HH:MM format."""
-        future = datetime.now() + timedelta(hours=3)
+        future = now_jst() + timedelta(hours=3)
         _write_task_entry_to_jsonl(
             task_queue.queue_path,
             task_id="future_dl",
@@ -634,7 +634,7 @@ class TestPrimingOutputStructure:
             summary="Task with future deadline",
             assignee="test-anima",
             deadline=future.isoformat(),
-            updated_at=datetime.now().isoformat(),
+            updated_at=now_jst().isoformat(),
         )
 
         output = task_queue.format_for_priming()
@@ -654,8 +654,8 @@ class TestPrimingOutputStructure:
                 source="human",
                 summary=f"Very long task description number {i} with lots of detail here",
                 assignee="test-anima",
-                deadline=(datetime.now() + timedelta(hours=1)).isoformat(),
-                updated_at=datetime.now().isoformat(),
+                deadline=(now_jst() + timedelta(hours=1)).isoformat(),
+                updated_at=now_jst().isoformat(),
             )
 
         output = task_queue.format_for_priming(budget_tokens=100)

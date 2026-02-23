@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime
+from core.time_utils import now_jst
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -85,7 +86,7 @@ def _make_mock_handle(
     handle = MagicMock(spec=ProcessHandle)
     handle.anima_name = anima_name
     handle.state = ProcessState.RUNNING
-    handle.stats = ProcessStats(started_at=datetime.now())
+    handle.stats = ProcessStats(started_at=now_jst())
     handle._streaming = False
 
     handle.start = AsyncMock()

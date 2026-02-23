@@ -2,10 +2,10 @@
 
 **[English version](features.md)**
 
-> 最終更新: 2026-02-18
+> 最終更新: 2026-02-23
 > 関連: [spec.md](spec.md), [memory.ja.md](memory.ja.md), [vision.ja.md](vision.ja.md)
 
-AnimaWorksフレームワークの実装済み機能を18カテゴリに分類した索引。各エントリの「設計」リンクは設計・実装文書、「Review」リンクはコードレビューレポートを参照する。
+AnimaWorksフレームワークの実装済み機能を19カテゴリに分類した索引。各エントリの「設計」リンクは設計・実装文書、「Review」リンクはコードレビューレポートを参照する。
 
 ---
 
@@ -38,7 +38,7 @@ agent.pyリファクタリング、階層設計、プロセス隔離、リネー
 
 ## 2. 実行エンジン
 
-A1/A2/B各モード改善、Agent SDKクラッシュリカバリー、SSE改善等。
+S/A/B各モード（旧A1/A2/B）改善、Agent SDKクラッシュリカバリー、SSE改善等。
 
 - **A2エージェンティックループの高度化** (2026-02-15) — LiteLLM + tool_useループの信頼性・機能向上
   [設計](implemented/20260215_a2-agentic-loop-enhancement_implemented-20260215.md) | [Review](implemented/20260215_review_a2-agentic-loop-enhancement_approved-20260215.md)
@@ -416,3 +416,103 @@ call_human統合、組織構成プロンプト注入等。
 
 - **Anima作成ハイブリッド化: create_animaツール + キャラクターシート仕様統一** (2026-02-16) — ツール呼出し + MDシートの統一作成方式
   [設計](implemented/20260216_person-creation-hybrid-and-create-tool_implemented-20260216.md) | [Review](implemented/20260216_review_person-creation-hybrid-and-create-tool_approved-20260216.md)
+
+---
+
+## 19. v0.2後の拡張（2026-02-18 — 2026-02-23）
+
+実行モード再設計、タスクキュー、解決レジストリ、動的Priming、リファクタリング、運用耐障害性の改善。
+
+### 実行エンジン
+
+- **実行モード再設計: S/A/B 3モードアーキテクチャ** (2026-02-23) — 実行モードをS (SDK) / A (Autonomous) / B (Basic) の3つに再定義。SモードはAgent SDKにセッション管理を委任
+  [設計](implemented/20260223_execution-mode-redesign-s-a-b-20260223.md) | [Review](implemented/20260223_review_execution-mode-redesign-s-a-b_approved-20260223.md)
+- **Sモード記憶エンコーディングギャップ修正** (2026-02-23) — 会話ターン保存・要旨記憶検索・行動トレース知識生成の3層対策
+  [設計](implemented/20260223_s-mode-memory-encoding-gap_implemented-20260223.md) | [Review](implemented/20260223_review_s-mode-memory-encoding-gap_approved-20260223.md)
+- **A1モード中間セッションコンテキスト自動コンパクト** (2026-02-22) — コンテキストトークン追跡とオーバーフロー時の自動終了・チェイニング
+  [設計](implemented/20260222_a1-mid-session-context-autocompact-implemented-20260222.md) | [Review](implemented/20260222_review_a1-mid-session-context-autocompact_approved-20260222.md)
+- **A1モードMCPネイティブツール** (2026-02-20) — Stdio MCPサーバーでAnimaWorks固有ツール12種をネイティブツールコールとして提供
+  [設計](implemented/20260220_a1-mcp-native-tools_implemented-20260220.md) | [Review](implemented/20260220_review_a1-mcp-native-tools_approved-20260220.md)
+- **A1フック: ツールコールログ & Bashブロックリスト** (2026-02-20) — PreToolUseフックの全ツールコール記録とBashコマンドブロックリスト
+  [設計](implemented/20260220_a1-hook-tool-logging-and-bash-blocklist-20260220.md) | [Review](implemented/20260220_review_a1-hook-tool-logging-and-bash-blocklist_approved-20260220.md)
+- **Mode Bコンテキストオーバーフロー保護** (2026-02-19) — preflight check・タイムアウト・ツール出力制限・会話閾値自動スケール
+  [設計](implemented/20260219_mode-b-context-overflow-protection_implemented-20260220.md) | [Review](implemented/20260219_review2_mode-b-context-overflow-protection_approved-20260220.md)
+- **コンテキスト過剰圧縮の包括的改善** (2026-02-21) — ツール結果保存・構造化メッセージ・セッション引き継ぎ・デバッグペイロード保存
+  [設計](implemented/20260221_K_context-over-compression-implemented-20260222.md) | [Review](implemented/20260222_review_context-over-compression_approved-20260222.md)
+
+### 記憶システム
+
+- **タスク永続化・Heartbeat耐障害性** (2026-02-19) — 永続JSONLタスクキュー・タスクチェックポイント・リカバリ・メッセージ重複排除・Priming注入
+  [設計](implemented/20260219_task-persistence-and-heartbeat-resilience_implemented-20260219.md) | [Review](implemented/20260219_review_task-persistence-and-heartbeat-resilience_approved-20260219.md)
+- **タスク滞留検知・deadline必須化・委任判断プロンプト注入** (2026-02-19) — 経過時間可視化・滞留マーカー・deadline自動適用・委任判断プロンプト
+  [設計](implemented/20260219_task-staleness-detection-and-delegation-implemented-20260219.md) | [Review](implemented/20260219_review_task-staleness-detection-and-delegation_approved-20260219.md)
+- **蒸留済み知識のシステムプロンプト全量注入** (2026-02-22) — knowledge/とprocedures/の全文をシステムプロンプトに直接注入
+  [設計](implemented/20260222_knowledge-procedures-full-injection_implemented-20260222.md) | [Review](implemented/20260222_review_knowledge-procedures-full-injection_approved-20260222.md)
+- **issue_resolved → procedure自動生成パイプライン** (2026-02-22) — 上司指摘の解決をprocedures/に自動蒸留する固定化パイプライン
+  [設計](implemented/20260222_consolidation-resolved-to-procedure-pipeline-20260222.md) | [Review](implemented/20260222_review_consolidation-resolved-to-procedure-pipeline_approved-20260222.md)
+- **Primingバジェット分類にintentを連携** (2026-02-19) — send_messageのintentフィールドをPrimingバジェット分類に接続
+  [設計](implemented/20260219_priming-intent-budget-allocation_implemented-20260220.md) | [Review](implemented/20260220_review2_priming-intent-budget-allocation_revision-20260220.md)
+- **記憶システム対称性改善・スキルベクトル検索化** (2026-02-19) — knowledgeに失敗カウント追加・スキルマッチングをベクトル検索化・矛盾履歴永続化
+  [設計](implemented/20260219_memory-system-symmetry-and-skill-vector-search_implemented-20260220.md) | [Review](implemented/20260220_review2_memory-system-symmetry-and-skill-vector-search_approved-20260220.md)
+
+### 通信・耐障害性
+
+- **メッセージストーム多層防御** (2026-02-19) — 会話深度リミッター・再処理カウンタ可視化・スケジュールHBカスケード検知
+  [設計](implemented/20260219_message-storm-defense-in-depth_implemented-20260219.md) | [Review](implemented/20260219_review_message-storm-defense-in-depth_approved-20260219.md)
+- **褒め合いループ防止** (2026-02-22) — プロンプト＋コード両面でAnima間の無限称賛連鎖を断ち切る
+  [設計](implemented/20260222_praise-loop-prevention_implemented-20260222.md) | [Review](implemented/20260222_review_praise-loop-prevention_approved-20260222.md)
+- **Per-Run DM制限** (2026-02-21) — 1回のrunにつき最大2名、1人1通、report/delegationのみ
+  [設計](implemented/20260221_A_per-anima-global-send-limit-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)
+
+### スケジュール・ライフサイクル
+
+- **heartbeat間隔のconfig.json化** (2026-02-21) — 自由文パース廃止、config.json管理・ハッシュ固定オフセット導入
+  [設計](implemented/20260221_H_schedule-parser-strict-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)
+- **CronTask trigger_heartbeatフラグ** (2026-02-23) — cronタスク実行後にheartbeatをトリガーするタスク単位フラグ
+  [設計](implemented/20260223_activity-log-conversation-history-api_implemented-20260223.md)
+- **Heartbeat Reflection Stream** (2026-02-20) — チェックリスト型からObserve-Reflect-Plan-Actフレームワークへの構造化
+  [設計](implemented/20260220_heartbeat-reflection-stream-20260220.md) | [Review](implemented/20260220_review_heartbeat-reflection-stream_approved-20260220.md)
+- **Heartbeat定数統一・intentベーストリガー** (2026-02-20) — カスケード定数外部化とメッセージ起因HBの「actionable intentのみ」への逆転
+  [設計](implemented/20260220_unify-heartbeat-constants-and-intent-based-trigger.md) | [Review](implemented/20260220_review_unify-heartbeat-constants-and-intent-based-trigger_approved.md)
+- **時間管理・タイムゾーン統一** (2026-02-19) — 現在時刻注入・naive datetime排除・heartbeat 24時間デフォルト化・timezone設定
+  [設計](implemented/20260219_time-management-and-timezone-implemented-20260220.md) | [Review](implemented/20260220_review_time-management-and-timezone_approved-20260220.md)
+
+### スキル・ツール
+
+- **skillツール: Progressive Disclosure** (2026-02-22) — `skill`ツールで全実行モード対応のオンデマンドスキル全文注入
+  [設計](implemented/20260222_skill-tool-progressive-disclosure_implemented-20260222.md) | [Review](implemented/20260222_review_skill-tool-progressive-disclosure_approved-20260222.md)
+- **ツールプロンプト外部化** (2026-02-22) — ツール説明をschemas.pyからSQLite DBに移行、WebUI編集対応
+  [設計](implemented/20260222_tool-prompt-externalization-implemented-20260222.md) | [Review](implemented/20260222_review_tool-prompt-externalization_approved-20260222.md)
+- **上司Animaの部下休止・復帰ツール** (2026-02-22) — disable_subordinate / enable_subordinateによるプロセス制御
+  [設計](implemented/20260222_supervisor-subordinate-disable-enable_implemented-20260222.md) | [Review](implemented/20260222_review_supervisor-subordinate-disable-enable_approved-20260222.md)
+
+### Web UI
+
+- **activity_logベース会話履歴API** (2026-02-23) — ワークスペースチャットのセッション区切り・ツールコール展開・無限スクロール対応
+  [設計](implemented/20260223_activity-log-conversation-history-api_implemented-20260223.md) | [Review](implemented/20260223_review_activity-log-conversation-history-api_approved-20260223.md)
+
+### プロセス管理
+
+- **ProcessSupervisorプロセス分離 + ヘルスチェック改善** (2026-02-22) — SIGTERM伝播防止・ログスパム解消・Reconciliationベース自動回復
+  [設計](implemented/20260222_supervisor-process-isolation-and-healthcheck-fix-implemented-20260223.md) | [Review](implemented/20260223_review_supervisor-process-isolation-and-healthcheck-fix_approved-20260223.md)
+- **IPC unaryリクエスト専用接続化** (2026-02-22) — 共有接続廃止によるID_MISMATCH根絶
+  [設計](implemented/20260222_ipc-dedicated-connection-for-unary_implemented-20260222.md) | [Review](implemented/20260222_review_ipc-dedicated-connection-for-unary_approved-20260222.md)
+- **IPCストリーミング残課題** (2026-02-22) — Claude SDK hook無効化 + ChromaDB Anima別分離
+  [設計](implemented/20260222_ipc-streaming-residual-issues_implemented-20260222.md) | [Review](implemented/20260222_review_ipc-streaming-residual-issues_approved-20260222.md)
+
+### リファクタリング・品質
+
+- **AnimaRunner責務分解** (2026-02-19) — 33メソッドの神クラスを4つの委譲クラスに分離
+  [設計](implemented/20260219_refactor-anima-runner-decomposition_implemented-20260220.md) | [Review](implemented/20260220_review_refactor-anima-runner-decomposition_approved-20260220.md)
+- **カスタム例外階層の導入** (2026-02-20) — 322箇所のbare Exception catchをドメイン例外に置換
+  [設計](implemented/20260220_custom-exception-hierarchy_implemented-20260220.md) | [Review](implemented/20260220_review_custom-exception-hierarchy_approved-20260220.md)
+- **ハードコードプロンプトの外部テンプレート抽出** (2026-02-20) — LLMプロンプト約6,500文字をtemplates/prompts/に外部化
+  [設計](implemented/20260220_extract-hardcoded-prompts-to-templates_implemented-20260220.md) | [Review](implemented/20260220_review_extract-hardcoded-prompts-to-templates_approved-20260220.md)
+- **システムプロンプトトークン効率最適化** (2026-02-20) — スキル全文注入廃止・手順書YAML自動構造化・会話履歴制限
+  [設計](implemented/20260220_system-prompt-token-optimization_implemented-20260220.md) | [Review](implemented/20260220_review_system-prompt-token-optimization_approved-20260220.md)
+- **ハードコードモデル名のconfig集約** (2026-02-20) — 18箇所のハードコードモデル名をPydantic defaults 2箇所に一元化
+  [設計](implemented/20260220_consolidate-hardcoded-model-names_implemented-20260220.md) | [Review](implemented/20260220_review_consolidate-hardcoded-model-names_approved-20260220.md)
+- **会話履歴ターン数上限の導入** (2026-02-20) — 膨張コンテキストによるツールコール放棄の防止
+  [設計](implemented/20260220_conversation-history-turn-limit_implemented-20260220.md) | [Review](implemented/20260220_review_conversation-history-turn-limit_approved-20260220.md)
+- **cronタスク型の適正使用** (2026-02-21) — command型の活用促進とバリデーション追加
+  [設計](implemented/20260221_K_cron-type-correctness-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)

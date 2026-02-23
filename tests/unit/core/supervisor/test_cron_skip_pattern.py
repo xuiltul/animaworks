@@ -37,6 +37,7 @@ def _make_scheduler_mgr() -> SchedulerManager:
 def _make_command_task(
     name: str = "test_task",
     skip_pattern: str | None = None,
+    trigger_heartbeat: bool = True,
 ) -> CronTask:
     return CronTask(
         name=name,
@@ -44,6 +45,7 @@ def _make_command_task(
         type="command",
         tool="test_tool",
         skip_pattern=skip_pattern,
+        trigger_heartbeat=trigger_heartbeat,
     )
 
 
@@ -152,6 +154,85 @@ class TestSkipPatternFiltering:
 
         await mgr._run_cron_task(task)
 
+        mgr._anima.memory.update_pending.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_trigger_heartbeat_false_suppresses_heartbeat(self):
+        """trigger_heartbeat=False suppresses heartbeat even with non-empty stdout."""
+        mgr = _make_scheduler_mgr()
+        mgr._anima.run_cron_command.return_value = {
+            "task": "test_task",
+            "exit_code": 0,
+            "stdout": '[{"message_id": "123"}]',
+            "stderr": "",
+            "duration_ms": 100,
+        }
+
+        task = _make_command_task(trigger_heartbeat=False)
+
+        await mgr._run_cron_task(task)
+
+        # heartbeat should NOT be triggered
+        mgr._anima.memory.update_pending.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_trigger_heartbeat_false_skips_pending_write(self):
+        """trigger_heartbeat=False also skips writing to pending.md."""
+        mgr = _make_scheduler_mgr()
+        mgr._anima.run_cron_command.return_value = {
+            "task": "test_task",
+            "exit_code": 0,
+            "stdout": "important output",
+            "stderr": "",
+            "duration_ms": 100,
+        }
+
+        task = _make_command_task(trigger_heartbeat=False)
+
+        await mgr._run_cron_task(task)
+
+        mgr._anima.memory.update_pending.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_trigger_heartbeat_true_allows_heartbeat(self):
+        """trigger_heartbeat=True (default) allows heartbeat as normal."""
+        mgr = _make_scheduler_mgr()
+        mgr._anima.run_cron_command.return_value = {
+            "task": "test_task",
+            "exit_code": 0,
+            "stdout": "some output",
+            "stderr": "",
+            "duration_ms": 100,
+        }
+
+        task = _make_command_task(trigger_heartbeat=True)
+
+        with patch.object(mgr, "heartbeat_tick", new_callable=AsyncMock):
+            await mgr._run_cron_task(task)
+
+        mgr._anima.memory.update_pending.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_trigger_heartbeat_false_takes_precedence_over_skip_pattern(self):
+        """trigger_heartbeat=False returns before skip_pattern is even checked."""
+        mgr = _make_scheduler_mgr()
+        mgr._anima.run_cron_command.return_value = {
+            "task": "test_task",
+            "exit_code": 0,
+            "stdout": '[{"data": "real"}]',  # would NOT match skip_pattern
+            "stderr": "",
+            "duration_ms": 100,
+        }
+
+        task = _make_command_task(
+            skip_pattern=r"^\[\s*\]$",
+            trigger_heartbeat=False,
+        )
+
+        await mgr._run_cron_task(task)
+
+        # Despite stdout not matching skip_pattern,
+        # trigger_heartbeat=False suppresses heartbeat
         mgr._anima.memory.update_pending.assert_not_called()
 
     @pytest.mark.asyncio

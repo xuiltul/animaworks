@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import pytest
 from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -112,7 +113,7 @@ async def test_supervisor_process_tracking(supervisor):
     handle.state = ProcessState.RUNNING
     handle.get_pid.return_value = 12345
     handle.stats = MagicMock()
-    handle.stats.started_at = datetime.now()
+    handle.stats.started_at = now_jst()
     handle.stats.restart_count = 0
     handle.stats.missed_pings = 0
     handle.stats.last_ping_at = None
@@ -135,7 +136,7 @@ async def test_get_all_status(supervisor):
         handle.state = ProcessState.RUNNING
         handle.get_pid.return_value = 12345
         handle.stats = MagicMock()
-        handle.stats.started_at = datetime.now()
+        handle.stats.started_at = now_jst()
         handle.stats.restart_count = 0
         handle.stats.missed_pings = 0
         handle.stats.last_ping_at = None

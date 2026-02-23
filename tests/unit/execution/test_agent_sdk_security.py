@@ -59,7 +59,6 @@ def other_anima_dir(animas_dir: Path) -> Path:
 class TestConstants:
     def test_protected_files_contains_expected(self):
         assert "permissions.md" in _PROTECTED_FILES
-        assert "identity.md" in _PROTECTED_FILES
         assert "bootstrap.md" in _PROTECTED_FILES
 
     def test_protected_files_is_frozenset(self):
@@ -84,11 +83,11 @@ class TestCheckA1FileAccess:
         assert result is not None
         assert "protected file" in result
 
-    def test_write_to_own_identity_blocked(self, anima_dir: Path):
+    def test_write_to_own_identity_allowed(self, anima_dir: Path):
+        """identity.md is intentionally editable — Animas can evolve."""
         path = str(anima_dir / "identity.md")
         result = _check_a1_file_access(path, anima_dir, write=True)
-        assert result is not None
-        assert "protected file" in result
+        assert result is None
 
     def test_write_to_own_bootstrap_blocked(self, anima_dir: Path):
         path = str(anima_dir / "bootstrap.md")

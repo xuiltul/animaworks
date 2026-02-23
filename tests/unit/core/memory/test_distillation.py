@@ -21,6 +21,7 @@ Covers:
 
 import json
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -728,7 +729,7 @@ class TestWeeklyPatternDistill:
         """Should detect patterns from activity log and create procedures."""
         # Create activity log entries with repeated tool_use
         activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
+        today = now_jst().date()
 
         entries = []
         for i in range(5):
@@ -784,7 +785,7 @@ class TestWeeklyPatternDistill:
     ) -> None:
         """Activity entries of irrelevant types should be filtered out."""
         activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
+        today = now_jst().date()
 
         # Only dm_sent/dm_received — not relevant for pattern detection
         entries = []
@@ -809,7 +810,7 @@ class TestWeeklyPatternDistill:
     ) -> None:
         """Too few entries per group should yield no clusters."""
         activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
+        today = now_jst().date()
 
         # Only 2 tool_use (below min_cluster_size=3)
         entries = [
@@ -841,7 +842,7 @@ class TestWeeklyPatternDistill:
     ) -> None:
         """LLM error during weekly distill should return zero results."""
         activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
+        today = now_jst().date()
 
         entries = []
         for i in range(5):
@@ -934,7 +935,7 @@ class TestLoadActivityEntries:
 
     def test_loads_entries(self, distiller, anima_dir: Path) -> None:
         activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
+        today = now_jst().date()
 
         entries = [
             json.dumps({"ts": f"{today}T09:00:00", "type": "tool_use"}, ensure_ascii=False),
@@ -950,7 +951,7 @@ class TestLoadActivityEntries:
 
     def test_loads_multi_day(self, distiller, anima_dir: Path) -> None:
         activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
+        today = now_jst().date()
         yesterday = today - timedelta(days=1)
 
         (activity_dir / f"{today}.jsonl").write_text(
@@ -971,7 +972,7 @@ class TestLoadActivityEntries:
 
     def test_skips_malformed_json(self, distiller, anima_dir: Path) -> None:
         activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
+        today = now_jst().date()
 
         lines = [
             json.dumps({"ts": f"{today}T09:00:00", "type": "tool_use"}),
@@ -1031,7 +1032,7 @@ class TestWeeklyPatternFilterIncludesResolved:
     ) -> None:
         """issue_resolved events should pass the relevant type filter."""
         activity_dir = anima_dir / "activity_log"
-        today = datetime.now().date()
+        today = now_jst().date()
 
         # Write issue_resolved events to activity log
         entries = []

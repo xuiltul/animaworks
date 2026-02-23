@@ -9,6 +9,7 @@ Requires ChromaDB and sentence-transformers.
 """
 
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 
 import pytest
@@ -256,7 +257,7 @@ def test_synaptic_downscaling_e2e(anima_dir, vector_store, indexer):
     assert len(normal_ids) > 0, "Should have at least one normal chunk"
 
     # Simulate old, unaccessed chunks (100 days ago)
-    old_date = (datetime.now() - timedelta(days=100)).isoformat()
+    old_date = (now_jst() - timedelta(days=100)).isoformat()
     all_ids = all_data["ids"]
     old_metas = [
         {"last_accessed_at": old_date, "access_count": 0}
@@ -337,7 +338,7 @@ def test_complete_forgetting_e2e(anima_dir, vector_store, indexer):
     assert slack_file.exists(), "Source file should exist before forgetting"
 
     # Simulate low activation for 90 days with zero access
-    low_since = (datetime.now() - timedelta(days=90)).isoformat()
+    low_since = (now_jst() - timedelta(days=90)).isoformat()
     low_metas = [
         {
             "activation_level": "low",

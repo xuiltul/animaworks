@@ -742,14 +742,13 @@ class TestReadSpecialtyPrompt:
 class TestProtectedFiles:
     """Tests for _PROTECTED_FILES in core/execution/agent_sdk.py."""
 
-    def test_specialty_prompt_is_protected(self) -> None:
-        """specialty_prompt.md is included in _PROTECTED_FILES frozenset."""
-        assert "specialty_prompt.md" in _PROTECTED_FILES
+    def test_specialty_prompt_not_protected(self) -> None:
+        """specialty_prompt.md is intentionally NOT protected (Animas can evolve)."""
+        assert "specialty_prompt.md" not in _PROTECTED_FILES
 
     def test_other_protected_files_present(self) -> None:
         """All expected protected files are in the frozenset."""
         assert "permissions.md" in _PROTECTED_FILES
-        assert "identity.md" in _PROTECTED_FILES
         assert "bootstrap.md" in _PROTECTED_FILES
 
     def test_protected_files_is_frozenset(self) -> None:

@@ -190,15 +190,17 @@ def desktop_page(browser_instance: Browser, static_server: str):
 
 
 def _dismiss_login(page: Page) -> None:
-    """Dismiss the login overlay by clicking guest login.
+    """Dismiss the login overlay so UI elements are clickable.
 
     The login screen covers the main UI; must be dismissed before
-    interacting with hamburger, sidebar, etc.
+    interacting with hamburger, sidebar, etc.  We hide it via JS
+    since these tests target layout, not authentication.
     """
-    guest_btn = page.locator("#guestLoginBtn")
-    if guest_btn.is_visible(timeout=3000):
-        guest_btn.click()
-        page.wait_for_timeout(300)
+    page.evaluate("""
+        const ls = document.getElementById('loginScreen');
+        if (ls) ls.classList.add('hidden');
+    """)
+    page.wait_for_timeout(200)
 
 
 # ── Mobile Dashboard Tests (375x667) ────────────────────────

@@ -2,10 +2,10 @@
 
 **[日本語版](features.ja.md)**
 
-> Last updated: 2026-02-18
+> Last updated: 2026-02-23
 > Related: [spec.md](spec.md), [memory.md](memory.md), [vision.md](vision.md)
 
-An index of implemented features in the AnimaWorks framework, organized across 18 categories. "Design" links point to design and implementation documents; "Review" links point to code review reports.
+An index of implemented features in the AnimaWorks framework, organized across 19 categories. "Design" links point to design and implementation documents; "Review" links point to code review reports.
 
 ---
 
@@ -38,7 +38,7 @@ Framework foundation changes including agent.py refactoring, hierarchy design, p
 
 ## 2. Execution Engine
 
-Improvements to A1/A2/B modes, Agent SDK crash recovery, SSE enhancements, and more.
+Improvements to S/A/B modes (formerly A1/A2/B), Agent SDK crash recovery, SSE enhancements, and more.
 
 - **A2 Agentic Loop Enhancement** (2026-02-15) — Reliability and feature improvements for the LiteLLM + tool_use loop
   [Design](implemented/20260215_a2-agentic-loop-enhancement_implemented-20260215.md) | [Review](implemented/20260215_review_a2-agentic-loop-enhancement_approved-20260215.md)
@@ -416,3 +416,103 @@ Hybrid creation, dynamic prompt injection, and more.
 
 - **Hybrid Anima Creation: Unified create_anima Tool + Character Sheet Specification** (2026-02-16) — Unified creation via tool invocation + MD character sheet
   [Design](implemented/20260216_person-creation-hybrid-and-create-tool_implemented-20260216.md) | [Review](implemented/20260216_review_person-creation-hybrid-and-create-tool_approved-20260216.md)
+
+---
+
+## 19. Post-v0.2 Enhancements (2026-02-18 — 2026-02-23)
+
+Execution mode redesign, task queue, resolution registry, dynamic Priming, refactoring, and operational resilience improvements.
+
+### Execution Engine
+
+- **Execution Mode Redesign: S/A/B 3-Mode Architecture** (2026-02-23) — Redesign execution modes as S (SDK) / A (Autonomous) / B (Basic). S mode delegates session management to Agent SDK
+  [Design](implemented/20260223_execution-mode-redesign-s-a-b-20260223.md) | [Review](implemented/20260223_review_execution-mode-redesign-s-a-b_approved-20260223.md)
+- **S Mode Memory Encoding Gap Fix** (2026-02-23) — Three-layer solution for conversation turn preservation, memory summary search, and behavior trace knowledge generation in S mode
+  [Design](implemented/20260223_s-mode-memory-encoding-gap_implemented-20260223.md) | [Review](implemented/20260223_review_s-mode-memory-encoding-gap_approved-20260223.md)
+- **A1 Mid-Session Context Auto-Compaction** (2026-02-22) — Context token tracking in A1 mode with auto-termination and chaining on overflow
+  [Design](implemented/20260222_a1-mid-session-context-autocompact-implemented-20260222.md) | [Review](implemented/20260222_review_a1-mid-session-context-autocompact_approved-20260222.md)
+- **A1 MCP Native Tools** (2026-02-20) — Stdio MCP server for A1 mode providing 12 AnimaWorks-specific tools as native tool calls
+  [Design](implemented/20260220_a1-mcp-native-tools_implemented-20260220.md) | [Review](implemented/20260220_review_a1-mcp-native-tools_approved-20260220.md)
+- **A1 Hook: Tool Call Logging & Bash Blocklist** (2026-02-20) — Complete tool call logging in PreToolUse hook and Bash command blocklist
+  [Design](implemented/20260220_a1-hook-tool-logging-and-bash-blocklist-20260220.md) | [Review](implemented/20260220_review_a1-hook-tool-logging-and-bash-blocklist_approved-20260220.md)
+- **Mode B Context Overflow Protection** (2026-02-19) — Preflight check, timeout, tool output limit, and auto-scaled history threshold for small-context models
+  [Design](implemented/20260219_mode-b-context-overflow-protection_implemented-20260220.md) | [Review](implemented/20260219_review2_mode-b-context-overflow-protection_approved-20260220.md)
+- **Context Over-Compression Comprehensive Improvement** (2026-02-21) — Tool result preservation, structured messages, session handoff, and debug payload storage
+  [Design](implemented/20260221_K_context-over-compression-implemented-20260222.md) | [Review](implemented/20260222_review_context-over-compression_approved-20260222.md)
+
+### Memory System
+
+- **Task Persistence and Heartbeat Resilience** (2026-02-19) — Persistent JSONL task queue, task checkpoints, recovery mechanisms, message deduplication, and Priming injection
+  [Design](implemented/20260219_task-persistence-and-heartbeat-resilience_implemented-20260219.md) | [Review](implemented/20260219_review_task-persistence-and-heartbeat-resilience_approved-20260219.md)
+- **Task Staleness Detection and Delegation** (2026-02-19) — Elapsed time visibility, staleness markers, deadline auto-enforcement, and delegation decision prompt injection
+  [Design](implemented/20260219_task-staleness-detection-and-delegation-implemented-20260219.md) | [Review](implemented/20260219_review_task-staleness-detection-and-delegation_approved-20260219.md)
+- **Distilled Knowledge Full System Prompt Injection** (2026-02-22) — Direct injection of full knowledge/ and procedures/ content into system prompt as always-active semantic memory
+  [Design](implemented/20260222_knowledge-procedures-full-injection_implemented-20260222.md) | [Review](implemented/20260222_review_knowledge-procedures-full-injection_approved-20260222.md)
+- **Issue Resolved → Procedure Auto-Generation Pipeline** (2026-02-22) — Consolidation pipeline converting resolved supervisor feedback into procedural memory
+  [Design](implemented/20260222_consolidation-resolved-to-procedure-pipeline-20260222.md) | [Review](implemented/20260222_review_consolidation-resolved-to-procedure-pipeline_approved-20260222.md)
+- **Priming Intent-Based Budget Allocation** (2026-02-19) — Link send_message intent field to Priming budget classification for intent-aware memory recall
+  [Design](implemented/20260219_priming-intent-budget-allocation_implemented-20260220.md) | [Review](implemented/20260220_review2_priming-intent-budget-allocation_revision-20260220.md)
+- **Memory System Symmetry and Skill Vector Search** (2026-02-19) — failure/success counts for knowledge, vector search for skill matching, contradiction history persistence
+  [Design](implemented/20260219_memory-system-symmetry-and-skill-vector-search_implemented-20260220.md) | [Review](implemented/20260220_review2_memory-system-symmetry-and-skill-vector-search_approved-20260220.md)
+
+### Communication & Resilience
+
+- **Message Storm Multi-Layer Defense** (2026-02-19) — Conversation depth limiter, reprocessing counter visibility, scheduled heartbeat cascade detection
+  [Design](implemented/20260219_message-storm-defense-in-depth_implemented-20260219.md) | [Review](implemented/20260219_review_message-storm-defense-in-depth_approved-20260219.md)
+- **Praise Loop Prevention** (2026-02-22) — Dual prompt and code defense against Anima-to-Anima infinite praise chains
+  [Design](implemented/20260222_praise-loop-prevention_implemented-20260222.md) | [Review](implemented/20260222_review_praise-loop-prevention_approved-20260222.md)
+- **Per-Run DM Limit** (2026-02-21) — Limit DMs per run to max 2 recipients, 1 message each, report/delegation intent only
+  [Design](implemented/20260221_A_per-anima-global-send-limit-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)
+
+### Scheduling & Lifecycle
+
+- **Heartbeat Interval Config.json Management** (2026-02-21) — Migrate heartbeat interval from free-form parsing to config.json with fixed hash-based offsets
+  [Design](implemented/20260221_H_schedule-parser-strict-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)
+- **CronTask trigger_heartbeat Flag** (2026-02-23) — Per-task flag to trigger a heartbeat after cron execution
+  [Design](implemented/20260223_activity-log-conversation-history-api_implemented-20260223.md)
+- **Heartbeat Reflection Stream** (2026-02-20) — Observe-Reflect-Plan-Act cognitive framework replacing checklist-based heartbeat
+  [Design](implemented/20260220_heartbeat-reflection-stream-20260220.md) | [Review](implemented/20260220_review_heartbeat-reflection-stream_approved-20260220.md)
+- **Heartbeat Constant Unification and Intent-Based Trigger** (2026-02-20) — Consolidate cascade constants and reverse message-triggered heartbeat to actionable-intent-only
+  [Design](implemented/20260220_unify-heartbeat-constants-and-intent-based-trigger.md) | [Review](implemented/20260220_review_unify-heartbeat-constants-and-intent-based-trigger_approved.md)
+- **Time Management and Timezone Unification** (2026-02-19) — Current time injection, naive datetime elimination, heartbeat 24-hour default, timezone config
+  [Design](implemented/20260219_time-management-and-timezone-implemented-20260220.md) | [Review](implemented/20260220_review_time-management-and-timezone_approved-20260220.md)
+
+### Skills & Tools
+
+- **Skill Tool: Progressive Disclosure** (2026-02-22) — On-demand full skill text injection via `skill` tool across all execution modes
+  [Design](implemented/20260222_skill-tool-progressive-disclosure_implemented-20260222.md) | [Review](implemented/20260222_review_skill-tool-progressive-disclosure_approved-20260222.md)
+- **Tool Prompt Externalization** (2026-02-22) — Tool descriptions migrated from hardcoded schemas.py to SQLite DB with WebUI editing
+  [Design](implemented/20260222_tool-prompt-externalization-implemented-20260222.md) | [Review](implemented/20260222_review_tool-prompt-externalization_approved-20260222.md)
+- **Supervisor Subordinate Disable/Enable Tools** (2026-02-22) — Process control tools for manager Animas to pause/resume subordinates
+  [Design](implemented/20260222_supervisor-subordinate-disable-enable_implemented-20260222.md) | [Review](implemented/20260222_review_supervisor-subordinate-disable-enable_approved-20260222.md)
+
+### Web UI
+
+- **Activity Log-Based Conversation History API** (2026-02-23) — Workspace chat with session segmentation, tool call expansion, and infinite scroll using activity_log as single data source
+  [Design](implemented/20260223_activity-log-conversation-history-api_implemented-20260223.md) | [Review](implemented/20260223_review_activity-log-conversation-history-api_approved-20260223.md)
+
+### Process Management
+
+- **ProcessSupervisor Process Isolation + Health Check Fix** (2026-02-22) — SIGTERM propagation prevention, log spam elimination, reconciliation-based auto-recovery
+  [Design](implemented/20260222_supervisor-process-isolation-and-healthcheck-fix-implemented-20260223.md) | [Review](implemented/20260223_review_supervisor-process-isolation-and-healthcheck-fix_approved-20260223.md)
+- **IPC Unary Request Dedicated Connection** (2026-02-22) — Per-request dedicated connection pattern to eliminate ID_MISMATCH errors
+  [Design](implemented/20260222_ipc-dedicated-connection-for-unary_implemented-20260222.md) | [Review](implemented/20260222_review_ipc-dedicated-connection-for-unary_approved-20260222.md)
+- **IPC Streaming Residual Issues** (2026-02-22) — Claude SDK hook deactivation and ChromaDB Anima-level separation
+  [Design](implemented/20260222_ipc-streaming-residual-issues_implemented-20260222.md) | [Review](implemented/20260222_review_ipc-streaming-residual-issues_approved-20260222.md)
+
+### Refactoring & Quality
+
+- **AnimaRunner Responsibility Decomposition** (2026-02-19) — Split 33-method monolith into 4 delegate classes
+  [Design](implemented/20260219_refactor-anima-runner-decomposition_implemented-20260220.md) | [Review](implemented/20260220_review_refactor-anima-runner-decomposition_approved-20260220.md)
+- **Custom Exception Hierarchy** (2026-02-20) — Unified exception hierarchy replacing 322 bare Exception catches with domain-specific types
+  [Design](implemented/20260220_custom-exception-hierarchy_implemented-20260220.md) | [Review](implemented/20260220_review_custom-exception-hierarchy_approved-20260220.md)
+- **Hardcoded Prompt Externalization** (2026-02-20) — Extract ~6,500 characters of LLM prompts to templates/prompts/
+  [Design](implemented/20260220_extract-hardcoded-prompts-to-templates_implemented-20260220.md) | [Review](implemented/20260220_review_extract-hardcoded-prompts-to-templates_approved-20260220.md)
+- **System Prompt Token Optimization** (2026-02-20) — Skill full-text removal, procedure YAML auto-structuring, history trim
+  [Design](implemented/20260220_system-prompt-token-optimization_implemented-20260220.md) | [Review](implemented/20260220_review_system-prompt-token-optimization_approved-20260220.md)
+- **Hardcoded Model Name Consolidation** (2026-02-20) — Centralize 18 hardcoded model names to 2 Pydantic defaults
+  [Design](implemented/20260220_consolidate-hardcoded-model-names_implemented-20260220.md) | [Review](implemented/20260220_review_consolidate-hardcoded-model-names_approved-20260220.md)
+- **Conversation History Turn Limit** (2026-02-20) — Prevention of tool call abandonment from inflated context
+  [Design](implemented/20260220_conversation-history-turn-limit_implemented-20260220.md) | [Review](implemented/20260220_review_conversation-history-turn-limit_approved-20260220.md)
+- **Cron Task Type Correctness** (2026-02-21) — Replace improper llm-typed cron tasks with command type and add validation
+  [Design](implemented/20260221_K_cron-type-correctness-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)

@@ -58,6 +58,7 @@ class CronTask(BaseModel):
     tool: str | None = None  # Command型の内部ツール名
     args: dict[str, Any] | None = None  # toolの引数
     skip_pattern: str | None = None  # stdoutがマッチしたらheartbeatをスキップ
+    trigger_heartbeat: bool = True  # Falseならcron出力時のHBトリガーを抑制
 
 
 class ModelConfig(BaseModel):

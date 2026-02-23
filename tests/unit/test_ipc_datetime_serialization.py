@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 
 import pytest
@@ -83,7 +84,7 @@ class TestIPCResponseDatetimeSerialization:
 
     def test_response_with_datetime_in_result(self):
         """to_json() should not raise when result contains a datetime object."""
-        now = datetime.now()
+        now = now_jst()
         response = IPCResponse(
             id="test_001",
             result={"timestamp": now, "value": "ok"},
@@ -175,7 +176,7 @@ class TestIPCRequestDatetimeSerialization:
 
     def test_request_with_datetime_in_params(self):
         """to_json() should not raise when params contain a datetime object."""
-        now = datetime.now()
+        now = now_jst()
         request = IPCRequest(
             id="req_001",
             method="test",
@@ -209,7 +210,7 @@ class TestIPCEventDatetimeSerialization:
 
     def test_event_with_datetime_in_data(self):
         """to_json() should not raise when data contains a datetime object."""
-        now = datetime.now()
+        now = now_jst()
         event = IPCEvent(
             event="status_changed",
             data={"status": "active", "since": now},

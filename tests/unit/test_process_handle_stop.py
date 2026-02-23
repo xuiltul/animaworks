@@ -32,6 +32,7 @@ import pytest
 from core.supervisor.ipc import IPCResponse
 from core.supervisor.manager import HealthConfig, ProcessSupervisor, RestartPolicy
 from core.supervisor.process_handle import ProcessHandle, ProcessState
+from core.time_utils import now_jst
 
 
 # ── Fixtures ──────────────────────────────────────────────────
@@ -388,7 +389,7 @@ class TestHealthCheckStoppingDetection:
         )
         handle.state = ProcessState.STOPPING
         # Set stopping_since to >30 seconds ago so the duration check triggers
-        handle.stopping_since = datetime.now() - timedelta(seconds=60)
+        handle.stopping_since = now_jst() - timedelta(seconds=60)
 
         supervisor.processes["stuck-anima"] = handle
 
@@ -423,7 +424,7 @@ class TestHealthCheckStoppingDetection:
         )
         handle.state = ProcessState.STOPPING
         # Set stopping_since to just 5 seconds ago (well under the 30s threshold)
-        handle.stopping_since = datetime.now() - timedelta(seconds=5)
+        handle.stopping_since = now_jst() - timedelta(seconds=5)
 
         supervisor.processes["stopping-anima"] = handle
 
@@ -455,7 +456,7 @@ class TestHealthCheckStoppingDetection:
             shared_dir=tmp_path / "shared",
         )
         handle.state = ProcessState.STOPPING
-        handle.stats.started_at = datetime.now() - timedelta(seconds=10)
+        handle.stats.started_at = now_jst() - timedelta(seconds=10)
         handle.process = MagicMock()
         handle.process.poll.return_value = None
 

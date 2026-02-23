@@ -246,6 +246,15 @@ class SchedulerManager:
                 # review and act on the results.
                 stdout = result.get("stdout", "").strip()
                 if stdout and result.get("exit_code", 0) == 0:
+                    # Check trigger_heartbeat flag first
+                    if not task.trigger_heartbeat:
+                        logger.info(
+                            "Cron command '%s' trigger_heartbeat=False, "
+                            "skipping heartbeat for %s",
+                            task.name, self._anima_name,
+                        )
+                        return
+
                     # Check skip_pattern: if stdout matches, suppress heartbeat
                     if task.skip_pattern:
                         try:
