@@ -2,7 +2,7 @@
 
 import { state, dom, escapeHtml } from "./state.js";
 import { api } from "./api.js";
-import { renderChat, resumeActiveStream } from "./chat.js";
+import { renderChat, resumeActiveStream, loadConversationHistory, setupScrollObserver } from "./chat.js";
 import { loadMemoryTab } from "./memory.js";
 import { hideHistoryDetail, loadSessionList } from "./history.js";
 
@@ -78,25 +78,14 @@ export async function selectAnima(name) {
   }
   if (chatSendBtn) chatSendBtn.disabled = false;
 
-  // Load conversation history + anima detail in parallel
-  const needConv = !state.chatHistories[name] || state.chatHistories[name].length === 0;
-  const convPromise = needConv
-    ? api(`/api/animas/${encodeURIComponent(name)}/conversation/full?limit=20`).catch(() => null)
-    : Promise.resolve(null);
+  // Load conversation history (activity_log API) + anima detail in parallel
+  const convPromise = loadConversationHistory(name);
   const detailPromise = api(`/api/animas/${encodeURIComponent(name)}`).catch(() => null);
 
-  const [conv, detail] = await Promise.all([convPromise, detailPromise]);
+  const [, detail] = await Promise.all([convPromise, detailPromise]);
 
-  // Apply conversation history
-  if (conv && conv.turns && conv.turns.length > 0) {
-    state.chatHistories[name] = conv.turns.map((t) => ({
-      role: t.role === "human" ? "user" : "assistant",
-      text: t.content,
-    }));
-  }
-
-  // Render chat history
-  renderChat();
+  // Setup infinite scroll observer for chat history
+  setupScrollObserver();
 
   // Check if anima is currently processing — resume stream
   const selectedAnimaObj = state.animas.find((p) => p.name === name);

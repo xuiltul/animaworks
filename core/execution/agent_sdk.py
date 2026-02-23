@@ -343,6 +343,7 @@ def _log_tool_use(
     tool_name: str,
     tool_input: dict[str, Any],
     *,
+    tool_use_id: str | None = None,
     blocked: bool = False,
     block_reason: str = "",
 ) -> None:
@@ -352,6 +353,8 @@ def _log_tool_use(
 
         activity = ActivityLogger(anima_dir)
         meta: dict[str, Any] = {"args": _sanitise_tool_args(tool_name, tool_input)}
+        if tool_use_id:
+            meta["tool_use_id"] = tool_use_id
         if blocked:
             meta["blocked"] = True
             meta["reason"] = block_reason
@@ -488,6 +491,7 @@ def _build_pre_tool_hook(
                 # Still log for observability.
                 _log_tool_use(
                     anima_dir, tool_name, tool_input,
+                    tool_use_id=tool_use_id,
                     blocked=False,
                     block_reason=(
                         f"context_observation: estimated {estimated_tokens} tokens, "
@@ -504,7 +508,7 @@ def _build_pre_tool_hook(
                 subordinate_management_files=_sub_mgmt_files,
             )
             if violation:
-                _log_tool_use(anima_dir, tool_name, tool_input, blocked=True, block_reason=violation)
+                _log_tool_use(anima_dir, tool_name, tool_input, tool_use_id=tool_use_id, blocked=True, block_reason=violation)
                 return SyncHookJSONOutput(
                     hookSpecificOutput=PreToolUseHookSpecificOutput(
                         hookEventName="PreToolUse",
@@ -522,7 +526,7 @@ def _build_pre_tool_hook(
                 subordinate_management_files=_sub_mgmt_files,
             )
             if violation:
-                _log_tool_use(anima_dir, tool_name, tool_input, blocked=True, block_reason=violation)
+                _log_tool_use(anima_dir, tool_name, tool_input, tool_use_id=tool_use_id, blocked=True, block_reason=violation)
                 return SyncHookJSONOutput(
                     hookSpecificOutput=PreToolUseHookSpecificOutput(
                         hookEventName="PreToolUse",
@@ -536,7 +540,7 @@ def _build_pre_tool_hook(
             command = tool_input.get("command", "")
             violation = _check_a1_bash_command(command, anima_dir)
             if violation:
-                _log_tool_use(anima_dir, tool_name, tool_input, blocked=True, block_reason=violation)
+                _log_tool_use(anima_dir, tool_name, tool_input, tool_use_id=tool_use_id, blocked=True, block_reason=violation)
                 return SyncHookJSONOutput(
                     hookSpecificOutput=PreToolUseHookSpecificOutput(
                         hookEventName="PreToolUse",
@@ -546,7 +550,7 @@ def _build_pre_tool_hook(
                 )
 
         # Log the tool call (allowed)
-        _log_tool_use(anima_dir, tool_name, tool_input)
+        _log_tool_use(anima_dir, tool_name, tool_input, tool_use_id=tool_use_id)
 
         # Output guard
         updated = _build_output_guard(tool_name, tool_input, anima_dir)

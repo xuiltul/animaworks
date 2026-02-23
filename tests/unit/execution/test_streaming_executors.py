@@ -281,9 +281,9 @@ class TestModeBStreamingWithToolCall:
         all_text = " ".join(e["text"] for e in text_events)
         assert "Let me search for that." in all_text
 
-        # Verify tool_handler.handle was called
+        # Verify tool_handler.handle was called (includes tool_use_id)
         assisted_executor._tool_handler.handle.assert_called_once_with(
-            "web_search", {"query": "test"},
+            "web_search", {"query": "test"}, "assisted_0_web_search",
         )
 
 

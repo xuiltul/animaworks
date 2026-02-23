@@ -287,6 +287,7 @@ class LiteLLMExecutor(BaseExecutor):
             self._tool_handler.handle,
             tc.function.name,
             fn_args,
+            tc.id,
         )
         return {"role": "tool", "tool_call_id": tc.id, "content": result}
 

@@ -402,7 +402,7 @@ class ToolHandler:
     # Maximum tool output size before truncation (500KB)
     _MAX_TOOL_OUTPUT_BYTES = 512_000
 
-    def handle(self, name: str, args: dict[str, Any]) -> str:
+    def handle(self, name: str, args: dict[str, Any], tool_use_id: str | None = None) -> str:
         """Synchronous tool call dispatch.
 
         Routes by tool name to the appropriate handler method via
@@ -436,8 +436,8 @@ class ToolHandler:
                         logger.warning("Unknown tool requested: %s", name)
                         result = f"Unknown tool: {name}"
 
-            self._log_tool_activity(name, args)
-            self._log_tool_result_activity(name, result)
+            self._log_tool_activity(name, args, tool_use_id=tool_use_id)
+            self._log_tool_result_activity(name, result, tool_use_id=tool_use_id)
             return self._truncate_output(result)
 
         except Exception as e:
@@ -473,31 +473,36 @@ class ToolHandler:
         "call_human": "human_notify",
     }
 
-    def _log_tool_activity(self, name: str, args: dict[str, Any]) -> None:
+    def _log_tool_activity(self, name: str, args: dict[str, Any], *, tool_use_id: str | None = None) -> None:
         """Record tool usage in unified activity log."""
         try:
             activity_type = self._ACTIVITY_TYPE_MAP.get(name)
+            meta: dict[str, Any] = {}
+            if tool_use_id:
+                meta["tool_use_id"] = tool_use_id
 
             if activity_type is None:
-                self._activity.log("tool_use", tool=name, summary=str(args)[:200])
+                self._activity.log("tool_use", tool=name, summary=str(args)[:200], meta=meta or None)
             elif name == "post_channel":
-                self._activity.log(activity_type, content=args.get("text", "")[:200], channel=args.get("channel", ""))
+                self._activity.log(activity_type, content=args.get("text", "")[:200], channel=args.get("channel", ""), meta=meta or None)
             elif name == "read_channel":
-                self._activity.log(activity_type, channel=args.get("channel", ""), summary=f"最新{args.get('limit', 20)}件を確認")
+                self._activity.log(activity_type, channel=args.get("channel", ""), summary=f"最新{args.get('limit', 20)}件を確認", meta=meta or None)
             elif name == "read_dm_history":
-                self._activity.log(activity_type, channel=f"dm:{args.get('peer', '')}", summary="DM履歴を確認")
+                self._activity.log(activity_type, channel=f"dm:{args.get('peer', '')}", summary="DM履歴を確認", meta=meta or None)
             elif name == "call_human":
-                self._activity.log(activity_type, content=args.get("body", "")[:200], via="configured_channels")
+                self._activity.log(activity_type, content=args.get("body", "")[:200], via="configured_channels", meta=meta or None)
         except Exception as e:
             logger.warning("Activity logging failed for tool '%s': %s", name, e)
 
-    def _log_tool_result_activity(self, name: str, result: str) -> None:
+    def _log_tool_result_activity(self, name: str, result: str, *, tool_use_id: str | None = None) -> None:
         """Record tool result in unified activity log (full text, pre-truncation)."""
         try:
+            meta: dict[str, Any] | None = {"tool_use_id": tool_use_id} if tool_use_id else None
             self._activity.log(
                 "tool_result",
                 tool=name,
                 content=result,
+                meta=meta,
             )
         except Exception as e:
             logger.warning("Activity result logging failed for tool '%s': %s", name, e)

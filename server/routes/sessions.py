@@ -8,6 +8,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
+from core.memory.activity import ActivityLogger
 from core.memory.conversation import ConversationMemory
 from core.memory.manager import MemoryManager
 from core.memory.shortterm import ShortTermMemory
@@ -108,6 +109,32 @@ def create_sessions_router() -> APIRouter:
             "episodes": episodes,
             "transcripts": transcripts,
         }
+
+    # ── Conversation history (activity_log-based) ──────────
+
+    @router.get("/animas/{name}/conversation/history")
+    async def get_conversation_history(
+        name: str,
+        limit: int = 50,
+        before: str | None = None,
+        request: Request = None,
+    ):
+        """Get conversation history from activity log.
+
+        Returns sessions with messages, tool calls nested into assistant
+        messages, and cursor-based pagination.
+        """
+        animas_dir = request.app.state.animas_dir
+        anima_dir = animas_dir / name
+        if not anima_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
+
+        limit = max(1, min(limit, 200))
+        activity = ActivityLogger(anima_dir)
+        return activity.get_conversation_view(
+            before=before,
+            limit=limit,
+        )
 
     @router.get("/animas/{name}/sessions/{session_id}")
     async def get_session_detail(

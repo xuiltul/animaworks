@@ -146,46 +146,9 @@ def create_memory_router() -> APIRouter:
             ],
         }
 
-    @router.get("/animas/{name}/conversation/full")
-    async def get_conversation_full(
-        name: str, limit: int = 50, offset: int = 0,
-        request: Request = None,
-    ):
-        """View full conversation history (not truncated)."""
-        animas_dir = request.app.state.animas_dir
-        anima_dir = animas_dir / name
-        if not anima_dir.exists():
-            raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
-
-        from core.config.models import load_model_config
-        model_config = load_model_config(anima_dir)
-
-        conv = ConversationMemory(anima_dir, model_config)
-        state = conv.load()
-
-        total = len(state.turns)
-        end = max(0, total - offset)
-        start = max(0, end - limit)
-        paginated = state.turns[start:end]
-
-        return {
-            "anima": name,
-            "total_turn_count": state.total_turn_count,
-            "raw_turns": total,
-            "compressed_turn_count": state.compressed_turn_count,
-            "has_summary": bool(state.compressed_summary),
-            "compressed_summary": state.compressed_summary or "",
-            "total_token_estimate": state.total_token_estimate,
-            "turns": [
-                {
-                    "role": t.role,
-                    "content": t.content,
-                    "timestamp": t.timestamp,
-                    "token_estimate": t.token_estimate,
-                }
-                for t in paginated
-            ],
-        }
+    # NOTE: /conversation/full has been removed.
+    # Use GET /animas/{name}/conversation/history (sessions.py) instead,
+    # which reads from the permanent activity_log.
 
     @router.delete("/animas/{name}/conversation")
     async def clear_conversation(name: str, request: Request):

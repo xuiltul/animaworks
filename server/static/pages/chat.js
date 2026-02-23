@@ -19,10 +19,11 @@ let _activeRightTab = "state";
 let _activeMemoryTab = "episodes";
 let _intervals = [];
 let _boundListeners = [];
-let _paginationState = {};  // Per-anima: { totalRaw, hasMore, loading }
+let _historyState = {};  // Per-anima: { sessions, hasMore, nextBefore, loading }
 let _chatObserver = null;
 let _isChatStreaming = false;
-const _PAGE_SIZE = 20;
+const _HISTORY_PAGE_SIZE = 50;
+const _TOOL_RESULT_TRUNCATE = 500;
 let _imageInputManager = null;
 
 // ── DOM refs (local) ───────────────────────
@@ -36,7 +37,7 @@ export function render(container) {
   _animas = [];
   _selectedAnima = null;
   _chatHistories = {};
-  _paginationState = {};
+  _historyState = {};
   _animaDetail = null;
   _activeRightTab = "state";
   _activeMemoryTab = "episodes";
@@ -158,7 +159,7 @@ export function destroy() {
   _animas = [];
   _selectedAnima = null;
   _chatHistories = {};
-  _paginationState = {};
+  _historyState = {};
   _animaDetail = null;
   _imageInputManager = null;
 }
@@ -314,30 +315,25 @@ async function _selectAnima(name) {
   if (input) { input.disabled = false; input.placeholder = `${name} にメッセージ...`; }
   if (sendBtn) sendBtn.disabled = false;
 
-  // Load conversation history + anima detail in parallel
-  const needConv = !_chatHistories[name] || _chatHistories[name].length === 0;
+  // Load conversation history (activity_log API) + anima detail in parallel
+  const needConv = !_historyState[name] || _historyState[name].sessions.length === 0;
   const convPromise = needConv
-    ? api(`/api/animas/${encodeURIComponent(name)}/conversation/full?limit=${_PAGE_SIZE}`).catch(() => null)
+    ? _fetchConversationHistory(name).catch(() => null)
     : Promise.resolve(null);
   const detailPromise = api(`/api/animas/${encodeURIComponent(name)}`).catch(() => null);
 
   const [conv, detail] = await Promise.all([convPromise, detailPromise]);
 
-  // Apply conversation history + pagination state
-  if (conv && conv.turns && conv.turns.length > 0) {
-    _chatHistories[name] = conv.turns.map(t => ({
-      role: t.role === "human" ? "user" : "assistant",
-      text: t.content,
-      timestamp: t.timestamp || "",
-    }));
-    const totalRaw = conv.raw_turns || 0;
-    _paginationState[name] = {
-      totalRaw,
-      hasMore: _chatHistories[name].length < totalRaw,
+  // Apply conversation history
+  if (conv && conv.sessions && conv.sessions.length > 0) {
+    _historyState[name] = {
+      sessions: conv.sessions,
+      hasMore: conv.has_more || false,
+      nextBefore: conv.next_before || null,
       loading: false,
     };
   } else if (needConv) {
-    _paginationState[name] = { totalRaw: 0, hasMore: false, loading: false };
+    _historyState[name] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
   }
 
   _renderChat();
@@ -390,47 +386,76 @@ function _renderChat(scrollToBottom = true) {
 
   const name = _selectedAnima;
   const history = _chatHistories[name] || [];
-  const pag = _paginationState[name] || { totalRaw: 0, hasMore: false, loading: false };
+  const hs = _historyState[name] || { sessions: [], hasMore: false, nextBefore: null, loading: false };
 
-  if (history.length === 0) {
-    messagesEl.innerHTML = '<div class="chat-empty">メッセージはまだありません</div>';
+  if (hs.sessions.length === 0 && history.length === 0) {
+    if (hs.loading) {
+      messagesEl.innerHTML = '<div class="chat-empty"><span class="tool-spinner"></span> \u8AAD\u307F\u8FBC\u307F\u4E2D...</div>';
+    } else {
+      messagesEl.innerHTML = '<div class="chat-empty">\u30E1\u30C3\u30BB\u30FC\u30B8\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093</div>';
+    }
     return;
   }
 
-  // Sentinel for infinite scroll
   let topHtml = "";
-  if (pag.hasMore) {
-    if (pag.loading) {
-      topHtml += '<div class="chat-load-indicator"><span class="tool-spinner"></span> 読み込み中...</div>';
+  // Sentinel for infinite scroll
+  if (hs.hasMore) {
+    if (hs.loading) {
+      topHtml += '<div class="history-loading-more"><span class="tool-spinner"></span> \u904E\u53BB\u306E\u4F1A\u8A71\u3092\u8AAD\u307F\u8FBC\u307F\u4E2D...</div>';
     }
     topHtml += '<div class="chat-load-sentinel"></div>';
   }
 
   const prevScrollHeight = messagesEl.scrollHeight;
-  messagesEl.innerHTML = topHtml + history.map(m => {
-    const ts = m.timestamp ? smartTimestamp(m.timestamp) : "";
-    const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
 
-    if (m.role === "thinking") {
-      return '<div class="chat-bubble thinking"><span class="thinking-animation">考え中</span></div>';
-    }
-    if (m.role === "assistant") {
-      const streamClass = m.streaming ? " streaming" : "";
-      let content = "";
-      if (m.text) {
-        content = renderMarkdown(m.text);
-      } else if (m.streaming) {
-        content = '<span class="cursor-blink"></span>';
+  // Render history sessions
+  let sessionsHtml = "";
+  for (let si = 0; si < hs.sessions.length; si++) {
+    const session = hs.sessions[si];
+    sessionsHtml += _renderSessionDivider(session, si === 0);
+    if (session.messages) {
+      for (const msg of session.messages) {
+        sessionsHtml += _renderHistoryMessage(msg);
       }
-      const toolHtml = m.activeTool
-        ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(m.activeTool)} を実行中...</div>`
-        : "";
-      return `<div class="chat-bubble assistant${streamClass}">${content}${toolHtml}${tsHtml}</div>`;
     }
-    const imagesHtml = renderChatImages(m.images);
-    const textHtml = m.text ? `<div class="chat-text">${escapeHtml(m.text)}</div>` : "";
-    return `<div class="chat-bubble user">${imagesHtml}${textHtml}${tsHtml}</div>`;
-  }).join("");
+  }
+
+  // Render live chat messages
+  let liveHtml = "";
+  if (history.length > 0) {
+    if (hs.sessions.length > 0) {
+      liveHtml += '<div class="session-divider"><span class="session-divider-label">\u73FE\u5728\u306E\u30BB\u30C3\u30B7\u30E7\u30F3</span></div>';
+    }
+    liveHtml += history.map(m => {
+      const ts = m.timestamp ? smartTimestamp(m.timestamp) : "";
+      const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
+
+      if (m.role === "thinking") {
+        return '<div class="chat-bubble thinking"><span class="thinking-animation">\u8003\u3048\u4E2D</span></div>';
+      }
+      if (m.role === "assistant") {
+        const streamClass = m.streaming ? " streaming" : "";
+        let content = "";
+        if (m.text) {
+          content = renderMarkdown(m.text);
+        } else if (m.streaming) {
+          content = '<span class="cursor-blink"></span>';
+        }
+        const toolHtml = m.activeTool
+          ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(m.activeTool)} \u3092\u5B9F\u884C\u4E2D...</div>`
+          : "";
+        return `<div class="chat-bubble assistant${streamClass}">${content}${toolHtml}${tsHtml}</div>`;
+      }
+      const imagesHtml = renderChatImages(m.images);
+      const textHtml = m.text ? `<div class="chat-text">${escapeHtml(m.text)}</div>` : "";
+      return `<div class="chat-bubble user">${imagesHtml}${textHtml}${tsHtml}</div>`;
+    }).join("");
+  }
+
+  messagesEl.innerHTML = topHtml + sessionsHtml + liveHtml;
+
+  // Bind tool call handlers for history messages
+  _bindToolCallHandlers(messagesEl);
 
   if (scrollToBottom) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -502,40 +527,168 @@ function _observeChatSentinel() {
 async function _loadOlderMessages() {
   const name = _selectedAnima;
   if (!name) return;
-  const pag = _paginationState[name];
-  if (!pag || !pag.hasMore || pag.loading) return;
+  const hs = _historyState[name];
+  if (!hs || !hs.hasMore || hs.loading) return;
   if (_isChatStreaming) return;
 
-  pag.loading = true;
+  hs.loading = true;
   _renderChat(false);
 
   try {
-    const history = _chatHistories[name] || [];
-    const offset = history.length;
-    const data = await api(`/api/animas/${encodeURIComponent(name)}/conversation/full?limit=${_PAGE_SIZE}&offset=${offset}`);
+    const data = await _fetchConversationHistory(name, _HISTORY_PAGE_SIZE, hs.nextBefore);
 
-    if (data.turns && data.turns.length > 0) {
-      const older = data.turns.map(t => ({
-        role: t.role === "human" ? "user" : "assistant",
-        text: t.content,
-        timestamp: t.timestamp || "",
-      }));
-      _chatHistories[name] = [...older, ..._chatHistories[name]];
-      _paginationState[name] = {
-        totalRaw: data.raw_turns || 0,
-        hasMore: data.turns.length >= _PAGE_SIZE && _chatHistories[name].length < (data.raw_turns || 0),
-        loading: false,
-      };
+    if (data && data.sessions && data.sessions.length > 0) {
+      hs.sessions = [...data.sessions, ...hs.sessions];
+      hs.hasMore = data.has_more || false;
+      hs.nextBefore = data.next_before || null;
     } else {
-      pag.hasMore = false;
-      pag.loading = false;
+      hs.hasMore = false;
     }
   } catch (err) {
     logger.error("Failed to load older messages", { error: err.message });
-    pag.loading = false;
   }
+  hs.loading = false;
 
   _renderChat(false);
+}
+
+// ── Conversation History API ──────────────────
+
+async function _fetchConversationHistory(animaName, limit = _HISTORY_PAGE_SIZE, before = null) {
+  let url = `/api/animas/${encodeURIComponent(animaName)}/conversation/history?limit=${limit}`;
+  if (before) {
+    url += `&before=${encodeURIComponent(before)}`;
+  }
+  return await api(url);
+}
+
+// ── History Message Rendering ─────────────────
+
+function _renderHistoryMessage(msg) {
+  const ts = msg.ts ? smartTimestamp(msg.ts) : "";
+  const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
+
+  if (msg.role === "system") {
+    return `<div class="chat-bubble assistant" style="opacity:0.7; font-style:italic;">${escapeHtml(msg.content || "")}${tsHtml}</div>`;
+  }
+
+  if (msg.role === "assistant") {
+    const content = msg.content ? renderMarkdown(msg.content) : "";
+    const toolHtml = _renderToolCalls(msg.tool_calls);
+    return `<div class="chat-bubble assistant">${content}${toolHtml}${tsHtml}</div>`;
+  }
+
+  // human / user
+  const fromLabel = msg.from_person && msg.from_person !== "human"
+    ? `<div style="font-size:0.72rem; opacity:0.7; margin-bottom:2px;">${escapeHtml(msg.from_person)}</div>`
+    : "";
+  return `<div class="chat-bubble user">${fromLabel}<div class="chat-text">${escapeHtml(msg.content || "")}</div>${tsHtml}</div>`;
+}
+
+// ── Tool Call Rendering ─────────────────────
+
+function _renderToolCalls(toolCalls) {
+  if (!toolCalls || toolCalls.length === 0) return "";
+
+  return toolCalls.map((tc, idx) => {
+    const errorClass = tc.is_error ? " tool-call-error" : "";
+    const toolName = escapeHtml(tc.tool_name || "unknown");
+    const errorLabel = tc.is_error ? " [ERROR]" : "";
+
+    return `<div class="tool-call-row${errorClass}" data-tool-idx="${idx}">` +
+      `<span class="tool-call-row-icon">\u25B6</span>` +
+      `<span class="tool-call-row-name">${toolName}${errorLabel}</span>` +
+      `</div>` +
+      `<div class="tool-call-detail" data-tool-idx="${idx}" style="display:none;">` +
+      _renderToolCallDetail(tc) +
+      `</div>`;
+  }).join("");
+}
+
+function _renderToolCallDetail(tc) {
+  let html = "";
+
+  const input = tc.input || "";
+  if (input) {
+    const inputStr = typeof input === "string" ? input : JSON.stringify(input, null, 2);
+    html += `<div class="tool-call-label">\u5165\u529B</div>`;
+    html += `<div class="tool-call-content">${escapeHtml(inputStr)}</div>`;
+  }
+
+  const result = tc.result || "";
+  if (result) {
+    const resultStr = typeof result === "string" ? result : JSON.stringify(result, null, 2);
+    html += `<div class="tool-call-label">\u7D50\u679C</div>`;
+    if (resultStr.length > _TOOL_RESULT_TRUNCATE) {
+      const truncated = resultStr.slice(0, _TOOL_RESULT_TRUNCATE);
+      html += `<div class="tool-call-content" data-full-result="${escapeHtml(resultStr)}">${escapeHtml(truncated)}...</div>`;
+      html += `<button class="tool-call-show-more">\u3082\u3063\u3068\u898B\u308B</button>`;
+    } else {
+      html += `<div class="tool-call-content">${escapeHtml(resultStr)}</div>`;
+    }
+  }
+
+  return html;
+}
+
+function _bindToolCallHandlers(container) {
+  if (!container) return;
+
+  container.querySelectorAll(".tool-call-row").forEach(row => {
+    row.addEventListener("click", () => {
+      const idx = row.dataset.toolIdx;
+      const detail = row.nextElementSibling;
+      if (!detail || detail.dataset.toolIdx !== idx) return;
+
+      const isExpanded = row.classList.contains("expanded");
+      if (isExpanded) {
+        row.classList.remove("expanded");
+        detail.style.display = "none";
+      } else {
+        row.classList.add("expanded");
+        detail.style.display = "";
+      }
+    });
+  });
+
+  container.querySelectorAll(".tool-call-show-more").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const contentEl = btn.previousElementSibling;
+      if (!contentEl) return;
+      const fullResult = contentEl.dataset.fullResult;
+      if (fullResult) {
+        contentEl.textContent = fullResult;
+        delete contentEl.dataset.fullResult;
+        btn.remove();
+      }
+    });
+  });
+}
+
+// ── Session Divider Rendering ─────────────────
+
+function _renderSessionDivider(session, isFirst) {
+  if (isFirst) return "";
+
+  const trigger = session.trigger || "chat";
+  let label = "";
+  let extraClass = "";
+
+  if (trigger === "heartbeat") {
+    label = "\u2764 \u30CF\u30FC\u30C8\u30D3\u30FC\u30C8";
+    extraClass = " session-divider-heartbeat";
+  } else if (trigger === "cron") {
+    label = "\u23F0 Cron\u30BF\u30B9\u30AF";
+    extraClass = " session-divider-cron";
+  } else {
+    const ts = session.session_start ? smartTimestamp(session.session_start) : "";
+    label = ts;
+  }
+
+  return `<div class="session-divider${extraClass}">` +
+    `<span class="session-divider-label">${escapeHtml(label)}</span>` +
+    `</div>`;
 }
 
 function _submitChat() {
@@ -911,46 +1064,44 @@ function _showHistoryDetail(title) {
 
 async function _loadActiveConversation() {
   if (!_selectedAnima) return;
-  _showHistoryDetail("進行中の会話");
+  _showHistoryDetail("\u4F1A\u8A71\u5C65\u6B74");
   const conv = _$("chatHistoryConversation");
-  if (conv) conv.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  if (conv) conv.innerHTML = '<div class="loading-placeholder">\u8AAD\u307F\u8FBC\u307F\u4E2D...</div>';
 
   try {
-    const data = await api(`/api/animas/${encodeURIComponent(_selectedAnima)}/conversation/full?limit=50`);
-    _renderConversationDetail(data);
+    const data = await _fetchConversationHistory(_selectedAnima, 50);
+    _renderConversationHistoryDetail(data);
   } catch {
-    if (conv) conv.innerHTML = '<div class="loading-placeholder">読み込み失敗</div>';
+    if (conv) conv.innerHTML = '<div class="loading-placeholder">\u8AAD\u307F\u8FBC\u307F\u5931\u6557</div>';
   }
 }
 
-function _renderConversationDetail(data) {
+function _renderConversationHistoryDetail(data) {
   const conv = _$("chatHistoryConversation");
   if (!conv) return;
 
-  let html = "";
-  if (data.has_summary && data.compressed_summary) {
-    html += `<div class="history-summary">
-      <div class="history-summary-label">要約 (${data.compressed_turn_count}ターン分)</div>
-      <div class="history-summary-body">${renderMarkdown(data.compressed_summary)}</div>
-    </div>`;
+  if (!data || !data.sessions || data.sessions.length === 0) {
+    conv.innerHTML = '<div class="loading-placeholder">\u4F1A\u8A71\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093</div>';
+    return;
   }
 
-  if (data.turns && data.turns.length > 0) {
-    for (const t of data.turns) {
-      const ts = t.timestamp ? timeStr(t.timestamp) : "";
-      const bubbleClass = t.role === "assistant" ? "assistant" : "user";
-      const roleLabel = t.role === "human" ? "ユーザー" : t.role;
-      const content = t.role === "assistant" ? renderMarkdown(t.content) : escapeHtml(t.content);
-      html += `
-        <div class="history-turn">
-          <div class="history-turn-meta">${ts} - ${escapeHtml(roleLabel)}</div>
-          <div class="chat-bubble ${bubbleClass}">${content}</div>
-        </div>`;
+  let html = "";
+  for (let si = 0; si < data.sessions.length; si++) {
+    const session = data.sessions[si];
+    html += _renderSessionDivider(session, si === 0);
+    if (session.messages) {
+      for (const msg of session.messages) {
+        html += _renderHistoryMessage(msg);
+      }
     }
   }
 
-  if (!html) html = '<div class="loading-placeholder">会話データがありません</div>';
+  if (!html) html = '<div class="loading-placeholder">\u4F1A\u8A71\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093</div>';
   conv.innerHTML = html;
+
+  // Bind tool call handlers
+  _bindToolCallHandlers(conv);
+
   conv.scrollTop = conv.scrollHeight;
 }
 

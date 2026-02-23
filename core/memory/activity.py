@@ -684,6 +684,334 @@ class ActivityLogger:
         # Single entry: use _format_entry
         return ActivityLogger._format_entry(group.entries[0], content_trim=content_trim)
 
+    # ── Conversation view ───────────────────────────────────────
+
+    # Event types relevant to conversation timeline display.
+    _CONVERSATION_TYPES = {
+        "message_received", "response_sent",
+        "tool_use", "tool_result",
+        "heartbeat_start", "heartbeat_end",
+        "cron_executed",
+        "error",
+    }
+
+    def get_conversation_view(
+        self,
+        *,
+        before: str | None = None,
+        limit: int = 50,
+        session_gap_minutes: int = 10,
+    ) -> dict[str, Any]:
+        """Build a conversation view from activity log entries.
+
+        Reads activity log events, pairs tool_use/tool_result, groups into
+        sessions (separated by gaps >= *session_gap_minutes*), and returns a
+        structure ready for UI rendering.
+
+        Args:
+            before: If given, only include entries with ``ts < before``
+                (cursor-based pagination, ISO 8601 timestamp).
+            limit: Maximum number of *messages* to return (tool_calls are
+                nested within assistant messages and do not count).
+            session_gap_minutes: Minimum gap in minutes to start a new session.
+
+        Returns:
+            ``{"sessions": [...], "has_more": bool, "next_before": str | None}``
+        """
+        entries = self._load_conversation_entries(before=before, limit=limit)
+        messages = self._entries_to_messages(entries)
+
+        # Apply limit (keep oldest N for chronological order display)
+        has_more = len(messages) > limit
+        if has_more:
+            messages = messages[-limit:]
+
+        # Determine next_before cursor
+        next_before: str | None = None
+        if has_more and messages:
+            next_before = messages[0]["ts"]
+
+        # Group into sessions
+        sessions = self._group_into_sessions(messages, session_gap_minutes)
+
+        return {
+            "sessions": sessions,
+            "has_more": has_more,
+            "next_before": next_before,
+        }
+
+    def _load_conversation_entries(
+        self,
+        *,
+        before: str | None = None,
+        limit: int = 50,
+    ) -> list[ActivityEntry]:
+        """Load conversation-relevant entries, scanning backwards.
+
+        Returns entries in chronological order.  Scans enough days to
+        collect at least ``limit * 3`` raw entries (to account for
+        tool_use/tool_result pairs being folded into messages).
+        """
+        target_raw = limit * 3 + 50  # overshoot to ensure enough messages
+        entries: list[ActivityEntry] = []
+        today = now_jst().date()
+        max_scan_days = 365  # safety cap
+
+        for day_offset in range(max_scan_days):
+            target = today - timedelta(days=day_offset)
+            path = self._log_dir / f"{target.isoformat()}.jsonl"
+            if not path.exists():
+                # Keep scanning further back; gaps in dates are normal
+                if day_offset > 30 and not entries:
+                    break  # give up after 30 empty days at start
+                continue
+
+            day_entries: list[ActivityEntry] = []
+            try:
+                for line_num, line in enumerate(
+                    path.read_text(encoding="utf-8").splitlines(), start=1,
+                ):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        raw = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if raw.get("type") not in self._CONVERSATION_TYPES:
+                        continue
+                    ts = raw.get("ts", "")
+                    if before and ts >= before:
+                        continue
+                    # Map JSONL keys
+                    if "from" in raw:
+                        raw["from_person"] = raw.pop("from")
+                    if "to" in raw:
+                        raw["to_person"] = raw.pop("to")
+                    entry = ActivityEntry(**{
+                        k: v for k, v in raw.items()
+                        if k in ActivityEntry.__dataclass_fields__
+                    })
+                    entry._line_number = line_num
+                    day_entries.append(entry)
+            except Exception:
+                logger.exception("Failed to read activity log %s", path)
+
+            entries = day_entries + entries  # prepend (older first)
+            if len(entries) >= target_raw:
+                break
+
+        return entries
+
+    def _entries_to_messages(
+        self,
+        entries: list[ActivityEntry],
+    ) -> list[dict[str, Any]]:
+        """Convert raw activity entries to conversation messages.
+
+        Pairs ``tool_use``/``tool_result`` by ``meta.tool_use_id`` and
+        nests them into the preceding ``response_sent`` message.
+        """
+        # Build tool_result lookup by tool_use_id
+        tool_results: dict[str, ActivityEntry] = {}
+        for e in entries:
+            if e.type == "tool_result":
+                tid = e.meta.get("tool_use_id", "")
+                if tid:
+                    tool_results[tid] = e
+
+        messages: list[dict[str, Any]] = []
+        pending_tool_calls: list[dict[str, Any]] = []
+
+        for e in entries:
+            if e.type == "message_received":
+                # Flush pending tools to last assistant message
+                self._flush_tool_calls(messages, pending_tool_calls)
+                messages.append({
+                    "ts": e.ts,
+                    "role": "human",
+                    "content": e.content,
+                    "from_person": e.from_person,
+                    "tool_calls": [],
+                })
+
+            elif e.type == "response_sent":
+                # Create assistant message first, then flush pending tools into it
+                msg = {
+                    "ts": e.ts,
+                    "role": "assistant",
+                    "content": e.content,
+                    "from_person": "",
+                    "tool_calls": [],
+                }
+                messages.append(msg)
+                # Attach any pending tool calls to this assistant message
+                if pending_tool_calls:
+                    msg["tool_calls"].extend(pending_tool_calls)
+                    pending_tool_calls.clear()
+
+            elif e.type == "tool_use":
+                tid = e.meta.get("tool_use_id", "")
+                result_entry = tool_results.get(tid) if tid else None
+                # Fallback: try matching by timestamp proximity + tool name
+                if not result_entry:
+                    result_entry = self._find_tool_result_fallback(
+                        entries, e,
+                    )
+                tc: dict[str, Any] = {
+                    "tool_use_id": tid,
+                    "tool_name": e.tool,
+                    "input": e.meta.get("args", e.content),
+                    "result": result_entry.content if result_entry else "",
+                    "is_error": (
+                        result_entry.meta.get("is_error", False)
+                        if result_entry else False
+                    ),
+                }
+                if e.meta.get("blocked"):
+                    tc["is_error"] = True
+                    tc["result"] = f"ブロック: {e.meta.get('reason', '')}"
+                pending_tool_calls.append(tc)
+
+            elif e.type == "tool_result":
+                # Already handled via lookup; skip standalone
+                pass
+
+            elif e.type == "heartbeat_start":
+                self._flush_tool_calls(messages, pending_tool_calls)
+                messages.append({
+                    "ts": e.ts,
+                    "role": "system",
+                    "content": e.summary or "定期巡回開始",
+                    "from_person": "",
+                    "tool_calls": [],
+                    "_trigger": "heartbeat",
+                })
+
+            elif e.type == "heartbeat_end":
+                self._flush_tool_calls(messages, pending_tool_calls)
+                messages.append({
+                    "ts": e.ts,
+                    "role": "system",
+                    "content": e.summary or e.content or "定期巡回完了",
+                    "from_person": "",
+                    "tool_calls": [],
+                    "_trigger": "heartbeat",
+                })
+
+            elif e.type == "cron_executed":
+                self._flush_tool_calls(messages, pending_tool_calls)
+                task_name = e.meta.get("task_name", "")
+                content = e.summary or e.content or task_name or "cronタスク実行"
+                messages.append({
+                    "ts": e.ts,
+                    "role": "system",
+                    "content": content,
+                    "from_person": "",
+                    "tool_calls": [],
+                    "_trigger": "cron",
+                })
+
+            elif e.type == "error":
+                self._flush_tool_calls(messages, pending_tool_calls)
+                messages.append({
+                    "ts": e.ts,
+                    "role": "system",
+                    "content": f"[エラー] {e.summary or e.content}",
+                    "from_person": "",
+                    "tool_calls": [],
+                })
+
+        # Flush any remaining tool calls
+        self._flush_tool_calls(messages, pending_tool_calls)
+
+        return messages
+
+    @staticmethod
+    def _flush_tool_calls(
+        messages: list[dict[str, Any]],
+        pending: list[dict[str, Any]],
+    ) -> None:
+        """Attach pending tool calls to the last assistant message."""
+        if not pending:
+            return
+        # Find last assistant message to attach to
+        for msg in reversed(messages):
+            if msg["role"] == "assistant":
+                msg["tool_calls"].extend(pending)
+                pending.clear()
+                return
+        # No assistant message found; discard (shouldn't normally happen)
+        pending.clear()
+
+    @staticmethod
+    def _find_tool_result_fallback(
+        entries: list[ActivityEntry],
+        tool_use_entry: ActivityEntry,
+    ) -> ActivityEntry | None:
+        """Fallback: find tool_result by timestamp proximity + tool name."""
+        found = False
+        for e in entries:
+            if e is tool_use_entry:
+                found = True
+                continue
+            if not found:
+                continue
+            if e.type == "tool_result" and e.tool == tool_use_entry.tool:
+                # Within 5 minutes
+                if _time_diff(tool_use_entry.ts, e.ts) < 300:
+                    return e
+            # Stop searching after too many entries
+            if e.type in ("message_received", "response_sent"):
+                break
+        return None
+
+    @staticmethod
+    def _group_into_sessions(
+        messages: list[dict[str, Any]],
+        gap_minutes: int,
+    ) -> list[dict[str, Any]]:
+        """Group messages into sessions based on time gaps."""
+        if not messages:
+            return []
+
+        gap_seconds = gap_minutes * 60
+        sessions: list[dict[str, Any]] = []
+        current_msgs: list[dict[str, Any]] = []
+        current_trigger = "chat"
+
+        for msg in messages:
+            # Detect trigger from system messages
+            msg_trigger = msg.pop("_trigger", None)
+            if msg_trigger:
+                current_trigger = msg_trigger
+
+            if current_msgs:
+                prev_ts = current_msgs[-1]["ts"]
+                if _time_diff(prev_ts, msg["ts"]) >= gap_seconds:
+                    # Close current session
+                    sessions.append({
+                        "session_start": current_msgs[0]["ts"],
+                        "session_end": current_msgs[-1]["ts"],
+                        "trigger": current_trigger,
+                        "messages": current_msgs,
+                    })
+                    current_msgs = []
+                    current_trigger = msg_trigger or "chat"
+
+            current_msgs.append(msg)
+
+        # Close final session
+        if current_msgs:
+            sessions.append({
+                "session_start": current_msgs[0]["ts"],
+                "session_end": current_msgs[-1]["ts"],
+                "trigger": current_trigger,
+                "messages": current_msgs,
+            })
+
+        return sessions
+
     # ── Rotation ──────────────────────────────────────────────
 
     def rotate(

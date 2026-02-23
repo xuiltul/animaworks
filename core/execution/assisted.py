@@ -420,6 +420,7 @@ class AssistedExecutor(BaseExecutor):
                     self._tool_handler.handle,
                     tool_name,
                     tool_args,
+                    tool_id,
                 )
             except Exception as e:
                 logger.exception("Mode B tool execution error: %s", tool_name)
@@ -602,6 +603,7 @@ class AssistedExecutor(BaseExecutor):
                         self._tool_handler.handle,
                         tool_name,
                         tool_args,
+                        tool_id,
                     )
                 except Exception as e:
                     logger.exception(
