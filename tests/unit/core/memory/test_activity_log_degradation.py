@@ -772,6 +772,12 @@ class TestActivityLoggerBasic:
 class TestMessengerSendIntegration:
     """Integration tests for Messenger.send() with activity log and dm_logs."""
 
+    @pytest.fixture(autouse=True)
+    def _reset_depth_limiter(self):
+        """Reset the global cascade limiter between tests."""
+        from core.cascade_limiter import depth_limiter
+        depth_limiter._exchanges.clear()
+
     def test_send_writes_both_activity_and_dm_logs(self, tmp_path: Path):
         """Verify send() writes to both activity log and dm_logs."""
         from core.messenger import Messenger

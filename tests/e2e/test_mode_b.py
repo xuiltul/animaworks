@@ -213,10 +213,9 @@ class TestModeBSkillInjection:
 
         assert len(captured_system) >= 1
         sys_prompt = captured_system[0]
-        # Personal skills appear under "スキルと手順書" (from skills_guide.md template)
-        assert "スキルと手順書" in sys_prompt
+        # Personal skills appear under memory guide section (スキル: ...)
+        assert "スキル:" in sys_prompt
         assert "test_skill" in sys_prompt
-        assert "A test skill for validation" in sys_prompt
 
     async def test_common_skill_in_system_prompt(self, make_agent_core, data_dir):
         """Mode B includes common skills in system prompt."""
