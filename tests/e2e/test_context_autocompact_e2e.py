@@ -1,12 +1,13 @@
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-"""E2E tests for A1 mid-session context auto-compact feature.
+"""E2E tests for A1 mid-session context observation-only monitoring.
 
-Verifies the full flow: PreToolUse hook context budget check,
-session_stats accumulation, force_chain propagation through
-ExecutionResult to ContextTracker, and boundary conditions across
-different context window sizes.
+Verifies the full flow: PreToolUse hook context budget observation
+(logging only, no termination), session_stats accumulation,
+force_chain propagation logic (retained for potential future use),
+and boundary conditions across different context window sizes.
+The SDK's built-in auto-compact handles actual context management.
 """
 
 from __future__ import annotations
@@ -115,8 +116,8 @@ class TestPreToolHookContextAutoCompact:
         assert session_stats["force_chain"] is False
 
     @pytest.mark.asyncio
-    async def test_exceeds_budget_returns_continue_false(self, anima_dir: Path):
-        """When estimated tokens exceed budget, hook returns continue_=False."""
+    async def test_exceeds_budget_logs_observation(self, anima_dir: Path):
+        """When estimated tokens exceed budget, hook logs observation but allows tool call."""
         max_tokens = 4096
         context_window = 200_000
         budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 8192
@@ -133,13 +134,15 @@ class TestPreToolHookContextAutoCompact:
         input_data = {"tool_name": "Grep", "tool_input": {"pattern": "test"}}
         result = await hook(input_data, "tool-002", {})
 
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
-        assert "stopReason" in result
+        # Observation-only: hook does NOT terminate, force_chain stays False
+        assert result.get("continue_") is not False
+        assert session_stats["force_chain"] is False
+        # tool_call_count still increments (budget condition detected)
+        assert session_stats["tool_call_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_force_chain_set_to_true(self, anima_dir: Path):
-        """When budget is exceeded, session_stats['force_chain'] is set True."""
+    async def test_force_chain_stays_false_on_budget_exceeded(self, anima_dir: Path):
+        """When budget is exceeded, session_stats['force_chain'] remains False (observation-only)."""
         session_stats = _make_session_stats(
             system_prompt_tokens=198_000,
         )
@@ -152,8 +155,9 @@ class TestPreToolHookContextAutoCompact:
         input_data = {"tool_name": "Bash", "tool_input": {"command": "ls"}}
         result = await hook(input_data, "tool-003", {})
 
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
+        # Observation-only: hook does NOT terminate, force_chain stays False
+        assert result.get("continue_") is not False
+        assert session_stats["force_chain"] is False
 
     @pytest.mark.asyncio
     async def test_security_checks_still_work_after_budget_check(
@@ -209,10 +213,10 @@ class TestPreToolHookContextAutoCompact:
             assert hook_output.get("permissionDecision") == "deny"
 
     @pytest.mark.asyncio
-    async def test_result_bytes_accumulation_triggers_compact(
+    async def test_result_bytes_accumulation_logs_budget_warning(
         self, anima_dir: Path,
     ):
-        """Large total_result_bytes alone can trigger auto-compact."""
+        """Large total_result_bytes triggers budget observation but allows tool call."""
         max_tokens = 4096
         context_window = 200_000
         budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 8192
@@ -232,8 +236,9 @@ class TestPreToolHookContextAutoCompact:
         input_data = {"tool_name": "Glob", "tool_input": {"pattern": "*.py"}}
         result = await hook(input_data, "tool-006", {})
 
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
+        # Observation-only: hook does NOT terminate, force_chain stays False
+        assert result.get("continue_") is not False
+        assert session_stats["force_chain"] is False
 
     @pytest.mark.asyncio
     async def test_multiple_calls_accumulate_tool_call_count(
@@ -359,7 +364,13 @@ class TestSessionStatsAccumulation:
 
 
 class TestForceChainPropagation:
-    """Test the force_chain flag flows through the full chain."""
+    """Test the force_chain flag flows through the full chain.
+
+    Note: The PreToolUse hook no longer sets force_chain=True (observation-only
+    behavior). However, the propagation logic in agent.py and ContextTracker
+    still exists for potential future use or other triggers. These tests verify
+    that the propagation mechanism itself works correctly.
+    """
 
     def test_execution_result_force_chain_accessible(self):
         """ExecutionResult with force_chain=True is accessible."""
@@ -443,13 +454,13 @@ class TestAutoCompactBoundaryConditions:
 
     @pytest.mark.asyncio
     async def test_small_context_window_8k(self, anima_dir: Path):
-        """Small context window (8K, Ollama-like) triggers earlier."""
+        """Small context window (8K, Ollama-like) detects budget exceeded but only logs."""
         max_tokens = 512
         context_window = 8_000
         budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 1024
 
         # estimated = 6500 + 2000/4 = 6500 + 500 = 7000
-        # remaining = 8000 - 7000 = 1000 < 1024 -> triggers
+        # remaining = 8000 - 7000 = 1000 < 1024 -> budget exceeded detected
         session_stats = _make_session_stats(
             system_prompt_tokens=6500,
             total_result_bytes=2000,
@@ -463,8 +474,9 @@ class TestAutoCompactBoundaryConditions:
         input_data = {"tool_name": "Read", "tool_input": {"file_path": "/tmp/x"}}
         result = await hook(input_data, "tool-boundary-1", {})
 
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
+        # Observation-only: hook does NOT terminate, force_chain stays False
+        assert result.get("continue_") is not False
+        assert session_stats["force_chain"] is False
 
     @pytest.mark.asyncio
     async def test_large_context_window_200k(self, anima_dir: Path):
@@ -516,14 +528,14 @@ class TestAutoCompactBoundaryConditions:
         assert session_stats["force_chain"] is False
 
     @pytest.mark.asyncio
-    async def test_one_token_over_boundary_triggers(self, anima_dir: Path):
-        """When remaining == budget - 1, should trigger (strictly less)."""
+    async def test_one_token_over_boundary_logs_observation(self, anima_dir: Path):
+        """When remaining == budget - 1, budget exceeded is detected but only logged."""
         max_tokens = 4096
         context_window = 200_000
         budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 8192
 
         # estimated = context_window - budget + 1 = 191809
-        # remaining = budget - 1 = 8191 < 8192 -> triggers
+        # remaining = budget - 1 = 8191 < 8192 -> budget exceeded detected
         session_stats = _make_session_stats(
             system_prompt_tokens=context_window - budget + 1,
         )
@@ -536,8 +548,9 @@ class TestAutoCompactBoundaryConditions:
         input_data = {"tool_name": "Bash", "tool_input": {"command": "echo test"}}
         result = await hook(input_data, "tool-boundary-4", {})
 
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
+        # Observation-only: hook does NOT terminate, force_chain stays False
+        assert result.get("continue_") is not False
+        assert session_stats["force_chain"] is False
 
     def test_budget_formula_verification(self):
         """Verify the budget formula matches the implementation."""
@@ -583,7 +596,7 @@ class TestAutoCompactBoundaryConditions:
 
     @pytest.mark.asyncio
     async def test_estimated_exceeds_context_window(self, anima_dir: Path):
-        """When estimated > context_window (negative remaining), triggers."""
+        """When estimated > context_window (negative remaining), logs observation only."""
         session_stats = _make_session_stats(
             system_prompt_tokens=150_000,
             total_result_bytes=300_000,  # 75_000 additional tokens
@@ -599,5 +612,6 @@ class TestAutoCompactBoundaryConditions:
 
         # estimated = 150_000 + 75_000 = 225_000 > context_window
         # remaining = 200_000 - 225_000 = -25_000 < 8192
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
+        # Observation-only: hook does NOT terminate, force_chain stays False
+        assert result.get("continue_") is not False
+        assert session_stats["force_chain"] is False

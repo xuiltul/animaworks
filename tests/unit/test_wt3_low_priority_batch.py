@@ -150,11 +150,11 @@ class TestStreamingCommentUpdated:
     """Fix 10: agent.py streaming section comment updated."""
 
     def test_streaming_comment_updated(self):
-        """agent.py should reference 'A1 / A2 / all modes', not just 'A1 Agent SDK'."""
+        """agent.py should reference 'S / A / all modes', not just 'A1 Agent SDK'."""
         agent_path = Path(__file__).resolve().parents[2] / "core" / "agent.py"
         content = agent_path.read_text(encoding="utf-8")
-        assert "A1 / A2 / all modes" in content, (
-            "agent.py streaming section comment should say 'A1 / A2 / all modes'"
+        assert "S / A / all modes" in content, (
+            "agent.py streaming section comment should say 'S / A / all modes'"
         )
 
 

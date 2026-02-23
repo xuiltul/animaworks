@@ -46,7 +46,7 @@ logger = logging.getLogger("animaworks.agent")
 # the hard limit is hit.  JSON framing + tool schemas add ~30-50% overhead
 # on top of the raw text, so we use conservative byte limits.
 _PROMPT_SOFT_LIMIT_BYTES = 600_000   # Force compression
-_PROMPT_HARD_LIMIT_BYTES = 1_200_000  # Fall back to A1 Fallback
+_PROMPT_HARD_LIMIT_BYTES = 1_200_000  # Fall back to S Fallback
 
 
 _PROMPT_LOG_RETENTION_DAYS = 3
@@ -165,10 +165,10 @@ class AgentCore:
     """Orchestrates execution of a Digital Anima's thinking/acting cycle.
 
     Delegates actual LLM execution to an appropriate Executor:
-      - A1 (autonomous, Claude):      ``AgentSDKExecutor``
-      - A1 fallback (no Agent SDK):   ``AnthropicFallbackExecutor``
-      - A2 (autonomous, non-Claude):   ``LiteLLMExecutor``
-      - B  (assisted):                 ``AssistedExecutor``
+      - S  (SDK, Claude):             ``AgentSDKExecutor``
+      - S  fallback (no Agent SDK):   ``AnthropicFallbackExecutor``
+      - A  (autonomous, non-Claude):   ``LiteLLMExecutor``
+      - B  (basic):                    ``AssistedExecutor``
     """
 
     def __init__(
@@ -330,20 +330,20 @@ class AgentCore:
         return self._resolve_execution_mode()
 
     def _resolve_execution_mode(self) -> str:
-        """Determine the effective execution mode: ``a1``, ``a2``, or ``b``.
+        """Determine the effective execution mode: ``s``, ``a``, or ``b``.
 
         Uses ``resolved_mode`` from config when available.
         Falls back to auto-detection for legacy config.md paths.
         """
         rm = self.model_config.resolved_mode
         if rm:
-            mode = rm.lower()  # "A1" → "a1"
+            mode = rm.lower()  # "S" → "s"
             return mode
 
         # Fallback (resolved_mode absent = legacy config.md path)
         if self._is_claude_model() and self._sdk_available:
-            return "a1"
-        return "a2"
+            return "s"
+        return "a"
 
     @staticmethod
     def _check_sdk() -> bool:
@@ -436,7 +436,7 @@ class AgentCore:
     def _create_executor(self):
         """Factory: create the appropriate executor for the resolved mode.
 
-        For mode A1 (Agent SDK), falls back gracefully:
+        For mode S (Agent SDK), falls back gracefully:
           1. Try ``AgentSDKExecutor`` (requires ``claude_agent_sdk``)
           2. If ImportError, try ``AnthropicFallbackExecutor`` (requires ``anthropic``)
           3. If that also fails, fall back to ``LiteLLMExecutor`` with the
@@ -450,7 +450,7 @@ class AgentCore:
 
         mode = self._resolve_execution_mode()
 
-        if mode == "a1":
+        if mode == "s":
             # ── Try Agent SDK first ──────────────────────────
             try:
                 from core.execution.agent_sdk import AgentSDKExecutor
@@ -494,7 +494,7 @@ class AgentCore:
                 personal_tools=self._personal_tools,
             )
 
-        if mode == "a2":
+        if mode == "a":
             return LiteLLMExecutor(
                 model_config=self.model_config,
                 anima_dir=self.anima_dir,
@@ -504,7 +504,7 @@ class AgentCore:
                 personal_tools=self._personal_tools,
             )
 
-        # mode == "b"
+        # mode == "b" (basic)
         return AssistedExecutor(
             model_config=self.model_config,
             anima_dir=self.anima_dir,
@@ -761,13 +761,13 @@ class AgentCore:
 
         # ── Stage 2: Fall back to Anthropic SDK (no JSON buffer limit) ──
         logger.warning(
-            "Prompt size %d still exceeds hard limit %d; switching to A1 Fallback",
+            "Prompt size %d still exceeds hard limit %d; switching to S Fallback",
             total, _PROMPT_HARD_LIMIT_BYTES,
         )
         return system_prompt, prompt, True
 
     def _create_fallback_executor(self):
-        """Create an AnthropicFallbackExecutor for when A1 SDK can't handle the prompt."""
+        """Create an AnthropicFallbackExecutor for when S mode SDK can't handle the prompt."""
         from core.execution import AnthropicFallbackExecutor
         logger.info("Creating AnthropicFallbackExecutor for oversized prompt")
         return AnthropicFallbackExecutor(
@@ -793,12 +793,13 @@ class AgentCore:
         """Run one agent cycle with autonomous memory search.
 
         Routing:
-          - Mode B  (assisted):  ``AssistedExecutor``  -- text-based tool loop
-          - Mode A2 (autonomous): ``LiteLLMExecutor`` -- LiteLLM + tool_use
-          - Mode A1 (autonomous): ``AgentSDKExecutor`` -- Claude Agent SDK
+          - Mode B (basic):      ``AssistedExecutor``  -- text-based tool loop
+          - Mode A (autonomous): ``LiteLLMExecutor`` -- LiteLLM + tool_use
+          - Mode S (SDK):        ``AgentSDKExecutor`` -- Claude Agent SDK
 
-        If the context threshold is crossed (A1 only), the session is
+        If the context threshold is crossed (A mode only), the session is
         externalized to short-term memory and automatically continued.
+        S mode relies on the SDK's built-in auto-compact.
         """
         async with self._agent_lock:
             return await self._run_cycle_inner(
@@ -927,8 +928,8 @@ class AgentCore:
                 tool_call_records=_tool_records_to_dicts(result),
             )
 
-        # ── Mode A2: LiteLLM tool_use loop ────────────────
-        if mode == "a2":
+        # ── Mode A: LiteLLM tool_use loop ─────────────────
+        if mode == "a":
             result = await self._executor.execute(
                 prompt=prompt,
                 system_prompt=system_prompt,
@@ -946,7 +947,7 @@ class AgentCore:
             shortterm.clear()
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.info(
-                "run_cycle END (a2) trigger=%s duration_ms=%d response_len=%d",
+                "run_cycle END (a) trigger=%s duration_ms=%d response_len=%d",
                 trigger, duration_ms, len(result.text),
             )
             return CycleResult(
@@ -958,7 +959,7 @@ class AgentCore:
                 tool_call_records=_tool_records_to_dicts(result),
             )
 
-        # ── Mode A1: Claude Agent SDK ─────────────────────
+        # ── Mode S: Claude Agent SDK ──────────────────────
         # Pre-flight: check prompt size to prevent Agent SDK buffer overflow
         from core.memory.conversation import ConversationMemory
         conv_memory = ConversationMemory(self.anima_dir, self.model_config)
@@ -987,22 +988,43 @@ class AgentCore:
                 images=images,
                 max_turns_override=max_turns_override,
             )
-        # Merge transcript-parsed replied_to for A1 mode
+        # Merge transcript-parsed replied_to for S mode
         if result.replied_to_from_transcript:
             self._tool_handler.merge_replied_to(result.replied_to_from_transcript)
             logger.info("Merged transcript replied_to: %s", result.replied_to_from_transcript)
         result_msg = result.result_message
         accumulated_tool_records = _tool_records_to_dicts(result)
 
+        # S mode: SDK manages context via auto-compact, no session chaining needed
+        if mode == "s":
+            shortterm.clear()
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(accumulated_tool_records),
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "run_cycle END (s) trigger=%s duration_ms=%d response_len=%d",
+                trigger, duration_ms, len(result.text),
+            )
+            return CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=result.text,
+                duration_ms=duration_ms,
+                tool_call_records=accumulated_tool_records,
+            )
+
         # Session chaining: if threshold was crossed, continue in a new session.
-        # force_chain is set by A1 mid-session context auto-compact (PreToolUse
+        # force_chain is set by S mode mid-session context auto-compact (PreToolUse
         # hook returned continue_=False).  In that case ResultMessage.usage may
         # not have updated the tracker, so we force the threshold flag.
         if result.force_chain and not tracker.threshold_exceeded:
             tracker.force_threshold()
             logger.info(
                 "Context auto-compact: forcing threshold_exceeded for session "
-                "chaining (A1 mid-session context budget exceeded)"
+                "chaining (S mode mid-session context budget exceeded)"
             )
 
         session_chained = False
@@ -1138,7 +1160,7 @@ class AgentCore:
             }
             return
 
-        # ── Streaming executor (A1 / A2 / all modes) ─────────────
+        # ── Streaming executor (S / A / all modes) ───────────────
         # Priming: Automatic memory retrieval
         overflow_files = self._compute_overflow_files()
         priming_section = await self._run_priming(
@@ -1189,7 +1211,7 @@ class AgentCore:
         )
         if use_fallback:
             # Fall back to non-streaming execution
-            logger.warning("Streaming fallback: using blocking A1 Fallback for oversized prompt")
+            logger.warning("Streaming fallback: using blocking S Fallback for oversized prompt")
             async with self._agent_lock:
                 cycle = await self._run_cycle_inner(
                     prompt,
@@ -1270,7 +1292,7 @@ class AgentCore:
                         transcript_replied = chunk.get("replied_to_from_transcript", set())
                         if transcript_replied:
                             self._tool_handler.merge_replied_to(transcript_replied)
-                        # Capture force_chain from A1 auto-compact
+                        # Capture force_chain from S mode auto-compact
                         if chunk.get("force_chain", False):
                             _stream_force_chain = True
                         stream_succeeded = True
@@ -1372,7 +1394,7 @@ class AgentCore:
                 shortterm.clear_checkpoint()
                 break
 
-        # Session chaining — force_chain from A1 mid-session auto-compact.
+        # Session chaining — force_chain from S mode mid-session auto-compact.
         if _stream_force_chain and not tracker.threshold_exceeded:
             tracker.force_threshold()
             logger.info(

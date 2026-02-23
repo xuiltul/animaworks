@@ -138,7 +138,7 @@ def _build_full_org_tree(
     return "\n".join(lines)
 
 
-def _build_org_context(anima_name: str, other_animas: list[str], execution_mode: str = "a1") -> str:
+def _build_org_context(anima_name: str, other_animas: list[str], execution_mode: str = "s") -> str:
     """Build organisation context section from supervisor chain.
 
     Reads config.json to derive each Anima's relationship
@@ -172,7 +172,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             ),
         ]
         if other_animas:
-            cr_key = "communication_rules_a1" if execution_mode == "a1" else "communication_rules"
+            cr_key = "communication_rules_s" if execution_mode == "s" else "communication_rules"
             _cr_store = get_prompt_store()
             _cr = (
                 _cr_store.get_section(cr_key) if _cr_store else None
@@ -226,7 +226,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
 
     # Communication rules: only when there are other animas
     if other_animas:
-        cr_key = "communication_rules_a1" if execution_mode == "a1" else "communication_rules"
+        cr_key = "communication_rules_s" if execution_mode == "s" else "communication_rules"
         _cr_store = get_prompt_store()
         _cr = (
             _cr_store.get_section(cr_key) if _cr_store else None
@@ -240,7 +240,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
 def _build_messaging_section(
     anima_dir: Path,
     other_animas: list[str],
-    execution_mode: str = "a1",
+    execution_mode: str = "s",
 ) -> str:
     """Build the messaging instructions with resolved paths."""
     from core.tooling.prompt_db import get_prompt_store
@@ -251,7 +251,7 @@ def _build_messaging_section(
         ", ".join(other_animas) if other_animas else "(まだ他の社員はいません)"
     )
 
-    db_key = "messaging_a1" if execution_mode == "a1" else "messaging"
+    db_key = "messaging_s" if execution_mode == "s" else "messaging"
     _msg_store = get_prompt_store()
     raw = (_msg_store.get_section(db_key) if _msg_store else None)
     if raw:
@@ -269,12 +269,12 @@ def _build_messaging_section(
     )
 
 
-def _load_a2_reflection() -> str:
-    """Load the A2 reflection/retry prompt template."""
+def _load_a_reflection() -> str:
+    """Load the A mode reflection/retry prompt template."""
     try:
-        return load_prompt("a2_reflection")
+        return load_prompt("a_reflection")
     except Exception:
-        logger.debug("a2_reflection template not found, skipping")
+        logger.debug("a_reflection template not found, skipping")
         return ""
 
 
@@ -314,8 +314,8 @@ def _build_recent_tool_section(anima_dir: Path, model_config: Any) -> str:
 
 def _build_human_notification_guidance(execution_mode: str = "") -> str:
     """Build the human notification instruction for top-level Animas."""
-    if execution_mode == "a1":
-        how_to = load_prompt("builder/human_notification_howto_a1")
+    if execution_mode == "s":
+        how_to = load_prompt("builder/human_notification_howto_s")
     else:
         how_to = load_prompt("builder/human_notification_howto_other")
 
@@ -327,7 +327,7 @@ def build_system_prompt(
     tool_registry: list[str] | None = None,
     personal_tools: dict[str, str] | None = None,
     priming_section: str = "",
-    execution_mode: str = "a1",
+    execution_mode: str = "s",
     message: str = "",
     retriever: object | None = None,
     *,
@@ -544,8 +544,8 @@ def build_system_prompt(
     # Commander hiring guardrail: force create_anima tool/CLI usage
     has_newstaff = any(m.name == "newstaff" for m in skill_metas)
     if has_newstaff:
-        if execution_mode == "a1":
-            parts.append(load_prompt("builder/hiring_rules_a1"))
+        if execution_mode == "s":
+            parts.append(load_prompt("builder/hiring_rules_s"))
         else:
             parts.append(load_prompt("builder/hiring_rules_other"))
 
@@ -553,27 +553,27 @@ def build_system_prompt(
     if not _prompt_store:
         logger.warning("Tool prompt DB unavailable; using hardcoded fallback guides")
 
-    if execution_mode == "a1":
-        _a1_builtin = (
-            _prompt_store.get_guide("a1_builtin") if _prompt_store else None
-        ) or DEFAULT_GUIDES.get("a1_builtin", "")
-        if _a1_builtin:
-            parts.append(_a1_builtin)
-        _a1_mcp = (
-            _prompt_store.get_guide("a1_mcp") if _prompt_store else None
-        ) or DEFAULT_GUIDES.get("a1_mcp", "")
-        if _a1_mcp:
-            parts.append(_a1_mcp)
+    if execution_mode == "s":
+        _s_builtin = (
+            _prompt_store.get_guide("s_builtin") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("s_builtin", "")
+        if _s_builtin:
+            parts.append(_s_builtin)
+        _s_mcp = (
+            _prompt_store.get_guide("s_mcp") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("s_mcp", "")
+        if _s_mcp:
+            parts.append(_s_mcp)
     else:
-        _non_a1 = (
-            _prompt_store.get_guide("non_a1") if _prompt_store else None
-        ) or DEFAULT_GUIDES.get("non_a1", "")
-        if _non_a1:
-            parts.append(_non_a1)
+        _non_s = (
+            _prompt_store.get_guide("non_s") if _prompt_store else None
+        ) or DEFAULT_GUIDES.get("non_s", "")
+        if _non_s:
+            parts.append(_non_s)
 
     # External tools guide (filtered by registry)
     if permissions and "外部ツール" in permissions and (tool_registry or personal_tools):
-        if execution_mode == "a2":
+        if execution_mode == "a":
             categories = ", ".join(sorted(tool_registry or []))
             if personal_tools:
                 personal_cats = ", ".join(sorted(personal_tools.keys()))
@@ -632,11 +632,11 @@ def build_system_prompt(
     if _ei:
         parts.append(_ei)
 
-    if execution_mode == "a2":
+    if execution_mode == "a":
         _ar = (
-            _prompt_store.get_section("a2_reflection")
+            _prompt_store.get_section("a_reflection")
             if _prompt_store else None
-        ) or _load_a2_reflection()
+        ) or _load_a_reflection()
         if _ar:
             parts.append(_ar)
 

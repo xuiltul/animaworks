@@ -288,7 +288,7 @@ class TestDefaultData:
             )
 
     def test_default_guides_has_exactly_three_keys(self) -> None:
-        assert set(DEFAULT_GUIDES.keys()) == {"a1_builtin", "a1_mcp", "non_a1"}
+        assert set(DEFAULT_GUIDES.keys()) == {"s_builtin", "s_mcp", "non_s"}
 
     def test_guide_content_is_non_empty(self) -> None:
         for key, content in DEFAULT_GUIDES.items():

@@ -96,10 +96,10 @@ class ExecutionResult:
     Attributes:
         text: The textual response from the LLM.
         result_message: Provider-specific metadata (e.g. ResultMessage
-            from Claude Agent SDK).  Used for session chaining in A1 mode.
+            from Claude Agent SDK).  Used for session chaining in S mode.
         tool_call_records: Tool calls made during this execution session.
         force_chain: When True, AgentCore should force session chaining
-            regardless of the ContextTracker state.  Set by the A1 executor
+            regardless of the ContextTracker state.  Set by the S executor
             when mid-session context auto-compact triggers via PreToolUse
             ``continue_=False``.
     """
@@ -115,13 +115,13 @@ class ExecutionResult:
 class BaseExecutor(ABC):
     """Abstract base for execution engines.
 
-    Each subclass implements one execution mode (A1, A2, B, or fallback).
+    Each subclass implements one execution mode (S, A, B, or fallback).
     Common credential resolution lives here.
 
     Parameter usage by mode:
 
     +------------------+--------+--------------+---------+----------+
-    | Parameter        | A1     | A2           | B       | Fallback |
+    | Parameter        | S      | A            | B       | Fallback |
     |                  | (SDK)  | (LiteLLM)    | (Asst.) | (Anthr.) |
     +==================+========+==============+=========+==========+
     | prompt           | YES    | YES          | YES     | YES      |
@@ -130,8 +130,8 @@ class BaseExecutor(ABC):
     | shortterm        | no*    | YES          | no      | YES      |
     +------------------+--------+--------------+---------+----------+
 
-    * A1 session chaining is managed externally by AgentCore.
-      A2 and Fallback handle session chaining inline via
+    * S session chaining is managed externally by AgentCore.
+      A and Fallback handle session chaining inline via
       handle_session_chaining().
     """
 
@@ -151,8 +151,8 @@ class BaseExecutor(ABC):
         """Whether this executor supports streaming execution.
 
         Returns True by default.  All executors now implement
-        ``execute_streaming()`` — either token-level (A1, A1 Fallback,
-        A2 non-Ollama) or iteration-level (A2 Ollama, B).
+        ``execute_streaming()`` — either token-level (S, S Fallback,
+        A non-Ollama) or iteration-level (A Ollama, B).
         """
         return True
 
@@ -240,12 +240,12 @@ class BaseExecutor(ABC):
             tracker: Context usage tracker for monitoring window consumption.
                 Not used by Mode B.
             shortterm: Short-term memory for inline session chaining
-                (A2 / Fallback). A1 chaining is managed by AgentCore.
+                (A / Fallback). S chaining is managed by AgentCore.
             trigger: Trigger identifier (e.g. "message:sakura", "heartbeat").
                 Used by Mode B for post-call send judgement. Other modes
                 ignore this parameter.
             images: Optional list of image dicts with ``data`` (base64) and
-                ``media_type`` keys. Supported by A1 Fallback and A2 modes.
+                ``media_type`` keys. Supported by S Fallback and A modes.
             max_turns_override: If provided, overrides ``max_turns`` from
                 ModelConfig for this single execution.
 

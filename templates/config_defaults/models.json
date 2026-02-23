@@ -1,0 +1,21 @@
+{
+  "claude-*":              { "mode": "S", "context_window": 200000 },
+  "anthropic/claude-*":    { "mode": "A", "context_window": 200000 },
+  "openai/*":              { "mode": "A", "context_window": 128000 },
+  "azure/*":               { "mode": "A", "context_window": 128000 },
+  "google/*":              { "mode": "A", "context_window": 1000000 },
+  "mistral/*":             { "mode": "A", "context_window": 128000 },
+  "xai/*":                 { "mode": "A", "context_window": 131072 },
+  "deepseek/deepseek-chat":{ "mode": "A", "context_window": 65536 },
+  "ollama/qwen3:14b":      { "mode": "A", "context_window": 40960 },
+  "ollama/qwen3:30b":      { "mode": "A", "context_window": 40960 },
+  "ollama/qwen3:32b":      { "mode": "A", "context_window": 40960 },
+  "ollama/qwen3-coder:*":  { "mode": "A", "context_window": 40960 },
+  "ollama/llama4:*":       { "mode": "A", "context_window": 131072 },
+  "ollama/glm-4.7*":       { "mode": "A", "context_window": 32768 },
+  "ollama/glm-5*":         { "mode": "A", "context_window": 32768 },
+  "ollama/kimi-k2*":       { "mode": "A", "context_window": 131072 },
+  "ollama/gemma3*":        { "mode": "B", "context_window": 8192 },
+  "ollama/phi4*":          { "mode": "B", "context_window": 16384 },
+  "ollama/*":              { "mode": "B", "context_window": 8192 }
+}

@@ -317,7 +317,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events using the Anthropic SDK messages.stream().
 
-        Yields event dicts matching the A1 streaming protocol:
+        Yields event dicts matching the S mode streaming protocol:
             - ``{"type": "text_delta", "text": "..."}``
             - ``{"type": "tool_start", "tool_name": "...", "tool_id": "..."}``
             - ``{"type": "tool_end", "tool_id": "...", "tool_name": "..."}``

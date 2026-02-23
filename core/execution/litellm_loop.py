@@ -7,7 +7,7 @@ from __future__ import annotations
 # See LICENSE for the full license text.
 
 
-"""Mode A2 executor: LiteLLM + tool_use loop.
+"""Mode A executor: LiteLLM + tool_use loop.
 
 Runs any tool_use-capable model (GPT-4o, Gemini Pro, etc.) in a loop where
 the LLM autonomously calls tools until it produces a final text response
@@ -132,7 +132,7 @@ def _extract_tool_uses_from_messages(messages: list[dict]) -> list[dict]:
 
 
 class LiteLLMExecutor(BaseExecutor):
-    """Execute via LiteLLM with a tool_use loop (Mode A2).
+    """Execute via LiteLLM with a tool_use loop (Mode A).
 
     The LLM calls tools autonomously (memory, files, commands, delegation)
     until it produces a final text response or hits ``max_turns``.
@@ -324,7 +324,7 @@ class LiteLLMExecutor(BaseExecutor):
 
         for iteration in range(max_iterations):
             logger.debug(
-                "A2 tool loop iteration=%d messages=%d",
+                "A tool loop iteration=%d messages=%d",
                 iteration, len(messages),
             )
 
@@ -381,13 +381,13 @@ class LiteLLMExecutor(BaseExecutor):
                         self._memory,
                         tool_registry=self._tool_registry,
                         personal_tools=self._personal_tools,
-                        execution_mode="a2",
+                        execution_mode="a",
                         message=prompt,
                     ),
                     max_chains=self._model_config.max_chains,
                     chain_count=chain_count,
-                    session_id="litellm-a2",
-                    trigger="a2_tool_loop",
+                    session_id="litellm-a",
+                    trigger="a_tool_loop",
                     original_prompt=prompt,
                     accumulated_response="\n".join(all_response_text),
                     turn_count=iteration,
@@ -411,7 +411,7 @@ class LiteLLMExecutor(BaseExecutor):
             if not tool_calls:
                 final_text = message.content or ""
                 all_response_text.append(final_text)
-                logger.debug("A2 final response at iteration=%d", iteration)
+                logger.debug("A final response at iteration=%d", iteration)
                 # ── Final drain: deliver any undelivered reminders ──
                 final_reminder = self.reminder_queue.drain_formatted()
                 if final_reminder:
@@ -423,7 +423,7 @@ class LiteLLMExecutor(BaseExecutor):
 
             # ── Process tool calls ────────────────────────────
             logger.info(
-                "A2 tool calls at iteration=%d: %s",
+                "A tool calls at iteration=%d: %s",
                 iteration,
                 ", ".join(tc.function.name for tc in tool_calls),
             )
@@ -446,7 +446,7 @@ class LiteLLMExecutor(BaseExecutor):
                     "content": SystemReminderQueue.format_reminder(reminder),
                 })
 
-        logger.warning("A2 max iterations (%d) reached", max_iterations)
+        logger.warning("A max iterations (%d) reached", max_iterations)
         return ExecutionResult(
             text="\n".join(all_response_text) or "(max iterations reached)",
             tool_call_records=all_tool_records,
@@ -515,11 +515,11 @@ class LiteLLMExecutor(BaseExecutor):
         max_iterations = max_turns_override or self._model_config.max_turns
 
         async with stream_error_boundary(
-            all_response_text, executor_name="A2-stream",
+            all_response_text, executor_name="A-stream",
         ):
             for iteration in range(max_iterations):
                 logger.debug(
-                    "A2 stream iteration=%d messages=%d",
+                    "A stream iteration=%d messages=%d",
                     iteration, len(messages),
                 )
 
@@ -629,7 +629,7 @@ class LiteLLMExecutor(BaseExecutor):
                 if not tool_calls_acc:
                     full_text = "\n".join(all_response_text)
                     logger.debug(
-                        "A2 stream final response at iteration=%d", iteration,
+                        "A stream final response at iteration=%d", iteration,
                     )
                     yield {
                         "type": "done",
@@ -642,7 +642,7 @@ class LiteLLMExecutor(BaseExecutor):
                 # ── Process tool calls ──
                 parsed_calls = parse_accumulated_tool_calls(tool_calls_acc)
                 logger.info(
-                    "A2 stream tool calls at iteration=%d: %s",
+                    "A stream tool calls at iteration=%d: %s",
                     iteration,
                     ", ".join(tc["name"] for tc in parsed_calls),
                 )
@@ -688,7 +688,7 @@ class LiteLLMExecutor(BaseExecutor):
 
         # If we exit the loop without returning, max iterations reached
         full_text = "\n".join(all_response_text) or "(max iterations reached)"
-        logger.warning("A2 stream max iterations (%d) reached", max_iterations)
+        logger.warning("A stream max iterations (%d) reached", max_iterations)
         yield {
             "type": "done",
             "full_text": full_text,
@@ -728,11 +728,11 @@ class LiteLLMExecutor(BaseExecutor):
         max_iterations = max_turns_override or self._model_config.max_turns
 
         async with stream_error_boundary(
-            all_response_text, executor_name="A2-ollama-stream",
+            all_response_text, executor_name="A-ollama-stream",
         ):
             for iteration in range(max_iterations):
                 logger.debug(
-                    "A2 ollama stream iteration=%d messages=%d",
+                    "A ollama stream iteration=%d messages=%d",
                     iteration, len(messages),
                 )
 
@@ -795,7 +795,7 @@ class LiteLLMExecutor(BaseExecutor):
                 if not tool_calls:
                     full_text = "\n".join(all_response_text)
                     logger.debug(
-                        "A2 ollama stream final response at iteration=%d",
+                        "A ollama stream final response at iteration=%d",
                         iteration,
                     )
                     yield {
@@ -812,7 +812,7 @@ class LiteLLMExecutor(BaseExecutor):
                         tc.id = f"ollama_{iteration}_{i}"
 
                 logger.info(
-                    "A2 ollama stream tool calls at iteration=%d: %s",
+                    "A ollama stream tool calls at iteration=%d: %s",
                     iteration,
                     ", ".join(tc.function.name for tc in tool_calls),
                 )
@@ -850,7 +850,7 @@ class LiteLLMExecutor(BaseExecutor):
         # Max iterations reached
         full_text = "\n".join(all_response_text) or "(max iterations reached)"
         logger.warning(
-            "A2 ollama stream max iterations (%d) reached", max_iterations,
+            "A ollama stream max iterations (%d) reached", max_iterations,
         )
         yield {
             "type": "done",

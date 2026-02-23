@@ -403,15 +403,17 @@ class DigitalAnima:
                 conv_memory = ConversationMemory(self.anima_dir, self.model_config)
                 await conv_memory.compress_if_needed()
 
-                # Determine if structured messages should be used
+                # Determine prompt and history strategy per execution mode
                 mode = self.agent.execution_mode
                 prior_messages = None
-                if mode in ("a2", "a1_fallback"):
-                    fmt = "openai" if mode == "a2" else "anthropic"
-                    prior_messages = conv_memory.build_structured_messages(
-                        content, fmt=fmt,
-                    )
-                    prompt = content  # Raw message; history is in prior_messages
+                if mode == "s":
+                    # S mode: SDK manages conversation history internally.
+                    # AnimaWorks only sends the current user message.
+                    prompt = content
+                elif mode == "a":
+                    # A mode: AnimaWorks manages history via structured messages
+                    prior_messages = conv_memory.build_structured_messages(content)
+                    prompt = content
                 elif mode == "b":
                     prompt = conv_memory.build_chat_prompt(
                         content, from_person, max_history_chars=2000,
@@ -420,10 +422,12 @@ class DigitalAnima:
                     prompt = conv_memory.build_chat_prompt(content, from_person)
 
                 # Pre-save: persist user input before agent execution
-                conv_memory.append_turn(
-                    "human", content, attachments=attachment_paths or [],
-                )
-                conv_memory.save()
+                # (skip for S mode — SDK manages history)
+                if mode != "s":
+                    conv_memory.append_turn(
+                        "human", content, attachments=attachment_paths or [],
+                    )
+                    conv_memory.save()
 
                 # Activity log: message received
                 self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
@@ -442,11 +446,12 @@ class DigitalAnima:
                         ToolRecord.from_dict(r)
                         for r in result.tool_call_records
                     ]
-                    conv_memory.append_turn(
-                        "assistant", result.summary,
-                        tool_records=tool_records,
-                    )
-                    conv_memory.save()
+                    if mode != "s":
+                        conv_memory.append_turn(
+                            "assistant", result.summary,
+                            tool_records=tool_records,
+                        )
+                        conv_memory.save()
 
                     # Activity log: response sent
                     self._activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat")
@@ -465,10 +470,11 @@ class DigitalAnima:
                         meta={"phase": "process_message", "error": str(exc)[:200]},
                     )
                     # Save error marker so the failed exchange is visible
-                    conv_memory.append_turn(
-                        "assistant", "[ERROR: エージェント実行中にエラーが発生しました]"
-                    )
-                    conv_memory.save()
+                    if mode != "s":
+                        conv_memory.append_turn(
+                            "assistant", "[ERROR: エージェント実行中にエラーが発生しました]"
+                        )
+                        conv_memory.save()
                     raise
                 finally:
                     self._status = "idle"
@@ -562,14 +568,15 @@ class DigitalAnima:
                 conv_memory = ConversationMemory(self.anima_dir, self.model_config)
                 await conv_memory.compress_if_needed()
 
-                # Determine if structured messages should be used
+                # Determine prompt and history strategy per execution mode
                 mode = self.agent.execution_mode
                 prior_messages = None
-                if mode in ("a2", "a1_fallback"):
-                    fmt = "openai" if mode == "a2" else "anthropic"
-                    prior_messages = conv_memory.build_structured_messages(
-                        content, fmt=fmt,
-                    )
+                if mode == "s":
+                    # S mode: SDK manages conversation history internally.
+                    prompt = content
+                elif mode == "a":
+                    # A mode: AnimaWorks manages history via structured messages
+                    prior_messages = conv_memory.build_structured_messages(content)
                     prompt = content
                 elif mode == "b":
                     prompt = conv_memory.build_chat_prompt(
@@ -579,10 +586,12 @@ class DigitalAnima:
                     prompt = conv_memory.build_chat_prompt(content, from_person)
 
                 # Pre-save: persist user input before agent execution
-                conv_memory.append_turn(
-                    "human", content, attachments=attachment_paths or [],
-                )
-                conv_memory.save()
+                # (skip for S mode — SDK manages history)
+                if mode != "s":
+                    conv_memory.append_turn(
+                        "human", content, attachments=attachment_paths or [],
+                    )
+                    conv_memory.save()
 
                 # Activity log: message received
                 self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat")
@@ -630,11 +639,12 @@ class DigitalAnima:
                                 ToolRecord.from_dict(r)
                                 for r in cycle_result.get("tool_call_records", [])
                             ]
-                            conv_memory.append_turn(
-                                "assistant", summary,
-                                tool_records=tool_records,
-                            )
-                            conv_memory.save()
+                            if mode != "s":
+                                conv_memory.append_turn(
+                                    "assistant", summary,
+                                    tool_records=tool_records,
+                                )
+                                conv_memory.save()
 
                             # Activity log: response sent
                             self._activity.log("response_sent", content=summary, to_person=from_person, channel="chat")
@@ -679,12 +689,13 @@ class DigitalAnima:
                 finally:
                     # Save partial response if cycle_done was never received
                     if not cycle_done:
-                        if partial_response:
-                            saved_text = partial_response + "\n[応答が中断されました]"
-                        else:
-                            saved_text = "[応答が中断されました]"
-                        conv_memory.append_turn("assistant", saved_text)
-                        conv_memory.save()
+                        if mode != "s":
+                            if partial_response:
+                                saved_text = partial_response + "\n[応答が中断されました]"
+                            else:
+                                saved_text = "[応答が中断されました]"
+                            conv_memory.append_turn("assistant", saved_text)
+                            conv_memory.save()
                     # Close journal (no-op if already finalized)
                     journal.close()
                     self._status = "idle"
@@ -798,13 +809,12 @@ class DigitalAnima:
     def _build_prior_messages(
         self, prompt_text: str,
     ) -> list[dict[str, Any]] | None:
-        """Build prior_messages for A2/A1F modes, None otherwise."""
+        """Build prior_messages for A mode, None for S/B."""
         mode = self.agent.execution_mode
-        if mode not in ("a2", "a1_fallback"):
+        if mode != "a":
             return None
         conv = ConversationMemory(self.anima_dir, self.model_config)
-        fmt = "openai" if mode == "a2" else "anthropic"
-        return conv.build_structured_messages(prompt_text, fmt=fmt)
+        return conv.build_structured_messages(prompt_text)
 
     async def _build_heartbeat_prompt(self) -> list[str]:
         """Build heartbeat prompt parts.

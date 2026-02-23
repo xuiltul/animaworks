@@ -1,4 +1,4 @@
-"""Unit tests for messaging prompt templates — A1 vs A2 content validation."""
+"""Unit tests for messaging prompt templates — S vs A content validation."""
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -9,33 +9,33 @@ from core.paths import PROMPTS_DIR
 
 
 class TestMessagingTemplates:
-    def test_messaging_a1_template_exists(self):
-        """A1-specific messaging template file must exist."""
-        path = PROMPTS_DIR / "messaging_a1.md"
+    def test_messaging_s_template_exists(self):
+        """S mode messaging template file must exist."""
+        path = PROMPTS_DIR / "messaging_s.md"
         assert path.exists(), f"Missing template: {path}"
 
-    def test_messaging_a1_has_mcp_send_message(self):
-        """A1 template must reference MCP send_message tool."""
-        content = (PROMPTS_DIR / "messaging_a1.md").read_text(encoding="utf-8")
+    def test_messaging_s_has_mcp_send_message(self):
+        """S mode template must reference MCP send_message tool."""
+        content = (PROMPTS_DIR / "messaging_s.md").read_text(encoding="utf-8")
         assert "mcp__aw__send_message" in content
 
-    def test_messaging_a1_no_bash_send(self):
-        """A1 template must NOT reference bash send command (abolished)."""
-        content = (PROMPTS_DIR / "messaging_a1.md").read_text(encoding="utf-8")
+    def test_messaging_s_no_bash_send(self):
+        """S mode template must NOT reference bash send command (abolished)."""
+        content = (PROMPTS_DIR / "messaging_s.md").read_text(encoding="utf-8")
         assert "bash send" not in content
 
-    def test_messaging_a1_has_placeholders(self):
-        """A1 template must have the required format placeholders."""
-        content = (PROMPTS_DIR / "messaging_a1.md").read_text(encoding="utf-8")
+    def test_messaging_s_has_placeholders(self):
+        """S mode template must have the required format placeholders."""
+        content = (PROMPTS_DIR / "messaging_s.md").read_text(encoding="utf-8")
         assert "{animas_line}" in content
 
-    def test_messaging_a2_template_exists(self):
-        """Standard messaging template (for A2) must still exist."""
+    def test_messaging_a_template_exists(self):
+        """Standard messaging template (for A mode) must still exist."""
         path = PROMPTS_DIR / "messaging.md"
         assert path.exists(), f"Missing template: {path}"
 
-    def test_messaging_a2_has_send_message_tool(self):
-        """A2 template should still reference send_message tool."""
+    def test_messaging_a_has_send_message_tool(self):
+        """A mode template should still reference send_message tool."""
         content = (PROMPTS_DIR / "messaging.md").read_text(encoding="utf-8")
         assert "send_message" in content
 

@@ -175,7 +175,7 @@ class TestPreToolHookContextBudget:
         assert session_stats["tool_call_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_exceeds_budget_triggers_autocompact(self, anima_dir: Path):
+    async def test_exceeds_budget_logs_observation(self, anima_dir: Path):
         """When estimated tokens exceed context_window - max_tokens*2, trigger."""
         max_tokens = 4096
         context_window = 200_000
@@ -202,10 +202,10 @@ class TestPreToolHookContextBudget:
         result = await hook(input_data, "tool-789", {})
 
         # Estimated: 191908 + 0 = 191908.  Remaining = 200000 - 191908 = 8092 < 8192
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
-        assert "stopReason" in result
-        assert "auto-compact" in result["stopReason"].lower() or "auto" in result["stopReason"].lower()
+        # S mode: hook logs observation but does NOT return continue_=False.
+        # SDK's built-in auto-compact handles context management.
+        assert result.get("continue_") is not False
+        assert session_stats["force_chain"] is False  # No longer set
 
     @pytest.mark.asyncio
     async def test_total_result_bytes_contributes_to_estimate(self, anima_dir: Path):
@@ -236,11 +236,12 @@ class TestPreToolHookContextBudget:
 
         # estimated = 1000 + 770000//4 = 1000 + 192500 = 193500
         # remaining = 200000 - 193500 = 6500 < 8192
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
+        # S mode: observation only, no continue_=False
+        assert result.get("continue_") is not False
+        assert session_stats["force_chain"] is False
 
     @pytest.mark.asyncio
-    async def test_force_chain_already_true_still_blocks(self, anima_dir: Path):
+    async def test_exceeds_budget_with_prior_force_chain_logs_observation(self, anima_dir: Path):
         """When force_chain is already True (re-entry), subsequent calls still block."""
         max_tokens = 4096
         context_window = 200_000
@@ -262,9 +263,9 @@ class TestPreToolHookContextBudget:
         result = await hook(input_data, "tool-bbb", {})
 
         # estimated = 5000 + 800000//4 = 5000 + 200000 = 205000
-        # remaining = 200000 - 205000 = -5000 < 8192 -> still triggers
-        assert result.get("continue_") is False
-        assert session_stats["force_chain"] is True
+        # remaining = 200000 - 205000 = -5000 < 8192
+        # S mode: observation only, no continue_=False
+        assert result.get("continue_") is not False
 
     @pytest.mark.asyncio
     async def test_tool_call_count_increments(self, anima_dir: Path):

@@ -499,36 +499,39 @@ def resolve_anima_config(
 # Patterns use fnmatch syntax (*, ?, [seq]).
 # Order matters for specificity — more specific patterns should appear first,
 # but the resolver sorts by specificity automatically.
+#
+# Mode values: S = SDK (Agent SDK / Claude Code), A = Autonomous (tool_use),
+#              B = Basic (no tool_use, framework-assisted)
 DEFAULT_MODEL_MODE_PATTERNS: dict[str, str] = {
-    # ── A1: Claude Agent SDK ──────────────────────────────
-    "claude-*": "A1",
+    # ── S: Claude Agent SDK ──────────────────────────────
+    "claude-*": "S",
 
-    # ── A2: Cloud API providers (LiteLLM + tool_use) ──────
-    "openai/*": "A2",
-    "azure/*": "A2",
-    "google/*": "A2",
-    "mistral/*": "A2",
-    "xai/*": "A2",
-    "cohere/*": "A2",
-    "zai/*": "A2",
-    "minimax/*": "A2",
-    "moonshot/*": "A2",
-    "deepseek/deepseek-chat": "A2",
+    # ── A: Cloud API providers (LiteLLM + tool_use) ──────
+    "openai/*": "A",
+    "azure/*": "A",
+    "google/*": "A",
+    "mistral/*": "A",
+    "xai/*": "A",
+    "cohere/*": "A",
+    "zai/*": "A",
+    "minimax/*": "A",
+    "moonshot/*": "A",
+    "deepseek/deepseek-chat": "A",
 
-    # ── A2: Ollama models with reliable tool_use ──────────
-    "ollama/qwen3:14b": "A2",
-    "ollama/qwen3:30b": "A2",
-    "ollama/qwen3:32b": "A2",
-    "ollama/qwen3:235b": "A2",
-    "ollama/qwen3-coder:*": "A2",
-    "ollama/llama4:*": "A2",
-    "ollama/mistral-small3.2:*": "A2",
-    "ollama/devstral*": "A2",
-    "ollama/glm-4.7*": "A2",
-    "ollama/glm-5*": "A2",
-    "ollama/minimax*": "A2",
-    "ollama/kimi-k2*": "A2",
-    "ollama/gpt-oss*": "A2",
+    # ── A: Ollama models with reliable tool_use ──────────
+    "ollama/qwen3:14b": "A",
+    "ollama/qwen3:30b": "A",
+    "ollama/qwen3:32b": "A",
+    "ollama/qwen3:235b": "A",
+    "ollama/qwen3-coder:*": "A",
+    "ollama/llama4:*": "A",
+    "ollama/mistral-small3.2:*": "A",
+    "ollama/devstral*": "A",
+    "ollama/glm-4.7*": "A",
+    "ollama/glm-5*": "A",
+    "ollama/minimax*": "A",
+    "ollama/kimi-k2*": "A",
+    "ollama/gpt-oss*": "A",
 
     # ── B: No reliable tool_use ───────────────────────────
     "ollama/qwen3:0.6b": "B",
@@ -544,6 +547,91 @@ DEFAULT_MODEL_MODE_PATTERNS: dict[str, str] = {
 
 # Backward-compatible alias
 DEFAULT_MODEL_MODES = DEFAULT_MODEL_MODE_PATTERNS
+
+# ── Legacy mode value mapping ──────────────────────────────
+# Maps old A1/A1F/A2/B and text-based values to new S/A/B scheme.
+_LEGACY_MODE_MAP: dict[str, str] = {
+    "autonomous": "A",
+    "assisted": "B",
+    "a1": "S",
+    "a1f": "A",
+    "a1_fallback": "A",
+    "a2": "A",
+}
+
+# ── models.json cache ─────────────────────────────────────
+_models_json_cache: dict[str, dict] | None = None
+_models_json_mtime: float = 0.0
+
+
+def _load_models_json() -> dict[str, dict]:
+    """Load the user-editable models.json from the runtime data directory.
+
+    Reads ``~/.animaworks/models.json`` (resolved via
+    ``core.paths.get_data_dir``).  The result is cached at module level and
+    automatically reloaded when the file's mtime changes.
+
+    Returns:
+        A dict mapping model-name patterns to entry dicts containing
+        ``"mode"`` and ``"context_window"`` keys.  Returns an empty dict
+        if the file is missing or cannot be parsed.
+    """
+    global _models_json_cache, _models_json_mtime
+
+    from core.paths import get_data_dir
+
+    models_path = get_data_dir() / "models.json"
+
+    # Fast path: return cache if mtime unchanged
+    if _models_json_cache is not None:
+        try:
+            disk_mtime = models_path.stat().st_mtime
+        except OSError:
+            disk_mtime = 0.0
+        if disk_mtime == _models_json_mtime:
+            return _models_json_cache
+
+    # Capture mtime before reading to avoid TOCTOU race
+    try:
+        file_mtime = models_path.stat().st_mtime
+    except OSError:
+        logger.debug("models.json not found at %s; skipping", models_path)
+        _models_json_cache = {}
+        _models_json_mtime = 0.0
+        return _models_json_cache
+
+    try:
+        raw = json.loads(models_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to load models.json from %s: %s", models_path, exc)
+        _models_json_cache = {}
+        _models_json_mtime = 0.0
+        return _models_json_cache
+
+    if not isinstance(raw, dict):
+        logger.warning("models.json is not a JSON object; ignoring")
+        _models_json_cache = {}
+        _models_json_mtime = 0.0
+        return _models_json_cache
+
+    # Filter to entries that are dicts (skip comment keys, etc.)
+    result: dict[str, dict] = {}
+    for key, value in raw.items():
+        if isinstance(value, dict):
+            result[key] = value
+
+    _models_json_cache = result
+    _models_json_mtime = file_mtime
+
+    logger.debug("Loaded models.json with %d entries", len(result))
+    return _models_json_cache
+
+
+def invalidate_models_json_cache() -> None:
+    """Reset the models.json module-level cache."""
+    global _models_json_cache, _models_json_mtime
+    _models_json_cache = None
+    _models_json_mtime = 0.0
 
 
 def _pattern_specificity(pattern: str) -> tuple[int, int, int]:
@@ -636,6 +724,52 @@ def load_model_config(anima_dir: Path) -> "ModelConfig":
     )
 
 
+def _normalise_mode(raw: str) -> str:
+    """Normalise a mode value to S/A/B, applying legacy mapping if needed.
+
+    Accepts old values (``"A1"``, ``"A2"``, ``"autonomous"``, etc.) and
+    new values (``"S"``, ``"A"``, ``"B"``).  Returns uppercase S/A/B.
+    """
+    lower = raw.strip().lower()
+    mapped = _LEGACY_MODE_MAP.get(lower)
+    if mapped:
+        return mapped
+    upper = raw.strip().upper()
+    if upper in ("S", "A", "B"):
+        return upper
+    # Unrecognised — return as-is (upper) for forward compat
+    logger.warning("Unrecognised execution mode '%s'; passing through as '%s'", raw, upper)
+    return upper
+
+
+def _match_models_json(model_name: str) -> dict | None:
+    """Match *model_name* against models.json entries.
+
+    Returns the matched entry dict (with ``"mode"`` and ``"context_window"``
+    keys) or ``None`` if no match.  Uses specificity-sorted pattern matching.
+    """
+    table = _load_models_json()
+    if not table:
+        return None
+
+    # Phase 1: exact match
+    if model_name in table:
+        return table[model_name]
+
+    # Phase 2: wildcard patterns sorted by specificity
+    wildcard_patterns = [
+        p for p in table
+        if any(c in p for c in ("*", "?", "["))
+    ]
+    wildcard_patterns.sort(key=_pattern_specificity)
+
+    for pattern in wildcard_patterns:
+        if fnmatch.fnmatch(model_name, pattern):
+            return table[pattern]
+
+    return None
+
+
 def resolve_execution_mode(
     config: AnimaWorksConfig,
     model_name: str,
@@ -644,28 +778,85 @@ def resolve_execution_mode(
     """Resolve execution mode from model name with wildcard pattern support.
 
     Priority:
-      1. Anima's execution_mode explicit override (legacy)
-      2. config.json model_modes table (exact + wildcard)
-      3. DEFAULT_MODEL_MODE_PATTERNS (exact + wildcard)
-      4. Default "B" (safe side)
-    """
-    if explicit_override:
-        mapping = {"autonomous": "A2", "assisted": "B"}
-        return mapping.get(explicit_override, explicit_override.upper())
+      1. Per-anima explicit override (with legacy value mapping)
+      2. models.json user table (``~/.animaworks/models.json``)
+      3. config.json model_modes (deprecated fallback, with legacy mapping)
+      4. DEFAULT_MODEL_MODE_PATTERNS (code defaults)
+      5. Default ``"B"`` (safe side)
 
-    # config.json model_modes (user overrides)
+    Returns:
+        One of ``"S"`` (SDK), ``"A"`` (Autonomous), or ``"B"`` (Basic).
+    """
+    # 1. Per-anima explicit override
+    if explicit_override:
+        return _normalise_mode(explicit_override)
+
+    # 2. models.json user table
+    entry = _match_models_json(model_name)
+    if entry is not None:
+        mode_val = entry.get("mode")
+        if mode_val:
+            return _normalise_mode(str(mode_val))
+
+    # 3. config.json model_modes (deprecated fallback)
     user_table = config.model_modes or {}
     if user_table:
         result = _match_pattern_table(model_name, user_table)
         if result is not None:
-            return result
+            return _normalise_mode(result)
 
-    # Code defaults
+    # 4. Code defaults
     result = _match_pattern_table(model_name, DEFAULT_MODEL_MODE_PATTERNS)
     if result is not None:
-        return result
+        return result  # Already S/A/B in the table
 
     return "B"  # unknown model → safe side
+
+
+def resolve_context_window(
+    model_name: str,
+    config: AnimaWorksConfig | None = None,
+) -> int | None:
+    """Resolve context window size from model name.
+
+    Priority:
+      1. models.json (``~/.animaworks/models.json``, ``"context_window"`` field)
+      2. config.json ``model_context_windows`` (deprecated fallback)
+      3. ``None`` (caller should fall through to ``core.prompt.context``
+         defaults)
+
+    Args:
+        model_name: The model name to resolve (e.g. ``"claude-sonnet-4-20250514"``).
+        config: Optional config instance.  Loaded lazily if not provided.
+
+    Returns:
+        Context window size in tokens, or ``None`` if not found in any
+        user-editable source (caller should use hardcoded defaults).
+    """
+    # 1. models.json
+    entry = _match_models_json(model_name)
+    if entry is not None:
+        cw = entry.get("context_window")
+        if cw is not None:
+            try:
+                return int(cw)
+            except (ValueError, TypeError):
+                pass
+
+    # 2. config.json model_context_windows
+    if config is None:
+        try:
+            config = load_config()
+        except Exception:
+            return None
+    overrides = config.model_context_windows or {}
+    if overrides:
+        bare = model_name.split("/", 1)[-1] if "/" in model_name else model_name
+        for pattern, size in overrides.items():
+            if fnmatch.fnmatch(model_name, pattern) or fnmatch.fnmatch(bare, pattern):
+                return size
+
+    return None
 
 
 # ---------------------------------------------------------------------------

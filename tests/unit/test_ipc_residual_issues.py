@@ -22,58 +22,28 @@ import pytest
 class TestSettingSourcesDisabled:
     """Verify ClaudeAgentOptions receives setting_sources=[] to block CLI hooks."""
 
-    def test_execute_passes_empty_setting_sources(self, tmp_path: Path):
-        """execute() ClaudeAgentOptions should include setting_sources=[]."""
-        # We capture the kwargs passed to ClaudeAgentOptions
-        captured_kwargs = {}
-        original_init = None
-
-        class FakeOptions:
-            def __init__(self, **kwargs):
-                captured_kwargs.update(kwargs)
-
-        with patch.dict("sys.modules", {
-            "claude_agent_sdk": MagicMock(
-                ClaudeAgentOptions=FakeOptions,
-                ClaudeSDKClient=MagicMock,
-                HookMatcher=MagicMock,
-                ResultMessage=MagicMock,
-                SystemMessage=MagicMock,
-                TextBlock=MagicMock,
-                ToolResultBlock=MagicMock,
-                ToolUseBlock=MagicMock,
-                UserMessage=MagicMock,
-                AssistantMessage=MagicMock,
-            ),
-        }):
-            from core.execution.agent_sdk import AgentSDKExecutor
-
-            executor = AgentSDKExecutor.__new__(AgentSDKExecutor)
-            executor._anima_dir = tmp_path
-            executor._model_config = MagicMock()
-            executor._model_config.model = "claude-sonnet-4-20250514"
-            executor._model_config.max_turns = 10
-            executor._model_config.max_tokens = 4096
-            executor._resolve_agent_sdk_model = MagicMock(return_value="claude-sonnet-4-20250514")
-            executor._build_env = MagicMock(return_value={})
-            executor._build_mcp_env = MagicMock(return_value={})
-
-            # We need to trigger the ClaudeAgentOptions construction
-            # The easiest way is to check the source code directly
-            import inspect
-            from core.execution.agent_sdk import AgentSDKExecutor as _Cls
-            source = inspect.getsource(_Cls.execute)
-            assert "setting_sources=[]" in source, (
-                "execute() must pass setting_sources=[] to ClaudeAgentOptions"
-            )
-
-    def test_execute_streaming_passes_empty_setting_sources(self):
-        """execute_streaming() ClaudeAgentOptions should include setting_sources=[]."""
+    def test_execute_passes_empty_setting_sources(self):
+        """_build_sdk_options() should include setting_sources=[] for ClaudeAgentOptions."""
         import inspect
         from core.execution.agent_sdk import AgentSDKExecutor
-        source = inspect.getsource(AgentSDKExecutor.execute_streaming)
+        # Options construction is extracted to _build_sdk_options()
+        source = inspect.getsource(AgentSDKExecutor._build_sdk_options)
         assert "setting_sources=[]" in source, (
-            "execute_streaming() must pass setting_sources=[] to ClaudeAgentOptions"
+            "_build_sdk_options() must pass setting_sources=[] to ClaudeAgentOptions"
+        )
+
+    def test_execute_streaming_passes_empty_setting_sources(self):
+        """execute_streaming() uses _build_sdk_options which includes setting_sources=[]."""
+        import inspect
+        from core.execution.agent_sdk import AgentSDKExecutor
+        # Verify execute() and execute_streaming() both call _build_sdk_options
+        exec_source = inspect.getsource(AgentSDKExecutor.execute)
+        stream_source = inspect.getsource(AgentSDKExecutor.execute_streaming)
+        assert "_build_sdk_options" in exec_source, (
+            "execute() must call _build_sdk_options()"
+        )
+        assert "_build_sdk_options" in stream_source, (
+            "execute_streaming() must call _build_sdk_options()"
         )
 
 

@@ -4,7 +4,7 @@
 """Tests for execution mode routing logic.
 
 Verifies that AgentCore._resolve_execution_mode() correctly routes
-to A1, A2, or B based on model name, SDK availability, and config.
+to S, A, or B based on model name, SDK availability, and config.
 No API calls are made in these tests.
 """
 
@@ -18,13 +18,13 @@ import pytest
 class TestModeRouting:
     """Mode detection: _resolve_execution_mode()."""
 
-    def test_claude_model_with_sdk_routes_to_a1(self, make_agent_core):
-        """Claude model + SDK available → Mode A1."""
+    def test_claude_model_with_sdk_routes_to_s(self, make_agent_core):
+        """Claude model + SDK available → Mode S."""
         agent = make_agent_core(
-            name="claude-a1",
+            name="claude-s",
             model="claude-sonnet-4-20250514",
         )
-        assert agent._resolve_execution_mode() == "a1"
+        assert agent._resolve_execution_mode() == "s"
 
     def test_claude_model_explicit_assisted_routes_to_b(self, make_agent_core):
         """Claude model + execution_mode='assisted' → Mode B."""
@@ -35,21 +35,21 @@ class TestModeRouting:
         )
         assert agent._resolve_execution_mode() == "b"
 
-    def test_openai_model_routes_to_a2(self, make_agent_core):
-        """Non-Claude model (OpenAI) → Mode A2."""
+    def test_openai_model_routes_to_a(self, make_agent_core):
+        """Non-Claude model (OpenAI) → Mode A."""
         agent = make_agent_core(
-            name="openai-a2",
+            name="openai-a",
             model="openai/gpt-4o",
         )
-        assert agent._resolve_execution_mode() == "a2"
+        assert agent._resolve_execution_mode() == "a"
 
-    def test_ollama_model_routes_to_a2(self, make_agent_core):
-        """Ollama model with tool_use support → Mode A2."""
+    def test_ollama_model_routes_to_a(self, make_agent_core):
+        """Ollama model with tool_use support → Mode A."""
         agent = make_agent_core(
-            name="ollama-a2",
+            name="ollama-a",
             model="ollama/qwen3:14b",
         )
-        assert agent._resolve_execution_mode() == "a2"
+        assert agent._resolve_execution_mode() == "a"
 
     def test_ollama_model_explicit_assisted_routes_to_b(self, make_agent_core):
         """Ollama model + execution_mode='assisted' → Mode B."""
@@ -68,13 +68,13 @@ class TestModeRouting:
         )
         assert agent._resolve_execution_mode() == "b"
 
-    def test_claude_model_without_sdk_still_routes_to_a1(self, make_agent_core):
-        """Claude model + SDK unavailable → still Mode A1 (executor handles fallback)."""
+    def test_claude_model_without_sdk_still_routes_to_s(self, make_agent_core):
+        """Claude model + SDK unavailable → still Mode S (executor handles fallback)."""
         agent = make_agent_core(
             name="claude-nosdk",
             model="claude-sonnet-4-20250514",
         )
         # Force SDK to be unavailable — _resolve_execution_mode no longer
-        # short-circuits to a2; _create_executor handles the fallback chain.
+        # short-circuits to a; _create_executor handles the fallback chain.
         agent._sdk_available = False
-        assert agent._resolve_execution_mode() == "a1"
+        assert agent._resolve_execution_mode() == "s"

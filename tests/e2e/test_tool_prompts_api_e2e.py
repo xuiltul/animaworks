@@ -189,9 +189,9 @@ class TestGuidesAPI:
         assert "guides" in data
         guides = data["guides"]
         keys = [g["key"] for g in guides]
-        assert "a1_builtin" in keys
-        assert "a1_mcp" in keys
-        assert "non_a1" in keys
+        assert "s_builtin" in keys
+        assert "s_mcp" in keys
+        assert "non_s" in keys
         assert len(guides) == 3
 
     async def test_get_single_guide(self, tmp_path: Path):
@@ -205,11 +205,11 @@ class TestGuidesAPI:
             "server.routes.tool_prompts.get_prompt_store", return_value=store,
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/tool-prompts/guides/a1_builtin")
+                resp = await client.get("/api/tool-prompts/guides/s_builtin")
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["key"] == "a1_builtin"
+        assert data["key"] == "s_builtin"
         assert "content" in data
         assert len(data["content"]) > 0
         # Verify it contains expected guide content
@@ -243,16 +243,16 @@ class TestGuidesAPI:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 new_content = "## Updated Guide\n\nThis is an updated guide."
                 resp = await client.put(
-                    "/api/tool-prompts/guides/a1_builtin",
+                    "/api/tool-prompts/guides/s_builtin",
                     json={"content": new_content},
                 )
                 assert resp.status_code == 200
                 result = resp.json()
-                assert result["key"] == "a1_builtin"
+                assert result["key"] == "s_builtin"
                 assert result["content"] == new_content
 
                 # Confirm via GET
-                resp2 = await client.get("/api/tool-prompts/guides/a1_builtin")
+                resp2 = await client.get("/api/tool-prompts/guides/s_builtin")
                 assert resp2.status_code == 200
                 assert resp2.json()["content"] == new_content
 
@@ -268,7 +268,7 @@ class TestGuidesAPI:
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.put(
-                    "/api/tool-prompts/guides/a1_builtin",
+                    "/api/tool-prompts/guides/s_builtin",
                     json={"content": ""},
                 )
 
@@ -526,7 +526,7 @@ class TestStoreUnavailable:
             "server.routes.tool_prompts.get_prompt_store", return_value=None,
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/tool-prompts/guides/a1_builtin")
+                resp = await client.get("/api/tool-prompts/guides/s_builtin")
         assert resp.status_code == 500
 
     async def test_update_guide_no_store(self, _no_store_app):
@@ -536,7 +536,7 @@ class TestStoreUnavailable:
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.put(
-                    "/api/tool-prompts/guides/a1_builtin",
+                    "/api/tool-prompts/guides/s_builtin",
                     json={"content": "test"},
                 )
         assert resp.status_code == 500
@@ -590,7 +590,7 @@ class TestSectionsAPI:
             sections={
                 "behavior_rules": ("Test behavior rules content", SECTION_CONDITIONS.get("behavior_rules")),
                 "environment": ("Test environment content", SECTION_CONDITIONS.get("environment")),
-                "a2_reflection": ("Test A2 reflection content", SECTION_CONDITIONS.get("a2_reflection")),
+                "a_reflection": ("Test A2 reflection content", SECTION_CONDITIONS.get("a_reflection")),
             },
         )
 
@@ -609,7 +609,7 @@ class TestSectionsAPI:
         keys = [s["key"] for s in sections]
         assert "behavior_rules" in keys
         assert "environment" in keys
-        assert "a2_reflection" in keys
+        assert "a_reflection" in keys
         assert len(sections) == 3
 
     async def test_get_single_section(self, tmp_path: Path):
@@ -617,7 +617,7 @@ class TestSectionsAPI:
         store = ToolPromptStore(db_path)
         store.seed_defaults(
             sections={
-                "a2_reflection": ("Test A2 reflection content", SECTION_CONDITIONS.get("a2_reflection")),
+                "a_reflection": ("Test A2 reflection content", SECTION_CONDITIONS.get("a_reflection")),
             },
         )
 
@@ -627,14 +627,14 @@ class TestSectionsAPI:
             "server.routes.tool_prompts.get_prompt_store", return_value=store,
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/tool-prompts/sections/a2_reflection")
+                resp = await client.get("/api/tool-prompts/sections/a_reflection")
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["key"] == "a2_reflection"
+        assert data["key"] == "a_reflection"
         assert "content" in data
         assert data["content"] == "Test A2 reflection content"
-        assert data["condition"] == "mode:a2"
+        assert data["condition"] == "mode:a"
 
     async def test_get_missing_section(self, tmp_path: Path):
         db_path = tmp_path / "tool_prompts.sqlite3"

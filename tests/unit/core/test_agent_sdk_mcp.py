@@ -96,6 +96,16 @@ class TestMcpServerConfig:
         mock_module.ToolResultBlock = type("ToolResultBlock", (), {})
         mock_module.HookMatcher = MagicMock()
 
+        # Real exception classes so `except (ProcessError, ClaudeSDKError)` works
+        class FakeProcessError(Exception):
+            pass
+
+        class FakeClaudeSDKError(Exception):
+            pass
+
+        mock_module.ProcessError = FakeProcessError
+        mock_module.ClaudeSDKError = FakeClaudeSDKError
+
         # ClaudeAgentOptions: capture kwargs on construction
         captured_options = {}
 
@@ -254,6 +264,16 @@ class TestMcpStatusLogging:
         mock_module.ToolUseBlock = type("ToolUseBlock", (), {})
         mock_module.ToolResultBlock = type("ToolResultBlock", (), {})
         mock_module.HookMatcher = MagicMock()
+
+        # Real exception classes so `except (ProcessError, ClaudeSDKError)` works
+        class FakeProcessError(Exception):
+            pass
+
+        class FakeClaudeSDKError(Exception):
+            pass
+
+        mock_module.ProcessError = FakeProcessError
+        mock_module.ClaudeSDKError = FakeClaudeSDKError
 
         # SystemMessage with controllable subtype and data
         class FakeSystemMessage:

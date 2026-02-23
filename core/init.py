@@ -41,11 +41,11 @@ def _ensure_tool_prompt_db(data_dir: Path) -> None:
     _SECTION_FILES: dict[str, str] = {
         "behavior_rules": "behavior_rules.md",
         "environment": "environment.md",
-        "messaging_a1": "messaging_a1.md",
+        "messaging_s": "messaging_s.md",
         "messaging": "messaging.md",
-        "communication_rules_a1": "communication_rules_a1.md",
+        "communication_rules_s": "communication_rules_s.md",
         "communication_rules": "communication_rules.md",
-        "a2_reflection": "a2_reflection.md",
+        "a_reflection": "a_reflection.md",
         "hiring_context": "hiring_context.md",
     }
 
@@ -124,7 +124,7 @@ def _migrate_memory_prompts_v1(
                 tool_store.set_description(name, desc)
 
         # 5-6: Update tool guides
-        for key in ("a1_mcp", "non_a1"):
+        for key in ("s_mcp", "non_s"):
             guide = DEFAULT_GUIDES.get(key)
             if guide:
                 tool_store.set_guide(key, guide)
@@ -181,9 +181,9 @@ def _migrate_praise_loop_prevention_v1(
 
         # Update sections from runtime prompts files
         for key in (
-            "communication_rules_a1",
+            "communication_rules_s",
             "communication_rules",
-            "messaging_a1",
+            "messaging_s",
             "messaging",
         ):
             path = prompts_dir / f"{key}.md"
@@ -287,6 +287,14 @@ def _copy_infrastructure(data_dir: Path) -> None:
                 continue
             shutil.copy2(item, target)
 
+    # Copy models.json from config_defaults/ to data_dir root
+    models_json_src = TEMPLATES_DIR / "config_defaults" / "models.json"
+    if models_json_src.is_file():
+        models_json_dst = data_dir / "models.json"
+        if not models_json_dst.exists():
+            shutil.copy2(models_json_src, models_json_dst)
+            logger.info("Copied models.json template to %s", models_json_dst)
+
 
 def _legacy_copy_default_anima(data_dir: Path) -> None:
     """Legacy fallback: create a blank anima when auto-initialising for server."""
@@ -336,6 +344,14 @@ def merge_templates(data_dir: Path) -> list[str]:
             shutil.copy2(src, dest)
             added.append(str(rel))
             logger.info("Merged template file: %s", rel)
+
+    # Copy models.json from config_defaults/ if missing
+    models_json_src = TEMPLATES_DIR / "config_defaults" / "models.json"
+    models_json_dst = data_dir / "models.json"
+    if models_json_src.is_file() and not models_json_dst.exists():
+        shutil.copy2(models_json_src, models_json_dst)
+        added.append("models.json")
+        logger.info("Merged models.json template to %s", models_json_dst)
 
     # Ensure runtime-only directories exist
     _ensure_runtime_only_dirs(data_dir)

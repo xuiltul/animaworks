@@ -457,34 +457,60 @@ class TestMatchPatternTable:
 
 
 class TestResolveExecutionModeWildcard:
+    @pytest.fixture(autouse=True)
+    def _clear_models_json(self):
+        """Ensure models.json cache does not leak between tests."""
+        from core.config.models import invalidate_models_json_cache
+        invalidate_models_json_cache()
+        yield
+        invalidate_models_json_cache()
+
     def test_explicit_override_autonomous(self):
         config = AnimaWorksConfig()
-        assert resolve_execution_mode(config, "any-model", "autonomous") == "A2"
+        assert resolve_execution_mode(config, "any-model", "autonomous") == "A"
 
     def test_explicit_override_assisted(self):
         config = AnimaWorksConfig()
         assert resolve_execution_mode(config, "any-model", "assisted") == "B"
 
-    def test_claude_wildcard_a1(self):
+    def test_explicit_override_legacy_a1(self):
         config = AnimaWorksConfig()
-        assert resolve_execution_mode(config, "claude-sonnet-4-20250514") == "A1"
-        assert resolve_execution_mode(config, "claude-opus-4-20250514") == "A1"
+        assert resolve_execution_mode(config, "any-model", "A1") == "S"
+
+    def test_explicit_override_legacy_a1f(self):
+        config = AnimaWorksConfig()
+        assert resolve_execution_mode(config, "any-model", "A1F") == "A"
+
+    def test_explicit_override_legacy_a2(self):
+        config = AnimaWorksConfig()
+        assert resolve_execution_mode(config, "any-model", "A2") == "A"
+
+    def test_explicit_override_new_sab(self):
+        config = AnimaWorksConfig()
+        assert resolve_execution_mode(config, "any-model", "S") == "S"
+        assert resolve_execution_mode(config, "any-model", "A") == "A"
+        assert resolve_execution_mode(config, "any-model", "B") == "B"
+
+    def test_claude_wildcard_s(self):
+        config = AnimaWorksConfig()
+        assert resolve_execution_mode(config, "claude-sonnet-4-20250514") == "S"
+        assert resolve_execution_mode(config, "claude-opus-4-20250514") == "S"
         # Future Claude model also matches
-        assert resolve_execution_mode(config, "claude-haiku-5-20260101") == "A1"
+        assert resolve_execution_mode(config, "claude-haiku-5-20260101") == "S"
 
-    def test_cloud_api_providers_a2(self):
+    def test_cloud_api_providers_a(self):
         config = AnimaWorksConfig()
-        assert resolve_execution_mode(config, "openai/gpt-4.1") == "A2"
-        assert resolve_execution_mode(config, "google/gemini-2.5-pro") == "A2"
-        assert resolve_execution_mode(config, "zai/zai-model") == "A2"
-        assert resolve_execution_mode(config, "minimax/some-model") == "A2"
-        assert resolve_execution_mode(config, "moonshot/kimi") == "A2"
+        assert resolve_execution_mode(config, "openai/gpt-4.1") == "A"
+        assert resolve_execution_mode(config, "google/gemini-2.5-pro") == "A"
+        assert resolve_execution_mode(config, "zai/zai-model") == "A"
+        assert resolve_execution_mode(config, "minimax/some-model") == "A"
+        assert resolve_execution_mode(config, "moonshot/kimi") == "A"
 
-    def test_ollama_a2_models(self):
+    def test_ollama_a_models(self):
         config = AnimaWorksConfig()
-        assert resolve_execution_mode(config, "ollama/qwen3:14b") == "A2"
-        assert resolve_execution_mode(config, "ollama/qwen3:30b") == "A2"
-        assert resolve_execution_mode(config, "ollama/llama4:scout") == "A2"
+        assert resolve_execution_mode(config, "ollama/qwen3:14b") == "A"
+        assert resolve_execution_mode(config, "ollama/qwen3:30b") == "A"
+        assert resolve_execution_mode(config, "ollama/llama4:scout") == "A"
 
     def test_ollama_b_models(self):
         config = AnimaWorksConfig()
@@ -496,20 +522,20 @@ class TestResolveExecutionModeWildcard:
         config = AnimaWorksConfig()
         assert resolve_execution_mode(config, "totally/unknown-model") == "B"
 
-    def test_config_exact_overrides_code_default(self):
+    def test_config_legacy_values_normalised(self):
+        # config.json model_modes with legacy A2 value → normalised to A
         config = AnimaWorksConfig(model_modes={"ollama/qwen3:8b": "A2"})
-        # Code default says B, but config.json says A2
-        assert resolve_execution_mode(config, "ollama/qwen3:8b") == "A2"
+        assert resolve_execution_mode(config, "ollama/qwen3:8b") == "A"
 
     def test_config_wildcard_overrides_code_default(self):
-        config = AnimaWorksConfig(model_modes={"ollama/gemma3*": "A2"})
+        config = AnimaWorksConfig(model_modes={"ollama/gemma3*": "A"})
         # Code default says B for gemma3*, but config.json overrides
-        assert resolve_execution_mode(config, "ollama/gemma3:27b") == "A2"
+        assert resolve_execution_mode(config, "ollama/gemma3:27b") == "A"
 
     def test_empty_config_falls_through_to_code(self):
         config = AnimaWorksConfig(model_modes={})
-        assert resolve_execution_mode(config, "claude-sonnet-4-20250514") == "A1"
-        assert resolve_execution_mode(config, "openai/gpt-4.1") == "A2"
+        assert resolve_execution_mode(config, "claude-sonnet-4-20250514") == "S"
+        assert resolve_execution_mode(config, "openai/gpt-4.1") == "A"
         assert resolve_execution_mode(config, "ollama/qwen3:8b") == "B"
 
 

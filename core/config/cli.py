@@ -306,11 +306,11 @@ def _interactive_setup() -> None:
 _SECTION_FILES: dict[str, str] = {
     "behavior_rules": "behavior_rules.md",
     "environment": "environment.md",
-    "messaging_a1": "messaging_a1.md",
+    "messaging_s": "messaging_s.md",
     "messaging": "messaging.md",
-    "communication_rules_a1": "communication_rules_a1.md",
+    "communication_rules_s": "communication_rules_s.md",
     "communication_rules": "communication_rules.md",
-    "a2_reflection": "a2_reflection.md",
+    "a_reflection": "a_reflection.md",
     "hiring_context": "hiring_context.md",
 }
 

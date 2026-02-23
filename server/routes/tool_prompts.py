@@ -190,7 +190,7 @@ def create_tool_prompts_router() -> APIRouter:
             memory = MemoryManager(anima_dir)
 
             # Determine execution mode from config
-            execution_mode = "a1"  # default
+            execution_mode = "s"  # default
             try:
                 from core.config.models import load_config, resolve_execution_mode
 

@@ -36,7 +36,7 @@ def _mock_load_prompt_with_builder(default: str = "section"):
                 f"外部ツールを使うには `discover_tools` を呼んでください。\n"
                 f"カテゴリ: {cats}"
             )
-        if name == "builder/hiring_rules_a1":
+        if name == "builder/hiring_rules_s":
             return "## 雇用ルール\n\ncreate-anima"
         if name == "builder/hiring_rules_other":
             return "## 雇用ルール\n\ncreate-anima"
@@ -117,33 +117,34 @@ class TestBuildMessagingSection:
             call_kwargs = mock_lp.call_args[1]
             assert "(まだ他の社員はいません)" in call_kwargs["animas_line"]
 
-    def test_a1_mode_uses_messaging_a1_template(self, tmp_path):
-        """A1 mode should load the messaging_a1 template."""
+    def test_s_mode_uses_messaging_s_template(self, tmp_path):
+        """S mode should load the messaging_s template."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
-        with patch("core.prompt.builder.load_prompt", return_value="a1 messaging") as mock_lp:
-            result = _build_messaging_section(anima_dir, ["bob"], execution_mode="a1")
-            assert result == "a1 messaging"
+        with patch("core.prompt.builder.load_prompt", return_value="s messaging") as mock_lp:
+            result = _build_messaging_section(anima_dir, ["bob"], execution_mode="s")
+            assert result == "s messaging"
             mock_lp.assert_called_once()
-            assert mock_lp.call_args[0][0] == "messaging_a1"
+            assert mock_lp.call_args[0][0] == "messaging_s"
 
-    def test_a2_mode_uses_messaging_template(self, tmp_path):
-        """A2 mode should load the standard messaging template."""
+    def test_a_mode_uses_messaging_template(self, tmp_path):
+        """A mode should load the standard messaging template."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
-        with patch("core.prompt.builder.load_prompt", return_value="a2 messaging") as mock_lp:
-            result = _build_messaging_section(anima_dir, ["bob"], execution_mode="a2")
-            assert result == "a2 messaging"
+        with patch("core.tooling.prompt_db.get_prompt_store", return_value=None), \
+             patch("core.prompt.builder.load_prompt", return_value="a messaging") as mock_lp:
+            result = _build_messaging_section(anima_dir, ["bob"], execution_mode="a")
+            assert result == "a messaging"
             mock_lp.assert_called_once()
             assert mock_lp.call_args[0][0] == "messaging"
 
-    def test_default_mode_uses_a1_template(self, tmp_path):
-        """Default execution_mode should be a1, using messaging_a1 template."""
+    def test_default_mode_uses_s_template(self, tmp_path):
+        """Default execution_mode should be s, using messaging_s template."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         with patch("core.prompt.builder.load_prompt", return_value="section") as mock_lp:
             _build_messaging_section(anima_dir, ["bob"])
-            assert mock_lp.call_args[0][0] == "messaging_a1"
+            assert mock_lp.call_args[0][0] == "messaging_s"
 
 
 # ── build_system_prompt ───────────────────────────────────
@@ -312,7 +313,7 @@ class TestBuildSystemPrompt:
             assert "未完了タスク" in result
             assert "task 1" in result
 
-    def test_a2_mode_injects_discover_tools_guide(self, tmp_path, data_dir):
+    def test_a_mode_injects_discover_tools_guide(self, tmp_path, data_dir):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
@@ -341,12 +342,12 @@ class TestBuildSystemPrompt:
             result = build_system_prompt(
                 memory,
                 tool_registry=["chatwork", "slack"],
-                execution_mode="a2",
+                execution_mode="a",
             )
             assert "discover_tools" in result
             assert "chatwork" in result
 
-    def test_a1_mode_uses_cli_guide(self, tmp_path, data_dir):
+    def test_s_mode_uses_cli_guide(self, tmp_path, data_dir):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
@@ -376,9 +377,9 @@ class TestBuildSystemPrompt:
             result = build_system_prompt(
                 memory,
                 tool_registry=["chatwork"],
-                execution_mode="a1",
+                execution_mode="s",
             )
-            # A1 mode should call the CLI guide builder
+            # S mode should call the CLI guide builder
             mock_guide.assert_called_once()
 
 

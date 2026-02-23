@@ -22,18 +22,24 @@ class TestSettingSourcesE2E:
     """E2E: Verify setting_sources=[] is present in actual code."""
 
     def test_both_methods_have_setting_sources(self):
-        """Both execute() and execute_streaming() must set setting_sources=[]."""
+        """_build_sdk_options() (used by execute and execute_streaming) must set setting_sources=[]."""
         import inspect
         from core.execution.agent_sdk import AgentSDKExecutor
 
+        # Options construction is centralized in _build_sdk_options()
+        options_src = inspect.getsource(AgentSDKExecutor._build_sdk_options)
+        assert "setting_sources=[]" in options_src, (
+            "_build_sdk_options() missing setting_sources=[]"
+        )
+
+        # Verify both execute() and execute_streaming() use _build_sdk_options
         execute_src = inspect.getsource(AgentSDKExecutor.execute)
         streaming_src = inspect.getsource(AgentSDKExecutor.execute_streaming)
-
-        assert "setting_sources=[]" in execute_src, (
-            "execute() missing setting_sources=[]"
+        assert "_build_sdk_options" in execute_src, (
+            "execute() must call _build_sdk_options()"
         )
-        assert "setting_sources=[]" in streaming_src, (
-            "execute_streaming() missing setting_sources=[]"
+        assert "_build_sdk_options" in streaming_src, (
+            "execute_streaming() must call _build_sdk_options()"
         )
 
 

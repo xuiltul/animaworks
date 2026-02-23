@@ -374,7 +374,7 @@ def _create_status_json(
     }
     # Only write execution_mode when explicitly specified in the character sheet.
     # When omitted, resolve_execution_mode() falls through to
-    # DEFAULT_MODEL_MODE_PATTERNS (e.g. "claude-*" → "A1").
+    # DEFAULT_MODEL_MODE_PATTERNS (e.g. "claude-*" → "S").
     explicit_mode = info.get("実行モード")
     if explicit_mode:
         status["execution_mode"] = explicit_mode

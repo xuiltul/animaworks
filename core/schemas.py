@@ -76,7 +76,7 @@ class ModelConfig(BaseModel):
     execution_mode: str | None = None  # "autonomous" or "assisted"; None = auto
     supervisor: str | None = None  # supervisor Anima name
     speciality: str | None = None  # free-text specialisation
-    resolved_mode: str | None = None  # "A1"/"A2"/"B" — resolved from config
+    resolved_mode: str | None = None  # "S"/"A"/"B" — resolved from config
     thinking: bool | None = None  # Ollama think param (None = auto: off for ollama/)
     llm_timeout: int | None = None  # LLM API呼び出しタイムアウト（秒）
 

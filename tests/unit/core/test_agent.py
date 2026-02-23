@@ -58,21 +58,21 @@ class TestResolveExecutionMode:
 
     def test_auto_non_claude_model(self, tmp_path):
         agent = _make_agent(tmp_path, model="openai/gpt-4o")
-        assert agent._resolve_execution_mode() == "a2"
+        assert agent._resolve_execution_mode() == "a"
 
     def test_auto_claude_without_sdk(self, tmp_path):
         agent = _make_agent(tmp_path, model="claude-sonnet-4-20250514")
         agent._sdk_available = False
-        assert agent._resolve_execution_mode() == "a2"
+        assert agent._resolve_execution_mode() == "a"
 
     def test_auto_claude_with_sdk(self, tmp_path):
         agent = _make_agent(tmp_path, model="claude-sonnet-4-20250514")
         agent._sdk_available = True
-        assert agent._resolve_execution_mode() == "a1"
+        assert agent._resolve_execution_mode() == "s"
 
     def test_autonomous_explicit_non_claude(self, tmp_path):
         agent = _make_agent(tmp_path, model="openai/gpt-4o", execution_mode="autonomous")
-        assert agent._resolve_execution_mode() == "a2"
+        assert agent._resolve_execution_mode() == "a"
 
 
 class TestIsClaude:
@@ -174,14 +174,14 @@ class TestRunCycle:
             assert isinstance(result, CycleResult)
             assert result.summary == "A2 response"
 
-    async def test_mode_a1_returns_result(self, tmp_path):
+    async def test_mode_s_returns_result(self, tmp_path):
         agent = _make_agent(tmp_path, model="claude-sonnet-4-20250514")
         agent._sdk_available = True
-        # Force mode a1
-        agent._resolve_execution_mode = MagicMock(return_value="a1")
+        # Force mode s (SDK mode)
+        agent._resolve_execution_mode = MagicMock(return_value="s")
 
         mock_result = MagicMock()
-        mock_result.text = "A1 response"
+        mock_result.text = "S mode response"
         mock_result.result_message = MagicMock()
         mock_result.result_message.num_turns = 3
         mock_result.result_message.session_id = "sess-1"
@@ -199,8 +199,9 @@ class TestRunCycle:
 
             result = await agent.run_cycle("Hello", trigger="manual")
             assert isinstance(result, CycleResult)
-            assert result.summary == "A1 response"
-            assert result.total_turns == 3
+            assert result.summary == "S mode response"
+            # S mode early-returns without session chaining; total_turns defaults to 0
+            assert result.total_turns == 0
 
 
 # ── Permission parsing ────────────────────────────────────

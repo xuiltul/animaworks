@@ -7,7 +7,7 @@ from __future__ import annotations
 # See LICENSE for the full license text.
 
 
-"""Shared streaming helpers for A2 / A1-Fallback / B executors.
+"""Shared streaming helpers for A / S-Fallback / B executors.
 
 Provides chunk accumulation utilities for LiteLLM streaming responses
 and a context-manager helper for converting API errors into
@@ -107,7 +107,7 @@ async def stream_error_boundary(
     Usage::
 
         text_parts: list[str] = []
-        async with stream_error_boundary(text_parts, executor_name="A2"):
+        async with stream_error_boundary(text_parts, executor_name="A"):
             async for chunk in llm_stream:
                 ...
 

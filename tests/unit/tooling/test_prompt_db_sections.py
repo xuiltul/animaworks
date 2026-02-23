@@ -196,12 +196,12 @@ class TestSectionConditions:
         expected = {
             "behavior_rules",
             "environment",
-            "messaging_a1",
+            "messaging_s",
             "messaging",
-            "communication_rules_a1",
+            "communication_rules_s",
             "communication_rules",
             "emotion_instruction",
-            "a2_reflection",
+            "a_reflection",
             "hiring_context",
         }
         assert set(SECTION_CONDITIONS.keys()) == expected
@@ -215,7 +215,7 @@ class TestSectionConditions:
     def test_specific_conditions(self) -> None:
         """Verify a few well-known condition values."""
         assert SECTION_CONDITIONS["behavior_rules"] is None
-        assert SECTION_CONDITIONS["messaging_a1"] == "mode:a1"
-        assert SECTION_CONDITIONS["messaging"] == "mode:non_a1"
-        assert SECTION_CONDITIONS["a2_reflection"] == "mode:a2"
+        assert SECTION_CONDITIONS["messaging_s"] == "mode:s"
+        assert SECTION_CONDITIONS["messaging"] == "mode:non_s"
+        assert SECTION_CONDITIONS["a_reflection"] == "mode:a"
         assert SECTION_CONDITIONS["hiring_context"] == "solo_top_level"

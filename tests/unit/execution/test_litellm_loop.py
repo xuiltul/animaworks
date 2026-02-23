@@ -1,4 +1,4 @@
-"""Tests for core.execution.litellm_loop — Mode A2: LiteLLM tool_use loop."""
+"""Tests for core.execution.litellm_loop — Mode A: LiteLLM tool_use loop."""
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -424,11 +424,11 @@ class TestToolExecutionErrorHandling:
 
 
 class TestSessionChainingExecutionMode:
-    """H1: Session chaining partial must pass execution_mode='a2'."""
+    """H1: Session chaining partial must pass execution_mode='a'."""
 
-    async def test_session_chaining_preserves_a2_mode(self, executor, anima_dir: Path):
+    async def test_session_chaining_preserves_a_mode(self, executor, anima_dir: Path):
         """When session chaining triggers, build_system_prompt must be called
-        with execution_mode='a2'."""
+        with execution_mode='a'."""
         tracker = ContextTracker(model="openai/gpt-4o", threshold=0.50)
         shortterm = ShortTermMemory(anima_dir)
 
@@ -452,11 +452,11 @@ class TestSessionChainingExecutionMode:
                 "test", system_prompt="sys", tracker=tracker, shortterm=shortterm,
             )
 
-        # Verify build_system_prompt was called with execution_mode="a2"
+        # Verify build_system_prompt was called with execution_mode="a"
         if build_spy.called:
             _, kwargs = build_spy.call_args
-            assert kwargs.get("execution_mode") == "a2", (
-                f"Expected execution_mode='a2', got {kwargs.get('execution_mode')!r}"
+            assert kwargs.get("execution_mode") == "a", (
+                f"Expected execution_mode='a', got {kwargs.get('execution_mode')!r}"
             )
 
 
