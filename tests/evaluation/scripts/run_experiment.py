@@ -31,6 +31,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from typing import Any
 
@@ -318,7 +319,7 @@ class PrimingSearchWrapper:
     def _get_recent_episodes(self) -> str:
         """Get recent episode content (last 2 days)."""
         parts = []
-        today = datetime.now().date()
+        today = now_jst().date()
         for offset in range(2):
             target_date = today - timedelta(days=offset)
             path = self.episodes_dir / f"{target_date.isoformat()}.md"
@@ -564,7 +565,7 @@ def save_trial_result(trial_result: TrialResult, output_dir: Path) -> Path:
     data = {
         "trial_id": trial_result.trial_id,
         "condition": trial_result.condition,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": now_jst().isoformat(),
         "summary": {
             "n_searches": len(trial_result.latencies),
             "mean_latency_ms": float(np.mean(trial_result.latencies))

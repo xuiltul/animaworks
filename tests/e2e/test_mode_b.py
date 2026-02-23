@@ -10,6 +10,7 @@ Post-call: episode recording and knowledge extraction.
 from __future__ import annotations
 
 from datetime import date
+from core.time_utils import now_jst
 
 import pytest
 
@@ -93,7 +94,7 @@ class TestModeBMock:
         # Simulate post-call knowledge extraction (formerly done by old AssistedExecutor)
         knowledge_text = "France's capital is Paris — useful geographic fact."
         from datetime import datetime
-        topic = datetime.now().strftime("learned_%Y%m%d_%H%M%S")
+        topic = now_jst().strftime("learned_%Y%m%d_%H%M%S")
         agent.memory.write_knowledge(topic, knowledge_text)
 
         # Check knowledge file was created

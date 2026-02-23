@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -146,7 +147,7 @@ class TestDMApiReturnsMessagesFromActivityLog:
         bob_dir = _make_anima_dir(animas_dir, "bob")
 
         # Log a conversation via ActivityLogger
-        ts_base = datetime.now().isoformat()
+        ts_base = now_jst().isoformat()
 
         alice_activity = ActivityLogger(alice_dir)
         alice_activity.log(
@@ -210,10 +211,10 @@ class TestDMApiReturnsMessagesFromActivityLog:
 
         # Both alice and bob log the same message (dm_sent / dm_received)
         # with identical timestamp and content
-        fixed_ts = datetime.now().isoformat()
+        fixed_ts = now_jst().isoformat()
 
         # Write directly to activity_log JSONL for precise timestamp control
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        date_str = now_jst().strftime("%Y-%m-%d")
         alice_log = alice_dir / "activity_log" / f"{date_str}.jsonl"
         bob_log = bob_dir / "activity_log" / f"{date_str}.jsonl"
 

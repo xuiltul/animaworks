@@ -12,6 +12,7 @@ import json
 import random
 import yaml
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from typing import Literal
 
@@ -246,7 +247,7 @@ detailed information about {topic} relevant to {domain}.
 - External Resource C
 
 ---
-*Last updated: {datetime.now().strftime('%Y-%m-%d')}*
+*Last updated: {now_jst().strftime('%Y-%m-%d')}*
 """
 
     def _get_knowledge_topics(self, domain: str) -> list[str]:
@@ -285,7 +286,7 @@ detailed information about {topic} relevant to {domain}.
         files = []
 
         # Generate episodes for consecutive days
-        start_date = datetime.now() - timedelta(days=count)
+        start_date = now_jst() - timedelta(days=count)
 
         for i in range(count):
             date = start_date + timedelta(days=i)
@@ -588,7 +589,7 @@ Write in Japanese if the domain is business, otherwise use English."""
             scenario_type=scenario_type,
             domain=domain,  # type: ignore
             turns=turns,
-            metadata={"generated_at": datetime.now().isoformat()}
+            metadata={"generated_at": now_jst().isoformat()}
         )
 
     def _select_relevant_memories(

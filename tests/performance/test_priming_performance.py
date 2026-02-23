@@ -21,6 +21,7 @@ import asyncio
 import statistics
 import time
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import patch
 
@@ -102,7 +103,7 @@ def anima_dir_with_data(tmp_path):
 
     # Create 50 episode files
     for i in range(50):
-        episode_date = datetime.now().date() - timedelta(days=i)
+        episode_date = now_jst().date() - timedelta(days=i)
         content = f"""# {episode_date} 行動ログ
 
 ## 10:00 — タスク {i}
@@ -375,7 +376,7 @@ async def test_concurrent_priming(tmp_path):
             encoding="utf-8",
         )
 
-        today = datetime.now().date()
+        today = now_jst().date()
         (anima_dir / "episodes" / f"{today}.md").write_text(
             f"# {today} Log for Anima {i}\n\n## 10:00 — Task\n\nContent.",
             encoding="utf-8",

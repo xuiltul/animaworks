@@ -20,6 +20,7 @@ corresponding methods are added.
 
 import json
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -651,7 +652,7 @@ class TestDailyConsolidateIncludesValidityReview:
         self, engine: object, temp_anima_dir: Path,
     ) -> None:
         """daily_consolidate result dict includes validity_review key."""
-        today = datetime.now().date()
+        today = now_jst().date()
         episode_file = engine.episodes_dir / f"{today}.md"
         episode_file.write_text(
             "## 10:00 — テスト\n\nテストエピソード。\n",

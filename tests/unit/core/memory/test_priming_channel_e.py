@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 
 import pytest
@@ -82,7 +83,7 @@ class TestFallbackChannels:
         assert result == ""
 
     async def test_reads_general_channel(self, anima_dir, shared_dir):
-        now = datetime.now()
+        now = now_jst()
         _write_channel(shared_dir, "general", [
             {"ts": now.isoformat(), "from": "kotoha", "text": "Hello!", "source": "anima"},
         ])
@@ -93,7 +94,7 @@ class TestFallbackChannels:
         assert "#general" in result
 
     async def test_reads_ops_channel(self, anima_dir, shared_dir):
-        now = datetime.now()
+        now = now_jst()
         _write_channel(shared_dir, "ops", [
             {"ts": now.isoformat(), "from": "yuki", "text": "Server down", "source": "anima"},
         ])
@@ -103,7 +104,7 @@ class TestFallbackChannels:
         assert "Server down" in result
 
     async def test_last_5_entries(self, anima_dir, shared_dir):
-        now = datetime.now()
+        now = now_jst()
         entries = [
             {"ts": (now - timedelta(minutes=10 - i)).isoformat(), "from": f"anima{i}", "text": f"msg{i}", "source": "anima"}
             for i in range(10)
@@ -116,7 +117,7 @@ class TestFallbackChannels:
         assert "msg9" in result
 
     async def test_human_messages_within_24h(self, anima_dir, shared_dir):
-        now = datetime.now()
+        now = now_jst()
         entries = [
             {"ts": (now - timedelta(hours=2)).isoformat(), "from": "taka", "text": "Error resolved", "source": "human"},
             {"ts": (now - timedelta(hours=30)).isoformat(), "from": "taka", "text": "Old message", "source": "human"},
@@ -128,7 +129,7 @@ class TestFallbackChannels:
         assert "[human]" in result
 
     async def test_mentions_included(self, anima_dir, shared_dir):
-        now = datetime.now()
+        now = now_jst()
         entries = [
             {"ts": (now - timedelta(hours=48)).isoformat(), "from": "mio", "text": "@sakura please check", "source": "anima"},
             # Add recent entries to push this beyond last-5 window
@@ -153,7 +154,7 @@ class TestFallbackChannels:
 
 class TestPrimeMemoriesWithActivity:
     async def test_includes_recent_activity(self, anima_dir, shared_dir, monkeypatch):
-        now = datetime.now()
+        now = now_jst()
         _write_channel(shared_dir, "general", [
             {"ts": now.isoformat(), "from": "kotoha", "text": "Test msg", "source": "anima"},
         ])
@@ -182,7 +183,7 @@ class TestPrimeMemoriesWithActivity:
 
     async def test_fallback_populates_recent_activity(self, anima_dir, shared_dir, monkeypatch):
         """When _channel_b_recent_activity falls back to old channels, result goes into recent_activity."""
-        now = datetime.now()
+        now = now_jst()
         _write_channel(shared_dir, "general", [
             {"ts": now.isoformat(), "from": "kotoha", "text": "Fallback msg", "source": "anima"},
         ])

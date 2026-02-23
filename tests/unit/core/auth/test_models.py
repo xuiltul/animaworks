@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from core.time_utils import now_jst
 
 import pytest
 from pydantic import ValidationError
@@ -45,6 +46,7 @@ class TestAuthUser:
         assert user.password_hash is None
 
     def test_created_at_is_auto_set(self):
+        # AuthUser.created_at uses datetime.now (naive) as default
         before = datetime.now()
         user = AuthUser(username="dave")
         after = datetime.now()

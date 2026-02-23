@@ -14,6 +14,7 @@ Install with: pip install 'animaworks[rag]'
 import asyncio
 import os
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 
 import pytest
@@ -165,11 +166,11 @@ def test_e2e_temporal_decay_ordering(anima_dir, indexer, retriever):
     )
 
     # Set old_file's mtime to 90 days ago
-    old_ts = (datetime.now() - timedelta(days=90)).timestamp()
+    old_ts = (now_jst() - timedelta(days=90)).timestamp()
     os.utime(old_file, (old_ts, old_ts))
 
     # Set new_file's mtime to now (already default, but be explicit)
-    new_ts = datetime.now().timestamp()
+    new_ts = now_jst().timestamp()
     os.utime(new_file, (new_ts, new_ts))
 
     # Index both files

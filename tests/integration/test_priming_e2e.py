@@ -11,6 +11,7 @@ consolidation processes, and performance benchmarks.
 
 import time
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import patch
 
@@ -94,7 +95,7 @@ def anima_dir(tmp_path: Path) -> Path:
     )
 
     # episodes/ — 2 files (today and yesterday)
-    today = datetime.now().date()
+    today = now_jst().date()
     yesterday = today - timedelta(days=1)
 
     (anima_dir / "episodes" / f"{today}.md").write_text(

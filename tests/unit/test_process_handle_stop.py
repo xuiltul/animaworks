@@ -456,7 +456,7 @@ class TestHealthCheckStoppingDetection:
             shared_dir=tmp_path / "shared",
         )
         handle.state = ProcessState.STOPPING
-        handle.stats.started_at = datetime.now() - timedelta(seconds=10)
+        handle.stats.started_at = now_jst() - timedelta(seconds=10)
         handle.process = MagicMock()
         handle.process.poll.return_value = None
 

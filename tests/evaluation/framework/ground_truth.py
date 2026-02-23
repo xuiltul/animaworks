@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +66,7 @@ class GroundTruthManager:
         annotation_set = AnnotationSet(
             annotator_id=annotator_id,
             metadata={
-                "created_at": datetime.now().isoformat(),
+                "created_at": now_jst().isoformat(),
                 "num_scenarios": len(scenarios),
                 "domain": memory_base.domain,
                 "size": memory_base.size
@@ -127,7 +128,7 @@ class GroundTruthManager:
             relevant_memories=relevant_memories,
             irrelevant_memories=irrelevant_paths,
             annotator_id=annotator_id,
-            timestamp=datetime.now().isoformat()
+            timestamp=now_jst().isoformat()
         )
 
     # ── Storage ──────────────────────────────────────────────────────────────
@@ -356,7 +357,7 @@ class GroundTruthManager:
         report = {
             "annotator_1": annotator1.annotator_id,
             "annotator_2": annotator2.annotator_id,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_jst().isoformat(),
             "agreement_metrics": agreement,
             "interpretation": self._interpret_kappa(agreement["cohens_kappa"])
         }

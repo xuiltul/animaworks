@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import patch
 
@@ -50,7 +51,7 @@ class TestEpisodeCollection:
     def test_collect_recent_episodes_with_data(self, consolidation_engine):
         """Test collecting episodes from existing files."""
         # Create today's episode file
-        today = datetime.now().date()
+        today = now_jst().date()
         episode_file = consolidation_engine.episodes_dir / f"{today}.md"
 
         episode_content = """# エピソード記憶
@@ -82,7 +83,7 @@ class TestEpisodeCollection:
     def test_collect_recent_episodes_with_cutoff(self, consolidation_engine):
         """Test that old episodes are excluded."""
         # Create yesterday's episode file
-        yesterday = datetime.now().date() - timedelta(days=1)
+        yesterday = now_jst().date() - timedelta(days=1)
         episode_file = consolidation_engine.episodes_dir / f"{yesterday}.md"
 
         episode_content = """# エピソード記憶
@@ -130,7 +131,7 @@ class TestEpisodeCollectionGlobAndFallback:
 
     def test_collect_suffixed_episode_files(self, consolidation_engine):
         """Suffixed files with ## HH:MM headers are discovered and parsed."""
-        today = datetime.now().date()
+        today = now_jst().date()
         episode_file = (
             consolidation_engine.episodes_dir / f"{today}_heartbeat_check.md"
         )
@@ -154,7 +155,7 @@ class TestEpisodeCollectionGlobAndFallback:
 
     def test_collect_suffixed_only_no_standard(self, consolidation_engine):
         """Collection works when only suffixed files exist (no YYYY-MM-DD.md)."""
-        today = datetime.now().date()
+        today = now_jst().date()
         # No standard file — only suffixed
         suffixed = consolidation_engine.episodes_dir / f"{today}_cron_run.md"
         suffixed.write_text(
@@ -171,7 +172,7 @@ class TestEpisodeCollectionGlobAndFallback:
 
     def test_collect_mixed_standard_and_suffixed(self, consolidation_engine):
         """Both standard and suffixed files are collected together."""
-        today = datetime.now().date()
+        today = now_jst().date()
 
         # Standard file
         standard = consolidation_engine.episodes_dir / f"{today}.md"
@@ -198,7 +199,7 @@ class TestEpisodeCollectionGlobAndFallback:
 
     def test_fallback_no_time_headers(self, consolidation_engine):
         """Files without ## HH:MM headers use mtime; entire content is one entry."""
-        today = datetime.now().date()
+        today = now_jst().date()
         episode_file = (
             consolidation_engine.episodes_dir / f"{today}_raw_notes.md"
         )
@@ -206,7 +207,7 @@ class TestEpisodeCollectionGlobAndFallback:
         episode_file.write_text(raw_content, encoding="utf-8")
 
         # Set mtime to a recent time (within the cutoff window)
-        recent_ts = (datetime.now() - timedelta(hours=1)).timestamp()
+        recent_ts = (now_jst() - timedelta(hours=1)).timestamp()
         os.utime(episode_file, (recent_ts, recent_ts))
 
         entries = consolidation_engine._collect_recent_episodes(hours=24)
@@ -220,7 +221,7 @@ class TestEpisodeCollectionGlobAndFallback:
 
     def test_fallback_mtime_respects_cutoff(self, consolidation_engine):
         """Files whose mtime falls outside the cutoff window are excluded."""
-        today = datetime.now().date()
+        today = now_jst().date()
         episode_file = (
             consolidation_engine.episodes_dir / f"{today}_old_notes.md"
         )
@@ -230,7 +231,7 @@ class TestEpisodeCollectionGlobAndFallback:
         )
 
         # Set mtime to 48 hours ago — outside the default 24h window
-        old_ts = (datetime.now() - timedelta(hours=48)).timestamp()
+        old_ts = (now_jst() - timedelta(hours=48)).timestamp()
         os.utime(episode_file, (old_ts, old_ts))
 
         entries = consolidation_engine._collect_recent_episodes(hours=24)
@@ -239,7 +240,7 @@ class TestEpisodeCollectionGlobAndFallback:
 
     def test_dedup_identical_content(self, consolidation_engine):
         """Duplicate entries (same first 200 chars) are deduplicated to one."""
-        today = datetime.now().date()
+        today = now_jst().date()
         shared_body = "重複テスト内容: " + "A" * 200
 
         # Standard file
@@ -263,7 +264,7 @@ class TestEpisodeCollectionGlobAndFallback:
 
     def test_dedup_different_content(self, consolidation_engine):
         """Entries with different content (first 200 chars) are both kept."""
-        today = datetime.now().date()
+        today = now_jst().date()
 
         # Standard file
         standard = consolidation_engine.episodes_dir / f"{today}.md"
@@ -290,7 +291,7 @@ class TestEpisodeCollectionGlobAndFallback:
 
     def test_collect_multiple_suffixed_files(self, consolidation_engine):
         """Multiple suffixed files for the same date are all collected."""
-        today = datetime.now().date()
+        today = now_jst().date()
 
         files_data = [
             (f"{today}_heartbeat.md", "## 08:00 — ハートビート1\n\nチェック完了\n"),

@@ -13,6 +13,7 @@ Tests cover:
 
 import json
 from datetime import datetime
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -139,7 +140,7 @@ def mock_agent_core():
         async def mock_run_cycle(prompt, trigger="message:human", **kwargs):
             from core.schemas import CycleResult
             return CycleResult(
-                timestamp=datetime.now(),
+                timestamp=now_jst(),
                 trigger=trigger,
                 action="respond",
                 summary="This is a mocked response from the agent. "
@@ -286,7 +287,7 @@ PostgreSQL for persistence, Redis for caching.
     )
 
     # Create a recent episode
-    today = datetime.now().date()
+    today = now_jst().date()
     (anima_dir / "episodes" / f"{today}.md").write_text(
         f"""# {today} Activity Log
 
@@ -429,7 +430,7 @@ async def test_multi_anima_isolation(tmp_path: Path, mock_llm):
         )
 
         # Create unique episode
-        today = datetime.now().date()
+        today = now_jst().date()
         (anima_dir / "episodes" / f"{today}.md").write_text(
             f"""# {today} Activity Log
 
@@ -538,7 +539,7 @@ async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket)
     shared_dir.mkdir()
 
     # Create episode for consolidation
-    today = datetime.now().date()
+    today = now_jst().date()
     (anima_dir / "episodes" / f"{today}.md").write_text(
         f"""# {today} Activity Log
 
@@ -644,7 +645,7 @@ async def test_conversation_finalization_creates_episode(full_anima_environment,
     await conv_memory.finalize_session()
 
     # Verify episode was created
-    today = datetime.now().date()
+    today = now_jst().date()
     episode_file = anima_dir / "episodes" / f"{today}.md"
     assert episode_file.exists()
 

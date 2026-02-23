@@ -12,6 +12,7 @@ Issue: 20260218_episode-dedup-state-autoupdate-resolution-propagation
 import json
 import re
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 
 import pytest
@@ -211,7 +212,7 @@ class TestFinalizeIfSessionEnded:
     async def test_skips_recent_session(self, conv_memory):
         """Returns False when last turn is recent (within SESSION_GAP_MINUTES)."""
         state = conv_memory.load()
-        recent_ts = datetime.now().isoformat()
+        recent_ts = now_jst().isoformat()
         state.turns = [
             ConversationTurn(role="human", content="hi", timestamp=recent_ts),
             ConversationTurn(role="assistant", content="hello", timestamp=recent_ts),
@@ -226,7 +227,7 @@ class TestFinalizeIfSessionEnded:
     @pytest.mark.asyncio
     async def test_triggers_on_old_session(self, conv_memory):
         """Returns True when last turn is older than SESSION_GAP_MINUTES."""
-        old_ts = (datetime.now() - timedelta(minutes=SESSION_GAP_MINUTES + 5)).isoformat()
+        old_ts = (now_jst() - timedelta(minutes=SESSION_GAP_MINUTES + 5)).isoformat()
         state = conv_memory.load()
         state.turns = [
             ConversationTurn(role="human", content="msg 1", timestamp=old_ts),
@@ -429,9 +430,9 @@ class TestResolutions:
         shared_dir = get_shared_dir()
         path = shared_dir / "resolutions.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
-        old_ts = (datetime.now() - timedelta(days=10)).isoformat()
+        old_ts = (now_jst() - timedelta(days=10)).isoformat()
         old_entry = json.dumps({"ts": old_ts, "issue": "古い問題", "resolver": "test"})
-        new_entry = json.dumps({"ts": datetime.now().isoformat(), "issue": "新しい問題", "resolver": "test"})
+        new_entry = json.dumps({"ts": now_jst().isoformat(), "issue": "新しい問題", "resolver": "test"})
         path.write_text(old_entry + "\n" + new_entry + "\n", encoding="utf-8")
 
         results = mm.read_resolutions(days=7)

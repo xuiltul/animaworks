@@ -25,6 +25,7 @@ activity log recording quality, and fix priming data loss:
 
 import json
 from datetime import datetime, timedelta
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -75,7 +76,7 @@ class TestReadSharedChannels:
 
         channels_dir = shared_dir / "channels"
         channels_dir.mkdir(parents=True)
-        now = datetime.now()
+        now = now_jst()
         entry = json.dumps({
             "ts": now.isoformat(),
             "from": "alice",
@@ -117,7 +118,7 @@ class TestReadSharedChannels:
 
         channels_dir = shared_dir / "channels"
         channels_dir.mkdir(parents=True)
-        now = datetime.now()
+        now = now_jst()
         lines = [
             "this is not json",
             json.dumps({"ts": now.isoformat(), "from": "bob", "text": "Valid", "source": "anima"}),
@@ -145,7 +146,7 @@ class TestReadSharedChannels:
         # but entry #2 has a mention of @test-anima
         entries = []
         for i in range(10):
-            ts = (datetime.now() - timedelta(hours=10 - i)).isoformat()
+            ts = (now_jst() - timedelta(hours=10 - i)).isoformat()
             text = f"Message {i}"
             if i == 2:
                 text = "Hey @test-anima please review"
@@ -174,7 +175,7 @@ class TestReadSharedChannels:
         # Old entries (outside latest N) but one is a recent human post
         entries = []
         for i in range(10):
-            ts = (datetime.now() - timedelta(hours=10 - i)).isoformat()
+            ts = (now_jst() - timedelta(hours=10 - i)).isoformat()
             source = "human" if i == 1 else "anima"
             entries.append(json.dumps({
                 "ts": ts, "from": f"user{i}", "text": f"Msg {i}", "source": source,
@@ -200,7 +201,7 @@ class TestReadSharedChannels:
         # 20 entries, all anima-source (no mentions, no human posts)
         entries = []
         for i in range(20):
-            ts = (datetime.now() - timedelta(days=2, hours=20 - i)).isoformat()
+            ts = (now_jst() - timedelta(days=2, hours=20 - i)).isoformat()
             entries.append(json.dumps({
                 "ts": ts, "from": f"bot{i}", "text": f"Bot message {i}", "source": "anima",
             }, ensure_ascii=False))
@@ -229,7 +230,7 @@ class TestChannelBRecentActivity:
         # Create shared channel with an entry
         channels_dir = shared_dir / "channels"
         channels_dir.mkdir(parents=True)
-        now = datetime.now()
+        now = now_jst()
         channel_entry = json.dumps({
             "ts": now.isoformat(),
             "from": "alice",
@@ -291,7 +292,7 @@ class TestMessengerSendActivityLog:
         messenger.send(to="receiver", content="Hello receiver!")
 
         # Check activity_log
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = now_jst().strftime("%Y-%m-%d")
         log_file = anima_dir / "activity_log" / f"{today}.jsonl"
         assert log_file.exists(), "activity_log JSONL file should exist"
 
@@ -523,7 +524,7 @@ class TestFormatForPrimingContentTrim:
         long_text = "A" * 300
         entries = [
             ActivityEntry(
-                ts=datetime.now().isoformat(),
+                ts=now_jst().isoformat(),
                 type="tool_use",
                 content=long_text,
                 tool="web_search",
@@ -543,7 +544,7 @@ class TestFormatForPrimingContentTrim:
         text = "B" * 100
         entries = [
             ActivityEntry(
-                ts=datetime.now().isoformat(),
+                ts=now_jst().isoformat(),
                 type="message_received",
                 content=text,
                 from_person="user",
@@ -559,7 +560,7 @@ class TestFormatForPrimingContentTrim:
         long_text = "C" * 500
         entries = [
             ActivityEntry(
-                ts=datetime.now().isoformat(),
+                ts=now_jst().isoformat(),
                 type="tool_use",
                 content=long_text,
                 tool="web_search",
@@ -729,7 +730,7 @@ class TestActivityLoggerBasic:
         activity = ActivityLogger(anima_dir)
         activity.log("dm_sent", content="Hello", to_person="bob")
 
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = now_jst().strftime("%Y-%m-%d")
         log_file = anima_dir / "activity_log" / f"{today}.jsonl"
         assert log_file.exists()
 
@@ -792,7 +793,7 @@ class TestMessengerSendIntegration:
         messenger.send(to="bob", content="Test message")
 
         # Check activity log
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = now_jst().strftime("%Y-%m-%d")
         activity_file = anima_dir / "activity_log" / f"{today}.jsonl"
         assert activity_file.exists()
         activity_entries = [

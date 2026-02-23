@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
+from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -226,7 +227,7 @@ class TestCrossContextFlow:
 
         # Replicate the A-3 logic from run_heartbeat
         if result.summary and "HEARTBEAT_OK" not in result.summary:
-            ts = datetime.now().strftime("%H:%M")
+            ts = now_jst().strftime("%H:%M")
             episode_entry = (
                 f"## {ts} ハートビート活動\n\n"
                 f"{result.summary[:500]}"
@@ -320,7 +321,7 @@ class TestCrossContextFlow:
         history_dir = anima_dir / "shortterm" / "heartbeat_history"
         history_dir.mkdir(parents=True, exist_ok=True)
         entry = json.dumps({
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": now_jst().isoformat(),
             "trigger": "heartbeat",
             "action": "checked",
             "summary": result.summary,
@@ -352,7 +353,7 @@ class TestCrossContextFlow:
         mm._indexer_initialized = True
 
         if result.summary and "HEARTBEAT_OK" not in result.summary:
-            ts = datetime.now().strftime("%H:%M")
+            ts = now_jst().strftime("%H:%M")
             episode_entry = (
                 f"## {ts} ハートビート活動\n\n"
                 f"{result.summary[:500]}"
