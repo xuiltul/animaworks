@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 import pytest
 
 from core.schemas import CycleResult, AnimaStatus
+from core.tooling.handler import active_session_type
 
 
 # ── Helpers ───────────────────────────────────────────────
@@ -23,6 +24,11 @@ def _make_cycle_result(**kwargs) -> CycleResult:
     defaults = dict(trigger="test", action="responded", summary="done", duration_ms=100)
     defaults.update(kwargs)
     return CycleResult(**defaults)
+
+
+def _wire_session_type(dp) -> None:
+    """Wire set_active_session_type to use the real ContextVar so reset() works."""
+    dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
 
 # ── DigitalAnima construction ────────────────────────────
@@ -42,8 +48,10 @@ class TestDigitalAnimaInit:
 
             assert dp.name == "alice"
             assert dp.anima_dir == anima_dir
-            assert dp._status == "idle"
-            assert dp._current_task == ""
+            assert dp._status_slots["conversation"] == "idle"
+            assert dp._status_slots["background"] == "idle"
+            assert dp._task_slots["conversation"] == ""
+            assert dp._task_slots["background"] == ""
             assert dp._last_heartbeat is None
             assert dp._last_activity is None
 
@@ -196,11 +204,12 @@ class TestProcessMessage:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(return_value=_make_cycle_result(summary="Hello!"))
 
             result = await dp.process_message("Hi", from_person="human")
             assert result == "Hello!"
-            assert dp._status == "idle"
+            assert dp._status_slots["conversation"] == "idle"
 
     async def test_status_transitions(self, data_dir, make_anima):
         anima_dir = make_anima("alice")
@@ -219,17 +228,18 @@ class TestProcessMessage:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
 
             observed_statuses = []
 
             async def mock_run_cycle(prompt, trigger="manual", **kwargs):
-                observed_statuses.append(dp._status)
+                observed_statuses.append(dp._status_slots["conversation"])
                 return _make_cycle_result()
 
             dp.agent.run_cycle = mock_run_cycle
             await dp.process_message("test")
             assert "thinking" in observed_statuses
-            assert dp._status == "idle"
+            assert dp._status_slots["conversation"] == "idle"
 
     async def test_exception_resets_status(self, data_dir, make_anima):
         anima_dir = make_anima("alice")
@@ -246,11 +256,12 @@ class TestProcessMessage:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(side_effect=RuntimeError("fail"))
 
             with pytest.raises(RuntimeError):
                 await dp.process_message("test")
-            assert dp._status == "idle"
+            assert dp._status_slots["conversation"] == "idle"
 
 
 # ── run_heartbeat ─────────────────────────────────────────
@@ -271,6 +282,7 @@ class TestRunHeartbeat:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(return_value=_make_cycle_result())
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
@@ -278,7 +290,7 @@ class TestRunHeartbeat:
             result = await dp.run_heartbeat()
             assert isinstance(result, CycleResult)
             assert dp._last_heartbeat is not None
-            assert dp._status == "idle"
+            assert dp._status_slots["background"] == "idle"
 
 
 # ── run_cron_task ─────────────────────────────────────────
@@ -296,12 +308,14 @@ class TestRunCronTask:
             MockMM.return_value.read_model_config.return_value = MagicMock()
 
             from core.anima import DigitalAnima
+            from core.tooling.handler import active_session_type
             dp = DigitalAnima(anima_dir, shared_dir)
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
             dp.agent.run_cycle = AsyncMock(return_value=_make_cycle_result())
 
             result = await dp.run_cron_task("daily_report", "Generate report")
             assert isinstance(result, CycleResult)
-            assert dp._status == "idle"
+            assert dp._status_slots["background"] == "idle"
 
 
 # ── process_greet ────────────────────────────────────────
@@ -323,6 +337,7 @@ class TestProcessGreet:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(
                 return_value=_make_cycle_result(
                     summary='こんにちは！今は待機中です。<!-- emotion: {"emotion": "smile"} -->'
@@ -349,6 +364,7 @@ class TestProcessGreet:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(
                 return_value=_make_cycle_result(summary="Hello!")
             )
@@ -379,6 +395,7 @@ class TestProcessGreet:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(
                 return_value=_make_cycle_result(summary="Hello!")
             )
@@ -409,6 +426,7 @@ class TestProcessGreet:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(
                 return_value=_make_cycle_result(summary="Hi there!")
             )
@@ -439,15 +457,16 @@ class TestProcessGreet:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
 
-            # Set pre-existing status
-            dp._status = "working"
-            dp._current_task = "Report generation"
+            # Set pre-existing status (conversation slot)
+            dp._status_slots["conversation"] = "working"
+            dp._task_slots["conversation"] = "Report generation"
 
             observed_statuses = []
 
             async def mock_run_cycle(prompt, trigger="manual", **kwargs):
-                observed_statuses.append(dp._status)
+                observed_statuses.append(dp._status_slots["conversation"])
                 return _make_cycle_result(summary="Hello!")
 
             dp.agent.run_cycle = mock_run_cycle
@@ -457,8 +476,8 @@ class TestProcessGreet:
             # During greet, status should be "greeting"
             assert "greeting" in observed_statuses
             # After greet, status should be restored
-            assert dp._status == "working"
-            assert dp._current_task == "Report generation"
+            assert dp._status_slots["conversation"] == "working"
+            assert dp._task_slots["conversation"] == "Report generation"
 
     async def test_greet_emotion_fallback(self, data_dir, make_anima):
         anima_dir = make_anima("alice")
@@ -475,6 +494,7 @@ class TestProcessGreet:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             # No emotion tag in response
             dp.agent.run_cycle = AsyncMock(
                 return_value=_make_cycle_result(summary="Plain greeting")
@@ -495,16 +515,17 @@ class TestProcessGreet:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
-            dp._status = "working"
-            dp._current_task = "Some task"
+            _wire_session_type(dp)
+            dp._status_slots["conversation"] = "working"
+            dp._task_slots["conversation"] = "Some task"
             dp.agent.run_cycle = AsyncMock(side_effect=RuntimeError("fail"))
 
             with pytest.raises(RuntimeError):
                 await dp.process_greet()
 
             # Status should be restored even after exception
-            assert dp._status == "working"
-            assert dp._current_task == "Some task"
+            assert dp._status_slots["conversation"] == "working"
+            assert dp._task_slots["conversation"] == "Some task"
 
 
 # ── Conversation data-loss fix tests ─────────────────────
@@ -533,6 +554,7 @@ class TestProcessMessageConversationSave:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
 
             # Track call order via a shared list
             call_order: list[str] = []
@@ -575,6 +597,7 @@ class TestProcessMessageConversationSave:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(side_effect=RuntimeError("boom"))
 
             with pytest.raises(RuntimeError):
@@ -615,6 +638,7 @@ class TestProcessMessageConversationSave:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(
                 return_value=_make_cycle_result(summary="Great answer")
             )
@@ -656,6 +680,7 @@ class TestProcessMessageStreamConversationSave:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
 
             call_order: list[str] = []
             MockConv.return_value.append_turn.side_effect = (
@@ -703,6 +728,7 @@ class TestProcessMessageStreamConversationSave:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {"type": "text_delta", "text": "partial "}
@@ -749,6 +775,7 @@ class TestProcessMessageStreamConversationSave:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 raise RuntimeError("immediate failure")
@@ -788,6 +815,7 @@ class TestProcessMessageStreamConversationSave:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {"type": "text_delta", "text": "Full "}
@@ -838,6 +866,7 @@ class TestProcessGreetConversationSave:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
             dp.agent.run_cycle = AsyncMock(side_effect=RuntimeError("greet failed"))
 
             with pytest.raises(RuntimeError):

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.schemas import Message
-from core.tooling.handler import ToolHandler
+from core.tooling.handler import ToolHandler, active_session_type
 
 
 def _make_handler(tmp_path: Path) -> ToolHandler:
@@ -81,6 +81,7 @@ class TestToolHandlerDepthLimitError:
     def test_depth_limit_error_does_not_track_replied_to(self, tmp_path):
         """When send() is blocked, replied_to should NOT be updated."""
         handler = _make_handler(tmp_path)
+        token = active_session_type.set("chat")
 
         messenger = MagicMock()
         messenger.anima_name = "test"
@@ -95,18 +96,22 @@ class TestToolHandlerDepthLimitError:
 
         mock_config = MagicMock()
         mock_config.external_messaging = MagicMock()
-        with (
-            patch("core.config.models.load_config", return_value=mock_config),
-            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch("core.outbound.resolve_recipient", return_value=None),
-        ):
-            handler._handle_send_message({"to": "bob", "content": "hello", "intent": "report"})
+        try:
+            with (
+                patch("core.config.models.load_config", return_value=mock_config),
+                patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+                patch("core.outbound.resolve_recipient", return_value=None),
+            ):
+                handler._handle_send_message({"to": "bob", "content": "hello", "intent": "report"})
 
-        assert "bob" not in handler._replied_to
+            assert "bob" not in handler.replied_to
+        finally:
+            active_session_type.reset(token)
 
     def test_successful_send_still_tracks_replied_to(self, tmp_path):
         """Normal send should still track replied_to as before."""
         handler = _make_handler(tmp_path)
+        token = active_session_type.set("chat")
 
         messenger = MagicMock()
         messenger.anima_name = "test"
@@ -121,15 +126,18 @@ class TestToolHandlerDepthLimitError:
 
         mock_config = MagicMock()
         mock_config.external_messaging = MagicMock()
-        with (
-            patch("core.config.models.load_config", return_value=mock_config),
-            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch("core.outbound.resolve_recipient", return_value=None),
-        ):
-            result = handler._handle_send_message({"to": "bob", "content": "hello", "intent": "report"})
+        try:
+            with (
+                patch("core.config.models.load_config", return_value=mock_config),
+                patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+                patch("core.outbound.resolve_recipient", return_value=None),
+            ):
+                result = handler._handle_send_message({"to": "bob", "content": "hello", "intent": "report"})
 
-        assert "bob" in handler._replied_to
-        assert "Message sent to bob" in result
+            assert "bob" in handler.replied_to
+            assert "Message sent to bob" in result
+        finally:
+            active_session_type.reset(token)
 
 
 class TestToolOutputTruncation:

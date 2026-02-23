@@ -415,7 +415,7 @@ class TestJournalOpenRecoversOrphan:
         from core.memory.streaming_journal import StreamingJournal
 
         # Create an orphaned journal (simulate previous crash)
-        journal_path = journal_anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = journal_anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         orphan_data = json.dumps({
             "ev": "start",
             "trigger": "heartbeat",
@@ -448,7 +448,7 @@ class TestJournalOpenRecoversOrphan:
         from core.memory.streaming_journal import StreamingJournal
 
         # Write an orphan with some text
-        journal_path = journal_anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = journal_anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         lines = [
             json.dumps({"ev": "start", "trigger": "chat", "from": "tester",
                          "session_id": "orphan-1",
@@ -468,7 +468,7 @@ class TestJournalOpenRecoversOrphan:
         """Opening without existing journal should work normally (no recovery)."""
         from core.memory.streaming_journal import StreamingJournal
 
-        journal_path = journal_anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = journal_anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         assert not journal_path.exists()
 
         journal = StreamingJournal(journal_anima_dir)

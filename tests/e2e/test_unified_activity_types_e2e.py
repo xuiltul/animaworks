@@ -19,6 +19,7 @@ import pytest
 from core.memory.activity import ActivityLogger, ActivityEntry
 from core.messenger import InboxItem
 from core.schemas import CycleResult
+from core.tooling.handler import active_session_type
 
 
 # ── Helpers ───────────────────────────────────────────────
@@ -106,6 +107,7 @@ class TestHeartbeatStartSummary:
 
             from core.anima import DigitalAnima
             anima = DigitalAnima(anima_dir, shared_dir)
+            anima.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
             await anima.run_heartbeat()
 
             # Verify activity log
@@ -152,6 +154,7 @@ class TestMessageReceivedSummary:
 
             from core.anima import DigitalAnima
             anima = DigitalAnima(anima_dir, shared_dir)
+            anima.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
             await anima.process_message(test_content, from_person="user")
 
             entries = _read_activity_entries(anima_dir)
@@ -228,6 +231,7 @@ class TestDmReceivedSummary:
 
             from core.anima import DigitalAnima
             anima = DigitalAnima(anima_dir, shared_dir)
+            anima.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
             await anima.run_heartbeat()
 
             entries = _read_activity_entries(anima_dir)

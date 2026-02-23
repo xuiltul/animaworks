@@ -21,6 +21,7 @@ import pytest
 
 from core.messenger import InboxItem
 from core.schemas import Message
+from core.tooling.handler import active_session_type
 
 
 # ══════════════════════════════════════════════════════════
@@ -56,6 +57,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -115,6 +117,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -179,6 +182,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -234,6 +238,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -293,6 +298,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -347,6 +353,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -397,6 +404,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -449,6 +457,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {

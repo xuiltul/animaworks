@@ -13,6 +13,7 @@ import re
 from datetime import date, timedelta
 from pathlib import Path
 
+from core.memory._io import atomic_write_text
 from core.paths import get_common_knowledge_dir, get_common_skills_dir, get_company_dir, get_shared_dir
 from core.schemas import ModelConfig, SkillMeta
 
@@ -273,10 +274,10 @@ class MemoryManager:
         self._rag.index_file(path, "episodes")
 
     def update_state(self, content: str) -> None:
-        (self.state_dir / "current_task.md").write_text(content, encoding="utf-8")
+        atomic_write_text(self.state_dir / "current_task.md", content)
 
     def update_pending(self, content: str) -> None:
-        (self.state_dir / "pending.md").write_text(content, encoding="utf-8")
+        atomic_write_text(self.state_dir / "pending.md", content)
 
     def write_knowledge(self, topic: str, content: str) -> None:
         safe = re.sub(r"[^\w\-_]", "_", topic)

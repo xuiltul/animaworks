@@ -107,8 +107,8 @@ class TestGreetE2E:
     async def test_greet_preserves_status(self, make_digital_anima):
         """Test that greeting restores the previous status after completion."""
         dp = make_digital_anima("greeter")
-        dp._status = "working"
-        dp._current_task = "Building report"
+        dp._status_slots["conversation"] = "working"
+        dp._task_slots["conversation"] = "Building report"
 
         with patch.object(
             dp.agent, "run_cycle",
@@ -116,14 +116,14 @@ class TestGreetE2E:
         ):
             result = await dp.process_greet()
 
-        assert dp._status == "working"
-        assert dp._current_task == "Building report"
+        assert dp._status_slots["conversation"] == "working"
+        assert dp._task_slots["conversation"] == "Building report"
 
     async def test_greet_with_busy_status_in_prompt(self, make_digital_anima):
         """Test that current status is injected into the greet prompt."""
         dp = make_digital_anima("greeter")
-        dp._status = "checking"
-        dp._current_task = "Morning heartbeat"
+        dp._status_slots["background"] = "checking"
+        dp._task_slots["background"] = "Morning heartbeat"
 
         prompt_received = []
 

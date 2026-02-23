@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.memory.activity import ActivityLogger
+from core.tooling.handler import active_session_type
 
 
 # ── Unit tests for _extract_reflection ──────────────────────────
@@ -141,6 +142,7 @@ class TestHeartbeatReflectionE2E:
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {"type": "text_delta", "text": "メッセージを確認しました。\n\n"}
@@ -206,6 +208,7 @@ class TestHeartbeatReflectionE2E:
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {"type": "text_delta", "text": "確認完了。\n\n"}
@@ -263,6 +266,7 @@ class TestHeartbeatReflectionE2E:
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {"type": "text_delta", "text": "全てのタスクを確認しました。特に問題ありません。"}

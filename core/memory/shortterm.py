@@ -70,10 +70,16 @@ class ShortTermMemory:
           └── archive/            # Completed / superseded states
     """
 
-    def __init__(self, anima_dir: Path) -> None:
+    def __init__(self, anima_dir: Path, session_type: str = "chat") -> None:
         self.anima_dir = anima_dir
-        self.shortterm_dir = anima_dir / "shortterm"
+        self._session_type = session_type
+        self.shortterm_dir = anima_dir / "shortterm" / session_type
+        self.shortterm_dir.mkdir(parents=True, exist_ok=True)
         self._archive_dir = self.shortterm_dir / "archive"
+
+        # Migrate legacy files from shortterm/ to shortterm/chat/
+        if session_type == "chat":
+            self._migrate_legacy_files()
 
     # ── Query ───────────────────────────────────────────────
 
@@ -194,6 +200,42 @@ class ShortTermMemory:
             logger.debug("Stream checkpoint cleared")
 
     # ── Private ─────────────────────────────────────────────
+
+    def _migrate_legacy_files(self) -> None:
+        """One-time migration: move files from shortterm/ to shortterm/chat/.
+
+        Before the session_type subdirectory was introduced, session state
+        files lived directly under ``{anima_dir}/shortterm/``.  This method
+        detects orphaned files at the old location and moves them into the
+        new ``shortterm/chat/`` directory so they become visible again.
+        """
+        legacy_dir = self.anima_dir / "shortterm"
+        # Check for legacy files directly in shortterm/ (not in subdirectories)
+        for name in ("session_state.json", "session_state.md", "stream_checkpoint.json"):
+            legacy_file = legacy_dir / name
+            if legacy_file.exists():
+                dest = self.shortterm_dir / name
+                if not dest.exists():
+                    legacy_file.rename(dest)
+                    logger.info(
+                        "Migrated legacy shortterm file: %s -> %s",
+                        legacy_file, dest,
+                    )
+        # Migrate archive directory
+        legacy_archive = legacy_dir / "archive"
+        new_archive = self.shortterm_dir / "archive"
+        if legacy_archive.exists() and not new_archive.exists():
+            legacy_archive.rename(new_archive)
+            logger.info("Migrated legacy shortterm archive directory")
+        elif legacy_archive.exists() and new_archive.exists():
+            # Move individual files from legacy archive to new archive
+            for f in legacy_archive.iterdir():
+                dest = new_archive / f.name
+                if not dest.exists():
+                    f.rename(dest)
+            # Remove legacy archive if empty
+            if not any(legacy_archive.iterdir()):
+                legacy_archive.rmdir()
 
     def _archive_existing(self) -> None:
         """Move existing session_state files to archive/."""

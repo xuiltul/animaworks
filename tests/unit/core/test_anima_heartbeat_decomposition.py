@@ -742,48 +742,6 @@ class TestExecuteHeartbeatCycle:
         finally:
             _stop_patches(mocks)
 
-    async def test_relay_queue_receives_chunks(self, data_dir, make_anima):
-        """When _heartbeat_stream_queue is set, text_delta chunks are relayed."""
-        anima_dir = make_anima("alice")
-        shared_dir = data_dir / "shared"
-        dp, mocks = _create_anima(anima_dir, shared_dir)
-        try:
-            dp.agent.reset_reply_tracking = MagicMock()
-            dp.agent.replied_to = set()
-            queue = asyncio.Queue()
-            dp._heartbeat_stream_queue = queue
-
-            async def mock_stream(prompt, trigger="heartbeat", **kwargs):
-                yield {"type": "text_delta", "text": "chunk1"}
-                yield {"type": "text_delta", "text": "chunk2"}
-                yield {
-                    "type": "cycle_done",
-                    "cycle_result": {"summary": "ok", "duration_ms": 10},
-                }
-
-            dp.agent.run_cycle_streaming = mock_stream
-
-            with patch("core.anima.StreamingJournal") as MockSJ, \
-                 patch("core.anima.ActivityLogger"), \
-                 patch("core.anima.ConversationMemory") as MockConv:
-                MockConv.return_value.finalize_if_session_ended = AsyncMock()
-                dp.memory.append_episode = MagicMock()
-
-                await dp._execute_heartbeat_cycle(
-                    "test prompt", inbox_items=[], unread_count=0,
-                )
-
-            # Queue should have: chunk1, chunk2, None (sentinel)
-            items = []
-            while not queue.empty():
-                items.append(await queue.get())
-            assert len(items) == 3
-            assert items[0]["text"] == "chunk1"
-            assert items[1]["text"] == "chunk2"
-            assert items[2] is None  # sentinel
-        finally:
-            _stop_patches(mocks)
-
     async def test_relay_queue_sentinel_without_queue(self, data_dir, make_anima):
         """When _heartbeat_stream_queue is None, no error on sentinel."""
         anima_dir = make_anima("alice")
@@ -1162,26 +1120,6 @@ class TestHandleHeartbeatFailure:
             call_args = mock_activity.log.call_args
             assert call_args[0][0] == "error"
             assert "TypeError" in call_args[1]["summary"]
-        finally:
-            _stop_patches(mocks)
-
-    async def test_relay_queue_sentinel_sent(self, data_dir, make_anima):
-        """Sentinel (None) is sent to relay queue on failure."""
-        anima_dir = make_anima("alice")
-        shared_dir = data_dir / "shared"
-        dp, mocks = _create_anima(anima_dir, shared_dir)
-        try:
-            error = RuntimeError("boom")
-            queue = asyncio.Queue()
-            dp._heartbeat_stream_queue = queue
-
-            with patch("core.anima.ActivityLogger"):
-                await dp._handle_heartbeat_failure(error, [], unread_count=0)
-
-            # Queue should have the None sentinel
-            assert not queue.empty()
-            sentinel = await queue.get()
-            assert sentinel is None
         finally:
             _stop_patches(mocks)
 

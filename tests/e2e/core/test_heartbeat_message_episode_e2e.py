@@ -12,6 +12,7 @@ import pytest
 
 from core.messenger import Messenger
 from core.memory.manager import MemoryManager
+from core.tooling.handler import active_session_type
 
 
 class TestHeartbeatMessageEpisodeE2E:
@@ -36,6 +37,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -82,6 +84,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -152,6 +155,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -205,6 +209,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -256,6 +261,7 @@ class TestHeartbeatMessageEpisodeE2E:
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             # Make append_episode raise an error
             original_append = dp.memory.append_episode

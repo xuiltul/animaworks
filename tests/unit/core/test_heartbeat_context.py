@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.schemas import CycleResult
+from core.tooling.handler import active_session_type
 
 
 # ── Helpers ───────────────────────────────────────────────
@@ -332,6 +333,7 @@ class TestHeartbeatEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             # Simulate streaming that yields a cycle_done with HEARTBEAT_OK
             async def mock_stream(prompt, trigger="manual", **kwargs):
@@ -373,6 +375,7 @@ class TestHeartbeatEpisodeRecording:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             # Simulate streaming that yields a cycle_done with actual activity
             async def mock_stream(prompt, trigger="manual", **kwargs):
@@ -435,6 +438,7 @@ class TestHeartbeatDialogueContext:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             # Capture the prompt passed to run_cycle_streaming
             captured_prompts: list[str] = []
@@ -486,6 +490,7 @@ class TestHeartbeatDialogueContext:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             captured_prompts: list[str] = []
 
@@ -539,6 +544,7 @@ class TestHeartbeatDialogueContext:
             dp = DigitalAnima(anima_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             captured_prompts: list[str] = []
 

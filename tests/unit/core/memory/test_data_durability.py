@@ -313,7 +313,7 @@ class TestStreamingJournalConfirmRecovery:
             journal.write_text("test content")
         journal.close()
 
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         assert journal_path.exists(), "Journal should exist before recovery"
 
         recovery = StreamingJournal.recover(anima_dir)
@@ -335,7 +335,7 @@ class TestStreamingJournalConfirmRecovery:
             journal.write_text("content to recover")
         journal.close()
 
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         assert journal_path.exists()
 
         # recover first, then confirm
@@ -358,7 +358,7 @@ class TestStreamingJournalConfirmRecovery:
         journal.write_tool_end("web_search", result_summary="3 results")
         journal.close()
 
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
 
         # Step 1: recover
         recovery = StreamingJournal.recover(anima_dir)
@@ -380,7 +380,7 @@ class TestStreamingJournalConfirmRecovery:
 
     def test_confirm_recovery_noop_when_no_file(self, anima_dir: Path):
         """confirm_recovery() should be a no-op when no journal file exists."""
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         assert not journal_path.exists()
 
         # Should not raise
@@ -502,7 +502,7 @@ class TestRunnerToolUseRecovery:
             runner._recover_streaming_journal()
 
         # confirm_recovery should have been called
-        mock_confirm.assert_called_once_with(anima_dir)
+        mock_confirm.assert_called_once_with(anima_dir, "chat")
 
         # And conv.save() should have been called before confirm_recovery
         mock_conv.save.assert_called_once()
@@ -527,7 +527,7 @@ class TestRunnerToolUseRecovery:
         # Actually: the runner checks `recovery.recovered_text and self.anima`
         # With empty text, it goes to else branch
 
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         assert journal_path.exists()
 
         with patch(

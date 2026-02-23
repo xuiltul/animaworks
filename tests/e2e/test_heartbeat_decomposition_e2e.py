@@ -7,7 +7,7 @@ Validates that the refactored heartbeat flow (5 private methods + orchestrator)
 behaves identically to the original monolithic run_heartbeat():
   1. Basic heartbeat flow returns CycleResult with expected fields
   2. Inbox messages are processed and archived
-  3. Heartbeat skips when user is waiting
+  3. Heartbeat runs concurrently with conversation (no skip)
   4. Failure writes recovery note and crash-archives inbox
   5. Recovery note is injected on next run and deleted
   6. InboxResult dataclass integration
@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.schemas import CycleResult
+from core.tooling.handler import active_session_type
 
 pytestmark = pytest.mark.e2e
 
@@ -43,6 +44,8 @@ def _make_digital_anima(anima_dir: Path, shared_dir: Path):
         dp.agent.reset_reply_tracking = MagicMock()
         dp.agent.replied_to = set()
         dp.agent.background_manager = None
+        # Wire set_active_session_type to use the real ContextVar
+        dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
         return dp
 
 
@@ -198,6 +201,7 @@ class TestHeartbeatWithInboxMessages:
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = {"episode_sender"}
             dp.agent.background_manager = None
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             async def mock_stream(prompt, trigger="manual", **kwargs):
                 yield {
@@ -222,41 +226,38 @@ class TestHeartbeatWithInboxMessages:
         assert "DB backup" in content
 
 
-# ── Test 3: Heartbeat skips when user waiting ─────────────
+# ── Test 3: Heartbeat runs concurrently with conversation ─
 
 
-class TestHeartbeatSkipsWhenUserWaiting:
-    """Set _user_waiting event, verify heartbeat returns skipped result."""
+class TestHeartbeatConcurrency:
+    """Verify heartbeat runs even when conversation lock is held (no skip)."""
 
     async def test_heartbeat_skips_when_user_waiting(self, data_dir, make_anima):
-        """Heartbeat defers to user messages when _user_waiting is set."""
+        """Heartbeat runs even when conversation lock is held (concurrent design)."""
         alice_dir = make_anima("alice")
         shared_dir = data_dir / "shared"
 
         dp = _make_digital_anima(alice_dir, shared_dir)
         _attach_mock_stream(dp)
 
-        # Simulate a user waiting for the lock
-        dp._user_waiting.set()
-
-        result = await dp.run_heartbeat()
+        # Acquire conversation lock to simulate an active user conversation.
+        # With the new concurrent design, heartbeat uses _background_lock
+        # and should NOT be skipped.
+        async with dp._conversation_lock:
+            result = await dp.run_heartbeat()
 
         assert result.trigger == "heartbeat"
-        assert result.action == "skipped"
-        assert "User message priority" in result.summary
+        assert result.action != "skipped"
 
     async def test_heartbeat_runs_normally_when_no_user_waiting(
         self, data_dir, make_anima,
     ):
-        """Heartbeat runs normally when _user_waiting is NOT set."""
+        """Heartbeat runs normally when no conversation is active."""
         alice_dir = make_anima("alice")
         shared_dir = data_dir / "shared"
 
         dp = _make_digital_anima(alice_dir, shared_dir)
         _attach_mock_stream(dp)
-
-        # Default state: _user_waiting is NOT set
-        assert not dp._user_waiting.is_set()
 
         result = await dp.run_heartbeat()
         assert result.action != "skipped"

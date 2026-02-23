@@ -363,7 +363,7 @@ class LifecycleManager:
                 if self._is_in_cooldown(name):
                     self._schedule_deferred_trigger(name)
                     continue
-                if anima._lock.locked():
+                if anima._background_lock.locked():
                     self._schedule_deferred_trigger(name)
                     continue
                 self._pending_triggers.add(name)
@@ -426,7 +426,7 @@ class LifecycleManager:
         if self._is_in_cooldown(name):
             self._schedule_deferred_trigger(name)
             return
-        if anima._lock.locked():
+        if anima._background_lock.locked():
             self._schedule_deferred_trigger(name)
             return
         self._pending_triggers.add(name)

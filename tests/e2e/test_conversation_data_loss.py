@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.schemas import CycleResult, ModelConfig
+from core.tooling.handler import active_session_type
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +76,8 @@ def _make_anima_with_mocks(anima_dir: Path, shared_dir: Path):
         from core.anima import DigitalAnima
 
         anima = DigitalAnima(anima_dir, shared_dir)
+        # Wire set_active_session_type to use the real ContextVar
+        anima.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
     return anima
 

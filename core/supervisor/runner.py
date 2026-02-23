@@ -191,97 +191,106 @@ class AnimaRunner:
             await self._cleanup()
 
     def _recover_streaming_journal(self) -> None:
-        """Recover partial response from an orphaned streaming journal.
+        """Recover partial response from orphaned streaming journals.
 
         If the previous process crashed during streaming, the journal
         file survives on disk.  Read it, record the partial response in
         conversation memory, and log the crash event.
+
+        Checks both ``chat`` and ``heartbeat`` session types.
         """
-        if not StreamingJournal.has_orphan(self._anima_dir):
-            return
+        for session_type in ("chat", "heartbeat"):
+            if not StreamingJournal.has_orphan(self._anima_dir, session_type):
+                continue
 
-        recovery = StreamingJournal.recover(self._anima_dir)
-        if recovery is None:
-            return
+            recovery = StreamingJournal.recover(self._anima_dir, session_type)
+            if recovery is None:
+                continue
 
-        logger.warning(
-            "Recovered streaming journal for %s: %d chars, %d tool calls, trigger=%s",
-            self.anima_name,
-            len(recovery.recovered_text),
-            len(recovery.tool_calls),
-            recovery.trigger,
-        )
-
-        # Record recovered text in conversation memory
-        if recovery.recovered_text and self.anima:
-            try:
-                from core.memory.conversation import ConversationMemory
-                conv_memory = ConversationMemory(
-                    self._anima_dir,
-                    self.anima.model_config,
-                )
-                saved_text = (
-                    recovery.recovered_text
-                    + "\n[応答が中断されました]"
-                )
-                conv_memory.append_turn("assistant", saved_text)
-                conv_memory.save()
-                StreamingJournal.confirm_recovery(self._anima_dir)
-                logger.info(
-                    "Recovered %d chars into conversation memory for %s",
-                    len(recovery.recovered_text),
-                    self.anima_name,
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to save recovered journal to conversation memory: %s",
-                    self.anima_name,
-                )
-        else:
-            # No text to save, but still need to clean up the journal
-            StreamingJournal.confirm_recovery(self._anima_dir)
-
-        # Record crash event in activity log
-        try:
-            from core.memory.activity import ActivityLogger
-            activity = ActivityLogger(self._anima_dir)
-            activity.log(
-                "error",
-                summary="応答が中断されました（前回セッションの未完了ストリームを回復）",
-                meta={
-                    "recovered_chars": len(recovery.recovered_text),
-                    "trigger": recovery.trigger,
-                    "tool_calls": len(recovery.tool_calls),
-                    "from_person": recovery.from_person,
-                    "started_at": recovery.started_at,
-                    "last_event_at": recovery.last_event_at,
-                },
-            )
-        except Exception:
-            logger.debug(
-                "Failed to log crash recovery to activity log: %s",
+            logger.warning(
+                "Recovered streaming journal for %s [%s]: %d chars, %d tool calls, trigger=%s",
                 self.anima_name,
-                exc_info=True,
+                session_type,
+                len(recovery.recovered_text),
+                len(recovery.tool_calls),
+                recovery.trigger,
             )
 
-        # Record tool_use events in activity log
-        if recovery.tool_calls:
-            try:
-                from core.memory.activity import ActivityLogger as _AL
-                _activity = _AL(self._anima_dir)
-                for tc in recovery.tool_calls:
-                    _activity.log(
-                        "tool_use",
-                        summary=f"[recovered] {tc.get('tool', 'unknown')}",
-                        tool=tc.get("tool", "unknown"),
-                        meta={"recovered": True, **tc},
+            # Record recovered text in conversation memory
+            if recovery.recovered_text and self.anima:
+                try:
+                    from core.memory.conversation import ConversationMemory
+                    conv_memory = ConversationMemory(
+                        self._anima_dir,
+                        self.anima.model_config,
                     )
+                    saved_text = (
+                        recovery.recovered_text
+                        + "\n[応答が中断されました]"
+                    )
+                    conv_memory.append_turn("assistant", saved_text)
+                    conv_memory.save()
+                    StreamingJournal.confirm_recovery(self._anima_dir, session_type)
+                    logger.info(
+                        "Recovered %d chars into conversation memory for %s [%s]",
+                        len(recovery.recovered_text),
+                        self.anima_name,
+                        session_type,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to save recovered journal to conversation memory: %s [%s]",
+                        self.anima_name,
+                        session_type,
+                    )
+            else:
+                # No text to save, but still need to clean up the journal
+                StreamingJournal.confirm_recovery(self._anima_dir, session_type)
+
+            # Record crash event in activity log
+            try:
+                from core.memory.activity import ActivityLogger
+                activity = ActivityLogger(self._anima_dir)
+                activity.log(
+                    "error",
+                    summary=f"応答が中断されました（前回セッションの未完了ストリームを回復, {session_type}）",
+                    meta={
+                        "recovered_chars": len(recovery.recovered_text),
+                        "trigger": recovery.trigger,
+                        "tool_calls": len(recovery.tool_calls),
+                        "from_person": recovery.from_person,
+                        "started_at": recovery.started_at,
+                        "last_event_at": recovery.last_event_at,
+                        "session_type": session_type,
+                    },
+                )
             except Exception:
                 logger.debug(
-                    "Failed to log recovered tool_use events: %s",
+                    "Failed to log crash recovery to activity log: %s [%s]",
                     self.anima_name,
+                    session_type,
                     exc_info=True,
                 )
+
+            # Record tool_use events in activity log
+            if recovery.tool_calls:
+                try:
+                    from core.memory.activity import ActivityLogger as _AL
+                    _activity = _AL(self._anima_dir)
+                    for tc in recovery.tool_calls:
+                        _activity.log(
+                            "tool_use",
+                            summary=f"[recovered] {tc.get('tool', 'unknown')}",
+                            tool=tc.get("tool", "unknown"),
+                            meta={"recovered": True, **tc},
+                        )
+                except Exception:
+                    logger.debug(
+                        "Failed to log recovered tool_use events: %s [%s]",
+                        self.anima_name,
+                        session_type,
+                        exc_info=True,
+                    )
 
     # ── Event Emission ─────────────────────────────────────────────
 
@@ -448,8 +457,8 @@ class AnimaRunner:
 
         scheduler = self._scheduler_mgr.scheduler if self._scheduler_mgr else None
         return {
-            "status": self.anima._status,
-            "current_task": self.anima._current_task or None,
+            "status": self.anima.primary_status,
+            "current_task": self.anima.primary_task or None,
             "needs_bootstrap": self.anima.needs_bootstrap,
             "scheduler_running": scheduler.running if scheduler else False,
             "scheduler_jobs": len(scheduler.get_jobs()) if scheduler else 0,

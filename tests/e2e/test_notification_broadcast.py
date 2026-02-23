@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.tooling.handler import active_session_type
 from server.websocket import WebSocketManager
 
 
@@ -43,6 +44,7 @@ class TestNotificationSentEventInStream:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             # Simulate notification data that would be queued by ToolHandler
             pending_notifications = [
@@ -125,6 +127,7 @@ class TestNotificationSentEventInStream:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             # No notifications queued
             dp.agent.drain_notifications = MagicMock(return_value=[])
@@ -293,6 +296,7 @@ class TestWebSocketNotificationQueueLifecycle:
 
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
             # Simulate one pending notification
             dp.agent.drain_notifications = MagicMock(

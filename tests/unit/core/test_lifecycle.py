@@ -487,8 +487,8 @@ class TestTryDeferredTrigger:
         dp = MagicMock()
         dp.name = "alice"
         dp.messenger.has_unread.return_value = True
-        dp._lock = MagicMock()
-        dp._lock.locked.return_value = False
+        dp._background_lock = MagicMock()
+        dp._background_lock.locked.return_value = False
         lm.animas["alice"] = dp
         # Set timer entry so pop works
         lm._deferred_timers["alice"] = MagicMock()
@@ -519,8 +519,8 @@ class TestTryDeferredTrigger:
         dp = MagicMock()
         dp.name = "alice"
         dp.messenger.has_unread.return_value = True
-        dp._lock = MagicMock()
-        dp._lock.locked.return_value = True
+        dp._background_lock = MagicMock()
+        dp._background_lock.locked.return_value = True
         lm.animas["alice"] = dp
         lm._deferred_timers["alice"] = MagicMock()
 

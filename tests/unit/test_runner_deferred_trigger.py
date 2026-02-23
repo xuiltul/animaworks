@@ -23,7 +23,7 @@ def _make_limiter(tmp_path: Path) -> InboxRateLimiter:
     """Create an InboxRateLimiter with minimal dependencies."""
     mock_anima = MagicMock()
     mock_anima.messenger = MagicMock()
-    mock_anima._lock = asyncio.Lock()
+    mock_anima._background_lock = asyncio.Lock()
 
     mock_scheduler_mgr = MagicMock(spec=SchedulerManager)
     mock_scheduler_mgr.heartbeat_running = False
@@ -81,8 +81,8 @@ class TestTryDeferredTrigger:
         """Fires heartbeat when not in cooldown and lock not held."""
         limiter = _make_limiter(tmp_path)
         limiter._anima.messenger.has_unread.return_value = True
-        limiter._anima._lock = MagicMock()
-        limiter._anima._lock.locked.return_value = False
+        limiter._anima._background_lock = MagicMock()
+        limiter._anima._background_lock.locked.return_value = False
         limiter._deferred_timer = MagicMock()
 
         with patch.object(limiter, "is_in_cooldown", return_value=False), \
@@ -109,8 +109,8 @@ class TestTryDeferredTrigger:
         """Re-schedules if anima lock is held."""
         limiter = _make_limiter(tmp_path)
         limiter._anima.messenger.has_unread.return_value = True
-        limiter._anima._lock = MagicMock()
-        limiter._anima._lock.locked.return_value = True
+        limiter._anima._background_lock = MagicMock()
+        limiter._anima._background_lock.locked.return_value = True
         limiter._deferred_timer = MagicMock()
 
         with patch.object(limiter, "is_in_cooldown", return_value=False), \

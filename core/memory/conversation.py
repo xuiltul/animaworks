@@ -17,12 +17,14 @@ Storage: ``{anima_dir}/state/conversation.json``
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import ClassVar
 
 from core.time_utils import ensure_aware, now_iso, now_jst
 from typing import TYPE_CHECKING, Any
@@ -172,6 +174,8 @@ class ParsedSessionSummary:
 class ConversationMemory:
     """Manages per-anima conversation history with automatic compression."""
 
+    _class_locks: ClassVar[dict[str, asyncio.Lock]] = {}
+
     def __init__(
         self,
         anima_dir: Path,
@@ -184,6 +188,11 @@ class ConversationMemory:
         self._state_path = self._state_dir / "conversation.json"
         self._transcript_dir = anima_dir / "transcripts"
         self._state: ConversationState | None = None
+
+        _key = str(anima_dir)
+        if _key not in self.__class__._class_locks:
+            self.__class__._class_locks[_key] = asyncio.Lock()
+        self._finalize_lock = self.__class__._class_locks[_key]
 
     # ── Context window overrides ────────────────────────────
 
@@ -832,23 +841,24 @@ class ConversationMemory:
         Returns:
             True if finalization was performed.
         """
-        state = self.load()
-        if not state.turns:
-            return False
-        # No unrecorded turns → skip
-        new_turns = state.turns[state.last_finalized_turn_index:]
-        if not new_turns:
-            return False
-        last_ts = datetime.fromisoformat(new_turns[-1].timestamp)
-        elapsed = (now_jst() - ensure_aware(last_ts)).total_seconds()
-        if elapsed < SESSION_GAP_MINUTES * 60:
-            return False
-        # Load any pending injected procedures stored by the agent
-        procedures, session_id = self._load_pending_procedures()
-        return await self.finalize_session(
-            injected_procedures=procedures or None,
-            session_id=session_id,
-        )
+        async with self._finalize_lock:
+            state = self.load()
+            if not state.turns:
+                return False
+            # No unrecorded turns → skip
+            new_turns = state.turns[state.last_finalized_turn_index:]
+            if not new_turns:
+                return False
+            last_ts = datetime.fromisoformat(new_turns[-1].timestamp)
+            elapsed = (now_jst() - ensure_aware(last_ts)).total_seconds()
+            if elapsed < SESSION_GAP_MINUTES * 60:
+                return False
+            # Load any pending injected procedures stored by the agent
+            procedures, session_id = self._load_pending_procedures()
+            return await self.finalize_session(
+                injected_procedures=procedures or None,
+                session_id=session_id,
+            )
 
     def _gather_activity_context(self, turns: list[ConversationTurn]) -> str:
         """Gather non-conversation activities from activity log for episode enrichment.

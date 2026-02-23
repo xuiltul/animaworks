@@ -226,9 +226,9 @@ class AgentCore:
         """Return and clear pending notification events from ToolHandler."""
         return self._tool_handler.drain_notifications()
 
-    def reset_reply_tracking(self) -> None:
+    def reset_reply_tracking(self, session_type: str | None = None) -> None:
         """Clear reply tracking (call at start of each heartbeat cycle)."""
-        self._tool_handler.reset_replied_to()
+        self._tool_handler.reset_replied_to(session_type=session_type)
 
     @property
     def replied_to(self) -> set[str]:

@@ -144,7 +144,7 @@ class InboxRateLimiter:
         if self.is_in_cooldown():
             self.schedule_deferred_trigger()
             return
-        if self._anima._lock.locked():
+        if self._anima._background_lock.locked():
             self.schedule_deferred_trigger()
             return
         self._pending_trigger = True
@@ -227,7 +227,7 @@ class InboxRateLimiter:
                     self.schedule_deferred_trigger()
                     await asyncio.sleep(2.0)
                     continue
-                if self._anima._lock.locked():
+                if self._anima._background_lock.locked():
                     self.schedule_deferred_trigger()
                     await asyncio.sleep(2.0)
                     continue

@@ -92,19 +92,14 @@ class DigitalAnima:
             anima_dir, self.memory, self.model_config, self.messenger
         )
 
-        self._lock = asyncio.Lock()
-        self._user_waiting = asyncio.Event()
-        # Event NOT set = no user waiting (default state)
-        self._status = "idle"
-        self._current_task = ""
+        # Separate locks: conversation (chat/greet) vs background (HB/cron/consolidation)
+        self._conversation_lock = asyncio.Lock()
+        self._background_lock = asyncio.Lock()
+        self._status_slots: dict[str, str] = {"conversation": "idle", "background": "idle"}
+        self._task_slots: dict[str, str] = {"conversation": "", "background": ""}
         self._last_heartbeat: datetime | None = None
         self._last_activity: datetime | None = None
         self._on_lock_released: Callable[[], None] | None = None
-
-        # Heartbeat SSE relay: allow process_message_stream to read
-        # heartbeat's streaming chunks while waiting for the lock.
-        self._heartbeat_stream_queue: asyncio.Queue | None = None
-        self._heartbeat_context: str = ""
 
         # Greet cache (1-hour cooldown)
         self._last_greet_at: float | None = None
@@ -318,11 +313,27 @@ class DigitalAnima:
         return (self.anima_dir / "bootstrap.md").exists()
 
     @property
+    def primary_status(self) -> str:
+        """Primary status: conversation takes priority over background."""
+        conv = self._status_slots.get("conversation", "idle")
+        if conv != "idle":
+            return conv
+        return self._status_slots.get("background", "idle")
+
+    @property
+    def primary_task(self) -> str:
+        """Primary task: conversation takes priority over background."""
+        conv = self._task_slots.get("conversation", "")
+        if conv:
+            return conv
+        return self._task_slots.get("background", "")
+
+    @property
     def status(self) -> AnimaStatus:
         return AnimaStatus(
             name=self.name,
-            status=self._status,
-            current_task=self._current_task,
+            status=self.primary_status,
+            current_task=self.primary_task,
             last_heartbeat=self._last_heartbeat,
             last_activity=self._last_activity,
             pending_messages=self.messenger.unread_count(),
@@ -346,10 +357,12 @@ class DigitalAnima:
             )
 
         logger.info("[%s] run_bootstrap START", self.name)
+        from core.tooling.handler import active_session_type
         try:
-            async with self._lock:
-                self._status = "bootstrapping"
-                self._current_task = "Initial bootstrap"
+            async with self._conversation_lock:
+                self._status_slots["conversation"] = "bootstrapping"
+                self._task_slots["conversation"] = "Initial bootstrap"
+                _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
                 conv_memory = ConversationMemory(self.anima_dir, self.model_config)
                 prompt = conv_memory.build_chat_prompt(
@@ -372,8 +385,9 @@ class DigitalAnima:
                     logger.exception("[%s] run_bootstrap FAILED", self.name)
                     raise
                 finally:
-                    self._status = "idle"
-                    self._current_task = ""
+                    active_session_type.reset(_session_token)
+                    self._status_slots["conversation"] = "idle"
+                    self._task_slots["conversation"] = ""
         finally:
             self._notify_lock_released()
 
@@ -389,15 +403,16 @@ class DigitalAnima:
             "[%s] process_message WAITING from=%s content_len=%d images=%d",
             self.name, from_person, len(content), len(images or []),
         )
-        self._user_waiting.set()
+        from core.tooling.handler import active_session_type
         try:
-            async with self._lock:
+            async with self._conversation_lock:
                 logger.info(
                     "[%s] process_message START (lock acquired) from=%s",
                     self.name, from_person,
                 )
-                self._status = "thinking"
-                self._current_task = f"Responding to {from_person}"
+                self._status_slots["conversation"] = "thinking"
+                self._task_slots["conversation"] = f"Responding to {from_person}"
+                _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, self.model_config)
@@ -473,10 +488,10 @@ class DigitalAnima:
                     conv_memory.save()
                     raise
                 finally:
-                    self._status = "idle"
-                    self._current_task = ""
+                    active_session_type.reset(_session_token)
+                    self._status_slots["conversation"] = "idle"
+                    self._task_slots["conversation"] = ""
         finally:
-            self._user_waiting.clear()
             self._notify_lock_released()
 
     async def process_message_stream(
@@ -494,7 +509,7 @@ class DigitalAnima:
         an immediate "initializing" message instead of waiting.
         """
         # ── Bootstrap guard: return immediately if bootstrap is running ──
-        if self.needs_bootstrap and self._lock.locked():
+        if self.needs_bootstrap and self._conversation_lock.locked():
             logger.info(
                 "[%s] process_message_stream REJECTED (bootstrapping) from=%s",
                 self.name, from_person,
@@ -509,56 +524,16 @@ class DigitalAnima:
             "[%s] process_message_stream WAITING from=%s content_len=%d images=%d",
             self.name, from_person, len(content), len(images or []),
         )
-        self._user_waiting.set()
+        from core.tooling.handler import active_session_type
         try:
-            # ── Heartbeat relay: stream heartbeat output while waiting ──
-            if self._lock.locked():
-                context_msg = self._heartbeat_context or "処理中です"
-                logger.info(
-                    "[%s] process_message_stream: lock held, starting heartbeat relay",
-                    self.name,
-                )
-                yield {
-                    "type": "heartbeat_relay_start",
-                    "message": f"ハートビート処理中（{context_msg}）",
-                }
-
-                # Create a queue so run_heartbeat can push chunks to us
-                self._heartbeat_stream_queue = asyncio.Queue()
-                try:
-                    while True:
-                        try:
-                            chunk = await asyncio.wait_for(
-                                self._heartbeat_stream_queue.get(), timeout=1.0,
-                            )
-                        except asyncio.TimeoutError:
-                            # Check if lock was released while we waited
-                            if not self._lock.locked():
-                                break
-                            continue
-                        if chunk is None:
-                            # Sentinel: heartbeat finished
-                            break
-                        yield {
-                            "type": "heartbeat_relay",
-                            "text": chunk.get("text", ""),
-                        }
-                finally:
-                    self._heartbeat_stream_queue = None
-
-                yield {"type": "heartbeat_relay_done"}
-                logger.info(
-                    "[%s] process_message_stream: heartbeat relay done",
-                    self.name,
-                )
-
-            async with self._lock:
+            async with self._conversation_lock:
                 logger.info(
                     "[%s] process_message_stream START (lock acquired) from=%s",
                     self.name, from_person,
                 )
-                self._status = "thinking"
-                self._current_task = f"Responding to {from_person}"
+                self._status_slots["conversation"] = "thinking"
+                self._task_slots["conversation"] = f"Responding to {from_person}"
+                _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, self.model_config)
@@ -691,10 +666,10 @@ class DigitalAnima:
                         conv_memory.save()
                     # Close journal (no-op if already finalized)
                     journal.close()
-                    self._status = "idle"
-                    self._current_task = ""
+                    active_session_type.reset(_session_token)
+                    self._status_slots["conversation"] = "idle"
+                    self._task_slots["conversation"] = ""
         finally:
-            self._user_waiting.clear()
             self._notify_lock_released()
 
     async def process_greet(self) -> dict[str, str | bool]:
@@ -723,19 +698,21 @@ class DigitalAnima:
             }
 
         logger.info("[%s] process_greet START", self.name)
-        async with self._lock:
-            prev_status = self._status
-            prev_task = self._current_task
+        from core.tooling.handler import active_session_type
+        async with self._conversation_lock:
+            prev_status = self._status_slots.get("conversation", "idle")
+            prev_task = self._task_slots.get("conversation", "")
+            _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
-            # Build greet prompt with current state
-            status_text = prev_status if prev_status != "idle" else "待機中"
-            task_text = prev_task if prev_task else "特になし"
+            # Build greet prompt with current state (use primary to include background)
+            status_text = self.primary_status if self.primary_status != "idle" else "待機中"
+            task_text = self.primary_task if self.primary_task else "特になし"
             prompt = load_prompt(
                 "greet", status=status_text, current_task=task_text,
             )
 
-            self._status = "greeting"
-            self._current_task = "Greeting user"
+            self._status_slots["conversation"] = "greeting"
+            self._task_slots["conversation"] = "Greeting user"
 
             conv_memory = ConversationMemory(self.anima_dir, self.model_config)
 
@@ -794,8 +771,9 @@ class DigitalAnima:
                 conv_memory.save()
                 raise
             finally:
-                self._status = prev_status
-                self._current_task = prev_task
+                active_session_type.reset(_session_token)
+                self._status_slots["conversation"] = prev_status
+                self._task_slots["conversation"] = prev_task
 
     # ── Heartbeat private methods ──────────────────────────
 
@@ -1118,7 +1096,7 @@ class DigitalAnima:
             logger.debug("[%s] Failed to write heartbeat checkpoint", self.name, exc_info=True)
 
         # Reset reply tracking before the cycle
-        self.agent.reset_reply_tracking()
+        self.agent.reset_reply_tracking(session_type="background")
         # Clear replied_to persistence file
         _replied_to_path = self.anima_dir / "run" / "replied_to.jsonl"
         if _replied_to_path.exists():
@@ -1128,7 +1106,7 @@ class DigitalAnima:
         result: CycleResult | None = None
 
         # Streaming journal for heartbeat crash recovery
-        journal = StreamingJournal(self.anima_dir)
+        journal = StreamingJournal(self.anima_dir, session_type="heartbeat")
         journal.open(trigger="heartbeat")
 
         try:
@@ -1140,9 +1118,6 @@ class DigitalAnima:
                 if chunk.get("type") == "text_delta":
                     accumulated_text += chunk.get("text", "")
                     journal.write_text(chunk.get("text", ""))
-                    queue = self._heartbeat_stream_queue
-                    if queue is not None:
-                        await queue.put(chunk)
 
                 if chunk.get("type") == "cycle_done":
                     cycle_result = chunk.get("cycle_result", {})
@@ -1160,11 +1135,6 @@ class DigitalAnima:
                         total_turns=cycle_result.get("total_turns", 0),
                     )
                     journal.finalize(summary=result.summary[:500])
-
-            # Send sentinel to close the relay queue
-            queue = self._heartbeat_stream_queue
-            if queue is not None:
-                await queue.put(None)
 
             if result is None:
                 result = CycleResult(
@@ -1347,8 +1317,8 @@ class DigitalAnima:
         # response.  Side effects (tool calls, messages sent) are
         # already persisted independently.
         try:
-            if StreamingJournal.has_orphan(self.anima_dir):
-                StreamingJournal.confirm_recovery(self.anima_dir)
+            if StreamingJournal.has_orphan(self.anima_dir, session_type="heartbeat"):
+                StreamingJournal.confirm_recovery(self.anima_dir, session_type="heartbeat")
                 logger.info("[%s] Cleaned up orphaned streaming journal", self.name)
         except Exception:
             logger.debug(
@@ -1356,30 +1326,16 @@ class DigitalAnima:
                 self.name, exc_info=True,
             )
 
-        # Send sentinel to close the relay queue on error
-        queue = self._heartbeat_stream_queue
-        if queue is not None:
-            await queue.put(None)
-
     # ── run_heartbeat orchestrator ───────────────────────────
 
     async def run_heartbeat(
         self,
         cascade_suppressed_senders: set[str] | None = None,
     ) -> CycleResult:
-        # Defer to user messages: skip heartbeat if a user is waiting for the lock
-        if self._user_waiting.is_set():
-            logger.info("[%s] run_heartbeat SKIPPED: user message waiting", self.name)
-            return CycleResult(
-                trigger="heartbeat",
-                action="skipped",
-                summary="User message priority: heartbeat deferred",
-            )
-
         logger.info("[%s] run_heartbeat START", self.name)
         try:
-            async with self._lock:
-                self._status = "checking"
+            async with self._background_lock:
+                self._status_slots["background"] = "checking"
                 self._last_heartbeat = now_jst()
                 inbox_items: list[InboxItem] = []
                 unread_count = 0
@@ -1399,14 +1355,6 @@ class DigitalAnima:
                     unread_count = inbox_result.unread_count
                     parts.extend(inbox_result.prompt_parts)
 
-                    # Set heartbeat context for relay
-                    if unread_count > 0:
-                        self._heartbeat_context = (
-                            f"{', '.join(inbox_result.senders)}からのメッセージを確認中"
-                        )
-                    else:
-                        self._heartbeat_context = "定期巡回中"
-
                     # 3. Execute agent cycle
                     # Suppress board fanout when replying to board_mention
                     # to prevent praise/acknowledgement loops.
@@ -1414,8 +1362,9 @@ class DigitalAnima:
                         item.msg.type == "board_mention"
                         for item in inbox_items
                     )
-                    if has_board_mention:
-                        self.agent._tool_handler._suppress_board_fanout = True
+                    from core.tooling.handler import suppress_board_fanout, active_session_type
+                    _fanout_token = suppress_board_fanout.set(True) if has_board_mention else None
+                    _session_token = self.agent._tool_handler.set_active_session_type("background")
                     heartbeat_text = "\n\n".join(parts)
                     prior_msgs = self._build_prior_messages(heartbeat_text)
                     try:
@@ -1424,7 +1373,9 @@ class DigitalAnima:
                             prior_messages=prior_msgs,
                         )
                     finally:
-                        self.agent._tool_handler._suppress_board_fanout = False
+                        if _fanout_token is not None:
+                            suppress_board_fanout.reset(_fanout_token)
+                        active_session_type.reset(_session_token)
 
                     # 4. Archive processed messages
                     if unread_count > 0:
@@ -1442,9 +1393,8 @@ class DigitalAnima:
                     )
                     raise
                 finally:
-                    self._status = "idle"
-                    self._current_task = ""
-                    self._heartbeat_context = ""
+                    self._status_slots["background"] = "idle"
+                    self._task_slots["background"] = ""
         finally:
             self._notify_lock_released()
 
@@ -1522,10 +1472,12 @@ class DigitalAnima:
             "[%s] run_consolidation START type=%s max_turns=%d",
             self.name, consolidation_type, max_turns,
         )
+        from core.tooling.handler import active_session_type
         try:
-            async with self._lock:
-                self._status = "consolidating"
-                self._current_task = f"Memory consolidation ({consolidation_type})"
+            async with self._background_lock:
+                self._status_slots["background"] = "consolidating"
+                self._task_slots["background"] = f"Memory consolidation ({consolidation_type})"
+                _session_token = self.agent._tool_handler.set_active_session_type("background")
 
                 try:
                     # Build consolidation prompt
@@ -1589,8 +1541,9 @@ class DigitalAnima:
                     )
                     raise
                 finally:
-                    self._status = "idle"
-                    self._current_task = ""
+                    active_session_type.reset(_session_token)
+                    self._status_slots["background"] = "idle"
+                    self._task_slots["background"] = ""
         finally:
             self._notify_lock_released()
 
@@ -1598,10 +1551,12 @@ class DigitalAnima:
         self, task_name: str, description: str
     ) -> CycleResult:
         logger.info("[%s] run_cron_task START task=%s", self.name, task_name)
+        from core.tooling.handler import active_session_type
         try:
-            async with self._lock:
-                self._status = "working"
-                self._current_task = task_name
+            async with self._background_lock:
+                self._status_slots["background"] = "working"
+                self._task_slots["background"] = task_name
+                _session_token = self.agent._tool_handler.set_active_session_type("background")
 
                 prompt = load_prompt(
                     "cron_task", task_name=task_name, description=description
@@ -1648,10 +1603,12 @@ class DigitalAnima:
                     )
                     raise
                 finally:
-                    self._status = "idle"
-                    self._current_task = ""
+                    active_session_type.reset(_session_token)
+                    self._status_slots["background"] = "idle"
+                    self._task_slots["background"] = ""
         finally:
             self._notify_lock_released()
+
     async def run_cron_command(
         self,
         task_name: str,
@@ -1680,10 +1637,12 @@ class DigitalAnima:
         stderr = ""
         exit_code = 0
 
+        from core.tooling.handler import active_session_type
         try:
-            async with self._lock:
-                self._status = "working"
-                self._current_task = task_name
+            async with self._background_lock:
+                self._status_slots["background"] = "working"
+                self._task_slots["background"] = task_name
+                _session_token = self.agent._tool_handler.set_active_session_type("background")
 
                 try:
                     if command:
@@ -1725,8 +1684,9 @@ class DigitalAnima:
                         meta={"phase": "run_cron_command", "error": str(exc)[:200]},
                     )
                 finally:
-                    self._status = "idle"
-                    self._current_task = ""
+                    active_session_type.reset(_session_token)
+                    self._status_slots["background"] = "idle"
+                    self._task_slots["background"] = ""
 
             duration_ms = (time.time_ns() // 1_000_000) - start_ms
 

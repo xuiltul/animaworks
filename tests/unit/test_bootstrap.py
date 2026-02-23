@@ -25,6 +25,7 @@ from httpx import ASGITransport, AsyncClient
 
 from core.schemas import CycleResult
 from core.supervisor.ipc import IPCRequest, IPCResponse
+from core.tooling.handler import active_session_type
 from core.supervisor.manager import (
     HealthConfig,
     ProcessSupervisor,
@@ -80,6 +81,9 @@ def _make_digital_anima(tmp_path: Path, *, with_bootstrap: bool = True):
         patch("core.anima.Messenger"),
     ):
         dp = DigitalAnima(anima_dir, shared_dir)
+
+    # Wire set_active_session_type to use the real ContextVar
+    dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
     return dp
 
@@ -150,7 +154,7 @@ class TestDigitalAnimaRunBootstrap:
 
         async def mock_run_cycle(prompt, trigger=""):
             # Capture status while inside the cycle
-            observed_statuses.append(dp._status)
+            observed_statuses.append(dp._status_slots["conversation"])
             return CycleResult(
                 trigger=trigger,
                 action="completed",
@@ -190,7 +194,7 @@ class TestDigitalAnimaRunBootstrap:
 
             result = await dp.run_bootstrap()
 
-        assert dp._status == "idle"
+        assert dp._status_slots["conversation"] == "idle"
         assert result.action == "completed"
 
     @pytest.mark.asyncio
@@ -210,8 +214,8 @@ class TestDigitalAnimaRunBootstrap:
             with pytest.raises(RuntimeError, match="LLM API error"):
                 await dp.run_bootstrap()
 
-        assert dp._status == "idle"
-        assert dp._current_task == ""
+        assert dp._status_slots["conversation"] == "idle"
+        assert dp._task_slots["conversation"] == ""
 
 
 # ════════════════════════════════════════════════════════════════════

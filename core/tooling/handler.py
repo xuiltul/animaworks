@@ -14,6 +14,7 @@ It owns permission checks, memory/file/command operations, and delegates
 external tool calls to ``ExternalToolDispatcher``.
 """
 
+import contextvars
 import json as _json
 import logging
 import re
@@ -36,6 +37,16 @@ from core.messenger import Messenger
 from core.notification.notifier import HumanNotifier
 
 logger = logging.getLogger("animaworks.tool_handler")
+
+# ── Board fanout suppression (context-scoped for background tasks) ──
+suppress_board_fanout: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "suppress_board_fanout", default=False,
+)
+
+# ── Active session type (context-scoped for concurrent HB+conversation) ──
+active_session_type: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "active_session_type", default="chat",
+)
 
 # Type alias for the message-sent callback (from, to, content).
 OnMessageSentFn = Callable[[str, str, str], None]
@@ -285,7 +296,7 @@ class ToolHandler:
         self._human_notifier = human_notifier
         self._background_manager = background_manager
         self._pending_notifications: list[dict[str, Any]] = []
-        self._replied_to: set[str] = set()
+        self._replied_to: dict[str, set[str]] = {"chat": set(), "background": set()}
         self._session_id: str = uuid.uuid4().hex[:12]
         self._activity = ActivityLogger(self._anima_dir)
         self._external = ExternalToolDispatcher(
@@ -364,8 +375,22 @@ class ToolHandler:
 
     @property
     def replied_to(self) -> set[str]:
-        """Anima names this anima has sent messages to in the current cycle."""
-        return self._replied_to
+        """Names already replied to in the current cycle (union of all sessions)."""
+        result: set[str] = set()
+        for s in self._replied_to.values():
+            result |= s
+        return result
+
+    def replied_to_for(self, session_type: str) -> set[str]:
+        """Names already replied to in a specific session type."""
+        return self._replied_to.get(session_type, set())
+
+    def set_active_session_type(self, session_type: str) -> contextvars.Token:
+        """Set the active session type for the current context.
+
+        Returns a reset token for use with ``active_session_type.reset(token)``.
+        """
+        return active_session_type.set(session_type)
 
     @property
     def session_id(self) -> str:
@@ -376,9 +401,13 @@ class ToolHandler:
         """Generate a new session ID (call at start of each interaction cycle)."""
         self._session_id = uuid.uuid4().hex[:12]
 
-    def reset_replied_to(self) -> None:
-        """Clear reply tracking (call at start of each heartbeat cycle)."""
-        self._replied_to.clear()
+    def reset_replied_to(self, session_type: str | None = None) -> None:
+        """Reset replied-to tracking. If session_type given, clear only that session."""
+        if session_type:
+            self._replied_to.get(session_type, set()).clear()
+        else:
+            for s in self._replied_to.values():
+                s.clear()
 
     def _persist_replied_to(self, to: str, *, success: bool) -> None:
         """Persist replied_to entry to file for cross-mode tracking."""
@@ -393,9 +422,9 @@ class ToolHandler:
         except Exception as e:
             logger.warning("Failed to persist replied_to for '%s': %s", to, e)
 
-    def merge_replied_to(self, names: set[str]) -> None:
-        """Merge externally detected reply targets into tracking."""
-        self._replied_to.update(names)
+    def merge_replied_to(self, names: set[str], session_type: str = "chat") -> None:
+        """Merge a set of names into replied-to for a given session."""
+        self._replied_to.setdefault(session_type, set()).update(names)
 
     # ── Main dispatch ────────────────────────────────────────
 
@@ -746,11 +775,12 @@ class ToolHandler:
             )
 
         # 2. Per-recipient limit: 1 message per recipient per run
-        if to in self._replied_to:
+        current_replied = self.replied_to_for(active_session_type.get())
+        if to in current_replied:
             return f"Error: このrunで既に {to} にメッセージを送信済みです。追加の連絡はBoardを使用してください。"
 
         # 3. Max recipients limit: 2 people per run
-        if len(self._replied_to) >= 2 and to not in self._replied_to:
+        if len(current_replied) >= 2 and to not in current_replied:
             return (
                 "Error: 1回のrunでDMを送れるのは最大2人までです。"
                 "3人以上への伝達はBoardを使用してください（post_channel ツール）。"
@@ -791,7 +821,7 @@ class ToolHandler:
                 "send_message routed externally: to=%s channel=%s",
                 to, resolved.channel,
             )
-            self._replied_to.add(to)
+            self._replied_to.setdefault(active_session_type.get(), set()).add(to)
             self._persist_replied_to(to, success=True)
 
             # Log to dm_logs via messenger (Activity Timeline)
@@ -832,7 +862,7 @@ class ToolHandler:
             return f"Error: {msg.content}"
 
         logger.info("send_message to=%s thread=%s", internal_to, msg.thread_id)
-        self._replied_to.add(internal_to)
+        self._replied_to.setdefault(active_session_type.get(), set()).add(internal_to)
         self._persist_replied_to(internal_to, success=True)
 
         if self._on_message_sent:
@@ -859,7 +889,7 @@ class ToolHandler:
 
         # ── Board mention fanout ──────────────────────────────
         # Suppress re-fanout when this post is a reply triggered by a board_mention.
-        if not getattr(self, "_suppress_board_fanout", False):
+        if not suppress_board_fanout.get():
             self._fanout_board_mentions(channel, text)
         else:
             logger.info(

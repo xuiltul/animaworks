@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.tooling.handler import active_session_type
+
 
 # ── process_message_stream bootstrap guard ────────────────────────
 
@@ -60,7 +62,7 @@ class TestProcessMessageStreamBootstrapGuard:
         assert dp.needs_bootstrap is True
 
         # Acquire lock to simulate ongoing bootstrap
-        await dp._lock.acquire()
+        await dp._conversation_lock.acquire()
 
         try:
             chunks: list[dict] = []
@@ -71,7 +73,7 @@ class TestProcessMessageStreamBootstrapGuard:
             assert chunks[0]["type"] == "bootstrap_busy"
             assert "初期化中" in chunks[0]["message"]
         finally:
-            dp._lock.release()
+            dp._conversation_lock.release()
 
     async def test_no_bootstrap_file_proceeds_normally(self, tmp_path: Path):
         """When needs_bootstrap=False, stream should proceed normally
@@ -105,6 +107,9 @@ class TestProcessMessageStreamBootstrapGuard:
             dp = DigitalAnima(anima_dir, shared_dir)
 
         assert dp.needs_bootstrap is False
+
+        # Wire set_active_session_type to use the real ContextVar
+        dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
         # Mock run_cycle_streaming to yield a quick done
         async def _mock_stream(prompt, trigger="", **kwargs):

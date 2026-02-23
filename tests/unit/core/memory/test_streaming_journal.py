@@ -63,7 +63,7 @@ class TestNormalLifecycle:
         journal.write_text("world.")
         journal.finalize(summary="completed normally")
 
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         assert not journal_path.exists(), "Journal file should be deleted after finalize"
         assert StreamingJournal.has_orphan(anima_dir) is False
 
@@ -102,7 +102,7 @@ class TestCrashRecovery:
         assert recovery.session_id == "s-crash"
         assert recovery.is_complete is False
 
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         # recover() no longer deletes the file; caller must confirm_recovery()
         assert journal_path.exists(), "Journal file should survive after recover()"
         StreamingJournal.confirm_recovery(anima_dir)
@@ -182,7 +182,7 @@ class TestCorruptedLineSkip:
         recover() must skip the corrupted lines and return data from
         the valid ones.
         """
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
 
         valid_start = json.dumps({
             "ev": "start",
@@ -268,7 +268,7 @@ class TestFinalizeThenClose:
 
         journal.finalize(summary="done")
 
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         assert not journal_path.exists(), "File should be deleted after finalize"
 
         # close() after finalize — should be a no-op
@@ -479,7 +479,7 @@ class TestToolIdPersistence:
         journal.close()
 
         # Read raw journal to verify tool_id is stored
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         raw = journal_path.read_text(encoding="utf-8")
         lines = [json.loads(line) for line in raw.strip().splitlines()]
 
@@ -498,7 +498,7 @@ class TestToolIdPersistence:
         journal.write_tool_end("web_search", result_summary="3 results")
         journal.close()
 
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         raw = journal_path.read_text(encoding="utf-8")
         lines = [json.loads(line) for line in raw.strip().splitlines()]
 
@@ -517,7 +517,7 @@ class TestToolIdRecoveryMatching:
 
     def test_tool_id_based_matching_in_recovery(self, anima_dir: Path):
         """Recovery should match tool_end to tool_start by tool_id."""
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         events = [
             json.dumps({"ev": "start", "trigger": "chat", "ts": "2026-02-22T10:00:00"}),
             json.dumps({"ev": "tool_start", "tool": "web_search", "args_summary": "q=test", "tool_id": "toolu_1", "ts": "2026-02-22T10:00:01"}),
@@ -536,7 +536,7 @@ class TestToolIdRecoveryMatching:
 
     def test_tool_name_fallback_when_tool_id_absent(self, anima_dir: Path):
         """Recovery should fall back to tool_name matching when tool_id is absent."""
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         events = [
             json.dumps({"ev": "start", "trigger": "chat", "ts": "2026-02-22T10:00:00"}),
             json.dumps({"ev": "tool_start", "tool": "web_search", "args_summary": "q=old", "ts": "2026-02-22T10:00:01"}),
@@ -556,7 +556,7 @@ class TestToolIdRecoveryMatching:
 
     def test_multiple_tools_same_name_different_ids(self, anima_dir: Path):
         """Multiple tools with same name but different tool_ids are matched correctly."""
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         events = [
             json.dumps({"ev": "start", "trigger": "chat", "ts": "2026-02-22T10:00:00"}),
             json.dumps({"ev": "tool_start", "tool": "Bash", "args_summary": "ls", "tool_id": "toolu_A", "ts": "2026-02-22T10:00:01"}),
@@ -582,7 +582,7 @@ class TestToolIdRecoveryMatching:
 
     def test_tool_id_match_preferred_over_tool_name(self, anima_dir: Path):
         """When both tool_id and tool_name could match, tool_id match takes priority."""
-        journal_path = anima_dir / "shortterm" / "streaming_journal.jsonl"
+        journal_path = anima_dir / "shortterm" / "streaming_journal_chat.jsonl"
         # Two Bash starts: first without tool_id, second with tool_id.
         # The tool_end with tool_id should match the second, not the first.
         events = [

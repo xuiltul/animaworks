@@ -214,26 +214,32 @@ class TestSuppressBoardFanout:
         handler: "ToolHandler",
         messenger: MagicMock,
     ) -> None:
-        """_suppress_board_fanout=False should still call fanout normally."""
-        handler._suppress_board_fanout = False
+        """suppress_board_fanout=False should still call fanout normally."""
+        from core.tooling.handler import suppress_board_fanout
+        token = suppress_board_fanout.set(False)
+        try:
+            with patch.object(handler, "_fanout_board_mentions") as mock_fanout:
+                handler._handle_post_channel({"channel": "dev", "text": "@bob check"})
 
-        with patch.object(handler, "_fanout_board_mentions") as mock_fanout:
-            handler._handle_post_channel({"channel": "dev", "text": "@bob check"})
-
-        mock_fanout.assert_called_once_with("dev", "@bob check")
+            mock_fanout.assert_called_once_with("dev", "@bob check")
+        finally:
+            suppress_board_fanout.reset(token)
 
     def test_post_channel_suppresses_fanout_when_flag_true(
         self,
         handler: "ToolHandler",
         messenger: MagicMock,
     ) -> None:
-        """_suppress_board_fanout=True should skip _fanout_board_mentions."""
-        handler._suppress_board_fanout = True
+        """suppress_board_fanout=True should skip _fanout_board_mentions."""
+        from core.tooling.handler import suppress_board_fanout
+        token = suppress_board_fanout.set(True)
+        try:
+            with patch.object(handler, "_fanout_board_mentions") as mock_fanout:
+                handler._handle_post_channel({"channel": "general", "text": "@all thanks"})
 
-        with patch.object(handler, "_fanout_board_mentions") as mock_fanout:
-            handler._handle_post_channel({"channel": "general", "text": "@all thanks"})
-
-        mock_fanout.assert_not_called()
+            mock_fanout.assert_not_called()
+        finally:
+            suppress_board_fanout.reset(token)
 
     def test_post_channel_still_posts_when_fanout_suppressed(
         self,
@@ -241,12 +247,15 @@ class TestSuppressBoardFanout:
         messenger: MagicMock,
     ) -> None:
         """Even with fanout suppressed, the channel post itself should still succeed."""
-        handler._suppress_board_fanout = True
+        from core.tooling.handler import suppress_board_fanout
+        token = suppress_board_fanout.set(True)
+        try:
+            result = handler._handle_post_channel({"channel": "general", "text": "hello"})
 
-        result = handler._handle_post_channel({"channel": "general", "text": "hello"})
-
-        messenger.post_channel.assert_called_once_with("general", "hello")
-        assert "Posted to #general" in result
+            messenger.post_channel.assert_called_once_with("general", "hello")
+            assert "Posted to #general" in result
+        finally:
+            suppress_board_fanout.reset(token)
 
     def test_post_channel_logs_suppression(
         self,
@@ -254,28 +263,30 @@ class TestSuppressBoardFanout:
         messenger: MagicMock,
     ) -> None:
         """Suppressed fanout should be logged."""
-        handler._suppress_board_fanout = True
+        from core.tooling.handler import suppress_board_fanout
+        token = suppress_board_fanout.set(True)
+        try:
+            with patch("core.tooling.handler.logger") as mock_logger:
+                handler._handle_post_channel({"channel": "ops", "text": "@all acknowledged"})
 
-        with patch("core.tooling.handler.logger") as mock_logger:
-            handler._handle_post_channel({"channel": "ops", "text": "@all acknowledged"})
+            # Look for the suppression log message
+            log_messages = [
+                call.args[0] if call.args else ""
+                for call in mock_logger.info.call_args_list
+            ]
+            assert any("Suppressed board fanout" in msg for msg in log_messages), (
+                f"Expected suppression log message, got: {log_messages}"
+            )
+        finally:
+            suppress_board_fanout.reset(token)
 
-        # Look for the suppression log message
-        log_messages = [
-            call.args[0] if call.args else ""
-            for call in mock_logger.info.call_args_list
-        ]
-        assert any("Suppressed board fanout" in msg for msg in log_messages), (
-            f"Expected suppression log message, got: {log_messages}"
-        )
-
-    def test_suppress_flag_defaults_to_false_via_getattr(
+    def test_suppress_flag_defaults_to_false_via_contextvar(
         self,
         handler: "ToolHandler",
     ) -> None:
-        """Handler should not have _suppress_board_fanout attribute by default;
-        getattr(..., False) should return False."""
-        # Verify the attribute doesn't exist on the handler by default
-        assert not getattr(handler, "_suppress_board_fanout", False)
+        """suppress_board_fanout ContextVar should default to False."""
+        from core.tooling.handler import suppress_board_fanout
+        assert suppress_board_fanout.get() is False
 
 
 # ── Test 3: SQLite migration ─────────────────────────────────────

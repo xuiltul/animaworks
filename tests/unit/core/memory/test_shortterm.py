@@ -20,7 +20,7 @@ from core.memory.shortterm import (
 @pytest.fixture
 def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "anima"
-    (d / "shortterm" / "archive").mkdir(parents=True)
+    (d / "shortterm" / "chat" / "archive").mkdir(parents=True)
     return d
 
 
@@ -70,7 +70,7 @@ class TestHasPending:
         assert stm.has_pending() is False
 
     def test_has_pending(self, stm, anima_dir):
-        (anima_dir / "shortterm" / "session_state.json").write_text(
+        (anima_dir / "shortterm" / "chat" / "session_state.json").write_text(
             "{}", encoding="utf-8"
         )
         assert stm.has_pending() is True
@@ -92,8 +92,8 @@ class TestSave:
         )
         result_path = stm.save(state)
         assert result_path.exists()
-        assert (anima_dir / "shortterm" / "session_state.json").exists()
-        assert (anima_dir / "shortterm" / "session_state.md").exists()
+        assert (anima_dir / "shortterm" / "chat" / "session_state.json").exists()
+        assert (anima_dir / "shortterm" / "chat" / "session_state.md").exists()
 
         # Verify JSON content
         data = json.loads(result_path.read_text(encoding="utf-8"))
@@ -101,7 +101,7 @@ class TestSave:
         assert data["turn_count"] == 3
 
         # Verify Markdown content
-        md = (anima_dir / "shortterm" / "session_state.md").read_text(encoding="utf-8")
+        md = (anima_dir / "shortterm" / "chat" / "session_state.md").read_text(encoding="utf-8")
         assert "sess-1" in md
         assert "Test prompt" in md
 
@@ -111,11 +111,11 @@ class TestSave:
         # Save second state
         stm.save(SessionState(session_id="second"))
         # First should be archived
-        archive_files = list((anima_dir / "shortterm" / "archive").glob("*.json"))
+        archive_files = list((anima_dir / "shortterm" / "chat" / "archive").glob("*.json"))
         assert len(archive_files) >= 1
         # Current should be "second"
         data = json.loads(
-            (anima_dir / "shortterm" / "session_state.json").read_text(encoding="utf-8")
+            (anima_dir / "shortterm" / "chat" / "session_state.json").read_text(encoding="utf-8")
         )
         assert data["session_id"] == "second"
 
@@ -123,7 +123,7 @@ class TestSave:
         anima_dir = tmp_path / "new_anima"
         stm = ShortTermMemory(anima_dir)
         stm.save(SessionState(session_id="test"))
-        assert (anima_dir / "shortterm" / "session_state.json").exists()
+        assert (anima_dir / "shortterm" / "chat" / "session_state.json").exists()
 
 
 # ── save_if_not_exists ────────────────────────────────────
@@ -136,7 +136,7 @@ class TestSaveIfNotExists:
         assert result.exists()
 
     def test_skips_when_md_exists(self, stm, anima_dir):
-        (anima_dir / "shortterm" / "session_state.md").write_text(
+        (anima_dir / "shortterm" / "chat" / "session_state.md").write_text(
             "Agent wrote this", encoding="utf-8"
         )
         result = stm.save_if_not_exists(SessionState(session_id="fallback"))
@@ -162,7 +162,7 @@ class TestLoad:
         assert stm.load() is None
 
     def test_load_malformed(self, stm, anima_dir):
-        (anima_dir / "shortterm" / "session_state.json").write_text(
+        (anima_dir / "shortterm" / "chat" / "session_state.json").write_text(
             "not json", encoding="utf-8"
         )
         assert stm.load() is None
@@ -188,7 +188,7 @@ class TestClear:
         stm.clear()
         assert not stm.has_pending()
         # Should be archived
-        archive_files = list((anima_dir / "shortterm" / "archive").glob("*.json"))
+        archive_files = list((anima_dir / "shortterm" / "chat" / "archive").glob("*.json"))
         assert len(archive_files) >= 1
 
     def test_clear_empty(self, stm):
@@ -200,12 +200,12 @@ class TestClear:
 
 class TestArchiveExisting:
     def test_archives_both_files(self, stm, anima_dir):
-        (anima_dir / "shortterm" / "session_state.json").write_text("{}", encoding="utf-8")
-        (anima_dir / "shortterm" / "session_state.md").write_text("md", encoding="utf-8")
+        (anima_dir / "shortterm" / "chat" / "session_state.json").write_text("{}", encoding="utf-8")
+        (anima_dir / "shortterm" / "chat" / "session_state.md").write_text("md", encoding="utf-8")
         stm._archive_existing()
-        assert not (anima_dir / "shortterm" / "session_state.json").exists()
-        assert not (anima_dir / "shortterm" / "session_state.md").exists()
-        archive = anima_dir / "shortterm" / "archive"
+        assert not (anima_dir / "shortterm" / "chat" / "session_state.json").exists()
+        assert not (anima_dir / "shortterm" / "chat" / "session_state.md").exists()
+        archive = anima_dir / "shortterm" / "chat" / "archive"
         assert len(list(archive.glob("*.json"))) == 1
         assert len(list(archive.glob("*.md"))) == 1
 
@@ -215,7 +215,7 @@ class TestArchiveExisting:
 
 class TestPruneArchive:
     def test_prunes_excess(self, stm, anima_dir):
-        archive = anima_dir / "shortterm" / "archive"
+        archive = anima_dir / "shortterm" / "chat" / "archive"
         # Create 110 files
         for i in range(110):
             (archive / f"{i:04d}.json").write_text("{}", encoding="utf-8")
@@ -224,7 +224,7 @@ class TestPruneArchive:
         assert len(remaining) == 100
 
     def test_no_prune_when_under_limit(self, stm, anima_dir):
-        archive = anima_dir / "shortterm" / "archive"
+        archive = anima_dir / "shortterm" / "chat" / "archive"
         for i in range(5):
             (archive / f"{i:04d}.json").write_text("{}", encoding="utf-8")
         stm._prune_archive(max_files=100)
