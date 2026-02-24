@@ -70,7 +70,8 @@ class Messenger:
             is_internal = (animas_dir / to).is_dir() if animas_dir.exists() else False
             if is_internal:
                 from core.cascade_limiter import depth_limiter
-                if not depth_limiter.check_and_record(self.anima_name, to):
+                sender_dir = animas_dir / self.anima_name
+                if not depth_limiter.check_depth(self.anima_name, to, sender_dir):
                     logger.warning(
                         "Depth limit exceeded: %s -> %s. Message not sent.",
                         self.anima_name, to,
@@ -155,21 +156,47 @@ class Messenger:
     ) -> None:
         """Post a message to a shared channel (append-only JSONL)."""
         _validate_name(channel, "channel name")
+
+        poster = from_name or self.anima_name
         channels_dir = self.shared_dir / "channels"
         channels_dir.mkdir(parents=True, exist_ok=True)
         filepath = channels_dir / f"{channel}.jsonl"
         entry = json.dumps({
             "ts": now_iso(),
-            "from": from_name or self.anima_name,
+            "from": poster,
             "text": text,
             "source": source,
         }, ensure_ascii=False)
         try:
             with filepath.open("a", encoding="utf-8") as f:
                 f.write(entry + "\n")
-            logger.info("Channel post: %s -> #%s", self.anima_name, channel)
+            logger.info("Channel post: %s -> #%s", poster, channel)
         except OSError:
             logger.warning("Failed to post to channel: %s", channel)
+
+    def last_post_by(self, anima_name: str, channel: str) -> dict | None:
+        """Return the last post by *anima_name* in *channel*, or None.
+
+        Scans the channel JSONL file from the tail for efficiency.
+        Used by ToolHandler for cross-run cooldown checks.
+        """
+        filepath = self.shared_dir / "channels" / f"{channel}.jsonl"
+        if not filepath.exists():
+            return None
+        try:
+            lines = filepath.read_text(encoding="utf-8").strip().splitlines()
+            for line in reversed(lines):
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get("from") == anima_name:
+                        return entry
+                except json.JSONDecodeError:
+                    continue
+        except OSError:
+            pass
+        return None
 
     def read_channel(
         self, channel: str, limit: int = 20, human_only: bool = False,
@@ -330,27 +357,34 @@ class Messenger:
     def receive_and_archive(self) -> list[Message]:
         messages = self.receive()
         if messages:
-            # E: Send read ACK to senders (skip ACK for ack/board_mention to prevent loops)
-            non_ack_messages = [m for m in messages if m.type not in ("ack", "board_mention")]
-            if non_ack_messages:
-                senders: dict[str, list[Message]] = {}
-                for m in non_ack_messages:
-                    senders.setdefault(m.from_person, []).append(m)
-                for sender, sender_msgs in senders.items():
-                    summary = ", ".join(m.content[:50] for m in sender_msgs[:3])
-                    if len(sender_msgs) > 3:
-                        summary += f" (+{len(sender_msgs) - 3}件)"
-                    try:
-                        self.send(
-                            to=sender,
-                            content=f"[既読通知] {len(sender_msgs)}件のメッセージを受信しました: {summary}",
-                            msg_type="ack",
-                            skip_logging=True,
-                        )
-                    except Exception:
-                        logger.debug(
-                            "Failed to send read ACK to %s", sender, exc_info=True,
-                        )
+            # E: Send read ACK to senders (disabled by default via heartbeat.enable_read_ack)
+            try:
+                from core.config.models import load_config
+                _send_ack = load_config().heartbeat.enable_read_ack
+            except Exception:
+                _send_ack = False
+
+            if _send_ack:
+                non_ack_messages = [m for m in messages if m.type not in ("ack", "board_mention")]
+                if non_ack_messages:
+                    senders: dict[str, list[Message]] = {}
+                    for m in non_ack_messages:
+                        senders.setdefault(m.from_person, []).append(m)
+                    for sender, sender_msgs in senders.items():
+                        summary = ", ".join(m.content[:50] for m in sender_msgs[:3])
+                        if len(sender_msgs) > 3:
+                            summary += f" (+{len(sender_msgs) - 3}件)"
+                        try:
+                            self.send(
+                                to=sender,
+                                content=f"[既読通知] {len(sender_msgs)}件のメッセージを受信しました: {summary}",
+                                msg_type="ack",
+                                skip_logging=True,
+                            )
+                        except Exception:
+                            logger.debug(
+                                "Failed to send read ACK to %s", sender, exc_info=True,
+                            )
             self.archive_all()
         return messages
 

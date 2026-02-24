@@ -48,6 +48,21 @@ class StreamingIPCHandler:
         self._anima_name = anima_name
         self._anima_dir = anima_dir
 
+    def _clear_stream_abort_state(self, reason: str) -> None:
+        """Clear session IDs and checkpoint after abnormal stream termination."""
+        try:
+            from core.execution.agent_sdk import clear_session_ids
+            clear_session_ids(self._anima_dir)
+            logger.info("Session IDs cleared: %s", reason)
+        except Exception as e:
+            logger.warning("Failed to clear session IDs: %s", e)
+        try:
+            from core.memory.shortterm import ShortTermMemory
+            ShortTermMemory(self._anima_dir).clear_checkpoint()
+            logger.info("Stream checkpoint cleared: %s", reason)
+        except Exception as e:
+            logger.warning("Failed to clear checkpoint: %s", e)
+
     async def handle_stream(
         self, request: IPCRequest
     ) -> AsyncIterator[IPCResponse]:
@@ -184,7 +199,8 @@ class StreamingIPCHandler:
                             chunk=json.dumps(chunk, ensure_ascii=False),
                         ))
 
-                # Stream ended without cycle_done — send final done
+                # Stream ended without cycle_done — done=False切断パス
+                self._clear_stream_abort_state("stream ended without cycle_done (done=False)")
                 await _enqueue(IPCResponse(
                     id=request.id,
                     stream=True,
@@ -197,6 +213,7 @@ class StreamingIPCHandler:
 
             except TimeoutError as e:
                 logger.error("Timeout in streaming process_message: %s", e)
+                self._clear_stream_abort_state("timeout")
                 await queue.put(IPCResponse(
                     id=request.id,
                     error={
@@ -208,6 +225,7 @@ class StreamingIPCHandler:
                 logger.exception(
                     "Error in streaming process_message: %s", e,
                 )
+                self._clear_stream_abort_state("exception")
                 await queue.put(IPCResponse(
                     id=request.id,
                     error={

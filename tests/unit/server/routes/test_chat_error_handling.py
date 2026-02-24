@@ -205,8 +205,15 @@ class TestStreamErrorCodes:
 
 class TestStreamKeepalive:
     @patch("core.config.load_config")
-    async def test_keepalive_chunk_becomes_sse_comment(self, mock_load_config):
-        """Keep-alive chunks should be emitted as SSE comments, not events."""
+    async def test_keepalive_chunk_not_in_registry(self, mock_load_config):
+        """Keep-alive IPC chunks are skipped by producer (not added to registry).
+
+        In the producer/tail architecture, keepalives are NOT buffered in
+        StreamRegistry.  The tail sends SSE keepalive comments only when
+        wait_new_event() times out (30s), which doesn't happen in fast tests.
+        This test verifies keepalives don't appear as named SSE events and
+        that the done event is delivered correctly.
+        """
         mock_config = MagicMock()
         mock_config.server.ipc_stream_timeout = 60
         mock_load_config.return_value = mock_config
@@ -235,8 +242,6 @@ class TestStreamKeepalive:
             )
 
         body = resp.text
-        # SSE comment line is present
-        assert ": keepalive" in body
         # Keep-alive must NOT appear as a named SSE event
         assert "event: keepalive" not in body
         # Normal done event is still emitted

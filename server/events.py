@@ -26,3 +26,28 @@ async def emit_notification(request: Request, data: dict[str, Any]) -> None:
     ws = getattr(request.app.state, "ws_manager", None)
     if ws:
         await ws.broadcast_notification(data)
+
+
+async def emit_direct(
+    ws_manager: Any, event_type: str, data: dict[str, Any],
+) -> None:
+    """Broadcast a WebSocket event using ws_manager directly.
+
+    Unlike :func:`emit`, this does not require a ``Request`` object,
+    making it suitable for background producer tasks that outlive the
+    HTTP connection.
+    """
+    if ws_manager:
+        await ws_manager.broadcast({"type": event_type, "data": data})
+
+
+async def emit_notification_direct(
+    ws_manager: Any, data: dict[str, Any],
+) -> None:
+    """Broadcast a notification using ws_manager directly.
+
+    Unlike :func:`emit_notification`, this does not require a ``Request``
+    object, making it suitable for background producer tasks.
+    """
+    if ws_manager:
+        await ws_manager.broadcast_notification(data)

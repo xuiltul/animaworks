@@ -239,8 +239,35 @@ class ContextTracker:
 
         Uses ``input_tokens + output_tokens`` because the snapshot
         represents the total session cost.
+
+        NOTE: ``ResultMessage.usage.input_tokens`` is a *cumulative sum* across
+        all turns in the session (not the current context size).  Prefer
+        ``update_from_message_start()`` for accurate mid-session tracking.
         """
         self.update(usage, include_output_in_ratio=True)
+
+    def update_from_message_start(self, usage: dict | None) -> bool:
+        """Update from a StreamEvent ``message_start`` usage dict (S mode).
+
+        This is the most accurate mid-session context measurement.  The
+        ``message_start`` event is emitted once per LLM turn and reports the
+        actual number of tokens consumed by the current request, including
+        prompt-cache tokens:
+
+            actual_context = input_tokens
+                           + cache_creation_input_tokens
+                           + cache_read_input_tokens
+
+        Returns True if the threshold was newly crossed.
+        """
+        if not usage:
+            return False
+        actual_input = (
+            usage.get("input_tokens", 0)
+            + usage.get("cache_creation_input_tokens", 0)
+            + usage.get("cache_read_input_tokens", 0)
+        )
+        return self.update({"input_tokens": actual_input}, include_output_in_ratio=False)
 
     def reset(self) -> None:
         """Reset tracker for a new session."""

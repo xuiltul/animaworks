@@ -6,101 +6,165 @@ from __future__ import annotations
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 
-"""Tests for ConversationDepthLimiter.
+"""Tests for ConversationDepthLimiter (file-based implementation).
 
 Covers:
-- Pair key normalization (symmetric)
-- Windowed expiration
-- Blocking at max_depth
+- check_depth blocks when exchange count exceeds max_depth
+- check_depth allows when under limit
+- check_depth fail-open when activity_log is missing
 - current_depth reporting
+- Legacy check_and_record always returns True (no-op stub)
+- Module-level singleton exists
 """
 
-import time
+import json
+from datetime import timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from core.cascade_limiter import ConversationDepthLimiter
+from core.time_utils import now_jst
 
 
-class TestPairKeyNormalization:
-    """Pair key is always sorted, so (a, b) == (b, a)."""
-
-    def test_pair_key_symmetric(self):
-        limiter = ConversationDepthLimiter()
-        assert limiter._pair_key("alice", "bob") == limiter._pair_key("bob", "alice")
-
-    def test_pair_key_same(self):
-        limiter = ConversationDepthLimiter()
-        assert limiter._pair_key("alice", "bob") == ("alice", "bob")
-
-
-class TestCheckAndRecord:
-    """Test check_and_record allows up to max_depth, then blocks."""
-
-    def test_allows_up_to_max_depth(self):
-        limiter = ConversationDepthLimiter(max_depth=3)
-        assert limiter.check_and_record("alice", "bob") is True
-        assert limiter.check_and_record("bob", "alice") is True
-        assert limiter.check_and_record("alice", "bob") is True
-        # 4th should be blocked
-        assert limiter.check_and_record("bob", "alice") is False
-
-    def test_different_pairs_independent(self):
-        limiter = ConversationDepthLimiter(max_depth=2)
-        assert limiter.check_and_record("alice", "bob") is True
-        assert limiter.check_and_record("alice", "bob") is True
-        assert limiter.check_and_record("alice", "bob") is False  # blocked
-
-        # Different pair should still be allowed
-        assert limiter.check_and_record("alice", "charlie") is True
-        assert limiter.check_and_record("alice", "charlie") is True
-
-    def test_symmetric_counting(self):
-        """A -> B and B -> A count towards the same depth."""
-        limiter = ConversationDepthLimiter(max_depth=2)
-        assert limiter.check_and_record("alice", "bob") is True   # depth=1
-        assert limiter.check_and_record("bob", "alice") is True   # depth=2
-        assert limiter.check_and_record("alice", "bob") is False  # blocked
+def _write_activity_entries(
+    anima_dir: Path,
+    entries: list[dict],
+) -> None:
+    """Write activity log entries for testing."""
+    log_dir = anima_dir / "activity_log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    today = now_jst().strftime("%Y-%m-%d")
+    log_file = log_dir / f"{today}.jsonl"
+    with log_file.open("a", encoding="utf-8") as f:
+        for entry in entries:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
-class TestWindowExpiration:
-    """Entries expire after the window, freeing up depth."""
+def _make_dm_entry(
+    event_type: str = "dm_sent",
+    from_person: str = "alice",
+    to_person: str = "bob",
+    content: str = "hello",
+    ts: str | None = None,
+) -> dict:
+    """Create a DM activity log entry."""
+    return {
+        "ts": ts or now_jst().isoformat(),
+        "type": event_type,
+        "content": content,
+        "from_person": from_person,
+        "to_person": to_person,
+    }
 
-    def test_expired_entries_evicted(self):
-        limiter = ConversationDepthLimiter(window_s=10, max_depth=2)
-        assert limiter.check_and_record("alice", "bob") is True
-        assert limiter.check_and_record("alice", "bob") is True
-        assert limiter.check_and_record("alice", "bob") is False  # blocked
 
-        # Simulate time passing beyond window
-        with patch("time.monotonic", return_value=time.monotonic() + 11):
-            assert limiter.check_and_record("alice", "bob") is True  # allowed again
+@pytest.fixture
+def _patch_config():
+    """Patch load_config for ConversationDepthLimiter.__init__."""
+    with patch("core.cascade_limiter.load_config") as mock_cfg:
+        mock_cfg.return_value.heartbeat.depth_window_s = 600
+        mock_cfg.return_value.heartbeat.max_depth = 6
+        yield mock_cfg
+
+
+class TestCheckDepth:
+    """Test file-based check_depth method."""
+
+    def test_blocks_on_exceeded(self, tmp_path: Path, _patch_config):
+        """depth超過でFalseを返す。"""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        limiter = ConversationDepthLimiter(window_s=600, max_depth=3)
+
+        entries = [
+            _make_dm_entry("dm_sent", "alice", "bob"),
+            _make_dm_entry("dm_received", "bob", "alice"),
+            _make_dm_entry("dm_sent", "alice", "bob"),
+        ]
+        _write_activity_entries(anima_dir, entries)
+
+        assert limiter.check_depth("alice", "bob", anima_dir) is False
+
+    def test_allows_under_limit(self, tmp_path: Path, _patch_config):
+        """limit内でTrueを返す。"""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        limiter = ConversationDepthLimiter(window_s=600, max_depth=6)
+
+        entries = [
+            _make_dm_entry("dm_sent", "alice", "bob"),
+            _make_dm_entry("dm_received", "bob", "alice"),
+        ]
+        _write_activity_entries(anima_dir, entries)
+
+        assert limiter.check_depth("alice", "bob", anima_dir) is True
+
+    def test_fail_open_on_missing_log(self, tmp_path: Path, _patch_config):
+        """activity_logが存在しない場合はTrueを返す（fail-open）。"""
+        anima_dir = tmp_path / "animas" / "alice"
+        # Don't create the directory
+        limiter = ConversationDepthLimiter(window_s=600, max_depth=3)
+        assert limiter.check_depth("alice", "bob", anima_dir) is True
+
+    def test_old_entries_not_counted(self, tmp_path: Path, _patch_config):
+        """ウィンドウ外の古いエントリはカウントされない。"""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        old_ts = (now_jst() - timedelta(seconds=700)).isoformat()
+        entries = [
+            _make_dm_entry("dm_sent", "alice", "bob", ts=old_ts),
+            _make_dm_entry("dm_received", "bob", "alice", ts=old_ts),
+            _make_dm_entry("dm_sent", "alice", "bob", ts=old_ts),
+        ]
+        _write_activity_entries(anima_dir, entries)
+
+        limiter = ConversationDepthLimiter(window_s=600, max_depth=3)
+        assert limiter.check_depth("alice", "bob", anima_dir) is True
 
 
 class TestCurrentDepth:
     """Test current_depth reporting."""
 
-    def test_zero_when_empty(self):
-        limiter = ConversationDepthLimiter()
-        assert limiter.current_depth("alice", "bob") == 0
+    def test_zero_when_empty(self, tmp_path: Path, _patch_config):
+        """ログなしで0を返す。"""
+        anima_dir = tmp_path / "animas" / "alice"
+        limiter = ConversationDepthLimiter(window_s=600, max_depth=6)
+        assert limiter.current_depth("alice", "bob", anima_dir) == 0
 
-    def test_increments_with_exchanges(self):
-        limiter = ConversationDepthLimiter(max_depth=10)
-        limiter.check_and_record("alice", "bob")
-        assert limiter.current_depth("alice", "bob") == 1
-        limiter.check_and_record("bob", "alice")
-        assert limiter.current_depth("alice", "bob") == 2
+    def test_counts_exchanges(self, tmp_path: Path, _patch_config):
+        """交換数を正しくカウントする。"""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
 
-    def test_symmetric(self):
-        limiter = ConversationDepthLimiter(max_depth=10)
-        limiter.check_and_record("alice", "bob")
-        assert limiter.current_depth("bob", "alice") == 1
+        entries = [
+            _make_dm_entry("dm_sent", "alice", "bob"),
+            _make_dm_entry("dm_received", "bob", "alice"),
+        ]
+        _write_activity_entries(anima_dir, entries)
+
+        limiter = ConversationDepthLimiter(window_s=600, max_depth=6)
+        assert limiter.current_depth("alice", "bob", anima_dir) == 2
+
+
+class TestLegacyCheckAndRecord:
+    """Legacy check_and_record is a no-op that always returns True."""
+
+    def test_always_returns_true(self, _patch_config):
+        """後方互換性スタブは常にTrueを返す。"""
+        limiter = ConversationDepthLimiter(max_depth=1)
+        assert limiter.check_and_record("alice", "bob") is True
+        assert limiter.check_and_record("alice", "bob") is True
+        assert limiter.check_and_record("alice", "bob") is True
 
 
 class TestModuleSingleton:
     """Test the module-level singleton is shared."""
 
     def test_singleton_exists(self):
+        """シングルトンが存在する。"""
         from core.cascade_limiter import depth_limiter
         assert isinstance(depth_limiter, ConversationDepthLimiter)

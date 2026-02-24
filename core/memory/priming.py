@@ -316,7 +316,7 @@ class PrimingEngine:
         from core.memory.activity import ActivityLogger
 
         activity = ActivityLogger(self.anima_dir)
-        entries = activity.recent(days=2)  # No limit — fetch all entries
+        entries = activity.recent(days=2, limit=100)  # Top-50 selected after scoring below
 
         # Always read shared channels for cross-Anima visibility
         channel_entries = self._read_shared_channels(limit_per_channel=5)

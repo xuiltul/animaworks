@@ -531,6 +531,74 @@ SUPERVISOR_TOOLS: list[dict[str, Any]] = [
             "required": ["name"],
         },
     },
+    {
+        "name": "set_subordinate_model",
+        "description": (
+            "部下のLLMモデルを変更する（直属部下のみ可能）。\n"
+            "変更は即時 config.json に保存されるが、実行中プロセスへの反映には "
+            "restart_subordinate を併用すること。\n\n"
+            "指定するモデル名は provider/model_name 形式（Claude は prefix 不要）。\n"
+            "KNOWN_MODELS 外の名前を指定した場合も警告のみで処理は続行する。\n\n"
+            "主なモデル名:\n"
+            "  [Mode S / Claude]\n"
+            "  claude-opus-4-6            最高性能・推奨\n"
+            "  claude-sonnet-4-6          バランス型・推奨\n"
+            "  claude-haiku-4-5-20251001  軽量・高速\n"
+            "  [Mode A / OpenAI]\n"
+            "  openai/gpt-4.1             最新・コーディング強\n"
+            "  openai/gpt-4.1-mini        高速・低コスト\n"
+            "  openai/o4-mini-2025-04-16  推論・低コスト\n"
+            "  [Mode A / Google]\n"
+            "  google/gemini-2.5-pro      最高性能\n"
+            "  google/gemini-2.5-flash    高速バランス\n"
+            "  [Mode A / xAI]\n"
+            "  xai/grok-4                 最新Grok\n"
+            "  [Mode A / Ollama local]\n"
+            "  ollama/glm-4.7             ローカル・tool_use対応\n"
+            "  [Mode B / Ollama local]\n"
+            "  ollama/gemma3:12b          中型ローカル\n"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "変更する部下のAnima名",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "新しいモデル名（例: claude-sonnet-4-6, openai/gpt-4.1）",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "変更理由（activity_log に記録される）",
+                },
+            },
+            "required": ["name", "model"],
+        },
+    },
+    {
+        "name": "restart_subordinate",
+        "description": (
+            "部下のAnimaプロセスを再起動する（直属部下のみ可能）。\n"
+            "モデル変更（set_subordinate_model）後に呼び出すことで新モデルを即時反映できる。\n"
+            "Reconciliation ループが 30 秒以内にプロセスを再起動する。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "再起動する部下のAnima名",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "再起動理由（activity_log に記録される）",
+                },
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 PROCEDURE_TOOLS: list[dict[str, Any]] = [

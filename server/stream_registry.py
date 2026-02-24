@@ -43,6 +43,8 @@ class ResponseStream:
     full_text: str = ""
     active_tool: str | None = None
     emotion: str | None = None
+    done: bool = False                                      # True if Anima finished normally
+    producer_task: asyncio.Task | None = field(default=None, repr=False)  # Background producer task
     _seq_counter: int = field(default=0, repr=False)
     _new_event: asyncio.Event = field(
         default_factory=asyncio.Event, repr=False,
@@ -224,15 +226,16 @@ class StreamRegistry:
             )
         return stream
 
-    def mark_complete(self, response_id: str) -> None:
+    def mark_complete(self, response_id: str, *, done: bool = True) -> None:
         """Mark a stream as complete."""
         stream = self._streams.get(response_id)
         if stream:
             stream.complete = True
+            stream.done = done
             logger.info(
-                "[SSE-REG] mark_complete stream=%s anima=%s events=%d text_len=%d",
+                "[SSE-REG] mark_complete stream=%s anima=%s events=%d text_len=%d done=%s",
                 response_id, stream.anima_name, stream.event_count,
-                len(stream.full_text),
+                len(stream.full_text), done,
             )
             # Clear the active mapping if this is still the active stream
             if self._anima_active.get(stream.anima_name) == response_id:
@@ -241,6 +244,55 @@ class StreamRegistry:
             logger.info(
                 "[SSE-REG] mark_complete stream=%s NOT_FOUND", response_id,
             )
+
+    def set_producer_task(self, response_id: str, task: asyncio.Task) -> None:
+        """Register a producer task for a stream."""
+        stream = self._streams.get(response_id)
+        if stream:
+            stream.producer_task = task
+            task.add_done_callback(lambda t: self._on_producer_done(response_id, t))
+            logger.info("[SSE-REG] set_producer_task stream=%s", response_id)
+
+    def _on_producer_done(self, response_id: str, task: asyncio.Task) -> None:
+        """Callback when producer task finishes — log exceptions."""
+        if task.cancelled():
+            logger.info("[PRODUCER] cancelled stream=%s", response_id)
+        elif task.exception():
+            logger.error(
+                "[PRODUCER] exception stream=%s: %s",
+                response_id, task.exception(),
+            )
+        else:
+            logger.info("[PRODUCER] completed stream=%s", response_id)
+
+    def cancel_producer(self, response_id: str) -> None:
+        """Cancel producer task for a specific stream."""
+        stream = self._streams.get(response_id)
+        if stream and stream.producer_task and not stream.producer_task.done():
+            stream.producer_task.cancel()
+            logger.info("[SSE-REG] cancel_producer stream=%s", response_id)
+
+    def cancel_all_producers(self) -> None:
+        """Cancel all running producer tasks (for server shutdown)."""
+        cancelled = 0
+        for rid, stream in self._streams.items():
+            if stream.producer_task and not stream.producer_task.done():
+                stream.producer_task.cancel()
+                cancelled += 1
+        if cancelled:
+            logger.info(
+                "[SSE-REG] cancel_all_producers cancelled=%d", cancelled,
+            )
+
+    async def await_all_producers(self, timeout: float = 5.0) -> None:
+        """Wait for all running producer tasks to finish (for graceful shutdown)."""
+        tasks = [
+            s.producer_task for s in self._streams.values()
+            if s.producer_task and not s.producer_task.done()
+        ]
+        if tasks:
+            logger.info("[SSE-REG] await_all_producers count=%d timeout=%.1f", len(tasks), timeout)
+            await asyncio.wait(tasks, timeout=timeout)
 
     def cleanup(self) -> int:
         """Remove expired streams. Returns count of removed entries."""
@@ -252,6 +304,9 @@ class StreamRegistry:
         for rid in expired:
             stream = self._streams.pop(rid, None)
             if stream:
+                # Cancel producer task if still running
+                if stream.producer_task and not stream.producer_task.done():
+                    stream.producer_task.cancel()
                 # Clean up active mapping if it points to this expired stream
                 if self._anima_active.get(stream.anima_name) == rid:
                     self._anima_active.pop(stream.anima_name, None)

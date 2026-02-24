@@ -17,8 +17,8 @@ from pydantic import BaseModel
 
 from core.time_utils import now_jst
 from server.dependencies import get_anima
-from server.events import emit, emit_notification
-from server.stream_registry import StreamRegistry
+from server.events import emit, emit_notification, emit_direct, emit_notification_direct
+from server.stream_registry import StreamRegistry, format_sse_with_id
 
 logger = logging.getLogger("animaworks.routes.chat")
 
@@ -304,6 +304,279 @@ def _chunk_to_event(chunk: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
     return None
 
 
+# ── Producer / Tail (SSE-IPC Separation) ─────────────────
+
+
+async def _emit_ws_side_effects(
+    chunk: dict[str, Any],
+    ws_manager: Any,
+    anima_name: str,
+) -> None:
+    """Fire WebSocket side effects for an IPC chunk (no request dependency).
+
+    Handles bootstrap status broadcasts and notification forwarding
+    that need to work even when the SSE client is disconnected.
+    """
+    event_type = chunk.get("type")
+    if event_type == "bootstrap_start" and ws_manager:
+        await emit_direct(
+            ws_manager, "anima.bootstrap",
+            {"name": anima_name, "status": "started"},
+        )
+    elif event_type == "bootstrap_complete" and ws_manager:
+        await emit_direct(
+            ws_manager, "anima.bootstrap",
+            {"name": anima_name, "status": "completed"},
+        )
+    elif event_type == "notification_sent" and ws_manager:
+        await emit_notification_direct(
+            ws_manager, chunk.get("data", {}),
+        )
+
+
+async def _run_producer(
+    stream: Any,
+    registry: StreamRegistry,
+    supervisor: Any,
+    ws_manager: Any,
+    *,
+    name: str,
+    body: Any,
+    saved_paths: list[str],
+) -> None:
+    """Background task: consume IPC stream and write events to StreamRegistry.
+
+    Runs independently of the SSE connection — client disconnect does NOT
+    kill this task, allowing the Anima to finish processing.
+    """
+    stream_done = False
+    ipc_chunk_count = 0
+    keepalive_count = 0
+    import time as _time
+    _start = _time.monotonic()
+
+    try:
+        await emit_direct(ws_manager, "anima.status", {"name": name, "status": "thinking"})
+
+        # Emit stream_start event
+        stream.add_event("stream_start", {"response_id": stream.response_id})
+
+        from core.config import load_config
+        _config = load_config()
+        _timeout = float(_config.server.ipc_stream_timeout)
+
+        logger.info(
+            "[PRODUCER] start anima=%s stream=%s user=%s timeout=%.1f",
+            name, stream.response_id, body.from_person, _timeout,
+        )
+
+        async for ipc_response in supervisor.send_request_stream(
+            anima_name=name,
+            method="process_message",
+            params={
+                "message": body.message,
+                "from_person": body.from_person,
+                "intent": body.intent,
+                "stream": True,
+                "images": [img.model_dump() for img in body.images] if body.images else [],
+                "attachment_paths": saved_paths,
+            },
+            timeout=_timeout,
+        ):
+            ipc_chunk_count += 1
+
+            if ipc_response.done:
+                # Final response with full result
+                result = ipc_response.result or {}
+                full_response = result.get("response", "")
+                cycle_result = result.get("cycle_result", {})
+                summary = cycle_result.get("summary", full_response)
+                clean_text, emotion = extract_emotion(summary)
+                cycle_result["summary"] = clean_text
+                cycle_result["emotion"] = emotion
+                elapsed = _time.monotonic() - _start
+                logger.info(
+                    "[PRODUCER] IPC done anima=%s stream=%s ipc_chunks=%d keepalives=%d elapsed=%.1fs response_len=%d",
+                    name, stream.response_id, ipc_chunk_count,
+                    keepalive_count, elapsed, len(clean_text),
+                )
+                stream.add_event("done", cycle_result or {"summary": clean_text, "emotion": emotion})
+                stream_done = True
+                break
+
+            if ipc_response.chunk:
+                try:
+                    chunk_data = json.loads(ipc_response.chunk)
+
+                    # Keep-alive chunks — don't add to registry, tail sends
+                    # SSE keepalive comments on wait_new_event timeout
+                    if chunk_data.get("type") == "keepalive":
+                        keepalive_count += 1
+                        elapsed = _time.monotonic() - _start
+                        logger.info(
+                            "[PRODUCER] keepalive anima=%s stream=%s keepalive#%d elapsed=%.1fs",
+                            name, stream.response_id, keepalive_count, elapsed,
+                        )
+                        continue
+
+                    # WebSocket side effects (no request dependency)
+                    await _emit_ws_side_effects(chunk_data, ws_manager, name)
+
+                    # Convert to SSE event and buffer in registry
+                    result = _chunk_to_event(chunk_data)
+                    if result:
+                        evt_name, evt_payload = result
+                        stream.add_event(evt_name, evt_payload)
+                        if evt_name == "done":
+                            stream_done = True
+                except json.JSONDecodeError:
+                    # Raw text chunk fallback
+                    stream.add_event("text_delta", {"text": ipc_response.chunk})
+                continue
+
+            # Fallback: non-streaming IPC response (result without done flag)
+            if ipc_response.result:
+                result = ipc_response.result
+                full_response = result.get("response", "")
+                cycle_result = result.get("cycle_result", {})
+                summary = cycle_result.get("summary", full_response)
+                clean_text, emotion = extract_emotion(summary)
+                cycle_result["summary"] = clean_text
+                cycle_result["emotion"] = emotion
+                stream.add_event("done", cycle_result or {"summary": clean_text, "emotion": emotion})
+                stream_done = True
+                break
+
+        # Stream ended without done event
+        if not stream_done:
+            elapsed = _time.monotonic() - _start
+            logger.warning(
+                "[PRODUCER] INCOMPLETE anima=%s stream=%s ipc_chunks=%d elapsed=%.1fs",
+                name, stream.response_id, ipc_chunk_count, elapsed,
+            )
+            stream.add_event("error", {
+                "code": "STREAM_INCOMPLETE",
+                "message": "ストリームが予期せず終了しました。再試行してください。",
+            })
+
+        registry.mark_complete(stream.response_id, done=stream_done)
+
+    except asyncio.CancelledError:
+        elapsed = _time.monotonic() - _start
+        logger.info(
+            "[PRODUCER] cancelled anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d",
+            name, stream.response_id, elapsed, ipc_chunk_count,
+        )
+        registry.mark_complete(stream.response_id, done=False)
+        raise
+
+    except RuntimeError as e:
+        elapsed = _time.monotonic() - _start
+        error_str = str(e)
+        if "Process restarting" in error_str:
+            logger.warning("[PRODUCER] ANIMA_RESTARTING anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
+            stream.add_event("error", {"code": "ANIMA_RESTARTING", "message": "Animaが再起動中です。しばらく待ってから再試行してください。"})
+        elif "Not connected" in error_str:
+            logger.error("[PRODUCER] ANIMA_UNAVAILABLE anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
+            stream.add_event("error", {"code": "ANIMA_UNAVAILABLE", "message": "Animaのプロセスに接続できません。再起動中の可能性があります。"})
+        elif "Connection closed during stream" in error_str:
+            logger.error("[PRODUCER] CONNECTION_LOST anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d", name, stream.response_id, elapsed, ipc_chunk_count)
+            stream.add_event("error", {"code": "CONNECTION_LOST", "message": "通信が切断されました。再試行してください。"})
+        elif "IPC protocol error" in error_str:
+            logger.error("[PRODUCER] IPC_PROTOCOL_ERROR anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
+            stream.add_event("error", {"code": "IPC_PROTOCOL_ERROR", "message": "通信エラーが発生しました。再試行してください。"})
+        else:
+            logger.exception("[PRODUCER] RUNTIME_ERROR anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
+            stream.add_event("error", {"code": "STREAM_ERROR", "message": "内部エラーが発生しました。再試行してください。"})
+        registry.mark_complete(stream.response_id, done=False)
+
+    except ValueError as e:
+        elapsed = _time.monotonic() - _start
+        logger.error("[PRODUCER] IPC_ERROR anima=%s stream=%s elapsed=%.1fs error=%s", name, stream.response_id, elapsed, e)
+        stream.add_event("error", {"code": "IPC_ERROR", "message": str(e)})
+        registry.mark_complete(stream.response_id, done=False)
+
+    except KeyError:
+        elapsed = _time.monotonic() - _start
+        logger.error("[PRODUCER] ANIMA_NOT_FOUND anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
+        stream.add_event("error", {"code": "ANIMA_NOT_FOUND", "message": f"Anima not found: {name}"})
+        registry.mark_complete(stream.response_id, done=False)
+
+    except TimeoutError:
+        elapsed = _time.monotonic() - _start
+        logger.error("[PRODUCER] IPC_TIMEOUT anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d", name, stream.response_id, elapsed, ipc_chunk_count)
+        stream.add_event("error", {"code": "IPC_TIMEOUT", "message": "応答がタイムアウトしました"})
+        registry.mark_complete(stream.response_id, done=False)
+
+    except Exception:
+        elapsed = _time.monotonic() - _start
+        logger.exception("[PRODUCER] STREAM_ERROR anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d", name, stream.response_id, elapsed, ipc_chunk_count)
+        stream.add_event("error", {"code": "STREAM_ERROR", "message": "Internal server error"})
+        registry.mark_complete(stream.response_id, done=False)
+
+    finally:
+        elapsed = _time.monotonic() - _start
+        logger.info(
+            "[PRODUCER] finalize anima=%s stream=%s ipc_chunks=%d keepalives=%d elapsed=%.1fs done=%s",
+            name, stream.response_id, ipc_chunk_count,
+            keepalive_count, elapsed, stream_done,
+        )
+        try:
+            await emit_direct(ws_manager, "anima.status", {"name": name, "status": "idle"})
+        except Exception:
+            logger.debug("[PRODUCER] failed to emit idle status during cleanup")
+
+
+async def _sse_tail(
+    stream: Any,
+    request: Request,
+) -> AsyncIterator[str]:
+    """Tail StreamRegistry and yield SSE frames.
+
+    If the client disconnects, this generator exits but the producer
+    task continues running in the background.  Uses ``wait_new_event()``
+    for efficient event notification instead of busy polling.
+    """
+    seq = -1
+    logger.info("[SSE-TAIL] start stream=%s", stream.response_id)
+
+    while True:
+        # Check client disconnect
+        if await request.is_disconnected():
+            logger.info(
+                "[SSE-TAIL] client disconnected stream=%s seq=%d",
+                stream.response_id, seq,
+            )
+            break
+
+        # Fetch new events from buffer
+        events = stream.events_after(seq)
+        if events:
+            for event in events:
+                yield format_sse_with_id(event.event, event.payload, event.event_id)
+                seq = event.seq
+
+        # Check if stream is complete and fully drained
+        if stream.complete:
+            # Drain any remaining events that arrived after our last check
+            remaining = stream.events_after(seq)
+            for event in remaining:
+                yield format_sse_with_id(event.event, event.payload, event.event_id)
+            logger.info(
+                "[SSE-TAIL] complete stream=%s seq=%d done=%s",
+                stream.response_id, seq, stream.done,
+            )
+            break
+
+        # Wait efficiently for new events (no busy polling)
+        got_event = await stream.wait_new_event(timeout=30.0)
+        if not got_event and not stream.complete:
+            # Timeout with no events — send keepalive to prevent connection drop
+            yield ": keepalive\n\n"
+
+    logger.info("[SSE-TAIL] end stream=%s seq=%d", stream.response_id, seq)
+
+
 async def _stream_events(
     anima: Any,
     name: str,
@@ -531,224 +804,19 @@ def create_chat_router() -> APIRouter:
 
         stream = registry.register(name, from_person=body.from_person)
 
-        async def _ipc_stream_events() -> AsyncIterator[str]:
-            """Async generator that converts IPC stream to SSE frames."""
-            full_response = ""
-            stream_done = False
-            ipc_chunk_count = 0
-            sse_frame_count = 0
-            keepalive_count = 0
-            import time as _time
-            _stream_start_time = _time.monotonic()
-            try:
-                logger.info(
-                    "[SSE-STREAM] start anima=%s stream=%s user=%s",
-                    name, stream.response_id, body.from_person,
-                )
-                await emit(request, "anima.status", {"name": name, "status": "thinking"})
-
-                # Emit stream_start with response_id for client tracking
-                sse_frame_count += 1
-                yield registry.format_sse(stream, "stream_start", {"response_id": stream.response_id})
-
-                from core.config import load_config
-                _config = load_config()
-                _timeout = float(_config.server.ipc_stream_timeout)
-
-                logger.info(
-                    "[SSE-STREAM] starting IPC stream anima=%s timeout=%.1f",
-                    name, _timeout,
-                )
-                async for ipc_response in supervisor.send_request_stream(
-                    anima_name=name,
-                    method="process_message",
-                    params={
-                        "message": body.message,
-                        "from_person": body.from_person,
-                        "intent": body.intent,
-                        "stream": True,
-                        "images": [img.model_dump() for img in body.images] if body.images else [],
-                        "attachment_paths": saved_paths,
-                    },
-                    timeout=_timeout,
-                ):
-                    ipc_chunk_count += 1
-                    if ipc_response.done:
-                        # Final response with full result
-                        result = ipc_response.result or {}
-                        full_response = result.get("response", full_response)
-                        cycle_result = result.get("cycle_result", {})
-                        # Extract emotion from response
-                        summary = cycle_result.get("summary", full_response)
-                        clean_text, emotion = extract_emotion(summary)
-                        cycle_result["summary"] = clean_text
-                        cycle_result["emotion"] = emotion
-                        full_response = clean_text
-                        sse_frame_count += 1
-                        elapsed = _time.monotonic() - _stream_start_time
-                        logger.info(
-                            "[SSE-STREAM] IPC done anima=%s stream=%s ipc_chunks=%d sse_frames=%d keepalives=%d elapsed=%.1fs response_len=%d",
-                            name, stream.response_id, ipc_chunk_count, sse_frame_count,
-                            keepalive_count, elapsed, len(clean_text),
-                        )
-                        yield registry.format_sse(stream, "done", cycle_result or {"summary": clean_text, "emotion": emotion})
-                        stream_done = True
-                        break
-
-                    if ipc_response.chunk:
-                        # Parse the chunk JSON from the IPC layer
-                        try:
-                            chunk_data = json.loads(ipc_response.chunk)
-
-                            # Keep-alive chunks → SSE comment (invisible to client parser)
-                            if chunk_data.get("type") == "keepalive":
-                                keepalive_count += 1
-                                elapsed = _time.monotonic() - _stream_start_time
-                                logger.info(
-                                    "[SSE-KEEPALIVE] anima=%s stream=%s keepalive#%d elapsed=%.1fs",
-                                    name, stream.response_id, keepalive_count, elapsed,
-                                )
-                                yield ": keepalive\n\n"
-                                continue
-
-                            # Side effects (WebSocket emissions)
-                            _, response_text = _handle_chunk(chunk_data, request=request, anima_name=name)
-                            if response_text:
-                                full_response = response_text
-                            # Format SSE with event ID via registry
-                            result = _chunk_to_event(chunk_data)
-                            if result:
-                                evt_name, evt_payload = result
-                                if evt_name == "done":
-                                    full_response = evt_payload.get("summary", full_response)
-                                    stream_done = True
-                                sse_frame_count += 1
-                                if evt_name != "text_delta":
-                                    logger.info(
-                                        "[SSE-STREAM] yield event=%s anima=%s stream=%s frame#%d",
-                                        evt_name, name, stream.response_id, sse_frame_count,
-                                    )
-                                yield registry.format_sse(stream, evt_name, evt_payload)
-                        except json.JSONDecodeError:
-                            # Raw text chunk fallback
-                            full_response += ipc_response.chunk
-                            yield registry.format_sse(stream, "text_delta", {"text": ipc_response.chunk})
-                        continue
-
-                    # Fallback: non-streaming IPC response (result without done flag)
-                    if ipc_response.result:
-                        result = ipc_response.result
-                        full_response = result.get("response", "")
-                        cycle_result = result.get("cycle_result", {})
-                        summary = cycle_result.get("summary", full_response)
-                        clean_text, emotion = extract_emotion(summary)
-                        cycle_result["summary"] = clean_text
-                        cycle_result["emotion"] = emotion
-                        full_response = clean_text
-                        yield registry.format_sse(stream, "done", cycle_result or {"summary": clean_text, "emotion": emotion})
-                        stream_done = True
-                        break
-
-                # Fallback: stream ended without done event
-                if not stream_done:
-                    elapsed = _time.monotonic() - _stream_start_time
-                    logger.warning(
-                        "[SSE-STREAM] INCOMPLETE anima=%s stream=%s ipc_chunks=%d sse_frames=%d elapsed=%.1fs",
-                        name, stream.response_id, ipc_chunk_count, sse_frame_count, elapsed,
-                    )
-                    yield registry.format_sse(stream, "error", {
-                        "code": "STREAM_INCOMPLETE",
-                        "message": "ストリームが予期せず終了しました。再試行してください。",
-                    })
-
-            except RuntimeError as e:
-                elapsed = _time.monotonic() - _stream_start_time
-                error_str = str(e)
-                if "Process restarting" in error_str:
-                    logger.warning(
-                        "[SSE-STREAM] ANIMA_RESTARTING anima=%s stream=%s elapsed=%.1fs",
-                        name, stream.response_id, elapsed,
-                    )
-                    yield registry.format_sse(stream, "error", {
-                        "code": "ANIMA_RESTARTING",
-                        "message": "Animaが再起動中です。しばらく待ってから再試行してください。",
-                    })
-                elif "Not connected" in error_str:
-                    logger.error(
-                        "[SSE-STREAM] ANIMA_UNAVAILABLE anima=%s stream=%s elapsed=%.1fs error=%s",
-                        name, stream.response_id, elapsed, e,
-                    )
-                    yield registry.format_sse(stream, "error", {
-                        "code": "ANIMA_UNAVAILABLE",
-                        "message": "Animaのプロセスに接続できません。再起動中の可能性があります。",
-                    })
-                elif "Connection closed during stream" in error_str:
-                    logger.error(
-                        "[SSE-STREAM] CONNECTION_LOST anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d error=%s",
-                        name, stream.response_id, elapsed, ipc_chunk_count, e,
-                    )
-                    yield registry.format_sse(stream, "error", {
-                        "code": "CONNECTION_LOST",
-                        "message": "通信が切断されました。再試行してください。",
-                    })
-                elif "IPC protocol error" in error_str:
-                    logger.error(
-                        "[SSE-STREAM] IPC_PROTOCOL_ERROR anima=%s stream=%s elapsed=%.1fs error=%s",
-                        name, stream.response_id, elapsed, e,
-                    )
-                    yield registry.format_sse(stream, "error", {
-                        "code": "IPC_PROTOCOL_ERROR",
-                        "message": "通信エラーが発生しました。再試行してください。",
-                    })
-                else:
-                    logger.exception(
-                        "[SSE-STREAM] RUNTIME_ERROR anima=%s stream=%s elapsed=%.1fs error=%s",
-                        name, stream.response_id, elapsed, e,
-                    )
-                    yield registry.format_sse(stream, "error", {
-                        "code": "STREAM_ERROR",
-                        "message": "内部エラーが発生しました。再試行してください。",
-                    })
-            except ValueError as e:
-                elapsed = _time.monotonic() - _stream_start_time
-                logger.error(
-                    "[SSE-STREAM] IPC_ERROR anima=%s stream=%s elapsed=%.1fs error=%s",
-                    name, stream.response_id, elapsed, e,
-                )
-                yield registry.format_sse(stream, "error", {"code": "IPC_ERROR", "message": str(e)})
-            except KeyError:
-                elapsed = _time.monotonic() - _stream_start_time
-                logger.error(
-                    "[SSE-STREAM] ANIMA_NOT_FOUND anima=%s stream=%s elapsed=%.1fs",
-                    name, stream.response_id, elapsed,
-                )
-                yield registry.format_sse(stream, "error", {"code": "ANIMA_NOT_FOUND", "message": f"Anima not found: {name}"})
-            except TimeoutError:
-                elapsed = _time.monotonic() - _stream_start_time
-                logger.error(
-                    "[SSE-STREAM] IPC_TIMEOUT anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d",
-                    name, stream.response_id, elapsed, ipc_chunk_count,
-                )
-                yield registry.format_sse(stream, "error", {"code": "IPC_TIMEOUT", "message": "応答がタイムアウトしました"})
-            except Exception:
-                elapsed = _time.monotonic() - _stream_start_time
-                logger.exception(
-                    "[SSE-STREAM] STREAM_ERROR anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d",
-                    name, stream.response_id, elapsed, ipc_chunk_count,
-                )
-                yield registry.format_sse(stream, "error", {"code": "STREAM_ERROR", "message": "Internal server error"})
-            finally:
-                elapsed = _time.monotonic() - _stream_start_time
-                logger.info(
-                    "[SSE-STREAM] finalize anima=%s stream=%s ipc_chunks=%d sse_frames=%d keepalives=%d elapsed=%.1fs done=%s",
-                    name, stream.response_id, ipc_chunk_count, sse_frame_count,
-                    keepalive_count, elapsed, stream_done,
-                )
-                registry.mark_complete(stream.response_id)
-                await emit(request, "anima.status", {"name": name, "status": "idle"})
+        # Launch producer task (runs in background, independent of SSE)
+        ws_manager = getattr(request.app.state, "ws_manager", None)
+        task = asyncio.create_task(
+            _run_producer(
+                stream, registry, supervisor, ws_manager,
+                name=name, body=body, saved_paths=saved_paths,
+            ),
+            name=f"producer-{stream.response_id}",
+        )
+        registry.set_producer_task(stream.response_id, task)
 
         return StreamingResponse(
-            _ipc_stream_events(),
+            _sse_tail(stream, request),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

@@ -10,7 +10,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
-    "claude-agent-sdk>=0.1.35",
+    "claude-agent-sdk>=0.1.40",
     "anthropic>=0.42.0",
     "litellm>=1.55.0",
     "fastapi>=0.115.0",

@@ -28,9 +28,11 @@ class TestE2EDMFlow:
 
     @pytest.fixture(autouse=True)
     def _reset_depth_limiter(self):
-        """Reset the global cascade limiter between tests."""
-        from core.cascade_limiter import depth_limiter
-        depth_limiter._exchanges.clear()
+        """Reset the global cascade limiter between tests.
+
+        The file-based limiter reads activity_log, so no in-memory
+        state to clear.  This fixture is kept for backward compatibility.
+        """
 
     def test_send_creates_inbox_and_dm_log(self, shared_dir):
         """send() creates inbox file and writes dm_log (parallel fallback)."""

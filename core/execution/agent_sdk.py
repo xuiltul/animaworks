@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import asdict
 from datetime import datetime
@@ -39,7 +40,7 @@ logger = logging.getLogger("animaworks.execution.agent_sdk")
 
 
 # Re-export for backward compatibility (agent.py imports from here)
-__all__ = ["AgentSDKExecutor", "StreamDisconnectedError"]
+__all__ = ["AgentSDKExecutor", "StreamDisconnectedError", "clear_session_ids"]
 
 
 # ── A1 Bash blocklist ────────────────────────────────────────
@@ -79,6 +80,28 @@ _WRITE_COMMANDS = frozenset({
 # small when system_prompt + conversation history grow large; 4 MB gives
 # comfortable headroom while still catching genuinely broken messages.
 _SDK_MAX_BUFFER_SIZE = 4 * 1024 * 1024  # 4 MB
+
+# Linux MAX_ARG_STRLEN is 128 KiB (131072 bytes) per argument — a kernel
+# compile-time constant that cannot be changed at runtime.  When the
+# system prompt exceeds this limit, `execve` fails with E2BIG ([Errno 7]).
+# We use a conservative threshold (100 KB) to leave headroom for encoding
+# overhead and other arguments.  When exceeded, the prompt is written to a
+# temp file and passed via the CLI's undocumented --system-prompt-file flag.
+_PROMPT_FILE_THRESHOLD = 100_000  # 100 KB
+
+# SDK Issue #387: invalid session ID causes SDK to hang for ~60s before
+# raising an error.  We wrap the first-event receive in asyncio.wait_for
+# so that a stale/invalid resume fails fast and falls back to a fresh session.
+RESUME_TIMEOUT_SEC = 15.0
+
+
+def _cleanup_prompt_files(files: list[Path]) -> None:
+    """Remove temp prompt files created for --system-prompt-file."""
+    for f in files:
+        try:
+            f.unlink(missing_ok=True)
+        except OSError:
+            logger.debug("Failed to remove temp prompt file: %s", f)
 
 # When estimated context usage leaves fewer than max_tokens * this factor
 # free, the PreToolUse hook triggers session termination for auto-compact.
@@ -120,6 +143,15 @@ def _clear_session_id(anima_dir: Path, session_type: str = "chat") -> None:
     path = anima_dir / "state" / _session_file(session_type)
     if path.exists():
         path.unlink(missing_ok=True)
+
+
+def clear_session_ids(anima_dir: Path) -> None:
+    """Clear all session IDs for an anima (chat and heartbeat).
+
+    Public wrapper for use by streaming_handler.py on done=False disconnection.
+    """
+    for session_type in ("chat", "heartbeat"):
+        _clear_session_id(anima_dir, session_type)
 
 
 def _check_a1_file_access(
@@ -570,6 +602,43 @@ def _build_pre_tool_hook(
     return _pre_tool_hook
 
 
+def _build_pre_compact_hook(anima_dir: Path) -> "Callable":
+    """Build a PreCompact hook that logs whenever SDK auto-compact fires.
+
+    This hook is called by the Claude Code subprocess before it summarises and
+    compresses the conversation history.  We record the event to the activity
+    log so that compaction history is visible in the Anima's timeline.
+    """
+    from claude_agent_sdk.types import HookContext, SyncHookJSONOutput
+
+    async def _pre_compact_hook(
+        input_data: dict,
+        tool_use_id: str | None,
+        context: HookContext,
+    ) -> SyncHookJSONOutput:
+        trigger = input_data.get("trigger", "unknown")
+        logger.info(
+            "SDK auto-compact triggered: trigger=%s anima=%s",
+            trigger,
+            anima_dir.name,
+        )
+        # Record to activity log for observability
+        try:
+            from core.memory.activity import ActivityLogger
+            activity = ActivityLogger(anima_dir)
+            await activity.log(
+                event_type="tool_use",
+                content=f"SDK context compaction ({trigger})",
+                summary=f"auto-compact:{trigger}",
+                meta={"trigger": trigger},
+            )
+        except Exception:
+            logger.debug("Failed to write compaction activity log", exc_info=True)
+        return SyncHookJSONOutput()
+
+    return _pre_compact_hook
+
+
 # ── Common tool record helpers ───────────────────────────────
 
 
@@ -738,6 +807,9 @@ class AgentSDKExecutor(BaseExecutor):
             "CLAUDE_CODE_DISABLE_SKILL_IMPROVEMENT": "true",
             # Block API key leaking from parent (load_dotenv) — force Max plan auth.
             "ANTHROPIC_API_KEY": "",
+            # Prevent nested-session detection when animaworks itself runs
+            # inside Claude Code (the bundled CLI checks this variable).
+            "CLAUDECODE": "",
         }
         # Only pass ANTHROPIC_BASE_URL if a custom endpoint is configured.
         if self._model_config.api_base_url:
@@ -770,18 +842,53 @@ class AgentSDKExecutor(BaseExecutor):
         *,
         resume: str | None = None,
         include_partial_messages: bool = False,
-    ) -> "ClaudeAgentOptions":
+    ) -> tuple["ClaudeAgentOptions", Path | None]:
         """Construct ``ClaudeAgentOptions`` for the Agent SDK client.
 
         Shared by both ``execute()`` and ``execute_streaming()`` (initial
         and retry attempts).  All SDK-specific lazy imports live here so
         callers need not repeat them.
+
+        Returns:
+            A tuple of (options, prompt_file).  *prompt_file* is ``None``
+            when the prompt fits in a CLI argument; otherwise it is a
+            ``Path`` to a temp file that the **caller must delete** after
+            the SDK client has been closed.
         """
         from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
         _cw = context_window
+
+        # When the system prompt exceeds MAX_ARG_STRLEN (128 KiB on Linux),
+        # execve fails with E2BIG.  Fall back to --system-prompt-file, an
+        # undocumented but functional CLI flag.  The SDK always emits
+        # --system-prompt ""; JS treats "" as falsy so the conflict check
+        # `if (f.systemPrompt)` passes and --system-prompt-file takes effect.
+        prompt_file: Path | None = None
+        extra_args: dict[str, str | None] = {}
+        if len(system_prompt.encode("utf-8")) > _PROMPT_FILE_THRESHOLD:
+            fd, tmp_path = tempfile.mkstemp(
+                suffix=".txt", prefix="aw-sysprompt-",
+            )
+            try:
+                os.write(fd, system_prompt.encode("utf-8"))
+            finally:
+                os.close(fd)
+            prompt_file = Path(tmp_path)
+            prompt_kwarg: str | None = None
+            extra_args["system-prompt-file"] = tmp_path
+            logger.info(
+                "System prompt too large for CLI arg (%d bytes > %d); "
+                "using --system-prompt-file %s",
+                len(system_prompt.encode("utf-8")),
+                _PROMPT_FILE_THRESHOLD,
+                tmp_path,
+            )
+        else:
+            prompt_kwarg = system_prompt
+
         kwargs: dict[str, Any] = dict(
-            system_prompt=system_prompt,
+            system_prompt=prompt_kwarg,
             allowed_tools=[
                 "Read", "Write", "Edit", "Bash", "Grep", "Glob",
                 "mcp__aw__*",
@@ -794,6 +901,7 @@ class AgentSDKExecutor(BaseExecutor):
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,
             resume=resume,
             setting_sources=[],  # CLI内蔵hook(settings.json)の読み込みを防止
+            extra_args=extra_args,
             mcp_servers={
                 "aw": {
                     "command": sys.executable,
@@ -811,11 +919,15 @@ class AgentSDKExecutor(BaseExecutor):
                         session_stats=session_stats,
                     )],
                 )],
+                "PreCompact": [HookMatcher(
+                    matcher=".*",
+                    hooks=[_build_pre_compact_hook(self._anima_dir)],
+                )],
             },
         )
         if include_partial_messages:
             kwargs["include_partial_messages"] = True
-        return ClaudeAgentOptions(**kwargs)
+        return ClaudeAgentOptions(**kwargs), prompt_file
 
     async def _process_blocking_messages(
         self,
@@ -942,10 +1054,13 @@ class AgentSDKExecutor(BaseExecutor):
         session_type = "heartbeat" if trigger in ("heartbeat",) or (trigger and trigger.startswith("cron:")) else "chat"
         session_id_to_resume = _load_session_id(self._anima_dir, session_type)
 
-        options = self._build_sdk_options(
+        options, prompt_file = self._build_sdk_options(
             system_prompt, _max_turns, _cw, session_stats,
             resume=session_id_to_resume,
         )
+        _prompt_files: list[Path] = []
+        if prompt_file:
+            _prompt_files.append(prompt_file)
 
         response_text: list[str] = []
         pending_records: dict[str, ToolCallRecord] = {}
@@ -973,10 +1088,12 @@ class AgentSDKExecutor(BaseExecutor):
                 )
                 _clear_session_id(self._anima_dir, session_type)
                 # Retry without resume
-                options = self._build_sdk_options(
+                options, pf = self._build_sdk_options(
                     system_prompt, _max_turns, _cw, session_stats,
                     resume=None,
                 )
+                if pf:
+                    _prompt_files.append(pf)
                 try:
                     async with ClaudeSDKClient(options=options) as client:
                         logger.info("ClaudeSDKClient connected (fresh session retry)")
@@ -1007,6 +1124,7 @@ class AgentSDKExecutor(BaseExecutor):
             )
         finally:
             _cleanup_tool_outputs(self._anima_dir)
+            _cleanup_prompt_files(_prompt_files)
 
         all_tool_records = _finalize_pending_records(pending_records)
         logger.debug(
@@ -1083,11 +1201,14 @@ class AgentSDKExecutor(BaseExecutor):
         session_type = "heartbeat" if trigger in ("heartbeat",) or (trigger and trigger.startswith("cron:")) else "chat"
         session_id_to_resume = _load_session_id(self._anima_dir, session_type)
 
-        options = self._build_sdk_options(
+        options, prompt_file = self._build_sdk_options(
             system_prompt, _max_turns, _cw, session_stats,
             resume=session_id_to_resume,
             include_partial_messages=True,
         )
+        _prompt_files: list[Path] = []
+        if prompt_file:
+            _prompt_files.append(prompt_file)
 
         response_text: list[str] = []
         pending_records: dict[str, ToolCallRecord] = {}
@@ -1109,7 +1230,16 @@ class AgentSDKExecutor(BaseExecutor):
                     event = message.event
                     event_type = event.get("type", "")
 
-                    if event_type == "content_block_start":
+                    if event_type == "message_start":
+                        # Accurate per-turn context size (input + cache tokens).
+                        # This is the authoritative source for threshold tracking
+                        # in S mode — unlike ResultMessage.usage which is a
+                        # cumulative sum across all turns.
+                        usage = event.get("message", {}).get("usage", {})
+                        if usage:
+                            tracker.update_from_message_start(usage)
+
+                    elif event_type == "content_block_start":
                         block = event.get("content_block", {})
                         if block.get("type") == "tool_use":
                             tool_id = block.get("id", "")
@@ -1167,7 +1297,11 @@ class AgentSDKExecutor(BaseExecutor):
                     result_message = message
                     if message.session_id:
                         _save_session_id(self._anima_dir, message.session_id, session_type)
-                    tracker.update_from_result_message(message.usage)
+                    # Do NOT call tracker.update_from_result_message() here.
+                    # ResultMessage.usage.input_tokens is a cumulative sum across
+                    # all turns (not the current context size) and would
+                    # produce inaccurate threshold checks.  Context tracking is
+                    # handled per-turn via message_start events above.
                     break  # receive_messages() does not auto-stop on ResultMessage
 
                 elif isinstance(message, SystemMessage):
@@ -1184,57 +1318,98 @@ class AgentSDKExecutor(BaseExecutor):
                             else:
                                 logger.info("MCP server '%s' connected successfully", name)
 
+        async def _run_fresh_session() -> AsyncGenerator[dict[str, Any], None]:
+            """Run a fresh (no-resume) streaming session and yield events."""
+            fresh_options, pf = self._build_sdk_options(
+                system_prompt, _max_turns, _cw, session_stats,
+                resume=None,
+                include_partial_messages=True,
+            )
+            if pf:
+                _prompt_files.append(pf)
+            try:
+                async with ClaudeSDKClient(options=fresh_options) as fresh_client:
+                    logger.info("ClaudeSDKClient connected (fresh session retry)")
+                    async for event in _stream_messages(fresh_client):
+                        yield event
+            except BaseException as retry_exc:
+                if isinstance(retry_exc, asyncio.CancelledError):
+                    raise
+                if not isinstance(retry_exc, Exception):
+                    logger.critical(
+                        "Agent SDK raised %s during streaming retry: %s",
+                        type(retry_exc).__name__, retry_exc,
+                    )
+                else:
+                    logger.exception("Agent SDK streaming error (fresh session retry)")
+                partial = "\n".join(response_text)
+                raise StreamDisconnectedError(
+                    f"Agent SDK stream error ({type(retry_exc).__name__}): {retry_exc}",
+                    partial_text=partial,
+                ) from retry_exc
+
         try:
             logger.info(
                 "ClaudeSDKClient connecting (streaming mode, resume=%s)",
                 session_id_to_resume,
             )
-            async with ClaudeSDKClient(options=options) as client:
-                logger.info("ClaudeSDKClient connected")
-                async for event in _stream_messages(client):
-                    yield event
-            logger.debug("ClaudeSDKClient disconnected")
-        except (ProcessError, ClaudeSDKError) as e:
             if session_id_to_resume:
-                logger.warning(
-                    "SDK session resume failed (session_id=%s): %s. "
-                    "Retrying with fresh session.",
-                    session_id_to_resume, e,
-                )
-                _clear_session_id(self._anima_dir, session_type)
-                # Retry without resume
-                options = self._build_sdk_options(
-                    system_prompt, _max_turns, _cw, session_stats,
-                    resume=None,
-                    include_partial_messages=True,
-                )
+                # SDK Issue #387: an invalid/stale session ID causes the SDK to
+                # hang for ~60 s before raising.  Guard the connection and first
+                # event with RESUME_TIMEOUT_SEC; on timeout (or any SDK error)
+                # clear the bad session ID and fall back to a fresh session.
+                #
+                # NOTE: The timeout guards "first yield from _stream_messages",
+                # which occurs at content_block_start/delta — NOT at
+                # message_start (which only updates the context tracker).
+                # This means a valid resume where the model runs a long tool
+                # before producing text could be falsely timed out.  In
+                # practice 15 s is generous for the connection + first chunk
+                # latency; long-running tools are rare on resume.
+                fell_back = False
                 try:
                     async with ClaudeSDKClient(options=options) as client:
-                        logger.info("ClaudeSDKClient connected (fresh session retry)")
-                        async for event in _stream_messages(client):
-                            yield event
-                except BaseException as retry_exc:
-                    if isinstance(retry_exc, asyncio.CancelledError):
-                        raise
-                    if not isinstance(retry_exc, Exception):
-                        logger.critical(
-                            "Agent SDK raised %s during streaming retry: %s",
-                            type(retry_exc).__name__, retry_exc,
-                        )
-                    else:
-                        logger.exception("Agent SDK streaming error (fresh session retry)")
-                    partial = "\n".join(response_text)
-                    raise StreamDisconnectedError(
-                        f"Agent SDK stream error ({type(retry_exc).__name__}): {retry_exc}",
-                        partial_text=partial,
-                    ) from retry_exc
+                        logger.info("ClaudeSDKClient connected")
+                        stream_gen = _stream_messages(client)
+
+                        async def _get_first_event() -> dict[str, Any]:
+                            return await stream_gen.__anext__()
+
+                        try:
+                            first_event = await asyncio.wait_for(
+                                _get_first_event(), timeout=RESUME_TIMEOUT_SEC
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                "Resume timed out after %.1fs (SDK Issue #387, "
+                                "session_id=%s), falling back to fresh session.",
+                                RESUME_TIMEOUT_SEC, session_id_to_resume,
+                            )
+                            await stream_gen.aclose()
+                            _clear_session_id(self._anima_dir, session_type)
+                            fell_back = True
+                        else:
+                            yield first_event
+                            async for event in stream_gen:
+                                yield event
+                except (ProcessError, ClaudeSDKError) as e:
+                    logger.warning(
+                        "SDK session resume failed (session_id=%s): %s. "
+                        "Retrying with fresh session.",
+                        session_id_to_resume, e,
+                    )
+                    _clear_session_id(self._anima_dir, session_type)
+                    fell_back = True
+
+                if fell_back:
+                    async for event in _run_fresh_session():
+                        yield event
             else:
-                # No session to resume — propagate as StreamDisconnectedError
-                partial = "\n".join(response_text)
-                raise StreamDisconnectedError(
-                    f"Agent SDK stream error ({type(e).__name__}): {e}",
-                    partial_text=partial,
-                ) from e
+                async with ClaudeSDKClient(options=options) as client:
+                    logger.info("ClaudeSDKClient connected")
+                    async for event in _stream_messages(client):
+                        yield event
+            logger.debug("ClaudeSDKClient disconnected")
         except BaseException as e:
             # CancelledError は正常な asyncio ライフサイクル（SIGTERM等）。
             # 捕捉せずそのまま伝播させる。
@@ -1257,6 +1432,7 @@ class AgentSDKExecutor(BaseExecutor):
             ) from e
         finally:
             _cleanup_tool_outputs(self._anima_dir)
+            _cleanup_prompt_files(_prompt_files)
 
         all_tool_records = _finalize_pending_records(pending_records)
         logger.debug(

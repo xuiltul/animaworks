@@ -312,6 +312,62 @@ def _build_recent_tool_section(anima_dir: Path, model_config: Any) -> str:
     return "## Recent Tool Results\n\n" + "\n".join(tool_lines)
 
 
+def _build_recent_outbound_section(anima_dir: Path, max_entries: int = 3) -> str:
+    """Build a short section showing the Anima's recent outbound actions.
+
+    Reads activity_log for channel_post and dm_sent within the last 2 hours.
+    Returns empty string if no recent outbound actions.
+    """
+    try:
+        from core.memory.activity import ActivityLogger
+
+        activity = ActivityLogger(anima_dir)
+        entries = activity.recent(
+            days=1,
+            limit=20,
+            types=["channel_post", "dm_sent"],
+        )
+    except Exception:
+        return ""
+
+    if not entries:
+        return ""
+
+    # Filter to last 2 hours
+    from datetime import datetime, timedelta
+
+    from core.time_utils import ensure_aware, now_jst
+
+    cutoff = now_jst() - timedelta(hours=2)
+
+    recent: list = []
+    for e in reversed(entries):  # newest first
+        try:
+            ts = ensure_aware(datetime.fromisoformat(e.ts))
+            if ts >= cutoff:
+                recent.append(e)
+        except (ValueError, TypeError):
+            continue
+        if len(recent) >= max_entries:
+            break
+
+    if not recent:
+        return ""
+
+    lines = ["## 直近のアウトバウンド行動", ""]
+    for e in reversed(recent):  # chronological order
+        time_str = e.ts[11:16] if len(e.ts) >= 16 else e.ts
+        text_preview = (e.summary or e.content or "")[:80]
+        if e.type == "channel_post":
+            ch = e.channel or "?"
+            lines.append(f"- [{time_str}] #{ch} に投稿済み: 「{text_preview}」")
+        elif e.type == "dm_sent":
+            to = e.to_person or "?"
+            lines.append(f"- [{time_str}] {to} にDM送信済み: 「{text_preview}」")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _build_human_notification_guidance(execution_mode: str = "") -> str:
     """Build the human notification instruction for top-level Animas."""
     if execution_mode == "s":
@@ -464,6 +520,14 @@ def build_system_prompt(
             ))
     except Exception:
         logger.debug("Failed to inject resolution registry", exc_info=True)
+
+    # Recent outbound actions (channel posts, DMs sent in last 2 hours)
+    try:
+        outbound_section = _build_recent_outbound_section(memory.anima_dir)
+        if outbound_section:
+            parts.append(outbound_section)
+    except Exception:
+        logger.debug("Failed to inject recent outbound section", exc_info=True)
 
     # Priming section (automatic memory recall)
     if priming_section:

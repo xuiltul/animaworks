@@ -846,6 +846,32 @@ class ProcessSupervisor:
         # Update running set after recovery attempts
         running = set(self.processes.keys())
 
+        # restart_requested フラグチェック
+        for name in list(on_disk.keys()):
+            anima_dir = self.animas_dir / name
+            status_file = anima_dir / "status.json"
+            try:
+                status = json.loads(status_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not status.get("restart_requested"):
+                continue
+            # Clear flag to prevent re-trigger
+            status.pop("restart_requested", None)
+            status_file.write_text(
+                json.dumps(status, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            logger.info("Reconciliation: restart_requested for %s, restarting", name)
+            try:
+                await self.restart_anima(name)
+            except Exception:
+                logger.exception("Reconciliation: failed to restart %s (restart_requested)", name)
+            continue
+
+        # Update running set after restart_requested handling
+        running = set(self.processes.keys())
+
         # enabled + not running → start
         for name, enabled in on_disk.items():
             if enabled and name not in running:

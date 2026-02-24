@@ -22,7 +22,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.cascade_limiter import ConversationDepthLimiter
 from core.messenger import Messenger
 
 
@@ -50,12 +49,12 @@ class TestDepthLimitBlocking:
 
     def test_blocked_returns_error_message(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
-        limiter = ConversationDepthLimiter(max_depth=1)
-        limiter.check_and_record("alice", "bob")  # use up the one allowed
+        mock_limiter = MagicMock()
+        mock_limiter.check_depth.return_value = False  # blocked
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", limiter),
+            patch("core.cascade_limiter.depth_limiter", mock_limiter),
         ):
             result = messenger.send("bob", "hello")
 
@@ -66,12 +65,12 @@ class TestDepthLimitBlocking:
 
     def test_blocked_does_not_write_file(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
-        limiter = ConversationDepthLimiter(max_depth=1)
-        limiter.check_and_record("alice", "bob")
+        mock_limiter = MagicMock()
+        mock_limiter.check_depth.return_value = False  # blocked
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", limiter),
+            patch("core.cascade_limiter.depth_limiter", mock_limiter),
         ):
             messenger.send("bob", "hello")
 
@@ -85,11 +84,12 @@ class TestDepthLimitAllowed:
 
     def test_allowed_writes_file(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
-        limiter = ConversationDepthLimiter(max_depth=6)
+        mock_limiter = MagicMock()
+        mock_limiter.check_depth.return_value = True  # allowed
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", limiter),
+            patch("core.cascade_limiter.depth_limiter", mock_limiter),
         ):
             result = messenger.send("bob", "hello")
 
@@ -104,12 +104,12 @@ class TestDepthLimitBypass:
 
     def test_ack_bypasses_depth_check(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
-        limiter = ConversationDepthLimiter(max_depth=1)
-        limiter.check_and_record("alice", "bob")  # exhaust
+        mock_limiter = MagicMock()
+        mock_limiter.check_depth.return_value = False  # blocked, but ack bypasses
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", limiter),
+            patch("core.cascade_limiter.depth_limiter", mock_limiter),
         ):
             result = messenger.send("bob", "ok", msg_type="ack")
 
@@ -118,12 +118,12 @@ class TestDepthLimitBypass:
 
     def test_error_bypasses_depth_check(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
-        limiter = ConversationDepthLimiter(max_depth=1)
-        limiter.check_and_record("alice", "bob")
+        mock_limiter = MagicMock()
+        mock_limiter.check_depth.return_value = False  # blocked, but error bypasses
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", limiter),
+            patch("core.cascade_limiter.depth_limiter", mock_limiter),
         ):
             result = messenger.send("bob", "fail", msg_type="error")
 
@@ -132,12 +132,12 @@ class TestDepthLimitBypass:
 
     def test_system_alert_bypasses_depth_check(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
-        limiter = ConversationDepthLimiter(max_depth=1)
-        limiter.check_and_record("alice", "bob")  # exhaust
+        mock_limiter = MagicMock()
+        mock_limiter.check_depth.return_value = False  # blocked, but system_alert bypasses
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", limiter),
+            patch("core.cascade_limiter.depth_limiter", mock_limiter),
         ):
             result = messenger.send("bob", "alert content", msg_type="system_alert")
 
@@ -147,12 +147,12 @@ class TestDepthLimitBypass:
     def test_board_mention_does_not_bypass_depth_check(self, shared_dir, animas_dir):
         """board_mention no longer bypasses depth check (praise-loop-prevention)."""
         messenger = Messenger(shared_dir, "alice")
-        limiter = ConversationDepthLimiter(max_depth=1)
-        limiter.check_and_record("alice", "bob")  # exhaust
+        mock_limiter = MagicMock()
+        mock_limiter.check_depth.return_value = False  # blocked
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", limiter),
+            patch("core.cascade_limiter.depth_limiter", mock_limiter),
         ):
             result = messenger.send("bob", "mentioned you", msg_type="board_mention")
 
@@ -165,13 +165,13 @@ class TestExternalRecipientSkip:
 
     def test_external_recipient_not_checked(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
-        limiter = ConversationDepthLimiter(max_depth=1)
-        limiter.check_and_record("alice", "external-user")  # exhaust
+        mock_limiter = MagicMock()
+        mock_limiter.check_depth.return_value = False  # blocked, but external skips check
 
         # "external-user" directory does not exist in animas_dir
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", limiter),
+            patch("core.cascade_limiter.depth_limiter", mock_limiter),
         ):
             result = messenger.send("external-user", "hello")
 

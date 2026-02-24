@@ -197,6 +197,8 @@ async def lifespan(app: FastAPI):
     # Shutdown all processes
     if app.state.setup_complete:
         await app.state.ws_manager.stop_heartbeat()
+        app.state.stream_registry.cancel_all_producers()
+        await app.state.stream_registry.await_all_producers(timeout=5.0)
         await app.state.stream_registry.stop_cleanup_loop()
         if getattr(app.state, "slack_socket_manager", None):
             await app.state.slack_socket_manager.stop()

@@ -51,9 +51,9 @@ class TestBoardMentionDepthCheck:
     def test_board_mention_calls_depth_limiter(
         self, messenger: "Messenger", animas_dir: Path
     ) -> None:
-        """board_mention should NOT be exempt — depth_limiter.check_and_record must be called."""
+        """board_mention should NOT be exempt — depth_limiter.check_depth must be called."""
         mock_limiter = MagicMock()
-        mock_limiter.check_and_record.return_value = True
+        mock_limiter.check_depth.return_value = True
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
@@ -61,14 +61,16 @@ class TestBoardMentionDepthCheck:
         ):
             messenger.send(to="target-anima", content="Great job!", msg_type="board_mention")
 
-        mock_limiter.check_and_record.assert_called_once_with("sender-anima", "target-anima")
+        mock_limiter.check_depth.assert_called_once_with(
+            "sender-anima", "target-anima", animas_dir / "sender-anima",
+        )
 
     def test_board_mention_blocked_when_depth_exceeded(
         self, messenger: "Messenger", animas_dir: Path
     ) -> None:
         """board_mention should be blocked when depth limiter returns False."""
         mock_limiter = MagicMock()
-        mock_limiter.check_and_record.return_value = False
+        mock_limiter.check_depth.return_value = False
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
@@ -98,7 +100,7 @@ class TestBoardMentionDepthCheck:
         ):
             result = messenger.send(to="target-anima", content="ok", msg_type="ack")
 
-        mock_limiter.check_and_record.assert_not_called()
+        mock_limiter.check_depth.assert_not_called()
         assert result.type == "ack"
 
     def test_error_exempt_from_depth_limiter(
@@ -116,7 +118,7 @@ class TestBoardMentionDepthCheck:
         ):
             result = messenger.send(to="target-anima", content="err", msg_type="error")
 
-        mock_limiter.check_and_record.assert_not_called()
+        mock_limiter.check_depth.assert_not_called()
         assert result.type == "error"
 
     def test_system_alert_exempt_from_depth_limiter(
@@ -136,7 +138,7 @@ class TestBoardMentionDepthCheck:
                 to="target-anima", content="alert", msg_type="system_alert",
             )
 
-        mock_limiter.check_and_record.assert_not_called()
+        mock_limiter.check_depth.assert_not_called()
         assert result.type == "system_alert"
 
     def test_regular_message_calls_depth_limiter(
@@ -144,7 +146,7 @@ class TestBoardMentionDepthCheck:
     ) -> None:
         """Regular 'message' type should also go through the depth limiter."""
         mock_limiter = MagicMock()
-        mock_limiter.check_and_record.return_value = True
+        mock_limiter.check_depth.return_value = True
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
@@ -152,7 +154,9 @@ class TestBoardMentionDepthCheck:
         ):
             messenger.send(to="target-anima", content="hello", msg_type="message")
 
-        mock_limiter.check_and_record.assert_called_once_with("sender-anima", "target-anima")
+        mock_limiter.check_depth.assert_called_once_with(
+            "sender-anima", "target-anima", animas_dir / "sender-anima",
+        )
 
 
 # ── Test 2: _suppress_board_fanout flag in handler ────────────────
