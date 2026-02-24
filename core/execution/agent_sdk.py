@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import asdict
 from datetime import datetime
@@ -80,10 +81,27 @@ _WRITE_COMMANDS = frozenset({
 # comfortable headroom while still catching genuinely broken messages.
 _SDK_MAX_BUFFER_SIZE = 4 * 1024 * 1024  # 4 MB
 
+# Linux MAX_ARG_STRLEN is 128 KiB (131072 bytes) per argument — a kernel
+# compile-time constant that cannot be changed at runtime.  When the
+# system prompt exceeds this limit, `execve` fails with E2BIG ([Errno 7]).
+# We use a conservative threshold (100 KB) to leave headroom for encoding
+# overhead and other arguments.  When exceeded, the prompt is written to a
+# temp file and passed via the CLI's undocumented --system-prompt-file flag.
+_PROMPT_FILE_THRESHOLD = 100_000  # 100 KB
+
 # SDK Issue #387: invalid session ID causes SDK to hang for ~60s before
 # raising an error.  We wrap the first-event receive in asyncio.wait_for
 # so that a stale/invalid resume fails fast and falls back to a fresh session.
 RESUME_TIMEOUT_SEC = 15.0
+
+
+def _cleanup_prompt_files(files: list[Path]) -> None:
+    """Remove temp prompt files created for --system-prompt-file."""
+    for f in files:
+        try:
+            f.unlink(missing_ok=True)
+        except OSError:
+            logger.debug("Failed to remove temp prompt file: %s", f)
 
 # When estimated context usage leaves fewer than max_tokens * this factor
 # free, the PreToolUse hook triggers session termination for auto-compact.
@@ -824,18 +842,53 @@ class AgentSDKExecutor(BaseExecutor):
         *,
         resume: str | None = None,
         include_partial_messages: bool = False,
-    ) -> "ClaudeAgentOptions":
+    ) -> tuple["ClaudeAgentOptions", Path | None]:
         """Construct ``ClaudeAgentOptions`` for the Agent SDK client.
 
         Shared by both ``execute()`` and ``execute_streaming()`` (initial
         and retry attempts).  All SDK-specific lazy imports live here so
         callers need not repeat them.
+
+        Returns:
+            A tuple of (options, prompt_file).  *prompt_file* is ``None``
+            when the prompt fits in a CLI argument; otherwise it is a
+            ``Path`` to a temp file that the **caller must delete** after
+            the SDK client has been closed.
         """
         from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 
         _cw = context_window
+
+        # When the system prompt exceeds MAX_ARG_STRLEN (128 KiB on Linux),
+        # execve fails with E2BIG.  Fall back to --system-prompt-file, an
+        # undocumented but functional CLI flag.  The SDK always emits
+        # --system-prompt ""; JS treats "" as falsy so the conflict check
+        # `if (f.systemPrompt)` passes and --system-prompt-file takes effect.
+        prompt_file: Path | None = None
+        extra_args: dict[str, str | None] = {}
+        if len(system_prompt.encode("utf-8")) > _PROMPT_FILE_THRESHOLD:
+            fd, tmp_path = tempfile.mkstemp(
+                suffix=".txt", prefix="aw-sysprompt-",
+            )
+            try:
+                os.write(fd, system_prompt.encode("utf-8"))
+            finally:
+                os.close(fd)
+            prompt_file = Path(tmp_path)
+            prompt_kwarg: str | None = None
+            extra_args["system-prompt-file"] = tmp_path
+            logger.info(
+                "System prompt too large for CLI arg (%d bytes > %d); "
+                "using --system-prompt-file %s",
+                len(system_prompt.encode("utf-8")),
+                _PROMPT_FILE_THRESHOLD,
+                tmp_path,
+            )
+        else:
+            prompt_kwarg = system_prompt
+
         kwargs: dict[str, Any] = dict(
-            system_prompt=system_prompt,
+            system_prompt=prompt_kwarg,
             allowed_tools=[
                 "Read", "Write", "Edit", "Bash", "Grep", "Glob",
                 "mcp__aw__*",
@@ -848,6 +901,7 @@ class AgentSDKExecutor(BaseExecutor):
             max_buffer_size=_SDK_MAX_BUFFER_SIZE,
             resume=resume,
             setting_sources=[],  # CLI内蔵hook(settings.json)の読み込みを防止
+            extra_args=extra_args,
             mcp_servers={
                 "aw": {
                     "command": sys.executable,
@@ -873,7 +927,7 @@ class AgentSDKExecutor(BaseExecutor):
         )
         if include_partial_messages:
             kwargs["include_partial_messages"] = True
-        return ClaudeAgentOptions(**kwargs)
+        return ClaudeAgentOptions(**kwargs), prompt_file
 
     async def _process_blocking_messages(
         self,
@@ -1000,10 +1054,13 @@ class AgentSDKExecutor(BaseExecutor):
         session_type = "heartbeat" if trigger in ("heartbeat",) or (trigger and trigger.startswith("cron:")) else "chat"
         session_id_to_resume = _load_session_id(self._anima_dir, session_type)
 
-        options = self._build_sdk_options(
+        options, prompt_file = self._build_sdk_options(
             system_prompt, _max_turns, _cw, session_stats,
             resume=session_id_to_resume,
         )
+        _prompt_files: list[Path] = []
+        if prompt_file:
+            _prompt_files.append(prompt_file)
 
         response_text: list[str] = []
         pending_records: dict[str, ToolCallRecord] = {}
@@ -1031,10 +1088,12 @@ class AgentSDKExecutor(BaseExecutor):
                 )
                 _clear_session_id(self._anima_dir, session_type)
                 # Retry without resume
-                options = self._build_sdk_options(
+                options, pf = self._build_sdk_options(
                     system_prompt, _max_turns, _cw, session_stats,
                     resume=None,
                 )
+                if pf:
+                    _prompt_files.append(pf)
                 try:
                     async with ClaudeSDKClient(options=options) as client:
                         logger.info("ClaudeSDKClient connected (fresh session retry)")
@@ -1065,6 +1124,7 @@ class AgentSDKExecutor(BaseExecutor):
             )
         finally:
             _cleanup_tool_outputs(self._anima_dir)
+            _cleanup_prompt_files(_prompt_files)
 
         all_tool_records = _finalize_pending_records(pending_records)
         logger.debug(
@@ -1141,11 +1201,14 @@ class AgentSDKExecutor(BaseExecutor):
         session_type = "heartbeat" if trigger in ("heartbeat",) or (trigger and trigger.startswith("cron:")) else "chat"
         session_id_to_resume = _load_session_id(self._anima_dir, session_type)
 
-        options = self._build_sdk_options(
+        options, prompt_file = self._build_sdk_options(
             system_prompt, _max_turns, _cw, session_stats,
             resume=session_id_to_resume,
             include_partial_messages=True,
         )
+        _prompt_files: list[Path] = []
+        if prompt_file:
+            _prompt_files.append(prompt_file)
 
         response_text: list[str] = []
         pending_records: dict[str, ToolCallRecord] = {}
@@ -1257,11 +1320,13 @@ class AgentSDKExecutor(BaseExecutor):
 
         async def _run_fresh_session() -> AsyncGenerator[dict[str, Any], None]:
             """Run a fresh (no-resume) streaming session and yield events."""
-            fresh_options = self._build_sdk_options(
+            fresh_options, pf = self._build_sdk_options(
                 system_prompt, _max_turns, _cw, session_stats,
                 resume=None,
                 include_partial_messages=True,
             )
+            if pf:
+                _prompt_files.append(pf)
             try:
                 async with ClaudeSDKClient(options=fresh_options) as fresh_client:
                     logger.info("ClaudeSDKClient connected (fresh session retry)")
@@ -1367,6 +1432,7 @@ class AgentSDKExecutor(BaseExecutor):
             ) from e
         finally:
             _cleanup_tool_outputs(self._anima_dir)
+            _cleanup_prompt_files(_prompt_files)
 
         all_tool_records = _finalize_pending_records(pending_records)
         logger.debug(
