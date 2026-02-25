@@ -193,12 +193,13 @@ class TestEstimateFromTranscript:
 
     def test_threshold_only_triggers_once(self, tmp_path):
         f = tmp_path / "big.json"
-        f.write_text("x" * 500_000)
-
         ct = ContextTracker(threshold=0.50)
+        # Write enough to exceed 50% of the context window
+        needed_tokens = int(ct.context_window * 0.60)
+        f.write_text("x" * (needed_tokens * CHARS_PER_TOKEN))
+
         ct.estimate_from_transcript(str(f))
         assert ct.threshold_exceeded is True
-        # Second call shouldn't change the flag
         ct.estimate_from_transcript(str(f))
         assert ct.threshold_exceeded is True
 
@@ -221,9 +222,10 @@ class TestUpdateFromUsage:
 
     def test_threshold_not_crossed_twice(self):
         ct = ContextTracker(threshold=0.50)
-        ct.update_from_usage({"input_tokens": 110_000, "output_tokens": 10_000})
+        over_threshold = int(ct.context_window * 0.55)
+        ct.update_from_usage({"input_tokens": over_threshold, "output_tokens": 10_000})
         assert ct.threshold_exceeded is True
-        result = ct.update_from_usage({"input_tokens": 120_000, "output_tokens": 10_000})
+        result = ct.update_from_usage({"input_tokens": over_threshold + 10_000, "output_tokens": 10_000})
         assert result is False  # already triggered
 
     def test_empty_usage(self):
@@ -244,7 +246,8 @@ class TestUpdateFromResultMessage:
 
     def test_threshold_detection(self):
         ct = ContextTracker(threshold=0.40)
-        ct.update_from_result_message({"input_tokens": 80_000, "output_tokens": 20_000})
+        over_threshold = int(ct.context_window * 0.45)
+        ct.update_from_result_message({"input_tokens": over_threshold, "output_tokens": 10_000})
         assert ct.threshold_exceeded is True
 
     def test_none_usage(self):
@@ -264,7 +267,8 @@ class TestUpdateFromResultMessage:
 class TestReset:
     def test_resets_all(self):
         ct = ContextTracker()
-        ct.update_from_usage({"input_tokens": 150_000, "output_tokens": 10_000})
+        over_threshold = int(ct.context_window * 0.55)
+        ct.update_from_usage({"input_tokens": over_threshold, "output_tokens": 10_000})
         assert ct.threshold_exceeded is True
         ct.reset()
         assert ct.usage_ratio == 0.0

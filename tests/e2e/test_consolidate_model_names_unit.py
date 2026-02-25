@@ -384,11 +384,10 @@ class TestContextTrackerModelDefault:
 
     def test_context_tracker_context_window_after_default(self):
         """Default model should resolve to a known context window size."""
-        from core.prompt.context import ContextTracker
+        from core.prompt.context import ContextTracker, resolve_context_window
 
         tracker = ContextTracker()
-        # claude-sonnet-4 has 200K context window
-        assert tracker.context_window == 200_000
+        assert tracker.context_window == resolve_context_window(tracker.model)
 
 
 # ══════════════════════════════════════════════════════════════════

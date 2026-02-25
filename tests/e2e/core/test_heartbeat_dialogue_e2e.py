@@ -371,8 +371,20 @@ class TestCrossContextFlow:
 # =====================================================================
 
 
+def _mock_config_ack_enabled():
+    """Return a mock config with heartbeat.enable_read_ack = True."""
+    cfg = MagicMock()
+    cfg.heartbeat.enable_read_ack = True
+    return cfg
+
+
 class TestMessengerAckFlow:
     """Test receive_and_archive sends read ACK to senders with loop prevention."""
+
+    @pytest.fixture(autouse=True)
+    def _enable_ack(self):
+        with patch("core.config.models.load_config", return_value=_mock_config_ack_enabled()):
+            yield
 
     def test_ack_sent_on_receive_and_archive(self, shared_dir):
         """When alice calls receive_and_archive, bob gets an ACK in his inbox."""

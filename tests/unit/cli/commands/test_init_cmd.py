@@ -15,18 +15,15 @@ import pytest
 class TestCmdInit:
     """Tests for cmd_init function."""
 
-    @patch("cli.commands.init_cmd._interactive_user_setup")
-    @patch("cli.commands.init_cmd._interactive_anima_setup")
     @patch("core.init.ensure_runtime_dir")
     @patch("core.paths.get_data_dir")
     def test_first_time_init(
-        self, mock_get_dir, mock_ensure, mock_anima_setup, mock_user_setup, tmp_path
+        self, mock_get_dir, mock_ensure, tmp_path, capsys
     ):
         from cli.commands.init_cmd import cmd_init
 
         data_dir = tmp_path / ".animaworks"
         data_dir.mkdir()
-        # No config.json => first time init
         mock_get_dir.return_value = data_dir
 
         args = argparse.Namespace(
@@ -36,8 +33,8 @@ class TestCmdInit:
         cmd_init(args)
 
         mock_ensure.assert_called_once_with(skip_animas=True)
-        mock_anima_setup.assert_called_once_with(data_dir)
-        mock_user_setup.assert_called_once_with(data_dir)
+        captured = capsys.readouterr()
+        assert "Initialize complete" in captured.out
 
     @patch("core.paths.get_data_dir")
     def test_already_initialized(self, mock_get_dir, tmp_path, capsys):
@@ -228,33 +225,3 @@ class TestRegisterAnimaInConfig:
         _register_anima_in_config(tmp_path, "alice")
 
 
-class TestInteractiveUserSetup:
-    """Tests for _interactive_user_setup."""
-
-    @patch("builtins.input", side_effect=["n"])
-    def test_decline(self, mock_input, tmp_path):
-        from cli.commands.init_cmd import _interactive_user_setup
-
-        _interactive_user_setup(tmp_path)
-        # No user dir should be created
-        assert not (tmp_path / "shared" / "users").exists()
-
-    @patch("builtins.input", side_effect=["y", "TestUser", "UTC", "some notes"])
-    def test_accept_with_notes(self, mock_input, tmp_path):
-        from cli.commands.init_cmd import _interactive_user_setup
-
-        _interactive_user_setup(tmp_path)
-        user_dir = tmp_path / "shared" / "users" / "TestUser"
-        assert user_dir.exists()
-        index = (user_dir / "index.md").read_text(encoding="utf-8")
-        assert "TestUser" in index
-        assert "UTC" in index
-        assert "some notes" in index
-
-    @patch("builtins.input", side_effect=["y", ""])
-    def test_empty_name(self, mock_input, tmp_path):
-        from cli.commands.init_cmd import _interactive_user_setup
-
-        _interactive_user_setup(tmp_path)
-        # Should not create anything
-        assert not (tmp_path / "shared" / "users").exists()

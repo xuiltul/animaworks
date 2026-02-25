@@ -154,11 +154,13 @@ class TestGuidesCRUD:
             assert "content" in entry
             assert "updated_at" in entry
 
-    def test_empty_content_rejected_by_check_constraint(
+    def test_empty_content_allowed_for_guides(
         self, store: ToolPromptStore
     ) -> None:
-        with pytest.raises(sqlite3.IntegrityError):
-            store.set_guide("bad_guide", "")
+        """tool_guides allows empty content (used to mark a guide as disabled)."""
+        result = store.set_guide("disabled_guide", "")
+        assert result["key"] == "disabled_guide"
+        assert store.get_guide("disabled_guide") is None  # empty -> treated as None
 
 
 # ── Seed Defaults ────────────────────────────────────────────
@@ -290,10 +292,14 @@ class TestDefaultData:
     def test_default_guides_has_exactly_three_keys(self) -> None:
         assert set(DEFAULT_GUIDES.keys()) == {"s_builtin", "s_mcp", "non_s"}
 
-    def test_guide_content_is_non_empty(self) -> None:
+    def test_guide_content_is_non_empty_except_s_builtin(self) -> None:
         for key, content in DEFAULT_GUIDES.items():
+            if key == "s_builtin":
+                assert content == "", (
+                    "s_builtin should be empty (Claude Code has built-in tool docs)"
+                )
+                continue
             assert len(content) > 0, f"Guide '{key}' has empty content"
-            # Also verify it contains some markdown structure
             assert "#" in content, f"Guide '{key}' should contain markdown headings"
 
     def test_guide_content_has_no_unresolved_template_variables(self) -> None:

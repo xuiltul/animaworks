@@ -205,15 +205,13 @@ class TestGuidesAPI:
             "server.routes.tool_prompts.get_prompt_store", return_value=store,
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                resp = await client.get("/api/tool-prompts/guides/s_builtin")
+                resp = await client.get("/api/tool-prompts/guides/s_mcp")
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["key"] == "s_builtin"
+        assert data["key"] == "s_mcp"
         assert "content" in data
         assert len(data["content"]) > 0
-        # Verify it contains expected guide content
-        assert "Read" in data["content"] or "ファイル読み取り" in data["content"]
 
     async def test_get_missing_guide(self, tmp_path: Path):
         db_path = tmp_path / "tool_prompts.sqlite3"

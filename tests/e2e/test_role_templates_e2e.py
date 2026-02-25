@@ -258,6 +258,16 @@ class TestCreateFromMdResearcherRole:
         self, data_dir: Path, tmp_path: Path
     ):
         """status.json should contain values from researcher/defaults.json."""
+        from pathlib import Path as _P
+        import importlib.resources
+
+        # Read expected values from the template itself
+        template_defaults_path = (
+            _P(__file__).resolve().parent.parent.parent
+            / "templates" / "roles" / "researcher" / "defaults.json"
+        )
+        expected = json.loads(template_defaults_path.read_text(encoding="utf-8"))
+
         animas_dir = data_dir / "animas"
         sheet_path = _write_sheet(tmp_path, RESEARCHER_SHEET)
 
@@ -266,12 +276,11 @@ class TestCreateFromMdResearcherRole:
         status = json.loads(
             (anima_dir / "status.json").read_text(encoding="utf-8")
         )
-        # researcher defaults.json specifies sonnet model
-        assert status["model"] == "claude-sonnet-4-6"
-        assert status["max_turns"] == 30
-        assert status["max_chains"] == 2
-        assert status["context_threshold"] == 0.50
-        assert status["conversation_history_threshold"] == 0.30
+        assert status["model"] == expected["model"]
+        assert status["max_turns"] == expected["max_turns"]
+        assert status["max_chains"] == expected["max_chains"]
+        assert status["context_threshold"] == expected["context_threshold"]
+        assert status["conversation_history_threshold"] == expected["conversation_history_threshold"]
         assert status["role"] == "researcher"
 
 

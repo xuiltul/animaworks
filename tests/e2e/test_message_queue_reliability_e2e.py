@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -193,9 +194,13 @@ class TestBackwardCompatibility:
 
     def test_receive_and_archive_ack_flow(self, alice, bob, shared_dir):
         """receive_and_archive sends ACK and archives all messages."""
+        cfg = MagicMock()
+        cfg.heartbeat.enable_read_ack = True
+
         bob.send("alice", "Greetings")
 
-        messages = alice.receive_and_archive()
+        with patch("core.config.models.load_config", return_value=cfg):
+            messages = alice.receive_and_archive()
         assert len(messages) == 1
         assert messages[0].content == "Greetings"
         assert alice.unread_count() == 0

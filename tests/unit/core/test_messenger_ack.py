@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -49,8 +50,20 @@ def _place_message(
 # ── receive_and_archive ACK ─────────────────────────────
 
 
+def _mock_config_ack_enabled():
+    """Return a mock config with heartbeat.enable_read_ack = True."""
+    cfg = MagicMock()
+    cfg.heartbeat.enable_read_ack = True
+    return cfg
+
+
 class TestReceiveAndArchiveACK:
     """Tests for read-ACK behaviour in receive_and_archive()."""
+
+    @pytest.fixture(autouse=True)
+    def _enable_ack(self):
+        with patch("core.config.models.load_config", return_value=_mock_config_ack_enabled()):
+            yield
 
     def test_sends_ack_to_sender(self, shared_dir: Path, messenger: Messenger) -> None:
         """When alice receives a message from bob, an ACK is sent to bob's inbox."""

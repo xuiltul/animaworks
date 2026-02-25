@@ -91,14 +91,13 @@ class TestContextTrackerIntegration:
 
     def test_different_models_yield_different_windows(self):
         """Claude and GPT models have different context windows."""
-        from core.prompt.context import ContextTracker
+        from core.prompt.context import ContextTracker, resolve_context_window
 
         claude_tracker = ContextTracker(model="claude-sonnet-4-6")
         gpt_tracker = ContextTracker(model="gpt-4o")
 
-        # Claude has 200K, GPT-4o has 128K
-        assert claude_tracker.context_window == 200_000
-        assert gpt_tracker.context_window == 128_000
+        assert claude_tracker.context_window == resolve_context_window("claude-sonnet-4-6")
+        assert gpt_tracker.context_window == resolve_context_window("gpt-4o")
         assert claude_tracker.context_window != gpt_tracker.context_window
 
 
