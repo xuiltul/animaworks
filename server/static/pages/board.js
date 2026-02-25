@@ -227,6 +227,14 @@ function _avatarHtml(name, isHuman) {
   return `<div class="${cls}">${escapeHtml(initial)}</div>`;
 }
 
+function _miniAvatarHtml(name) {
+  const url = _avatarCache[name];
+  if (url) {
+    return `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="board-dm-mini-avatar">`;
+  }
+  return `<span class="board-dm-mini-avatar-placeholder">${escapeHtml(name.charAt(0).toUpperCase())}</span>`;
+}
+
 // ── Sidebar Data Loading ───────────────────
 
 async function _loadSidebarData() {
@@ -279,10 +287,11 @@ function _renderDmList() {
   // Populate filter dropdown with unique participant names
   _populateDmFilter();
 
-  // Apply filter
-  const filtered = _dmFilterAnima
+  // Apply filter + sort alphabetically by pair key
+  const filtered = (_dmFilterAnima
     ? _dmPairs.filter(dm => (dm.participants || []).includes(_dmFilterAnima))
-    : _dmPairs;
+    : [..._dmPairs]
+  ).sort((a, b) => (a.pair || "").localeCompare(b.pair || ""));
 
   if (filtered.length === 0) {
     const msg = _dmPairs.length === 0 ? "DMなし" : "該当するDMなし";
@@ -292,12 +301,15 @@ function _renderDmList() {
 
   el.innerHTML = filtered.map(dm => {
     const pair = dm.pair || "";
-    const participants = (dm.participants || []).join(" ↔ ");
+    const parts = dm.participants || [];
     const activeClass = _selectedType === "dm" && _selectedName === pair ? " active" : "";
     const count = dm.message_count ?? 0;
+    const label = parts.length === 2
+      ? `${_miniAvatarHtml(parts[0])}<span>${escapeHtml(parts[0])}</span><span class="board-dm-arrow">↔</span>${_miniAvatarHtml(parts[1])}<span>${escapeHtml(parts[1])}</span>`
+      : `<span>${escapeHtml(parts.join(" ↔ ") || pair)}</span>`;
     return `
-      <div class="board-sidebar-item${activeClass}" data-type="dm" data-name="${escapeHtml(pair)}" tabindex="0" role="button">
-        <span>${escapeHtml(participants || pair)}</span>
+      <div class="board-sidebar-item board-dm-item${activeClass}" data-type="dm" data-name="${escapeHtml(pair)}" tabindex="0" role="button">
+        <span class="board-dm-participants">${label}</span>
         ${count > 0 ? `<span class="board-sidebar-item-count">${count}</span>` : ""}
       </div>`;
   }).join("");

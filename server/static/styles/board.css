@@ -66,6 +66,51 @@
   border-color: #2563eb;
 }
 
+/* ── DM Sidebar Item ───────────────────────── */
+
+.board-dm-item {
+  padding: 6px 16px;
+}
+
+.board-dm-participants {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.84rem;
+}
+
+.board-dm-arrow {
+  color: #94a3b8;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  margin: 0 1px;
+}
+
+.board-dm-mini-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.board-dm-mini-avatar-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
 .board-sidebar-item {
   display: flex;
   align-items: center;
