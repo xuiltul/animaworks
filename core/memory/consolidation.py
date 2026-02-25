@@ -275,7 +275,7 @@ class ConsolidationEngine:
             from core.memory.activity import ActivityLogger
 
             activity = ActivityLogger(self.anima_dir)
-            target_types = ["response_sent", "tool_use", "message_received"]
+            target_types = ["response_sent", "tool_use", "tool_result", "message_received"]
             entries = activity.recent(
                 days=max(1, (hours + 23) // 24),
                 limit=200,

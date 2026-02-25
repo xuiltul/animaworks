@@ -630,9 +630,26 @@ class ToolHandler:
             logger.warning("Activity logging failed for tool '%s': %s", name, e)
 
     def _log_tool_result_activity(self, name: str, result: str, *, tool_use_id: str | None = None) -> None:
-        """Record tool result in unified activity log (full text, pre-truncation)."""
+        """Record tool result in unified activity log with structured meta."""
         try:
-            meta: dict[str, Any] | None = {"tool_use_id": tool_use_id} if tool_use_id else None
+            meta: dict[str, Any] = {}
+            if tool_use_id:
+                meta["tool_use_id"] = tool_use_id
+
+            is_error = result.startswith("Error") or result.startswith("error")
+            meta["result_status"] = "fail" if is_error else "ok"
+            meta["result_bytes"] = len(result.encode("utf-8", errors="replace"))
+
+            if not is_error:
+                try:
+                    parsed = json.loads(result)
+                    if isinstance(parsed, list):
+                        meta["result_count"] = len(parsed)
+                    elif isinstance(parsed, dict) and "count" in parsed:
+                        meta["result_count"] = parsed["count"]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
             self._activity.log(
                 "tool_result",
                 tool=name,

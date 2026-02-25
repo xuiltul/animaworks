@@ -494,6 +494,11 @@ class ActivityLogger:
     def _format_entry(entry: ActivityEntry, content_trim: int = 200) -> str:
         """Format a single entry as a concise timeline line."""
         ts = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
+
+        # tool_result: compact meta-only format for consolidation
+        if entry.type == "tool_result":
+            return ActivityLogger._format_tool_result_entry(entry, ts)
+
         text = entry.summary or entry.content
 
         # Truncate long content with pointer (0 = no trim)
@@ -548,6 +553,36 @@ class ActivityLogger:
 
         ctx = f"({', '.join(context_parts)})" if context_parts else ""
         return f"[{ts}] {icon} {entry.type}{ctx}: {text}"
+
+    @staticmethod
+    def _format_tool_result_entry(entry: ActivityEntry, ts: str) -> str:
+        """Format tool_result as compact meta-only line for consolidation.
+
+        Output: ``[HH:MM] TRES tool_name → ok (12件, 3.2KB)``
+        Avoids injecting raw result content (which can be huge).
+        """
+        tool = entry.tool or "unknown"
+        meta = entry.meta or {}
+        status = meta.get("result_status", "ok")
+        result_bytes = meta.get("result_bytes", 0)
+        result_count = meta.get("result_count")
+
+        if result_bytes >= 1024:
+            size_str = f"{result_bytes / 1024:.1f}KB"
+        else:
+            size_str = f"{result_bytes}B"
+
+        parts = []
+        if result_count is not None:
+            parts.append(f"{result_count}件")
+        parts.append(size_str)
+
+        detail = f" ({', '.join(parts)})" if parts else ""
+
+        if status == "fail":
+            err_hint = (entry.content or "")[:60]
+            return f"[{ts}] TRES {tool} → fail: {err_hint}"
+        return f"[{ts}] TRES {tool} → ok{detail}"
 
     # ── Grouping ─────────────────────────────────────────────
 
