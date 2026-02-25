@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -151,7 +151,8 @@ class TestE2EChannelFlow:
 class TestE2EDMFlow:
     """Tests DM history listing and retrieval."""
 
-    async def test_dm_history_with_messenger(self, tmp_path: Path):
+    @patch("core.config.models.load_config", side_effect=Exception("no config"))
+    async def test_dm_history_with_messenger(self, _mock_cfg: MagicMock, tmp_path: Path):
         """Verify DM history reading works with real JSONL files."""
         shared_dir = tmp_path / "shared"
         shared_dir.mkdir()

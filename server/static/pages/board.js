@@ -215,7 +215,7 @@ function _renderDmList() {
 
   el.innerHTML = _dmPairs.map(dm => {
     const pair = dm.pair || "";
-    const participants = (dm.participants || []).join(", ");
+    const participants = (dm.participants || []).join(" ↔ ");
     const activeClass = _selectedType === "dm" && _selectedName === pair ? " active" : "";
     const count = dm.message_count ?? 0;
     return `
@@ -284,7 +284,7 @@ function _selectItem(type, name) {
     if (metaEl) metaEl.textContent = "";
   } else {
     const dmInfo = _dmPairs.find(d => d.pair === name);
-    const participants = dmInfo ? (dmInfo.participants || []).join(" & ") : name;
+    const participants = dmInfo ? (dmInfo.participants || []).join(" ↔ ") : name;
     if (titleEl) titleEl.textContent = participants;
     if (metaEl) metaEl.textContent = "ダイレクトメッセージ";
   }

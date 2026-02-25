@@ -15,7 +15,7 @@ import time
 from datetime import datetime
 from core.time_utils import now_jst
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -80,8 +80,9 @@ def _write_legacy_dm(shared_dir: Path, pair: str, entries: list[dict]) -> None:
 class TestDMApiReturnsMessagesFromActivityLog:
     """Full integration: ActivityLogger.log() -> GET /api/dm endpoints."""
 
+    @patch("core.config.models.load_config", side_effect=Exception("no config"))
     async def test_dm_list_includes_pair_from_activity_log(
-        self, tmp_path: Path,
+        self, _mock_cfg: MagicMock, tmp_path: Path,
     ) -> None:
         """GET /api/dm lists pairs discovered from per-Anima activity_log."""
         _data_dir, shared_dir, animas_dir = _setup_data_dir(tmp_path)
@@ -316,8 +317,9 @@ class TestDMApiMergesLegacyAndActivityLog:
         # Total should include all unique messages
         assert data["total"] >= 3
 
+    @patch("core.config.models.load_config", side_effect=Exception("no config"))
     async def test_dm_list_merges_counts_from_both_sources(
-        self, tmp_path: Path,
+        self, _mock_cfg: MagicMock, tmp_path: Path,
     ) -> None:
         """GET /api/dm includes counts from both legacy dm_logs/ and activity_log."""
         _data_dir, shared_dir, animas_dir = _setup_data_dir(tmp_path)

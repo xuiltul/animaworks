@@ -2301,6 +2301,7 @@ class ToolHandler:
     # older code used "コマンド実行". Accept both.
     _CMD_SECTION_HEADERS = ("コマンド実行", "実行できるコマンド")
     _FILE_SECTION_HEADERS = ("ファイル操作", "読める場所")
+    _DENIED_CMD_SECTION_HEADERS = ("実行できないコマンド",)
 
     def _find_section_header(
         self, permissions: str, candidates: tuple[str, ...],
@@ -2311,6 +2312,46 @@ class ToolHandler:
                 return header
         return None
 
+    def _parse_denied_commands(self, permissions: str) -> list[str]:
+        """Parse the denied-commands section from permissions.md.
+
+        Supports both comma-separated (``rm -rf, shutdown``) and list
+        (``- rm -rf``) formats.  Natural-language entries like
+        ``システム設定の変更`` are returned as-is but will harmlessly fail
+        to match any real command name.
+
+        Note: This parser differs from ``_parse_permission_section`` —
+        that one expects ``- item: description`` (colon-separated, dash-only)
+        while this one handles comma-separated and ``-``/``*`` list formats
+        without colon splitting.
+        """
+        header = self._find_section_header(
+            permissions, self._DENIED_CMD_SECTION_HEADERS,
+        )
+        if header is None:
+            return []
+
+        lines: list[str] = []
+        in_section = False
+        for line in permissions.splitlines():
+            stripped = line.strip()
+            if header in stripped:
+                in_section = True
+                continue
+            if in_section and stripped.startswith("#"):
+                break
+            if in_section and stripped:
+                lines.append(stripped)
+
+        items: list[str] = []
+        for line in lines:
+            line = line.lstrip("-* ")
+            for part in line.split(","):
+                part = part.strip()
+                if part:
+                    items.append(part)
+        return items
+
     def _check_command_permission(self, command: str) -> str | None:
         """Check if the command is allowed by permissions.md and security rules.
 
@@ -2319,6 +2360,7 @@ class ToolHandler:
         Security layers (evaluated in order):
           1. Injection patterns (;  `  $()  ${}) — always blocked
           2. Dangerous command patterns (rm -rf, curl|sh, etc.) — always blocked
+          2.5. Per-anima denied commands from permissions.md
           3. permissions.md section presence check
           4. Per-command allowlist (if section lists specific commands)
           5. Path traversal check on arguments
@@ -2348,8 +2390,41 @@ class ToolHandler:
                 )
                 return _error_result("PermissionDenied", reason)
 
-        # Layer 3: permissions.md section check
+        # Layer 2.5: Per-anima denied commands from permissions.md
         permissions = self._memory.read_permissions()
+        denied_items = self._parse_denied_commands(permissions)
+        if denied_items:
+            segments = [
+                s.strip()
+                for s in re.split(r"\|(?!\|)|\&\&|\|\|", command)
+                if s.strip()
+            ]
+            for segment in segments:
+                try:
+                    seg_argv = shlex.split(segment)
+                except ValueError:
+                    continue
+                if not seg_argv:
+                    continue
+                cmd_base = seg_argv[0]
+                for denied in denied_items:
+                    # Check both command name and full segment text.
+                    # Segment check is intentionally conservative: catches
+                    # cases like "rm -rf" matching in "rm -rf /tmp" even
+                    # though cmd_base is just "rm".  May match argument
+                    # paths containing the denied string — acceptable as
+                    # denied entries are admin-controlled command names.
+                    if denied in cmd_base or denied in segment:
+                        logger.warning(
+                            "permission_denied anima=%s command=%s reason=denied_list(%s)",
+                            self._anima_name, command[:80], denied,
+                        )
+                        return _error_result(
+                            "PermissionDenied",
+                            f"Command '{cmd_base}' is in denied list ('{denied}')",
+                        )
+
+        # Layer 3: permissions.md section check
         header = self._find_section_header(permissions, self._CMD_SECTION_HEADERS)
         if header is None:
             logger.warning("permission_denied anima=%s command=%s reason=cmd_not_enabled", self._anima_name, command[:80])

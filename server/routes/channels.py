@@ -195,14 +195,25 @@ def create_channels_router() -> APIRouter:
     async def list_dm_pairs(request: Request):
         """List all DM conversation pairs with metadata.
 
-        Primary source: per-Anima activity_log/ (dm_sent/dm_received).
+        Primary source: per-Anima activity_log/ (message_sent/message_received).
         Fallback: legacy shared/dm_logs/ for historical data.
+        Filters out pairs where either participant is not a registered Anima,
+        and pairs with zero messages.
         """
         shared_dir: Path = request.app.state.shared_dir
         animas_dir = shared_dir.parent / "animas"
 
         # pair_key (sorted "alice-bob") -> {count, last_ts}
         pair_map: dict[str, dict] = {}
+
+        # Fetch valid Anima names for filtering garbage pairs.
+        # Falls back to no filtering when config is unavailable.
+        valid_names: set[str] = set()
+        try:
+            from core.config.models import load_config
+            valid_names = set(load_config().animas.keys())
+        except Exception:
+            logger.debug("load_config unavailable for DM pair filter", exc_info=True)
 
         # ── Primary: scan activity_log from all Animas ────────
         if animas_dir.exists():
@@ -213,10 +224,9 @@ def create_channels_router() -> APIRouter:
                     activity = ActivityLogger(anima_dir)
                     entries = activity.recent(
                         days=30, limit=500,
-                        types=["dm_sent", "dm_received"],
+                        types=["message_sent", "message_received"],
                     )
                     for e in entries:
-                        # Determine the two participants
                         sender = e.from_person or anima_dir.name
                         receiver = e.to_person
                         if not receiver:
@@ -253,19 +263,25 @@ def create_channels_router() -> APIRouter:
                         pass
 
                 if pair_name in pair_map:
-                    # Merge: add legacy count, keep latest ts
                     pair_map[pair_name]["count"] += count
                     if last_ts > pair_map[pair_name]["last_ts"]:
                         pair_map[pair_name]["last_ts"] = last_ts
                 else:
                     pair_map[pair_name] = {"count": count, "last_ts": last_ts}
 
-        # ── Build response sorted by last_message_ts desc ─────
+        # ── Build response: filter + sort by last_message_ts desc ─
         pairs: list[dict] = []
         for pair_key, info in pair_map.items():
+            if info["count"] == 0:
+                continue
+            parts = pair_key.split("-", 1)
+            if len(parts) != 2:
+                continue
+            if valid_names and not (parts[0] in valid_names and parts[1] in valid_names):
+                continue
             pairs.append({
                 "pair": pair_key,
-                "participants": pair_key.split("-", 1),
+                "participants": parts,
                 "message_count": info["count"],
                 "last_message_ts": info["last_ts"],
             })
@@ -281,8 +297,10 @@ def create_channels_router() -> APIRouter:
     ):
         """Get DM history for a specific pair.
 
-        Primary source: per-Anima activity_log/ (dm_sent/dm_received).
-        Fallback: legacy shared/dm_logs/ for historical data.
+        Reads only ``message_sent`` (+ alias ``dm_sent``) from each
+        participant's activity_log.  Because each DM is recorded once on
+        the sender side, duplicates are structurally impossible.
+        Falls back to legacy shared/dm_logs/ for historical data.
         """
         if err := _validate_name(pair):
             return err
@@ -296,9 +314,9 @@ def create_channels_router() -> APIRouter:
             )
 
         messages: list[dict] = []
-        seen: set[str] = set()  # dedup key: "ts|content"
+        seen: set[str] = set()
 
-        # ── Primary: read from each participant's activity_log ─
+        # ── Primary: read message_sent from each participant ──
         for name in participants:
             other = participants[1] if name == participants[0] else participants[0]
             anima_dir = animas_dir / name
@@ -308,14 +326,10 @@ def create_channels_router() -> APIRouter:
                 activity = ActivityLogger(anima_dir)
                 entries = activity.recent(
                     days=30, limit=limit * 2,
-                    types=["dm_sent", "dm_received"],
+                    types=["message_sent"],
                     involving=other,
                 )
                 for e in entries:
-                    dedup_key = f"{e.ts}|{e.content}"
-                    if dedup_key in seen:
-                        continue
-                    seen.add(dedup_key)
                     messages.append({
                         "ts": e.ts,
                         "from": e.from_person or name,
@@ -327,6 +341,10 @@ def create_channels_router() -> APIRouter:
                     "Failed to read DM activity_log for %s",
                     name, exc_info=True,
                 )
+
+        # Track activity_log messages for legacy dedup
+        for m in messages:
+            seen.add(f"{m['ts']}|{m['text']}")
 
         # ── Fallback: legacy dm_logs/ ─────────────────────────
         dm_file = shared_dir / "dm_logs" / f"{pair}.jsonl"
