@@ -173,6 +173,114 @@ class TestGetChannelMessages:
             resp = await client.get("/api/channels/INVALID")
         assert resp.status_code == 400
 
+    async def test_reverse_pagination_returns_newest_first(self, tmp_path: Path):
+        """offset=0 returns the newest N messages in chronological order."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        entries = [
+            {"ts": f"2026-02-17T{h:02d}:00:00", "from": "sakura", "text": f"msg{h}", "source": "anima"}
+            for h in range(10)
+        ]
+        _write_channel(shared_dir, "general", entries)
+
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/general?limit=3&offset=0")
+        data = resp.json()
+        assert len(data["messages"]) == 3
+        assert data["total"] == 10
+        assert data["has_more"] is True
+        texts = [m["text"] for m in data["messages"]]
+        assert texts == ["msg7", "msg8", "msg9"]
+
+    async def test_reverse_pagination_second_page(self, tmp_path: Path):
+        """offset=3 returns the next 3 older messages."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        entries = [
+            {"ts": f"2026-02-17T{h:02d}:00:00", "from": "sakura", "text": f"msg{h}", "source": "anima"}
+            for h in range(10)
+        ]
+        _write_channel(shared_dir, "general", entries)
+
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/general?limit=3&offset=3")
+        data = resp.json()
+        assert len(data["messages"]) == 3
+        texts = [m["text"] for m in data["messages"]]
+        assert texts == ["msg4", "msg5", "msg6"]
+        assert data["has_more"] is True
+
+    async def test_reverse_pagination_last_page(self, tmp_path: Path):
+        """Last page returns remaining messages with has_more=false."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        entries = [
+            {"ts": f"2026-02-17T{h:02d}:00:00", "from": "sakura", "text": f"msg{h}", "source": "anima"}
+            for h in range(10)
+        ]
+        _write_channel(shared_dir, "general", entries)
+
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/general?limit=5&offset=7")
+        data = resp.json()
+        assert len(data["messages"]) == 3
+        texts = [m["text"] for m in data["messages"]]
+        assert texts == ["msg0", "msg1", "msg2"]
+        assert data["has_more"] is False
+
+    async def test_reverse_pagination_all_messages_traversal(self, tmp_path: Path):
+        """Traversing all pages yields all messages in correct order."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        entries = [
+            {"ts": f"2026-02-17T{h:02d}:00:00", "from": "sakura", "text": f"msg{h}", "source": "anima"}
+            for h in range(75)
+        ]
+        _write_channel(shared_dir, "general", entries)
+
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        all_texts: list[str] = []
+        offset = 0
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            while True:
+                resp = await client.get(f"/api/channels/general?limit=50&offset={offset}")
+                data = resp.json()
+                page_texts = [m["text"] for m in data["messages"]]
+                all_texts = page_texts + all_texts
+                offset += len(data["messages"])
+                if not data["has_more"]:
+                    break
+
+        assert len(all_texts) == 75
+        assert all_texts == [f"msg{i}" for i in range(75)]
+
+    async def test_small_channel_no_has_more(self, tmp_path: Path):
+        """Channel with fewer messages than limit returns all with has_more=false."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        entries = [
+            {"ts": f"2026-02-17T{h:02d}:00:00", "from": "sakura", "text": f"msg{h}", "source": "anima"}
+            for h in range(3)
+        ]
+        _write_channel(shared_dir, "general", entries)
+
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/general?limit=50&offset=0")
+        data = resp.json()
+        assert len(data["messages"]) == 3
+        assert data["has_more"] is False
+        texts = [m["text"] for m in data["messages"]]
+        assert texts == ["msg0", "msg1", "msg2"]
+
     async def test_empty_channel_returns_empty_list(self, tmp_path: Path):
         shared_dir = tmp_path / "shared"
         shared_dir.mkdir()

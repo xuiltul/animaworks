@@ -199,6 +199,175 @@ class TestE2EDMFlow:
             assert data["messages"][1]["from"] == "alice"
 
 
+# ── Reverse Pagination ───────────────────────────────────
+
+
+class TestE2EReversePagination:
+    """Tests reverse pagination: offset=0 returns newest N messages."""
+
+    async def test_newest_messages_returned_first(self, tmp_path: Path):
+        """Post 10 messages, then verify offset=0 returns the newest 5."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _seed_channels(shared_dir)
+
+        app = _create_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            for i in range(10):
+                await client.post(
+                    "/api/channels/general",
+                    json={"text": f"message-{i}", "from_name": "taka"},
+                )
+
+            resp = await client.get("/api/channels/general?limit=5&offset=0")
+            data = resp.json()
+
+        assert data["total"] == 10
+        assert len(data["messages"]) == 5
+        assert data["has_more"] is True
+        texts = [m["text"] for m in data["messages"]]
+        assert texts == [f"message-{i}" for i in range(5, 10)]
+
+    async def test_full_traversal_with_real_posts(self, tmp_path: Path):
+        """Post 75 messages, traverse all pages, verify all recovered."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _seed_channels(shared_dir)
+
+        channel_file = shared_dir / "channels" / "general.jsonl"
+        entries = [
+            json.dumps({
+                "ts": f"2026-02-25T{h:02d}:{m:02d}:00",
+                "from": "sakura",
+                "text": f"msg-{i}",
+                "source": "anima",
+            })
+            for i, (h, m) in enumerate(
+                [(h, m) for h in range(24) for m in range(0, 60, 1)][:75]
+            )
+        ]
+        channel_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
+
+        app = _create_app(shared_dir)
+        transport = ASGITransport(app=app)
+        all_texts: list[str] = []
+        offset = 0
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            while True:
+                resp = await client.get(
+                    f"/api/channels/general?limit=50&offset={offset}"
+                )
+                data = resp.json()
+                page_texts = [m["text"] for m in data["messages"]]
+                all_texts = page_texts + all_texts
+                offset += len(data["messages"])
+                if not data["has_more"]:
+                    break
+
+        assert len(all_texts) == 75
+        assert all_texts == [f"msg-{i}" for i in range(75)]
+
+    async def test_three_page_traversal(self, tmp_path: Path):
+        """Post 125 messages (3 pages), traverse all, verify none lost."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _seed_channels(shared_dir)
+
+        channel_file = shared_dir / "channels" / "general.jsonl"
+        entries = [
+            json.dumps({
+                "ts": f"2026-02-25T{i // 60:02d}:{i % 60:02d}:00",
+                "from": "sakura",
+                "text": f"msg-{i}",
+                "source": "anima",
+            })
+            for i in range(125)
+        ]
+        channel_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
+
+        app = _create_app(shared_dir)
+        transport = ASGITransport(app=app)
+        all_texts: list[str] = []
+        offset = 0
+        pages = 0
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            while True:
+                resp = await client.get(
+                    f"/api/channels/general?limit=50&offset={offset}"
+                )
+                data = resp.json()
+                page_texts = [m["text"] for m in data["messages"]]
+                all_texts = page_texts + all_texts
+                offset += len(data["messages"])
+                pages += 1
+                if not data["has_more"]:
+                    break
+
+        assert pages == 3, f"Expected 3 pages, got {pages}"
+        assert len(all_texts) == 125
+        assert all_texts == [f"msg-{i}" for i in range(125)]
+
+    async def test_small_channel_single_page(self, tmp_path: Path):
+        """Channel with < limit messages returns all with has_more=false."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _seed_channels(shared_dir)
+
+        app = _create_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            for i in range(3):
+                await client.post(
+                    "/api/channels/general",
+                    json={"text": f"short-{i}", "from_name": "taka"},
+                )
+
+            resp = await client.get("/api/channels/general?limit=50&offset=0")
+            data = resp.json()
+
+        assert data["total"] == 3
+        assert len(data["messages"]) == 3
+        assert data["has_more"] is False
+        texts = [m["text"] for m in data["messages"]]
+        assert texts == ["short-0", "short-1", "short-2"]
+
+    async def test_pagination_preserves_chronological_order(self, tmp_path: Path):
+        """Each page's messages are in chronological order (old → new)."""
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _seed_channels(shared_dir)
+
+        channel_file = shared_dir / "channels" / "general.jsonl"
+        entries = [
+            json.dumps({
+                "ts": f"2026-02-25T{i:02d}:00:00",
+                "from": "sakura",
+                "text": f"msg-{i}",
+                "source": "anima",
+            })
+            for i in range(20)
+        ]
+        channel_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
+
+        app = _create_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Page 1: newest 10
+            resp1 = await client.get("/api/channels/general?limit=10&offset=0")
+            # Page 2: older 10
+            resp2 = await client.get("/api/channels/general?limit=10&offset=10")
+
+        page1 = resp1.json()["messages"]
+        page2 = resp2.json()["messages"]
+
+        page1_ts = [m["ts"] for m in page1]
+        page2_ts = [m["ts"] for m in page2]
+        assert page1_ts == sorted(page1_ts)
+        assert page2_ts == sorted(page2_ts)
+        assert page2_ts[-1] < page1_ts[0]
+
+
 # ── Error Cases ──────────────────────────────────────────
 
 

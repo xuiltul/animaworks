@@ -117,7 +117,12 @@ def create_channels_router() -> APIRouter:
                 continue
 
         total = len(all_messages)
-        paginated = all_messages[offset:offset + limit]
+
+        # Reverse pagination: offset=0 → newest N messages (chronological order)
+        start = max(0, total - offset - limit)
+        end = max(0, total - offset)
+        paginated = all_messages[start:end]
+        has_more = start > 0
 
         return {
             "channel": name,
@@ -125,7 +130,7 @@ def create_channels_router() -> APIRouter:
             "total": total,
             "offset": offset,
             "limit": limit,
-            "has_more": offset + limit < total,
+            "has_more": has_more,
         }
 
     @router.post("/channels/{name}")
