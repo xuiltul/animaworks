@@ -10,6 +10,7 @@ of Agent SDK stream chunks and periodic keep-alive chunks.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import logging
 import time
@@ -24,6 +25,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _DEFAULT_KEEPALIVE_INTERVAL = 30  # fallback keep-alive interval in seconds
+
+
+def _json_default(obj: Any) -> Any:
+    """JSON serializer fallback for dataclasses (e.g. ToolCallRecord)."""
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return dataclasses.asdict(obj)
+    return str(obj)
 
 
 class _Sentinel:
@@ -196,7 +204,10 @@ class StreamingIPCHandler:
                         await _enqueue(IPCResponse(
                             id=request.id,
                             stream=True,
-                            chunk=json.dumps(chunk, ensure_ascii=False),
+                            chunk=json.dumps(
+                                chunk, ensure_ascii=False,
+                                default=_json_default,
+                            ),
                         ))
 
                 # Stream ended without cycle_done — done=False切断パス

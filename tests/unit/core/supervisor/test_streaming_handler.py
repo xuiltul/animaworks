@@ -152,3 +152,59 @@ class TestStreamHandleBasicFlow:
                 pass
 
         assert captured_kwargs["intent"] == ""
+
+
+class TestStreamHandleToolEndSerialization:
+    """Test that tool_end events with ToolCallRecord are serialized safely."""
+
+    @pytest.mark.asyncio
+    async def test_tool_end_with_dataclass_record(self):
+        """tool_end events containing a ToolCallRecord dataclass must not raise."""
+        from core.execution.base import ToolCallRecord
+
+        handler = _make_handler()
+
+        async def mock_stream(*args, **kwargs):
+            yield {"type": "tool_start", "tool_name": "read_memory_file"}
+            yield {
+                "type": "tool_end",
+                "tool_id": "tc_1",
+                "tool_name": "read_memory_file",
+                "record": ToolCallRecord(
+                    tool_name="read_memory_file",
+                    tool_id="tc_1",
+                    input_summary='{"path": "episodes/2026-02-25.md"}',
+                    result_summary="(content of the file)",
+                ),
+            }
+            yield {"type": "text_delta", "text": "Done"}
+            yield {"type": "cycle_done", "cycle_result": {"summary": "Done"}}
+
+        handler._anima.process_message_stream = mock_stream
+        handler._anima.needs_bootstrap = False
+
+        request = IPCRequest(
+            id="req-1",
+            method="process_message",
+            params={"message": "read my memories", "stream": True},
+        )
+
+        responses: list[IPCResponse] = []
+        with patch("core.config.load_config") as mock_config:
+            mock_config.return_value.server.keepalive_interval = 30
+            async for resp in handler.handle_stream(request):
+                responses.append(resp)
+
+        # Verify tool_end chunk was serialized successfully
+        tool_end_chunks = [
+            r for r in responses
+            if r.chunk and '"tool_end"' in r.chunk
+        ]
+        assert len(tool_end_chunks) == 1
+
+        parsed = json.loads(tool_end_chunks[0].chunk)
+        assert parsed["record"]["tool_name"] == "read_memory_file"
+        assert parsed["record"]["tool_id"] == "tc_1"
+
+        # Final response must be done
+        assert responses[-1].done is True
