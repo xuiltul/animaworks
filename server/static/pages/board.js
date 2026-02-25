@@ -38,6 +38,9 @@ export function render(container) {
   _total = 0;
   _boundListeners = [];
   _sidebarCollapsed = false;
+  _loadingMore = false;
+  _hasMore = false;
+  _currentOffset = 0;
 
   container.innerHTML = `
     <div class="board-layout">
@@ -120,6 +123,9 @@ export function destroy() {
   _selectedType = null;
   _selectedName = null;
   _messages = [];
+  _loadingMore = false;
+  _hasMore = false;
+  _currentOffset = 0;
 }
 
 // ── Event Binding ──────────────────────────
@@ -302,6 +308,14 @@ function _selectItem(type, name) {
     input.placeholder = `#${name} にメッセージを投稿...`;
   }
 
+  // Bind scroll handler for infinite scroll
+  const messagesEl = _$("boardMessages");
+  if (messagesEl && !messagesEl.__scrollBound) {
+    messagesEl.addEventListener("scroll", _onMessagesScroll);
+    _boundListeners.push({ el: messagesEl, event: "scroll", handler: _onMessagesScroll });
+    messagesEl.__scrollBound = true;
+  }
+
   // Load messages
   _loadMessages(type, name, false);
 }
@@ -316,13 +330,15 @@ async function _loadMessages(type, name, isPolling) {
   if (!messagesEl) return;
 
   if (!isPolling) {
+    _currentOffset = 0;
+    _hasMore = false;
     messagesEl.innerHTML = '<div class="board-messages-empty">読み込み中...</div>';
   }
 
   try {
     let data;
     if (type === "channel") {
-      data = await api(`/api/channels/${encodeURIComponent(name)}?limit=50&offset=0`);
+      data = await api(`/api/channels/${encodeURIComponent(name)}?limit=50&offset=${_currentOffset}`);
     } else {
       data = await api(`/api/dm/${encodeURIComponent(name)}?limit=50`);
     }
@@ -332,13 +348,55 @@ async function _loadMessages(type, name, isPolling) {
 
     _messages = data.messages || [];
     _total = data.total || _messages.length;
+    _hasMore = data.has_more || false;
     _renderMessages();
+    if (!isPolling) _scrollToBottom();
   } catch (err) {
     if (type !== _selectedType || name !== _selectedName) return;
     if (!isPolling) {
       messagesEl.innerHTML = `<div class="board-messages-empty">読み込み失敗: ${escapeHtml(err.message)}</div>`;
     }
     logger.error("Failed to load messages", { type, name, error: err.message });
+  }
+}
+
+async function _loadOlderMessages() {
+  if (_loadingMore || !_hasMore || _selectedType !== "channel") return;
+  _loadingMore = true;
+
+  const messagesEl = _$("boardMessages");
+  if (!messagesEl) { _loadingMore = false; return; }
+
+  const prevScrollHeight = messagesEl.scrollHeight;
+  _currentOffset += _messages.length;
+
+  try {
+    const data = await api(
+      `/api/channels/${encodeURIComponent(_selectedName)}?limit=50&offset=${_currentOffset}`
+    );
+
+    if (_selectedType !== "channel" || _selectedName !== data.channel) {
+      _loadingMore = false;
+      return;
+    }
+
+    const older = data.messages || [];
+    _messages = [...older, ..._messages];
+    _hasMore = data.has_more || false;
+    _renderMessages();
+
+    const newScrollHeight = messagesEl.scrollHeight;
+    messagesEl.scrollTop = newScrollHeight - prevScrollHeight;
+  } catch (err) {
+    logger.error("Failed to load older messages", { error: err.message });
+  } finally {
+    _loadingMore = false;
+  }
+}
+
+function _onMessagesScroll(e) {
+  if (e.target.scrollTop < 100 && _hasMore && !_loadingMore) {
+    _loadOlderMessages();
   }
 }
 

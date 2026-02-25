@@ -202,7 +202,7 @@ class TestE2EDMFlow:
 # ── Reverse Pagination ───────────────────────────────────
 
 
-class TestE2EReversePagenation:
+class TestE2EReversePagination:
     """Tests reverse pagination: offset=0 returns newest N messages."""
 
     async def test_newest_messages_returned_first(self, tmp_path: Path):
