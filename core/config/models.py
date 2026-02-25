@@ -264,6 +264,8 @@ class HeartbeatConfig(BaseModel):
     actionable_intents: list[str] = ["delegation", "report", "question"]
     enable_read_ack: bool = False  # Send read-receipt ACK to message senders (disabled by default to prevent gratitude loops)
     channel_post_cooldown_s: int = 300  # Min seconds between board posts per Anima (0 = no limit)
+    max_messages_per_hour: int = 30  # Global outbound DM limit per Anima per hour
+    max_messages_per_day: int = 100  # Global outbound DM limit per Anima per day
 
 
 class AnimaWorksConfig(BaseModel):

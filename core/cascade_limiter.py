@@ -41,10 +41,75 @@ class ConversationDepthLimiter:
         self,
         window_s: float | None = None,
         max_depth: int | None = None,
+        max_per_hour: int | None = None,
+        max_per_day: int | None = None,
     ) -> None:
         cfg = load_config()
         self._window_s = window_s if window_s is not None else cfg.heartbeat.depth_window_s
         self._max_depth = max_depth if max_depth is not None else cfg.heartbeat.max_depth
+        self._max_per_hour = max_per_hour if max_per_hour is not None else cfg.heartbeat.max_messages_per_hour
+        self._max_per_day = max_per_day if max_per_day is not None else cfg.heartbeat.max_messages_per_day
+
+    def check_global_outbound(
+        self,
+        sender: str,
+        sender_anima_dir: Path,
+    ) -> bool:
+        """Check if sender has exceeded global outbound message limit.
+
+        Counts all dm_sent / message_sent events from sender
+        in the last hour and last 24 hours.
+
+        Returns True if allowed, False if limit exceeded.
+        """
+        try:
+            from core.memory.activity import ActivityLogger
+
+            activity = ActivityLogger(sender_anima_dir)
+            entries = activity.recent(
+                days=2,
+                limit=500,
+                types=["dm_sent", "message_sent"],
+            )
+        except Exception:
+            logger.warning(
+                "Failed to read activity log for global outbound check: %s",
+                sender_anima_dir,
+                exc_info=True,
+            )
+            return False  # fail-closed
+
+        now = now_jst()
+        hourly_cutoff = now - timedelta(hours=1)
+        daily_cutoff = now - timedelta(hours=24)
+        hourly_count = 0
+        daily_count = 0
+
+        for e in entries:
+            try:
+                ts = ensure_aware(datetime.fromisoformat(e.ts))
+                if ts >= daily_cutoff:
+                    daily_count += 1
+                    if ts >= hourly_cutoff:
+                        hourly_count += 1
+            except (ValueError, TypeError):
+                continue
+
+        if hourly_count >= self._max_per_hour:
+            logger.warning(
+                "GLOBAL HOURLY LIMIT: %s blocked (%d msgs in last hour)",
+                sender,
+                hourly_count,
+            )
+            return False
+        if daily_count >= self._max_per_day:
+            logger.warning(
+                "GLOBAL DAILY LIMIT: %s blocked (%d msgs in last 24h)",
+                sender,
+                daily_count,
+            )
+            return False
+        return True
 
     def check_depth(
         self,
@@ -77,12 +142,12 @@ class ConversationDepthLimiter:
                 involving=receiver,
             )
         except Exception:
-            logger.debug(
-                "Failed to read activity log for depth check: %s",
+            logger.warning(
+                "Failed to read activity log for depth check: %s — blocking send (fail-closed)",
                 sender_anima_dir,
                 exc_info=True,
             )
-            return True  # fail-open: allow if we can't read the log
+            return False  # fail-closed: block if we can't verify
 
         cutoff = now_jst() - timedelta(seconds=self._window_s)
         count = 0

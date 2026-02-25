@@ -422,3 +422,93 @@ class BackgroundTaskManager:
         if removed:
             logger.info("Cleaned up %d old background tasks", removed)
         return removed
+
+
+# ── DM log rotation ──────────────────────────────────────────
+
+
+async def rotate_dm_logs(
+    shared_dir: Path,
+    max_age_days: int = 7,
+) -> dict[str, Any]:
+    """Archive old dm_log entries beyond *max_age_days*.
+
+    For each ``*.jsonl`` file in ``shared_dir/dm_logs/``, entries older
+    than *max_age_days* are moved to ``{stem}.{date}.archive.jsonl``.
+    The archive file is opened in append mode so repeated runs on the
+    same day simply accumulate.  The active file is then rewritten with
+    only the recent entries.
+
+    Returns:
+        Dict with per-file counts: ``{filename: {"archived": N, "kept": M}}``.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _rotate_dm_logs_sync, shared_dir, max_age_days)
+
+
+def _rotate_dm_logs_sync(
+    shared_dir: Path,
+    max_age_days: int = 7,
+) -> dict[str, Any]:
+    """Synchronous implementation of dm_log rotation."""
+    from datetime import datetime, timedelta
+    from core.time_utils import ensure_aware, now_jst
+
+    dm_logs_dir = shared_dir / "dm_logs"
+    if not dm_logs_dir.exists():
+        return {}
+
+    cutoff = now_jst() - timedelta(days=max_age_days)
+    results: dict[str, Any] = {}
+
+    for path in sorted(dm_logs_dir.glob("*.jsonl")):
+        if ".archive." in path.name:
+            continue
+
+        recent_lines: list[str] = []
+        archive_lines: list[str] = []
+
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            logger.warning("Failed to read dm_log: %s", path)
+            continue
+
+        for line in content.splitlines():
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+                ts = datetime.fromisoformat(entry["ts"])
+                if ensure_aware(ts) >= cutoff:
+                    recent_lines.append(line)
+                else:
+                    archive_lines.append(line)
+            except (json.JSONDecodeError, KeyError, ValueError):
+                recent_lines.append(line)
+
+        if not archive_lines:
+            continue
+
+        date_str = now_jst().strftime("%Y%m%d")
+        archive_name = path.stem + f".{date_str}.archive.jsonl"
+        archive_path = dm_logs_dir / archive_name
+        try:
+            with archive_path.open("a", encoding="utf-8") as f:
+                f.write("\n".join(archive_lines) + "\n")
+            path.write_text(
+                "\n".join(recent_lines) + ("\n" if recent_lines else ""),
+                encoding="utf-8",
+            )
+            results[path.name] = {
+                "archived": len(archive_lines),
+                "kept": len(recent_lines),
+            }
+            logger.info(
+                "dm_log rotated: %s — %d archived, %d kept",
+                path.name, len(archive_lines), len(recent_lines),
+            )
+        except OSError:
+            logger.exception("Failed to rotate dm_log: %s", path)
+
+    return results

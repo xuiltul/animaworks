@@ -11,7 +11,8 @@ from __future__ import annotations
 Covers:
 - check_depth blocks when exchange count exceeds max_depth
 - check_depth allows when under limit
-- check_depth fail-open when activity_log is missing
+- check_depth fail-closed when activity_log is missing
+- check_global_outbound hourly/daily limits and fail-closed on error
 - current_depth reporting
 - Legacy check_and_record always returns True (no-op stub)
 - Module-level singleton exists
@@ -102,12 +103,14 @@ class TestCheckDepth:
 
         assert limiter.check_depth("alice", "bob", anima_dir) is True
 
-    def test_fail_open_on_missing_log(self, tmp_path: Path, _patch_config):
-        """activity_logが存在しない場合はTrueを返す（fail-open）。"""
+    def test_fail_closed_on_read_error(self, tmp_path: Path, _patch_config):
+        """activity_log読み取りエラー時はFalseを返す（fail-closed）。"""
         anima_dir = tmp_path / "animas" / "alice"
-        # Don't create the directory
+        anima_dir.mkdir(parents=True)
+
         limiter = ConversationDepthLimiter(window_s=600, max_depth=3)
-        assert limiter.check_depth("alice", "bob", anima_dir) is True
+        with patch("core.memory.activity.ActivityLogger.recent", side_effect=OSError("disk error")):
+            assert limiter.check_depth("alice", "bob", anima_dir) is False
 
     def test_old_entries_not_counted(self, tmp_path: Path, _patch_config):
         """ウィンドウ外の古いエントリはカウントされない。"""
@@ -124,6 +127,92 @@ class TestCheckDepth:
 
         limiter = ConversationDepthLimiter(window_s=600, max_depth=3)
         assert limiter.check_depth("alice", "bob", anima_dir) is True
+
+
+class TestCheckGlobalOutbound:
+    """Test check_global_outbound hourly/daily limits."""
+
+    def test_allows_under_hourly_limit(self, tmp_path: Path, _patch_config):
+        """Under hourly limit → returns True."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        entries = [
+            _make_dm_entry("dm_sent", "alice", "bob"),
+            _make_dm_entry("dm_sent", "alice", "charlie"),
+        ]
+        _write_activity_entries(anima_dir, entries)
+
+        limiter = ConversationDepthLimiter(max_per_hour=3, max_per_day=5)
+        assert limiter.check_global_outbound("alice", anima_dir) is True
+
+    def test_blocks_on_hourly_limit(self, tmp_path: Path, _patch_config):
+        """At/above hourly limit → returns False."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        entries = [
+            _make_dm_entry("dm_sent", "alice", "bob"),
+            _make_dm_entry("dm_sent", "alice", "charlie"),
+            _make_dm_entry("dm_sent", "alice", "dave"),
+        ]
+        _write_activity_entries(anima_dir, entries)
+
+        limiter = ConversationDepthLimiter(max_per_hour=3, max_per_day=5)
+        assert limiter.check_global_outbound("alice", anima_dir) is False
+
+    def test_blocks_on_daily_limit(self, tmp_path: Path, _patch_config):
+        """At/above daily limit → returns False."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        entries = [
+            _make_dm_entry("dm_sent", "alice", f"user{i}")
+            for i in range(5)
+        ]
+        _write_activity_entries(anima_dir, entries)
+
+        limiter = ConversationDepthLimiter(max_per_hour=10, max_per_day=5)
+        assert limiter.check_global_outbound("alice", anima_dir) is False
+
+    def test_fail_closed_on_error(self, tmp_path: Path, _patch_config):
+        """When activity log read fails → returns False."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        limiter = ConversationDepthLimiter(max_per_hour=3, max_per_day=5)
+        with patch(
+            "core.memory.activity.ActivityLogger",
+            side_effect=OSError("read failed"),
+        ):
+            assert limiter.check_global_outbound("alice", anima_dir) is False
+
+    def test_old_entries_not_counted_hourly(self, tmp_path: Path, _patch_config):
+        """Entries older than 1 hour don't count for hourly."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        old_ts = (now_jst() - timedelta(hours=2)).isoformat()
+        entries = [
+            _make_dm_entry("dm_sent", "alice", "bob", ts=old_ts),
+            _make_dm_entry("dm_sent", "alice", "charlie", ts=old_ts),
+            _make_dm_entry("dm_sent", "alice", "dave"),
+        ]
+        _write_activity_entries(anima_dir, entries)
+
+        limiter = ConversationDepthLimiter(max_per_hour=3, max_per_day=5)
+        assert limiter.check_global_outbound("alice", anima_dir) is True
+
+    def test_old_entries_not_counted_daily(self, tmp_path: Path, _patch_config):
+        """Entries older than 24 hours don't count for daily."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        old_ts = (now_jst() - timedelta(hours=25)).isoformat()
+        entries = [
+            _make_dm_entry("dm_sent", "alice", f"user{i}", ts=old_ts)
+            for i in range(5)
+        ]
+        entries.append(_make_dm_entry("dm_sent", "alice", "bob"))
+        _write_activity_entries(anima_dir, entries)
+
+        limiter = ConversationDepthLimiter(max_per_hour=10, max_per_day=5)
+        assert limiter.check_global_outbound("alice", anima_dir) is True
 
 
 class TestCurrentDepth:

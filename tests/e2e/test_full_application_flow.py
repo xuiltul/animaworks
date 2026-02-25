@@ -571,6 +571,7 @@ async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket)
 
         assert "system_daily_consolidation" in job_ids
         assert "system_weekly_integration" in job_ids
+        assert "system_dm_log_rotation" in job_ids
 
         # Verify cron schedules
         daily_job = lifecycle.scheduler.get_job("system_daily_consolidation")

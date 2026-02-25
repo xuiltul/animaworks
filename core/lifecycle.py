@@ -544,6 +544,16 @@ class LifecycleManager:
         )
         logger.info("System cron: Monthly forgetting on 1st at 03:00 JST")
 
+        # Daily DM log rotation: Every day at 04:30 JST
+        self.scheduler.add_job(
+            self._handle_dm_log_rotation,
+            CronTrigger(hour=4, minute=30),
+            id="system_dm_log_rotation",
+            name="System: DM Log Rotation",
+            replace_existing=True,
+        )
+        logger.info("System cron: DM log rotation at 04:30 JST")
+
     async def _handle_daily_indexing(self) -> None:
         """Run daily RAG indexing for all animas.
 
@@ -911,6 +921,21 @@ class LifecycleManager:
                     "Monthly forgetting failed for anima=%s",
                     anima_name
                 )
+
+    async def _handle_dm_log_rotation(self) -> None:
+        """Archive old dm_log entries beyond 7 days."""
+        from core.paths import get_shared_dir
+        from core.background import rotate_dm_logs
+
+        shared_dir = get_shared_dir()
+        try:
+            result = await rotate_dm_logs(shared_dir)
+            if result:
+                logger.info("DM log rotation completed: %s", result)
+            else:
+                logger.debug("DM log rotation: nothing to archive")
+        except Exception:
+            logger.exception("DM log rotation failed")
 
     # ── Lifecycle ─────────────────────────────────────────
 

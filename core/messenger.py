@@ -71,6 +71,20 @@ class Messenger:
             if is_internal:
                 from core.cascade_limiter import depth_limiter
                 sender_dir = animas_dir / self.anima_name
+                if not depth_limiter.check_global_outbound(self.anima_name, sender_dir):
+                    logger.warning(
+                        "Global outbound limit exceeded: %s. Message not sent.",
+                        self.anima_name,
+                    )
+                    return Message(
+                        from_person="system",
+                        to_person=self.anima_name,
+                        type="error",
+                        content=(
+                            f"GlobalOutboundLimitExceeded: あなたの送信数が"
+                            f"制限に達しました。しばらくお待ちください"
+                        ),
+                    )
                 if not depth_limiter.check_depth(self.anima_name, to, sender_dir):
                     logger.warning(
                         "Depth limit exceeded: %s -> %s. Message not sent.",
