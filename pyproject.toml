@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "animaworks"
-version = "0.2.0"
+version = "0.3.0"
 description = "AnimaWorks - Digital Anima Framework with library-type memory"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

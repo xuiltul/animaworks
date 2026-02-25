@@ -18,11 +18,10 @@ Each agent has its own name, personality, memory, and schedule. They communicate
 ```bash
 curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh | bash
 cd animaworks
-uv run animaworks init      # opens setup wizard in your browser
-uv run animaworks start     # start the server
+uv run animaworks start     # start the server — setup wizard opens on first run
 ```
 
-Open **http://localhost:18500/** — your first Anima is ready. Click to start chatting.
+Open **http://localhost:18500/** — the setup wizard guides you through API keys, locale, and creating your first Anima. After that, you're on the dashboard.
 
 **That's it.** The setup script installs [uv](https://docs.astral.sh/uv/), clones the repo, and downloads Python 3.12+ with all dependencies automatically.
 
@@ -50,7 +49,6 @@ Requires Python 3.12+ already installed on your system.
 git clone https://github.com/xuiltul/animaworks.git && cd animaworks
 python3 -m venv .venv && source .venv/bin/activate
 pip install --upgrade pip && pip install -e .
-animaworks init
 animaworks start
 ```
 
@@ -248,7 +246,7 @@ The CLI is for power users and automation. Day-to-day use is through the Web UI.
 
 | Command | Description |
 |---|---|
-| `animaworks init` | Interactive setup wizard |
+| `animaworks init` | Initialize runtime directory (non-interactive) |
 | `animaworks init --force` | Merge template updates (preserves data) |
 | `animaworks reset [--restart]` | Reset runtime directory |
 

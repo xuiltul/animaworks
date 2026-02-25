@@ -17,11 +17,10 @@
 ```bash
 curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh | bash
 cd animaworks
-uv run animaworks init      # ブラウザにセットアップウィザードが開く
-uv run animaworks start     # サーバー起動
+uv run animaworks start     # サーバー起動 — 初回はセットアップウィザードが開く
 ```
 
-**http://localhost:18500/** を開く — 最初のAnimaが待っている。クリックして会話を始めよう。
+**http://localhost:18500/** を開く — セットアップウィザードがAPIキー・言語・最初のAnima作成をガイドする。完了後、ダッシュボードへ。
 
 **セットアップはこれで完了。** セットアップスクリプトが [uv](https://docs.astral.sh/uv/) をインストールし、リポジトリをクローンし、Python 3.12+と全依存パッケージを自動でダウンロードする。
 
@@ -49,7 +48,6 @@ Python 3.12+ がシステムにインストール済みであること。
 git clone https://github.com/xuiltul/animaworks.git && cd animaworks
 python3 -m venv .venv && source .venv/bin/activate
 pip install --upgrade pip && pip install -e .
-animaworks init
 animaworks start
 ```
 
@@ -245,7 +243,7 @@ CLIはパワーユーザーと自動化向け。日常操作はWeb UIで。
 
 | コマンド | 説明 |
 |---|---|
-| `animaworks init` | 対話式セットアップウィザード |
+| `animaworks init` | ランタイムディレクトリを初期化（非対話） |
 | `animaworks init --force` | テンプレート差分マージ（データ保持） |
 | `animaworks reset [--restart]` | ランタイムディレクトリをリセット |
 

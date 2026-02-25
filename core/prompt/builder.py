@@ -578,7 +578,9 @@ def build_system_prompt(
     except Exception:
         ctx_window = 128_000
 
-    knowledge_budget = int(ctx_window * 0.10)
+    # コンテキスト窓の5%、かつ絶対上限4,000トークン（≈12,000文字）。
+    # 10%では200kモデルで20,000トークンとなり肥大化するため抑制する。
+    knowledge_budget = min(int(ctx_window * 0.05), 4000)
     distilled = memory.collect_distilled_knowledge()
 
     used_tokens = 0
