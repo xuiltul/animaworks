@@ -474,7 +474,7 @@ def _cache_subordinate_paths(
 def _build_pre_tool_hook(
     anima_dir: Path,
     *,
-    max_tokens: int = 4096,
+    max_tokens: int = 8192,
     context_window: int = 200_000,
     session_stats: dict[str, Any] | None = None,
 ) -> Callable:
@@ -914,7 +914,7 @@ class AgentSDKExecutor(BaseExecutor):
                     matcher=".*",
                     hooks=[_build_pre_tool_hook(
                         self._anima_dir,
-                        max_tokens=self._model_config.max_tokens or 4096,
+                        max_tokens=self._model_config.max_tokens or 8192,
                         context_window=_cw,
                         session_stats=session_stats,
                     )],

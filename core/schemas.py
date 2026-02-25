@@ -68,7 +68,7 @@ class ModelConfig(BaseModel):
 
     model: str = DEFAULT_ANIMA_MODEL
     fallback_model: str | None = None
-    max_tokens: int = 4096
+    max_tokens: int = 8192
     max_turns: int = 20
     api_key: str | None = None  # direct API key (resolved from config.json)
     api_key_env: str = "ANTHROPIC_API_KEY"  # fallback: env var name

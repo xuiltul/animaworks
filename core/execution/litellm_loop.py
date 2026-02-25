@@ -1041,7 +1041,7 @@ class LiteLLMExecutor(BaseExecutor):
 
         est_input = _estimate_tokens()
         available = ctx_window - est_input
-        configured_max = llm_kwargs.get("max_tokens", 4096)
+        configured_max = llm_kwargs.get("max_tokens", 8192)
 
         if available < configured_max:
             if available - 128 >= 256:

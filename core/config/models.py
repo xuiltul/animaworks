@@ -83,7 +83,7 @@ class AnimaDefaults(BaseModel):
 
     model: str = DEFAULT_ANIMA_MODEL
     fallback_model: str | None = None
-    max_tokens: int = 4096
+    max_tokens: int = 8192
     max_turns: int = 20
     credential: str = "anthropic"
     context_threshold: float = 0.50
