@@ -331,6 +331,10 @@ class TaskQueueManager:
         tasks = self._load_all()
         return [t for t in tasks.values() if t.status == "delegated"]
 
+    def get_task_by_id(self, task_id: str) -> TaskEntry | None:
+        """Look up a single task by its ID."""
+        return self._load_all().get(task_id)
+
     # ── Formatting ───────────────────────────────────────────
 
     def format_for_priming(self, budget_tokens: int = 400) -> str:

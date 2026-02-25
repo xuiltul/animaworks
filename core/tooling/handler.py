@@ -1876,7 +1876,7 @@ class ToolHandler:
             from core.tools import TOOL_MODULES
             all_categories = sorted(TOOL_MODULES.keys())
             for cat in all_categories:
-                if cat in (self._external._tool_registry if hasattr(self._external, '_tool_registry') else []):
+                if cat in (self._external.registry if self._external else []):
                     external_enabled.append(cat)
                 else:
                     external_available.append(cat)
@@ -2065,8 +2065,7 @@ class ToolHandler:
                 target_dir = animas_dir / delegated_to
                 try:
                     sub_tqm = TaskQueueManager(target_dir)
-                    sub_tasks = sub_tqm._load_all()
-                    sub_task = sub_tasks.get(delegated_task_id)
+                    sub_task = sub_tqm.get_task_by_id(delegated_task_id)
                     if sub_task:
                         entry["subordinate_status"] = sub_task.status
                         entry["last_updated"] = sub_task.updated_at
