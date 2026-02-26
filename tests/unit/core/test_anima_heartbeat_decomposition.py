@@ -173,7 +173,7 @@ class TestBuildHeartbeatPrompt:
                 parts = await dp._build_heartbeat_prompt()
 
             # Should contain recovery note content
-            recovery_parts = [p for p in parts if "前回のハートビート障害情報" in p]
+            recovery_parts = [p for p in parts if "前回のバックグラウンド障害情報" in p]
             assert len(recovery_parts) == 1
             assert "Previous crash info" in recovery_parts[0]
             # Recovery note file should be removed
@@ -201,7 +201,7 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            recovery_parts = [p for p in parts if "前回のハートビート障害情報" in p]
+            recovery_parts = [p for p in parts if "前回のバックグラウンド障害情報" in p]
             assert len(recovery_parts) == 0
         finally:
             _stop_patches(mocks)

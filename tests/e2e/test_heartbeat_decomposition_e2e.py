@@ -435,7 +435,7 @@ class TestHeartbeatRecoveryNoteInjectedOnNextRun:
 
         # Recovery note content should appear in the prompt
         assert len(captured_prompts) == 1
-        assert "前回のハートビート障害情報" in captured_prompts[0]
+        assert "前回のバックグラウンド障害情報" in captured_prompts[0]
         assert "RuntimeError" in captured_prompts[0]
 
         # Recovery note should be deleted after loading

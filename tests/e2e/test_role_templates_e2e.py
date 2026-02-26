@@ -264,7 +264,7 @@ class TestCreateFromMdResearcherRole:
         # Read expected values from the template itself
         template_defaults_path = (
             _P(__file__).resolve().parent.parent.parent
-            / "templates" / "roles" / "researcher" / "defaults.json"
+            / "templates" / "_shared" / "roles" / "researcher" / "defaults.json"
         )
         expected = json.loads(template_defaults_path.read_text(encoding="utf-8"))
 

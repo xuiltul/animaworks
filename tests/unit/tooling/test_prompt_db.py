@@ -214,6 +214,20 @@ class TestSeedDefaults:
         assert store.list_descriptions() == []
         assert store.list_guides() == []
 
+    def test_seed_defaults_with_locale_dicts(
+        self, store: ToolPromptStore, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Locale dicts are flattened using current locale."""
+        import core.tooling.prompt_db as prompt_db_mod
+
+        monkeypatch.setattr(prompt_db_mod, "_get_locale", lambda: "en")
+        store.seed_defaults(
+            descriptions={"tool_a": {"ja": "日本語説明", "en": "English description"}},
+            guides={"guide_x": {"ja": "日本語ガイド", "en": "English guide"}},
+        )
+        assert store.get_description("tool_a") == "English description"
+        assert store.get_guide("guide_x") == "English guide"
+
 
 # ── Singleton ────────────────────────────────────────────────
 
@@ -293,21 +307,32 @@ class TestDefaultData:
         assert set(DEFAULT_GUIDES.keys()) == {"s_builtin", "s_mcp", "non_s"}
 
     def test_guide_content_is_non_empty_except_s_builtin(self) -> None:
-        for key, content in DEFAULT_GUIDES.items():
+        for key, entry in DEFAULT_GUIDES.items():
             if key == "s_builtin":
-                assert content == "", (
+                assert entry.get("ja", "") == "" and entry.get("en", "") == "", (
                     "s_builtin should be empty (Claude Code has built-in tool docs)"
                 )
                 continue
-            assert len(content) > 0, f"Guide '{key}' has empty content"
-            assert "#" in content, f"Guide '{key}' should contain markdown headings"
+            for loc in ("ja", "en"):
+                content = entry.get(loc, "")
+                assert len(content) > 0, f"Guide '{key}' [{loc}] has empty content"
+                assert "#" in content, (
+                    f"Guide '{key}' [{loc}] should contain markdown headings"
+                )
 
     def test_guide_content_has_no_unresolved_template_variables(self) -> None:
         """Ensure no {data_dir} or {name} template variables remain in guides."""
-        for key, content in DEFAULT_GUIDES.items():
-            assert "{data_dir}" not in content, (
-                f"Guide '{key}' contains unresolved {{data_dir}} template variable"
-            )
-            assert "{name}" not in content, (
-                f"Guide '{key}' contains unresolved {{name}} template variable"
-            )
+        for key, entry in DEFAULT_GUIDES.items():
+            if isinstance(entry, dict):
+                for loc, content in entry.items():
+                    assert "{data_dir}" not in content, (
+                        f"Guide '{key}' [{loc}] contains unresolved "
+                        "{{data_dir}} template variable"
+                    )
+                    assert "{name}" not in content, (
+                        f"Guide '{key}' [{loc}] contains unresolved "
+                        "{{name}} template variable"
+                    )
+            else:
+                assert "{data_dir}" not in entry
+                assert "{name}" not in entry

@@ -377,7 +377,7 @@ def cmd_anima_set_role(args: argparse.Namespace) -> None:
     """Change an anima's role."""
     import requests
 
-    from core.anima_factory import ROLES_DIR, VALID_ROLES, _apply_role_defaults
+    from core.anima_factory import SHARED_ROLES_DIR, VALID_ROLES, _apply_role_defaults
     from core.paths import get_animas_dir, get_data_dir
 
     name = args.anima
@@ -409,7 +409,7 @@ def cmd_anima_set_role(args: argparse.Namespace) -> None:
 
     if not args.status_only:
         # Merge defaults.json values into status.json
-        defaults_path = ROLES_DIR / new_role / "defaults.json"
+        defaults_path = SHARED_ROLES_DIR / new_role / "defaults.json"
         if defaults_path.is_file():
             try:
                 role_defaults = json.loads(defaults_path.read_text(encoding="utf-8"))

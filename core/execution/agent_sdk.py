@@ -54,6 +54,8 @@ __all__ = ["AgentSDKExecutor", "StreamDisconnectedError", "clear_session_ids"]
 # Patterns that are unconditionally blocked in Bash tool calls.
 # Each entry is (compiled_regex, human-readable reason).
 _BASH_BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"chatwork\s+send", re.IGNORECASE),
+     "Chatwork send via Bash is blocked; use the Chatwork tool instead"),
     (re.compile(r"curl.*api\.chatwork\.com.*/messages", re.IGNORECASE),
      "Direct Chatwork API post is blocked"),
     (re.compile(r"wget.*api\.chatwork\.com.*/messages", re.IGNORECASE),

@@ -11,7 +11,7 @@ import pytest
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 
-from core.paths import PROMPTS_DIR
+from core.paths import TEMPLATES_DIR
 
 
 # ── TestMessagingSectionBranching ─────────────────────────
@@ -203,17 +203,17 @@ class TestSTemplateContent:
 
     def test_messaging_s_contains_mcp_send_message(self) -> None:
         """messaging_s.md must reference the MCP tool name mcp__aw__send_message."""
-        content = (PROMPTS_DIR / "messaging_s.md").read_text(encoding="utf-8")
+        content = (TEMPLATES_DIR / "ja" / "prompts" / "messaging_s.md").read_text(encoding="utf-8")
         assert "mcp__aw__send_message" in content
 
     def test_messaging_s_does_not_contain_bash_send(self) -> None:
         """messaging_s.md must NOT contain 'bash send' (legacy CLI approach removed)."""
-        content = (PROMPTS_DIR / "messaging_s.md").read_text(encoding="utf-8")
+        content = (TEMPLATES_DIR / "ja" / "prompts" / "messaging_s.md").read_text(encoding="utf-8")
         assert "bash send" not in content
 
     def test_communication_rules_s_contains_mcp_send_message(self) -> None:
         """communication_rules_s.md must reference the MCP tool name mcp__aw__send_message."""
-        content = (PROMPTS_DIR / "communication_rules_s.md").read_text(encoding="utf-8")
+        content = (TEMPLATES_DIR / "ja" / "prompts" / "communication_rules_s.md").read_text(encoding="utf-8")
         assert "mcp__aw__send_message" in content
 
     def test_communication_rules_s_no_bare_send_message(self) -> None:
@@ -223,7 +223,7 @@ class TestSTemplateContent:
         prefixed with 'mcp__aw__', indicating the MCP tool is used
         rather than a generic tool_use call.
         """
-        content = (PROMPTS_DIR / "communication_rules_s.md").read_text(encoding="utf-8")
+        content = (TEMPLATES_DIR / "ja" / "prompts" / "communication_rules_s.md").read_text(encoding="utf-8")
         # Find all occurrences of 'send_message' and verify each is prefixed
         # with 'mcp__aw__'. We use a negative lookbehind to find bare instances.
         bare_matches = re.findall(r"(?<!mcp__aw__)send_message", content)
