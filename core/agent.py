@@ -564,6 +564,7 @@ class AgentCore:
                     tool_registry=self._tool_registry,
                     memory=self.memory,
                     personal_tools=self._personal_tools,
+                    interrupt_event=self._interrupt_event,
                 )
 
         if mode == "a":

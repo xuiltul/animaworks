@@ -504,7 +504,8 @@ body {
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
 }
-.btn-danger:hover {
+.btn-danger:hover,
+.btn-danger:active {
   background: #dc2626;
 }
 .btn-danger:disabled {
@@ -523,7 +524,8 @@ body {
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
 }
-.btn-warning:hover {
+.btn-warning:hover,
+.btn-warning:active {
   background: #d97706;
 }
 .btn-warning:disabled {
@@ -542,7 +544,8 @@ body {
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
 }
-.btn-success:hover {
+.btn-success:hover,
+.btn-success:active {
   background: #16a34a;
 }
 .btn-success:disabled {

@@ -828,6 +828,7 @@ class DigitalAnima:
         Separated from heartbeat to provide instant response to inter-Anima
         messages without triggering the full heartbeat observation cycle.
         """
+        self._interrupt_event.clear()
         logger.info("[%s] process_inbox_message START", self.name)
         try:
             async with self._inbox_lock:

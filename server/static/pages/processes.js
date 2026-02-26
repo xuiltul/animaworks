@@ -227,7 +227,7 @@ function _bindAllButtons(container) {
   // Interrupt
   container.querySelectorAll(".process-interrupt-btn").forEach(btn => {
     btn.addEventListener("click", () => _handleAction(btn, "interrupt", {
-      label: "中断", busyLabel: "中断中...", doneLabel: "中断完了",
+      label: "中断", busyLabel: "中断中...", doneLabel: "中断完了", reload: true,
     }));
   });
 }
