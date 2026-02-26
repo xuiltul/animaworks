@@ -22,10 +22,41 @@ from core.prompt.builder import (
 from core.schemas import SkillMeta
 
 
+_MOCK_SECTIONS = (
+    "[group1_header]: # 1. 動作環境と行動ルール\n"
+    "[current_time_label]: **現在時刻**:\n"
+    "[group2_header]: # 2. あなた自身\n"
+    "[group3_header]: # 3. 現在の状況\n"
+    "[current_state_header]: ## 現在の状態\n"
+    "[pending_tasks_header]: ## 未完了タスク\n"
+    "[procedures_header]: ## Procedures（手順書）\n"
+    "[distilled_knowledge_header]: ## Distilled Knowledge\n"
+    "[group4_header]: # 4. 記憶と能力\n"
+    "[group5_header]: # 5. 組織とコミュニケーション\n"
+    "[group6_header]: # 6. メタ設定\n"
+    "[you_marker]:   ← あなた\n"
+    "[common_label]: (共通スキル)\n"
+    "[recent_tool_results_header]: ## Recent Tool Results\n"
+)
+
+_MOCK_FALLBACKS = (
+    "[unset]: (未設定)\n"
+    "[none]: (なし)\n"
+    "[none_top_level]: (なし — あなたがトップです)\n"
+    "[no_other_animas]: (まだ他の社員はいません)\n"
+    "[truncated]: （前半省略）\n"
+    "[summary]: （要約）\n"
+)
+
+
 def _mock_load_prompt_with_builder(default: str = "section"):
     """Return a side_effect function that renders builder/* templates minimally."""
 
     def _mock(name: str, **kwargs) -> str:
+        if name == "builder/sections":
+            return _MOCK_SECTIONS
+        if name == "builder/fallbacks":
+            return _MOCK_FALLBACKS
         if name == "builder/task_in_progress":
             return f"## ⚠️ 進行中タスク\n\n{kwargs.get('state', '')}"
         if name == "builder/task_queue":
@@ -113,8 +144,14 @@ class TestBuildMessagingSection:
     def test_no_animas(self, tmp_path):
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
+
+        def _mock_lp(name: str, **kwargs) -> str:
+            if name == "builder/fallbacks":
+                return _MOCK_FALLBACKS
+            return "messaging section"
+
         with patch("core.tooling.prompt_db.get_prompt_store", return_value=None), \
-             patch("core.prompt.builder.load_prompt", return_value="messaging section") as mock_lp:
+             patch("core.prompt.builder.load_prompt", side_effect=_mock_lp) as mock_lp:
             _build_messaging_section(anima_dir, [])
             call_kwargs = mock_lp.call_args[1]
             assert "(まだ他の社員はいません)" in call_kwargs["animas_line"]

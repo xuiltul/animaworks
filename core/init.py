@@ -328,11 +328,15 @@ def _copy_infrastructure(data_dir: Path) -> None:
     from core.paths import _get_locale
 
     locale = _get_locale()
-    locale_dir = TEMPLATES_DIR / locale
-
-    # Fall back to ja if locale dir doesn't exist
-    if not locale_dir.exists():
-        locale_dir = TEMPLATES_DIR / "ja"
+    locale_dir: Path | None = None
+    for loc in (locale, "en", "ja"):
+        candidate = TEMPLATES_DIR / loc
+        if candidate.exists():
+            locale_dir = candidate
+            break
+    if locale_dir is None:
+        logger.warning("No locale template directory found; skipping infrastructure copy")
+        return
 
     for item in locale_dir.iterdir():
         if item.name == "anima_templates":
@@ -388,9 +392,15 @@ def merge_templates(data_dir: Path) -> list[str]:
     from core.paths import _get_locale
 
     locale = _get_locale()
-    locale_dir = TEMPLATES_DIR / locale
-    if not locale_dir.exists():
-        locale_dir = TEMPLATES_DIR / "ja"
+    locale_dir: Path | None = None
+    for loc in (locale, "en", "ja"):
+        candidate = TEMPLATES_DIR / loc
+        if candidate.exists():
+            locale_dir = candidate
+            break
+    if locale_dir is None:
+        logger.warning("No locale template directory found; skipping merge")
+        return []
 
     added: list[str] = []
 

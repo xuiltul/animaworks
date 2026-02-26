@@ -86,7 +86,7 @@ def _get_locale() -> str:
     try:
         from core.config.models import load_config
         return load_config().locale
-    except Exception:
+    except (ImportError, FileNotFoundError, ValueError, OSError):
         return "ja"
 
 
@@ -115,6 +115,10 @@ def resolve_template_path(
         FileNotFoundError: If the template is not found in any fallback.
     """
     loc = locale or _get_locale()
+    if ".." in category or ".." in filename:
+        raise ValueError(
+            f"Path traversal not allowed: {category}/{filename}"
+        )
     for fallback in _unique([loc, "en", "ja"]):
         path = TEMPLATES_DIR / fallback / category / filename
         if path.exists():

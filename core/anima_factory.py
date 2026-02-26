@@ -457,8 +457,8 @@ def _create_status_json(
     """Create status.json in *anima_dir* from parsed character-sheet info.
 
     The JSON contains supervisor, role, execution mode, model, and credential
-    extracted from the ``基本情報`` table.  Role defaults from
-    ``templates/roles/<role>/defaults.json`` are merged in for model config
+    extracted from the character sheet info table.  Role defaults from
+    ``templates/_shared/roles/<role>/defaults.json`` are merged in for model config
     fields; character sheet values take priority.
 
     Args:

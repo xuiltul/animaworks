@@ -20,19 +20,35 @@ from core.time_utils import now_jst
 logger = logging.getLogger("animaworks.prompt_builder")
 
 
+def _parse_kv_template(raw: str) -> dict[str, str]:
+    """Parse ``[key]: value`` lines from a template string.
+
+    Only the first ``]: `` occurrence per line is used as delimiter,
+    so values may safely contain ``]: ``.
+    """
+    result: dict[str, str] = {}
+    for line in raw.strip().splitlines():
+        if not line.startswith("["):
+            continue
+        bracket_end = line.find("]")
+        if bracket_end < 0:
+            continue
+        sep = line.find("]: ", bracket_end)
+        if sep < 0:
+            continue
+        key = line[1:bracket_end]
+        value = line[sep + 3:]
+        result[key] = value
+    return result
+
+
 def _load_section_strings(locale: str | None = None) -> dict[str, str]:
     """Load section headers and labels from template."""
     try:
         raw = load_prompt("builder/sections", locale=locale)
     except FileNotFoundError:
         return {}
-    result: dict[str, str] = {}
-    for line in raw.strip().splitlines():
-        if line.startswith("[") and "]: " in line:
-            key = line[1:line.index("]")]
-            value = line[line.index("]: ") + 3:]
-            result[key] = value
-    return result
+    return _parse_kv_template(raw)
 
 
 def _load_fallback_strings(locale: str | None = None) -> dict[str, str]:
@@ -41,13 +57,7 @@ def _load_fallback_strings(locale: str | None = None) -> dict[str, str]:
         raw = load_prompt("builder/fallbacks", locale=locale)
     except FileNotFoundError:
         return {}
-    result: dict[str, str] = {}
-    for line in raw.strip().splitlines():
-        if line.startswith("[") and "]: " in line:
-            key = line[1:line.index("]")]
-            value = line[line.index("]: ") + 3:]
-            result[key] = value
-    return result
+    return _parse_kv_template(raw)
 
 
 @dataclass
@@ -157,7 +167,7 @@ def _build_full_org_tree(
 ) -> str:
     """Build an indented full organization tree for top-level animas."""
     _ss = _load_section_strings()
-    you_marker = _ss.get("you_marker", "  ← あなた")
+    you_marker = _ss.get("you_marker", "  ← you")
 
     # Build children map: parent -> list of children
     children: dict[str | None, list[str]] = {}
@@ -281,7 +291,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
 
     # Top-level anima with subordinates: show full org tree
     if is_top_level and len(all_animas) > 1:
-        anima_speciality = my_speciality or _fs.get("unset", "(未設定)")
+        anima_speciality = my_speciality or _fs.get("unset", "(not set)")
         tree_text = _build_full_org_tree(anima_name, all_animas)
         parts = [
             load_prompt(
@@ -308,7 +318,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             sup_spec = all_animas[my_supervisor].speciality
         supervisor_line = _format_anima_entry(my_supervisor, sup_spec)
     else:
-        supervisor_line = _fs.get("none_top_level", "(なし — あなたがトップです)")
+        supervisor_line = _fs.get("none_top_level", "(none — you are top-level)")
 
     # Subordinates: animas whose supervisor is me
     subordinates: list[str] = []
@@ -329,9 +339,9 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             if pcfg.supervisor == my_supervisor:
                 peers.append(_format_anima_entry(name, pcfg.speciality))
 
-    subordinates_line = ", ".join(subordinates) if subordinates else _fs.get("none", "(なし)")
-    peers_line = ", ".join(peers) if peers else _fs.get("none", "(なし)")
-    anima_speciality = my_speciality or _fs.get("unset", "(未設定)")
+    subordinates_line = ", ".join(subordinates) if subordinates else _fs.get("none", "(none)")
+    peers_line = ", ".join(peers) if peers else _fs.get("none", "(none)")
+    anima_speciality = my_speciality or _fs.get("unset", "(not set)")
 
     parts = [
         load_prompt(
@@ -368,7 +378,7 @@ def _build_messaging_section(
     self_name = anima_dir.name
     main_py = PROJECT_DIR / "main.py"
     animas_line = (
-        ", ".join(other_animas) if other_animas else _fs.get("no_other_animas", "(まだ他の社員はいません)")
+        ", ".join(other_animas) if other_animas else _fs.get("no_other_animas", "(no other employees yet)")
     )
 
     db_key = "messaging_s" if execution_mode == "s" else "messaging"
@@ -500,7 +510,7 @@ def build_system_prompt(
     permissions = memory.read_permissions()
 
     # ── Group 1: 動作環境と行動ルール ─────────────────────────
-    parts.append(_ss.get("group1_header", "# 1. 動作環境と行動ルール"))
+    parts.append(_ss.get("group1_header", "# 1. Environment and Action Rules"))
 
     if is_task:
         parts.append(f"Anima: {pd.name}\nData directory: {data_dir}")
@@ -535,7 +545,7 @@ def build_system_prompt(
             parts.append(injection)
 
     current_time = now_jst().strftime("%Y-%m-%d %H:%M (%Z)")
-    parts.append(f"{_ss.get('current_time_label', '**現在時刻**:')} {current_time}")
+    parts.append(f"{_ss.get('current_time_label', '**Current time**:')} {current_time}")
 
     if not is_task and tier in (TIER_FULL, TIER_STANDARD):
         _br = (
@@ -552,7 +562,7 @@ def build_system_prompt(
     # ── Group 2: あなた自身（補足） ─────────────────────────────
     # NOTE: identity.md / injection.md は Group 1 直後に注入済み。
     #       ここでは bootstrap, vision, specialty, permissions を追加。
-    parts.append(_ss.get("group2_header", "# 2. あなた自身"))
+    parts.append(_ss.get("group2_header", "# 2. Yourself"))
 
     if not is_task and tier in (TIER_FULL, TIER_STANDARD):
         bootstrap = memory.read_bootstrap()
@@ -574,7 +584,7 @@ def build_system_prompt(
             parts.append(permissions)
 
     # ── Group 3: 現在の状況 ───────────────────────────────────
-    parts.append(_ss.get("group3_header", "# 3. 現在の状況"))
+    parts.append(_ss.get("group3_header", "# 3. Current Situation"))
 
     # current_state: skip for task; summary (500 chars) for inbox
     if not is_task:
@@ -593,16 +603,16 @@ def build_system_prompt(
                 first_nl = truncated.find("\n")
                 if first_nl != -1 and first_nl < _state_max * 0.2:
                     truncated = truncated[first_nl + 1:]
-                state = f"{_fs.get('truncated', '（前半省略）')}\n\n{truncated}"
+                state = f"{_fs.get('truncated', '(earlier portion omitted)')}\n\n{truncated}"
             parts.append(load_prompt("builder/task_in_progress", state=state))
         elif state:
-            parts.append(f"{_ss.get('current_state_header', '## 現在の状態')}\n\n{state}")
+            parts.append(f"{_ss.get('current_state_header', '## Current State')}\n\n{state}")
 
     # pending: skip for inbox and task
     if not is_inbox and not is_task:
         pending = memory.read_pending()
         if pending:
-            parts.append(f"{_ss.get('pending_tasks_header', '## 未完了タスク')}\n\n{pending}")
+            parts.append(f"{_ss.get('pending_tasks_header', '## Pending Tasks')}\n\n{pending}")
 
     # Task Queue, Resolution Registry, Recent Outbound: skip for inbox and task
     if not is_inbox and not is_task and tier in (TIER_FULL, TIER_STANDARD):
@@ -651,14 +661,14 @@ def build_system_prompt(
             logger.debug("Failed to inject recent tool results", exc_info=True)
 
     # ── Group 4: 記憶と能力 ───────────────────────────────────
-    parts.append(_ss.get("group4_header", "# 4. 記憶と能力"))
+    parts.append(_ss.get("group4_header", "# 4. Memory and Capabilities"))
 
     if is_task:
         parts.append(f"Anima directory: {pd}")
     elif tier in (TIER_FULL, TIER_STANDARD):
         # Memory directory guide
-        _none = _fs.get("none", "(なし)")
-        _common = _ss.get("common_label", "(共通)")
+        _none = _fs.get("none", "(none)")
+        _common = _ss.get("common_label", "(shared)")
         knowledge_list = ", ".join(memory.list_knowledge_files()) or _none
         episode_list = ", ".join(memory.list_episode_files()[:7]) or _none
         procedure_list = ", ".join(memory.list_procedure_files()) or _none
@@ -720,7 +730,7 @@ def build_system_prompt(
 
     if proc_parts:
         parts.append(
-            f"{_ss.get('procedures_header', '## Procedures（手順書）')}\n\n"
+            f"{_ss.get('procedures_header', '## Procedures')}\n\n"
             + "\n\n---\n\n".join(proc_parts)
         )
 
@@ -806,7 +816,7 @@ def build_system_prompt(
                 parts.append(tools_guide)
 
     # ── Group 5: 組織とコミュニケーション ─────────────────────
-    parts.append(_ss.get("group5_header", "# 5. 組織とコミュニケーション"))
+    parts.append(_ss.get("group5_header", "# 5. Organization and Communication"))
 
     # hiring_context: skip for inbox and task
     if not is_inbox and not is_task and tier in (TIER_FULL, TIER_STANDARD):
@@ -831,7 +841,7 @@ def build_system_prompt(
 
         _msg = _build_messaging_section(pd, other_animas, execution_mode)
         if is_background_auto and len(_msg) > 500:
-            _msg = _msg[:500] + "\n" + _fs.get("summary", "（要約）")
+            _msg = _msg[:500] + "\n" + _fs.get("summary", "(summary)")
         parts.append(_msg)
 
         # human_notification: skip for inbox and task
@@ -853,7 +863,7 @@ def build_system_prompt(
             parts.append("メッセージはsend_messageツールで送信してください。")
 
     # ── Group 6: メタ設定 ─────────────────────────────────────
-    parts.append(_ss.get("group6_header", "# 6. メタ設定"))
+    parts.append(_ss.get("group6_header", "# 6. Meta Settings"))
 
     # emotion: skip for background-auto (heartbeat/cron) and task
     if not is_background_auto and not is_task and tier in (TIER_FULL, TIER_STANDARD):
