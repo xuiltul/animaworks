@@ -76,6 +76,9 @@ class TestExtractNameFromMd:
     def test_eimei_pattern(self):
         assert _extract_name_from_md("英名 Hinata") == "hinata"
 
+    def test_english_name_field(self):
+        assert _extract_name_from_md("| Name | Alice |") == "alice"
+
     def test_no_match(self):
         assert _extract_name_from_md("No heading here") is None
 
@@ -491,10 +494,10 @@ class TestParseCharacterSheetInfo:
 ## 人格
 """
         info = _parse_character_sheet_info(content)
-        assert info["英名"] == "sakura"
-        assert info["役割"] == "developer"
-        assert info["上司"] == "tanaka"
-        assert info["モデル"] == "claude-sonnet"
+        assert info["name"] == "sakura"
+        assert info["役割"] == "developer"  # Unmapped field kept as-is
+        assert info["supervisor"] == "tanaka"
+        assert info["model"] == "claude-sonnet"
 
     def test_empty_content(self):
         info = _parse_character_sheet_info("No 基本情報 section here")
@@ -511,7 +514,29 @@ class TestParseCharacterSheetInfo:
         info = _parse_character_sheet_info(content)
         assert "項目" not in info
         assert "---" not in info
-        assert info["英名"] == "hinata"
+        assert info["name"] == "hinata"
+
+    def test_english_character_sheet(self):
+        """English format returns normalized keys."""
+        content = """\
+## Basic Information
+
+| Field | Value |
+|-------|-------|
+| Name | alice |
+| Supervisor | bob |
+| Model | openai/gpt-4o |
+
+## Personality
+Content here.
+
+## Role & Guidelines
+Content here.
+"""
+        info = _parse_character_sheet_info(content)
+        assert info["name"] == "alice"
+        assert info["supervisor"] == "bob"
+        assert info["model"] == "openai/gpt-4o"
 
 
 # ── _validate_character_sheet ────────────────────────────
@@ -596,11 +621,11 @@ class TestCreateStatusJson:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
         info = {
-            "英名": "sakura",
+            "name": "sakura",
             "役割": "developer",
-            "上司": "tanaka",
-            "実行モード": "assisted",
-            "モデル": "openai/gpt-4o",
+            "supervisor": "tanaka",
+            "exec_mode": "assisted",
+            "model": "openai/gpt-4o",
             "credential": "openai_key",
         }
         _create_status_json(anima_dir, info)
@@ -614,7 +639,7 @@ class TestCreateStatusJson:
     def test_supervisor_nashi_normalized(self, tmp_path):
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        info = {"上司": "(なし)"}
+        info = {"supervisor": "(なし)"}
         _create_status_json(anima_dir, info)
         status = json.loads((anima_dir / "status.json").read_text(encoding="utf-8"))
         assert status["supervisor"] == ""
@@ -623,7 +648,7 @@ class TestCreateStatusJson:
         """Explicit supervisor_override takes priority over sheet value."""
         person_dir = tmp_path / "person"
         person_dir.mkdir()
-        info = {"上司": "tanaka"}
+        info = {"supervisor": "tanaka"}
         _create_status_json(person_dir, info, supervisor_override="yamada")
         status = json.loads((person_dir / "status.json").read_text(encoding="utf-8"))
         assert status["supervisor"] == "yamada"

@@ -398,9 +398,13 @@ def cmd_config_export_sections(args: argparse.Namespace) -> None:
 
     dry_run: bool = getattr(args, "dry_run", False)
 
-    # Resolve template directory
-    project_root = Path(__file__).resolve().parent.parent.parent
-    templates_dir = project_root / "templates" / "prompts"
+    # Resolve template directory (locale-aware)
+    from core.paths import TEMPLATES_DIR, _get_locale
+
+    loc = _get_locale()
+    templates_dir = TEMPLATES_DIR / loc / "prompts"
+    if not templates_dir.is_dir():
+        templates_dir = TEMPLATES_DIR / "ja" / "prompts"
     if not templates_dir.is_dir():
         print(f"Error: templates directory not found: {templates_dir}", file=sys.stderr)
         sys.exit(1)

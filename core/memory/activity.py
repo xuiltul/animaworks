@@ -266,6 +266,10 @@ class ActivityLogger:
                 f.write(line + "\n")
                 f.flush()
                 os.fsync(f.fileno())
+        except OSError as exc:
+            from core.exceptions import MemoryWriteError
+            logger.exception("Failed to append activity log")
+            raise MemoryWriteError(f"Activity log write failed: {exc}") from exc
         except Exception:
             logger.exception("Failed to append activity log")
 
@@ -1145,6 +1149,8 @@ class ActivityLogger:
                     "from_person": "",
                     "tool_calls": [],
                 }
+                if e.meta.get("thinking_text"):
+                    msg["thinking_text"] = e.meta["thinking_text"]
                 messages.append(msg)
                 # Attach any pending tool calls to this assistant message
                 if pending_tool_calls:

@@ -260,25 +260,25 @@ function _createEventElement(evt) {
   const timeEl = document.createElement("span");
   timeEl.className = "tl-event-time";
   timeEl.textContent = _formatTime(evt.ts);
-  timeEl.style.cssText = "flex-shrink:0; color:#aaa; font-size:0.75rem; min-width:45px;";
+  timeEl.style.cssText = "flex-shrink:0; color:var(--aw-color-text-muted, #aaa); font-size:0.75rem; min-width:45px;";
 
   // Icon
   const iconEl = document.createElement("span");
   iconEl.className = "tl-event-icon";
-  iconEl.textContent = getIcon(evt.type);
+  iconEl.innerHTML = getIcon(evt.type);
   iconEl.style.cssText = "flex-shrink:0;";
 
   // Anima
   const animasEl = document.createElement("span");
   animasEl.className = "tl-event-animas";
   animasEl.textContent = evt.anima || "";
-  animasEl.style.cssText = "font-weight:600; color:#2563eb; flex-shrink:0; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
+  animasEl.style.cssText = "font-weight:600; color:var(--aw-color-accent, #2563eb); flex-shrink:0; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;";
 
   // Summary
   const summaryEl = document.createElement("span");
   summaryEl.className = "tl-event-summary";
   summaryEl.textContent = getDisplaySummary(evt);
-  summaryEl.style.cssText = "color:#555; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;";
+  summaryEl.style.cssText = "color:var(--aw-color-text-secondary, #555); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;";
 
   // Expand chevron (only for events with content)
   if (hasContent) {
@@ -294,6 +294,7 @@ function _createEventElement(evt) {
   el.appendChild(summaryEl);
 
   wrapper.appendChild(el);
+  if (window.lucide) lucide.createIcons({ nodes: [iconEl] });
 
   // Expandable content panel
   if (hasContent) {

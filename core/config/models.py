@@ -19,9 +19,10 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
 
-from typing import Literal
+if TYPE_CHECKING:
+    from core.schemas import ModelConfig
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -92,7 +93,8 @@ class AnimaDefaults(BaseModel):
     execution_mode: str | None = None  # None = auto-detect from model
     supervisor: str | None = None
     speciality: str | None = None
-    thinking: bool | None = None  # Ollama thinking mode
+    thinking: bool | None = None  # Extended thinking (Bedrock: reasoning_effort, Ollama: think)
+    thinking_effort: str | None = None  # "low"/"medium"/"high"/"max" (default: "high")
     llm_timeout: int = 600  # default LLM API timeout (seconds)
 
 
@@ -146,6 +148,7 @@ class ImageGenConfig(BaseModel):
     negative_prompt_extra: str = ""  # Extra tags added to negative prompt
     vibe_strength: float = 0.6  # Vibe Transfer strength (0.0-1.0)
     vibe_info_extracted: float = 0.8  # Vibe Transfer information extraction (0.0-1.0)
+    enable_3d: bool = True  # Enable 3D model generation (Meshy API)
 
 
 class NotificationChannelConfig(BaseModel):
@@ -257,6 +260,55 @@ class HeartbeatConfig(BaseModel):
     max_messages_per_day: int = 100  # Global outbound DM limit per Anima per day
 
 
+# ── Voice Chat Config ───────────────────────────────────────────────────────
+
+
+class VoicevoxConfig(BaseModel):
+    """VOICEVOX Engine connection settings."""
+
+    base_url: str = "http://localhost:50021"
+
+
+class ElevenLabsVoiceConfig(BaseModel):
+    """ElevenLabs TTS API settings."""
+
+    api_key_env: str = "ELEVENLABS_API_KEY"
+    model_id: str = "eleven_flash_v2_5"
+
+
+class StyleBertVits2Config(BaseModel):
+    """Style-BERT-VITS2 / AivisSpeech connection settings."""
+
+    base_url: str = "http://localhost:5000"
+
+
+class VoiceConfig(BaseModel):
+    """Voice chat configuration."""
+
+    stt_model: str = "large-v3-turbo"
+    stt_device: str = "auto"
+    stt_compute_type: str = "default"
+    stt_language: str | None = None
+    stt_refine_enabled: bool = False
+    default_tts_provider: str = "voicevox"
+    audio_format: str = "wav"
+    voicevox: VoicevoxConfig = VoicevoxConfig()
+    elevenlabs: ElevenLabsVoiceConfig = ElevenLabsVoiceConfig()
+    style_bert_vits2: StyleBertVits2Config = StyleBertVits2Config()
+
+
+# ── UI Config ────────────────────────────────────────────────────────────────
+
+
+class UIConfig(BaseModel):
+    """UI appearance and theme settings."""
+
+    theme: str = "default"
+
+
+# ── Main Config ─────────────────────────────────────────────────────────────
+
+
 class AnimaWorksConfig(BaseModel):
     version: int = 1
     setup_complete: bool = False
@@ -265,6 +317,7 @@ class AnimaWorksConfig(BaseModel):
     credentials: dict[str, CredentialConfig] = {"anthropic": CredentialConfig()}
     model_modes: dict[str, str] = {}  # モデル名 → "S"/"A"/"B" (legacy: "A1"/"A2" も可)
     model_context_windows: dict[str, int] = {}  # モデル名パターン → コンテキストウィンドウサイズ
+    model_max_tokens: dict[str, int] = {}  # モデル名パターン → デフォルト max_tokens
     anima_defaults: AnimaDefaults = AnimaDefaults()
     animas: dict[str, AnimaModelConfig] = {}
     consolidation: ConsolidationConfig = ConsolidationConfig()
@@ -277,6 +330,8 @@ class AnimaWorksConfig(BaseModel):
     background_task: BackgroundTaskConfig = BackgroundTaskConfig()
     activity_log: ActivityLogConfig = ActivityLogConfig()
     heartbeat: HeartbeatConfig = HeartbeatConfig()
+    voice: VoiceConfig = VoiceConfig()
+    ui: UIConfig = UIConfig()
 
 
 # ---------------------------------------------------------------------------
@@ -352,10 +407,12 @@ def load_config(path: Path | None = None) -> AnimaWorksConfig:
             config = AnimaWorksConfig.model_validate(data)
         except json.JSONDecodeError as exc:
             logger.error("Failed to parse %s: %s", path, exc)
+            raise ConfigError(f"Invalid JSON in {path}: {exc}") from exc
+        except ConfigError:
             raise
         except Exception as exc:
             logger.error("Failed to load config from %s: %s", path, exc)
-            raise
+            raise ConfigError(f"Failed to load config from {path}: {exc}") from exc
     else:
         logger.info("Config file not found at %s; using defaults", path)
         config = AnimaWorksConfig()
@@ -436,6 +493,7 @@ def _load_status_json(anima_dir: Path) -> dict[str, Any]:
         "max_tokens": "max_tokens",
         "fallback_model": "fallback_model",
         "thinking": "thinking",
+        "thinking_effort": "thinking_effort",
         "llm_timeout": "llm_timeout",
     }
     for status_key, config_key in field_mapping.items():
@@ -520,9 +578,13 @@ DEFAULT_MODEL_MODE_PATTERNS: dict[str, str] = {
     # ── S: Claude Agent SDK ──────────────────────────────
     "claude-*": "S",
 
+    # ── C: Codex SDK (Codex CLI wrapper) ─────────────────
+    "codex/*": "C",
+
     # ── A: Cloud API providers (LiteLLM + tool_use) ──────
     "openai/*": "A",
     "azure/*": "A",
+    "bedrock/*": "A",
     "google/*": "A",
     "vertex_ai/*": "A",
     "mistral/*": "A",
@@ -603,6 +665,10 @@ KNOWN_MODELS: list[dict[str, str]] = [
     {"name": "ollama/glm-4.7",               "mode": "A", "note": "ローカル・tool_use対応"},
     {"name": "ollama/qwen3:14b",             "mode": "A", "note": "ローカル中型"},
     {"name": "ollama/qwen3:32b",             "mode": "A", "note": "ローカル大型"},
+    # ── Codex (Mode C) ──────────────────────────────────────────────────────
+    {"name": "codex/o4-mini",                "mode": "C", "note": "Codex CLI経由・高速"},
+    {"name": "codex/o3",                     "mode": "C", "note": "Codex CLI経由・推論"},
+    {"name": "codex/gpt-4.1",               "mode": "C", "note": "Codex CLI経由・コーディング"},
     # ── Ollama Local (Mode B: tool_use 非対応) ────────────────────────────────
     {"name": "ollama/gemma3:4b",             "mode": "B", "note": "軽量ローカル"},
     {"name": "ollama/gemma3:12b",            "mode": "B", "note": "中型ローカル"},
@@ -780,6 +846,7 @@ def load_model_config(anima_dir: Path) -> "ModelConfig":
         speciality=resolved.speciality,
         resolved_mode=mode,
         thinking=resolved.thinking,
+        thinking_effort=resolved.thinking_effort,
         llm_timeout=resolved.llm_timeout,
         extra_keys=credential.keys or {},
     )
@@ -796,7 +863,7 @@ def _normalise_mode(raw: str) -> str:
     if mapped:
         return mapped
     upper = raw.strip().upper()
-    if upper in ("S", "A", "B"):
+    if upper in ("S", "A", "B", "C"):
         return upper
     # Unrecognised — return as-is (upper) for forward compat
     logger.warning("Unrecognised execution mode '%s'; passing through as '%s'", raw, upper)
@@ -846,7 +913,8 @@ def resolve_execution_mode(
       5. Default ``"B"`` (safe side)
 
     Returns:
-        One of ``"S"`` (SDK), ``"A"`` (Autonomous), or ``"B"`` (Basic).
+        One of ``"S"`` (SDK), ``"C"`` (Codex), ``"A"`` (Autonomous),
+        or ``"B"`` (Basic).
     """
     # 1. Per-anima explicit override
     if explicit_override:
@@ -918,6 +986,57 @@ def resolve_context_window(
                 return size
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# max_tokens resolution
+# ---------------------------------------------------------------------------
+
+DEFAULT_MAX_TOKENS: int = 8192
+_THINKING_MIN_MAX_TOKENS: int = 16384
+
+
+def _match_model_max_tokens(
+    model_name: str,
+    config: AnimaWorksConfig | None = None,
+) -> int | None:
+    """Match *model_name* against ``config.model_max_tokens`` pattern table."""
+    if config is None:
+        try:
+            config = load_config()
+        except Exception:
+            return None
+    table = config.model_max_tokens or {}
+    if not table:
+        return None
+    bare = model_name.split("/", 1)[-1] if "/" in model_name else model_name
+    for pattern, value in table.items():
+        if fnmatch.fnmatch(model_name, pattern) or fnmatch.fnmatch(bare, pattern):
+            return value
+    return None
+
+
+def resolve_max_tokens(
+    model_name: str,
+    explicit: int | None,
+    thinking: bool | None,
+    config: AnimaWorksConfig | None = None,
+) -> int:
+    """Resolve effective max_tokens.
+
+    Priority:
+      1. ``config.model_max_tokens`` pattern match (overrides all)
+      2. Thinking minimum floor (16384 when thinking enabled, raises low values)
+      3. Explicit value (status.json ``max_tokens``)
+      4. DEFAULT_MAX_TOKENS (8192)
+    """
+    matched = _match_model_max_tokens(model_name, config)
+    if matched is not None:
+        return matched
+    base = explicit if (explicit is not None and explicit != DEFAULT_MAX_TOKENS) else DEFAULT_MAX_TOKENS
+    if thinking:
+        return max(_THINKING_MIN_MAX_TOKENS, base)
+    return base
 
 
 # ---------------------------------------------------------------------------

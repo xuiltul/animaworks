@@ -234,13 +234,13 @@ class TestOrphanEvents:
 
 class TestMixedTriggerGrouping:
     def test_full_scenario(self) -> None:
-        """HB + orphan + Chat + DM + Cron → correct groups."""
+        """HB + Chat + DM + Cron → correct groups (channel_post absorbed into heartbeat)."""
         entries = [
             # Heartbeat (1 group)
             _make("heartbeat_start", _ts(BASE, 0)),
             _make("channel_read", _ts(BASE, 1)),
             _make("heartbeat_end", _ts(BASE, 2), summary="ok"),
-            # Orphan (1 single)
+            # channel_post at +5 is within time window of heartbeat → absorbed
             _make("channel_post", _ts(BASE, 5), channel="ops"),
             # Chat (1 group)
             _make("message_received", _ts(BASE, 10), from_person="admin",
@@ -256,13 +256,13 @@ class TestMixedTriggerGrouping:
         ]
         groups = _group(entries)
         types = [g["type"] for g in groups]
-        assert types == ["heartbeat", "single", "chat", "dm", "cron"]
-        assert groups[0]["event_count"] == 3
+        assert types == ["heartbeat", "chat", "dm", "cron"]
+        assert groups[0]["event_count"] == 4  # start, channel_read, end, channel_post
         assert groups[0]["is_open"] is False
+        assert groups[1]["event_count"] == 2  # message_received, response_sent
         assert groups[2]["event_count"] == 2
         assert groups[3]["event_count"] == 2
-        assert groups[4]["event_count"] == 2
-        assert groups[4]["is_open"] is True  # cron has no explicit close
+        assert groups[3]["is_open"] is True  # cron has no explicit close
 
 
 # ── Group ID format ──────────────────────────────────────

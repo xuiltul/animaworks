@@ -41,7 +41,7 @@ class TestReadModelConfigFromMd:
 
         assert isinstance(mc, ModelConfig)
         assert mc.model == "claude-sonnet-4-6"
-        assert mc.max_tokens == 4096
+        assert mc.max_tokens == 8192
         assert mc.max_turns == 20
 
     def test_returns_defaults_on_empty_file(
@@ -89,7 +89,7 @@ class TestReadModelConfigFromMd:
         mc = reader._read_model_config_from_md()
 
         assert mc.model == "custom-model"
-        assert mc.max_tokens == 4096  # default
+        assert mc.max_tokens == 8192  # default
         assert mc.max_turns == 20  # default
 
     def test_ignores_biko_section(
@@ -236,6 +236,7 @@ class TestReadModelConfig:
         mock_resolved.supervisor = None
         mock_resolved.speciality = None
         mock_resolved.thinking = None
+        mock_resolved.thinking_effort = None
         mock_resolved.llm_timeout = None
 
         mock_credential = MagicMock()
@@ -297,6 +298,7 @@ class TestReadModelConfig:
         mock_resolved.supervisor = None
         mock_resolved.speciality = None
         mock_resolved.thinking = None
+        mock_resolved.thinking_effort = None
         mock_resolved.llm_timeout = None
 
         mock_credential = MagicMock()

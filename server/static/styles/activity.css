@@ -13,7 +13,7 @@
 }
 
 .activity-empty {
-  color: #aaa;
+  color: var(--aw-color-text-muted);
   font-size: 0.85rem;
   text-align: center;
   margin-top: 40px;
@@ -31,7 +31,7 @@
 
 .activity-entry:hover,
 .activity-entry:active {
-  background: #fafafa;
+  background: var(--aw-color-bg-subtle);
 }
 
 .activity-icon {
@@ -44,7 +44,7 @@
 
 .activity-time {
   font-size: 0.72rem;
-  color: #999;
+  color: var(--aw-color-text-faint);
   flex-shrink: 0;
   width: 50px;
   padding-top: 2px;
@@ -58,11 +58,11 @@
 
 .activity-anima {
   font-weight: 600;
-  color: #2563eb;
+  color: var(--aw-color-accent);
 }
 
 .activity-summary {
-  color: #555;
+  color: var(--aw-color-text-secondary);
   word-wrap: break-word;
 }
 
@@ -84,7 +84,7 @@
 
 .activity-count {
   font-size: 0.85rem;
-  color: var(--text-secondary, #888);
+  color: var(--aw-color-text-muted);
 }
 
 .activity-filters {
@@ -93,23 +93,23 @@
   flex-wrap: wrap;
   align-items: center;
   padding: 0.75rem 0;
-  border-bottom: 1px solid var(--border-color, #eee);
+  border-bottom: 1px solid var(--aw-color-border-light);
 }
 
 .activity-anima-select {
   padding: 0.3rem 0.5rem;
-  border: 1px solid var(--border-color, #ddd);
+  border: 1px solid var(--aw-color-border-medium);
   border-radius: 6px;
   font-size: 0.84rem;
-  background: var(--bg-primary, #fff);
-  color: var(--text-primary, #333);
+  background: var(--aw-color-bg-primary);
+  color: var(--aw-color-text-primary);
   cursor: pointer;
 }
 
 .activity-type-chip {
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  border: 1px solid var(--border-color, #ddd);
+  border: 1px solid var(--aw-color-border-medium);
   background: transparent;
   cursor: pointer;
   font-size: 0.8rem;
@@ -117,13 +117,13 @@
 }
 
 .activity-type-chip:hover {
-  background: var(--bg-hover, #f5f5f5);
+  background: var(--aw-color-bg-hover);
 }
 
 .activity-type-chip.active {
-  background: var(--accent-color, #2563eb);
-  color: #fff;
-  border-color: var(--accent-color, #2563eb);
+  background: var(--aw-color-accent);
+  color: var(--aw-color-bg-primary);
+  border-color: var(--aw-color-accent);
 }
 
 .activity-list {
@@ -135,23 +135,23 @@
   align-items: flex-start;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-color, #f0f0f0);
+  border-bottom: 1px solid var(--aw-color-border-light);
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .activity-row:hover {
-  background: var(--bg-hover, #fafafa);
+  background: var(--aw-color-bg-subtle);
 }
 
 .activity-row.expanded {
-  background: var(--bg-hover, #f7f7ff);
+  background: var(--aw-color-bg-alt);
 }
 
 .activity-row-time {
   flex-shrink: 0;
   min-width: 3.5rem;
-  color: var(--text-secondary, #888);
+  color: var(--aw-color-text-muted);
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
 }
@@ -166,7 +166,7 @@
   flex-shrink: 0;
   max-width: 8rem;
   font-weight: 500;
-  color: var(--accent-color, #2563eb);
+  color: var(--aw-color-accent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -176,7 +176,7 @@
 .activity-row-summary {
   flex: 1;
   min-width: 0;
-  color: var(--text-secondary, #555);
+  color: var(--aw-color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -185,8 +185,8 @@
 
 .activity-detail {
   padding: 0.75rem 1rem 0.75rem 3.5rem;
-  background: var(--bg-secondary, #f9f9f9);
-  border-bottom: 1px solid var(--border-color, #eee);
+  background: var(--aw-color-bg-subtle);
+  border-bottom: 1px solid var(--aw-color-border-light);
   font-size: 0.84rem;
   animation: activitySlideDown 0.15s ease-out;
 }
@@ -197,7 +197,7 @@
 
 .activity-detail-label {
   font-weight: 600;
-  color: var(--text-secondary, #666);
+  color: var(--aw-color-text-secondary);
   margin-right: 0.4rem;
 }
 
@@ -206,9 +206,9 @@
   word-break: break-word;
   margin: 0.5rem 0;
   padding: 0.5rem;
-  background: var(--bg-primary, #fff);
+  background: var(--aw-color-bg-primary);
   border-radius: 4px;
-  border: 1px solid var(--border-color, #eee);
+  border: 1px solid var(--aw-color-border-light);
   max-height: 300px;
   overflow-y: auto;
 }
@@ -228,17 +228,17 @@
 .activity-markdown ul,
 .activity-markdown ol { margin: 0.3em 0; padding-left: 1.4em; }
 .activity-markdown li { margin: 0.15em 0; }
-.activity-markdown code { background: #e8ecf0; padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
-.activity-markdown pre { background: #272822; color: #f8f8f2; padding: 8px 10px; border-radius: 4px; overflow-x: auto; margin: 0.4em 0; }
+.activity-markdown code { background: var(--aw-color-code-inline-bg); padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
+.activity-markdown pre { background: var(--aw-color-code-bg); color: var(--aw-color-code-text); padding: 8px 10px; border-radius: 4px; overflow-x: auto; margin: 0.4em 0; }
 .activity-markdown pre code { background: none; padding: 0; color: inherit; }
 
 .activity-meta {
   font-family: monospace;
   font-size: 0.78rem;
-  background: var(--bg-primary, #fff);
+  background: var(--aw-color-bg-primary);
   padding: 0.4rem;
   border-radius: 4px;
-  border: 1px solid var(--border-color, #eee);
+  border: 1px solid var(--aw-color-border-light);
   white-space: pre-wrap;
   word-break: break-all;
 }
@@ -248,17 +248,17 @@
   width: 100%;
   padding: 0.6rem;
   margin-top: 0.5rem;
-  border: 1px solid var(--border-color, #ddd);
+  border: 1px solid var(--aw-color-border-medium);
   background: transparent;
   cursor: pointer;
   border-radius: 6px;
   font-size: 0.85rem;
-  color: var(--text-secondary, #666);
+  color: var(--aw-color-text-secondary);
   transition: all 0.15s;
 }
 
 .activity-load-more:hover {
-  background: var(--bg-hover, #f5f5f5);
+  background: var(--aw-color-bg-hover);
 }
 
 .activity-load-more:disabled {
@@ -269,7 +269,7 @@
 .activity-page .activity-empty {
   text-align: center;
   padding: 3rem 1rem;
-  color: var(--text-secondary, #aaa);
+  color: var(--aw-color-text-muted);
   font-size: 0.9rem;
 }
 
@@ -287,7 +287,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.55rem 0.75rem;
-  border-bottom: 1px solid var(--border-color, #f0f0f0);
+  border-bottom: 1px solid var(--aw-color-border-light);
   cursor: pointer;
   transition: background 0.15s;
   font-size: 0.88rem;
@@ -295,11 +295,11 @@
 
 .activity-group-header:hover,
 .activity-group-header:active {
-  background: var(--bg-hover, #fafafa);
+  background: var(--aw-color-bg-subtle);
 }
 
 .activity-group-header.expanded {
-  background: var(--bg-hover, #f7f7ff);
+  background: var(--aw-color-bg-alt);
   border-bottom-color: transparent;
 }
 
@@ -307,7 +307,7 @@
   flex-shrink: 0;
   width: 1rem;
   font-size: 0.7rem;
-  color: var(--text-secondary, #888);
+  color: var(--aw-color-text-muted);
   text-align: center;
 }
 
@@ -323,7 +323,7 @@
 .activity-group-count {
   flex-shrink: 0;
   font-size: 0.78rem;
-  color: var(--text-secondary, #999);
+  color: var(--aw-color-text-faint);
 }
 
 .activity-group-badge-open {
@@ -331,15 +331,15 @@
   font-size: 0.72rem;
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--aw-color-warning-bg);
+  color: var(--aw-color-warning-text);
   font-weight: 500;
 }
 
 .activity-group-events {
   padding: 0.25rem 0 0.25rem 1.5rem;
-  border-bottom: 1px solid var(--border-color, #eee);
-  background: var(--bg-secondary, #fafafa);
+  border-bottom: 1px solid var(--aw-color-border-light);
+  background: var(--aw-color-bg-subtle);
   animation: activitySlideDown 0.15s ease-out;
 }
 
@@ -355,30 +355,30 @@
 .activity-tree-connector {
   flex-shrink: 0;
   width: 1rem;
-  color: var(--border-color, #ccc);
+  color: var(--aw-color-border-dark);
   font-family: monospace;
   text-align: center;
   user-select: none;
 }
 
 .activity-tool-result {
-  color: var(--text-secondary, #666);
+  color: var(--aw-color-text-secondary);
 }
 
 .activity-tool-result.tool-error {
-  color: #dc2626;
+  color: var(--aw-color-error-dark);
 }
 
 .activity-group-show-more {
   padding: 0.3rem 0.5rem 0.3rem 2rem;
   font-size: 0.8rem;
-  color: var(--accent-color, #2563eb);
+  color: var(--aw-color-accent);
   cursor: pointer;
   transition: background 0.1s;
 }
 
 .activity-group-show-more:hover,
 .activity-group-show-more:active {
-  background: var(--bg-hover, #f0f0f0);
+  background: var(--aw-color-bg-hover);
   border-radius: 4px;
 }

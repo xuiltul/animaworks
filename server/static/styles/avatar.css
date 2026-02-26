@@ -10,19 +10,20 @@
 }
 
 .anima-avatar-img {
+  display: var(--aw-avatar-display);
   width: 36px;
   height: 36px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid #e0e0e0;
+  border: 2px solid var(--aw-color-avatar-border);
 }
 
 .anima-avatar-placeholder {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #e0e0e0;
-  color: #666;
+  background: var(--aw-color-avatar-placeholder-bg);
+  color: var(--aw-color-avatar-placeholder-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -30,4 +31,19 @@
   font-weight: 600;
   line-height: 1;
   transition: filter 0.4s ease, opacity 0.4s ease;
+}
+
+/* ── Business Theme: Initial Icon ────────── */
+.anima-avatar-initial {
+  display: var(--aw-avatar-initial-display);
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--aw-color-bg-primary);
+  text-transform: uppercase;
+  user-select: none;
 }

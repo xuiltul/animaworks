@@ -61,6 +61,7 @@ def _make_mock_memory(anima_dir: Path, tmp_path: Path) -> MagicMock:
     memory.list_procedure_metas.return_value = []
     memory.list_skill_metas.return_value = []
     memory.list_common_skill_metas.return_value = []
+    memory.collect_distilled_knowledge_separated.return_value = ([], [])
     return memory
 
 

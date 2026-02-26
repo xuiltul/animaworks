@@ -125,6 +125,9 @@ class TestNoSilentPasses:
         # streaming_handler.py: last-resort fallback when error-response enqueue
         # itself fails (queue corruption) — recovery delegated to SENTINEL.
         "streaming_handler.py",
+        # builder.py: status.json parse failure falls back to None defaults
+        # for supervisor/speciality/role in org tree construction.
+        "builder.py",
     })
 
     def test_no_except_exception_pass_in_core(self):

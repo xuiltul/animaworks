@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AnimaWorks Workspace</title>
+  <link rel="stylesheet" href="/styles/tokens.css">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/styles/voice.css">
   <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg">
   <script type="importmap">
   {
@@ -31,6 +33,10 @@
       </div>
       <div class="ws-header-center" id="wsAnimaSelector"></div>
       <div class="ws-header-right">
+        <button class="ws-view-toggle" id="wsViewToggle" title="ビュー切替">
+          <span class="ws-view-toggle-3d">🏢 3D</span>
+          <span class="ws-view-toggle-org">📊 Dashboard</span>
+        </button>
         <div class="ws-system-status" id="wsSystemStatus">
           <span class="status-dot status-offline"></span>
           <span class="status-text">接続中...</span>
@@ -47,6 +53,9 @@
       <div class="ws-office-panel" id="wsOfficePanel">
         <div class="ws-office-canvas" id="wsOfficeCanvas"></div>
       </div>
+
+      <!-- Org Dashboard (alternative to 3D) -->
+      <div class="ws-org-panel hidden" id="wsOrgPanel"></div>
 
       <!-- Conversation Overlay (appears on top of office) -->
       <div class="ws-conv-overlay hidden" id="wsConvOverlay">
@@ -120,6 +129,7 @@
 
   </div>
 
+  <script src="/vendor/lucide/lucide.min.js"></script>
   <!-- ── Module Entry Point ───────────── -->
   <script type="module" src="modules/app.js?v=20260219a"></script>
 </body>

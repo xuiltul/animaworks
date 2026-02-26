@@ -929,25 +929,52 @@ def to_litellm_format(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def to_text_format(schemas: list[dict[str, Any]]) -> str:
+def to_text_format(
+    schemas: list[dict[str, Any]],
+    *,
+    locale: str | None = None,
+) -> str:
     """Convert canonical tool schemas to text specification for Mode B.
 
     Generates a markdown-formatted tool guide that instructs the LLM to
     output tool calls as JSON code blocks.  Used by ``AssistedExecutor``
     to inject tool specifications into the system prompt.
     """
+    from core.tooling.prompt_db import _get_locale
+
+    loc = locale or _get_locale()
+
+    if loc == "ja":
+        header = "## 利用可能なツール"
+        instruction = "ツールを使いたい場合、以下の形式で ```json コードブロックとして出力してください:"
+        example = '{"tool": "ツール名", "arguments": {"引数名": "値"}}'
+        result_note = "ツールの実行結果は次のメッセージで提供されます。"
+        text_note = "ツールを使う必要がなければ、普通にテキストで返答してください。"
+        one_call = "1回のメッセージでツール呼び出しは1つだけにしてください。"
+        args_label = "引数"
+        required_label = "(必須)"
+    else:
+        header = "## Available Tools"
+        instruction = "To use a tool, output a ```json code block in the following format:"
+        example = '{"tool": "tool_name", "arguments": {"arg_name": "value"}}'
+        result_note = "Tool results will be provided in the next message."
+        text_note = "If you don't need to use a tool, respond with plain text."
+        one_call = "Only one tool call per message."
+        args_label = "Args"
+        required_label = "(required)"
+
     lines = [
-        "## 利用可能なツール",
+        header,
         "",
-        "ツールを使いたい場合、以下の形式で ```json コードブロックとして出力してください:",
+        instruction,
         "",
         "```json",
-        '{"tool": "ツール名", "arguments": {"引数名": "値"}}',
+        example,
         "```",
         "",
-        "ツールの実行結果は次のメッセージで提供されます。",
-        "ツールを使う必要がなければ、普通にテキストで返答してください。",
-        "1回のメッセージでツール呼び出しは1つだけにしてください。",
+        result_note,
+        text_note,
+        one_call,
         "",
     ]
     for schema in schemas:
@@ -958,12 +985,12 @@ def to_text_format(schemas: list[dict[str, Any]]) -> str:
         args_parts = []
         for k, v in params.items():
             type_str = v.get("type", "?")
-            req_str = " (必須)" if k in required else ""
+            req_str = f" {required_label}" if k in required else ""
             args_parts.append(f"{k}: {type_str}{req_str}")
         args_desc = ", ".join(args_parts)
         lines.append(f"- **{name}**: {desc}")
         if args_desc:
-            lines.append(f"  - 引数: {args_desc}")
+            lines.append(f"  - {args_label}: {args_desc}")
     return "\n".join(lines)
 
 

@@ -157,7 +157,10 @@ class TestCheckGlobalOutbound:
         _write_activity_entries(anima_dir, entries)
 
         limiter = ConversationDepthLimiter(max_per_hour=3, max_per_day=5)
-        assert limiter.check_global_outbound("alice", anima_dir) is False
+        result = limiter.check_global_outbound("alice", anima_dir)
+        assert result is not True
+        assert isinstance(result, str)
+        assert "GlobalOutboundLimitExceeded" in result
 
     def test_blocks_on_daily_limit(self, tmp_path: Path, _patch_config):
         """At/above daily limit → returns False."""
@@ -170,7 +173,10 @@ class TestCheckGlobalOutbound:
         _write_activity_entries(anima_dir, entries)
 
         limiter = ConversationDepthLimiter(max_per_hour=10, max_per_day=5)
-        assert limiter.check_global_outbound("alice", anima_dir) is False
+        result = limiter.check_global_outbound("alice", anima_dir)
+        assert result is not True
+        assert isinstance(result, str)
+        assert "GlobalOutboundLimitExceeded" in result
 
     def test_fail_closed_on_error(self, tmp_path: Path, _patch_config):
         """When activity log read fails → returns False."""
@@ -182,7 +188,10 @@ class TestCheckGlobalOutbound:
             "core.memory.activity.ActivityLogger",
             side_effect=OSError("read failed"),
         ):
-            assert limiter.check_global_outbound("alice", anima_dir) is False
+            result = limiter.check_global_outbound("alice", anima_dir)
+            assert result is not True
+            assert isinstance(result, str)
+            assert "GlobalOutboundLimitExceeded" in result
 
     def test_old_entries_not_counted_hourly(self, tmp_path: Path, _patch_config):
         """Entries older than 1 hour don't count for hourly."""

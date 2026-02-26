@@ -53,6 +53,7 @@ class TestBoardMentionDepthCheck:
     ) -> None:
         """board_mention should NOT be exempt — depth_limiter.check_depth must be called."""
         mock_limiter = MagicMock()
+        mock_limiter.check_global_outbound.return_value = True  # pass before depth check
         mock_limiter.check_depth.return_value = True
 
         with (
@@ -70,6 +71,7 @@ class TestBoardMentionDepthCheck:
     ) -> None:
         """board_mention should be blocked when depth limiter returns False."""
         mock_limiter = MagicMock()
+        mock_limiter.check_global_outbound.return_value = True  # pass before depth check
         mock_limiter.check_depth.return_value = False
 
         with (
@@ -146,6 +148,7 @@ class TestBoardMentionDepthCheck:
     ) -> None:
         """Regular 'message' type should also go through the depth limiter."""
         mock_limiter = MagicMock()
+        mock_limiter.check_global_outbound.return_value = True  # pass before depth check
         mock_limiter.check_depth.return_value = True
 
         with (

@@ -43,7 +43,7 @@ class TestModelConfig:
         mc = ModelConfig()
         assert mc.model == "claude-sonnet-4-6"
         assert mc.fallback_model is None
-        assert mc.max_tokens == 4096
+        assert mc.max_tokens == 8192
         assert mc.max_turns == 20
         assert mc.api_key is None
         assert mc.api_key_env == "ANTHROPIC_API_KEY"

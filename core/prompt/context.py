@@ -7,9 +7,14 @@
 
 """Context window usage tracker.
 
-Monitors token consumption and detects when the 50% threshold is crossed.
+Monitors token consumption and detects when the compaction threshold is crossed.
 Uses transcript file size as a heuristic for the Agent SDK path,
 and direct usage data from the Anthropic SDK fallback path.
+
+The compaction threshold is auto-scaled based on model context window size:
+large models (1M+ tokens) use the configured value (e.g. 0.50), while
+smaller models get a progressively higher threshold (up to 0.98) so that
+the fixed-size system prompt does not trigger immediate compaction.
 """
 
 from __future__ import annotations
@@ -52,6 +57,9 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "gemini-2.0-flash": 1_048_576,
     "gemini-2.5-pro": 1_048_576,
     "gemini-2.5-flash": 1_048_576,
+    # Codex CLI models (same context as OpenAI API models)
+    "o4-mini": 200_000,
+    "o3": 200_000,
     # GLM (THUDM)
     "glm-4": 131_072,
     # Ollama / local (conservative defaults)
@@ -60,6 +68,36 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "qwen2.5": 128_000,
 }
 _DEFAULT_CONTEXT_WINDOW = 128_000
+
+# ── Context threshold auto-scaling ─────────────────────────
+# Reference window size at which the configured threshold is used as-is.
+_THRESHOLD_REFERENCE_WINDOW = 1_000_000
+# Upper bound for the auto-scaled threshold (smallest models).
+_THRESHOLD_CEILING = 0.98
+
+
+def resolve_context_threshold(
+    configured: float,
+    context_window: int,
+) -> float:
+    """Auto-scale the compaction threshold based on context window size.
+
+    Large context windows (>= 1M tokens) keep the configured threshold
+    (typically 0.50).  Smaller windows get a linearly higher threshold,
+    sliding up to 0.98, so that the fixed-size system prompt does not
+    immediately trigger compaction on small models.
+
+    Examples (configured=0.50):
+        1 000 000 tokens → 0.50
+          200 000 tokens → 0.884
+          128 000 tokens → 0.919
+           30 000 tokens → 0.966
+    """
+    if context_window >= _THRESHOLD_REFERENCE_WINDOW:
+        return configured
+    ratio = context_window / _THRESHOLD_REFERENCE_WINDOW
+    scaled = _THRESHOLD_CEILING - (_THRESHOLD_CEILING - configured) * ratio
+    return round(min(scaled, _THRESHOLD_CEILING), 4)
 
 
 def resolve_context_window(
@@ -115,6 +153,18 @@ class ContextTracker:
         if not self.model:
             from core.config.models import AnimaDefaults
             self.model = AnimaDefaults().model
+
+        # Auto-scale threshold for small context windows.
+        original = self.threshold
+        self.threshold = resolve_context_threshold(
+            self.threshold, self.context_window,
+        )
+        if self.threshold != original:
+            logger.info(
+                "Context threshold auto-scaled: %.2f → %.2f "
+                "(model=%s, window=%d)",
+                original, self.threshold, self.model, self.context_window,
+            )
 
     @property
     def context_window(self) -> int:

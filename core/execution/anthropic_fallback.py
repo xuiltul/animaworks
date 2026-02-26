@@ -22,6 +22,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+from core.exceptions import LLMAPIError, ToolExecutionError  # noqa: F401
 from core.prompt.context import ContextTracker, resolve_context_window
 from core.execution._sanitize import wrap_tool_result
 from core.execution._session import build_continuation_prompt, handle_session_chaining
@@ -56,7 +57,7 @@ def _extract_tool_uses_from_messages(messages: list[dict]) -> list[dict]:
                             "name": block.get("name", ""),
                             "input": str(block.get("input", ""))[:500],
                         })
-                    elif hasattr(block, "type") and block.type == "tool_use":
+                    elif hasattr(block, "type") and getattr(block, "type", None) == "tool_use":
                         tool_uses.append({
                             "name": getattr(block, "name", ""),
                             "input": str(getattr(block, "input", ""))[:500],
@@ -121,7 +122,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         """Create an AsyncAnthropic client with resolved credentials."""
         import anthropic
 
-        client_kwargs: dict[str, str] = {}
+        client_kwargs: dict[str, Any] = {}
         api_key = self._resolve_api_key()
         if api_key:
             client_kwargs["api_key"] = api_key
@@ -174,6 +175,15 @@ class AnthropicFallbackExecutor(BaseExecutor):
         chain_count = 0
         max_iterations = max_turns_override or self._model_config.max_turns
 
+        from core.config.models import resolve_max_tokens
+        from core.execution.base import is_adaptive_model, is_anthropic_claude, resolve_thinking_effort
+
+        _eff_max = resolve_max_tokens(
+            self._model_config.model,
+            self._model_config.max_tokens,
+            self._model_config.thinking,
+        )
+
         for iteration in range(max_iterations):
             is_final_iteration = (
                 max_iterations > 1 and iteration == max_iterations - 1
@@ -198,19 +208,30 @@ class AnthropicFallbackExecutor(BaseExecutor):
 
             create_kwargs: dict[str, Any] = {
                 "model": self._model_config.model,
-                "max_tokens": self._model_config.max_tokens,
+                "max_tokens": _eff_max,
                 "system": system_prompt,
                 "messages": messages,
                 "timeout": httpx.Timeout(self._resolve_llm_timeout()),
             }
+            if self._model_config.thinking and is_anthropic_claude(self._model_config.model):
+                if is_adaptive_model(self._model_config.model):
+                    create_kwargs["thinking"] = {"type": "adaptive"}
+                    create_kwargs["output_config"] = {"effort": resolve_thinking_effort(
+                        self._model_config.model, self._model_config.thinking_effort,
+                    )}
+                else:
+                    create_kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+                create_kwargs["temperature"] = 1
             if not is_final_iteration:
                 create_kwargs["tools"] = tools
 
             try:
                 response = await client.messages.create(**create_kwargs)
+            except LLMAPIError:
+                raise
             except Exception as e:
                 logger.exception("Anthropic API error")
-                return ExecutionResult(text=f"[LLM API Error: {e}]")
+                raise LLMAPIError(f"Anthropic API error: {e}") from e
 
             # ── Context tracking + session chaining ───────────
             if tracker:
@@ -257,7 +278,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 if new_sys is not None:
                     all_response_text.append(current_text)
                     system_prompt = new_sys
-                    messages = [
+                    messages: list[dict[str, Any]] = [
                         {"role": "user", "content": build_continuation_prompt()}
                     ]
                     continue
@@ -360,6 +381,15 @@ class AnthropicFallbackExecutor(BaseExecutor):
         all_tool_records: list[ToolCallRecord] = []
         _MAX_ITERATIONS = max_turns_override or self._model_config.max_turns
 
+        from core.config.models import resolve_max_tokens
+        from core.execution.base import is_adaptive_model, is_anthropic_claude, resolve_thinking_effort
+
+        _eff_max_s = resolve_max_tokens(
+            self._model_config.model,
+            self._model_config.max_tokens,
+            self._model_config.thinking,
+        )
+
         async with stream_error_boundary(
             all_response_text, executor_name="AnthropicFallback",
         ):
@@ -391,14 +421,24 @@ class AnthropicFallbackExecutor(BaseExecutor):
 
                 stream_kwargs: dict[str, Any] = {
                     "model": self._model_config.model,
-                    "max_tokens": self._model_config.max_tokens,
+                    "max_tokens": _eff_max_s,
                     "system": system_prompt,
                     "messages": messages,
                     "timeout": httpx.Timeout(self._resolve_llm_timeout()),
                 }
+                if self._model_config.thinking and is_anthropic_claude(self._model_config.model):
+                    if is_adaptive_model(self._model_config.model):
+                        stream_kwargs["thinking"] = {"type": "adaptive"}
+                        stream_kwargs["output_config"] = {"effort": resolve_thinking_effort(
+                            self._model_config.model, self._model_config.thinking_effort,
+                        )}
+                    else:
+                        stream_kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+                    stream_kwargs["temperature"] = 1
                 if not is_final_iteration:
                     stream_kwargs["tools"] = tools
 
+                _in_thinking_block = False
                 async with client.messages.stream(**stream_kwargs) as stream:
                     async for event in stream:
                         # Text deltas — forward immediately
@@ -406,7 +446,11 @@ class AnthropicFallbackExecutor(BaseExecutor):
                             iteration_text_parts.append(event.text)
                             yield {"type": "text_delta", "text": event.text}
 
-                        # Content block start — detect tool_use blocks
+                        # Thinking events (Anthropic SDK stream helper)
+                        elif event.type == "thinking":
+                            yield {"type": "thinking_delta", "text": event.thinking}
+
+                        # Content block start — detect tool_use / thinking blocks
                         elif event.type == "content_block_start":
                             block = event.content_block
                             if block.type == "tool_use":
@@ -415,6 +459,14 @@ class AnthropicFallbackExecutor(BaseExecutor):
                                     "tool_name": block.name,
                                     "tool_id": block.id,
                                 }
+                            elif block.type == "thinking":
+                                _in_thinking_block = True
+                                yield {"type": "thinking_start"}
+
+                        elif event.type == "content_block_stop":
+                            if _in_thinking_block:
+                                _in_thinking_block = False
+                                yield {"type": "thinking_end"}
 
                     # After consuming the full stream, get the final message
                     final_message = await stream.get_final_message()
@@ -480,8 +532,11 @@ class AnthropicFallbackExecutor(BaseExecutor):
                             tu.input,
                             tu.id,
                         )
+                    except ToolExecutionError as tool_err:
+                        logger.warning("Tool execution error: %s – %s", tu.name, tool_err)
+                        result = f"ツール実行エラー: {tool_err}"
                     except Exception as tool_err:
-                        logger.exception("Tool execution error: %s", tu.name)
+                        logger.exception("Unexpected tool error: %s", tu.name)
                         result = f"ツール実行エラー: {tool_err}"
                     tool_results.append({
                         "type": "tool_result",

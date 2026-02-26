@@ -26,7 +26,7 @@ import logging
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from core.paths import load_prompt
 
@@ -254,11 +254,11 @@ class ReconsolidationEngine:
 
                 import litellm
 
-                response = await litellm.acompletion(
+                response = cast(Any, await litellm.acompletion(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=2048,
-                )
+                ))
                 text = response.choices[0].message.content or ""
 
                 # Sanitize and parse
@@ -337,11 +337,11 @@ class ReconsolidationEngine:
         try:
             import litellm
 
-            response = await litellm.acompletion(
+            response = cast(Any, await litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2048,
-            )
+            ))
 
             text = response.choices[0].message.content or ""
 
@@ -552,11 +552,11 @@ class ReconsolidationEngine:
         try:
             import litellm
 
-            response = await litellm.acompletion(
+            response = cast(Any, await litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2048,
-            )
+            ))
 
             text = response.choices[0].message.content or ""
 

@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from core.exceptions import AnimaNotFoundError, IPCConnectionError as IPCConnError  # noqa: F401
 from core.time_utils import now_jst
 from server.dependencies import get_anima
 from server.events import emit, emit_notification, emit_direct, emit_notification_direct
@@ -236,6 +237,15 @@ def _handle_chunk(
     if event_type == "heartbeat_relay_done":
         return _format_sse("heartbeat_relay_done", {}), ""
 
+    if event_type == "thinking_start":
+        return _format_sse("thinking_start", {}), ""
+
+    if event_type == "thinking_delta":
+        return _format_sse("thinking_delta", {"text": chunk.get("text", "")}), ""
+
+    if event_type == "thinking_end":
+        return _format_sse("thinking_end", {}), ""
+
     if event_type == "notification_sent":
         # Broadcast notification to all WebSocket clients (with queue support)
         if request:
@@ -289,6 +299,12 @@ def _chunk_to_event(chunk: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
         return "heartbeat_relay", {"text": chunk.get("text", "")}
     if event_type == "heartbeat_relay_done":
         return "heartbeat_relay_done", {}
+    if event_type == "thinking_start":
+        return "thinking_start", {}
+    if event_type == "thinking_delta":
+        return "thinking_delta", {"text": chunk.get("text", "")}
+    if event_type == "thinking_end":
+        return "thinking_end", {}
     if event_type == "cycle_done":
         cycle_result = chunk.get("cycle_result", {})
         response_text = cycle_result.get("summary", "")
@@ -490,13 +506,13 @@ async def _run_producer(
             stream.add_event("error", {"code": "STREAM_ERROR", "message": "内部エラーが発生しました。再試行してください。"})
         registry.mark_complete(stream.response_id, done=False)
 
-    except ValueError as e:
+    except (ValueError, IPCConnError) as e:
         elapsed = _time.monotonic() - _start
         logger.error("[PRODUCER] IPC_ERROR anima=%s stream=%s elapsed=%.1fs error=%s", name, stream.response_id, elapsed, e)
         stream.add_event("error", {"code": "IPC_ERROR", "message": str(e)})
         registry.mark_complete(stream.response_id, done=False)
 
-    except KeyError:
+    except (KeyError, AnimaNotFoundError):
         elapsed = _time.monotonic() - _start
         logger.error("[PRODUCER] ANIMA_NOT_FOUND anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
         stream.add_event("error", {"code": "ANIMA_NOT_FOUND", "message": f"Anima not found: {name}"})
@@ -678,10 +694,10 @@ def create_chat_router() -> APIRouter:
             logger.info("chat_response anima=%s response_len=%d", name, len(clean_response))
             return ChatResponse(response=clean_response, anima=name)
 
-        except KeyError:
+        except (KeyError, AnimaNotFoundError):
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
-        except ValueError as e:
+        except (ValueError, IPCConnError) as e:
             from fastapi import HTTPException
             raise HTTPException(status_code=500, detail=str(e))
         except asyncio.TimeoutError:
@@ -726,10 +742,10 @@ def create_chat_router() -> APIRouter:
                 "anima": name,
             }
 
-        except KeyError:
+        except (KeyError, AnimaNotFoundError):
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
-        except ValueError as e:
+        except (ValueError, IPCConnError) as e:
             from fastapi import HTTPException
             raise HTTPException(status_code=500, detail=str(e))
         except asyncio.TimeoutError:

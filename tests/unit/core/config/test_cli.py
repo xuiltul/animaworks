@@ -299,17 +299,16 @@ class TestCmdConfigExportSections:
         store = ToolPromptStore(db_path)
         store.set_section("environment", "NEW CONTENT FROM DB", None)
 
-        # Create a templates dir with different content
-        templates_dir = tmp_path / "templates" / "prompts"
+        # Create templates dir: cmd_config_export_sections uses templates/{locale}/prompts/
+        templates_dir = tmp_path / "templates" / "ja" / "prompts"
         templates_dir.mkdir(parents=True)
         (templates_dir / "environment.md").write_text("OLD CONTENT", encoding="utf-8")
 
         args = argparse.Namespace(dry_run=True)
-        with patch("core.config.cli.Path") as mock_path_cls:
-            # Mock __file__ resolution to point to tmp_path
-            mock_path_cls.return_value.resolve.return_value.parent.parent.parent = tmp_path
-            with patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
-                cmd_config_export_sections(args)
+        with patch("core.paths.TEMPLATES_DIR", tmp_path / "templates"), \
+             patch("core.paths._get_locale", return_value="ja"), \
+             patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
+            cmd_config_export_sections(args)
 
         captured = capsys.readouterr()
         assert "DIFF" in captured.out
@@ -326,15 +325,15 @@ class TestCmdConfigExportSections:
         store = ToolPromptStore(db_path)
         store.set_section("environment", "UPDATED ENVIRONMENT", None)
 
-        templates_dir = tmp_path / "templates" / "prompts"
+        templates_dir = tmp_path / "templates" / "ja" / "prompts"
         templates_dir.mkdir(parents=True)
         (templates_dir / "environment.md").write_text("OLD", encoding="utf-8")
 
         args = argparse.Namespace(dry_run=False)
-        with patch("core.config.cli.Path") as mock_path_cls:
-            mock_path_cls.return_value.resolve.return_value.parent.parent.parent = tmp_path
-            with patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
-                cmd_config_export_sections(args)
+        with patch("core.paths.TEMPLATES_DIR", tmp_path / "templates"), \
+             patch("core.paths._get_locale", return_value="ja"), \
+             patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
+            cmd_config_export_sections(args)
 
         captured = capsys.readouterr()
         assert "WRITE" in captured.out
@@ -350,15 +349,15 @@ class TestCmdConfigExportSections:
         store = ToolPromptStore(db_path)
         store.set_section("environment", "SAME CONTENT", None)
 
-        templates_dir = tmp_path / "templates" / "prompts"
+        templates_dir = tmp_path / "templates" / "ja" / "prompts"
         templates_dir.mkdir(parents=True)
         (templates_dir / "environment.md").write_text("SAME CONTENT\n", encoding="utf-8")
 
         args = argparse.Namespace(dry_run=False)
-        with patch("core.config.cli.Path") as mock_path_cls:
-            mock_path_cls.return_value.resolve.return_value.parent.parent.parent = tmp_path
-            with patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
-                cmd_config_export_sections(args)
+        with patch("core.paths.TEMPLATES_DIR", tmp_path / "templates"), \
+             patch("core.paths._get_locale", return_value="ja"), \
+             patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
+            cmd_config_export_sections(args)
 
         captured = capsys.readouterr()
         assert "===" in captured.out
@@ -373,14 +372,14 @@ class TestCmdConfigExportSections:
         store = ToolPromptStore(db_path)
         store.set_section("emotion_instruction", "emotions here", None)
 
-        templates_dir = tmp_path / "templates" / "prompts"
+        templates_dir = tmp_path / "templates" / "ja" / "prompts"
         templates_dir.mkdir(parents=True)
 
         args = argparse.Namespace(dry_run=False)
-        with patch("core.config.cli.Path") as mock_path_cls:
-            mock_path_cls.return_value.resolve.return_value.parent.parent.parent = tmp_path
-            with patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
-                cmd_config_export_sections(args)
+        with patch("core.paths.TEMPLATES_DIR", tmp_path / "templates"), \
+             patch("core.paths._get_locale", return_value="ja"), \
+             patch("core.tooling.prompt_db.get_prompt_store", return_value=store):
+            cmd_config_export_sections(args)
 
         captured = capsys.readouterr()
         assert "SKIP" in captured.out

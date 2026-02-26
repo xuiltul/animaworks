@@ -42,7 +42,7 @@ class TestToolResultFormat:
         )
         formatted = ActivityLogger._format_entry(entry)
         assert "TRES" in formatted
-        assert "tool:web_search" in formatted
+        assert "web_search" in formatted
 
     def test_log_tool_result_entry(self, tmp_path: Path) -> None:
         al = ActivityLogger(tmp_path)

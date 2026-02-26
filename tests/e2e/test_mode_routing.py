@@ -78,3 +78,28 @@ class TestModeRouting:
         # short-circuits to a; _create_executor handles the fallback chain.
         agent._sdk_available = False
         assert agent._resolve_execution_mode() == "s"
+
+    def test_codex_model_routes_to_c(self, make_agent_core):
+        """Codex-prefixed model → Mode C."""
+        agent = make_agent_core(
+            name="codex-c",
+            model="codex/o4-mini",
+        )
+        assert agent._resolve_execution_mode() == "c"
+
+    def test_codex_gpt41_routes_to_c(self, make_agent_core):
+        """codex/gpt-4.1 → Mode C (not A)."""
+        agent = make_agent_core(
+            name="codex-gpt",
+            model="codex/gpt-4.1",
+        )
+        assert agent._resolve_execution_mode() == "c"
+
+    def test_codex_explicit_a_override(self, make_agent_core):
+        """Codex model + explicit execution_mode='A' → Mode A (override wins)."""
+        agent = make_agent_core(
+            name="codex-override",
+            model="codex/o4-mini",
+            execution_mode="A",
+        )
+        assert agent._resolve_execution_mode() == "a"

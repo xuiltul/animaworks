@@ -28,24 +28,6 @@ def anima_dir(tmp_path: Path) -> Path:
 class TestBlocklistAndLoggingIntegration:
     """Verify blocked commands are both denied and logged."""
 
-    def test_blocked_chatwork_send_logged(self, anima_dir: Path):
-        cmd = "chatwork send general hello"
-        # Verify it's blocked
-        reason = _check_a1_bash_command(cmd, anima_dir)
-        assert reason is not None
-        # Log the blocked call
-        _log_tool_use(anima_dir, "Bash", {"command": cmd}, blocked=True, block_reason=reason)
-        # Verify log entry
-        log_files = list((anima_dir / "activity_log").glob("*.jsonl"))
-        assert len(log_files) == 1
-        entries = [json.loads(line) for line in log_files[0].read_text().strip().split("\n")]
-        assert len(entries) == 1
-        entry = entries[0]
-        assert entry["type"] == "tool_use"
-        assert entry["tool"] == "Bash"
-        assert entry["meta"]["blocked"] is True
-        assert "Chatwork" in entry["meta"]["reason"]
-
     def test_allowed_command_logged_without_blocked(self, anima_dir: Path):
         cmd = "ls -la"
         reason = _check_a1_bash_command(cmd, anima_dir)

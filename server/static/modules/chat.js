@@ -1,10 +1,11 @@
 /* ── Chat ──────────────────────────────────── */
 
-import { state, dom, escapeHtml, renderMarkdown, smartTimestamp } from "./state.js";
+import { state, dom, escapeHtml, renderMarkdown, renderSafeMarkdown, smartTimestamp } from "./state.js";
 import { addActivity } from "./activity.js";
 import { streamChat, fetchActiveStream, fetchStreamProgress } from "../shared/chat-stream.js";
 import { createLogger } from "../shared/logger.js";
 import { createImageInput, initLightbox, renderChatImages } from "../shared/image-input.js";
+import { initVoiceUI, updateVoiceUIAnima } from "./voice-ui.js";
 import { api } from "./api.js";
 
 const logger = createLogger("chat");
@@ -285,9 +286,15 @@ function _renderHistoryMessage(msg) {
   }
 
   if (msg.role === "assistant") {
+    let thinkingHtml = "";
+    if (msg.thinking_text) {
+      const thRendered = renderSafeMarkdown(msg.thinking_text);
+      const thSummary = `Thinking (${msg.thinking_text.length} chars)`;
+      thinkingHtml = `<details class="thinking-block"><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(thSummary)}</summary><div class="thinking-content">${thRendered}</div></details>`;
+    }
     const content = msg.content ? renderMarkdown(msg.content) : "";
     const toolHtml = _renderToolCalls(msg.tool_calls);
-    return `<div class="chat-bubble assistant">${content}${toolHtml}${tsHtml}</div>`;
+    return `<div class="chat-bubble assistant">${thinkingHtml}${content}${toolHtml}${tsHtml}</div>`;
   }
 
   // human / user
@@ -304,6 +311,13 @@ function _renderLiveChatMessage(m) {
   if (m.role === "assistant") {
     const streamClass = m.streaming ? " streaming" : "";
     const notifClass = m.notification ? " notification" : "";
+    let thinkingHtml = "";
+    if (m.thinkingText) {
+      const thSummary = m.thinking ? "Thinking..." : `Thinking (${m.thinkingText.length} chars)`;
+      const thRendered = renderSafeMarkdown(m.thinkingText);
+      const open = m.thinking ? " open" : "";
+      thinkingHtml = `<details class="thinking-block"${open}><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(thSummary)}</summary><div class="thinking-content">${thRendered}</div></details>`;
+    }
     let content = "";
     if (m.text) {
       content = renderMarkdown(m.text);
@@ -316,7 +330,7 @@ function _renderLiveChatMessage(m) {
     const toolHtml = m.activeTool
       ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(m.activeTool)} \u3092\u5B9F\u884C\u4E2D...</div>`
       : "";
-    return `<div class="chat-bubble assistant${streamClass}${notifClass}">${content}${bootstrapHtml}${toolHtml}</div>`;
+    return `<div class="chat-bubble assistant${streamClass}${notifClass}">${thinkingHtml}${content}${bootstrapHtml}${toolHtml}</div>`;
   }
   const imagesHtml = renderChatImages(m.images);
   const textHtml = m.text ? `<div class="chat-text">${escapeHtml(m.text)}</div>` : "";
@@ -388,13 +402,21 @@ export function renderChat() {
 
 // ── SSE Streaming ─────────────────────────
 
-function renderStreamingBubble(msg) {
+export function renderStreamingBubble(msg) {
   const chatMessages = dom.chatMessages || document.getElementById("chatMessages");
   if (!chatMessages) return;
   const bubble = chatMessages.querySelector(".chat-bubble.assistant.streaming");
   if (!bubble) return;
 
   let html = "";
+
+  // Thinking block (collapsible)
+  if (msg.thinkingText) {
+    const open = msg.thinking ? " open" : "";
+    const summary = msg.thinking ? "Thinking..." : `Thinking (${msg.thinkingText.length} chars)`;
+    const thinkingHtml = renderSafeMarkdown(msg.thinkingText);
+    html += `<details class="thinking-block"${open}><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(summary)}</summary><div class="thinking-content">${thinkingHtml}</div></details>`;
+  }
 
   if (msg.heartbeatRelay) {
     html += '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>\u30CF\u30FC\u30C8\u30D3\u30FC\u30C8\u51E6\u7406\u4E2D...</div>';
@@ -527,6 +549,19 @@ export async function sendChat(message) {
         streamingMsg.afterHeartbeatRelay = true;
         renderStreamingBubble(streamingMsg);
       },
+      onThinkingStart: () => {
+        streamingMsg.thinkingText = "";
+        streamingMsg.thinking = true;
+        renderStreamingBubble(streamingMsg);
+      },
+      onThinkingDelta: (text) => {
+        streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + text;
+        renderStreamingBubble(streamingMsg);
+      },
+      onThinkingEnd: () => {
+        streamingMsg.thinking = false;
+        renderStreamingBubble(streamingMsg);
+      },
       onError: ({ message: errorMsg }) => {
         logger.debug(`onError: ${errorMsg}`);
         streamingMsg.text += `\n[\u30A8\u30E9\u30FC] ${errorMsg}`;
@@ -636,6 +671,12 @@ export function initImageInput() {
 
   // Initialize lightbox for image clicks
   initLightbox();
+
+  // Initialize voice input
+  const chatInputFormEl = document.querySelector('.chat-input-form');
+  if (chatInputFormEl && state.selectedAnima) {
+    initVoiceUI(chatInputFormEl, state.selectedAnima, _buildVoiceChatCallbacks(state.selectedAnima));
+  }
 }
 
 /**
@@ -756,3 +797,34 @@ export { _renderToolCalls as renderToolCalls };
 export { _renderSessionDivider as renderSessionDivider };
 export { _bindToolCallHandlers as bindToolCallHandlers };
 export { _fetchConversationHistory as fetchConversationHistory };
+
+export function updateVoiceAnima(animaName) {
+  updateVoiceUIAnima(animaName);
+  const chatInputForm = document.querySelector('.chat-input-form');
+  if (chatInputForm && animaName) {
+    initVoiceUI(chatInputForm, animaName, _buildVoiceChatCallbacks(animaName));
+  }
+}
+
+function _buildVoiceChatCallbacks(animaName) {
+  return {
+    addUserBubble(text) {
+      if (!state.chatHistories[animaName]) state.chatHistories[animaName] = [];
+      state.chatHistories[animaName].push({ role: 'user', text });
+      renderChat();
+    },
+    addStreamingBubble() {
+      if (!state.chatHistories[animaName]) state.chatHistories[animaName] = [];
+      const msg = { role: 'assistant', text: '', streaming: true, activeTool: null };
+      state.chatHistories[animaName].push(msg);
+      renderChat();
+      return msg;
+    },
+    updateStreamingBubble(msg) {
+      renderStreamingBubble(msg);
+    },
+    finalizeStreamingBubble(_msg) {
+      renderChat();
+    },
+  };
+}

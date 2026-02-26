@@ -25,6 +25,7 @@ export function addActivity(type, animaName, summary) {
       <span class="activity-summary"> ${escapeHtml(summary)}</span>
     </div>`;
   feed.appendChild(entry);
+  if (window.lucide) lucide.createIcons({ nodes: [entry] });
   feed.scrollTop = feed.scrollHeight;
 
   // Cap at 200 entries

@@ -10,7 +10,7 @@ Tests cover:
    the common_knowledge reference hint section
 3. scripts/generate_reference.py — auto-generation of reference content
    from code into AUTO-GENERATED markers
-4. templates/common_knowledge/ — structural validation of template files
+4. templates/ja/common_knowledge/ — structural validation of template files
 """
 
 from __future__ import annotations
@@ -53,9 +53,10 @@ class TestCopyInfrastructure:
     def test_copies_common_knowledge_directory(self, tmp_path: Path):
         from core.init import _copy_infrastructure
 
-        # Set up a fake templates directory with common_knowledge
+        # Set up a fake templates directory with locale-specific common_knowledge
         templates = tmp_path / "templates"
-        ck_src = templates / "common_knowledge"
+        ja_dir = templates / "ja"
+        ck_src = ja_dir / "common_knowledge"
         ck_src.mkdir(parents=True)
         (ck_src / "00_index.md").write_text("# Index", encoding="utf-8")
         sub = ck_src / "organization"
@@ -65,7 +66,9 @@ class TestCopyInfrastructure:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
 
-        with patch("core.init.TEMPLATES_DIR", templates):
+        with patch("core.init.TEMPLATES_DIR", templates), patch(
+            "core.paths._get_locale", return_value="ja"
+        ):
             _copy_infrastructure(data_dir)
 
         assert (data_dir / "common_knowledge" / "00_index.md").exists()
@@ -75,18 +78,21 @@ class TestCopyInfrastructure:
         from core.init import _copy_infrastructure
 
         templates = tmp_path / "templates"
-        (templates / "anima_templates").mkdir(parents=True)
-        (templates / "anima_templates" / "identity.md").write_text(
+        ja_dir = templates / "ja"
+        (ja_dir / "anima_templates").mkdir(parents=True)
+        (ja_dir / "anima_templates" / "identity.md").write_text(
             "# Identity", encoding="utf-8"
         )
         # Also add common_knowledge so there's something valid
-        (templates / "common_knowledge").mkdir()
-        (templates / "common_knowledge" / "test.md").write_text("test", encoding="utf-8")
+        (ja_dir / "common_knowledge").mkdir()
+        (ja_dir / "common_knowledge" / "test.md").write_text("test", encoding="utf-8")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
 
-        with patch("core.init.TEMPLATES_DIR", templates):
+        with patch("core.init.TEMPLATES_DIR", templates), patch(
+            "core.paths._get_locale", return_value="ja"
+        ):
             _copy_infrastructure(data_dir)
 
         assert not (data_dir / "anima_templates").exists()
@@ -96,7 +102,9 @@ class TestCopyInfrastructure:
         from core.init import _copy_infrastructure
 
         templates = tmp_path / "templates"
-        ck_src = templates / "common_knowledge"
+        ja_dir = templates / "ja"
+        ja_dir.mkdir(parents=True)
+        ck_src = ja_dir / "common_knowledge"
         ck_src.mkdir(parents=True)
         (ck_src / "00_index.md").write_text("# Index v1", encoding="utf-8")
 
@@ -105,7 +113,9 @@ class TestCopyInfrastructure:
         ck_dst.mkdir(parents=True)
         (ck_dst / "00_index.md").write_text("# Old Index", encoding="utf-8")
 
-        with patch("core.init.TEMPLATES_DIR", templates):
+        with patch("core.init.TEMPLATES_DIR", templates), patch(
+            "core.paths._get_locale", return_value="ja"
+        ):
             _copy_infrastructure(data_dir)
 
         content = (ck_dst / "00_index.md").read_text(encoding="utf-8")
@@ -119,7 +129,8 @@ class TestMergeTemplates:
         from core.init import merge_templates
 
         templates = tmp_path / "templates"
-        ck_src = templates / "common_knowledge"
+        ja_dir = templates / "ja"
+        ck_src = ja_dir / "common_knowledge"
         ck_src.mkdir(parents=True)
         (ck_src / "00_index.md").write_text("# Index", encoding="utf-8")
         org = ck_src / "organization"
@@ -131,7 +142,9 @@ class TestMergeTemplates:
         # Create common_knowledge dir but leave it empty
         (data_dir / "common_knowledge").mkdir(parents=True)
 
-        with patch("core.init.TEMPLATES_DIR", templates):
+        with patch("core.init.TEMPLATES_DIR", templates), patch(
+            "core.paths._get_locale", return_value="ja"
+        ):
             added = merge_templates(data_dir)
 
         assert "common_knowledge/00_index.md" in added
@@ -142,7 +155,8 @@ class TestMergeTemplates:
         from core.init import merge_templates
 
         templates = tmp_path / "templates"
-        ck_src = templates / "common_knowledge"
+        ja_dir = templates / "ja"
+        ck_src = ja_dir / "common_knowledge"
         ck_src.mkdir(parents=True)
         (ck_src / "00_index.md").write_text("# Template version", encoding="utf-8")
 
@@ -152,7 +166,9 @@ class TestMergeTemplates:
             "# User-customized version", encoding="utf-8"
         )
 
-        with patch("core.init.TEMPLATES_DIR", templates):
+        with patch("core.init.TEMPLATES_DIR", templates), patch(
+            "core.paths._get_locale", return_value="ja"
+        ):
             added = merge_templates(data_dir)
 
         # File already existed, should not be overwritten or listed
@@ -233,6 +249,7 @@ def _make_mock_memory(anima_dir: Path) -> MagicMock:
     mem.list_common_skill_metas.return_value = []
     mem.list_shared_users.return_value = []
     mem.common_skills_dir = anima_dir.parent.parent / "common_skills"
+    mem.collect_distilled_knowledge_separated.return_value = ([], [])
     return mem
 
 
@@ -798,25 +815,32 @@ class TestGeneratorsRegistry:
 # ════════════════════════════════════════════════════════════════════
 
 
-# Path to the real templates in the project
+# Path to the real templates in the project (ja locale after i18n restructuring)
 _TEMPLATES_CK_DIR = (
     Path(__file__).resolve().parent.parent.parent.parent
     / "templates"
+    / "ja"
     / "common_knowledge"
 )
 
-# All 12 expected markdown files
+# All expected markdown files in templates/ja/common_knowledge
 _EXPECTED_FILES = [
     "00_index.md",
-    "organization/structure.md",
-    "organization/roles.md",
-    "organization/hierarchy-rules.md",
-    "communication/messaging-guide.md",
+    "communication/board-guide.md",
     "communication/instruction-patterns.md",
+    "communication/messaging-guide.md",
     "communication/reporting-guide.md",
+    "communication/sending-limits.md",
+    "operations/background-tasks.md",
+    "operations/heartbeat-cron-guide.md",
     "operations/project-setup.md",
     "operations/task-management.md",
-    "operations/heartbeat-cron-guide.md",
+    "operations/tool-usage-overview.md",
+    "operations/voice-chat-guide.md",
+    "organization/hierarchy-rules.md",
+    "organization/roles.md",
+    "organization/structure.md",
+    "security/prompt-injection-awareness.md",
     "troubleshooting/common-issues.md",
     "troubleshooting/escalation-flowchart.md",
 ]
@@ -831,16 +855,22 @@ class TestTemplateFilesExist:
         assert full_path.exists(), f"Missing template: {rel_path}"
 
     def test_total_file_count(self):
-        """Exactly 14 .md files should exist in common_knowledge."""
+        """Exactly 18 .md files should exist in common_knowledge."""
         md_files = list(_TEMPLATES_CK_DIR.rglob("*.md"))
-        assert len(md_files) == 14, (
-            f"Expected 14 .md files, found {len(md_files)}: "
+        assert len(md_files) == 18, (
+            f"Expected 18 .md files, found {len(md_files)}: "
             f"{[str(f.relative_to(_TEMPLATES_CK_DIR)) for f in md_files]}"
         )
 
     def test_directory_structure(self):
         """Expected subdirectories should exist."""
-        for subdir in ("organization", "communication", "operations", "troubleshooting"):
+        for subdir in (
+            "organization",
+            "communication",
+            "operations",
+            "troubleshooting",
+            "security",
+        ):
             assert (_TEMPLATES_CK_DIR / subdir).is_dir(), f"Missing subdir: {subdir}"
 
 
@@ -921,11 +951,17 @@ class TestIndexFileReferences:
         "communication/messaging-guide.md",
         "communication/instruction-patterns.md",
         "communication/reporting-guide.md",
+        "communication/board-guide.md",
+        "communication/sending-limits.md",
         "operations/project-setup.md",
         "operations/task-management.md",
         "operations/heartbeat-cron-guide.md",
+        "operations/tool-usage-overview.md",
+        "operations/background-tasks.md",
+        "operations/voice-chat-guide.md",
         "troubleshooting/common-issues.md",
         "troubleshooting/escalation-flowchart.md",
+        "security/prompt-injection-awareness.md",
     ]
 
     @pytest.mark.parametrize("rel_path", _EXPECTED_REFERENCED_FILES)

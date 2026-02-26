@@ -1,6 +1,7 @@
 /* ── State & DOM refs ──────────────────────── */
 
 export const state = {
+  uiTheme: "default",
   currentUser: null,
   currentUserRole: null,
   authMode: null,
@@ -75,6 +76,15 @@ export function statusClass(status) {
 export function renderMarkdown(text) {
   try {
     return marked.parse(text, { breaks: true });
+  } catch {
+    return escapeHtml(text);
+  }
+}
+
+export function renderSafeMarkdown(text) {
+  if (!text) return "";
+  try {
+    return marked.parse(escapeHtml(text), { breaks: true });
   } catch {
     return escapeHtml(text);
   }

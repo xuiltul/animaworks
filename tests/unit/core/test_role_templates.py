@@ -17,7 +17,6 @@ from unittest.mock import patch
 import pytest
 
 from core.anima_factory import (
-    ROLES_DIR,
     VALID_ROLES,
     _apply_role_defaults,
     _create_status_json,
@@ -103,7 +102,8 @@ class TestApplyRoleDefaults:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _apply_role_defaults(anima_dir, "engineer")
 
         perm_path = anima_dir / "permissions.md"
@@ -121,7 +121,8 @@ class TestApplyRoleDefaults:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _apply_role_defaults(anima_dir, "researcher")
 
         spec_path = anima_dir / "specialty_prompt.md"
@@ -140,7 +141,8 @@ class TestApplyRoleDefaults:
         anima_dir = tmp_path / "mybot"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _apply_role_defaults(anima_dir, "engineer")
 
         content = (anima_dir / "permissions.md").read_text(encoding="utf-8")
@@ -160,7 +162,8 @@ class TestApplyRoleDefaults:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _apply_role_defaults(anima_dir, "unknown_role")
 
         # Should have general permissions, not crash
@@ -177,7 +180,8 @@ class TestApplyRoleDefaults:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             # Should not raise
             _apply_role_defaults(anima_dir, "engineer")
 
@@ -196,7 +200,8 @@ class TestApplyRoleDefaults:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _apply_role_defaults(anima_dir, "writer")
 
         assert not (anima_dir / "permissions.md").exists()
@@ -213,7 +218,8 @@ class TestApplyRoleDefaults:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _apply_role_defaults(anima_dir, "ops")
 
         assert (anima_dir / "permissions.md").exists()
@@ -256,7 +262,8 @@ class TestCreateStatusJsonWithRole:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _create_status_json(anima_dir, {}, role="engineer")
 
         status = _read_status_json(anima_dir)
@@ -278,8 +285,9 @@ class TestCreateStatusJsonWithRole:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        info = {"モデル": "openai/gpt-4o"}
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        info = {"model": "openai/gpt-4o"}
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _create_status_json(anima_dir, info, role="engineer")
 
         status = _read_status_json(anima_dir)
@@ -299,7 +307,8 @@ class TestCreateStatusJsonWithRole:
         anima_dir.mkdir()
 
         info = {"credential": "my_custom_key"}
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _create_status_json(anima_dir, info, role="engineer")
 
         status = _read_status_json(anima_dir)
@@ -311,8 +320,9 @@ class TestCreateStatusJsonWithRole:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        info = {"上司": "tanaka"}
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        info = {"supervisor": "tanaka"}
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _create_status_json(
                 anima_dir, info, supervisor_override="yamada", role="general"
             )
@@ -333,7 +343,8 @@ class TestCreateStatusJsonWithRole:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _create_status_json(anima_dir, {}, role="engineer")
 
         status = _read_status_json(anima_dir)
@@ -353,7 +364,8 @@ class TestCreateStatusJsonWithRole:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _create_status_json(anima_dir, {}, role="engineer")
 
         status = _read_status_json(anima_dir)
@@ -372,7 +384,8 @@ class TestCreateStatusJsonWithRole:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             # Should not raise
             _create_status_json(anima_dir, {}, role="engineer")
 
@@ -391,8 +404,9 @@ class TestCreateStatusJsonWithRole:
         anima_dir.mkdir()
 
         # Empty strings should not override
-        info = {"モデル": "", "credential": ""}
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        info = {"model": "", "credential": ""}
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _create_status_json(anima_dir, info, role="engineer")
 
         status = _read_status_json(anima_dir)
@@ -777,7 +791,8 @@ class TestRoleTemplateIntegration:
         anima_dir = tmp_path / "hinata"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _apply_role_defaults(anima_dir, "engineer")
             _create_status_json(anima_dir, {}, role="engineer")
 
@@ -814,7 +829,8 @@ class TestRoleTemplateIntegration:
         anima_dir = tmp_path / "testbot"
         anima_dir.mkdir()
 
-        with patch("core.anima_factory.ROLES_DIR", roles_root):
+        with patch("core.anima_factory._get_roles_dir", return_value=roles_root), \
+             patch("core.anima_factory.SHARED_ROLES_DIR", roles_root):
             _create_status_json(anima_dir, {}, role="engineer")
 
         # Now resolve with no config override

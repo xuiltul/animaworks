@@ -235,6 +235,9 @@ class RAGMemorySearch:
         """Perform vector search to augment keyword results."""
         from core.memory.rag.retriever import MemoryRetriever
 
+        if self._indexer is None:
+            return []
+
         anima_name = self._anima_dir.name
         retriever = MemoryRetriever(
             self._indexer.vector_store,

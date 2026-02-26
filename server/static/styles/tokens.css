@@ -1,0 +1,144 @@
+/* ── Design Tokens ──────────────────────────────────────
+   CSS custom properties for theme support.
+   :root = default theme, .theme-business = business theme.
+   ────────────────────────────────────────────────────── */
+
+:root {
+  /* Primary accent */
+  --aw-color-accent: #2563eb;
+  --aw-color-accent-hover: #1d4ed8;
+  --aw-color-accent-light: #93c5fd;
+  --aw-color-accent-bg: #dbeafe;
+
+  /* Backgrounds */
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #f5f5f5;
+  --aw-color-bg-tertiary: #e5e5e5;
+  --aw-color-bg-subtle: #fafafa;
+  --aw-color-bg-hover: #f0f0f0;
+  --aw-color-bg-alt: #f0f4ff;
+  --aw-color-bg-panel: #f8fafc;
+
+  /* Text */
+  --aw-color-text-primary: #1a1a1a;
+  --aw-color-text-secondary: #555;
+  --aw-color-text-muted: #888;
+  --aw-color-text-faint: #999;
+  --aw-color-text-placeholder: #9ca3af;
+  --aw-color-text-link: #2563eb;
+
+  /* Status */
+  --aw-color-success: #22c55e;
+  --aw-color-success-bg: #dcfce7;
+  --aw-color-success-bg-alt: #f0fdf4;
+  --aw-color-success-text: #166534;
+  --aw-color-success-border: #86efac;
+  --aw-color-warning: #f59e0b;
+  --aw-color-warning-bg: #fef3c7;
+  --aw-color-warning-bg-alt: #fffbeb;
+  --aw-color-warning-text: #92400e;
+  --aw-color-warning-text-dark: #b45309;
+  --aw-color-warning-text-darker: #92400e;
+  --aw-color-warning-border: #fde68a;
+  --aw-color-error: #ef4444;
+  --aw-color-error-dark: #dc2626;
+  --aw-color-error-bg: #fee2e2;
+  --aw-color-error-bg-alt: #fef2f2;
+  --aw-color-error-text: #991b1b;
+  --aw-color-error-border: #fecaca;
+  --aw-color-info: #6366f1;
+  --aw-color-info-hover: #4f46e5;
+  --aw-color-info-bg: #dbeafe;
+  --aw-color-info-bg-alt: #eff6ff;
+  --aw-color-info-text: #1e40af;
+  --aw-color-info-border: #bfdbfe;
+  --aw-color-info-text-alt: #3b82f6;
+
+  /* Borders */
+  --aw-color-border: #e5e5e5;
+  --aw-color-border-light: #eee;
+  --aw-color-border-medium: #ddd;
+  --aw-color-border-dark: #ccc;
+  --aw-color-border-input: #d1d5db;
+  --aw-color-border-subtle: #e2e8f0;
+  --aw-color-border-separator: #e5e7eb;
+
+  /* Sidebar nav */
+  --aw-color-sidebar-bg: #1e293b;
+  --aw-color-sidebar-text: #fff;
+  --aw-color-sidebar-muted: #cbd5e1;
+  --aw-color-sidebar-section: #94a3b8;
+  --aw-color-sidebar-hover-bg: #f1f5f9;
+  --aw-color-sidebar-active-bg: #fff;
+  --aw-color-sidebar-active-text: #2563eb;
+
+  /* Code blocks */
+  --aw-color-code-bg: #272822;
+  --aw-color-code-text: #f8f8f2;
+  --aw-color-code-inline-bg: #e8ecf0;
+
+  /* Avatar */
+  --aw-color-avatar-border: #e0e0e0;
+  --aw-color-avatar-placeholder-bg: #e0e0e0;
+  --aw-color-avatar-placeholder-text: #666;
+
+  /* Misc */
+  --aw-color-gray-text: #4b5563;
+  --aw-color-gray-dark: #374151;
+  --aw-color-gray-darker: #1f2937;
+  --aw-color-slate-light: #64748b;
+  --aw-color-summary-bg: #fefce8;
+  --aw-color-summary-border: #fef08a;
+  --aw-color-summary-label: #a16207;
+  --aw-color-summary-body: #444;
+
+  /* Animation control */
+  --aw-animation-play-state: running;
+  --aw-animation-duration-multiplier: 1;
+  --aw-avatar-display: block;
+  --aw-avatar-initial-display: none;
+  --aw-emoji-display: inline;
+  --aw-icon-display: none;
+}
+
+/* ── Business Theme ──────────────────────────────────── */
+.theme-business {
+  /* Primary — more muted, professional */
+  --aw-color-accent: #1e40af;
+  --aw-color-accent-hover: #1e3a8a;
+  --aw-color-accent-light: #93c5fd;
+  --aw-color-accent-bg: #eff6ff;
+
+  /* Backgrounds — cooler tones */
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #f8fafc;
+  --aw-color-bg-tertiary: #e2e8f0;
+  --aw-color-bg-subtle: #f8fafc;
+  --aw-color-bg-hover: #f1f5f9;
+  --aw-color-bg-alt: #eff6ff;
+  --aw-color-bg-panel: #f8fafc;
+
+  /* Text */
+  --aw-color-text-primary: #0f172a;
+  --aw-color-text-secondary: #475569;
+  --aw-color-text-muted: #64748b;
+  --aw-color-text-faint: #94a3b8;
+  --aw-color-text-link: #1e40af;
+
+  /* Borders — slightly cooler */
+  --aw-color-border: #e2e8f0;
+  --aw-color-border-light: #e2e8f0;
+  --aw-color-border-medium: #cbd5e1;
+  --aw-color-border-dark: #94a3b8;
+
+  /* Sidebar nav */
+  --aw-color-sidebar-bg: #0f172a;
+
+  /* Animation control */
+  --aw-animation-play-state: paused;
+  --aw-animation-duration-multiplier: 0;
+  --aw-avatar-display: none;
+  --aw-avatar-initial-display: flex;
+  --aw-emoji-display: none;
+  --aw-icon-display: inline-flex;
+}

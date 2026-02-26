@@ -22,6 +22,7 @@ import json
 import logging
 import re
 from pathlib import Path
+from typing import Any, cast
 
 from core.paths import load_prompt
 from core.time_utils import now_iso, now_jst
@@ -105,11 +106,11 @@ class ProceduralDistiller:
         try:
             import litellm
 
-            response = await litellm.acompletion(
+            response = cast(Any, await litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=3072,
-            )
+            ))
             text = response.choices[0].message.content or ""
             text = self._strip_code_fence(text)
             result["raw_response"] = text
@@ -269,11 +270,11 @@ class ProceduralDistiller:
         try:
             import litellm
 
-            response = await litellm.acompletion(
+            response = cast(Any, await litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2048,
-            )
+            ))
             text = response.choices[0].message.content or "[]"
             procedures = self._parse_procedures(text)
 
@@ -698,7 +699,7 @@ class ProceduralDistiller:
                 )
                 for r in results:
                     if r.score >= threshold:
-                        return r.metadata.get("source_file", "unknown")
+                        return str(r.metadata.get("source_file", "unknown"))
         except Exception as e:
             logger.warning(
                 "RAG duplicate check failed (proceeding with save): %s", e,

@@ -12,6 +12,10 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.tooling.prompt_db import ToolPromptStore
 
 from core.paths import TEMPLATES_DIR, get_data_dir
 
@@ -85,7 +89,7 @@ def _ensure_tool_prompt_db(data_dir: Path) -> None:
 
 
 def _migrate_memory_prompts_v1(
-    tool_store: "ToolPromptStore",  # noqa: F821
+    tool_store: ToolPromptStore,
     prompts_dir: Path,
 ) -> None:
     """One-shot migration: update memory-related prompts to v1 (active style).
@@ -94,9 +98,9 @@ def _migrate_memory_prompts_v1(
     table and skips if already applied.
     """
     from core.tooling.prompt_db import (
-        DEFAULT_DESCRIPTIONS,
-        DEFAULT_GUIDES,
         SECTION_CONDITIONS,
+        get_default_description,
+        get_default_guide,
     )
 
     # Ensure migrations table exists
@@ -120,13 +124,13 @@ def _migrate_memory_prompts_v1(
             "report_procedure_outcome",
             "report_knowledge_outcome",
         ):
-            desc = DEFAULT_DESCRIPTIONS.get(name)
+            desc = get_default_description(name)
             if desc:
                 tool_store.set_description(name, desc)
 
         # 5-6: Update tool guides
         for key in ("s_mcp", "non_s"):
-            guide = DEFAULT_GUIDES.get(key)
+            guide = get_default_guide(key)
             if guide:
                 tool_store.set_guide(key, guide)
 
@@ -152,7 +156,7 @@ def _migrate_memory_prompts_v1(
 
 
 def _migrate_praise_loop_prevention_v1(
-    tool_store: "ToolPromptStore",  # noqa: F821
+    tool_store: ToolPromptStore,
     prompts_dir: Path,
 ) -> None:
     """One-shot migration: update communication/messaging prompts to prevent praise loops.
@@ -207,7 +211,7 @@ def _migrate_praise_loop_prevention_v1(
 
 
 def _migrate_behavior_rules_must_v1(
-    tool_store: "ToolPromptStore",  # noqa: F821
+    tool_store: ToolPromptStore,
     prompts_dir: Path,
 ) -> None:
     """One-shot migration: upgrade behavior_rules to MUST-level memory search constraints.
@@ -321,7 +325,20 @@ def ensure_runtime_dir(*, skip_animas: bool = False) -> Path:
 
 def _copy_infrastructure(data_dir: Path) -> None:
     """Copy only infrastructure templates (prompts, company, etc.) to data_dir."""
-    for item in TEMPLATES_DIR.iterdir():
+    from core.paths import _get_locale
+
+    locale = _get_locale()
+    locale_dir: Path | None = None
+    for loc in (locale, "en", "ja"):
+        candidate = TEMPLATES_DIR / loc
+        if candidate.exists():
+            locale_dir = candidate
+            break
+    if locale_dir is None:
+        logger.warning("No locale template directory found; skipping infrastructure copy")
+        return
+
+    for item in locale_dir.iterdir():
         if item.name == "anima_templates":
             continue
         target = data_dir / item.name
@@ -334,8 +351,8 @@ def _copy_infrastructure(data_dir: Path) -> None:
                 continue
             shutil.copy2(item, target)
 
-    # Copy models.json from config_defaults/ to data_dir root
-    models_json_src = TEMPLATES_DIR / "config_defaults" / "models.json"
+    # Copy models.json from _shared/config_defaults/ to data_dir root
+    models_json_src = TEMPLATES_DIR / "_shared" / "config_defaults" / "models.json"
     if models_json_src.is_file():
         models_json_dst = data_dir / "models.json"
         if not models_json_dst.exists():
@@ -360,9 +377,9 @@ def _legacy_copy_default_anima(data_dir: Path) -> None:
 def merge_templates(data_dir: Path) -> list[str]:
     """Copy infrastructure template files that don't exist in the runtime directory.
 
-    Walks the infrastructure templates tree and copies any file that is missing
-    from the runtime data directory.  Existing files are never overwritten.
-    anima_templates/ is skipped (animas are managed separately).
+    Walks the locale-specific templates tree and copies any file that is missing
+    from the runtime data directory.  prompts/ files are always overwritten to
+    keep in sync. anima_templates/ is skipped (animas are managed separately).
 
     Returns a list of newly added file paths (relative to data_dir).
     """
@@ -372,19 +389,35 @@ def merge_templates(data_dir: Path) -> list[str]:
             "Is the project installed correctly?"
         )
 
+    from core.paths import _get_locale
+
+    locale = _get_locale()
+    locale_dir: Path | None = None
+    for loc in (locale, "en", "ja"):
+        candidate = TEMPLATES_DIR / loc
+        if candidate.exists():
+            locale_dir = candidate
+            break
+    if locale_dir is None:
+        logger.warning("No locale template directory found; skipping merge")
+        return []
+
     added: list[str] = []
-    for src in TEMPLATES_DIR.rglob("*"):
+
+    # Walk locale directory for infrastructure templates
+    for src in locale_dir.rglob("*"):
         if src.is_symlink() or src.is_dir():
             continue
-        rel = src.relative_to(TEMPLATES_DIR)
-        # Skip anima_templates/ and bootstrap.md (per-anima only)
+        rel = src.relative_to(locale_dir)
         parts = rel.parts
         if parts[0] == "anima_templates":
             continue
         if rel.name == "bootstrap.md" and len(parts) == 1:
             continue
+        # Roles: only copy .md files, not defaults.json (those are in _shared)
+        if parts[0] == "roles":
+            continue
         dest = data_dir / rel
-        # prompts/ files are always overwritten to keep them in sync
         is_prompt = parts[0] == "prompts"
         if is_prompt or not dest.exists():
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -392,8 +425,8 @@ def merge_templates(data_dir: Path) -> list[str]:
             added.append(str(rel))
             logger.info("Merged template file: %s", rel)
 
-    # Copy models.json from config_defaults/ if missing
-    models_json_src = TEMPLATES_DIR / "config_defaults" / "models.json"
+    # Copy models.json from _shared/config_defaults/ if missing
+    models_json_src = TEMPLATES_DIR / "_shared" / "config_defaults" / "models.json"
     models_json_dst = data_dir / "models.json"
     if models_json_src.is_file() and not models_json_dst.exists():
         shutil.copy2(models_json_src, models_json_dst)

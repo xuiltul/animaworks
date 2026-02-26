@@ -65,10 +65,8 @@ def get_anima_vectordb_dir(anima_name: str) -> Path:
 
 # --- Prompt templates ---
 
-PROMPTS_DIR = TEMPLATES_DIR / "prompts"
-
 # Cache loaded templates to avoid repeated disk reads
-_prompt_cache: dict[str, str] = {}
+_prompt_cache: dict[tuple[str, str], str] = {}
 
 
 class _SafeFormatDict(dict):
@@ -83,22 +81,76 @@ class _SafeFormatDict(dict):
         return "{" + key + "}"
 
 
-def load_prompt(name: str, **kwargs: object) -> str:
-    """Load a prompt template from templates/prompts/{name}.md and format it.
+def _get_locale() -> str:
+    """Get locale from config lazily to avoid circular imports."""
+    try:
+        from core.config.models import load_config
+        return load_config().locale
+    except (ImportError, FileNotFoundError, ValueError, OSError):
+        return "ja"
+
+
+def _unique(seq: list[str]) -> list[str]:
+    """Return unique elements preserving order."""
+    seen: set[str] = set()
+    return [x for x in seq if not (x in seen or seen.add(x))]  # type: ignore[func-returns-value]
+
+
+def resolve_template_path(
+    category: str,
+    filename: str,
+    locale: str | None = None,
+) -> Path:
+    """Resolve template path with fallback chain: locale -> en -> ja.
+
+    Args:
+        category: Template category (e.g. "prompts", "company", "roles/engineer").
+        filename: File name within the category (e.g. "environment.md").
+        locale: Override locale. If None, uses config.locale.
+
+    Returns:
+        Path to the resolved template file.
+
+    Raises:
+        FileNotFoundError: If the template is not found in any fallback.
+    """
+    loc = locale or _get_locale()
+    if ".." in category or ".." in filename:
+        raise ValueError(
+            f"Path traversal not allowed: {category}/{filename}"
+        )
+    for fallback in _unique([loc, "en", "ja"]):
+        path = TEMPLATES_DIR / fallback / category / filename
+        if path.exists():
+            return path
+    shared = TEMPLATES_DIR / "_shared" / category / filename
+    if shared.exists():
+        return shared
+    raise FileNotFoundError(
+        f"Template not found: {category}/{filename} "
+        f"(tried locales: {loc}, en, ja and _shared)"
+    )
+
+
+def load_prompt(name: str, *, locale: str | None = None, **kwargs: object) -> str:
+    """Load a prompt template and format it with locale-aware resolution.
 
     Templates use Python str.format_map() placeholders like {anima_dir}.
     Literal braces in templates should be doubled: {{ and }}.
 
     Subdirectory paths are supported: ``load_prompt("memory/daily_consolidation")``
-    resolves to ``templates/prompts/memory/daily_consolidation.md``.
+    resolves to ``templates/{locale}/prompts/memory/daily_consolidation.md``.
 
     Args:
         name: Template file name without extension. May include subdirectory
               (e.g. ``"behavior_rules"``, ``"memory/daily_consolidation"``).
+        locale: Override locale. If None, uses config.locale.
         **kwargs: Values to substitute into the template placeholders.
     """
-    if name not in _prompt_cache:
-        path = PROMPTS_DIR / f"{name}.md"
-        _prompt_cache[name] = path.read_text(encoding="utf-8")
-    template = _prompt_cache[name]
+    loc = locale or _get_locale()
+    key = (loc, name)
+    if key not in _prompt_cache:
+        path = resolve_template_path("prompts", f"{name}.md", loc)
+        _prompt_cache[key] = path.read_text(encoding="utf-8")
+    template = _prompt_cache[key]
     return template.format_map(_SafeFormatDict(kwargs))

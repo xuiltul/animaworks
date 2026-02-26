@@ -13,16 +13,21 @@ model loading (~6 seconds per initialization).
 import logging
 import threading
 from pathlib import Path
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.memory.rag.store import ChromaVectorStore
+    from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-_vector_stores: dict[str | None, object] = {}
-_embedding_model = None
+_vector_stores: dict[str | None, ChromaVectorStore] = {}
+_embedding_model: SentenceTransformer | None = None
 _embedding_model_name: str | None = None
 
 
-def get_vector_store(anima_name: str | None = None):
+def get_vector_store(anima_name: str | None = None) -> ChromaVectorStore:
     """Return process-level singleton ChromaVectorStore per anima.
 
     Args:
@@ -52,7 +57,7 @@ def _get_configured_model_name() -> str:
         return "intfloat/multilingual-e5-small"
 
 
-def get_embedding_model(model_name: str | None = None):
+def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
     """Return process-level singleton SentenceTransformer model.
 
     Args:
@@ -103,7 +108,10 @@ def get_embedding_dimension() -> int:
     the sentence embedding dimension.
     """
     model = get_embedding_model()
-    return model.get_sentence_embedding_dimension()
+    dim = model.get_sentence_embedding_dimension()
+    if dim is None:
+        raise RuntimeError("Embedding model did not report a dimension")
+    return dim
 
 
 def get_embedding_model_name() -> str:

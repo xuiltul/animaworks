@@ -349,6 +349,18 @@ def cli_main() -> None:
     )
     p_anima_set_model.set_defaults(func=_lazy_anima_set_model)
 
+    # anima reload
+    p_anima_reload = anima_sub.add_parser("reload", help="Hot-reload anima config from status.json")
+    p_anima_reload.add_argument(
+        "anima", nargs="?", default=None,
+        help="Anima name (not required with --all)",
+    )
+    p_anima_reload.add_argument(
+        "--all", action="store_true",
+        help="Reload config for all running animas",
+    )
+    p_anima_reload.set_defaults(func=_lazy_anima_reload)
+
     # anima set-role
     p_anima_set_role = anima_sub.add_parser("set-role", help="Change an anima's role")
     p_anima_set_role.add_argument("anima", help="Anima name")
@@ -586,6 +598,12 @@ def _lazy_anima_set_model(args: argparse.Namespace) -> None:
     from cli.commands.anima_mgmt import cmd_anima_set_model
 
     cmd_anima_set_model(args)
+
+
+def _lazy_anima_reload(args: argparse.Namespace) -> None:
+    from cli.commands.anima_mgmt import cmd_anima_reload
+
+    cmd_anima_reload(args)
 
 
 def _lazy_board_read(args: argparse.Namespace) -> None:

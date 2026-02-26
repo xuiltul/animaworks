@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.config.models import ExternalMessagingConfig, UserAliasConfig
+from core.exceptions import RecipientNotFoundError
 from core.outbound import (
     ResolvedRecipient,
     _build_channel_order,
@@ -101,7 +102,7 @@ class TestResolveRecipient:
 
     def test_bare_slack_user_id_short_rejected(self, known_animas, empty_config):
         """Too short to be a Slack ID — falls through to unknown."""
-        with pytest.raises(ValueError, match="Unknown recipient"):
+        with pytest.raises(RecipientNotFoundError, match="Unknown recipient"):
             resolve_recipient("U12345", known_animas, empty_config)
 
     def test_case_insensitive_anima_fallback(self, known_animas, empty_config):
@@ -110,15 +111,15 @@ class TestResolveRecipient:
         assert result.name == "sakura"
 
     def test_unknown_recipient_raises(self, known_animas, empty_config):
-        with pytest.raises(ValueError, match="Unknown recipient 'nobody'"):
+        with pytest.raises(RecipientNotFoundError, match="Unknown recipient 'nobody'"):
             resolve_recipient("nobody", known_animas, empty_config)
 
     def test_unknown_recipient_error_lists_known(self, known_animas, empty_config):
-        with pytest.raises(ValueError, match="Known animas"):
+        with pytest.raises(RecipientNotFoundError, match="Known animas"):
             resolve_recipient("xyz", known_animas, empty_config)
 
     def test_empty_recipient_raises(self, known_animas, empty_config):
-        with pytest.raises(ValueError, match="empty"):
+        with pytest.raises(RecipientNotFoundError, match="empty"):
             resolve_recipient("", known_animas, empty_config)
 
     def test_whitespace_stripping(self, known_animas, config_with_aliases):
@@ -165,7 +166,7 @@ class TestResolveFromAlias:
 
     def test_no_contact_info_raises(self):
         alias_cfg = UserAliasConfig()
-        with pytest.raises(ValueError, match="no contact info"):
+        with pytest.raises(RecipientNotFoundError, match="no contact info"):
             _resolve_from_alias("user", alias_cfg, "slack")
 
 

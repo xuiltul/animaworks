@@ -2,10 +2,10 @@
 
 **[English version](features.md)**
 
-> 最終更新: 2026-02-23
+> 最終更新: 2026-02-26
 > 関連: [spec.md](spec.md), [memory.ja.md](memory.ja.md), [vision.ja.md](vision.ja.md)
 
-AnimaWorksフレームワークの実装済み機能を19カテゴリに分類した索引。各エントリの「設計」リンクは設計・実装文書、「Review」リンクはコードレビューレポートを参照する。
+AnimaWorksフレームワークの実装済み機能を20カテゴリに分類した索引。各エントリの「設計」リンクは設計・実装文書、「Review」リンクはコードレビューレポートを参照する。
 
 ---
 
@@ -516,3 +516,12 @@ call_human統合、組織構成プロンプト注入等。
   [設計](implemented/20260220_conversation-history-turn-limit_implemented-20260220.md) | [Review](implemented/20260220_review_conversation-history-turn-limit_approved-20260220.md)
 - **cronタスク型の適正使用** (2026-02-21) — command型の活用促進とバリデーション追加
   [設計](implemented/20260221_K_cron-type-correctness-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)
+
+---
+
+## 20. 音声チャット（Voice Chat）
+
+Animaとのリアルタイム音声会話機能。ブラウザ音声入力 → STT → 既存チャットパイプライン → TTS → ブラウザ再生。
+
+- **Voice Chat System — STT + TTS + WebSocket音声会話** (2026-02-26) — 音声専用WebSocket `/ws/voice/{name}` + faster-whisper STT + マルチプロバイダTTS（VOICEVOX / Style-BERT-VITS2 / ElevenLabs）。AudioWorklet PCM 16kHz直送、文分割ストリーミングTTS、VAD/PTT両対応、barge-in、Per-Anima音声設定
+  [設計](implemented/20260226_voice-chat-system-implemented-20260226.md) | [Review](implemented/20260226_review_voice-chat-system_approved-20260226.md)

@@ -92,8 +92,10 @@ class TestSharedActivityTypesModule:
         assert count == 9, f"Expected 9 TYPE_CATEGORIES entries, got {count}"
 
     def test_fallback_icon_defined(self) -> None:
+        """getIcon() should return a fallback for unknown types (emoji 📌, lucide pin)."""
         content = _SHARED_MODULE.read_text(encoding="utf-8")
-        assert "FALLBACK_ICON" in content
+        assert "TYPE_ICONS[type] ||" in content, "getIcon should have fallback for unknown type"
+        assert '"📌"' in content, "getIcon fallback should use 📌 emoji"
 
     def test_type_defaults_defined(self) -> None:
         content = _SHARED_MODULE.read_text(encoding="utf-8")

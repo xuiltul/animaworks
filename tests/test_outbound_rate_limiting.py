@@ -267,16 +267,20 @@ class TestCascadeLimiterFileBased:
         assert result is True
 
 
-# ── Priming outbound section ────────────────────────────────
+# ── Priming outbound section (via PrimingEngine) ────────────
 
 
-class TestBuildRecentOutboundSection:
-    """_build_recent_outbound_section のユニットテスト。"""
+class TestCollectRecentOutbound:
+    """PrimingEngine._collect_recent_outbound のユニットテスト。"""
 
-    def test_build_recent_outbound_section_with_entries(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_collect_recent_outbound_with_entries(self, tmp_path: Path) -> None:
         """エントリありで正しいフォーマットのセクションを生成する。"""
+        from core.memory.priming import PrimingEngine
+
         anima_dir = tmp_path / "animas" / "alice"
         (anima_dir / "activity_log").mkdir(parents=True)
+        (anima_dir / "knowledge").mkdir(parents=True)
 
         today = now_jst().strftime("%Y-%m-%d")
         log_file = anima_dir / "activity_log" / f"{today}.jsonl"
@@ -290,20 +294,22 @@ class TestBuildRecentOutboundSection:
         ]
         log_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
 
-        from core.prompt.builder import _build_recent_outbound_section
-
-        result = _build_recent_outbound_section(anima_dir)
+        engine = PrimingEngine(anima_dir)
+        result = await engine._collect_recent_outbound()
 
         assert "直近のアウトバウンド行動" in result
         assert "#general に投稿済み" in result
         assert "bob にメッセージ送信済み" in result
 
-    def test_build_recent_outbound_section_empty(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_collect_recent_outbound_empty(self, tmp_path: Path) -> None:
         """エントリなしで空文字列を返す。"""
+        from core.memory.priming import PrimingEngine
+
         anima_dir = tmp_path / "animas" / "alice"
         (anima_dir / "activity_log").mkdir(parents=True)
+        (anima_dir / "knowledge").mkdir(parents=True)
 
-        from core.prompt.builder import _build_recent_outbound_section
-
-        result = _build_recent_outbound_section(anima_dir)
+        engine = PrimingEngine(anima_dir)
+        result = await engine._collect_recent_outbound()
         assert result == ""

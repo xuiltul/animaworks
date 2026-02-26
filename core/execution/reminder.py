@@ -47,14 +47,16 @@ class SystemReminderQueue:
     async def push(self, content: str) -> None:
         """Enqueue a reminder.  Oldest entry is dropped if queue is full."""
         async with self._lock:
-            if len(self._items) >= self._items.maxlen:
+            maxlen = self._items.maxlen or _MAX_QUEUE_SIZE
+            if len(self._items) >= maxlen:
                 dropped = self._items.popleft()
                 logger.debug("SystemReminderQueue overflow; dropped: %s", dropped[:80])
             self._items.append(content)
 
     def push_sync(self, content: str) -> None:
         """Synchronous push (for use from sync code paths)."""
-        if len(self._items) >= self._items.maxlen:
+        maxlen = self._items.maxlen or _MAX_QUEUE_SIZE
+        if len(self._items) >= maxlen:
             dropped = self._items.popleft()
             logger.debug("SystemReminderQueue overflow; dropped: %s", dropped[:80])
         self._items.append(content)

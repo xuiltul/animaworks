@@ -23,7 +23,7 @@ import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from core.paths import load_prompt
 from core.time_utils import ensure_aware, now_jst
@@ -449,11 +449,11 @@ class ForgettingEngine:
         try:
             import litellm
 
-            response = await litellm.acompletion(
+            response = cast(Any, await litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1024,
-            )
+            ))
             return response.choices[0].message.content or None
         except Exception as e:
             logger.warning("LLM merge failed: %s", e)
@@ -479,7 +479,7 @@ class ForgettingEngine:
 
             embedding = indexer._generate_embeddings([content])[0]
 
-            now_iso_str = now.isoformat()
+            now_iso_str = now_jst().isoformat()
             metadata = {
                 "anima": self.anima_name,
                 "memory_type": memory_type,

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from core.exceptions import RecipientNotFoundError
 from core.messenger import Messenger
 
 
@@ -276,15 +277,15 @@ class TestReceiveExternalChannelMirroring:
 
 class TestNameValidation:
     def test_post_channel_rejects_path_traversal(self, messenger):
-        with pytest.raises(ValueError, match="Invalid channel name"):
+        with pytest.raises(RecipientNotFoundError, match="Invalid channel name"):
             messenger.post_channel("../../etc", "exploit")
 
     def test_read_channel_rejects_path_traversal(self, messenger):
-        with pytest.raises(ValueError, match="Invalid channel name"):
+        with pytest.raises(RecipientNotFoundError, match="Invalid channel name"):
             messenger.read_channel("../secrets")
 
     def test_read_dm_history_rejects_path_traversal(self, messenger):
-        with pytest.raises(ValueError, match="Invalid peer name"):
+        with pytest.raises(RecipientNotFoundError, match="Invalid peer name"):
             messenger.read_dm_history("../../root")
 
     def test_valid_channel_names_accepted(self, shared_dir, messenger):
@@ -294,5 +295,5 @@ class TestNameValidation:
         messenger.post_channel("my-channel-1", "ok")
 
     def test_uppercase_channel_rejected(self, messenger):
-        with pytest.raises(ValueError, match="Invalid channel name"):
+        with pytest.raises(RecipientNotFoundError, match="Invalid channel name"):
             messenger.post_channel("General", "not allowed")

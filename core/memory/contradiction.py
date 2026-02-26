@@ -30,8 +30,11 @@ from typing import TYPE_CHECKING
 from core.paths import load_prompt
 from core.time_utils import now_iso
 
+from typing import Any, cast
+
 if TYPE_CHECKING:
     from core.memory.activity import ActivityLogger
+    from core.memory.validation import KnowledgeValidator
 
 logger = logging.getLogger("animaworks.contradiction")
 
@@ -96,7 +99,7 @@ class ContradictionDetector:
         self.anima_dir = anima_dir
         self.anima_name = anima_name
         self.knowledge_dir = anima_dir / "knowledge"
-        self._nli_validator: object | None = None  # KnowledgeValidator instance
+        self._nli_validator: KnowledgeValidator | None = None
         self._activity_logger = activity_logger
 
     # ── NLI validator access ────────────────────────────────────
@@ -222,7 +225,7 @@ class ContradictionDetector:
                 if result.score < self.VECTOR_SIMILARITY_THRESHOLD:
                     continue
 
-                source_file = result.metadata.get("source_file", "")
+                source_file = str(result.metadata.get("source_file", ""))
                 if not source_file:
                     continue
 
@@ -232,7 +235,8 @@ class ContradictionDetector:
                     continue
 
                 # Deduplicate pairs (order-independent)
-                pair_key = tuple(sorted([str(query_path), str(match_path)]))
+                sorted_pair = sorted([str(query_path), str(match_path)])
+                pair_key = (sorted_pair[0], sorted_pair[1])
                 if pair_key in seen_pairs:
                     continue
                 seen_pairs.add(pair_key)
@@ -368,11 +372,11 @@ class ContradictionDetector:
         )
 
         try:
-            response = await litellm.acompletion(
+            response = cast(Any, await litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2048,
-            )
+            ))
             text = response.choices[0].message.content or ""
 
             # Extract JSON from response
@@ -852,11 +856,11 @@ class ContradictionDetector:
         )
 
         try:
-            response = await litellm.acompletion(
+            response = cast(Any, await litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=4096,
-            )
+            ))
             result = response.choices[0].message.content or ""
 
             # Strip code fences

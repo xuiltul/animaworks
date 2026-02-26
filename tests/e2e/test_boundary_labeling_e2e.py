@@ -44,6 +44,7 @@ def _make_mock_memory(tmp_path: Path) -> MagicMock:
     memory.list_procedure_metas.return_value = []
     memory.list_shared_users.return_value = []
     memory.collect_distilled_knowledge.return_value = []
+    memory.collect_distilled_knowledge_separated.return_value = ([], [])
     memory.common_skills_dir = tmp_path / "common_skills"
     return memory
 

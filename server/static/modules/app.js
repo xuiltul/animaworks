@@ -6,6 +6,34 @@ import { state } from "./state.js";
 import { connectWebSocket } from "./websocket.js";
 // state.authMode is set by login.js checkAuth()
 import { loadSystemStatus } from "./status.js";
+
+// ── Theme ────────────────────────────────────
+
+function applyTheme(theme) {
+  state.uiTheme = theme;
+  document.body.classList.toggle("theme-business", theme === "business");
+  const toggle = document.getElementById("themeSwitch");
+  if (toggle) toggle.checked = theme === "business";
+  localStorage.setItem("aw-theme", theme);
+}
+
+async function initTheme() {
+  const stored = localStorage.getItem("aw-theme");
+  if (stored) {
+    applyTheme(stored);
+    return;
+  }
+  try {
+    const resp = await fetch("/api/system/config");
+    if (resp.ok) {
+      const cfg = await resp.json();
+      const theme = cfg?.ui?.theme || "default";
+      applyTheme(theme);
+      return;
+    }
+  } catch { /* ignore */ }
+  applyTheme("default");
+}
 import { checkAuth, logout, showLoginScreen, hideLoginScreen, setStartDashboard } from "./login.js";
 import { initRouter } from "./router.js";
 
@@ -81,6 +109,15 @@ function initMobileNav() {
 // ── Init ────────────────────────────────────
 
 async function init() {
+  // Theme (before auth so UI looks correct immediately)
+  await initTheme();
+  const themeSwitch = document.getElementById("themeSwitch");
+  if (themeSwitch) {
+    themeSwitch.addEventListener("change", (e) => {
+      applyTheme(e.target.checked ? "business" : "default");
+    });
+  }
+
   // Logout button binding
   document.getElementById("logoutBtn").addEventListener("click", logout);
 

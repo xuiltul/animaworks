@@ -63,6 +63,9 @@ export async function fetchStreamProgress(animaName, responseId) {
  * @param {function({message: string}): void} [callbacks.onHeartbeatRelayStart] - Heartbeat relay started
  * @param {function({text: string}): void} [callbacks.onHeartbeatRelay] - Heartbeat relay text chunk
  * @param {function(): void} [callbacks.onHeartbeatRelayDone] - Heartbeat relay completed
+ * @param {function(): void} [callbacks.onThinkingStart] - Thinking block started
+ * @param {function(string): void} [callbacks.onThinkingDelta] - Thinking text delta
+ * @param {function(): void} [callbacks.onThinkingEnd] - Thinking block ended
  * @param {function(): void} [callbacks.onReconnecting] - Reconnection attempt starting
  * @param {function(): void} [callbacks.onReconnected] - Reconnection successful
  * @returns {Promise<void>}
@@ -232,6 +235,20 @@ async function _processStream(res, callbacks, setResponseId, setLastEventId, sig
           case "heartbeat_relay_done":
             logger.info(`[SSE-FE] EVENT heartbeat_relay_done id=${id}`);
             callbacks.onHeartbeatRelayDone?.();
+            break;
+
+          case "thinking_start":
+            logger.info(`[SSE-FE] EVENT thinking_start id=${id}`);
+            callbacks.onThinkingStart?.();
+            break;
+
+          case "thinking_delta":
+            callbacks.onThinkingDelta?.(data.text || "");
+            break;
+
+          case "thinking_end":
+            logger.info(`[SSE-FE] EVENT thinking_end id=${id}`);
+            callbacks.onThinkingEnd?.();
             break;
 
           default:

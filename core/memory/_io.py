@@ -21,7 +21,13 @@ logger = logging.getLogger("animaworks.memory._io")
 
 
 def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
-    """Write content to file atomically using temp + rename pattern."""
+    """Write content to file atomically using temp + rename pattern.
+
+    Raises:
+        MemoryWriteError: On I/O failure (wraps underlying OSError).
+    """
+    from core.exceptions import MemoryWriteError
+
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(
         dir=path.parent, suffix=".tmp", prefix=f".{path.name}.",
@@ -32,6 +38,12 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
             f.flush()
             os.fsync(f.fileno())
         os.rename(tmp_path, path)
+    except OSError as exc:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            logger.debug("Failed to unlink temp file %s", tmp_path, exc_info=True)
+        raise MemoryWriteError(f"Atomic write failed for {path}: {exc}") from exc
     except BaseException:
         try:
             os.unlink(tmp_path)

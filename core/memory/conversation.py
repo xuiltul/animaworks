@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from core.time_utils import ensure_aware, now_iso, now_jst
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from core.memory._io import atomic_write_text
 from core.paths import load_prompt
@@ -711,14 +711,14 @@ class ConversationMemory:
         import litellm
 
         model = self.model_config.fallback_model or self.model_config.model
-        response = await litellm.acompletion(
+        response = cast(Any, await litellm.acompletion(
             model=model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user_content},
             ],
             max_tokens=max_tokens,
-        )
+        ))
         return response.choices[0].message.content or ""
 
     async def _call_compression_llm(

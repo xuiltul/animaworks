@@ -41,8 +41,8 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
     "unreplied": {"expected_seconds": 30, "background_eligible": False},
 }
 
-WebClient = None
-SlackApiError = None
+WebClient: Any = None
+SlackApiError: Any = None
 
 def _require_slack_sdk():
     global WebClient, SlackApiError
@@ -1157,7 +1157,7 @@ def _run_cli_command(client: SlackClient, args) -> None:
             my_user_id = client.my_user_id
             my_name = client.my_name
 
-            unreplied = cache.find_unreplied(my_user_id)
+            unreplied = cache.find_unreplied(my_user_id or "")
             user_name_map = cache.get_user_name_cache()
 
             if getattr(args, "json", False):
@@ -1300,7 +1300,7 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
         cache = MessageCache()
         try:
             client.auth_test()
-            return cache.find_unreplied(client.my_user_id)
+            return cache.find_unreplied(client.my_user_id or "")
         finally:
             cache.close()
     if name == "slack_channels":

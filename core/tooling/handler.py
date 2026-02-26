@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from core.exceptions import ToolExecutionError, MemoryWriteError, ProcessError, DeliveryError  # noqa: F401
+from core.exceptions import ToolExecutionError, MemoryWriteError, ProcessError, DeliveryError, RecipientNotFoundError  # noqa: F401
 from core.time_utils import now_iso
 
 from core.background import BackgroundTaskManager
@@ -371,8 +371,10 @@ class ToolHandler:
         # ── Cache subordinate paths for permission checks ──
         self._subordinate_activity_dirs: list[Path] = []
         self._subordinate_management_files: list[Path] = []
+        self._subordinate_root_dirs: list[Path] = []
         self._descendant_activity_dirs: list[Path] = []
         self._descendant_state_files: list[Path] = []
+        self._descendant_state_dirs: list[Path] = []
         try:
             from core.config.models import load_config
             from core.paths import get_animas_dir
@@ -384,12 +386,20 @@ class ToolHandler:
                     self._subordinate_activity_dirs.append(_sub_dir / "activity_log")
                     self._subordinate_management_files.append(_sub_dir / "cron.md")
                     self._subordinate_management_files.append(_sub_dir / "heartbeat.md")
+                    self._subordinate_management_files.append(_sub_dir / "status.json")
+                    self._subordinate_management_files.append(_sub_dir / "injection.md")
+                    self._subordinate_root_dirs.append(_sub_dir)
             _all_descendants = self._get_all_descendants()
             for _desc_name in _all_descendants:
                 _desc_dir = (_animas_dir / _desc_name).resolve()
                 self._descendant_activity_dirs.append(_desc_dir / "activity_log")
                 self._descendant_state_files.append(_desc_dir / "state" / "current_task.md")
                 self._descendant_state_files.append(_desc_dir / "state" / "pending.md")
+                self._descendant_state_files.append(_desc_dir / "status.json")
+                self._descendant_state_files.append(_desc_dir / "identity.md")
+                self._descendant_state_files.append(_desc_dir / "injection.md")
+                self._descendant_state_files.append(_desc_dir / "state" / "task_queue.jsonl")
+                self._descendant_state_dirs.append(_desc_dir / "state" / "pending")
         except Exception:
             logger.debug("Failed to cache subordinate paths for %s", self._anima_name, exc_info=True)
 
@@ -577,11 +587,15 @@ class ToolHandler:
             self._log_tool_result_activity(name, result, tool_use_id=tool_use_id)
             return self._truncate_output(result)
 
+        except ToolExecutionError:
+            raise
+        except MemoryWriteError:
+            raise
         except Exception as e:
             logger.exception("Unhandled tool error in %s", name)
-            return _error_result(
-                "UnhandledError", f"Tool execution failed: {name}: {e}",
-            )
+            raise ToolExecutionError(
+                f"Tool execution failed: {name}: {e}"
+            ) from e
 
     def _truncate_output(self, output: str) -> str:
         """Truncate tool output if it exceeds the size limit."""
@@ -644,12 +658,12 @@ class ToolHandler:
 
             if not is_error:
                 try:
-                    parsed = json.loads(result)
+                    parsed = _json.loads(result)
                     if isinstance(parsed, list):
                         meta["result_count"] = len(parsed)
                     elif isinstance(parsed, dict) and "count" in parsed:
                         meta["result_count"] = parsed["count"]
-                except (json.JSONDecodeError, TypeError):
+                except (_json.JSONDecodeError, TypeError):
                     pass
 
             self._activity.log(
@@ -687,7 +701,6 @@ class ToolHandler:
             resolved = path.resolve()
             # Allow if within own anima_dir
             if not self._superuser and not resolved.is_relative_to(self._anima_dir.resolve()):
-                # Check subordinate read permissions (activity_log, cron.md, heartbeat.md)
                 allowed = False
                 for sub_activity in self._subordinate_activity_dirs:
                     if resolved.is_relative_to(sub_activity):
@@ -696,6 +709,21 @@ class ToolHandler:
                 if not allowed:
                     for mgmt_file in self._subordinate_management_files:
                         if resolved == mgmt_file:
+                            allowed = True
+                            break
+                if not allowed:
+                    for desc_activity in self._descendant_activity_dirs:
+                        if resolved.is_relative_to(desc_activity):
+                            allowed = True
+                            break
+                if not allowed:
+                    for desc_state in self._descendant_state_files:
+                        if resolved == desc_state:
+                            allowed = True
+                            break
+                if not allowed:
+                    for desc_state_dir in self._descendant_state_dirs:
+                        if resolved.is_relative_to(desc_state_dir):
                             allowed = True
                             break
                 if not allowed:
@@ -757,9 +785,9 @@ class ToolHandler:
 
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        use_lock = self._state_file_lock and self._is_state_file(path)
-        if use_lock:
-            self._state_file_lock.acquire()
+        lock = self._state_file_lock if self._state_file_lock and self._is_state_file(path) else None
+        if lock:
+            lock.acquire()
         try:
             # Auto-add YAML frontmatter for procedure overwrite writes
             auto_frontmatter_applied = False
@@ -781,8 +809,8 @@ class ToolHandler:
             else:
                 path.write_text(content, encoding="utf-8")
         finally:
-            if use_lock:
-                self._state_file_lock.release()
+            if lock:
+                lock.release()
         logger.info(
             "write_memory_file path=%s mode=%s",
             args["path"], args.get("mode", "overwrite"),
@@ -951,8 +979,7 @@ class ToolHandler:
             resolved = resolve_recipient(
                 to, known_animas, config.external_messaging,
             )
-        except ValueError as e:
-            # Unknown recipient — return helpful error
+        except (ValueError, RecipientNotFoundError) as e:
             return _error_result("UnknownRecipient", str(e))
         except Exception as e:
             logger.warning(
@@ -1903,10 +1930,17 @@ class ToolHandler:
 
         file_read: list[str] = ["自分のディレクトリ", "shared/"]
         file_write: list[str] = ["自分のディレクトリ"]
+        if self._subordinate_management_files:
+            file_read.append("直属部下のcron.md, heartbeat.md, status.json, injection.md")
+            file_write.append("直属部下のcron.md, heartbeat.md, status.json, injection.md")
+        if self._subordinate_root_dirs:
+            file_read.append("直属部下のディレクトリ一覧")
         if self._descendant_activity_dirs:
             file_read.append("配下のactivity_log")
         if self._descendant_state_files:
-            file_read.append("配下のstate (current_task.md, pending.md)")
+            file_read.append("配下のstatus.json, identity.md, injection.md, state/, task_queue.jsonl")
+        if self._descendant_state_dirs:
+            file_read.append("配下のstate/pending/")
 
         file_header = self._find_section_header(permissions_text, self._FILE_SECTION_HEADERS)
         if file_header:
@@ -2561,9 +2595,9 @@ class ToolHandler:
         if not path.exists():
             return _error_result("FileNotFound", f"File not found: {path_str}", suggestion="Use list_directory to find the correct path")
         try:
-            use_lock = self._state_file_lock and self._is_state_file(path)
-            if use_lock:
-                self._state_file_lock.acquire()
+            lock = self._state_file_lock if self._state_file_lock and self._is_state_file(path) else None
+            if lock:
+                lock.acquire()
             try:
                 content = path.read_text(encoding="utf-8")
                 old = args.get("old_string", "")
@@ -2576,8 +2610,8 @@ class ToolHandler:
                 content = content.replace(old, new, 1)
                 path.write_text(content, encoding="utf-8")
             finally:
-                if use_lock:
-                    self._state_file_lock.release()
+                if lock:
+                    lock.release()
             logger.info("edit_file path=%s", path_str)
             return f"Edited {path_str}"
         except Exception as e:
@@ -2794,10 +2828,14 @@ class ToolHandler:
         Access rules (evaluated in order):
           0. debug_superuser -- bypass all checks
           1. Own anima_dir -- always allowed for reads; writes to protected files blocked
-          2. Subordinate's activity_log/ -- read-only for direct supervisors
-          3. Subordinate's cron.md & heartbeat.md -- read/write for direct supervisors
-          4. Paths listed under ``ファイル操作`` section in permissions.md
-          5. Everything else -- denied
+          2. Subordinate's activity_log/ -- read-only for direct/all supervisors
+          3. Descendant's state files -- read-only (status.json, identity.md, etc.)
+          4. Descendant's state/pending/ dir -- read-only
+          5. Subordinate's management files -- read/write (cron.md, heartbeat.md,
+             status.json, injection.md)
+          6. Subordinate root dir -- read-only (for list_directory)
+          7. Paths listed under ``ファイル操作`` section in permissions.md
+          8. Everything else -- denied
         """
         if self._superuser:
             return None
@@ -2824,16 +2862,28 @@ class ToolHandler:
                 if resolved.is_relative_to(desc_activity):
                     return None
 
-        # Supervisor can read any descendant's current_task.md / pending.md
+        # Supervisor can read any descendant's state files
         if not write:
             for desc_state in self._descendant_state_files:
                 if resolved == desc_state:
                     return None
 
-        # Supervisor can read/write subordinate's cron.md & heartbeat.md
+        # Supervisor can read any descendant's state/pending/ directory
+        if not write:
+            for desc_state_dir in self._descendant_state_dirs:
+                if resolved.is_relative_to(desc_state_dir):
+                    return None
+
+        # Supervisor can read/write subordinate's management files
         for mgmt_file in self._subordinate_management_files:
             if resolved == mgmt_file:
                 return None
+
+        # Supervisor can list direct subordinate's root directory
+        if not write:
+            for sub_root in self._subordinate_root_dirs:
+                if resolved == sub_root:
+                    return None
 
         permissions = self._memory.read_permissions()
         header = self._find_section_header(permissions, self._FILE_SECTION_HEADERS)

@@ -13,7 +13,6 @@ import pytest
 from core.paths import (
     PROJECT_DIR,
     TEMPLATES_DIR,
-    PROMPTS_DIR,
     _prompt_cache,
     get_common_knowledge_dir,
     get_common_skills_dir,
@@ -23,6 +22,7 @@ from core.paths import (
     get_shared_dir,
     get_tmp_dir,
     load_prompt,
+    resolve_template_path,
 )
 
 
@@ -36,8 +36,26 @@ class TestConstants:
     def test_templates_dir_is_under_project(self):
         assert TEMPLATES_DIR == PROJECT_DIR / "templates"
 
-    def test_prompts_dir_is_under_templates(self):
-        assert PROMPTS_DIR == TEMPLATES_DIR / "prompts"
+
+class TestResolveTemplatePath:
+    def test_resolves_to_locale_prompts_for_default_locale(self):
+        """resolve_template_path("prompts", "environment.md") resolves to ja/prompts/ for default locale."""
+        path = resolve_template_path("prompts", "environment.md", locale="ja")
+        assert path == TEMPLATES_DIR / "ja" / "prompts" / "environment.md"
+        assert path.exists()
+
+    def test_fallback_chain_locale_en_ja(self):
+        """Fallback tries locale, en, ja in order."""
+        # Request "ja" - should resolve to ja/prompts/messaging.md
+        path = resolve_template_path("prompts", "messaging.md", locale="ja")
+        assert path == TEMPLATES_DIR / "ja" / "prompts" / "messaging.md"
+        assert path.exists()
+
+    def test_raises_when_template_not_found(self):
+        """FileNotFoundError when template does not exist in any fallback."""
+        with pytest.raises(FileNotFoundError) as excinfo:
+            resolve_template_path("prompts", "nonexistent_template_xyz.md", locale="ja")
+        assert "nonexistent_template_xyz" in str(excinfo.value)
 
 
 # ── get_data_dir ──────────────────────────────────────────
@@ -108,50 +126,56 @@ class TestLoadPrompt:
         _prompt_cache.clear()
 
     def test_load_simple_template(self, tmp_path):
-        prompts_dir = tmp_path / "prompts"
-        prompts_dir.mkdir()
+        prompts_dir = tmp_path / "ja" / "prompts"
+        prompts_dir.mkdir(parents=True)
         (prompts_dir / "test_tpl.md").write_text(
             "Hello {anima_name}!", encoding="utf-8"
         )
-        with patch("core.paths.PROMPTS_DIR", prompts_dir):
-            result = load_prompt("test_tpl", anima_name="World")
+        with patch("core.paths.resolve_template_path") as mock_resolve:
+            mock_resolve.return_value = prompts_dir / "test_tpl.md"
+            result = load_prompt("test_tpl", anima_name="World", locale="ja")
             assert result == "Hello World!"
+            mock_resolve.assert_called_once_with("prompts", "test_tpl.md", "ja")
 
     def test_load_without_kwargs(self, tmp_path):
-        prompts_dir = tmp_path / "prompts"
-        prompts_dir.mkdir()
+        prompts_dir = tmp_path / "ja" / "prompts"
+        prompts_dir.mkdir(parents=True)
         (prompts_dir / "plain.md").write_text(
             "No placeholders here.", encoding="utf-8"
         )
-        with patch("core.paths.PROMPTS_DIR", prompts_dir):
-            result = load_prompt("plain")
+        with patch("core.paths.resolve_template_path") as mock_resolve:
+            mock_resolve.return_value = prompts_dir / "plain.md"
+            result = load_prompt("plain", locale="ja")
             assert result == "No placeholders here."
 
     def test_caching(self, tmp_path):
-        prompts_dir = tmp_path / "prompts"
-        prompts_dir.mkdir()
+        prompts_dir = tmp_path / "ja" / "prompts"
+        prompts_dir.mkdir(parents=True)
         (prompts_dir / "cached.md").write_text("Content", encoding="utf-8")
-        with patch("core.paths.PROMPTS_DIR", prompts_dir):
-            load_prompt("cached")
-            assert "cached" in _prompt_cache
+        with patch("core.paths.resolve_template_path") as mock_resolve:
+            mock_resolve.return_value = prompts_dir / "cached.md"
+            load_prompt("cached", locale="ja")
+            assert ("ja", "cached") in _prompt_cache
             # Modify file; cached version should be returned
             (prompts_dir / "cached.md").write_text("Modified", encoding="utf-8")
-            result = load_prompt("cached")
+            result = load_prompt("cached", locale="ja")
             assert result == "Content"  # still cached
 
     def test_missing_template_raises(self, tmp_path):
-        prompts_dir = tmp_path / "prompts"
-        prompts_dir.mkdir()
-        with patch("core.paths.PROMPTS_DIR", prompts_dir):
+        with patch("core.paths.resolve_template_path") as mock_resolve:
+            mock_resolve.side_effect = FileNotFoundError(
+                "Template not found: prompts/nonexistent.md"
+            )
             with pytest.raises(FileNotFoundError):
-                load_prompt("nonexistent")
+                load_prompt("nonexistent", locale="ja")
 
     def test_format_map_with_multiple_kwargs(self, tmp_path):
-        prompts_dir = tmp_path / "prompts"
-        prompts_dir.mkdir()
+        prompts_dir = tmp_path / "ja" / "prompts"
+        prompts_dir.mkdir(parents=True)
         (prompts_dir / "multi.md").write_text(
             "{a} and {b}", encoding="utf-8"
         )
-        with patch("core.paths.PROMPTS_DIR", prompts_dir):
-            result = load_prompt("multi", a="X", b="Y")
+        with patch("core.paths.resolve_template_path") as mock_resolve:
+            mock_resolve.return_value = prompts_dir / "multi.md"
+            result = load_prompt("multi", a="X", b="Y", locale="ja")
             assert result == "X and Y"

@@ -150,6 +150,12 @@ _PASSIVE_HOVER_SELECTORS = {
     ".chat-attach-btn",
     ".activity-type-chip",
     ".btn-login",
+    ".voice-mode-toggle",
+    ".voice-mic-btn",
+    ".ws-view-toggle",
+    ".org-activity-item",
+    ".org-tree-node",
+    ".org-status-card",
 }
 
 

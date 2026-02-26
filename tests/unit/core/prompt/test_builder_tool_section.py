@@ -414,6 +414,7 @@ class TestBuildSystemPromptIntegration:
         memory.list_procedure_metas.return_value = []
         memory.list_shared_users.return_value = []
         memory.read_model_config.return_value = model_config
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         return memory
 
     def test_tool_section_in_system_prompt(

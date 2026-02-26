@@ -113,7 +113,7 @@ class SchedulerManager:
         minute_spec = ",".join(slots)
 
         # Determine active hours
-        if active_start is not None:
+        if active_start is not None and active_end is not None:
             hour_spec = f"{active_start}-{active_end - 1}"
             log_active = f"active {active_start}:00-{active_end}:00"
         else:

@@ -173,7 +173,7 @@ class BackgroundTaskManager:
         self,
         tool_name: str,
         tool_args: dict[str, Any],
-        execute_fn: Callable[[str, dict[str, Any]], str],
+        execute_fn: Callable[[str, dict[str, Any]], str | None],
     ) -> str:
         """Submit a tool call for background execution.
 
@@ -282,7 +282,7 @@ class BackgroundTaskManager:
     async def _run_task(
         self,
         task: BackgroundTask,
-        execute_fn: Callable[[str, dict[str, Any]], str],
+        execute_fn: Callable[[str, dict[str, Any]], str | None],
     ) -> None:
         """Run a synchronous tool call in a thread and handle completion."""
         try:

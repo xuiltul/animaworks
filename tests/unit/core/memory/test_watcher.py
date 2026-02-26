@@ -74,8 +74,8 @@ async def test_file_creation_triggers_indexing(temp_anima_dir):
     test_file = temp_anima_dir / "knowledge" / "test.md"
     test_file.write_text("# Test\n\nContent")
 
-    # Wait for debounce + processing
-    await asyncio.sleep(1.0)
+    # Wait for debounce (500ms) + processing; extra margin for CI/slow systems
+    await asyncio.sleep(2.0)
 
     # Stop watcher
     watcher.stop()

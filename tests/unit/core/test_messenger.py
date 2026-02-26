@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from core.exceptions import DeliveryError
 from core.messenger import InboxItem, Messenger
 from core.schemas import Message
 
@@ -543,7 +544,7 @@ class TestSendDeliveryVerification:
             return original_exists(self_path)
 
         with patch.object(Path, "exists", fake_exists):
-            with pytest.raises(OSError, match="Message delivery failed"):
+            with pytest.raises(DeliveryError, match="Message delivery failed"):
                 messenger.send("bob", "will fail verification")
 
 

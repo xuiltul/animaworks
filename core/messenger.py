@@ -27,7 +27,7 @@ _SAFE_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
 def _validate_name(name: str, kind: str = "name") -> None:
     """Validate a channel or peer name to prevent path traversal."""
     if not _SAFE_NAME_RE.match(name):
-        raise ValueError(f"Invalid {kind}: {name!r}")
+        raise RecipientNotFoundError(f"Invalid {kind}: {name!r}")
 
 
 @dataclass
@@ -116,9 +116,8 @@ class Messenger:
         filepath = target_dir / f"{msg.id}.json"
         filepath.write_text(msg.model_dump_json(indent=2), encoding="utf-8")
 
-        # Delivery verification: confirm file was written
         if not filepath.exists():
-            raise OSError(
+            raise DeliveryError(
                 f"Message delivery failed: file not created at {filepath} "
                 f"({self.anima_name} -> {to})"
             )

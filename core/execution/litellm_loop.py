@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from core.exceptions import LLMAPIError, ToolExecutionError, ConfigError  # noqa: F401
 from core.prompt.context import ContextTracker, resolve_context_window
@@ -180,9 +180,16 @@ class LiteLLMExecutor(BaseExecutor):
 
     def _build_llm_kwargs(self) -> dict[str, Any]:
         """Credential + model kwargs for ``litellm.acompletion``."""
+        from core.config.models import resolve_max_tokens
+        from core.execution.base import is_adaptive_model, is_anthropic_claude, resolve_thinking_effort
+        _eff_max = resolve_max_tokens(
+            self._model_config.model,
+            self._model_config.max_tokens,
+            self._model_config.thinking,
+        )
         kwargs: dict[str, Any] = {
             "model": self._model_config.model,
-            "max_tokens": self._model_config.max_tokens,
+            "max_tokens": _eff_max,
             "timeout": self._resolve_llm_timeout(),
         }
         api_key = self._resolve_api_key()
@@ -191,9 +198,26 @@ class LiteLLMExecutor(BaseExecutor):
         if self._model_config.api_base_url:
             kwargs["api_base"] = self._model_config.api_base_url
         self._apply_provider_kwargs(kwargs)
-        # Ollama thinking control: default to off for ollama/ models
+        # Extended thinking / reasoning control
         if self._model_config.thinking is not None:
-            kwargs["think"] = self._model_config.thinking
+            model = self._model_config.model
+            if model.startswith("bedrock/"):
+                if self._model_config.thinking:
+                    kwargs["reasoning_effort"] = resolve_thinking_effort(
+                        model, self._model_config.thinking_effort,
+                    )
+            elif is_anthropic_claude(model):
+                if self._model_config.thinking:
+                    if is_adaptive_model(model):
+                        kwargs["thinking"] = {"type": "adaptive"}
+                        kwargs["reasoning_effort"] = resolve_thinking_effort(
+                            model, self._model_config.thinking_effort,
+                        )
+                    else:
+                        kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+                    kwargs["temperature"] = 1
+            else:
+                kwargs["think"] = self._model_config.thinking
         elif self._model_config.model.startswith("ollama/"):
             kwargs["think"] = False
         # Ollama num_ctx: explicitly set context window to prevent silent truncation
@@ -368,9 +392,11 @@ class LiteLLMExecutor(BaseExecutor):
 
             try:
                 response = await litellm.acompletion(**call_kwargs)
+            except LLMAPIError:
+                raise
             except Exception as e:
                 logger.exception("LiteLLM API error")
-                return ExecutionResult(text=f"[LLM API Error: {e}]")
+                raise LLMAPIError(f"LiteLLM API error: {e}") from e
 
             choice = response.choices[0]
             message = choice.message
@@ -448,7 +474,7 @@ class LiteLLMExecutor(BaseExecutor):
             logger.info(
                 "A tool calls at iteration=%d: %s",
                 iteration,
-                ", ".join(tc.function.name for tc in tool_calls),
+                ", ".join(tc.function.name or "unknown" for tc in tool_calls),
             )
             messages.append(message.model_dump())
 
@@ -527,6 +553,10 @@ class LiteLLMExecutor(BaseExecutor):
         not within this method.
         """
         import litellm
+        # When thinking_blocks are missing from assistant messages on tool-call
+        # turns, Anthropic/Bedrock returns 400.  This flag tells LiteLLM to
+        # silently drop the thinking param for that turn instead of crashing.
+        litellm.modify_params = True
 
         tools = self._build_base_tools()
         active_categories: set[str] = set()
@@ -593,7 +623,7 @@ class LiteLLMExecutor(BaseExecutor):
                 if not is_final_iteration:
                     call_kwargs["tools"] = tools
 
-                response = await litellm.acompletion(**call_kwargs)
+                response = cast(Any, await litellm.acompletion(**call_kwargs))
 
                 # Accumulate streamed chunks
                 iter_text_parts: list[str] = []
@@ -602,6 +632,7 @@ class LiteLLMExecutor(BaseExecutor):
                 usage_data: dict[str, int] | None = None
                 _chunk_count = 0
                 _reasoning_seen = False
+                _reasoning_parts: list[str] = []
 
                 async for chunk in response:
                     _chunk_count += 1
@@ -625,16 +656,18 @@ class LiteLLMExecutor(BaseExecutor):
                         iter_text_parts.append(delta.content)
                         yield {"type": "text_delta", "text": delta.content}
 
-                    # Fallback: capture reasoning_content as text when
-                    # content is empty (e.g. GLM thinking mode via vLLM)
+                    # Reasoning content → thinking_delta events
                     reasoning = getattr(delta, "reasoning_content", None)
-                    if reasoning and not delta.content:
+                    if reasoning:
+                        _reasoning_parts.append(reasoning)
                         if not _reasoning_seen:
                             _reasoning_seen = True
                             logger.info(
                                 "A stream: reasoning_content detected "
                                 "(model may be in thinking mode)",
                             )
+                            yield {"type": "thinking_start"}
+                        yield {"type": "thinking_delta", "text": reasoning}
 
                     # H1: Use accumulate_tool_call_chunks return value
                     if delta.tool_calls:
@@ -661,6 +694,23 @@ class LiteLLMExecutor(BaseExecutor):
                             "input_tokens": chunk.usage.prompt_tokens or 0,
                             "output_tokens": chunk.usage.completion_tokens or 0,
                         }
+
+                if _reasoning_seen:
+                    yield {"type": "thinking_end"}
+
+                # Try to extract thinking_blocks from streamed response for
+                # later inclusion in assistant messages (tool-call iterations).
+                _iter_thinking_blocks: list[dict[str, Any]] | None = None
+                if _reasoning_seen:
+                    _resp_msg = getattr(response, "response_uptil_now", None)
+                    if _resp_msg:
+                        _choices = getattr(_resp_msg, "choices", None)
+                        if _choices:
+                            _msg_obj = getattr(_choices[0], "message", None)
+                            if _msg_obj:
+                                _iter_thinking_blocks = getattr(
+                                    _msg_obj, "thinking_blocks", None,
+                                )
 
                 # Post-stream diagnostics
                 if not iter_text_parts and not tool_calls_acc:
@@ -737,6 +787,12 @@ class LiteLLMExecutor(BaseExecutor):
                     "content": iter_text or None,
                     "tool_calls": assistant_tool_calls,
                 }
+                if _iter_thinking_blocks:
+                    assistant_msg["thinking_blocks"] = _iter_thinking_blocks
+                    logger.debug(
+                        "A stream: preserved %d thinking_blocks for tool-call turn",
+                        len(_iter_thinking_blocks),
+                    )
                 messages.append(assistant_msg)
 
                 # H2: Execute tool calls and yield tool_end per-tool
@@ -848,7 +904,7 @@ class LiteLLMExecutor(BaseExecutor):
                 if not is_final_iteration:
                     call_kwargs["tools"] = tools
 
-                response = await litellm.acompletion(**call_kwargs)
+                response = cast(Any, await litellm.acompletion(**call_kwargs))
 
                 choice = response.choices[0]
                 message = choice.message
@@ -905,7 +961,7 @@ class LiteLLMExecutor(BaseExecutor):
                 logger.info(
                     "A ollama stream tool calls at iteration=%d: %s",
                     iteration,
-                    ", ".join(tc.function.name for tc in tool_calls),
+                    ", ".join(tc.function.name or "unknown" for tc in tool_calls),
                 )
                 messages.append(message.model_dump())
 
@@ -1215,7 +1271,7 @@ class LiteLLMExecutor(BaseExecutor):
             results = await asyncio.gather(*coros, return_exceptions=True)
             for i, r in enumerate(results):
                 shim = parallel[i]
-                if isinstance(r, Exception):
+                if isinstance(r, BaseException):
                     logger.warning("Parallel tool execution error: %s", r)
                     error_content = _json.dumps({
                         "status": "error",
@@ -1228,9 +1284,12 @@ class LiteLLMExecutor(BaseExecutor):
                         "content": wrap_tool_result(shim.function.name, error_content),
                     })
                     result_summary = _truncate_for_record(error_content, tool_result_save_budget(shim.function.name, context_window))
-                else:
+                elif isinstance(r, dict):
                     messages.append(r)
                     result_summary = _truncate_for_record(r.get("content", ""), tool_result_save_budget(shim.function.name, context_window))
+                else:
+                    messages.append({"role": "tool", "tool_call_id": shim.id, "content": str(r)})
+                    result_summary = _truncate_for_record(str(r), tool_result_save_budget(shim.function.name, context_window))
                 yield {
                     "type": "tool_end",
                     "tool_id": shim.id,
@@ -1249,11 +1308,24 @@ class LiteLLMExecutor(BaseExecutor):
                     r = await self._execute_tool_call(shim, args_map[shim.id])
                     messages.append(r)
                     result_summary = _truncate_for_record(r.get("content", ""), tool_result_save_budget(shim.function.name, context_window))
-                except Exception as e:
+                except ToolExecutionError as e:
                     logger.warning("Serial tool execution error: %s", e)
                     error_content = _json.dumps({
                         "status": "error",
-                        "error_type": "ExecutionError",
+                        "error_type": "ToolExecutionError",
+                        "message": str(e),
+                    }, ensure_ascii=False)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": shim.id,
+                        "content": wrap_tool_result(shim.function.name, error_content),
+                    })
+                    result_summary = _truncate_for_record(error_content, tool_result_save_budget(shim.function.name, context_window))
+                except Exception as e:
+                    logger.warning("Serial tool execution error (unexpected): %s", e)
+                    error_content = _json.dumps({
+                        "status": "error",
+                        "error_type": type(e).__name__,
                         "message": str(e),
                     }, ensure_ascii=False)
                     messages.append({

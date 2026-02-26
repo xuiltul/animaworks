@@ -1,6 +1,7 @@
 // ── Home Dashboard ──────────────────────────
 import { api } from "../modules/api.js";
 import { escapeHtml, timeStr, statusClass } from "../modules/state.js";
+import { animaHashColor } from "../modules/animas.js";
 import { getIcon, getDisplaySummary } from "../shared/activity-types.js";
 
 let _refreshInterval = null;
@@ -114,9 +115,14 @@ async function _loadAnimaCards() {
 
       const dotClass = statusClass(p.status);
       const statusLabel = p.status || "offline";
+      const initial = escapeHtml(p.name.charAt(0).toUpperCase());
+      const color = animaHashColor(p.name);
 
-      // Avatar: try HEAD check, fallback to initial
-      let avatarHtml = `<div class="anima-avatar-placeholder" style="width:48px;height:48px;font-size:1.2rem;margin:0 auto 0.5rem;">${escapeHtml(p.name.charAt(0).toUpperCase())}</div>`;
+      // Avatar: both img and initial div, CSS controls visibility per theme
+      const avatarHtml = `
+        <div class="anima-avatar-container" style="width:48px;height:48px;margin:0 auto 0.5rem;">
+          <div class="anima-avatar-initial" style="background: ${color}; width:48px; height:48px; font-size:18px;">${initial}</div>
+        </div>`;
 
       card.innerHTML = `
         <div class="card-body" style="text-align:center; padding: 1rem;">
@@ -147,13 +153,20 @@ async function _tryLoadAvatar(name) {
   const container = document.getElementById(`homeAvatar_${name}`);
   if (!container) return;
 
+  const initial = escapeHtml(name.charAt(0).toUpperCase());
+  const color = animaHashColor(name);
+
   const candidates = ["avatar_bustup.png", "avatar_chibi.png"];
   for (const filename of candidates) {
     const url = `/api/animas/${encodeURIComponent(name)}/assets/${encodeURIComponent(filename)}`;
     try {
       const resp = await fetch(url, { method: "HEAD" });
       if (resp.ok) {
-        container.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;margin:0 auto 0.5rem;display:block;">`;
+        container.innerHTML = `
+          <div class="anima-avatar-container" style="width:48px;height:48px;margin:0 auto 0.5rem;">
+            <img class="anima-avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(name)}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;">
+            <div class="anima-avatar-initial" style="background: ${color}; width:48px; height:48px; font-size:18px;">${initial}</div>
+          </div>`;
         return;
       }
     } catch { /* try next */ }

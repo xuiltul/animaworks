@@ -80,7 +80,8 @@ class ModelConfig(BaseModel):
     supervisor: str | None = None  # supervisor Anima name
     speciality: str | None = None  # free-text specialisation
     resolved_mode: str | None = None  # "S"/"A"/"B" — resolved from config
-    thinking: bool | None = None  # Ollama think param (None = auto: off for ollama/)
+    thinking: bool | None = None  # Extended thinking (Bedrock: reasoning_effort, Ollama: think param)
+    thinking_effort: str | None = None  # "low"/"medium"/"high"/"max" (default: "high")
     llm_timeout: int | None = None  # LLM API呼び出しタイムアウト（秒）
     extra_keys: dict[str, str] = {}  # provider-specific credential keys (e.g. api_version, vertex_project)
 
@@ -122,6 +123,7 @@ class CycleResult(BaseModel):
     trigger: str
     action: str
     summary: str = ""
+    thinking_text: str = ""
     duration_ms: int = 0
     timestamp: datetime = Field(default_factory=now_jst)
     context_usage_ratio: float = 0.0

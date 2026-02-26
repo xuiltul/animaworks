@@ -111,11 +111,11 @@ class ChatworkClient:
     """HTTP client for the Chatwork v2 API with rate-limit retry."""
 
     def __init__(self, api_token: str | None = None):
-        _require_requests()
+        req = _require_requests()
         if api_token is None:
             api_token = get_credential("chatwork", "chatwork", env_var="CHATWORK_API_TOKEN")
         self.api_token = api_token
-        self.session = requests.Session()
+        self.session = req.Session()
         self.session.headers.update({
             "X-ChatWorkToken": api_token,
             "Accept": "application/json",
@@ -166,16 +166,16 @@ class ChatworkClient:
         """Async wrapper around :meth:`_request` using a thread-pool executor."""
         return await run_sync(self._request, method, path, **kwargs)
 
-    def get(self, path: str, params: dict | None = None):
+    def get(self, path: str, params: dict | None = None) -> Any:
         return self._request("GET", path, params=params)
 
-    def post(self, path: str, data: dict | None = None):
+    def post(self, path: str, data: dict | None = None) -> Any:
         return self._request("POST", path, data=data)
 
-    def put(self, path: str, data: dict | None = None):
+    def put(self, path: str, data: dict | None = None) -> Any:
         return self._request("PUT", path, data=data)
 
-    def delete(self, path: str):
+    def delete(self, path: str) -> Any:
         return self._request("DELETE", path)
 
     # --- High-level API methods ---

@@ -46,6 +46,59 @@ def cmd_anima_restart(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_anima_reload(args: argparse.Namespace) -> None:
+    """Hot-reload anima config from status.json without process restart."""
+    import requests
+
+    from core.paths import get_data_dir
+
+    pid_file = get_data_dir() / "server.pid"
+    if not pid_file.exists():
+        print("Error: Server is not running")
+        sys.exit(1)
+
+    gateway_url = args.gateway_url or "http://localhost:18500"
+
+    if args.all:
+        try:
+            response = requests.post(
+                f"{gateway_url}/api/animas/reload-all",
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            result = response.json()
+            for name, r in result.get("results", {}).items():
+                status = r.get("status", "unknown")
+                if status == "ok":
+                    changes = r.get("changes", [])
+                    print(f"  {name}: reloaded (model={r.get('model', '?')}, changes={changes})")
+                else:
+                    print(f"  {name}: {r.get('error', status)}")
+            print("All animas reloaded.")
+        except requests.exceptions.RequestException as e:
+            print(f"Error: Failed to reload all animas: {e}")
+            sys.exit(1)
+        return
+
+    if not args.anima:
+        print("Error: anima name is required (or use --all)")
+        sys.exit(1)
+
+    try:
+        response = requests.post(
+            f"{gateway_url}/api/animas/{args.anima}/reload",
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        result = response.json()
+        changes = result.get("changes", [])
+        model = result.get("model", "?")
+        print(f"Anima '{args.anima}' config reloaded (model={model}, changes={changes})")
+    except requests.exceptions.RequestException as e:
+        print(f"Error: Failed to reload anima config: {e}")
+        sys.exit(1)
+
+
 def cmd_anima_status(args: argparse.Namespace) -> None:
     """Show status of anima processes."""
     import requests
@@ -324,7 +377,7 @@ def cmd_anima_set_role(args: argparse.Namespace) -> None:
     """Change an anima's role."""
     import requests
 
-    from core.anima_factory import ROLES_DIR, VALID_ROLES, _apply_role_defaults
+    from core.anima_factory import SHARED_ROLES_DIR, VALID_ROLES, _apply_role_defaults
     from core.paths import get_animas_dir, get_data_dir
 
     name = args.anima
@@ -356,7 +409,7 @@ def cmd_anima_set_role(args: argparse.Namespace) -> None:
 
     if not args.status_only:
         # Merge defaults.json values into status.json
-        defaults_path = ROLES_DIR / new_role / "defaults.json"
+        defaults_path = SHARED_ROLES_DIR / new_role / "defaults.json"
         if defaults_path.is_file():
             try:
                 role_defaults = json.loads(defaults_path.read_text(encoding="utf-8"))

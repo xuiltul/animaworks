@@ -15,6 +15,7 @@ import logging
 import time
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -47,22 +48,23 @@ class MemoryFileHandler(FileSystemEventHandler):
 
     def on_created(self, event: FileSystemEvent) -> None:
         """Handle file creation events."""
-        if not event.is_directory and event.src_path.endswith(".md"):
-            logger.debug("File created: %s", event.src_path)
-            self.watcher.queue_file(Path(event.src_path))
+        src = str(event.src_path)
+        if not event.is_directory and src.endswith(".md"):
+            logger.debug("File created: %s", src)
+            self.watcher.queue_file(Path(src))
 
     def on_modified(self, event: FileSystemEvent) -> None:
         """Handle file modification events."""
-        if not event.is_directory and event.src_path.endswith(".md"):
-            logger.debug("File modified: %s", event.src_path)
-            self.watcher.queue_file(Path(event.src_path))
+        src = str(event.src_path)
+        if not event.is_directory and src.endswith(".md"):
+            logger.debug("File modified: %s", src)
+            self.watcher.queue_file(Path(src))
 
     def on_deleted(self, event: FileSystemEvent) -> None:
         """Handle file deletion events."""
-        if not event.is_directory and event.src_path.endswith(".md"):
-            logger.debug("File deleted: %s", event.src_path)
-            # Note: For deletion, we'd need to remove from vector store
-            # This is a Phase 4 feature
+        src = str(event.src_path)
+        if not event.is_directory and src.endswith(".md"):
+            logger.debug("File deleted: %s", src)
             pass
 
 
@@ -97,7 +99,7 @@ class FileWatcher:
         self.knowledge_graph = knowledge_graph
         self.anima_name = anima_name
         self._extra_watch_dirs = extra_watch_dirs or []
-        self.observer: Observer | None = None
+        self.observer: Any = None
         self._running = False
 
         # Debounce queue: file_path -> last_modified_time

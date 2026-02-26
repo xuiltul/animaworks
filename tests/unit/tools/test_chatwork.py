@@ -122,12 +122,6 @@ class TestChatworkClient:
         result = client.rooms()
         assert len(result) == 1
 
-    def test_post_message_disabled(self):
-        """post_message is currently disabled and raises RuntimeError."""
-        client = ChatworkClient()
-        with pytest.raises(RuntimeError, match="無効化"):
-            client.post_message("123", "Hello")
-
     def test_get_room_by_name_exact(self):
         self._mock_session.request.return_value = self._make_response(
             json_data=[
@@ -604,7 +598,7 @@ class TestExecutionProfile:
         expected = {
             "rooms", "messages", "send", "search", "unreplied",
             "sync", "me", "members", "contacts", "task",
-            "mytasks", "tasks", "mentions", "stats",
+            "mytasks", "tasks", "mentions", "stats", "files", "download",
         }
         assert set(EXECUTION_PROFILE.keys()) == expected
 
@@ -614,9 +608,13 @@ class TestExecutionProfile:
         assert EXECUTION_PROFILE["sync"]["background_eligible"] is True
 
     def test_other_commands_not_background_eligible(self):
+        """Commands other than sync and download are not background-eligible."""
         from core.tools.chatwork import EXECUTION_PROFILE
 
-        for key in ("rooms", "messages", "send", "search", "unreplied",
-                     "me", "members", "contacts", "task", "mytasks",
-                     "tasks", "mentions", "stats"):
-            assert EXECUTION_PROFILE[key]["background_eligible"] is False
+        non_eligible = (
+            "rooms", "messages", "send", "search", "unreplied",
+            "me", "members", "contacts", "task", "mytasks",
+            "tasks", "mentions", "stats", "files",
+        )
+        for key in non_eligible:
+            assert EXECUTION_PROFILE[key]["background_eligible"] is False, key

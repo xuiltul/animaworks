@@ -23,7 +23,12 @@ import time
 from collections.abc import AsyncGenerator, Callable
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.execution.base import ExecutionResult
+    from core.memory.conversation import ConversationMemory
+    from core.notification.notifier import HumanNotifier
 
 from core.time_utils import now_iso, now_jst
 
@@ -231,6 +236,18 @@ class AgentCore:
         """Return and clear pending notification events from ToolHandler."""
         return self._tool_handler.drain_notifications()
 
+    def update_model_config(self, new_config: ModelConfig) -> None:
+        """Update model config, rebuild executor and refresh context window."""
+        self.model_config = new_config
+        from core.config.models import resolve_context_window
+        cw = resolve_context_window(new_config.model) or 32_000
+        self._tool_handler._context_window = cw
+        self._executor = self._create_executor()
+        logger.info(
+            "AgentCore: config reloaded, model=%s, context_window=%d",
+            new_config.model, cw,
+        )
+
     def reset_reply_tracking(self, session_type: str | None = None) -> None:
         """Clear reply tracking (call at start of each heartbeat cycle)."""
         self._tool_handler.reset_replied_to(session_type=session_type)
@@ -339,7 +356,7 @@ class AgentCore:
         return self._resolve_execution_mode()
 
     def _resolve_execution_mode(self) -> str:
-        """Determine the effective execution mode: ``s``, ``a``, or ``b``.
+        """Determine the effective execution mode: ``s``, ``c``, ``a``, or ``b``.
 
         Uses ``resolved_mode`` from config when available.
         Falls back to auto-detection for legacy config.md paths.
@@ -515,6 +532,29 @@ class AgentCore:
                 personal_tools=self._personal_tools,
             )
 
+        if mode == "c":
+            try:
+                from core.execution.codex_sdk import CodexSDKExecutor
+                return CodexSDKExecutor(
+                    model_config=self.model_config,
+                    anima_dir=self.anima_dir,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                )
+            except ImportError:
+                logger.warning(
+                    "CodexSDKExecutor unavailable (openai-codex-sdk not installed), "
+                    "falling back to LiteLLM (Mode A)"
+                )
+                return LiteLLMExecutor(
+                    model_config=self.model_config,
+                    anima_dir=self.anima_dir,
+                    tool_handler=self._tool_handler,
+                    tool_registry=self._tool_registry,
+                    memory=self.memory,
+                    personal_tools=self._personal_tools,
+                )
+
         if mode == "a":
             return LiteLLMExecutor(
                 model_config=self.model_config,
@@ -640,16 +680,6 @@ class AgentCore:
                 else "cron" if trigger.startswith("cron")
                 else "chat"
             )
-
-            try:
-                from core.prompt.context import resolve_context_window
-                distilled = self.memory.collect_distilled_knowledge()
-                ctx_window = resolve_context_window(self.model_config.model)
-                _, overflow_files = MemoryManager.compute_injection_plan(
-                    distilled, ctx_window,
-                )
-            except Exception:
-                overflow_files = None
 
             result = await self._priming_engine.prime_memories(
                 message,
@@ -952,11 +982,12 @@ class AgentCore:
         Routing:
           - Mode B (basic):      ``AssistedExecutor``  -- text-based tool loop
           - Mode A (autonomous): ``LiteLLMExecutor`` -- LiteLLM + tool_use
+          - Mode C (codex):      ``CodexSDKExecutor`` -- Codex CLI wrapper
           - Mode S (SDK):        ``AgentSDKExecutor`` -- Claude Agent SDK
 
         If the context threshold is crossed (A mode only), the session is
         externalized to short-term memory and automatically continued.
-        S mode relies on the SDK's built-in auto-compact.
+        S and C modes rely on the SDK's built-in context management.
         """
         async with self._agent_lock:
             return await self._run_cycle_inner(
@@ -1092,6 +1123,38 @@ class AgentCore:
                 action="responded",
                 summary=result.text,
                 duration_ms=duration_ms,
+                tool_call_records=_tool_records_to_dicts(result),
+            )
+
+        # ── Mode C: Codex SDK ─────────────────────────────
+        if mode == "c":
+            result = await self._executor.execute(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                tracker=tracker,
+                trigger=trigger,
+                images=images,
+                max_turns_override=max_turns_override,
+            )
+            if result.replied_to_from_transcript:
+                self._tool_handler.merge_replied_to(result.replied_to_from_transcript)
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(result.tool_call_records),
+            )
+            shortterm.clear()
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "run_cycle END (c) trigger=%s duration_ms=%d response_len=%d",
+                trigger, duration_ms, len(result.text),
+            )
+            return CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=result.text,
+                duration_ms=duration_ms,
+                context_usage_ratio=tracker.usage_ratio,
                 tool_call_records=_tool_records_to_dicts(result),
             )
 
@@ -1441,6 +1504,7 @@ class AgentCore:
 
         # Primary session with checkpoint + retry support
         full_text_parts: list[str] = []
+        thinking_text_parts: list[str] = []
         all_tool_call_records: list[dict] = []
         result_message: Any = None
         _stream_force_chain = False
@@ -1497,6 +1561,8 @@ class AgentCore:
                     else:
                         if chunk["type"] == "text_delta":
                             text_parts_this_attempt.append(chunk.get("text", ""))
+                        elif chunk["type"] == "thinking_delta":
+                            thinking_text_parts.append(chunk.get("text", ""))
                         yield chunk
 
             except Exception as e:
@@ -1510,7 +1576,7 @@ class AgentCore:
                     break
 
                 # ── Stream disconnect: attempt retry ──────────
-                partial_text = e.partial_text if is_stream_error else ""
+                partial_text = getattr(e, "partial_text", "") or ""
                 if partial_text:
                     full_text_parts.append(partial_text)
 
@@ -1533,8 +1599,12 @@ class AgentCore:
                 # リトライ1回目は必ずfresh session（壊れたセッションIDを持ち越さない）
                 if retry_count == 1:
                     try:
-                        from core.execution.agent_sdk import clear_session_ids
-                        clear_session_ids(self.anima_dir)
+                        if mode == "c":
+                            from core.execution.codex_sdk import clear_codex_thread_ids
+                            clear_codex_thread_ids(self.anima_dir)
+                        else:
+                            from core.execution.agent_sdk import clear_session_ids
+                            clear_session_ids(self.anima_dir)
                         logger.info("Session IDs cleared for retry 1 (fresh session forced)")
                     except Exception as e:
                         logger.warning("Failed to clear session IDs for retry: %s", e)
@@ -1677,6 +1747,7 @@ class AgentCore:
         )
 
         full_text = "\n".join(full_text_parts)
+        thinking_text = "".join(thinking_text_parts)
         duration_ms = int((time.monotonic() - start) * 1000)
         logger.info(
             "run_cycle_streaming END trigger=%s duration_ms=%d response_len=%d chained=%s retries=%d",
@@ -1689,6 +1760,7 @@ class AgentCore:
                 trigger=trigger,
                 action="responded",
                 summary=full_text,
+                thinking_text=thinking_text[:10000],
                 duration_ms=duration_ms,
                 context_usage_ratio=tracker.usage_ratio,
                 session_chained=session_chained,

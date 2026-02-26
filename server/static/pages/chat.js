@@ -1,9 +1,11 @@
 // ── Chat Page (Self-Contained) ──────────────
 import { api } from "../modules/api.js";
-import { escapeHtml, renderMarkdown, timeStr, smartTimestamp } from "../modules/state.js";
+import { escapeHtml, renderMarkdown, renderSafeMarkdown, timeStr, smartTimestamp } from "../modules/state.js";
 import { streamChat } from "../shared/chat-stream.js";
 import { createLogger } from "../shared/logger.js";
 import { createImageInput, initLightbox, renderChatImages } from "../shared/image-input.js";
+import { initVoiceUI } from "../modules/voice-ui.js";
+import { updateVoiceAnima } from "../modules/chat.js";
 import { getIcon, getDisplaySummary } from "../shared/activity-types.js";
 
 const logger = createLogger("chat-page");
@@ -25,6 +27,7 @@ let _isChatStreaming = false;
 const _HISTORY_PAGE_SIZE = 50;
 const _TOOL_RESULT_TRUNCATE = 500;
 let _imageInputManager = null;
+let _bustupUrl = null;
 
 // ── DOM refs (local) ───────────────────────
 
@@ -155,6 +158,8 @@ export function destroy() {
   }
   _boundListeners = [];
   if (_chatObserver) { _chatObserver.disconnect(); _chatObserver = null; }
+  _removeBustupOverlay();
+  _bustupUrl = null;
   _container = null;
   _animas = [];
   _selectedAnima = null;
@@ -173,6 +178,15 @@ function _bindEvents() {
       _switchMobileTab(e.target.dataset.panel);
     });
   }
+
+  // Bustup overlay on avatar click
+  _addListener("chatPageAvatar", "click", () => {
+    if (_bustupUrl) _showBustupOverlay();
+  });
+
+  // Escape to dismiss bustup overlay
+  document.addEventListener("keydown", _onBustupEscape);
+  _boundListeners.push({ el: document, event: "keydown", handler: _onBustupEscape });
 
   // Anima selector
   _addListener("chatPageAnimaSelect", "change", (e) => {
@@ -306,6 +320,7 @@ function _renderAnimaDropdown() {
 
 async function _selectAnima(name) {
   _selectedAnima = name;
+  updateVoiceAnima(name);
 
   const select = _$("chatPageAnimaSelect");
   if (select) select.value = name;
@@ -360,9 +375,11 @@ async function _updateAvatar() {
   const container = _$("chatPageAvatar");
   if (!container || !_selectedAnima) {
     if (container) container.innerHTML = "";
+    _bustupUrl = null;
     return;
   }
 
+  _bustupUrl = null;
   const name = _selectedAnima;
   const candidates = ["avatar_bustup.png", "avatar_chibi.png"];
   for (const filename of candidates) {
@@ -370,12 +387,46 @@ async function _updateAvatar() {
     try {
       const resp = await fetch(url, { method: "HEAD" });
       if (resp.ok) {
+        if (filename === "avatar_bustup.png") _bustupUrl = url;
         container.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="anima-avatar-img">`;
+        container.style.cursor = _bustupUrl ? "pointer" : "";
         return;
       }
     } catch { /* try next */ }
   }
+  container.style.cursor = "";
   container.innerHTML = `<div class="anima-avatar-placeholder">${escapeHtml(name.charAt(0).toUpperCase())}</div>`;
+}
+
+// ── Bustup Overlay ──────────────────────────
+
+function _showBustupOverlay() {
+  if (!_bustupUrl || !_selectedAnima) return;
+  _removeBustupOverlay();
+
+  const overlay = document.createElement("div");
+  overlay.className = "bustup-overlay";
+  overlay.id = "chatBustupOverlay";
+  overlay.innerHTML = `<img class="bustup-overlay-img" src="${escapeHtml(_bustupUrl)}" alt="${escapeHtml(_selectedAnima)}">`;
+  overlay.addEventListener("click", _dismissBustupOverlay);
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("visible"));
+}
+
+function _dismissBustupOverlay() {
+  const overlay = document.getElementById("chatBustupOverlay");
+  if (!overlay) return;
+  overlay.classList.remove("visible");
+  overlay.classList.add("hiding");
+  overlay.addEventListener("transitionend", () => overlay.remove(), { once: true });
+}
+
+function _removeBustupOverlay() {
+  document.getElementById("chatBustupOverlay")?.remove();
+}
+
+function _onBustupEscape(e) {
+  if (e.key === "Escape") _dismissBustupOverlay();
 }
 
 // ── Chat Rendering ─────────────────────────
@@ -435,6 +486,12 @@ function _renderChat(scrollToBottom = true) {
       }
       if (m.role === "assistant") {
         const streamClass = m.streaming ? " streaming" : "";
+        let thinkingHtml = "";
+        if (m.thinkingText) {
+          const thSummary = `Thinking (${m.thinkingText.length} chars)`;
+          const thRendered = renderSafeMarkdown(m.thinkingText);
+          thinkingHtml = `<details class="thinking-block"><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(thSummary)}</summary><div class="thinking-content">${thRendered}</div></details>`;
+        }
         let content = "";
         if (m.text) {
           content = renderMarkdown(m.text);
@@ -444,7 +501,7 @@ function _renderChat(scrollToBottom = true) {
         const toolHtml = m.activeTool
           ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(m.activeTool)} \u3092\u5B9F\u884C\u4E2D...</div>`
           : "";
-        return `<div class="chat-bubble assistant${streamClass}">${content}${toolHtml}${tsHtml}</div>`;
+        return `<div class="chat-bubble assistant${streamClass}">${thinkingHtml}${content}${toolHtml}${tsHtml}</div>`;
       }
       const imagesHtml = renderChatImages(m.images);
       const textHtml = m.text ? `<div class="chat-text">${escapeHtml(m.text)}</div>` : "";
@@ -476,6 +533,13 @@ function _renderStreamingBubble(msg) {
   if (!bubble) return;
 
   let html = "";
+
+  if (msg.thinkingText) {
+    const open = msg.thinking ? " open" : "";
+    const summary = msg.thinking ? "Thinking..." : `Thinking (${msg.thinkingText.length} chars)`;
+    const thHtml = renderSafeMarkdown(msg.thinkingText);
+    html += `<details class="thinking-block"${open}><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(summary)}</summary><div class="thinking-content">${thHtml}</div></details>`;
+  }
 
   if (msg.heartbeatRelay) {
     html += '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>ハートビート処理中...</div>';
@@ -729,7 +793,7 @@ async function _sendChat(message) {
 
   const sendTs = new Date().toISOString();
   history.push({ role: "user", text: message, images: displayImages, timestamp: sendTs });
-  const streamingMsg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: sendTs };
+  const streamingMsg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: sendTs, thinkingText: "", thinking: false };
   history.push(streamingMsg);
   _renderChat();
 
@@ -791,6 +855,19 @@ async function _sendChat(message) {
         streamingMsg.heartbeatRelay = false;
         streamingMsg.heartbeatText = "";
         streamingMsg.afterHeartbeatRelay = true;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onThinkingStart: () => {
+        streamingMsg.thinkingText = "";
+        streamingMsg.thinking = true;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onThinkingDelta: (text) => {
+        streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + text;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onThinkingEnd: () => {
+        streamingMsg.thinking = false;
         _renderStreamingBubble(streamingMsg);
       },
       onError: ({ message: errorMsg }) => {
@@ -1243,6 +1320,12 @@ function _initImageInput() {
 
   // Initialize lightbox for image clicks
   initLightbox();
+
+  // Initialize voice input
+  const chatInputFormEl = _$("chatPageForm") || document.querySelector(".chat-input-form");
+  if (chatInputFormEl && _selectedAnima) {
+    initVoiceUI(chatInputFormEl, _selectedAnima);
+  }
 }
 
 async function _loadMemoryContent(tab, file) {

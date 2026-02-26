@@ -322,7 +322,7 @@ class TestKnownModels:
         models = self._get_known_models()
         assert len(models) > 0, "KNOWN_MODELS must not be empty"
 
-        valid_modes = {"S", "A", "B"}
+        valid_modes = {"S", "C", "A", "B"}
         for entry in models:
             assert "name" in entry, f"Missing 'name' in entry: {entry}"
             assert "mode" in entry, f"Missing 'mode' in entry: {entry}"
@@ -330,7 +330,7 @@ class TestKnownModels:
             assert isinstance(entry["name"], str) and entry["name"], \
                 f"'name' must be a non-empty string: {entry}"
             assert entry["mode"] in valid_modes, \
-                f"'mode' must be S, A, or B, got '{entry['mode']}': {entry}"
+                f"'mode' must be S, C, A, or B, got '{entry['mode']}': {entry}"
             assert isinstance(entry["note"], str), \
                 f"'note' must be a string: {entry}"
 

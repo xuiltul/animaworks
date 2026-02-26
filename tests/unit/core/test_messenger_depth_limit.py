@@ -50,6 +50,7 @@ class TestDepthLimitBlocking:
     def test_blocked_returns_error_message(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
         mock_limiter = MagicMock()
+        mock_limiter.check_global_outbound.return_value = True  # pass global first
         mock_limiter.check_depth.return_value = False  # blocked
 
         with (
@@ -66,6 +67,7 @@ class TestDepthLimitBlocking:
     def test_blocked_does_not_write_file(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
         mock_limiter = MagicMock()
+        mock_limiter.check_global_outbound.return_value = True  # pass global first
         mock_limiter.check_depth.return_value = False  # blocked
 
         with (
@@ -85,6 +87,7 @@ class TestDepthLimitAllowed:
     def test_allowed_writes_file(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
         mock_limiter = MagicMock()
+        mock_limiter.check_global_outbound.return_value = True  # pass global first
         mock_limiter.check_depth.return_value = True  # allowed
 
         with (
@@ -148,6 +151,7 @@ class TestDepthLimitBypass:
         """board_mention no longer bypasses depth check (praise-loop-prevention)."""
         messenger = Messenger(shared_dir, "alice")
         mock_limiter = MagicMock()
+        mock_limiter.check_global_outbound.return_value = True  # pass global first
         mock_limiter.check_depth.return_value = False  # blocked
 
         with (
@@ -186,7 +190,9 @@ class TestGlobalOutboundLimitBlocking:
     def test_blocked_returns_error_message(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
         mock_limiter = MagicMock()
-        mock_limiter.check_global_outbound.return_value = False  # blocked
+        mock_limiter.check_global_outbound.return_value = (
+            "GlobalOutboundLimitExceeded: テスト用ブロックメッセージ"
+        )
         mock_limiter.check_depth.return_value = True  # would allow
 
         with (
@@ -203,7 +209,9 @@ class TestGlobalOutboundLimitBlocking:
     def test_blocked_does_not_write_file(self, shared_dir, animas_dir):
         messenger = Messenger(shared_dir, "alice")
         mock_limiter = MagicMock()
-        mock_limiter.check_global_outbound.return_value = False  # blocked
+        mock_limiter.check_global_outbound.return_value = (
+            "GlobalOutboundLimitExceeded: テスト用ブロックメッセージ"
+        )
         mock_limiter.check_depth.return_value = True  # would allow
 
         with (

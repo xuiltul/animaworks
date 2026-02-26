@@ -27,6 +27,32 @@ from core.memory.shortterm import ShortTermMemory
 from core.exceptions import StreamDisconnectedError  # noqa: F401 – re-export
 
 
+# ── Adaptive Thinking helpers ─────────────────────────────────
+
+_ADAPTIVE_MODELS = frozenset({"claude-opus-4-6", "claude-sonnet-4-6"})
+
+
+def is_adaptive_model(model: str) -> bool:
+    """Return True if *model* supports Anthropic adaptive thinking (4.6 series)."""
+    bare = model.split("/")[-1] if "/" in model else model
+    return bare in _ADAPTIVE_MODELS
+
+
+def is_anthropic_claude(model: str) -> bool:
+    """Return True if *model* is an Anthropic Claude model."""
+    bare = model.split("/")[-1] if "/" in model else model
+    return bare.startswith("claude-")
+
+
+def resolve_thinking_effort(model: str, effort: str | None) -> str:
+    """Resolve thinking effort, clamping ``"max"`` to ``"high"`` for non-Opus-4.6."""
+    resolved = effort or "high"
+    if resolved == "max":
+        bare = model.split("/")[-1] if "/" in model else model
+        if bare != "claude-opus-4-6":
+            return "high"
+    return resolved
+
 
 # ── Dynamic tool-record budget ───────────────────────────────
 
@@ -115,22 +141,22 @@ class ExecutionResult:
 class BaseExecutor(ABC):
     """Abstract base for execution engines.
 
-    Each subclass implements one execution mode (S, A, B, or fallback).
+    Each subclass implements one execution mode (S, C, A, B, or fallback).
     Common credential resolution lives here.
 
     Parameter usage by mode:
 
-    +------------------+--------+--------------+---------+----------+
-    | Parameter        | S      | A            | B       | Fallback |
-    |                  | (SDK)  | (LiteLLM)    | (Asst.) | (Anthr.) |
-    +==================+========+==============+=========+==========+
-    | prompt           | YES    | YES          | YES     | YES      |
-    | system_prompt    | YES    | YES          | (own)   | YES      |
-    | tracker          | YES    | YES          | no      | YES      |
-    | shortterm        | no*    | YES          | no      | YES      |
-    +------------------+--------+--------------+---------+----------+
+    +------------------+--------+--------+--------------+---------+----------+
+    | Parameter        | S      | C      | A            | B       | Fallback |
+    |                  | (SDK)  | (Codex)| (LiteLLM)    | (Asst.) | (Anthr.) |
+    +==================+========+========+==============+=========+==========+
+    | prompt           | YES    | YES    | YES          | YES     | YES      |
+    | system_prompt    | YES    | YES    | YES          | (own)   | YES      |
+    | tracker          | YES    | YES    | YES          | no      | YES      |
+    | shortterm        | no*    | no*    | YES          | no      | YES      |
+    +------------------+--------+--------+--------------+---------+----------+
 
-    * S session chaining is managed externally by AgentCore.
+    * S and C session chaining is managed externally by AgentCore.
       A and Fallback handle session chaining inline via
       handle_session_chaining().
     """
@@ -216,6 +242,12 @@ class BaseExecutor(ABC):
 
         elif model.startswith("vertex_ai/"):
             for key in ("vertex_project", "vertex_location", "vertex_credentials"):
+                val = extra.get(key) or os.environ.get(key.upper())
+                if val:
+                    kwargs[key] = val
+
+        elif model.startswith("bedrock/"):
+            for key in ("aws_access_key_id", "aws_secret_access_key", "aws_region_name"):
                 val = extra.get(key) or os.environ.get(key.upper())
                 if val:
                     kwargs[key] = val

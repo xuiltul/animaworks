@@ -393,6 +393,7 @@ class TestReconcileAnimaAssets:
         mock_pipeline.generate_all.assert_called_once_with(
             prompt="1girl, test prompt",
             skip_existing=True,
+            steps=None,
         )
 
     @pytest.mark.asyncio

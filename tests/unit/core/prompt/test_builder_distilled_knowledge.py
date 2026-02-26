@@ -39,6 +39,7 @@ def _make_mock_memory(anima_dir: Path, data_dir: Path) -> MagicMock:
     memory.common_skills_dir = data_dir / "common_skills"
     memory.list_shared_users.return_value = []
     memory.collect_distilled_knowledge.return_value = []
+    memory.collect_distilled_knowledge_separated.return_value = ([], [])
     # read_model_config for context window resolution
     model_cfg = MagicMock()
     model_cfg.model = "claude-sonnet-4-6"
@@ -52,28 +53,32 @@ def _make_mock_memory(anima_dir: Path, data_dir: Path) -> MagicMock:
 
 class TestDistilledEntriesInjected:
     def test_distilled_entries_injected(self, tmp_path: Path, data_dir: Path) -> None:
-        """collect_distilled_knowledge entries appear in system prompt as 'Distilled Knowledge'."""
+        """collect_distilled_knowledge_separated entries appear in system prompt as 'Distilled Knowledge'."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
 
-        # Mock collect_distilled_knowledge to return entries
-        memory.collect_distilled_knowledge.return_value = [
-            {
-                "name": "python-basics",
-                "content": "Python is a dynamically typed language.",
-                "confidence": 0.9,
-                "path": "/tmp/knowledge/python-basics.md",
-            },
-            {
-                "name": "deploy-procedure",
-                "content": "Deploy using docker compose up.",
-                "confidence": 0.7,
-                "path": "/tmp/procedures/deploy-procedure.md",
-            },
-        ]
+        # Mock collect_distilled_knowledge_separated: (procedures_list, knowledge_list)
+        memory.collect_distilled_knowledge_separated.return_value = (
+            [
+                {
+                    "name": "deploy-procedure",
+                    "content": "Deploy using docker compose up.",
+                    "confidence": 0.7,
+                    "path": "/tmp/procedures/deploy-procedure.md",
+                },
+            ],
+            [
+                {
+                    "name": "python-basics",
+                    "content": "Python is a dynamically typed language.",
+                    "confidence": 0.9,
+                    "path": "/tmp/knowledge/python-basics.md",
+                },
+            ],
+        )
 
         result = build_system_prompt(memory)
         assert isinstance(result, BuildResult)
@@ -92,7 +97,7 @@ class TestDistilledEntriesEmpty:
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
-        memory.collect_distilled_knowledge.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         result = build_system_prompt(memory)
         assert "## Distilled Knowledge" not in result
@@ -111,20 +116,23 @@ class TestOverflowFilesInBuildResult:
         small_content = "Critical information."
         large_content = "B" * 900_000  # ~300k tokens, exceeds any 10% budget
 
-        memory.collect_distilled_knowledge.return_value = [
-            {
-                "name": "small-knowledge",
-                "content": small_content,
-                "confidence": 0.95,
-                "path": "/tmp/knowledge/small-knowledge.md",
-            },
-            {
-                "name": "huge-knowledge",
-                "content": large_content,
-                "confidence": 0.1,
-                "path": "/tmp/knowledge/huge-knowledge.md",
-            },
-        ]
+        memory.collect_distilled_knowledge_separated.return_value = (
+            [],
+            [
+                {
+                    "name": "small-knowledge",
+                    "content": small_content,
+                    "confidence": 0.95,
+                    "path": "/tmp/knowledge/small-knowledge.md",
+                },
+                {
+                    "name": "huge-knowledge",
+                    "content": large_content,
+                    "confidence": 0.1,
+                    "path": "/tmp/knowledge/huge-knowledge.md",
+                },
+            ],
+        )
 
         result = build_system_prompt(memory)
         assert isinstance(result, BuildResult)
@@ -140,47 +148,53 @@ class TestAutoComputeWhenNoEntries:
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
-        memory.collect_distilled_knowledge.return_value = [
-            {
-                "name": "auto-computed",
-                "content": "Auto computed knowledge",
-                "confidence": 0.8,
-                "path": "/tmp/knowledge/auto-computed.md",
-            },
-        ]
+        memory.collect_distilled_knowledge_separated.return_value = (
+            [],
+            [
+                {
+                    "name": "auto-computed",
+                    "content": "Auto computed knowledge",
+                    "confidence": 0.8,
+                    "path": "/tmp/knowledge/auto-computed.md",
+                },
+            ],
+        )
 
         result = build_system_prompt(memory)
         assert isinstance(result, BuildResult)
-        # collect_distilled_knowledge should have been called
-        memory.collect_distilled_knowledge.assert_called_once()
+        # collect_distilled_knowledge_separated should have been called
+        memory.collect_distilled_knowledge_separated.assert_called_once()
         assert "auto-computed" in result
         assert "Auto computed knowledge" in result
 
 
 class TestConfidenceSortingInOutput:
     def test_confidence_sorting_in_output(self, tmp_path: Path, data_dir: Path) -> None:
-        """Entries are injected in the order returned by collect_distilled_knowledge."""
+        """Entries are injected in the order returned by collect_distilled_knowledge_separated."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
 
-        # Return entries in confidence-descending order (as collect_distilled_knowledge does)
-        memory.collect_distilled_knowledge.return_value = [
-            {
-                "name": "high-conf",
-                "content": "HIGH_CONFIDENCE_CONTENT",
-                "confidence": 0.9,
-                "path": "/tmp/knowledge/high-conf.md",
-            },
-            {
-                "name": "low-conf",
-                "content": "LOW_CONFIDENCE_CONTENT",
-                "confidence": 0.3,
-                "path": "/tmp/knowledge/low-conf.md",
-            },
-        ]
+        # Return entries in confidence-descending order (as collect_distilled_knowledge_separated does)
+        memory.collect_distilled_knowledge_separated.return_value = (
+            [],
+            [
+                {
+                    "name": "high-conf",
+                    "content": "HIGH_CONFIDENCE_CONTENT",
+                    "confidence": 0.9,
+                    "path": "/tmp/knowledge/high-conf.md",
+                },
+                {
+                    "name": "low-conf",
+                    "content": "LOW_CONFIDENCE_CONTENT",
+                    "confidence": 0.3,
+                    "path": "/tmp/knowledge/low-conf.md",
+                },
+            ],
+        )
 
         result = build_system_prompt(memory)
         # Both should appear

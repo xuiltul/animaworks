@@ -10,6 +10,7 @@ from __future__ import annotations
 
 Each engine implements one execution mode:
   - ``AgentSDKExecutor``  (S): Claude Agent SDK -- full tool access via subprocess
+  - ``CodexSDKExecutor``  (C): Codex SDK -- Codex CLI wrapper for OpenAI models
   - ``LiteLLMExecutor``   (A): LiteLLM + tool_use loop -- any model with tool support
   - ``AssistedExecutor``  (B):  1-shot LLM call -- framework handles memory I/O
   - ``AnthropicFallbackExecutor``: Anthropic SDK direct -- fallback when Agent SDK unavailable
@@ -22,6 +23,12 @@ try:
 except ImportError:  # pragma: no cover
     AgentSDKExecutor = None  # type: ignore[assignment,misc]
 
+# CodexSDKExecutor requires openai_codex_sdk (optional dependency).
+try:
+    from core.execution.codex_sdk import CodexSDKExecutor
+except ImportError:  # pragma: no cover
+    CodexSDKExecutor = None  # type: ignore[assignment,misc]
+
 from core.execution.anthropic_fallback import AnthropicFallbackExecutor
 from core.execution.assisted import AssistedExecutor
 from core.execution.base import BaseExecutor, ExecutionResult
@@ -32,6 +39,7 @@ __all__ = [
     "AnthropicFallbackExecutor",
     "AssistedExecutor",
     "BaseExecutor",
+    "CodexSDKExecutor",
     "ExecutionResult",
     "LiteLLMExecutor",
 ]

@@ -29,8 +29,14 @@ from core.memory.conversation import ConversationMemory, ToolRecord
 from core.memory import MemoryManager
 from core.messenger import InboxItem, Messenger
 from core.paths import load_prompt
-from core.exceptions import AnimaWorksError  # noqa: F401
-from core.schemas import CycleResult, AnimaStatus, VALID_EMOTIONS
+from core.exceptions import (  # noqa: F401
+    AnimaWorksError,
+    ExecutionError,
+    LLMAPIError,
+    ToolError,
+    MemoryIOError,
+)
+from core.schemas import CycleResult, AnimaStatus, ModelConfig, VALID_EMOTIONS
 
 logger = logging.getLogger("animaworks.anima")
 
@@ -154,7 +160,20 @@ class DigitalAnima:
 
         return notifications
 
-    def set_on_lock_released(self, fn: Callable[[], None]) -> None:
+    def reload_config(self) -> dict[str, Any]:
+        """Hot-reload ModelConfig from status.json without process restart."""
+        old = self.model_config
+        new = self.memory.read_model_config()
+        self.model_config = new
+        self.agent.update_model_config(new)
+        changes = [
+            k for k in ModelConfig.model_fields
+            if getattr(old, k) != getattr(new, k)
+        ]
+        logger.info("reload_config: model=%s, changes=%s", new.model, changes)
+        return {"status": "ok", "model": new.model, "changes": changes}
+
+    def set_on_lock_released(self, fn: Callable[[], Any]) -> None:
         """Inject a callback invoked when the anima's lock is released."""
         self._on_lock_released = fn
 
@@ -476,8 +495,9 @@ class DigitalAnima:
                     )
                     conv_memory.save()
 
-                    # Activity log: response sent
-                    self._activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat")
+                    # Activity log: response sent (with thinking text if present)
+                    resp_meta = {"thinking_text": result.thinking_text} if result.thinking_text else None
+                    self._activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat", meta=resp_meta)
 
                     logger.info(
                         "[%s] process_message END duration_ms=%d",
@@ -626,8 +646,10 @@ class DigitalAnima:
                             )
                             conv_memory.save()
 
-                            # Activity log: response sent
-                            self._activity.log("response_sent", content=summary, to_person=from_person, channel="chat")
+                            # Activity log: response sent (with thinking text if present)
+                            thinking_text = cycle_result.get("thinking_text", "")
+                            resp_meta = {"thinking_text": thinking_text} if thinking_text else None
+                            self._activity.log("response_sent", content=summary, to_person=from_person, channel="chat", meta=resp_meta)
 
                             # Finalize streaming journal (deletes the file)
                             journal.finalize(summary=summary[:500])
@@ -643,16 +665,12 @@ class DigitalAnima:
                         yield chunk
                 except Exception as exc:
                     logger.exception("[%s] process_message_stream FAILED", self.name)
-                    # Determine error code from exception type
-                    exc_module = type(exc).__module__ or ""
-                    exc_name = type(exc).__qualname__
-                    if "tool" in exc_module.lower() or "tool" in exc_name.lower():
+                    if isinstance(exc, ToolError):
                         error_code = "TOOL_ERROR"
-                    elif any(
-                        k in exc_module.lower()
-                        for k in ("anthropic", "openai", "litellm", "llm")
-                    ):
+                    elif isinstance(exc, (LLMAPIError, ExecutionError)):
                         error_code = "LLM_ERROR"
+                    elif isinstance(exc, MemoryIOError):
+                        error_code = "MEMORY_ERROR"
                     else:
                         error_code = "STREAM_ERROR"
                     # Activity log: error

@@ -17,6 +17,10 @@ logic so it lives in exactly one place.
 
 import logging
 from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.memory.shortterm import StreamCheckpoint
 
 from core.memory import MemoryManager
 from core.time_utils import now_iso

@@ -41,8 +41,8 @@ def _extract_type_icons_keys(source: str) -> list[str]:
     m = re.search(r"export\s+const\s+TYPE_ICONS\s*=\s*\{(.*?)\};", source, re.DOTALL)
     assert m, "TYPE_ICONS not found in activity-types.js"
     block = m.group(1)
-    # Extract keys (word characters before the colon)
-    keys = re.findall(r"(\w+)\s*:", block)
+    # Extract top-level keys only (key: { ... }, not nested emoji/lucide)
+    keys = re.findall(r"(\w+)\s*:\s*\{", block)
     return keys
 
 

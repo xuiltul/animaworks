@@ -172,8 +172,8 @@ class TestBuilderProcedureInjection:
         assert "| backup | 手順 |" not in prompt
         assert "| 名前 | 種別 | 概要 |" not in prompt
 
-    def test_injected_procedures_always_empty(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """BuildResult.injected_procedures is always an empty list."""
+    def test_injected_procedures_populated_when_in_budget(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """BuildResult.injected_procedures contains procedures injected into the system prompt."""
         (anima_dir / "procedures" / "deploy.md").write_text(
             "---\ndescription: \"「デプロイ」手順\"\n---\n\n# Deploy",
             encoding="utf-8",
@@ -195,7 +195,8 @@ class TestBuilderProcedureInjection:
 
         result = build_system_prompt(memory, message="デプロイをお願いします")
 
-        assert result.injected_procedures == []
+        assert len(result.injected_procedures) == 1
+        assert "deploy" in str(result.injected_procedures[0]).lower()
 
 
 # ── 2-3: Priming Channel D with procedures ──────────────

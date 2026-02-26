@@ -60,6 +60,7 @@ class ConfigReader:
                 speciality=resolved.speciality,
                 resolved_mode=mode,
                 thinking=resolved.thinking,
+                thinking_effort=resolved.thinking_effort,
                 llm_timeout=resolved.llm_timeout,
                 extra_keys=credential.keys or {},
             )

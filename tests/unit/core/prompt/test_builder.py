@@ -22,10 +22,41 @@ from core.prompt.builder import (
 from core.schemas import SkillMeta
 
 
+_MOCK_SECTIONS = (
+    "[group1_header]: # 1. 動作環境と行動ルール\n"
+    "[current_time_label]: **現在時刻**:\n"
+    "[group2_header]: # 2. あなた自身\n"
+    "[group3_header]: # 3. 現在の状況\n"
+    "[current_state_header]: ## 現在の状態\n"
+    "[pending_tasks_header]: ## 未完了タスク\n"
+    "[procedures_header]: ## Procedures（手順書）\n"
+    "[distilled_knowledge_header]: ## Distilled Knowledge\n"
+    "[group4_header]: # 4. 記憶と能力\n"
+    "[group5_header]: # 5. 組織とコミュニケーション\n"
+    "[group6_header]: # 6. メタ設定\n"
+    "[you_marker]:   ← あなた\n"
+    "[common_label]: (共通スキル)\n"
+    "[recent_tool_results_header]: ## Recent Tool Results\n"
+)
+
+_MOCK_FALLBACKS = (
+    "[unset]: (未設定)\n"
+    "[none]: (なし)\n"
+    "[none_top_level]: (なし — あなたがトップです)\n"
+    "[no_other_animas]: (まだ他の社員はいません)\n"
+    "[truncated]: （前半省略）\n"
+    "[summary]: （要約）\n"
+)
+
+
 def _mock_load_prompt_with_builder(default: str = "section"):
     """Return a side_effect function that renders builder/* templates minimally."""
 
     def _mock(name: str, **kwargs) -> str:
+        if name == "builder/sections":
+            return _MOCK_SECTIONS
+        if name == "builder/fallbacks":
+            return _MOCK_FALLBACKS
         if name == "builder/task_in_progress":
             return f"## ⚠️ 進行中タスク\n\n{kwargs.get('state', '')}"
         if name == "builder/task_queue":
@@ -113,8 +144,14 @@ class TestBuildMessagingSection:
     def test_no_animas(self, tmp_path):
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
+
+        def _mock_lp(name: str, **kwargs) -> str:
+            if name == "builder/fallbacks":
+                return _MOCK_FALLBACKS
+            return "messaging section"
+
         with patch("core.tooling.prompt_db.get_prompt_store", return_value=None), \
-             patch("core.prompt.builder.load_prompt", return_value="messaging section") as mock_lp:
+             patch("core.prompt.builder.load_prompt", side_effect=_mock_lp) as mock_lp:
             _build_messaging_section(anima_dir, [])
             call_kwargs = mock_lp.call_args[1]
             assert "(まだ他の社員はいません)" in call_kwargs["animas_line"]
@@ -127,8 +164,8 @@ class TestBuildMessagingSection:
              patch("core.prompt.builder.load_prompt", return_value="s messaging") as mock_lp:
             result = _build_messaging_section(anima_dir, ["bob"], execution_mode="s")
             assert result == "s messaging"
-            mock_lp.assert_called_once()
-            assert mock_lp.call_args[0][0] == "messaging_s"
+            template_names = [c[0][0] for c in mock_lp.call_args_list]
+            assert "messaging_s" in template_names
 
     def test_a_mode_uses_messaging_template(self, tmp_path):
         """A mode should load the standard messaging template."""
@@ -138,8 +175,8 @@ class TestBuildMessagingSection:
              patch("core.prompt.builder.load_prompt", return_value="a messaging") as mock_lp:
             result = _build_messaging_section(anima_dir, ["bob"], execution_mode="a")
             assert result == "a messaging"
-            mock_lp.assert_called_once()
-            assert mock_lp.call_args[0][0] == "messaging"
+            template_names = [c[0][0] for c in mock_lp.call_args_list]
+            assert "messaging" in template_names
 
     def test_default_mode_uses_s_template(self, tmp_path):
         """Default execution_mode should be s, using messaging_s template."""
@@ -148,7 +185,8 @@ class TestBuildMessagingSection:
         with patch("core.tooling.prompt_db.get_prompt_store", return_value=None), \
              patch("core.prompt.builder.load_prompt", return_value="section") as mock_lp:
             _build_messaging_section(anima_dir, ["bob"])
-            assert mock_lp.call_args[0][0] == "messaging_s"
+            template_names = [c[0][0] for c in mock_lp.call_args_list]
+            assert "messaging_s" in template_names
 
 
 # ── build_system_prompt ───────────────────────────────────
@@ -177,8 +215,10 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", return_value="prompt section"):
             result = build_system_prompt(memory)
@@ -208,8 +248,10 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", return_value="prompt"):
             result = build_system_prompt(memory)
@@ -242,8 +284,10 @@ class TestBuildSystemPrompt:
         memory.list_skill_metas.return_value = [SkillMeta(name="coding", description="Write code", path=Path("/tmp/test/skills/coding.md"), is_common=False)]
         memory.list_common_skill_metas.return_value = [SkillMeta(name="deploy", description="Deploy apps", path=Path("/tmp/test/common_skills/deploy.md"), is_common=True)]
         memory.list_procedure_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(memory)
@@ -277,8 +321,10 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", return_value="section"):
             result = build_system_prompt(memory)
@@ -306,8 +352,10 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(memory)
@@ -339,8 +387,10 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(
@@ -373,8 +423,10 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", return_value="section"), \
              patch("core.tooling.guide.build_tools_guide", return_value="CLI guide") as mock_guide:
@@ -523,8 +575,10 @@ class TestHiringContextPlacement:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         # read_model_config returns a ModelConfig with supervisor=None
         from core.schemas import ModelConfig
@@ -576,8 +630,10 @@ class TestHiringContextPlacement:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         result = build_system_prompt(memory)
 

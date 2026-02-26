@@ -85,8 +85,15 @@ async def _reconcile_assets_at_startup(animas_dir: Path) -> None:
     """Background task: generate missing anima assets after startup."""
     try:
         from core.asset_reconciler import reconcile_all_assets
+        from core.config.models import load_config
 
-        results = await reconcile_all_assets(animas_dir)
+        enable_3d = True
+        try:
+            enable_3d = load_config().image_gen.enable_3d
+        except Exception:
+            pass
+
+        results = await reconcile_all_assets(animas_dir, enable_3d=enable_3d)
         if results:
             logger.info("Startup asset reconciliation: %d anima(s) processed", len(results))
     except Exception:
@@ -156,7 +163,13 @@ async def lifespan(app: FastAPI):
 
         async def _reconcile_assets_periodic() -> None:
             try:
-                await reconcile_all_assets(app.state.animas_dir)
+                enable_3d = True
+                try:
+                    from core.config.models import load_config
+                    enable_3d = load_config().image_gen.enable_3d
+                except Exception:
+                    pass
+                await reconcile_all_assets(app.state.animas_dir, enable_3d=enable_3d)
             except asyncio.CancelledError:
                 logger.debug("Asset reconciliation cancelled (shutdown)")
             except Exception:
@@ -360,7 +373,7 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
             return await call_next(request)
 
         # Only protect /api/ and /ws paths
-        if not path.startswith("/api/") and path != "/ws":
+        if not path.startswith("/api/") and path != "/ws" and not path.startswith("/ws/"):
             return await call_next(request)
 
         # Validate session token from cookie

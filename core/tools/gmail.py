@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from email.mime.text import MIMEText
 from email.utils import parseaddr
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 try:
     from google.oauth2.credentials import Credentials
@@ -168,7 +168,7 @@ class GmailClient:
                         "Place credentials.json or set GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET."
                     )
 
-                creds = flow.run_local_server(port=0, open_browser=True)
+                creds = cast(Credentials, flow.run_local_server(port=0, open_browser=True))
                 self.token_path.parent.mkdir(parents=True, exist_ok=True)
                 self.token_path.write_text(creds.to_json())
 

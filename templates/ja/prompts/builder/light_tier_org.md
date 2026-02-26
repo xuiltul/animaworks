@@ -1,0 +1,2 @@
+あなたは{anima_name}です。他のアニマとはsend_messageで通信できます。
+メッセージはsend_messageツールで送信してください。

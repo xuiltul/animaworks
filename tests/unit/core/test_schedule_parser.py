@@ -511,7 +511,7 @@ class TestBlankTemplateFormat:
 
     def test_blank_template_parses_correctly(self):
         """Updated blank template with schedule: lines parses correctly."""
-        content = (Path(__file__).resolve().parents[3] / "templates/anima_templates/_blank/cron.md").read_text()
+        content = (Path(__file__).resolve().parents[3] / "templates/ja/anima_templates/_blank/cron.md").read_text()
         # Replace {name} placeholder
         content = content.replace("{name}", "test")
         tasks = parse_cron_md(content)
@@ -526,7 +526,7 @@ class TestBlankTemplateFormat:
 
     def test_blank_template_schedules_are_valid(self):
         """All schedules in the blank template are valid cron expressions."""
-        content = (Path(__file__).resolve().parents[3] / "templates/anima_templates/_blank/cron.md").read_text()
+        content = (Path(__file__).resolve().parents[3] / "templates/ja/anima_templates/_blank/cron.md").read_text()
         content = content.replace("{name}", "test")
         tasks = parse_cron_md(content)
         for task in tasks:

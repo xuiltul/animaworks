@@ -95,6 +95,7 @@ def mock_memory(anima_dir: Path, tmp_path: Path) -> MagicMock:
     mm.list_shared_users.return_value = []
     mm.load_recent_heartbeat_summary.return_value = ""
     mm.read_model_config.return_value = MagicMock(supervisor=None)
+    mm.collect_distilled_knowledge_separated.return_value = ([], [])
     return mm
 
 
@@ -251,7 +252,17 @@ class TestBuildSystemPromptCurrentTask:
         """When state is 'status: idle', uses the '## 現在の状態' header."""
         mock_memory.read_current_state.return_value = "status: idle"
 
-        with patch("core.prompt.builder.load_prompt", return_value="prompt section"), \
+        _SECTIONS = (
+            "[current_state_header]: ## 現在の状態\n"
+            "[pending_tasks_header]: ## 未完了タスク\n"
+        )
+
+        def _mock_lp(name: str, **kwargs) -> str:
+            if name == "builder/sections":
+                return _SECTIONS
+            return "prompt section"
+
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_lp), \
              patch("core.prompt.builder._discover_other_animas", return_value=[]), \
              patch("core.prompt.builder._build_org_context", return_value=""):
             from core.prompt.builder import build_system_prompt
@@ -264,7 +275,11 @@ class TestBuildSystemPromptCurrentTask:
         """When state is not 'status: idle', uses the '⚠️ 進行中タスク' header."""
         mock_memory.read_current_state.return_value = "status: working\ntask: Fix bug"
 
+        _SECTIONS = "[current_state_header]: ## 現在の状態\n"
+
         def _mock_lp(name: str, **kwargs) -> str:
+            if name == "builder/sections":
+                return _SECTIONS
             if name == "builder/task_in_progress":
                 return (
                     "## ⚠️ 進行中タスク（MUST: 最優先で確認すること）\n\n"

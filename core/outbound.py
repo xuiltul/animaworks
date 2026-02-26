@@ -61,7 +61,7 @@ def resolve_recipient(
     """
     raw = to.strip()
     if not raw:
-        raise ValueError("Recipient name is empty")
+        raise RecipientNotFoundError("Recipient name is empty")
 
     # 1. Exact Anima name match (case-sensitive, fastest path)
     if raw in known_animas:
@@ -109,9 +109,8 @@ def resolve_recipient(
         if anima.lower() == lower:
             return ResolvedRecipient(is_internal=True, name=anima)
 
-    # 7. Unknown recipient
     alias_names = list(config.user_aliases.keys())
-    raise ValueError(
+    raise RecipientNotFoundError(
         f"Unknown recipient '{raw}'. "
         f"Known animas: {sorted(known_animas)}. "
         f"User aliases: {alias_names}. "
@@ -163,7 +162,7 @@ def _resolve_from_alias(
             alias_used=alias,
         )
 
-    raise ValueError(
+    raise RecipientNotFoundError(
         f"User alias '{alias}' has no contact info for any channel. "
         f"Configure slack_user_id or chatwork_room_id in external_messaging.user_aliases."
     )

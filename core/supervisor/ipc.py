@@ -211,6 +211,7 @@ class IPCServer:
                 if not line:
                     continue
 
+                request: IPCRequest | None = None
                 try:
                     request = IPCRequest.from_json(line)
                     logger.debug("IPC request: %s (id=%s)", request.method, request.id)
@@ -218,7 +219,7 @@ class IPCServer:
                     handler_result = await self.request_handler(request)
 
                     # Check if result is an async iterator (streaming)
-                    if hasattr(handler_result, "__aiter__"):
+                    if isinstance(handler_result, AsyncIterator):
                         async for response in handler_result:
                             response_data = (response.to_json() + "\n").encode("utf-8")
                             await self._chunked_write(writer, response_data)
@@ -237,7 +238,7 @@ class IPCServer:
                 except Exception as e:
                     logger.exception("Error handling IPC request: %s", e)
                     error_response = IPCResponse(
-                        id=request.id if "request" in locals() else "unknown",
+                        id=request.id if request is not None else "unknown",
                         error={"code": "HANDLER_ERROR", "message": str(e)}
                     )
                     writer.write((error_response.to_json() + "\n").encode("utf-8"))

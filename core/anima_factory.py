@@ -20,11 +20,88 @@ from core.paths import TEMPLATES_DIR
 
 logger = logging.getLogger("animaworks.anima_factory")
 
-ANIMA_TEMPLATES_DIR = TEMPLATES_DIR / "anima_templates"
-BLANK_TEMPLATE_DIR = ANIMA_TEMPLATES_DIR / "_blank"
-BOOTSTRAP_TEMPLATE = TEMPLATES_DIR / "bootstrap.md"
-ROLES_DIR = TEMPLATES_DIR / "roles"
+
+def _get_anima_templates_dir(locale: str | None = None) -> Path:
+    """Get locale-aware anima_templates directory."""
+    from core.paths import _get_locale
+    loc = locale or _get_locale()
+    d = TEMPLATES_DIR / loc / "anima_templates"
+    if d.exists():
+        return d
+    return TEMPLATES_DIR / "ja" / "anima_templates"
+
+
+def _get_blank_template_dir(locale: str | None = None) -> Path:
+    return _get_anima_templates_dir(locale) / "_blank"
+
+
+def _get_bootstrap_template(locale: str | None = None) -> Path:
+    from core.paths import _get_locale
+    loc = locale or _get_locale()
+    p = TEMPLATES_DIR / loc / "bootstrap.md"
+    if p.exists():
+        return p
+    return TEMPLATES_DIR / "ja" / "bootstrap.md"
+
+
+def _get_roles_dir(locale: str | None = None) -> Path:
+    """Get locale-aware roles directory for .md files."""
+    from core.paths import _get_locale
+    loc = locale or _get_locale()
+    d = TEMPLATES_DIR / loc / "roles"
+    if d.exists():
+        return d
+    return TEMPLATES_DIR / "ja" / "roles"
+
+
+SHARED_ROLES_DIR = TEMPLATES_DIR / "_shared" / "roles"
 VALID_ROLES = frozenset({"engineer", "researcher", "manager", "writer", "ops", "general"})
+
+SECTION_HEADINGS: dict[str, dict[str, str]] = {
+    "ja": {
+        "basic_info": "基本情報",
+        "personality": "人格",
+        "role_guidelines": "役割・行動方針",
+        "permissions": "権限",
+    },
+    "en": {
+        "basic_info": "Basic Information",
+        "personality": "Personality",
+        "role_guidelines": "Role & Guidelines",
+        "permissions": "Permissions",
+    },
+}
+
+FIELD_NAMES: dict[str, dict[str, str]] = {
+    "ja": {
+        "name": "英名",
+        "supervisor": "上司",
+        "model": "モデル",
+        "exec_mode": "実行モード",
+        "credential": "credential",
+    },
+    "en": {
+        "name": "Name",
+        "supervisor": "Supervisor",
+        "model": "Model",
+        "exec_mode": "Execution Mode",
+        "credential": "credential",
+    },
+}
+
+TABLE_SKIP_VALUES: dict[str, set[str]] = {
+    "ja": {"項目", "設定", "---", "------"},
+    "en": {"Field", "Value", "Item", "Setting", "---", "------"},
+}
+
+NONE_VALUES: frozenset[str] = frozenset({
+    "なし", "(なし)", "（なし）", "None", "(None)", "-", "---", "",
+})
+
+# Backward compatibility: patch targets for tests
+BLANK_TEMPLATE_DIR = _get_blank_template_dir()
+BOOTSTRAP_TEMPLATE = _get_bootstrap_template()
+ANIMA_TEMPLATES_DIR = _get_anima_templates_dir()
 
 # Subdirectories every anima needs at runtime
 _RUNTIME_SUBDIRS = [
@@ -40,11 +117,12 @@ _RUNTIME_SUBDIRS = [
 
 def list_anima_templates() -> list[str]:
     """List available anima templates (excluding _blank)."""
-    if not ANIMA_TEMPLATES_DIR.exists():
+    anima_templates_dir = ANIMA_TEMPLATES_DIR
+    if not anima_templates_dir.exists():
         return []
     return [
         d.name
-        for d in sorted(ANIMA_TEMPLATES_DIR.iterdir())
+        for d in sorted(anima_templates_dir.iterdir())
         if d.is_dir() and not d.name.startswith("_")
     ]
 
@@ -107,8 +185,9 @@ def create_blank(animas_dir: Path, name: str) -> Path:
         raise FileExistsError(f"Anima already exists: {name}")
 
     try:
-        if BLANK_TEMPLATE_DIR.exists():
-            shutil.copytree(BLANK_TEMPLATE_DIR, anima_dir)
+        blank_dir = BLANK_TEMPLATE_DIR
+        if blank_dir.exists():
+            shutil.copytree(blank_dir, anima_dir)
             # Replace {name} placeholder in all markdown files
             for md_file in anima_dir.rglob("*.md"):
                 content = md_file.read_text(encoding="utf-8")
@@ -221,72 +300,100 @@ def _extract_name_from_md(content: str) -> str | None:
     Looks for patterns like:
         # Character: Hinata
         # {name}
-        英名 Hinata
+        英名 Hinata  /  Name Hinata
     """
     # Try "# Character: Name" or "# Name"
     m = re.search(r"^#\s+(?:Character:\s*)?(\w+)", content, re.MULTILINE)
     if m:
         return m.group(1).lower()
 
-    # Try "| 英名 | Name |" table row format
-    m = re.search(r"\|\s*英名\s*\|\s*(\w+)\s*\|", content)
-    if m:
-        return m.group(1).lower()
-
-    # Try "英名 Name"
-    m = re.search(r"英名\s+(\w+)", content)
-    if m:
-        return m.group(1).lower()
+    # Try table row format for both ja and en
+    for loc in ("ja", "en"):
+        field = FIELD_NAMES[loc]["name"]
+        m = re.search(rf"\|\s*{re.escape(field)}\s*\|\s*(\w+)\s*\|", content)
+        if m:
+            return m.group(1).lower()
+        m = re.search(rf"{re.escape(field)}\s+(\w+)", content)
+        if m:
+            return m.group(1).lower()
 
     return None
+
+
+def _detect_sheet_locale(content: str) -> str:
+    """Detect character sheet locale by trying section heading matches."""
+    for loc in ("ja", "en"):
+        heading = SECTION_HEADINGS[loc]["basic_info"]
+        if re.search(rf"^##\s+{re.escape(heading)}", content, re.MULTILINE):
+            return loc
+    return "ja"
 
 
 # ── CharacterSheet Helpers ──────────
 
 
 def _parse_character_sheet_info(content: str) -> dict[str, str]:
-    """Parse the markdown table in the '基本情報' section of a character sheet.
+    """Parse the markdown table in the basic info section of a character sheet.
 
-    Expects rows like ``| 英名 | sakura |`` and returns a dict mapping
-    the first column to the second, e.g. ``{"英名": "sakura", ...}``.
+    Supports both Japanese (基本情報) and English (Basic Information) formats.
+    Returns a dict with normalized internal keys (name, supervisor, model, etc.).
 
     Args:
         content: Full markdown content of the character sheet.
 
     Returns:
-        Mapping of item name to value parsed from the table.
+        Mapping of normalized field names to values parsed from the table.
     """
+    locale = _detect_sheet_locale(content)
+    headings = SECTION_HEADINGS[locale]
+    skip_values = (
+        TABLE_SKIP_VALUES.get(locale, set())
+        | TABLE_SKIP_VALUES.get("ja", set())
+        | TABLE_SKIP_VALUES.get("en", set())
+    )
+
     info: dict[str, str] = {}
     in_section = False
     for line in content.splitlines():
-        if re.match(r"^##\s+基本情報", line):
+        if re.match(rf"^##\s+{re.escape(headings['basic_info'])}", line):
             in_section = True
             continue
         if in_section and line.startswith("## "):
             break
         if not in_section:
             continue
-        # Match table data rows (skip header / separator rows)
         m = re.match(r"\|\s*(.+?)\s*\|\s*(.+?)\s*\|", line)
         if m:
             key = m.group(1).strip()
             value = m.group(2).strip()
-            # Skip header row and separator row
-            if key in ("項目", "---", "------") or value in ("設定", "---", "------"):
+            if key in skip_values or value in skip_values:
                 continue
             if set(key) <= {"-", " "} or set(value) <= {"-", " "}:
                 continue
             info[key] = value
-    return info
+
+    # Normalize field names to internal keys for cross-locale consistency
+    fields = FIELD_NAMES[locale]
+    normalized: dict[str, str] = {}
+    reverse_map = {v: k for k, v in fields.items()}
+    for key, value in info.items():
+        internal_key = reverse_map.get(key)
+        if internal_key:
+            normalized[internal_key] = value
+        else:
+            normalized[key] = value
+
+    return normalized
 
 
 def _validate_character_sheet(content: str) -> None:
     """Validate that a character sheet contains all required sections.
 
-    Required sections:
-        - ``## 基本情報``
-        - ``## 人格`` (or ``→ identity.md``)
-        - ``## 役割・行動方針`` (or ``→ injection.md``)
+    Supports both Japanese and English section headings based on detected
+    locale. Required sections:
+        - Basic Information (基本情報 / Basic Information)
+        - Personality (人格 / Personality) or ``→ identity.md``
+        - Role & Guidelines (役割・行動方針 / Role & Guidelines) or ``→ injection.md``
 
     Args:
         content: Full markdown content of the character sheet.
@@ -294,29 +401,30 @@ def _validate_character_sheet(content: str) -> None:
     Raises:
         ValueError: If any required section is missing.
     """
+    locale = _detect_sheet_locale(content)
+    headings = SECTION_HEADINGS[locale]
     missing: list[str] = []
 
-    if not re.search(r"^##\s+基本情報", content, re.MULTILINE):
-        missing.append("基本情報")
+    if not re.search(rf"^##\s+{re.escape(headings['basic_info'])}", content, re.MULTILINE):
+        missing.append(headings["basic_info"])
 
     has_personality = (
-        re.search(r"^##\s+人格", content, re.MULTILINE) is not None
+        re.search(rf"^##\s+{re.escape(headings['personality'])}", content, re.MULTILINE) is not None
         or "→ identity.md" in content
     )
     if not has_personality:
-        missing.append("人格 (or '→ identity.md')")
+        missing.append(f"{headings['personality']} (or '→ identity.md')")
 
     has_injection = (
-        re.search(r"^##\s+役割・行動方針", content, re.MULTILINE) is not None
+        re.search(rf"^##\s+{re.escape(headings['role_guidelines'])}", content, re.MULTILINE) is not None
         or "→ injection.md" in content
     )
     if not has_injection:
-        missing.append("役割・行動方針 (or '→ injection.md')")
+        missing.append(f"{headings['role_guidelines']} (or '→ injection.md')")
 
     if missing:
         raise ValueError(
-            "Character sheet is missing required sections: "
-            + ", ".join(missing)
+            "Character sheet is missing required sections: " + ", ".join(missing)
         )
 
 
@@ -349,8 +457,8 @@ def _create_status_json(
     """Create status.json in *anima_dir* from parsed character-sheet info.
 
     The JSON contains supervisor, role, execution mode, model, and credential
-    extracted from the ``基本情報`` table.  Role defaults from
-    ``templates/roles/<role>/defaults.json`` are merged in for model config
+    extracted from the character sheet info table.  Role defaults from
+    ``templates/_shared/roles/<role>/defaults.json`` are merged in for model config
     fields; character sheet values take priority.
 
     Args:
@@ -362,7 +470,7 @@ def _create_status_json(
     """
     # Load role defaults
     role_defaults: dict[str, Any] = {}
-    defaults_path = ROLES_DIR / role / "defaults.json"
+    defaults_path = SHARED_ROLES_DIR / role / "defaults.json"
     if defaults_path.is_file():
         try:
             role_defaults = json.loads(defaults_path.read_text(encoding="utf-8"))
@@ -372,8 +480,8 @@ def _create_status_json(
     if supervisor_override:
         supervisor = supervisor_override
     else:
-        supervisor_raw = info.get("上司", "")
-        supervisor = "" if supervisor_raw in ("(なし)", "なし", "-", "") else supervisor_raw
+        supervisor_raw = info.get("supervisor", "")
+        supervisor = "" if supervisor_raw in NONE_VALUES else supervisor_raw
 
     status: dict[str, object] = {
         "supervisor": supervisor,
@@ -383,7 +491,7 @@ def _create_status_json(
     # Only write execution_mode when explicitly specified in the character sheet.
     # When omitted, resolve_execution_mode() falls through to
     # DEFAULT_MODEL_MODE_PATTERNS (e.g. "claude-*" → "S").
-    explicit_mode = info.get("実行モード")
+    explicit_mode = info.get("exec_mode")
     if explicit_mode:
         status["execution_mode"] = explicit_mode
 
@@ -394,7 +502,7 @@ def _create_status_json(
             status[key] = role_defaults[key]
 
     # Character sheet model/credential override role defaults if specified
-    sheet_model = info.get("モデル", "")
+    sheet_model = info.get("model", "")
     if sheet_model:
         status["model"] = sheet_model
     sheet_cred = info.get("credential", "")
@@ -442,36 +550,33 @@ def _apply_defaults_from_sheet(anima_dir: Path, md_content: str) -> None:
     are left untouched.
 
     Sections that **are** present overwrite the corresponding file:
-        - ``## 人格``          → ``identity.md``
-        - ``## 役割・行動方針`` → ``injection.md``
-        - ``## 権限``          → ``permissions.md``
+        - Personality (人格 / Personality)          → ``identity.md``
+        - Role & Guidelines (役割・行動方針 / …)   → ``injection.md``
+        - Permissions (権限 / Permissions)         → ``permissions.md``
 
     Args:
         anima_dir: Target anima directory (already populated by create_blank).
         md_content: Full markdown content of the character sheet.
     """
+    locale = _detect_sheet_locale(md_content)
+    headings = SECTION_HEADINGS[locale]
+
     # Identity
-    personality = _extract_section_content(md_content, "人格")
+    personality = _extract_section_content(md_content, headings["personality"])
     if personality:
-        (anima_dir / "identity.md").write_text(
-            personality + "\n", encoding="utf-8"
-        )
+        (anima_dir / "identity.md").write_text(personality + "\n", encoding="utf-8")
         logger.debug("Wrote identity.md from character sheet for %s", anima_dir.name)
 
     # Injection
-    injection = _extract_section_content(md_content, "役割・行動方針")
+    injection = _extract_section_content(md_content, headings["role_guidelines"])
     if injection:
-        (anima_dir / "injection.md").write_text(
-            injection + "\n", encoding="utf-8"
-        )
+        (anima_dir / "injection.md").write_text(injection + "\n", encoding="utf-8")
         logger.debug("Wrote injection.md from character sheet for %s", anima_dir.name)
 
     # Permissions
-    permissions = _extract_section_content(md_content, "権限")
+    permissions = _extract_section_content(md_content, headings["permissions"])
     if permissions:
-        (anima_dir / "permissions.md").write_text(
-            permissions + "\n", encoding="utf-8"
-        )
+        (anima_dir / "permissions.md").write_text(permissions + "\n", encoding="utf-8")
         logger.debug("Wrote permissions.md from character sheet for %s", anima_dir.name)
 
 
@@ -489,7 +594,7 @@ def _apply_role_defaults(anima_dir: Path, role: str) -> None:
         logger.warning("Unknown role '%s', falling back to 'general'", role)
         role = "general"
 
-    role_dir = ROLES_DIR / role
+    role_dir = _get_roles_dir() / role
     if not role_dir.exists():
         logger.warning("Role template directory not found: %s", role_dir)
         return
@@ -552,7 +657,7 @@ def _should_create_bootstrap(anima_dir: Path) -> bool:
         return True
 
     content = identity.read_text(encoding="utf-8")
-    if not content.strip() or "未定義" in content:
+    if not content.strip() or "未定義" in content or "undefined" in content.lower():
         return True
 
     if (anima_dir / "character_sheet.md").exists():
@@ -567,8 +672,9 @@ def _place_bootstrap(anima_dir: Path) -> None:
         logger.debug("Skipping bootstrap for %s (identity already defined)", anima_dir)
         return
 
-    if BOOTSTRAP_TEMPLATE.exists():
-        shutil.copy2(BOOTSTRAP_TEMPLATE, anima_dir / "bootstrap.md")
+    bootstrap_tpl = BOOTSTRAP_TEMPLATE
+    if bootstrap_tpl.exists():
+        shutil.copy2(bootstrap_tpl, anima_dir / "bootstrap.md")
         logger.debug("Placed bootstrap.md in %s", anima_dir)
 
 

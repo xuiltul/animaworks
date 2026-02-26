@@ -142,15 +142,16 @@ class TestCollectDistilledKnowledge:
         assert result[0]["source_type"] == "procedures"
 
     def test_sorted_by_confidence_descending(self, memory, anima_dir):
-        """Results are sorted by confidence descending."""
+        """Results: procedures first (each sorted by confidence), then knowledge (sorted)."""
         _write_knowledge(anima_dir, "low", "Low conf", 0.3)
         _write_knowledge(anima_dir, "high", "High conf", 0.9)
         _write_procedure(anima_dir, "mid", "Mid conf", 0.6)
 
         result = memory.collect_distilled_knowledge()
 
+        # collect_distilled_knowledge returns procedures + knowledge; each list sorted by confidence
         confidences = [e["confidence"] for e in result]
-        assert confidences == [0.9, 0.6, 0.3]
+        assert confidences == [0.6, 0.9, 0.3]
 
     def test_default_confidence_when_missing(self, memory, anima_dir):
         """Files without confidence metadata get default 0.5."""
@@ -241,7 +242,7 @@ class TestBuilderKnowledgeInjection:
         assert "huge" in result.injected_knowledge_files or "huge" in result.overflow_files
 
     def test_confidence_ordering_in_injection(self, memory, anima_dir, data_dir):
-        """Higher confidence files are injected first."""
+        """Procedures injected first, then knowledge by confidence. Both tracked separately."""
         _write_knowledge(anima_dir, "low-conf", "Low", 0.3)
         _write_knowledge(anima_dir, "high-conf", "High", 0.9)
         _write_procedure(anima_dir, "mid-conf", "Mid", 0.6)
@@ -250,15 +251,16 @@ class TestBuilderKnowledgeInjection:
 
         result = build_system_prompt(memory)
 
-        # All should fit (small content)
-        assert len(result.injected_knowledge_files) == 3
+        # Procedures in injected_procedures, knowledge in injected_knowledge_files
+        assert len(result.injected_procedures) == 1
+        assert len(result.injected_knowledge_files) == 2
         assert result.overflow_files == []
-        # Check ordering in the prompt
+        # Check ordering: procedures first, then knowledge (high-conf before low-conf)
         prompt = result.system_prompt
-        high_pos = prompt.index("### high-conf")
         mid_pos = prompt.index("### mid-conf")
+        high_pos = prompt.index("### high-conf")
         low_pos = prompt.index("### low-conf")
-        assert high_pos < mid_pos < low_pos
+        assert mid_pos < high_pos < low_pos
 
 
 # ── Priming: Conditional Channel C ───────────────────────

@@ -17,7 +17,7 @@ import re
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from core.schemas import TaskEntry
 from core.time_utils import ensure_aware, now_iso, now_jst
@@ -126,7 +126,7 @@ class TaskQueueManager:
     def add_task(
         self,
         *,
-        source: str,
+        source: Literal["human", "anima"],
         original_instruction: str,
         assignee: str,
         summary: str,

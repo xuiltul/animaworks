@@ -214,8 +214,12 @@ class TestModeBSkillInjection:
 
         assert len(captured_system) >= 1
         sys_prompt = captured_system[0]
-        # Personal skills appear under memory guide section (スキル: ...)
-        assert "スキル:" in sys_prompt
+        # Personal skills appear in system prompt (memory guide or Priming)
+        assert (
+            "スキルと手順書" in sys_prompt
+            or "スキル:" in sys_prompt
+            or "あなたが持っているスキル" in sys_prompt
+        )
         assert "test_skill" in sys_prompt
 
     async def test_common_skill_in_system_prompt(self, make_agent_core, data_dir):

@@ -20,7 +20,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from typing import TYPE_CHECKING
+
 from core.time_utils import ensure_aware, now_iso
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger("animaworks.rag.indexer")
 
@@ -59,7 +64,7 @@ class MemoryIndexer:
         embedding_model_name: str | None = None,
         *,
         collection_prefix: str | None = None,
-        embedding_model: object | None = None,
+        embedding_model: SentenceTransformer | None = None,
     ) -> None:
         """Initialize indexer.
 
@@ -98,7 +103,7 @@ class MemoryIndexer:
 
         self.embedding_model = get_embedding_model(self._embedding_model_name_override)
 
-    def _load_index_meta(self) -> dict[str, dict[str, str]]:
+    def _load_index_meta(self) -> dict[str, dict[str, str | int]]:
         """Load index metadata (file hashes and timestamps)."""
         if not self.meta_path.exists():
             return {}

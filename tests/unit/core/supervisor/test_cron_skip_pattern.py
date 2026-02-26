@@ -23,6 +23,7 @@ def _make_scheduler_mgr() -> SchedulerManager:
     mock_anima = MagicMock()
     mock_anima.memory = MagicMock()
     mock_anima.run_cron_command = AsyncMock()
+    mock_anima.run_cron_task = AsyncMock()
     mock_anima.run_heartbeat = AsyncMock()
 
     mgr = SchedulerManager(
@@ -71,8 +72,8 @@ class TestSkipPatternFiltering:
 
         await mgr._run_cron_task(task)
 
-        # heartbeat should NOT be triggered
-        mgr._anima.memory.update_pending.assert_not_called()
+        # heartbeat/cron LLM should NOT be triggered
+        mgr._anima.run_cron_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_non_empty_array_does_not_match_skip_pattern(self):
@@ -88,11 +89,10 @@ class TestSkipPatternFiltering:
 
         task = _make_command_task(skip_pattern=r"^\[\s*\]$")
 
-        with patch.object(mgr, "heartbeat_tick", new_callable=AsyncMock):
-            await mgr._run_cron_task(task)
+        await mgr._run_cron_task(task)
 
-        # heartbeat SHOULD be triggered
-        mgr._anima.memory.update_pending.assert_called_once()
+        # cron LLM follow-up SHOULD be triggered
+        mgr._anima.run_cron_task.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_no_skip_pattern_triggers_heartbeat(self):
@@ -108,11 +108,10 @@ class TestSkipPatternFiltering:
 
         task = _make_command_task(skip_pattern=None)
 
-        with patch.object(mgr, "heartbeat_tick", new_callable=AsyncMock):
-            await mgr._run_cron_task(task)
+        await mgr._run_cron_task(task)
 
-        # Without skip_pattern, even '[]' triggers heartbeat
-        mgr._anima.memory.update_pending.assert_called_once()
+        # Without skip_pattern, even '[]' triggers cron LLM follow-up
+        mgr._anima.run_cron_task.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_invalid_regex_continues_to_heartbeat(self, caplog):
@@ -130,12 +129,11 @@ class TestSkipPatternFiltering:
 
         task = _make_command_task(skip_pattern="[unterminated")
 
-        with patch.object(mgr, "heartbeat_tick", new_callable=AsyncMock), \
-             caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING):
             await mgr._run_cron_task(task)
 
-        # Should still trigger heartbeat despite invalid pattern
-        mgr._anima.memory.update_pending.assert_called_once()
+        # Should still trigger cron LLM despite invalid pattern
+        mgr._anima.run_cron_task.assert_called_once()
         assert "Invalid skip_pattern" in caplog.text
 
     @pytest.mark.asyncio
@@ -154,7 +152,7 @@ class TestSkipPatternFiltering:
 
         await mgr._run_cron_task(task)
 
-        mgr._anima.memory.update_pending.assert_not_called()
+        mgr._anima.run_cron_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_trigger_heartbeat_false_suppresses_heartbeat(self):
@@ -172,8 +170,8 @@ class TestSkipPatternFiltering:
 
         await mgr._run_cron_task(task)
 
-        # heartbeat should NOT be triggered
-        mgr._anima.memory.update_pending.assert_not_called()
+        # cron LLM follow-up should NOT be triggered
+        mgr._anima.run_cron_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_trigger_heartbeat_false_skips_pending_write(self):
@@ -191,7 +189,7 @@ class TestSkipPatternFiltering:
 
         await mgr._run_cron_task(task)
 
-        mgr._anima.memory.update_pending.assert_not_called()
+        mgr._anima.run_cron_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_trigger_heartbeat_true_allows_heartbeat(self):
@@ -207,10 +205,9 @@ class TestSkipPatternFiltering:
 
         task = _make_command_task(trigger_heartbeat=True)
 
-        with patch.object(mgr, "heartbeat_tick", new_callable=AsyncMock):
-            await mgr._run_cron_task(task)
+        await mgr._run_cron_task(task)
 
-        mgr._anima.memory.update_pending.assert_called_once()
+        mgr._anima.run_cron_task.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_trigger_heartbeat_false_takes_precedence_over_skip_pattern(self):
@@ -232,8 +229,8 @@ class TestSkipPatternFiltering:
         await mgr._run_cron_task(task)
 
         # Despite stdout not matching skip_pattern,
-        # trigger_heartbeat=False suppresses heartbeat
-        mgr._anima.memory.update_pending.assert_not_called()
+        # trigger_heartbeat=False suppresses cron LLM follow-up
+        mgr._anima.run_cron_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_nonzero_exit_code_no_heartbeat(self):
@@ -251,4 +248,4 @@ class TestSkipPatternFiltering:
 
         await mgr._run_cron_task(task)
 
-        mgr._anima.memory.update_pending.assert_not_called()
+        mgr._anima.run_cron_task.assert_not_called()

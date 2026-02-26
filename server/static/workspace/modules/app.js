@@ -9,7 +9,7 @@ import { initAnima, loadAnimas, selectAnima, renderAnimaSelector, renderStatus }
 import { initMemory, loadMemoryTab } from "./memory.js";
 import { initSession, loadSessions } from "./session.js";
 import { escapeHtml, renderSimpleMarkdown, smartTimestamp } from "./utils.js";
-import { initOffice, getDesks, highlightDesk, setCharacterClickHandler, getScene, registerClickTarget, setCharacterUpdateHook, getObstacles, getFloorDimensions } from "./office3d.js";
+import { initOffice, disposeOffice, getDesks, highlightDesk, setCharacterClickHandler, getScene, registerClickTarget, setCharacterUpdateHook, getObstacles, getFloorDimensions } from "./office3d.js";
 import { initCharacters, createCharacter, removeCharacter, updateCharacterState, updateAllCharacters, getCharacterGroup, getCharacterHome, setAppearance } from "./character.js";
 import { initBustup, setCharacter, setExpression, setTalking, onClick as onBustupClick, setLive2dAppearance } from "./live2d.js";
 import { createNavGrid } from "./navigation.js";
@@ -23,7 +23,9 @@ import { streamChat, fetchActiveStream, fetchStreamProgress } from "../../shared
 import { SwipeHandler } from "../../modules/touch.js";
 import { createLogger } from "../../shared/logger.js";
 import { createImageInput, initLightbox, renderChatImages } from "../../shared/image-input.js";
+import { initVoiceUI, destroyVoiceUI } from "../../modules/voice-ui.js";
 import { getIcon } from "../../shared/activity-types.js";
+import { initOrgDashboard, disposeOrgDashboard, updateAnimaStatus, addActivityItem } from "./org-dashboard.js";
 
 const logger = createLogger("ws-app");
 
@@ -67,6 +69,8 @@ function cacheDom() {
   // 3D Office
   dom.officePanel = document.getElementById("wsOfficePanel");
   dom.officeCanvas = document.getElementById("wsOfficeCanvas");
+  dom.orgPanel = document.getElementById("wsOrgPanel");
+  dom.viewToggle = document.getElementById("wsViewToggle");
 
   // Conversation overlay (3-column)
   dom.convOverlay = document.getElementById("wsConvOverlay");
@@ -108,6 +112,7 @@ function addActivity(type, animaName, summary, isoTs) {
     <span class="activity-summary">${escapeHtml(summary)}</span>`;
 
   dom.paneActivity.prepend(entry);
+  if (window.lucide) lucide.createIcons({ nodes: [entry] });
 
   // Cap at 200 entries
   while (dom.paneActivity.children.length > 200) {
@@ -256,6 +261,57 @@ async function initOfficeIfNeeded() {
   }
 }
 
+// ── View Switching ──────────────────────
+
+let _currentView = null; // '3d' | 'org'
+
+function getDefaultView() {
+  const theme = localStorage.getItem("aw-theme") || "default";
+  return theme === "business" ? "org" : "3d";
+}
+
+function getCurrentView() {
+  return localStorage.getItem("aw-workspace-view") || getDefaultView();
+}
+
+async function switchView(view) {
+  if (_currentView === view) return;
+  _currentView = view;
+  localStorage.setItem("aw-workspace-view", view);
+
+  if (view === "org") {
+    // Dispose 3D resources before switching
+    disposeOffice();
+    setState({ officeInitialized: false });
+
+    dom.officePanel.classList.add("hidden");
+    dom.orgPanel.classList.remove("hidden");
+
+    const { animas } = getState();
+    await initOrgDashboard(dom.orgPanel, animas, {
+      onNodeClick: (name) => selectAnima(name),
+    });
+  } else {
+    // Dispose org dashboard before switching
+    dom.orgPanel.classList.add("hidden");
+    dom.officePanel.classList.remove("hidden");
+    disposeOrgDashboard();
+
+    await initOfficeIfNeeded();
+  }
+
+  updateViewToggle();
+}
+
+function updateViewToggle() {
+  if (!dom.viewToggle) return;
+  const is3d = _currentView === "3d";
+  dom.viewToggle.querySelector(".ws-view-toggle-3d").style.fontWeight = is3d ? "700" : "400";
+  dom.viewToggle.querySelector(".ws-view-toggle-org").style.fontWeight = is3d ? "400" : "700";
+}
+
+// ── Status Mapping ──────────────────────
+
 function mapAnimaStatusToAnim(status) {
   if (!status) return "idle";
   const s = typeof status === "object" ? status.state || status.status || "idle" : String(status);
@@ -286,6 +342,7 @@ let _scrollObserver = null;
 async function openConversation(animaName) {
   if (!dom.convOverlay) return;
 
+  destroyVoiceUI();
   setState({ conversationOpen: true, conversationAnima: animaName });
 
   // Show conversation overlay on top of office
@@ -321,6 +378,12 @@ async function openConversation(animaName) {
 
   // Focus input
   dom.convInput?.focus();
+
+  // Initialize voice input for conversation
+  const convInputArea = document.querySelector(".ws-conv-input-area");
+  if (convInputArea && animaName) {
+    initVoiceUI(convInputArea, animaName, _buildVoiceChatCallbacks(animaName));
+  }
 }
 
 function closeConversation() {
@@ -357,6 +420,9 @@ function closeConversation() {
     convStreamController.abort();
     convStreamController = null;
   }
+
+  // Destroy voice UI
+  destroyVoiceUI();
 }
 
 // ── Greeting on Character Click ──────────────────────
@@ -549,6 +615,12 @@ function renderConvBubble(msg) {
     return `<div class="chat-bubble user">${imagesHtml}${textHtml}${tsHtml}</div>`;
   }
   const streamClass = msg.streaming ? " streaming" : "";
+  let thinkingHtml = "";
+  if (msg.thinkingText) {
+    const thSummary = `Thinking (${msg.thinkingText.length} chars)`;
+    const thRendered = renderSimpleMarkdown(msg.thinkingText);
+    thinkingHtml = `<details class="thinking-block"><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(thSummary)}</summary><div class="thinking-content">${thRendered}</div></details>`;
+  }
   let content = "";
   if (msg.text) {
     content = renderSimpleMarkdown(msg.text);
@@ -558,7 +630,7 @@ function renderConvBubble(msg) {
   const toolHtml = msg.activeTool
     ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(msg.activeTool)} を実行中...</div>`
     : "";
-  return `<div class="chat-bubble assistant${streamClass}">${content}${toolHtml}${tsHtml}</div>`;
+  return `<div class="chat-bubble assistant${streamClass}">${thinkingHtml}${content}${toolHtml}${tsHtml}</div>`;
 }
 
 function renderConvMessages() {
@@ -704,6 +776,19 @@ async function resumeConversationStream(animaName) {
         setExpression("neutral");
         updateStreamingBubble(streamingMsg);
       },
+      onThinkingStart: () => {
+        streamingMsg.thinkingText = "";
+        streamingMsg.thinking = true;
+        updateStreamingBubble(streamingMsg);
+      },
+      onThinkingDelta: (text) => {
+        streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + text;
+        scheduleStreamingUpdate(streamingMsg);
+      },
+      onThinkingEnd: () => {
+        streamingMsg.thinking = false;
+        updateStreamingBubble(streamingMsg);
+      },
       onDone: ({ summary, emotion }) => {
         if (summary) streamingMsg.text = summary;
         if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
@@ -827,7 +912,7 @@ async function sendConversationMessage() {
   const { chatMessages } = getState();
   const sendTs = new Date().toISOString();
   const userMsg = { role: "user", text: text || "", images: displayImages, timestamp: sendTs };
-  const streamingMsg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: sendTs };
+  const streamingMsg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: sendTs, thinkingText: "", thinking: false };
   setState({ chatMessages: [...chatMessages, userMsg, streamingMsg] });
   renderConvMessages();
 
@@ -883,6 +968,19 @@ async function sendConversationMessage() {
         streamingMsg.heartbeatText = "";
         streamingMsg.afterHeartbeatRelay = true;
         scheduleStreamingUpdate(streamingMsg);
+      },
+      onThinkingStart: () => {
+        streamingMsg.thinkingText = "";
+        streamingMsg.thinking = true;
+        updateStreamingBubble(streamingMsg);
+      },
+      onThinkingDelta: (text) => {
+        streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + text;
+        scheduleStreamingUpdate(streamingMsg);
+      },
+      onThinkingEnd: () => {
+        streamingMsg.thinking = false;
+        updateStreamingBubble(streamingMsg);
       },
       onDone: ({ summary, emotion }) => {
         // Use clean summary (emotion tag already stripped server-side)
@@ -948,6 +1046,12 @@ function updateStreamingBubble(msg) {
   if (!bubble) return;
 
   let html = "";
+  if (msg.thinkingText) {
+    const open = msg.thinking ? " open" : "";
+    const summary = msg.thinking ? "Thinking..." : `Thinking (${msg.thinkingText.length} chars)`;
+    const thinkingRendered = renderSimpleMarkdown(msg.thinkingText);
+    html += `<details class="thinking-block"${open}><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(summary)}</summary><div class="thinking-content">${thinkingRendered}</div></details>`;
+  }
   if (msg.heartbeatRelay) {
     html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>ハートビート処理中...</div>';
     if (msg.heartbeatText) {
@@ -965,6 +1069,32 @@ function updateStreamingBubble(msg) {
   }
   bubble.innerHTML = html;
   dom.convMessages.scrollTop = dom.convMessages.scrollHeight;
+}
+
+function _buildVoiceChatCallbacks(animaName) {
+  return {
+    addUserBubble(text) {
+      const { chatMessages } = getState();
+      const ts = new Date().toISOString();
+      setState({ chatMessages: [...chatMessages, { role: "user", text, timestamp: ts }] });
+      renderConvMessages();
+    },
+    addStreamingBubble() {
+      const { chatMessages } = getState();
+      const ts = new Date().toISOString();
+      const msg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: ts, thinkingText: "", thinking: false };
+      setState({ chatMessages: [...chatMessages, msg] });
+      renderConvMessages();
+      return msg;
+    },
+    updateStreamingBubble(msg) {
+      updateStreamingBubble(msg);
+    },
+    finalizeStreamingBubble(msg) {
+      setState({ chatMessages: [...getState().chatMessages] });
+      renderConvMessages();
+    },
+  };
 }
 
 // ── Board Tab ──────────────────────
@@ -1213,6 +1343,9 @@ function setupWebSocket() {
       lastAnimaStatus[data.name] = data.status;
       addActivity("system", data.name, `Status: ${data.status}`);
     }
+    if (_currentView === "org") {
+      updateAnimaStatus(data.name, data.status || data);
+    }
   }));
 
   // ── anima.interaction — inter-anima messaging visualization ──
@@ -1237,6 +1370,14 @@ function setupWebSocket() {
         to_person: data.to_person,
       },
     });
+    if (_currentView === "org") {
+      addActivityItem({
+        ts: data.ts || new Date().toISOString(),
+        type: "anima.interaction",
+        from: data.from_person || data.from || "",
+        summary: data.summary || "",
+      });
+    }
   }));
 
   wsUnsubscribers.push(onEvent("anima.heartbeat", (data) => {
@@ -1252,6 +1393,14 @@ function setupWebSocket() {
       ts: data.ts || localISOString(),
       summary: data.summary || "heartbeat completed",
     });
+    if (_currentView === "org") {
+      addActivityItem({
+        ts: data.ts || new Date().toISOString(),
+        type: "anima.heartbeat",
+        from: data.name || "",
+        summary: data.summary || "heartbeat completed",
+      });
+    }
   }));
 
   wsUnsubscribers.push(onEvent("anima.cron", (data) => {
@@ -1263,6 +1412,14 @@ function setupWebSocket() {
       ts: data.ts || localISOString(),
       summary: data.summary || `cron: ${data.task || ""}`,
     });
+    if (_currentView === "org") {
+      addActivityItem({
+        ts: data.ts || new Date().toISOString(),
+        type: "anima.cron",
+        from: data.name || "",
+        summary: data.summary || `cron: ${data.task || ""}`,
+      });
+    }
   }));
 
   // ── board.post — shared channel message ──
@@ -1298,6 +1455,14 @@ function setupWebSocket() {
         source: data.source || "",
       },
     });
+    if (_currentView === "org") {
+      addActivityItem({
+        ts: data.ts || new Date().toISOString(),
+        type: "board.post",
+        from,
+        summary: `[#${channel}] ${text}`,
+      });
+    }
   }));
 
   // ── anima.proactive_message — autonomous outbound messages ──
@@ -1573,8 +1738,8 @@ async function startDashboard() {
   if (dashboardInitialized) {
     await loadAnimas();
     await loadSystemStatus();
-    // Re-init office if needed
-    initOfficeIfNeeded();
+    const initialView = getCurrentView();
+    await switchView(initialView);
     return;
   }
   dashboardInitialized = true;
@@ -1671,8 +1836,17 @@ async function startDashboard() {
   // Activate default right tab
   activateRightTab("state");
 
-  // Auto-init 3D office (always visible now)
-  initOfficeIfNeeded();
+  // View switching: 3D office or org dashboard
+  const initialView = getCurrentView();
+  await switchView(initialView);
+
+  // View toggle button
+  if (dom.viewToggle) {
+    dom.viewToggle.addEventListener("click", () => {
+      const next = _currentView === "3d" ? "org" : "3d";
+      switchView(next);
+    });
+  }
 
   // Viewport & mobile responsive features
   initViewportHeightFallback();
@@ -1700,7 +1874,13 @@ async function onAnimaSelected(name) {
 
 // ── Main Init ──────────────────────
 
+function applyTheme() {
+  const theme = localStorage.getItem("aw-theme") || "default";
+  document.body.classList.toggle("theme-business", theme === "business");
+}
+
 export function init() {
+  applyTheme();
   cacheDom();
 
   const savedUser = getCurrentUser();

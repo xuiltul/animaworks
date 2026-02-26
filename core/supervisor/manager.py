@@ -427,18 +427,17 @@ class ProcessSupervisor:
             Response result dict
 
         Raises:
-            KeyError: If anima not found
-            RuntimeError: If process not running
-            ValueError: If response contains error
+            AnimaNotFoundError: If anima not found
+            IPCConnectionError: If response contains error
         """
         handle = self.processes.get(anima_name)
         if not handle:
-            raise KeyError(f"Anima not found: {anima_name}")
+            raise AnimaNotFoundError(f"Anima not found: {anima_name}")
 
         response = await handle.send_request(method, params, timeout)
 
         if response.error:
-            raise ValueError(
+            raise IPCConnectionError(
                 f"Request failed: {response.error.get('message', 'Unknown error')}"
             )
 
@@ -465,18 +464,18 @@ class ProcessSupervisor:
             IPCResponse objects (chunks and final result)
 
         Raises:
-            KeyError: If anima not found
-            RuntimeError: If process not running
+            AnimaNotFoundError: If anima not found
+            IPCConnectionError: If response contains error
         """
         handle = self.processes.get(anima_name)
         if not handle:
-            raise KeyError(f"Anima not found: {anima_name}")
+            raise AnimaNotFoundError(f"Anima not found: {anima_name}")
 
         async for response in handle.send_request_stream(
             method, params, timeout
         ):
             if response.error:
-                raise ValueError(
+                raise IPCConnectionError(
                     f"Stream error: {response.error.get('message', 'Unknown error')}"
                 )
             yield response
@@ -937,8 +936,17 @@ class ProcessSupervisor:
         """Check for and generate missing anima assets during reconciliation."""
         try:
             from core.asset_reconciler import find_animas_with_missing_assets, reconcile_anima_assets
+            from core.config.models import load_config
 
-            incomplete = find_animas_with_missing_assets(self.animas_dir)
+            enable_3d = True
+            try:
+                enable_3d = load_config().image_gen.enable_3d
+            except Exception:
+                pass
+
+            incomplete = find_animas_with_missing_assets(
+                self.animas_dir, enable_3d=enable_3d,
+            )
             if not incomplete:
                 return
 
@@ -948,7 +956,9 @@ class ProcessSupervisor:
             )
             for anima_name, _check in incomplete:
                 anima_dir = self.animas_dir / anima_name
-                result = await reconcile_anima_assets(anima_dir)
+                result = await reconcile_anima_assets(
+                    anima_dir, enable_3d=enable_3d,
+                )
                 if not result.get("skipped"):
                     await self._broadcast_event(
                         "anima.assets_updated",

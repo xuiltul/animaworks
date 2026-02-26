@@ -217,14 +217,17 @@ class TestCascadeLimiterFileBasedE2E:
 @pytest.mark.e2e
 class TestPrimingOutboundSectionE2E:
     """activity_log に channel_post と message_sent を書き込み、
-    _build_recent_outbound_section が正しくセクションを生成することを確認する。
+    PrimingEngine._collect_recent_outbound が正しくセクションを生成することを確認する。
     """
 
-    def test_priming_outbound_section_e2e(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_priming_outbound_section_e2e(self, tmp_path: Path) -> None:
         """実際のファイルI/Oで outbound section が正しいセクションを生成する。"""
-        anima_dir = _make_anima_dir(tmp_path, "alice")
+        from core.memory.priming import PrimingEngine
 
-        # Write activity log with channel_post and dm_sent entries
+        anima_dir = _make_anima_dir(tmp_path, "alice")
+        (anima_dir / "knowledge").mkdir(exist_ok=True)
+
         today = now_jst().strftime("%Y-%m-%d")
         log_file = anima_dir / "activity_log" / f"{today}.jsonl"
 
@@ -254,9 +257,8 @@ class TestPrimingOutboundSectionE2E:
         ]
         log_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
 
-        from core.prompt.builder import _build_recent_outbound_section
-
-        result = _build_recent_outbound_section(anima_dir)
+        engine = PrimingEngine(anima_dir)
+        result = await engine._collect_recent_outbound()
 
         # ── Section header present ──
         assert "直近のアウトバウンド行動" in result
@@ -269,18 +271,20 @@ class TestPrimingOutboundSectionE2E:
         assert "bob にメッセージ送信済み" in result or "charlie にメッセージ送信済み" in result
 
         # ── max_entries=3 respected (all 3 should appear) ──
-        # Check that all entries within 2 hours are included
         assert "bob" in result
         assert "charlie" in result
 
-    def test_priming_outbound_section_old_entries_excluded(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_priming_outbound_section_old_entries_excluded(self, tmp_path: Path) -> None:
         """2時間以上前のエントリはセクションに含まれない。"""
+        from core.memory.priming import PrimingEngine
+
         anima_dir = _make_anima_dir(tmp_path, "alice")
+        (anima_dir / "knowledge").mkdir(exist_ok=True)
 
         today = now_jst().strftime("%Y-%m-%d")
         log_file = anima_dir / "activity_log" / f"{today}.jsonl"
 
-        # Entry from 3 hours ago (should be excluded)
         old_ts = (now_jst() - timedelta(hours=3)).isoformat()
         entries = [
             json.dumps({
@@ -292,18 +296,19 @@ class TestPrimingOutboundSectionE2E:
         ]
         log_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
 
-        from core.prompt.builder import _build_recent_outbound_section
+        engine = PrimingEngine(anima_dir)
+        result = await engine._collect_recent_outbound()
 
-        result = _build_recent_outbound_section(anima_dir)
-
-        # Should return empty since all entries are older than 2 hours
         assert result == ""
 
-    def test_priming_outbound_section_empty_log(self, tmp_path: Path) -> None:
+    @pytest.mark.asyncio
+    async def test_priming_outbound_section_empty_log(self, tmp_path: Path) -> None:
         """アクティビティログが空の場合は空文字列を返す。"""
+        from core.memory.priming import PrimingEngine
+
         anima_dir = _make_anima_dir(tmp_path, "alice")
+        (anima_dir / "knowledge").mkdir(exist_ok=True)
 
-        from core.prompt.builder import _build_recent_outbound_section
-
-        result = _build_recent_outbound_section(anima_dir)
+        engine = PrimingEngine(anima_dir)
+        result = await engine._collect_recent_outbound()
         assert result == ""

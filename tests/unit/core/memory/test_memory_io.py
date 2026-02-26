@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
+from core.exceptions import MemoryWriteError
 from core.memory._io import atomic_write_text, cleanup_tmp_files
 
 
@@ -63,7 +64,7 @@ class TestAtomicWriteText:
 
         # Patch os.fdopen so the write inside atomic_write_text raises
         with patch("core.memory._io.os.fdopen", side_effect=OSError("disk full")):
-            with pytest.raises(OSError, match="disk full"):
+            with pytest.raises(MemoryWriteError, match="disk full"):
                 atomic_write_text(target, "should not appear")
 
         assert target.read_text(encoding="utf-8") == "original content"
@@ -73,7 +74,7 @@ class TestAtomicWriteText:
         target = tmp_path / "cleanup.txt"
 
         with patch("core.memory._io.os.fdopen", side_effect=OSError("fail")):
-            with pytest.raises(OSError):
+            with pytest.raises(MemoryWriteError):
                 atomic_write_text(target, "boom")
 
         tmp_files = list(tmp_path.glob("*.tmp"))

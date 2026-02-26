@@ -47,7 +47,7 @@ export function render(container) {
   container.innerHTML = `
     <div class="board-layout">
       <!-- Mobile toggle for sidebar -->
-      <button class="board-mobile-toggle" id="boardMobileToggle">チャンネル一覧を表示</button>
+      <button class="board-mobile-toggle" id="boardMobileToggle">チャンネル一覧を隠す</button>
 
       <!-- Left Sidebar -->
       <div class="board-sidebar" id="boardSidebar">

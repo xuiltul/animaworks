@@ -26,7 +26,13 @@ import tempfile
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    try:
+        from claude_code_sdk import ClaudeCodeSDKClient as ClaudeSDKClient, ClaudeAgentOptions, ResultMessage
+    except ImportError:
+        pass
 
 from core.prompt.context import CHARS_PER_TOKEN, ContextTracker, resolve_context_window
 from core.exceptions import ExecutionError, LLMAPIError, MemoryWriteError  # noqa: F401
@@ -48,6 +54,10 @@ __all__ = ["AgentSDKExecutor", "StreamDisconnectedError", "clear_session_ids"]
 # Patterns that are unconditionally blocked in Bash tool calls.
 # Each entry is (compiled_regex, human-readable reason).
 _BASH_BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"chatwork\s+send", re.IGNORECASE),
+     "Chatwork send via Bash is blocked; use the Chatwork tool instead"),
+    (re.compile(r"chatwork_cli\.py\s+send", re.IGNORECASE),
+     "Chatwork CLI send via Bash is blocked; use the Chatwork tool instead"),
     (re.compile(r"curl.*api\.chatwork\.com.*/messages", re.IGNORECASE),
      "Direct Chatwork API post is blocked"),
     (re.compile(r"wget.*api\.chatwork\.com.*/messages", re.IGNORECASE),
@@ -644,7 +654,7 @@ def _build_pre_compact_hook(anima_dir: Path) -> "Callable":
         try:
             from core.memory.activity import ActivityLogger
             activity = ActivityLogger(anima_dir)
-            await activity.log(
+            activity.log(
                 event_type="tool_use",
                 content=f"SDK context compaction ({trigger})",
                 summary=f"auto-compact:{trigger}",
@@ -905,10 +915,19 @@ class AgentSDKExecutor(BaseExecutor):
         else:
             prompt_kwarg = system_prompt
 
+        # ── Resolve effective max_tokens ──────────────────────
+        from core.config.models import resolve_max_tokens
+        _effective_max_tokens = resolve_max_tokens(
+            self._model_config.model,
+            self._model_config.max_tokens,
+            self._model_config.thinking,
+        )
+
         kwargs: dict[str, Any] = dict(
             system_prompt=prompt_kwarg,
             allowed_tools=[
                 "Read", "Write", "Edit", "Bash", "Grep", "Glob",
+                "WebFetch", "WebSearch",
                 "mcp__aw__*",
             ],
             permission_mode="acceptEdits",
@@ -932,7 +951,7 @@ class AgentSDKExecutor(BaseExecutor):
                     matcher=".*",
                     hooks=[_build_pre_tool_hook(
                         self._anima_dir,
-                        max_tokens=self._model_config.max_tokens or 8192,
+                        max_tokens=_effective_max_tokens,
                         context_window=_cw,
                         session_stats=session_stats,
                         superuser=_is_debug_superuser(self._anima_dir),
@@ -944,6 +963,16 @@ class AgentSDKExecutor(BaseExecutor):
                 )],
             },
         )
+        # ── Adaptive thinking ─────────────────────────────────
+        if self._model_config.thinking:
+            from core.execution.base import is_adaptive_model, resolve_thinking_effort
+            if is_adaptive_model(self._model_config.model):
+                kwargs["thinking"] = {"type": "adaptive"}
+                kwargs["effort"] = resolve_thinking_effort(
+                    self._model_config.model,
+                    self._model_config.thinking_effort,
+                )
+
         if include_partial_messages:
             kwargs["include_partial_messages"] = True
         return ClaudeAgentOptions(**kwargs), prompt_file
@@ -1242,6 +1271,7 @@ class AgentSDKExecutor(BaseExecutor):
         ) -> AsyncGenerator[dict[str, Any], None]:
             nonlocal result_message, message_count
             got_stream_event = False
+            _in_thinking_block = False
             await client.query(prompt)
             async for message in client.receive_messages():
                 if isinstance(message, StreamEvent):
@@ -1269,6 +1299,9 @@ class AgentSDKExecutor(BaseExecutor):
                                 "tool_name": tool_name,
                                 "tool_id": tool_id,
                             }
+                        elif block.get("type") == "thinking":
+                            _in_thinking_block = True
+                            yield {"type": "thinking_start"}
 
                     elif event_type == "content_block_delta":
                         delta = event.get("delta", {})
@@ -1276,6 +1309,15 @@ class AgentSDKExecutor(BaseExecutor):
                             text = delta.get("text", "")
                             if text:
                                 yield {"type": "text_delta", "text": text}
+                        elif delta.get("type") == "thinking_delta":
+                            thinking_text = delta.get("thinking", "")
+                            if thinking_text:
+                                yield {"type": "thinking_delta", "text": thinking_text}
+
+                    elif event_type == "content_block_stop":
+                        if _in_thinking_block:
+                            _in_thinking_block = False
+                            yield {"type": "thinking_end"}
 
                 elif isinstance(message, AssistantMessage):
                     if not got_stream_event:

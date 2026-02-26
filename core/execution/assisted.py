@@ -304,10 +304,18 @@ class AssistedExecutor(BaseExecutor):
         """Call LiteLLM ``acompletion`` without tools parameter."""
         import litellm
 
+        from core.config.models import resolve_max_tokens
+        from core.execution.base import is_adaptive_model, is_anthropic_claude, resolve_thinking_effort
+
+        _eff_max = max_tokens_override if max_tokens_override is not None else resolve_max_tokens(
+            self._model_config.model,
+            self._model_config.max_tokens,
+            self._model_config.thinking,
+        )
         kwargs: dict[str, Any] = {
             "model": self._model_config.model,
             "messages": messages,
-            "max_tokens": max_tokens_override if max_tokens_override is not None else self._model_config.max_tokens,
+            "max_tokens": _eff_max,
             "timeout": self._resolve_llm_timeout(),
         }
 
@@ -318,9 +326,26 @@ class AssistedExecutor(BaseExecutor):
             kwargs["api_base"] = self._model_config.api_base_url
         self._apply_provider_kwargs(kwargs)
 
-        # Ollama thinking control: default to off for ollama/ models
+        # Extended thinking / reasoning control
         if self._model_config.thinking is not None:
-            kwargs["think"] = self._model_config.thinking
+            model = self._model_config.model
+            if model.startswith("bedrock/"):
+                if self._model_config.thinking:
+                    kwargs["reasoning_effort"] = resolve_thinking_effort(
+                        model, self._model_config.thinking_effort,
+                    )
+            elif is_anthropic_claude(model):
+                if self._model_config.thinking:
+                    if is_adaptive_model(model):
+                        kwargs["thinking"] = {"type": "adaptive"}
+                        kwargs["reasoning_effort"] = resolve_thinking_effort(
+                            model, self._model_config.thinking_effort,
+                        )
+                    else:
+                        kwargs["thinking"] = {"type": "enabled", "budget_tokens": 10000}
+                    kwargs["temperature"] = 1
+            else:
+                kwargs["think"] = self._model_config.thinking
         elif self._model_config.model.startswith("ollama/"):
             kwargs["think"] = False
 
@@ -457,8 +482,11 @@ class AssistedExecutor(BaseExecutor):
                     tool_args,
                     tool_id,
                 )
+            except ToolExecutionError as e:
+                logger.warning("Mode B tool execution error: %s – %s", tool_name, e)
+                result = f"ツール実行エラー: {e}"
             except Exception as e:
-                logger.exception("Mode B tool execution error: %s", tool_name)
+                logger.exception("Mode B unexpected tool error: %s", tool_name)
                 result = f"ツール実行エラー: {e}"
 
             result = _truncate_tool_output(str(result))
@@ -641,9 +669,14 @@ class AssistedExecutor(BaseExecutor):
                         tool_args,
                         tool_id,
                     )
+                except ToolExecutionError as e:
+                    logger.warning(
+                        "Mode B streaming tool error: %s – %s", tool_name, e,
+                    )
+                    result = f"ツール実行エラー: {e}"
                 except Exception as e:
                     logger.exception(
-                        "Mode B streaming tool execution error: %s", tool_name,
+                        "Mode B streaming unexpected tool error: %s", tool_name,
                     )
                     result = f"ツール実行エラー: {e}"
 

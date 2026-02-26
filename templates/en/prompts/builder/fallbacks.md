@@ -1,0 +1,6 @@
+[unset]: (not set)
+[none]: (none)
+[none_top_level]: (none — you are top-level)
+[no_other_animas]: (no other employees yet)
+[truncated]: (earlier portion omitted)
+[summary]: (summary)

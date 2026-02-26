@@ -157,17 +157,16 @@ class TestDispatchRouting:
         assert "task-123" in result
         assert "background" in result.lower()
 
-    def test_dispatch_exception_caught(self, handler: ToolHandler):
-        """Exceptions from dispatch handlers should be caught by top-level try."""
+    def test_dispatch_exception_raises_tool_execution_error(self, handler: ToolHandler):
+        """Exceptions from dispatch handlers should raise ToolExecutionError."""
+        from core.exceptions import ToolExecutionError
+
         handler._dispatch["search_memory"] = MagicMock(
             side_effect=RuntimeError("handler crashed"),
         )
 
-        result = handler.handle("search_memory", {"query": "test"})
-
-        assert "Tool execution failed" in result
-        assert "search_memory" in result
-        assert "handler crashed" in result
+        with pytest.raises(ToolExecutionError, match="search_memory.*handler crashed"):
+            handler.handle("search_memory", {"query": "test"})
 
 
 # ── Activity type map ─────────────────────────────────────────

@@ -34,16 +34,12 @@ def _make_handler(tmp_path: Path) -> ToolHandler:
 
 
 class TestToolHandlerTopLevelCatch:
-    def test_unhandled_exception_returns_error_string(self, tmp_path):
+    def test_unhandled_exception_raises_tool_execution_error(self, tmp_path):
+        from core.exceptions import ToolExecutionError
         handler = _make_handler(tmp_path)
-        # Patch the dispatch dict entry directly (bound method refs are
-        # captured at __init__ time, so patch.object on the instance
-        # attribute does not affect the dict).
         handler._dispatch["search_memory"] = MagicMock(side_effect=RuntimeError("boom"))
-        result = handler.handle("search_memory", {"query": "test"})
-        assert "Tool execution failed" in result
-        assert "search_memory" in result
-        assert "boom" in result
+        with pytest.raises(ToolExecutionError, match="search_memory.*boom"):
+            handler.handle("search_memory", {"query": "test"})
 
 
 class TestToolHandlerDepthLimitError:

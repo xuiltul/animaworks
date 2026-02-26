@@ -18,6 +18,7 @@ from server.routes.sessions import create_sessions_router
 from server.routes.system import create_system_router
 from server.routes.tool_prompts import create_tool_prompts_router
 from server.routes.users import create_users_router
+from server.routes.voice import create_voice_router
 from server.routes.webhooks import create_webhooks_router
 from server.routes.websocket_route import create_websocket_router
 
@@ -43,5 +44,6 @@ def create_router() -> APIRouter:
 
     router.include_router(api)
     router.include_router(create_websocket_router())
+    router.include_router(create_voice_router())
 
     return router

@@ -255,7 +255,7 @@ class MemoryRetriever:
             result.source_scores["recency"] = recency_score
 
             # --- Frequency boost (new: Hebbian LTP analog) ---
-            access_count = int(result.metadata.get("access_count", 0))
+            access_count = int(str(result.metadata.get("access_count", 0)))
             frequency_boost = WEIGHT_FREQUENCY * math.log1p(access_count)
             result.score += frequency_boost
             result.source_scores["frequency"] = frequency_boost
@@ -283,7 +283,7 @@ class MemoryRetriever:
             ids, metas = updates_by_collection[collection]
             ids.append(r.doc_id)
             metas.append({
-                "access_count": int(r.metadata.get("access_count", 0)) + 1,
+                "access_count": int(str(r.metadata.get("access_count", 0))) + 1,
                 "last_accessed_at": now_iso_str,
             })
 

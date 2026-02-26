@@ -15,7 +15,10 @@ from core.prompt.context import (
     MODEL_CONTEXT_WINDOWS,
     ContextTracker,
     _DEFAULT_CONTEXT_WINDOW,
+    _THRESHOLD_CEILING,
+    _THRESHOLD_REFERENCE_WINDOW,
     _resolve_context_window,
+    resolve_context_threshold,
 )
 
 
@@ -103,6 +106,48 @@ class TestResolveContextWindowOverrides:
         assert _resolve_context_window("glm-4.7-flash", overrides) == 16_384
 
 
+# ── resolve_context_threshold ─────────────────────────────
+
+
+class TestResolveContextThreshold:
+    """Auto-scaling of compaction threshold based on context window size."""
+
+    def test_large_model_unchanged(self):
+        """1M+ models keep the configured threshold as-is."""
+        assert resolve_context_threshold(0.50, 1_000_000) == 0.50
+        assert resolve_context_threshold(0.50, 2_000_000) == 0.50
+
+    def test_small_model_scales_up(self):
+        """Smaller windows get a higher threshold."""
+        result = resolve_context_threshold(0.50, 200_000)
+        assert result > 0.50
+        assert result < _THRESHOLD_CEILING
+
+    def test_very_small_model_near_ceiling(self):
+        """Very small windows approach the ceiling (0.98)."""
+        result = resolve_context_threshold(0.50, 30_000)
+        assert result >= 0.95
+
+    def test_ceiling_not_exceeded(self):
+        """Threshold should never exceed the ceiling."""
+        result = resolve_context_threshold(0.10, 1_000)
+        assert result <= _THRESHOLD_CEILING
+
+    def test_sliding_scale_monotonic(self):
+        """Larger windows should produce lower (or equal) thresholds."""
+        windows = [30_000, 128_000, 200_000, 500_000, 1_000_000]
+        thresholds = [resolve_context_threshold(0.50, w) for w in windows]
+        for i in range(len(thresholds) - 1):
+            assert thresholds[i] >= thresholds[i + 1]
+
+    def test_expected_values(self):
+        """Smoke-test specific expected values (configured=0.50)."""
+        assert resolve_context_threshold(0.50, 1_000_000) == 0.50
+        assert resolve_context_threshold(0.50, 200_000) == pytest.approx(0.884, abs=0.01)
+        assert resolve_context_threshold(0.50, 128_000) == pytest.approx(0.919, abs=0.01)
+        assert resolve_context_threshold(0.50, 30_000) == pytest.approx(0.966, abs=0.01)
+
+
 # ── ContextTracker init ───────────────────────────────────
 
 
@@ -114,8 +159,9 @@ class TestContextTrackerInit:
         assert ct.context_window_overrides == {}
 
     def test_custom(self):
-        ct = ContextTracker(model="gpt-4o", threshold=0.70)
-        assert ct.model == "gpt-4o"
+        # Use a 1M model so auto-scaling does not change the threshold.
+        ct = ContextTracker(model="claude-sonnet-4-6", threshold=0.70)
+        assert ct.model == "claude-sonnet-4-6"
         assert ct.threshold == 0.70
 
     def test_custom_with_overrides(self):
@@ -126,6 +172,20 @@ class TestContextTrackerInit:
         )
         assert ct.context_window_overrides == overrides
         assert ct.context_window == 16_384
+
+    def test_threshold_auto_scaled_for_small_model(self):
+        """Small model with 30K context should auto-scale threshold upward."""
+        ct = ContextTracker(
+            model="openai/glm-4.7-flash",
+            threshold=0.50,
+            context_window_overrides={"glm-4*": 30_000},
+        )
+        assert ct.threshold > 0.90  # should be ~0.94
+
+    def test_threshold_unchanged_for_large_model(self):
+        """Large model (1M) should keep configured threshold."""
+        ct = ContextTracker(model="claude-sonnet-4-6", threshold=0.50)
+        assert ct.threshold == 0.50
 
 
 class TestContextTrackerProperties:
@@ -180,13 +240,13 @@ class TestEstimateFromTranscript:
         assert abs(ratio - expected) < 0.01
 
     def test_threshold_detection(self, tmp_path):
-        # Create a large file to exceed threshold
+        # Use a 1M model so auto-scaling keeps threshold at 0.50
         f = tmp_path / "big.json"
-        # 200k window * 0.50 threshold = 100k tokens needed
-        # 100k tokens * 4 chars = 400k chars
-        f.write_text("x" * 500_000)
+        # 1M window * 0.50 threshold = 500k tokens needed
+        # 500k tokens * 4 chars = 2M chars
+        f.write_text("x" * 2_500_000)
 
-        ct = ContextTracker(model="claude-sonnet-4-20250514", threshold=0.50)
+        ct = ContextTracker(model="claude-sonnet-4-6", threshold=0.50)
         ratio = ct.estimate_from_transcript(str(f))
         assert ratio >= 0.50
         assert ct.threshold_exceeded is True
@@ -215,8 +275,9 @@ class TestUpdateFromUsage:
         assert result is False  # didn't cross threshold
 
     def test_threshold_crossed(self):
-        ct = ContextTracker(model="claude-sonnet-4-20250514", threshold=0.50)
-        result = ct.update_from_usage({"input_tokens": 110_000, "output_tokens": 10_000})
+        # Use a 1M model so auto-scaling keeps threshold at 0.50
+        ct = ContextTracker(model="claude-sonnet-4-6", threshold=0.50)
+        result = ct.update_from_usage({"input_tokens": 510_000, "output_tokens": 10_000})
         assert result is True
         assert ct.threshold_exceeded is True
 

@@ -99,8 +99,8 @@ class TestSupervisorActivityLogPermission:
 
         assert result is not None, "Supervisor should NOT be allowed to read subordinate's episodes"
 
-    def test_supervisor_cannot_read_subordinate_identity(self, tmp_path: Path):
-        """Supervisor mio cannot read subordinate yuki's identity.md."""
+    def test_supervisor_can_read_subordinate_identity(self, tmp_path: Path):
+        """Supervisor mio can read descendant yuki's identity.md (read_subordinate_state)."""
         sub_dir = tmp_path / "animas" / "yuki"
         sub_dir.mkdir(parents=True, exist_ok=True)
         identity_file = sub_dir / "identity.md"
@@ -111,7 +111,7 @@ class TestSupervisorActivityLogPermission:
 
         result = handler._check_file_permission(str(identity_file), write=False)
 
-        assert result is not None, "Supervisor should NOT be allowed to read subordinate's identity.md"
+        assert result is None, "Supervisor should be allowed to read descendant's identity.md"
 
     def test_supervisor_cannot_write_subordinate_activity_log(self, tmp_path: Path):
         """Supervisor mio cannot WRITE to subordinate yuki's activity_log."""
@@ -192,21 +192,22 @@ class TestSupervisorActivityLogPermission:
         assert result is not None, "Config failure should result in denial"
 
     def test_path_traversal_via_dotdot_denied(self, tmp_path: Path):
-        """Path traversal ``activity_log/../../identity.md`` is denied after resolve()."""
-        # Create subordinate dirs
+        """Path traversal ``activity_log/../episodes/...`` resolves to episodes, which is denied."""
+        # Create subordinate dirs (identity.md is now allowed for descendants, so target episodes/)
         sub_dir = tmp_path / "animas" / "yuki"
         (sub_dir / "activity_log").mkdir(parents=True, exist_ok=True)
-        identity_file = sub_dir / "identity.md"
-        identity_file.write_text("private identity", encoding="utf-8")
+        (sub_dir / "episodes").mkdir(parents=True, exist_ok=True)
+        episode_file = sub_dir / "episodes" / "2026-02-22.md"
+        episode_file.write_text("private episode content", encoding="utf-8")
 
         mock_cfg = _make_config_with_hierarchy("mio", ["yuki"])
         handler = _make_handler(tmp_path, "mio", mock_cfg=mock_cfg)
 
-        # Try to escape activity_log via ..
-        traversal_path = str(sub_dir / "activity_log" / ".." / "identity.md")
+        # Try to escape activity_log via .. to reach episodes (denied for descendants)
+        traversal_path = str(sub_dir / "activity_log" / ".." / "episodes" / "2026-02-22.md")
         result = handler._check_file_permission(traversal_path, write=False)
 
-        assert result is not None, "Path traversal via .. should be denied"
+        assert result is not None, "Path traversal via .. to episodes should be denied"
 
     def test_subordinate_paths_cached_at_init(self, tmp_path: Path):
         """Verify _subordinate_activity_dirs is populated at init, not per-call."""

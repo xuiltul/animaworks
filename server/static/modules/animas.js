@@ -2,9 +2,10 @@
 
 import { state, dom, escapeHtml } from "./state.js";
 import { api } from "./api.js";
-import { renderChat, resumeActiveStream, loadConversationHistory, setupScrollObserver } from "./chat.js";
+import { renderChat, resumeActiveStream, loadConversationHistory, setupScrollObserver, updateVoiceAnima } from "./chat.js";
 import { loadMemoryTab } from "./memory.js";
 import { hideHistoryDetail, loadSessionList } from "./history.js";
+import { animaHashColor } from "../shared/avatar-utils.js";
 
 export async function loadAnimas() {
   try {
@@ -19,6 +20,14 @@ export async function loadAnimas() {
 }
 
 // ── Anima State Class Helper ──────────────────
+function statusIndicator(emoji, lucideIcon) {
+  const isBusiness = document.body.classList.contains('theme-business');
+  if (isBusiness) {
+    return `<i data-lucide="${lucideIcon}" style="width:14px;height:14px;display:inline-block;vertical-align:middle;"></i>`;
+  }
+  return emoji;
+}
+
 export function animaStateClass(anima) {
   if (anima.status === "bootstrapping" || anima.bootstrapping) {
     return "anima-item--loading";
@@ -37,15 +46,16 @@ export function renderAnimaDropdown() {
   for (const p of state.animas) {
     const selected = p.name === state.selectedAnima ? " selected" : "";
     if (p.status === "bootstrapping" || p.bootstrapping) {
-      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>\u23F3 ${escapeHtml(p.name)} (制作中...)</option>`;
+      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>${statusIndicator('\u23F3', 'loader')} ${escapeHtml(p.name)} (制作中...)</option>`;
     } else if (p.status === "not_found" || p.status === "stopped") {
-      html += `<option value="${escapeHtml(p.name)}"${selected}>\uD83D\uDCA4 ${escapeHtml(p.name)} (停止中)</option>`;
+      html += `<option value="${escapeHtml(p.name)}"${selected}>${statusIndicator('\uD83D\uDCA4', 'moon')} ${escapeHtml(p.name)} (停止中)</option>`;
     } else {
       const statusLabel = p.status ? ` (${p.status})` : "";
       html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${statusLabel}</option>`;
     }
   }
   dropdown.innerHTML = html;
+  if (window.lucide) lucide.createIcons();
 }
 
 export async function selectAnima(name) {
@@ -64,6 +74,7 @@ export async function selectAnima(name) {
   }
 
   state.selectedAnima = name;
+  updateVoiceAnima(name);
 
   // Update dropdown
   const dropdown = dom.animaDropdown || document.getElementById("animaDropdown");
@@ -116,6 +127,9 @@ export async function selectAnima(name) {
 
 // ── Anima Avatar ───────────────────────────
 
+// animaHashColor is now imported from shared/avatar-utils.js
+export { animaHashColor };
+
 export async function updateAnimaAvatar() {
   const container = dom.animaAvatar || document.getElementById("animaAvatar");
   if (!container) return;
@@ -126,21 +140,28 @@ export async function updateAnimaAvatar() {
     return;
   }
 
+  const initial = escapeHtml(name.charAt(0).toUpperCase());
+  const color = animaHashColor(name);
+
   // Try bust-up first, then chibi
+  let imgHtml = "";
   const candidates = ["avatar_bustup.png", "avatar_chibi.png"];
   for (const filename of candidates) {
     const url = `/api/animas/${encodeURIComponent(name)}/assets/${encodeURIComponent(filename)}`;
     try {
       const resp = await fetch(url, { method: "HEAD" });
       if (resp.ok) {
-        container.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="anima-avatar-img">`;
-        return;
+        imgHtml = `<img class="anima-avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
+        break;
       }
     } catch { /* try next */ }
   }
 
-  // Fallback: initial letter
-  container.innerHTML = `<div class="anima-avatar-placeholder">${escapeHtml(name.charAt(0).toUpperCase())}</div>`;
+  // Always render both: img and initial div. CSS variables control visibility per theme.
+  const initialDiv = `<div class="anima-avatar-initial" style="background: ${color}; width:36px; height:36px;">${initial}</div>`;
+  container.innerHTML = imgHtml + initialDiv;
+
+  if (window.lucide) lucide.createIcons();
 }
 
 // ── Anima State ───────────────────────────

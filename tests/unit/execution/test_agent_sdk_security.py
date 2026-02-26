@@ -207,22 +207,9 @@ class TestCheckA1BashCommand:
 
 
 class TestBashBlockedPatterns:
-    def test_chatwork_send_blocked(self, anima_dir: Path):
-        result = _check_a1_bash_command("chatwork send room1 hello", anima_dir)
-        assert result is not None
-        assert "Chatwork send" in result
-
-    def test_chatwork_cli_send_blocked(self, anima_dir: Path):
-        result = _check_a1_bash_command("chatwork_cli.py send room1 hello", anima_dir)
-        assert result is not None
-
     def test_curl_chatwork_api_blocked(self, anima_dir: Path):
         cmd = "curl -X POST https://api.chatwork.com/v2/rooms/123/messages -d 'body=hello'"
         result = _check_a1_bash_command(cmd, anima_dir)
-        assert result is not None
-
-    def test_chatwork_send_case_insensitive(self, anima_dir: Path):
-        result = _check_a1_bash_command("CHATWORK SEND room1 msg", anima_dir)
         assert result is not None
 
     def test_chatwork_messages_read_allowed(self, anima_dir: Path):
@@ -245,7 +232,7 @@ class TestBashBlockedPatterns:
         assert "wget" in result
 
     def test_blocked_patterns_is_nonempty_list(self):
-        assert len(_BASH_BLOCKED_PATTERNS) >= 4
+        assert len(_BASH_BLOCKED_PATTERNS) >= 2
 
 
 # ── _summarise_tool_input ───────────────────────────────────

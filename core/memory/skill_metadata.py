@@ -186,7 +186,7 @@ def _match_tier3_vector(
         file_path = r.metadata.get("file_path", "") or r.metadata.get("source_file", "")
         skill = candidate_by_path.get(str(file_path))
         if skill is None and file_path:
-            stem = Path(file_path).stem
+            stem = Path(str(file_path)).stem
             skill = candidate_by_path.get(stem)
         if skill and skill.name not in seen:
             matched.append(skill)

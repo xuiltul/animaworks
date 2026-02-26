@@ -3,39 +3,40 @@
 
 // ── Type icons ──────────────────────────────────
 export const TYPE_ICONS = {
-  // API detailed types (primary)
-  message_received: "📨",
-  response_sent:    "💬",
-  channel_read:     "📖",
-  channel_post:     "📢",
-  dm_received:      "📩",
-  dm_sent:          "✉️",
-  human_notify:     "📣",
-  tool_use:         "🔧",
-  tool_result:      "📋",
-  heartbeat_start:       "🔄",
-  heartbeat_end:         "💓",
-  heartbeat_reflection:  "💭",
-  cron_executed:    "⏰",
-  memory_write:     "📝",
-  error:            "⚠️",
-  issue_resolved:   "🎯",
-  // WebSocket simplified types (fallback for real-time events)
-  message:      "📩",
-  heartbeat:    "💓",
-  cron:         "⏰",
-  chat:         "💬",
-  board:        "📋",
-  notification: "🔔",
-  status:       "🔵",
-  system:       "⚙️",
-  session:      "📄",
+  message_received: { emoji: "📨", lucide: "mail" },
+  response_sent:    { emoji: "💬", lucide: "message-circle" },
+  channel_read:     { emoji: "📖", lucide: "book-open" },
+  channel_post:     { emoji: "📢", lucide: "megaphone" },
+  dm_received:      { emoji: "📩", lucide: "inbox" },
+  dm_sent:          { emoji: "✉️", lucide: "send" },
+  human_notify:     { emoji: "📣", lucide: "bell-ring" },
+  tool_use:         { emoji: "🔧", lucide: "wrench" },
+  tool_result:      { emoji: "📋", lucide: "clipboard-check" },
+  heartbeat_start:       { emoji: "🔄", lucide: "refresh-cw" },
+  heartbeat_end:         { emoji: "💓", lucide: "heart-pulse" },
+  heartbeat_reflection:  { emoji: "💭", lucide: "brain" },
+  cron_executed:    { emoji: "⏰", lucide: "clock" },
+  memory_write:     { emoji: "📝", lucide: "pencil" },
+  error:            { emoji: "⚠️", lucide: "alert-triangle" },
+  issue_resolved:   { emoji: "🎯", lucide: "check-circle" },
+  message:      { emoji: "📩", lucide: "inbox" },
+  heartbeat:    { emoji: "💓", lucide: "heart-pulse" },
+  cron:         { emoji: "⏰", lucide: "clock" },
+  chat:         { emoji: "💬", lucide: "message-circle" },
+  board:        { emoji: "📋", lucide: "clipboard-list" },
+  notification: { emoji: "🔔", lucide: "bell" },
+  status:       { emoji: "🔵", lucide: "circle" },
+  system:       { emoji: "⚙️", lucide: "settings" },
+  session:      { emoji: "📄", lucide: "file-text" },
 };
 
-const FALLBACK_ICON = "⚙️";
-
 export function getIcon(type) {
-  return TYPE_ICONS[type] || FALLBACK_ICON;
+  const entry = TYPE_ICONS[type] || { emoji: "📌", lucide: "pin" };
+  const isBusiness = document.body.classList.contains('theme-business');
+  if (isBusiness) {
+    return `<i data-lucide="${entry.lucide}" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"></i>`;
+  }
+  return entry.emoji;
 }
 
 // ── Filter categories (detailed API types) ──────

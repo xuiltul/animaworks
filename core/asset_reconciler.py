@@ -15,8 +15,9 @@ import asyncio
 import logging
 import os
 import re
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from core.exceptions import AnimaWorksError  # noqa: F401
 
@@ -35,6 +36,60 @@ REQUIRED_ASSETS: dict[str, str] = {
     "model_rigged": "avatar_chibi_rigged.glb",
 }
 
+_3D_ASSET_KEYS = frozenset({"model_chibi", "model_rigged"})
+
+# ── Failure cooldown ──────────────────────────────────────────────
+# Tracks per-anima asset generation failures to avoid retrying
+# non-transient errors (e.g. Meshy 402 Payment Required) every 30s.
+
+_COOLDOWN_SECONDS = 3600.0  # 1 hour cooldown after non-transient failure
+
+# {anima_name: (failure_time, error_message)}
+_failure_cooldowns: dict[str, tuple[float, str]] = {}
+
+
+def _is_in_cooldown(anima_name: str) -> tuple[bool, str]:
+    """Check if an anima is in failure cooldown.
+
+    Returns (is_cooled_down, reason_message).
+    """
+    entry = _failure_cooldowns.get(anima_name)
+    if entry is None:
+        return False, ""
+    fail_time, error_msg = entry
+    elapsed = time.monotonic() - fail_time
+    if elapsed >= _COOLDOWN_SECONDS:
+        del _failure_cooldowns[anima_name]
+        return False, ""
+    remaining = int(_COOLDOWN_SECONDS - elapsed)
+    return True, f"cooldown ({remaining}s remaining): {error_msg}"
+
+
+def _record_failure(anima_name: str, error: str) -> None:
+    """Record a non-transient failure for cooldown tracking."""
+    _failure_cooldowns[anima_name] = (time.monotonic(), error)
+    logger.warning(
+        "Asset generation for %s entered cooldown (%ds): %s",
+        anima_name,
+        int(_COOLDOWN_SECONDS),
+        error,
+    )
+
+
+def _is_non_transient_error(error_str: str) -> bool:
+    """Detect non-transient errors that should trigger cooldown."""
+    non_transient_patterns = [
+        "402",                    # Payment Required (Meshy credits)
+        "401",                    # Unauthorized (bad API key)
+        "403",                    # Forbidden
+        "ToolConfigError",        # Missing API key
+        "No image generation API key",
+        "MESHY_API_KEY",
+        "NOVELAI_TOKEN",
+        "FAL_KEY",
+    ]
+    return any(p in error_str for p in non_transient_patterns)
+
 
 def _get_lock(anima_name: str) -> asyncio.Lock:
     """Return (or create) the per-anima generation lock."""
@@ -46,8 +101,16 @@ def _get_lock(anima_name: str) -> asyncio.Lock:
 # ── Asset checking ────────────────────────────────────────────────
 
 
-def check_anima_assets(anima_dir: Path) -> dict[str, Any]:
+def check_anima_assets(
+    anima_dir: Path,
+    *,
+    enable_3d: bool = True,
+) -> dict[str, Any]:
     """Check an anima's asset completeness using metadata logic.
+
+    Args:
+        anima_dir: Path to the anima's runtime directory.
+        enable_3d: Whether 3D assets are required.
 
     Returns a dict with:
       - ``complete`` (bool): True if all required assets exist.
@@ -62,6 +125,8 @@ def check_anima_assets(anima_dir: Path) -> dict[str, Any]:
     present: list[str] = []
 
     for key, filename in REQUIRED_ASSETS.items():
+        if not enable_3d and key in _3D_ASSET_KEYS:
+            continue
         path = assets_dir / filename
         if has_dir and path.exists() and path.is_file():
             present.append(key)
@@ -78,6 +143,8 @@ def check_anima_assets(anima_dir: Path) -> dict[str, Any]:
 
 def find_animas_with_missing_assets(
     animas_dir: Path,
+    *,
+    enable_3d: bool = True,
 ) -> list[tuple[str, dict[str, Any]]]:
     """Scan all anima directories and return those with incomplete assets.
 
@@ -92,7 +159,7 @@ def find_animas_with_missing_assets(
             continue
         if not (anima_dir / "identity.md").exists():
             continue
-        result = check_anima_assets(anima_dir)
+        result = check_anima_assets(anima_dir, enable_3d=enable_3d)
         if not result["complete"]:
             results.append((anima_dir.name, result))
 
@@ -106,6 +173,7 @@ async def reconcile_anima_assets(
     anima_dir: Path,
     *,
     prompt: str | None = None,
+    enable_3d: bool = True,
 ) -> dict[str, Any]:
     """Generate missing assets for a single anima (non-blocking).
 
@@ -117,12 +185,21 @@ async def reconcile_anima_assets(
         anima_dir: Path to the anima's runtime directory.
         prompt: Character prompt for image generation.  If ``None``,
             attempts to extract from identity.md.
+        enable_3d: Whether to include 3D model generation steps.
 
     Returns:
         Dict with generation results or skip reason.
     """
     anima_name = anima_dir.name
     lock = _get_lock(anima_name)
+
+    # Check failure cooldown before acquiring lock
+    in_cooldown, cooldown_reason = _is_in_cooldown(anima_name)
+    if in_cooldown:
+        logger.debug(
+            "Skipping asset generation for %s: %s", anima_name, cooldown_reason,
+        )
+        return {"anima": anima_name, "skipped": True, "reason": cooldown_reason}
 
     if lock.locked():
         logger.info(
@@ -133,7 +210,7 @@ async def reconcile_anima_assets(
 
     async with lock:
         # Re-check after acquiring lock — another task may have generated
-        check = check_anima_assets(anima_dir)
+        check = check_anima_assets(anima_dir, enable_3d=enable_3d)
         if check["complete"]:
             logger.debug("Assets complete for %s (post-lock check)", anima_name)
             return {"anima": anima_name, "skipped": True, "reason": "complete"}
@@ -156,6 +233,11 @@ async def reconcile_anima_assets(
                 "reason": "no_prompt",
             }
 
+        # Determine which pipeline steps to run based on missing assets
+        steps: list[str] | None = None
+        if not enable_3d:
+            steps = ["fullbody", "bustup", "chibi"]
+
         try:
             from core.tools.image_gen import ImageGenPipeline
 
@@ -166,6 +248,7 @@ async def reconcile_anima_assets(
                 lambda: pipeline.generate_all(
                     prompt=resolved_prompt,
                     skip_existing=True,
+                    steps=steps,
                 ),
             )
             generated = _summarise_result(result)
@@ -174,6 +257,13 @@ async def reconcile_anima_assets(
                 anima_name,
                 generated,
             )
+
+            # Check for non-transient errors and enter cooldown
+            for err in result.errors:
+                if _is_non_transient_error(err):
+                    _record_failure(anima_name, err)
+                    break
+
             return {
                 "anima": anima_name,
                 "skipped": False,
@@ -181,11 +271,15 @@ async def reconcile_anima_assets(
                 "errors": result.errors,
             }
         except Exception as exc:
-            logger.exception("Asset generation failed for %s", anima_name)
+            error_str = str(exc)
+            if _is_non_transient_error(error_str):
+                _record_failure(anima_name, error_str)
+            else:
+                logger.exception("Asset generation failed for %s", anima_name)
             return {
                 "anima": anima_name,
                 "skipped": False,
-                "error": str(exc),
+                "error": error_str,
             }
 
 
@@ -193,17 +287,19 @@ async def reconcile_all_assets(
     animas_dir: Path,
     *,
     ws_manager: Any | None = None,
+    enable_3d: bool = True,
 ) -> list[dict[str, Any]]:
     """Check all animas and generate missing assets sequentially.
 
     Args:
         animas_dir: Root animas directory.
         ws_manager: Optional WebSocketManager for broadcasting updates.
+        enable_3d: Whether to include 3D model generation.
 
     Returns:
         List of per-anima result dicts.
     """
-    incomplete = find_animas_with_missing_assets(animas_dir)
+    incomplete = find_animas_with_missing_assets(animas_dir, enable_3d=enable_3d)
     if not incomplete:
         logger.debug("All animas have complete assets")
         return []
@@ -217,7 +313,9 @@ async def reconcile_all_assets(
     results: list[dict[str, Any]] = []
     for anima_name, _check in incomplete:
         anima_dir = animas_dir / anima_name
-        result = await reconcile_anima_assets(anima_dir)
+        result = await reconcile_anima_assets(
+            anima_dir, enable_3d=enable_3d,
+        )
         results.append(result)
 
         # Broadcast asset update if something was generated
@@ -423,7 +521,7 @@ async def _synthesize_prompt_via_llm(
     try:
         import litellm
 
-        response = await litellm.acompletion(**kwargs)
+        response = cast(Any, await litellm.acompletion(**kwargs))
         result = (response.choices[0].message.content or "").strip()
     except Exception as exc:
         logger.warning(

@@ -20,6 +20,46 @@ from core.time_utils import now_jst
 logger = logging.getLogger("animaworks.prompt_builder")
 
 
+def _parse_kv_template(raw: str) -> dict[str, str]:
+    """Parse ``[key]: value`` lines from a template string.
+
+    Only the first ``]: `` occurrence per line is used as delimiter,
+    so values may safely contain ``]: ``.
+    """
+    result: dict[str, str] = {}
+    for line in raw.strip().splitlines():
+        if not line.startswith("["):
+            continue
+        bracket_end = line.find("]")
+        if bracket_end < 0:
+            continue
+        sep = line.find("]: ", bracket_end)
+        if sep < 0:
+            continue
+        key = line[1:bracket_end]
+        value = line[sep + 3:]
+        result[key] = value
+    return result
+
+
+def _load_section_strings(locale: str | None = None) -> dict[str, str]:
+    """Load section headers and labels from template."""
+    try:
+        raw = load_prompt("builder/sections", locale=locale)
+    except FileNotFoundError:
+        return {}
+    return _parse_kv_template(raw)
+
+
+def _load_fallback_strings(locale: str | None = None) -> dict[str, str]:
+    """Load fallback/placeholder texts from template."""
+    try:
+        raw = load_prompt("builder/fallbacks", locale=locale)
+    except FileNotFoundError:
+        return {}
+    return _parse_kv_template(raw)
+
+
 @dataclass
 class BuildResult:
     """Result of system prompt building."""
@@ -126,6 +166,9 @@ def _build_full_org_tree(
     all_animas: dict[str, Any],
 ) -> str:
     """Build an indented full organization tree for top-level animas."""
+    _ss = _load_section_strings()
+    you_marker = _ss.get("you_marker", "  ← you")
+
     # Build children map: parent -> list of children
     children: dict[str | None, list[str]] = {}
     for name, pcfg in all_animas.items():
@@ -141,10 +184,10 @@ def _build_full_org_tree(
         label = _format_anima_entry(name, spec)
         if is_root:
             marker = ""
-            suffix = "  ← あなた" if name == anima_name else ""
+            suffix = you_marker if name == anima_name else ""
         else:
             marker = "└── " if is_last else "├── "
-            suffix = "  ← あなた" if name == anima_name else ""
+            suffix = you_marker if name == anima_name else ""
         lines.append(f"{prefix}{marker}{label}{suffix}")
         kids = children.get(name, [])
         for i, child in enumerate(kids):
@@ -233,6 +276,8 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     from core.tooling.prompt_db import get_prompt_store
     from core.paths import get_data_dir
 
+    _fs = _load_fallback_strings()
+
     animas_dir = get_data_dir() / "animas"
     all_animas = _scan_all_animas(animas_dir)
 
@@ -246,7 +291,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
 
     # Top-level anima with subordinates: show full org tree
     if is_top_level and len(all_animas) > 1:
-        anima_speciality = my_speciality or "(未設定)"
+        anima_speciality = my_speciality or _fs.get("unset", "(not set)")
         tree_text = _build_full_org_tree(anima_name, all_animas)
         parts = [
             load_prompt(
@@ -273,7 +318,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             sup_spec = all_animas[my_supervisor].speciality
         supervisor_line = _format_anima_entry(my_supervisor, sup_spec)
     else:
-        supervisor_line = "(なし — あなたがトップです)"
+        supervisor_line = _fs.get("none_top_level", "(none — you are top-level)")
 
     # Subordinates: animas whose supervisor is me
     subordinates: list[str] = []
@@ -294,9 +339,9 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             if pcfg.supervisor == my_supervisor:
                 peers.append(_format_anima_entry(name, pcfg.speciality))
 
-    subordinates_line = ", ".join(subordinates) if subordinates else "(なし)"
-    peers_line = ", ".join(peers) if peers else "(なし)"
-    anima_speciality = my_speciality or "(未設定)"
+    subordinates_line = ", ".join(subordinates) if subordinates else _fs.get("none", "(none)")
+    peers_line = ", ".join(peers) if peers else _fs.get("none", "(none)")
+    anima_speciality = my_speciality or _fs.get("unset", "(not set)")
 
     parts = [
         load_prompt(
@@ -329,10 +374,11 @@ def _build_messaging_section(
     """Build the messaging instructions with resolved paths."""
     from core.tooling.prompt_db import get_prompt_store
 
+    _fs = _load_fallback_strings()
     self_name = anima_dir.name
     main_py = PROJECT_DIR / "main.py"
     animas_line = (
-        ", ".join(other_animas) if other_animas else "(まだ他の社員はいません)"
+        ", ".join(other_animas) if other_animas else _fs.get("no_other_animas", "(no other employees yet)")
     )
 
     db_key = "messaging_s" if execution_mode == "s" else "messaging"
@@ -393,63 +439,10 @@ def _build_recent_tool_section(anima_dir: Path, model_config: Any) -> str:
 
     if not tool_lines:
         return ""
-    return "## Recent Tool Results\n\n" + "\n".join(tool_lines)
+    _ss = _load_section_strings()
+    header = _ss.get("recent_tool_results_header", "## Recent Tool Results")
+    return f"{header}\n\n" + "\n".join(tool_lines)
 
-
-def _build_recent_outbound_section(anima_dir: Path, max_entries: int = 3) -> str:
-    """Build a short section showing the Anima's recent outbound actions.
-
-    Reads activity_log for channel_post and message_sent within the last 2 hours.
-    Returns empty string if no recent outbound actions.
-    """
-    try:
-        from core.memory.activity import ActivityLogger
-
-        activity = ActivityLogger(anima_dir)
-        entries = activity.recent(
-            days=1,
-            limit=20,
-            types=["channel_post", "message_sent"],
-        )
-    except Exception:
-        return ""
-
-    if not entries:
-        return ""
-
-    # Filter to last 2 hours
-    from datetime import datetime, timedelta
-
-    from core.time_utils import ensure_aware, now_jst
-
-    cutoff = now_jst() - timedelta(hours=2)
-
-    recent: list = []
-    for e in reversed(entries):  # newest first
-        try:
-            ts = ensure_aware(datetime.fromisoformat(e.ts))
-            if ts >= cutoff:
-                recent.append(e)
-        except (ValueError, TypeError):
-            continue
-        if len(recent) >= max_entries:
-            break
-
-    if not recent:
-        return ""
-
-    lines = ["## 直近のアウトバウンド行動", ""]
-    for e in reversed(recent):  # chronological order
-        time_str = e.ts[11:16] if len(e.ts) >= 16 else e.ts
-        text_preview = (e.summary or e.content or "")[:80]
-        if e.type == "channel_post":
-            ch = e.channel or "?"
-            lines.append(f"- [{time_str}] #{ch} に投稿済み: 「{text_preview}」")
-        elif e.type in ("dm_sent", "message_sent"):
-            to = e.to_person or "?"
-            lines.append(f"- [{time_str}] {to} にメッセージ送信済み: 「{text_preview}」")
-    lines.append("")
-    return "\n".join(lines)
 
 
 def _build_human_notification_guidance(execution_mode: str = "") -> str:
@@ -488,6 +481,8 @@ def build_system_prompt(
     pd = memory.anima_dir
     data_dir = get_data_dir()
     tier = resolve_prompt_tier(context_window)
+    _ss = _load_section_strings()
+    _fs = _load_fallback_strings()
 
     # ── Trigger-based section filtering ──────────────────────────
     is_inbox = trigger.startswith("inbox:")
@@ -500,7 +495,7 @@ def build_system_prompt(
     # ── Pre-compute values needed across multiple groups ──────────
 
     # DB-first prompt store (singleton); used for system sections & tool guides
-    from core.tooling.prompt_db import DEFAULT_GUIDES, get_prompt_store
+    from core.tooling.prompt_db import get_default_guide, get_prompt_store
     _prompt_store = get_prompt_store()
 
     # other_animas is needed by Group 5 (org_context, messaging)
@@ -515,7 +510,7 @@ def build_system_prompt(
     permissions = memory.read_permissions()
 
     # ── Group 1: 動作環境と行動ルール ─────────────────────────
-    parts.append("# 1. 動作環境と行動ルール")
+    parts.append(_ss.get("group1_header", "# 1. Environment and Action Rules"))
 
     if is_task:
         parts.append(f"Anima: {pd.name}\nData directory: {data_dir}")
@@ -550,7 +545,7 @@ def build_system_prompt(
             parts.append(injection)
 
     current_time = now_jst().strftime("%Y-%m-%d %H:%M (%Z)")
-    parts.append(f"**現在時刻**: {current_time}")
+    parts.append(f"{_ss.get('current_time_label', '**Current time**:')} {current_time}")
 
     if not is_task and tier in (TIER_FULL, TIER_STANDARD):
         _br = (
@@ -567,7 +562,7 @@ def build_system_prompt(
     # ── Group 2: あなた自身（補足） ─────────────────────────────
     # NOTE: identity.md / injection.md は Group 1 直後に注入済み。
     #       ここでは bootstrap, vision, specialty, permissions を追加。
-    parts.append("# 2. あなた自身")
+    parts.append(_ss.get("group2_header", "# 2. Yourself"))
 
     if not is_task and tier in (TIER_FULL, TIER_STANDARD):
         bootstrap = memory.read_bootstrap()
@@ -589,7 +584,7 @@ def build_system_prompt(
             parts.append(permissions)
 
     # ── Group 3: 現在の状況 ───────────────────────────────────
-    parts.append("# 3. 現在の状況")
+    parts.append(_ss.get("group3_header", "# 3. Current Situation"))
 
     # current_state: skip for task; summary (500 chars) for inbox
     if not is_task:
@@ -608,16 +603,16 @@ def build_system_prompt(
                 first_nl = truncated.find("\n")
                 if first_nl != -1 and first_nl < _state_max * 0.2:
                     truncated = truncated[first_nl + 1:]
-                state = "（前半省略）\n\n" + truncated
+                state = f"{_fs.get('truncated', '(earlier portion omitted)')}\n\n{truncated}"
             parts.append(load_prompt("builder/task_in_progress", state=state))
         elif state:
-            parts.append(f"## 現在の状態\n\n{state}")
+            parts.append(f"{_ss.get('current_state_header', '## Current State')}\n\n{state}")
 
     # pending: skip for inbox and task
     if not is_inbox and not is_task:
         pending = memory.read_pending()
         if pending:
-            parts.append(f"## 未完了タスク\n\n{pending}")
+            parts.append(f"{_ss.get('pending_tasks_header', '## Pending Tasks')}\n\n{pending}")
 
     # Task Queue, Resolution Registry, Recent Outbound: skip for inbox and task
     if not is_inbox and not is_task and tier in (TIER_FULL, TIER_STANDARD):
@@ -651,13 +646,6 @@ def build_system_prompt(
         except Exception:
             logger.debug("Failed to inject resolution registry", exc_info=True)
 
-        try:
-            outbound_section = _build_recent_outbound_section(memory.anima_dir)
-            if outbound_section:
-                parts.append(outbound_section)
-        except Exception:
-            logger.debug("Failed to inject recent outbound section", exc_info=True)
-
     # Priming: skip for task
     if not is_task and priming_section:
         parts.append(priming_section)
@@ -673,24 +661,26 @@ def build_system_prompt(
             logger.debug("Failed to inject recent tool results", exc_info=True)
 
     # ── Group 4: 記憶と能力 ───────────────────────────────────
-    parts.append("# 4. 記憶と能力")
+    parts.append(_ss.get("group4_header", "# 4. Memory and Capabilities"))
 
     if is_task:
         parts.append(f"Anima directory: {pd}")
     elif tier in (TIER_FULL, TIER_STANDARD):
         # Memory directory guide
-        knowledge_list = ", ".join(memory.list_knowledge_files()) or "(なし)"
-        episode_list = ", ".join(memory.list_episode_files()[:7]) or "(なし)"
-        procedure_list = ", ".join(memory.list_procedure_files()) or "(なし)"
+        _none = _fs.get("none", "(none)")
+        _common = _ss.get("common_label", "(shared)")
+        knowledge_list = ", ".join(memory.list_knowledge_files()) or _none
+        episode_list = ", ".join(memory.list_episode_files()[:7]) or _none
+        procedure_list = ", ".join(memory.list_procedure_files()) or _none
         skill_lines: list[str] = []
         for m in skill_metas:
             desc = f": {m.description}" if m.description else ""
             skill_lines.append(f"- {m.name}{desc}")
         for m in common_skill_metas:
             desc = f": {m.description}" if m.description else ""
-            skill_lines.append(f"- {m.name}(共通){desc}")
-        skill_names = "\n".join(skill_lines) or "(なし)"
-        shared_users_list = ", ".join(memory.list_shared_users()) or "(なし)"
+            skill_lines.append(f"- {m.name}{_common}{desc}")
+        skill_names = "\n".join(skill_lines) or _none
+        shared_users_list = ", ".join(memory.list_shared_users()) or _none
 
         parts.append(load_prompt(
             "memory_guide",
@@ -740,7 +730,7 @@ def build_system_prompt(
 
     if proc_parts:
         parts.append(
-            "## Procedures（手順書）\n\n"
+            f"{_ss.get('procedures_header', '## Procedures')}\n\n"
             + "\n\n---\n\n".join(proc_parts)
         )
 
@@ -758,7 +748,7 @@ def build_system_prompt(
 
     if know_parts:
         parts.append(
-            "## Distilled Knowledge\n\n"
+            f"{_ss.get('distilled_knowledge_header', '## Distilled Knowledge')}\n\n"
             + "\n\n---\n\n".join(know_parts)
         )
 
@@ -779,33 +769,37 @@ def build_system_prompt(
         logger.warning("Tool prompt DB unavailable; using hardcoded fallback guides")
 
     if is_heartbeat:
-        parts.append(
-            "Heartbeatでは**観察・報告・計画**にツールを使ってください。\n"
-            "- OK: チャネル読み取り、記憶検索、メッセージ送信、タスク更新、pending作成\n"
-            "- NG: コード変更、ファイル大量編集、長時間の分析・調査\n"
-            "重い作業が必要な場合は state/pending/ にタスクファイルを書き出してください。"
-        )
+        try:
+            parts.append(load_prompt("builder/heartbeat_tool_instruction"))
+        except FileNotFoundError:
+            parts.append(
+                "Heartbeatでは**観察・報告・計画**にツールを使ってください。\n"
+                "- OK: チャネル読み取り、記憶検索、メッセージ送信、タスク更新、pending作成\n"
+                "- NG: コード変更、ファイル大量編集、長時間の分析・調査\n"
+                "重い作業が必要な場合は state/pending/ にタスクファイルを書き出してください。"
+            )
     else:
         if execution_mode == "s":
             _s_builtin = (
                 _prompt_store.get_guide("s_builtin") if _prompt_store else None
-            ) or DEFAULT_GUIDES.get("s_builtin", "")
+            ) or get_default_guide("s_builtin")
             if _s_builtin:
                 parts.append(_s_builtin)
             _s_mcp = (
                 _prompt_store.get_guide("s_mcp") if _prompt_store else None
-            ) or DEFAULT_GUIDES.get("s_mcp", "")
+            ) or get_default_guide("s_mcp")
             if _s_mcp:
                 parts.append(_s_mcp)
         else:
             _non_s = (
                 _prompt_store.get_guide("non_s") if _prompt_store else None
-            ) or DEFAULT_GUIDES.get("non_s", "")
+            ) or get_default_guide("non_s")
             if _non_s:
                 parts.append(_non_s)
 
     # External tools guide (skip for heartbeat)
-    if not is_heartbeat and permissions and "外部ツール" in permissions and (tool_registry or personal_tools):
+    _EXTERNAL_TOOLS_KEYWORDS = {"外部ツール", "External Tools", "external tools"}
+    if not is_heartbeat and permissions and any(kw in permissions for kw in _EXTERNAL_TOOLS_KEYWORDS) and (tool_registry or personal_tools):
         if execution_mode == "a":
             categories = ", ".join(sorted(tool_registry or []))
             if personal_tools:
@@ -822,7 +816,7 @@ def build_system_prompt(
                 parts.append(tools_guide)
 
     # ── Group 5: 組織とコミュニケーション ─────────────────────
-    parts.append("# 5. 組織とコミュニケーション")
+    parts.append(_ss.get("group5_header", "# 5. Organization and Communication"))
 
     # hiring_context: skip for inbox and task
     if not is_inbox and not is_task and tier in (TIER_FULL, TIER_STANDARD):
@@ -847,7 +841,7 @@ def build_system_prompt(
 
         _msg = _build_messaging_section(pd, other_animas, execution_mode)
         if is_background_auto and len(_msg) > 500:
-            _msg = _msg[:500] + "\n（要約）"
+            _msg = _msg[:500] + "\n" + _fs.get("summary", "(summary)")
         parts.append(_msg)
 
         # human_notification: skip for inbox and task
@@ -862,11 +856,14 @@ def build_system_prompt(
             except Exception:
                 logger.debug("Skipped human notification guidance injection", exc_info=True)
     elif not is_task and tier == TIER_LIGHT:
-        parts.append(f"あなたは{pd.name}です。他のアニマとはsend_messageで通信できます。")
-        parts.append("メッセージはsend_messageツールで送信してください。")
+        try:
+            parts.append(load_prompt("builder/light_tier_org", anima_name=pd.name))
+        except FileNotFoundError:
+            parts.append(f"あなたは{pd.name}です。他のアニマとはsend_messageで通信できます。")
+            parts.append("メッセージはsend_messageツールで送信してください。")
 
     # ── Group 6: メタ設定 ─────────────────────────────────────
-    parts.append("# 6. メタ設定")
+    parts.append(_ss.get("group6_header", "# 6. Meta Settings"))
 
     # emotion: skip for background-auto (heartbeat/cron) and task
     if not is_background_auto and not is_task and tier in (TIER_FULL, TIER_STANDARD):

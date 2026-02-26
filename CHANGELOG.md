@@ -7,6 +7,46 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- voice chat bubble integration, thinking delta, mobile touch improvements
+- add Codex SDK execution mode C for OpenAI Codex CLI integration
+- thinking UI integration — all frontends + persistence + voice indicator
+- add thinking streaming events and collapsible UI component
+- integrate adaptive thinking into S/A execution engines
+- add thinking_effort schema, resolve_max_tokens, adaptive thinking helpers
+- add prompt i18n (ja/en) — locale-aware template system
+- add status.json hot-reload via IPC without process restart
+- enable extended thinking for Bedrock Claude models
+- add business theme UI with CSS design tokens and workspace org dashboard
+- add voice chat system (STT + TTS + WebSocket)
+- add AWS Bedrock provider support for LiteLLM execution
+- expand supervisor file access permissions for subordinate management
+- enable WebFetch/WebSearch native tools in S mode
+- add bustup image overlay on avatar click in chat page
+
+### Fixed
+- HTTPS reverse proxy auth loop and asset reconciliation infinite retry
+- preserve thinking_blocks in LiteLLM tool-call iterations
+- resolve frontend regressions and improve workspace org dashboard
+- sanitize thinking text rendering to prevent XSS
+- resolve review revision findings for prompt i18n
+- use output_config instead of reasoning_effort for Anthropic SDK
+- resolve all 98 test regressions from i18n restructuring + main rebase
+- update assisted.py adaptive thinking + fix config_reader test mocks
+- resolve review findings — cli.py path regression + DRY _get_locale
+- 91件の失敗テストを現行実装に追従させる
+- address review findings — disposeOffice on view switch, Lucide createIcons timing
+- raise compaction threshold ceiling from 0.95 to 0.98
+- web_search dispatch bug and context threshold auto-scaling
+- add builder.py to silent-pass allowlist for org tree status.json fallback
+- board mobile scroll and channel switching
+- add missing tool result for ToolExecutionError in serial path
+- improve error handling with custom exception hierarchy
+- resolve type safety issues across codebase
+
+### Changed
+- move outbound section to PrimingEngine
+
 ## [0.4.1] - 2026-02-25
 
 ### Added

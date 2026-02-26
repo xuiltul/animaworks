@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 logger = logging.getLogger("animaworks.rag.store")
 
@@ -187,8 +188,8 @@ class ChromaVectorStore(VectorStore):
         coll.upsert(
             ids=ids,
             documents=contents,
-            embeddings=embeddings,
-            metadatas=metadatas,
+            embeddings=cast(Any, embeddings),
+            metadatas=cast(Any, metadatas),
         )
 
         logger.debug(
@@ -218,19 +219,24 @@ class ChromaVectorStore(VectorStore):
         results = coll.query(
             query_embeddings=[embedding],
             n_results=top_k,
-            where=where,
+            where=cast(Any, where),
         )
 
         # Parse results
         search_results: list[SearchResult] = []
         if results["ids"] and results["ids"][0]:
             for i, doc_id in enumerate(results["ids"][0]):
+                meta_raw = results["metadatas"][0][i] if results["metadatas"] else {}
+                meta_dict: dict[str, str | int | float | list[str]] = (
+                    cast(Any, dict(meta_raw)) if meta_raw else {}
+                )
                 doc = Document(
                     id=doc_id,
                     content=results["documents"][0][i] if results["documents"] else "",
-                    metadata=results["metadatas"][0][i] if results["metadatas"] else {},
+                    metadata=meta_dict,
                 )
-                score = 1.0 - results["distances"][0][i]  # Convert distance to similarity
+                distances = results["distances"]
+                score = 1.0 - distances[0][i] if distances else 0.0
                 search_results.append(SearchResult(document=doc, score=score))
 
         logger.debug(
@@ -260,8 +266,8 @@ class ChromaVectorStore(VectorStore):
             return
         try:
             coll = self.client.get_collection(name=collection)
-            serialized = [self._serialize_metadata(m) for m in metadatas]
-            coll.update(ids=ids, metadatas=serialized)
+            serialized = [self._serialize_metadata(dict(m)) for m in metadatas]
+            coll.update(ids=ids, metadatas=cast(Any, serialized))
             logger.debug("Updated metadata for %d documents in '%s'", len(ids), collection)
         except Exception as e:
             logger.warning("Failed to update metadata in '%s': %s", collection, e)

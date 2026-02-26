@@ -21,6 +21,7 @@ Pipeline:
 import json
 import logging
 import re
+from typing import Any, cast
 
 from core.paths import load_prompt
 
@@ -206,11 +207,11 @@ class KnowledgeValidator:
         )
 
         try:
-            response = await litellm.acompletion(
+            response = cast(Any, await litellm.acompletion(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=256,
-            )
+            ))
             text = response.choices[0].message.content or ""
             # Extract JSON from response
             json_match = re.search(r"\{.*\}", text, re.DOTALL)

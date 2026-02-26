@@ -87,6 +87,7 @@ def _make_mock_memory(
     memory.list_procedure_metas.return_value = []
     memory.list_shared_users.return_value = []
     memory.collect_distilled_knowledge.return_value = []
+    memory.collect_distilled_knowledge_separated.return_value = ([], [])
     return memory
 
 
@@ -104,7 +105,14 @@ class TestBuildSystemPromptTiers:
         **memory_kwargs,
     ) -> BuildResult:
         memory = _make_mock_memory(tmp_path, data_dir, **memory_kwargs)
-        with patch("core.prompt.builder.load_prompt", return_value="section"):
+
+        def _load_prompt_section(name: str, *args: object, **kwargs: object) -> str:
+            if name == "builder/light_tier_org":
+                anima_name = kwargs.get("anima_name", "test-anima")
+                return f"あなたは{anima_name}です。他のアニマとはsend_messageで通信できます。\nメッセージはsend_messageツールで送信してください。"
+            return "section"
+
+        with patch("core.prompt.builder.load_prompt", side_effect=_load_prompt_section):
             return build_system_prompt(
                 memory,
                 execution_mode="a",
@@ -238,9 +246,17 @@ class TestDistilledKnowledgeTierBudget:
 
     def test_t1_injects_dk(self, tmp_path, data_dir):
         memory = _make_mock_memory(tmp_path, data_dir)
-        memory.collect_distilled_knowledge.return_value = [
-            {"name": "test_knowledge", "content": "knowledge content here"},
-        ]
+        memory.collect_distilled_knowledge_separated.return_value = (
+            [],
+            [
+                {
+                    "name": "test_knowledge",
+                    "content": "knowledge content here",
+                    "confidence": 0.8,
+                    "path": "/tmp/knowledge/test_knowledge.md",
+                },
+            ],
+        )
         with patch("core.prompt.builder.load_prompt", return_value="section"):
             result = build_system_prompt(
                 memory, execution_mode="a", context_window=200_000,
@@ -250,9 +266,17 @@ class TestDistilledKnowledgeTierBudget:
 
     def test_t4_omits_dk(self, tmp_path, data_dir):
         memory = _make_mock_memory(tmp_path, data_dir)
-        memory.collect_distilled_knowledge.return_value = [
-            {"name": "test_knowledge", "content": "knowledge content here"},
-        ]
+        memory.collect_distilled_knowledge_separated.return_value = (
+            [],
+            [
+                {
+                    "name": "test_knowledge",
+                    "content": "knowledge content here",
+                    "confidence": 0.8,
+                    "path": "/tmp/knowledge/test_knowledge.md",
+                },
+            ],
+        )
         with patch("core.prompt.builder.load_prompt", return_value="section"):
             result = build_system_prompt(
                 memory, execution_mode="a", context_window=8_000,
@@ -261,9 +285,17 @@ class TestDistilledKnowledgeTierBudget:
 
     def test_t3_omits_dk(self, tmp_path, data_dir):
         memory = _make_mock_memory(tmp_path, data_dir)
-        memory.collect_distilled_knowledge.return_value = [
-            {"name": "test_knowledge", "content": "knowledge content here"},
-        ]
+        memory.collect_distilled_knowledge_separated.return_value = (
+            [],
+            [
+                {
+                    "name": "test_knowledge",
+                    "content": "knowledge content here",
+                    "confidence": 0.8,
+                    "path": "/tmp/knowledge/test_knowledge.md",
+                },
+            ],
+        )
         with patch("core.prompt.builder.load_prompt", return_value="section"):
             result = build_system_prompt(
                 memory, execution_mode="a", context_window=16_000,

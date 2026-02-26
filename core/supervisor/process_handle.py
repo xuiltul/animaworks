@@ -124,10 +124,10 @@ class ProcessHandle:
         logger.info("Starting process: %s", self.anima_name)
         logger.debug("Command: %s", " ".join(cmd))
 
+        stderr_path: Path | None = None
         try:
             # Redirect stderr to a log file for post-mortem debugging;
             # stdout is discarded because the child writes its own log files.
-            stderr_path: Path | None = None
             if self.log_dir:
                 stderr_dir = self.log_dir / "animas" / self.anima_name
                 stderr_dir.mkdir(parents=True, exist_ok=True)
@@ -227,6 +227,8 @@ class ProcessHandle:
                     method="ping",
                     params={}
                 )
+                if not self.ipc_client:
+                    raise RuntimeError(f"IPC client not initialized for {self.anima_name}")
                 response = await self.ipc_client.send_request(request, timeout=5.0)
                 if response.result and response.result.get("status") == "ok":
                     logger.info(

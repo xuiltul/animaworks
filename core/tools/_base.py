@@ -237,5 +237,6 @@ def get_eligible_tools_from_profiles(
     for tool_name, subcommands in profiles.items():
         for subcmd, info in subcommands.items():
             if info.get("background_eligible"):
-                eligible[f"{tool_name}:{subcmd}"] = int(info.get("expected_seconds", 60))
+                raw = info.get("expected_seconds", 60)
+                eligible[f"{tool_name}:{subcmd}"] = int(str(raw)) if raw is not None else 60
     return eligible

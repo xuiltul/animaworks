@@ -272,12 +272,13 @@ class KnowledgeGraph:
             with open(cache_path, encoding="utf-8") as f:
                 data = json.load(f)
 
-            self.graph = json_graph.node_link_graph(data, directed=True)
+            graph = json_graph.node_link_graph(data, directed=True)
+            self.graph = graph
 
             logger.info(
                 "Graph loaded from cache: %d nodes, %d edges",
-                self.graph.number_of_nodes(),
-                self.graph.number_of_edges(),
+                graph.number_of_nodes(),
+                graph.number_of_edges(),
             )
             return True
 

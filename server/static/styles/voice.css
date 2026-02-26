@@ -1,0 +1,183 @@
+/* ── Voice Chat UI ────────────────────────── */
+
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+}
+
+.voice-mic-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color, #ccc);
+  background: var(--bg-secondary, #f5f5f5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+  flex-shrink: 0;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+}
+.voice-mic-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: var(--text-secondary, #666);
+  pointer-events: none;
+}
+.voice-mic-btn:hover {
+  border-color: var(--accent-color, #4a9eff);
+  background: var(--bg-hover, #eef);
+}
+.voice-mic-btn.active {
+  border-color: var(--accent-color, #4a9eff);
+  background: var(--accent-bg, #e8f0fe);
+}
+.voice-mic-btn.active svg {
+  fill: var(--accent-color, #4a9eff);
+}
+.voice-mic-btn.recording {
+  border-color: #e53e3e;
+  background: #fed7d7;
+  animation: voice-pulse 1.5s ease-in-out infinite;
+}
+.voice-mic-btn.recording svg {
+  fill: #e53e3e;
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(229, 62, 62, 0);
+  }
+}
+
+.voice-rec-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e53e3e;
+  animation: voice-blink 1s ease-in-out infinite;
+}
+@keyframes voice-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.voice-tts-indicator {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.voice-tts-indicator::after {
+  content: '🔊';
+  font-size: 14px;
+  animation: voice-speak 0.8s ease-in-out infinite alternate;
+}
+@keyframes voice-speak {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.2);
+  }
+}
+
+.voice-thinking-indicator {
+  font-size: 11px;
+  color: var(--accent-color, #4a9eff);
+  animation: voice-thinking-pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@keyframes voice-thinking-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.voice-mode-toggle {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #ccc);
+  background: var(--bg-secondary, #f5f5f5);
+  cursor: pointer;
+  color: var(--text-secondary, #666);
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.voice-mode-toggle:hover {
+  border-color: var(--accent-color, #4a9eff);
+}
+
+.voice-volume-slider {
+  width: 60px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border-color, #ccc);
+  border-radius: 2px;
+  outline: none;
+  flex-shrink: 0;
+}
+.voice-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-color, #4a9eff);
+  cursor: pointer;
+}
+
+/* ── Mobile: larger tap target ─────────── */
+@media (max-width: 768px) {
+  .voice-mic-btn {
+    width: 48px;
+    height: 48px;
+  }
+  .voice-mic-btn svg {
+    width: 24px;
+    height: 24px;
+  }
+  .voice-controls {
+    gap: 8px;
+  }
+  .voice-volume-slider {
+    width: 50px;
+  }
+}
+
+/* ── Dark mode ──────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  .voice-mic-btn {
+    background: var(--bg-secondary, #2d2d2d);
+    border-color: var(--border-color, #444);
+  }
+  .voice-mic-btn svg {
+    fill: var(--text-secondary, #aaa);
+  }
+  .voice-mic-btn.recording {
+    background: #4a1919;
+    border-color: #e53e3e;
+  }
+  .voice-mode-toggle {
+    background: var(--bg-secondary, #2d2d2d);
+    color: var(--text-secondary, #aaa);
+  }
+}

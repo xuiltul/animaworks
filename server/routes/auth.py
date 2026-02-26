@@ -23,6 +23,15 @@ from core.auth.manager import (
 logger = logging.getLogger("animaworks.routes.auth")
 
 
+def _is_forwarded_https(request: Request) -> bool:
+    """Detect HTTPS when behind a reverse proxy."""
+    if request.headers.get("x-forwarded-proto") == "https":
+        return True
+    if request.url.scheme == "https":
+        return True
+    return False
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -71,11 +80,13 @@ def create_auth_router() -> APIRouter:
             "display_name": user.display_name,
             "role": user.role,
         })
+        is_https = _is_forwarded_https(request)
         response.set_cookie(
             key="session_token",
             value=token,
             httponly=True,
-            samesite="strict",
+            secure=is_https,
+            samesite="lax",
             path="/",
         )
         logger.info("User '%s' logged in", user.username)

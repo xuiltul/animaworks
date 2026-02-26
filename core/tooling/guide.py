@@ -20,6 +20,60 @@ from core.exceptions import ToolConfigError  # noqa: F401
 logger = logging.getLogger("animaworks.tool_guide")
 
 
+# ── Locale-aware guide strings ────────────────────────────────────────
+
+_GUIDE_STRINGS: dict[str, str | dict[str, str]] = {
+    "header": {
+        "ja": "## 外部ツール",
+        "en": "## External Tools",
+    },
+    "intro": {
+        "ja": (
+            "以下の外部ツールが利用可能です。使い方の詳細は `discover_tools` ツールまたは "
+            "`animaworks-tool <ツール名> --help` で確認してください。"
+        ),
+        "en": (
+            "The following external tools are available. Use `discover_tools` tool or "
+            "`animaworks-tool <tool_name> --help` for details."
+        ),
+    },
+    "table_header": {
+        "ja": "| ツール | 概要 | サブコマンド |",
+        "en": "| Tool | Summary | Subcommands |",
+    },
+    "table_separator": "|--------|------|------------|",
+    "long_running_label": {
+        "ja": "長時間ツール",
+        "en": "Long-running tools",
+    },
+    "long_running": {
+        "ja": (
+            "`animaworks-tool submit <tool> <subcommand>` で非同期実行すること。"
+            "直接実行するとロックが保持される。"
+        ),
+        "en": (
+            "Use `animaworks-tool submit <tool> <subcommand>` for async execution. "
+            "Direct execution holds the lock."
+        ),
+    },
+    "footer": {
+        "ja": "使えるツールは上記のみ（permissions.mdで許可されたもの）。APIキー未設定はエラーになる。",
+        "en": "Only the tools listed above are available (as permitted in permissions.md). Missing API keys will cause errors.",
+    },
+}
+
+
+def _gs(key: str) -> str:
+    """Get guide string for current locale."""
+    entry = _GUIDE_STRINGS.get(key, {})
+    if isinstance(entry, str):
+        return entry
+    from core.paths import _get_locale
+
+    loc = _get_locale()
+    return entry.get(loc) or entry.get("en") or entry.get("ja", "")
+
+
 # ── Public API ───────────────────────────────────────────────────
 
 
@@ -43,13 +97,12 @@ def build_tools_guide(
     profiles = load_execution_profiles(TOOL_MODULES, personal_tools)
 
     parts: list[str] = [
-        "## 外部ツール",
+        _gs("header"),
         "",
-        "以下の外部ツールが利用可能です。使い方の詳細は `discover_tools` ツールまたは "
-        "`animaworks-tool <ツール名> --help` で確認してください。",
+        _gs("intro"),
         "",
-        "| ツール | 概要 | サブコマンド |",
-        "|--------|------|------------|",
+        _gs("table_header"),
+        _gs("table_separator"),
     ]
 
     bg_tools: list[str] = []
@@ -79,14 +132,11 @@ def build_tools_guide(
     parts.append("")
 
     if bg_tools:
-        parts.append(f"長時間ツール: {', '.join(bg_tools)}")
-        parts.append(
-            "`animaworks-tool submit <tool> <subcommand>` で非同期実行すること。"
-            "直接実行するとロックが保持される。"
-        )
+        parts.append(f"{_gs('long_running_label')}: {', '.join(bg_tools)}")
+        parts.append(_gs("long_running"))
         parts.append("")
 
-    parts.append("使えるツールは上記のみ（permissions.mdで許可されたもの）。APIキー未設定はエラーになる。")
+    parts.append(_gs("footer"))
 
     return "\n".join(parts)
 
