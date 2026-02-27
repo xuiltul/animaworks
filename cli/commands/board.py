@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import argparse
+
+from core.i18n import t
 import json
 import logging
 import os
@@ -108,9 +110,7 @@ def _fanout_board_mentions(
 
     fanout_content = (
         f"[board_reply:channel={channel},from={from_anima}]\n"
-        f"{from_anima}さんがボード #{channel} であなたをメンションしました:\n\n"
-        f"{text}\n\n"
-        f'返信するには post_channel(channel="{channel}", text="返信内容") を使ってください。'
+        + t("handler.board_mention_content", from_name=from_anima, channel=channel, text=text)
     )
 
     for target in sorted(targets):

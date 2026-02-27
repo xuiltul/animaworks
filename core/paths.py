@@ -85,8 +85,11 @@ def _get_locale() -> str:
     """Get locale from config lazily to avoid circular imports."""
     try:
         from core.config.models import load_config
-        return load_config().locale
-    except (ImportError, FileNotFoundError, ValueError, OSError):
+        loc = load_config().locale
+        if isinstance(loc, str) and loc:
+            return loc
+        return "ja"
+    except (ImportError, FileNotFoundError, ValueError, OSError, AttributeError):
         return "ja"
 
 

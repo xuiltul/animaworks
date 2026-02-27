@@ -12,6 +12,7 @@ import logging
 import re
 from typing import Any
 
+from core.i18n import t
 from core.voice.sentence_splitter import StreamingSentenceSplitter
 from core.voice.stt import VoiceSTT
 from core.voice.tts_base import BaseTTSProvider, TTSConfig
@@ -150,7 +151,7 @@ class VoiceSession:
             result = await self._stt.transcribe_buffer_async(audio_data)
         except Exception as e:
             logger.exception("STT failed: %s", e)
-            await self._send_error("音声認識に失敗しました")
+            await self._send_error(t("voice.stt_failed"))
             return
 
         text = result.get("raw_text", "").strip()

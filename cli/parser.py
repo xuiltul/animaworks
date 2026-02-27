@@ -7,6 +7,8 @@ from __future__ import annotations
 import argparse
 import os
 
+from core.i18n import t
+
 
 def cli_main() -> None:
     from dotenv import load_dotenv
@@ -307,12 +309,12 @@ def cli_main() -> None:
     p_anima_delete.set_defaults(func=_lazy_anima_delete)
 
     # anima disable
-    p_anima_disable = anima_sub.add_parser("disable", help="Disable (休養) an anima")
+    p_anima_disable = anima_sub.add_parser("disable", help=t("cli.disable_help"))
     p_anima_disable.add_argument("anima", help="Anima name to disable")
     p_anima_disable.set_defaults(func=_lazy_anima_disable)
 
     # anima enable
-    p_anima_enable = anima_sub.add_parser("enable", help="Enable (復帰) an anima")
+    p_anima_enable = anima_sub.add_parser("enable", help=t("cli.enable_help"))
     p_anima_enable.add_argument("anima", help="Anima name to enable")
     p_anima_enable.set_defaults(func=_lazy_anima_enable)
 
@@ -553,9 +555,9 @@ def _lazy_migrate_cron(args: argparse.Namespace) -> None:
     animas_dir = get_data_dir() / "animas"
     count = migrate_all_cron(animas_dir)
     if count:
-        print(f"Migrated {count} anima(s) to standard cron format.")
+        print(t("cli.migrate_cron_done", count=count))
     else:
-        print("No migration needed — all cron.md files are already in standard format.")
+        print(t("cli.migrate_cron_skipped"))
 
 
 def _lazy_anima_create(args: argparse.Namespace) -> None:

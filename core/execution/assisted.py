@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from core.exceptions import LLMAPIError, ToolExecutionError, ConfigError  # noqa: F401
+from core.i18n import t
 from core.execution._sanitize import wrap_tool_result
 from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
 from core.execution.reminder import MSG_OUTPUT_TRUNCATED, SystemReminderQueue
@@ -168,7 +169,7 @@ def _truncate_tool_output(result: str, max_bytes: int = _MAX_TOOL_OUTPUT_BYTES) 
     truncated = encoded[:max_bytes].decode("utf-8", errors="ignore")
     return (
         f"{truncated}\n"
-        f"... [出力切り捨て: 元のサイズ {len(encoded)}バイト]"
+        + t("assisted.output_truncated", size=len(encoded))
     )
 
 

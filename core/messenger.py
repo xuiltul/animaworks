@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.i18n import t
 from core.time_utils import now_iso
 
 from core.exceptions import MessagingError, DeliveryError, RecipientNotFoundError  # noqa: F401
@@ -92,11 +93,7 @@ class Messenger:
                         from_person="system",
                         to_person=self.anima_name,
                         type="error",
-                        content=(
-                            f"ConversationDepthExceeded: {to}との会話が"
-                            f"10分間に6ターンに達しました。"
-                            f"次のハートビートサイクルまでお待ちください"
-                        ),
+                        content=t("messenger.depth_exceeded", to=to),
                     )
 
         msg = Message(

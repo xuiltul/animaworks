@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from core.exceptions import ToolExecutionError, MemoryWriteError, ProcessError, DeliveryError, RecipientNotFoundError  # noqa: F401
+from core.i18n import t
 from core.time_utils import now_iso
 
 from core.background import BackgroundTaskManager
@@ -170,11 +171,10 @@ def _validate_episode_path(rel_path: str) -> str | None:
 
     from datetime import date
 
-    return (
-        f"WARNING: エピソードファイル名 '{filename}' は標準パターン "
-        f"(YYYY-MM-DD.md または YYYY-MM-DD_suffix.md) に合致しません。"
-        f" 推奨: episodes/{date.today().isoformat()}.md に"
-        f" '## HH:MM — タイトル' 形式で追記してください。"
+    return t(
+        "handler.episode_filename_warning",
+        filename=filename,
+        date=date.today().isoformat(),
     )
 
 
@@ -193,12 +193,12 @@ def _validate_skill_format(content: str) -> str:
 
     # ── Check YAML frontmatter presence ──
     if not content.startswith("---"):
-        return "スキルファイルにはYAMLフロントマター(---)が必要です。"
+        return t("handler.skill_frontmatter_required")
 
     # ── Parse frontmatter ──
     end_idx = content.find("---", 3)
     if end_idx == -1:
-        return "スキルファイルにはYAMLフロントマター(---)が必要です。"
+        return t("handler.skill_frontmatter_required")
 
     frontmatter_raw = content[3:end_idx].strip()
     try:
@@ -217,25 +217,19 @@ def _validate_skill_format(content: str) -> str:
 
     # ── Required fields ──
     if "name" not in frontmatter:
-        messages.append("`name` フィールドが必要です。")
+        messages.append(t("handler.name_field_required"))
     if "description" not in frontmatter:
-        messages.append("`description` フィールドが必要です。")
+        messages.append(t("handler.description_field_required"))
 
     # ── Description quality check (only if description exists) ──
     desc = str(frontmatter.get("description", ""))
     if desc and ("「" not in desc or "」" not in desc):
-        messages.append(
-            "descriptionに「」キーワードがありません。"
-            "自動マッチング精度が低下する可能性があります。"
-        )
+        messages.append(t("handler.description_keyword_warning"))
 
     # ── Legacy section detection ──
     body = content[end_idx + 3:]
     if "## 概要" in body or "## 発動条件" in body:
-        messages.append(
-            "旧形式のセクション(## 概要 / ## 発動条件)が検出されました。"
-            "Claude Code形式(YAMLフロントマター)への移行を推奨します。"
-        )
+        messages.append(t("handler.legacy_skill_sections"))
 
     return "\n".join(messages)
 
@@ -253,17 +247,12 @@ def _validate_procedure_format(content: str) -> str:
     messages: list[str] = []
 
     if not content.startswith("---"):
-        messages.append(
-            "手順書ファイルにはYAMLフロントマター(---)を推奨します。"
-            "description フィールドで自動マッチングが有効になります。"
-        )
+        messages.append(t("handler.procedure_frontmatter_recommended"))
         return "\n".join(messages)
 
     end_idx = content.find("---", 3)
     if end_idx == -1:
-        messages.append(
-            "手順書ファイルにはYAMLフロントマター(---)を推奨します。"
-        )
+        messages.append(t("handler.procedure_frontmatter_recommended_short"))
         return "\n".join(messages)
 
     frontmatter_raw = content[3:end_idx].strip()
@@ -281,10 +270,7 @@ def _validate_procedure_format(content: str) -> str:
                 frontmatter[key.strip()] = val.strip()
 
     if "description" not in frontmatter:
-        messages.append(
-            "`description` フィールドがありません。"
-            "自動マッチングを有効にするために description を追加してください。"
-        )
+        messages.append(t("handler.procedure_description_missing"))
 
     return "\n".join(messages)
 
@@ -575,7 +561,7 @@ class ToolHandler:
                     result = _json.dumps({
                         "status": "background",
                         "task_id": task_id,
-                        "message": f"タスクをバックグラウンドで実行開始しました (task_id: {task_id})",
+                        "message": t("handler.background_task_started", task_id=task_id),
                     }, ensure_ascii=False)
                 else:
                     # External tool dispatch -- inject anima_dir for tools that need it
@@ -615,7 +601,7 @@ class ToolHandler:
         )
         return (
             truncated
-            + f"\n\n[出力が500KBを超えたためトランケーションしました。元のサイズ: {size}]"
+            + "\n\n" + t("handler.output_truncated", size=size)
         )
 
     # Activity type mapping: tool name → (activity_type, kwargs_builder)
@@ -639,9 +625,9 @@ class ToolHandler:
             elif name == "post_channel":
                 self._activity.log(activity_type, content=args.get("text", "")[:200], channel=args.get("channel", ""), meta=meta or None)
             elif name == "read_channel":
-                self._activity.log(activity_type, channel=args.get("channel", ""), summary=f"最新{args.get('limit', 20)}件を確認", meta=meta or None)
+                self._activity.log(activity_type, channel=args.get("channel", ""), summary=t("handler.activity_recent_items", limit=args.get("limit", 20)), meta=meta or None)
             elif name == "read_dm_history":
-                self._activity.log(activity_type, channel=f"dm:{args.get('peer', '')}", summary="DM履歴を確認", meta=meta or None)
+                self._activity.log(activity_type, channel=f"dm:{args.get('peer', '')}", summary=t("handler.activity_dm_history"), meta=meta or None)
             elif name == "call_human":
                 self._activity.log(activity_type, content=args.get("body", "")[:200], via="configured_channels", meta=meta or None)
         except Exception as e:
@@ -779,7 +765,7 @@ class ToolHandler:
             if not self._check_tool_creation_permission("個人ツール"):
                 return _error_result(
                     "PermissionDenied",
-                    "ツール作成が許可されていません。permissions.md に「ツール作成」セクションを追加してください。",
+                    t("handler.tool_creation_denied"),
                 )
 
         content = args["content"]
@@ -845,14 +831,14 @@ class ToolHandler:
         if (rel.startswith("skills/") or rel.startswith("common_skills/")) and rel.endswith(".md"):
             validation_msg = _validate_skill_format(args["content"])
             if validation_msg:
-                result = f"{result}\n\n⚠️ スキルフォーマット検証:\n{validation_msg}"
+                result = f"{result}\n\n{t('handler.skill_format_validation', msg=validation_msg)}"
 
         # Validate procedure file format (soft validation: warn but don't block)
         # Skip when auto-frontmatter was just applied (content already structured)
         if rel.startswith("procedures/") and rel.endswith(".md") and not auto_frontmatter_applied:
             validation_msg = _validate_procedure_format(args["content"])
             if validation_msg:
-                result = f"{result}\n\n⚠️ 手順書フォーマット検証:\n{validation_msg}"
+                result = f"{result}\n\n{t('handler.procedure_format_validation', msg=validation_msg)}"
 
         # Auto-update RAG index for skill/procedure writes
         if rel.startswith(("skills/", "procedures/")) and rel.endswith(".md"):
@@ -948,23 +934,16 @@ class ToolHandler:
         # ── Per-run DM limits ──
         # 1. Intent restriction: report/delegation/question allowed for DM
         if intent not in ("report", "delegation", "question"):
-            return (
-                "Error: DMのintentは 'report', 'delegation', 'question' のみ許可されています。"
-                "acknowledgment・感謝・FYIは"
-                "Boardを使用してください（post_channel ツール）。"
-            )
+            return t("handler.dm_intent_error")
 
         # 2. Per-recipient limit: 1 message per recipient per run
         current_replied = self.replied_to_for(active_session_type.get())
         if to in current_replied:
-            return f"Error: このrunで既に {to} にメッセージを送信済みです。追加の連絡はBoardを使用してください。"
+            return t("handler.dm_already_sent", to=to)
 
         # 3. Max recipients limit: 2 people per run
         if len(current_replied) >= 2 and to not in current_replied:
-            return (
-                "Error: 1回のrunでDMを送れるのは最大2人までです。"
-                "3人以上への伝達はBoardを使用してください（post_channel ツール）。"
-            )
+            return t("handler.dm_max_recipients")
 
         # ── Resolve recipient: internal Anima or external user ──
         try:
@@ -1084,13 +1063,14 @@ class ToolHandler:
             alt_channels = {"general", "ops"} - {channel} - current_posted
             alt_hint = ""
             if alt_channels:
-                alt_hint = (
-                    f" 別のチャネル（{', '.join(f'#{c}' for c in sorted(alt_channels))}）"
-                    "への投稿、またはsend_message（intent: question/report）は可能です。"
+                alt_hint = t(
+                    "handler.post_alt_hint",
+                    channels=", ".join(f"#{c}" for c in sorted(alt_channels)),
                 )
-            return (
-                f"Error: このrunで既に #{channel} に投稿済みです。"
-                f"同一チャネルへの連投はできません。{alt_hint}"
+            return t(
+                "handler.post_already_posted",
+                channel=channel,
+                alt_hint=alt_hint,
             )
 
         # ── Cross-run guard: ファイルベース cooldown チェック ──
@@ -1108,10 +1088,12 @@ class ToolHandler:
                     ts = ensure_aware(datetime.fromisoformat(last["ts"]))
                     elapsed = (now_jst() - ts).total_seconds()
                     if elapsed < cooldown:
-                        return (
-                            f"Error: #{channel} には {last['ts'][11:16]} に投稿済みです"
-                            f"（{int(elapsed)}秒前）。"
-                            f"クールダウン {cooldown}秒が必要です。"
+                        return t(
+                            "handler.post_cooldown",
+                            channel=channel,
+                            ts=last["ts"][11:16],
+                            elapsed=int(elapsed),
+                            cooldown=cooldown,
                         )
                 except (ValueError, TypeError):
                     pass
@@ -1169,9 +1151,7 @@ class ToolHandler:
         from_name = self._anima_name
         fanout_content = (
             f"[board_reply:channel={channel},from={from_name}]\n"
-            f"{from_name}さんがボード #{channel} であなたをメンションしました:\n\n"
-            f"{text}\n\n"
-            f'返信するには post_channel(channel="{channel}", text="返信内容") を使ってください。'
+            + t("handler.board_mention_content", from_name=from_name, channel=channel, text=text)
         )
 
         for target in sorted(targets):
@@ -1384,25 +1364,25 @@ class ToolHandler:
         if target_name == self._anima_name:
             return _error_result(
                 "PermissionDenied",
-                "自分自身を操作することはできません",
+                t("handler.self_operation_denied"),
             )
 
         try:
             config = load_config()
         except Exception as e:
-            return _error_result("ConfigError", f"設定読み込みに失敗: {e}")
+            return _error_result("ConfigError", t("handler.config_load_failed", e=e))
 
         target_cfg = config.animas.get(target_name)
         if target_cfg is None:
             return _error_result(
                 "AnimaNotFound",
-                f"Anima '{target_name}' は存在しません",
+                t("handler.anima_not_found", target_name=target_name),
             )
 
         if target_cfg.supervisor != self._anima_name:
             return _error_result(
                 "PermissionDenied",
-                f"'{target_name}' はあなたの直属部下ではありません",
+                t("handler.not_direct_subordinate", target_name=target_name),
                 context={"supervisor": target_cfg.supervisor or "(なし)"},
             )
 
@@ -1446,13 +1426,13 @@ class ToolHandler:
         if target_name == self._anima_name:
             return _error_result(
                 "PermissionDenied",
-                "自分自身を操作することはできません",
+                t("handler.self_operation_denied"),
             )
         descendants = self._get_all_descendants()
         if target_name not in descendants:
             return _error_result(
                 "PermissionDenied",
-                f"'{target_name}' はあなたの配下ではありません",
+                t("handler.not_descendant", target_name=target_name),
             )
         return None
 
@@ -1486,7 +1466,7 @@ class ToolHandler:
                 pass
 
         if not existing.get("enabled", True):
-            return f"'{target_name}' は既に休止中です"
+            return t("handler.already_disabled", target_name=target_name)
 
         existing["enabled"] = False
         status_file.write_text(
@@ -1495,9 +1475,9 @@ class ToolHandler:
         )
 
         # Activity log
-        log_summary = f"{target_name} を休止"
+        log_summary = t("handler.disable_log_summary", target_name=target_name)
         if reason:
-            log_summary += f" (理由: {reason})"
+            log_summary += t("handler.disable_reason", reason=reason)
         self._activity.log(
             "tool_use",
             tool="disable_subordinate",
@@ -1510,7 +1490,7 @@ class ToolHandler:
             self._anima_name, target_name, reason or "(none)",
         )
 
-        result = f"'{target_name}' を休止にしました。Reconciliation が30秒以内にプロセスを停止します。"
+        result = t("handler.disabled_success", target_name=target_name)
         if reason:
             result += f"\n理由: {reason}"
         return result
@@ -1544,7 +1524,7 @@ class ToolHandler:
                 pass
 
         if existing.get("enabled", True):
-            return f"'{target_name}' は既に有効です"
+            return t("handler.already_enabled", target_name=target_name)
 
         existing["enabled"] = True
         status_file.write_text(
@@ -1556,7 +1536,7 @@ class ToolHandler:
         self._activity.log(
             "tool_use",
             tool="enable_subordinate",
-            summary=f"{target_name} を復帰",
+            summary=t("handler.enable_log_summary", target_name=target_name),
             meta={"target": target_name},
         )
 
@@ -1565,7 +1545,7 @@ class ToolHandler:
             self._anima_name, target_name,
         )
 
-        return f"'{target_name}' を有効にしました。Reconciliation が30秒以内にプロセスを起動します。"
+        return t("handler.enabled_success", target_name=target_name)
 
     def _handle_set_subordinate_model(self, args: dict[str, Any]) -> str:
         """Change a subordinate anima's LLM model (updates status.json).
@@ -1598,17 +1578,14 @@ class ToolHandler:
                 "Not in KNOWN_MODELS — proceeding anyway.",
                 model, target_name,
             )
-            warn_msg = (
-                f"\n警告: '{model}' は既知のモデルカタログに含まれていません。"
-                "正しいモデル名か確認してください。"
-            )
+            warn_msg = "\n" + t("handler.model_warning", model=model)
 
         target_dir = get_data_dir() / "animas" / target_name
         update_status_model(target_dir, model=model)
 
-        log_summary = f"{target_name} のモデルを {model} に変更"
+        log_summary = t("handler.model_change_log", target_name=target_name, model=model)
         if reason:
-            log_summary += f" (理由: {reason})"
+            log_summary += t("handler.disable_reason", reason=reason)
         self._activity.log(
             "tool_use",
             tool="set_subordinate_model",
@@ -1621,10 +1598,7 @@ class ToolHandler:
             self._anima_name, target_name, model, reason or "(none)",
         )
 
-        result = (
-            f"'{target_name}' のモデルを '{model}' に変更しました。"
-            "反映するには restart_subordinate を呼び出してください。"
-        )
+        result = t("handler.model_changed", target_name=target_name, model=model)
         if reason:
             result += f"\n理由: {reason}"
         return result + warn_msg
@@ -1662,9 +1636,9 @@ class ToolHandler:
             encoding="utf-8",
         )
 
-        log_summary = f"{target_name} を再起動リクエスト"
+        log_summary = t("handler.restart_log", target_name=target_name)
         if reason:
-            log_summary += f" (理由: {reason})"
+            log_summary += t("handler.disable_reason", reason=reason)
         self._activity.log(
             "tool_use",
             tool="restart_subordinate",
@@ -1677,10 +1651,7 @@ class ToolHandler:
             self._anima_name, target_name, reason or "(none)",
         )
 
-        result = (
-            f"'{target_name}' の再起動をリクエストしました。"
-            "Reconciliation が 30 秒以内にプロセスを再起動します。"
-        )
+        result = t("handler.restart_success", target_name=target_name)
         if reason:
             result += f"\n理由: {reason}"
         return result
@@ -1689,7 +1660,7 @@ class ToolHandler:
         """Show organization dashboard with all descendants' status."""
         descendants = self._get_all_descendants()
         if not descendants:
-            return "配下の Anima はいません"
+            return t("handler.no_subordinates")
 
         from core.config.models import load_config
         from core.paths import get_animas_dir
@@ -1728,19 +1699,19 @@ class ToolHandler:
                 if recent:
                     entry["last_activity"] = recent[-1].ts
                 else:
-                    entry["last_activity"] = "なし"
+                    entry["last_activity"] = t("handler.last_activity_none")
             except Exception:
-                entry["last_activity"] = "不明"
+                entry["last_activity"] = t("handler.last_activity_unknown")
 
             task_file = desc_dir / "state" / "current_task.md"
             if task_file.exists():
                 try:
                     task_text = task_file.read_text(encoding="utf-8").strip()
-                    entry["current_task"] = task_text[:100] if task_text else "なし"
+                    entry["current_task"] = task_text[:100] if task_text else t("handler.current_task_none")
                 except Exception:
-                    entry["current_task"] = "読取不可"
+                    entry["current_task"] = t("handler.current_task_unreadable")
             else:
-                entry["current_task"] = "なし"
+                entry["current_task"] = t("handler.current_task_none")
 
             try:
                 from core.memory.task_queue import TaskQueueManager
@@ -1753,7 +1724,7 @@ class ToolHandler:
 
             entries.append(entry)
 
-        lines: list[str] = ["## 組織ダッシュボード", ""]
+        lines: list[str] = [t("handler.org_dashboard_title"), ""]
         by_supervisor: dict[str, list[dict[str, Any]]] = {}
         for e in entries:
             sup = e.get("supervisor", "")
@@ -1765,10 +1736,11 @@ class ToolHandler:
                 prefix = "  " * indent + "├─ " if indent > 0 else ""
                 status_icon = "🟢" if child["process_status"] in ("running", "enabled") else "🔴" if child["process_status"] == "disabled" else "⚪"
                 line = f"{prefix}{status_icon} **{child['name']}** [{child['process_status']}]"
-                line += f" | 最終: {child['last_activity']}"
-                line += f" | タスク: {child['active_tasks']}件"
-                if child["current_task"] != "なし":
-                    line += f"\n{'  ' * (indent + 1)}└ 作業中: {child['current_task']}"
+                line += " | " + t("handler.dashboard_last", activity=child["last_activity"])
+                line += " | " + t("handler.dashboard_tasks", count=child["active_tasks"])
+                none_str = t("handler.current_task_none")
+                if child["current_task"] != none_str:
+                    line += "\n" + "  " * (indent + 1) + "└ " + t("handler.dashboard_working_on", task=child["current_task"])
                 lines.append(line)
                 _render_tree(child["name"], indent + 1)
 
@@ -1781,7 +1753,7 @@ class ToolHandler:
         self._activity.log(
             "tool_use",
             tool="org_dashboard",
-            summary=f"配下{len(descendants)}名のダッシュボード表示",
+            summary=t("handler.dashboard_summary", count=len(descendants)),
         )
 
         return "\n".join(lines)
@@ -1798,7 +1770,7 @@ class ToolHandler:
         else:
             targets = self._get_all_descendants()
             if not targets:
-                return "配下の Anima はいません"
+                return t("handler.no_subordinates")
 
         from core.paths import get_animas_dir
 
@@ -1811,7 +1783,7 @@ class ToolHandler:
                 "name": name,
                 "alive": False,
                 "process_status": "unknown",
-                "last_activity": "不明",
+                "last_activity": t("handler.last_activity_unknown"),
                 "since": "",
             }
 
@@ -1852,12 +1824,12 @@ class ToolHandler:
                     elapsed = (now_jst() - ts).total_seconds()
                     minutes = int(elapsed / 60)
                     if minutes < 60:
-                        result["since"] = f"{minutes}分前"
+                        result["since"] = t("handler.since_minutes", minutes=minutes)
                     else:
                         hours = minutes // 60
-                        result["since"] = f"{hours}時間{minutes % 60}分前"
+                        result["since"] = t("handler.since_hours", hours=hours, minutes=minutes % 60)
                 else:
-                    result["last_activity"] = "なし"
+                    result["last_activity"] = t("handler.last_activity_none")
             except Exception:
                 logger.debug("Failed to read activity for %s", name, exc_info=True)
 
@@ -1866,7 +1838,7 @@ class ToolHandler:
         self._activity.log(
             "tool_use",
             tool="ping_subordinate",
-            summary=f"{'全配下' if not target_name else target_name}の生存確認",
+            summary=t("handler.ping_summary", target="全配下" if not target_name else target_name),
         )
 
         return _json.dumps(results, ensure_ascii=False, indent=2)
@@ -1885,20 +1857,20 @@ class ToolHandler:
 
         desc_dir = get_animas_dir() / target_name
 
-        parts: list[str] = [f"## {target_name} の作業状態", ""]
+        parts: list[str] = [t("handler.state_title", target_name=target_name), ""]
 
         task_file = desc_dir / "state" / "current_task.md"
         if task_file.exists():
             try:
                 content = task_file.read_text(encoding="utf-8").strip()
-                parts.append("### 進行中タスク")
-                parts.append(content if content else "(なし)")
+                parts.append(t("handler.state_current_task"))
+                parts.append(content if content else t("handler.state_none"))
             except Exception:
-                parts.append("### 進行中タスク")
-                parts.append("(読取不可)")
+                parts.append(t("handler.state_current_task"))
+                parts.append(t("handler.state_unreadable"))
         else:
-            parts.append("### 進行中タスク")
-            parts.append("(なし)")
+            parts.append(t("handler.state_current_task"))
+            parts.append(t("handler.state_none"))
 
         parts.append("")
 
@@ -1906,19 +1878,19 @@ class ToolHandler:
         if pending_file.exists():
             try:
                 content = pending_file.read_text(encoding="utf-8").strip()
-                parts.append("### 保留タスク")
-                parts.append(content if content else "(なし)")
+                parts.append(t("handler.state_pending"))
+                parts.append(content if content else t("handler.state_none"))
             except Exception:
-                parts.append("### 保留タスク")
-                parts.append("(読取不可)")
+                parts.append(t("handler.state_pending"))
+                parts.append(t("handler.state_unreadable"))
         else:
-            parts.append("### 保留タスク")
-            parts.append("(なし)")
+            parts.append(t("handler.state_pending"))
+            parts.append(t("handler.state_none"))
 
         self._activity.log(
             "tool_use",
             tool="read_subordinate_state",
-            summary=f"{target_name}の作業状態を読み取り",
+            summary=t("handler.state_read_summary", target_name=target_name),
         )
 
         return "\n".join(parts)
@@ -1944,19 +1916,19 @@ class ToolHandler:
 
         permissions_text = self._memory.read_permissions() if self._memory else ""
 
-        file_read: list[str] = ["自分のディレクトリ", "shared/"]
-        file_write: list[str] = ["自分のディレクトリ"]
+        file_read: list[str] = [t("handler.file_read_own"), t("handler.file_read_shared")]
+        file_write: list[str] = [t("handler.file_write_own")]
         if self._subordinate_management_files:
-            file_read.append("直属部下のcron.md, heartbeat.md, status.json, injection.md")
-            file_write.append("直属部下のcron.md, heartbeat.md, status.json, injection.md")
+            file_read.append(t("handler.subordinate_management"))
+            file_write.append(t("handler.subordinate_management"))
         if self._subordinate_root_dirs:
-            file_read.append("直属部下のディレクトリ一覧")
+            file_read.append(t("handler.subordinate_dir_list"))
         if self._descendant_activity_dirs:
-            file_read.append("配下のactivity_log")
+            file_read.append(t("handler.descendant_activity"))
         if self._descendant_state_files:
-            file_read.append("配下のstatus.json, identity.md, injection.md, state/, task_queue.jsonl")
+            file_read.append(t("handler.descendant_state"))
         if self._descendant_state_dirs:
-            file_read.append("配下のstate/pending/")
+            file_read.append(t("handler.descendant_pending"))
 
         file_header = self._find_section_header(permissions_text, self._FILE_SECTION_HEADERS)
         if file_header:
@@ -1969,7 +1941,7 @@ class ToolHandler:
         restrictions: list[str] = []
         denied_cmds = self._parse_denied_commands(permissions_text)
         if denied_cmds:
-            restrictions.extend(f"{cmd} 禁止" for cmd in denied_cmds)
+            restrictions.extend(t("handler.cmd_denied", cmd=cmd) for cmd in denied_cmds)
 
         result = {
             "internal_tools": internal_tools,
@@ -2039,15 +2011,20 @@ class ToolHandler:
             try:
                 self._messenger.send(
                     to=target_name,
-                    content=f"[タスク委譲]\n{instruction}\n\n期限: {deadline}\nタスクID: {sub_entry.task_id}",
+                    content=t(
+                        "handler.delegation_dm_content",
+                        instruction=instruction,
+                        deadline=deadline,
+                        task_id=sub_entry.task_id,
+                    ),
                     intent="delegation",
                 )
-                dm_result = "DM送信済み"
+                dm_result = t("handler.dm_sent")
             except Exception as e:
-                dm_result = f"DM送信失敗: {e}"
+                dm_result = t("handler.dm_send_failed", e=e)
                 logger.warning("delegate_task DM failed: %s -> %s: %s", self._anima_name, target_name, e)
         else:
-            dm_result = "メッセンジャー未設定（タスクキューへの追加は成功）"
+            dm_result = t("handler.messenger_not_set")
 
         # Check if subordinate process is running
         process_warning = ""
@@ -2059,7 +2036,7 @@ class ToolHandler:
                 if status_file.exists():
                     sdata = _json.loads(status_file.read_text(encoding="utf-8"))
                     if not sdata.get("enabled", True):
-                        process_warning = f"\n⚠️ {target_name} は現在休止中です。タスクはキューに蓄積されますが、処理は再起動後になります。"
+                        process_warning = t("handler.subordinate_disabled_warning", target_name=target_name)
         except Exception:
             logger.debug("Failed to check subordinate process status for %s", target_name, exc_info=True)
 
@@ -2068,7 +2045,7 @@ class ToolHandler:
         own_entry = own_tqm.add_delegated_task(
             original_instruction=instruction,
             assignee=target_name,
-            summary=f"[委譲] {summary}",
+            summary=t("handler.delegation_summary", summary=summary),
             deadline=deadline,
             relay_chain=[self._anima_name, target_name],
             meta={
@@ -2080,7 +2057,7 @@ class ToolHandler:
         self._activity.log(
             "tool_use",
             tool="delegate_task",
-            summary=f"{target_name}にタスク委譲: {summary[:80]}",
+            summary=t("handler.delegate_log", target_name=target_name, summary=summary[:80]),
             meta={
                 "target": target_name,
                 "own_task_id": own_entry.task_id,
@@ -2088,11 +2065,12 @@ class ToolHandler:
             },
         )
 
-        result = (
-            f"タスクを {target_name} に委譲しました。\n"
-            f"- 部下側タスクID: {sub_entry.task_id}\n"
-            f"- 追跡用タスクID: {own_entry.task_id}\n"
-            f"- {dm_result}"
+        result = t(
+            "handler.delegated_success",
+            target_name=target_name,
+            sub_id=sub_entry.task_id,
+            own_id=own_entry.task_id,
+            dm_result=dm_result,
         )
         return result + process_warning
 
@@ -2107,7 +2085,7 @@ class ToolHandler:
         delegated = own_tqm.get_delegated_tasks()
 
         if not delegated:
-            return "委譲済みタスクはありません"
+            return t("handler.no_delegated_tasks")
 
         animas_dir = get_animas_dir()
         results: list[dict[str, Any]] = []
@@ -2150,11 +2128,11 @@ class ToolHandler:
         self._activity.log(
             "tool_use",
             tool="task_tracker",
-            summary=f"委譲タスク追跡 (filter={status_filter}, count={len(results)})",
+            summary=t("handler.task_tracker_log", status=status_filter, count=len(results)),
         )
 
         if not results:
-            return f"条件に合う委譲済みタスクはありません (filter={status_filter})"
+            return t("handler.no_matching_delegated", status=status_filter)
 
         return _json.dumps(results, ensure_ascii=False, indent=2)
 
@@ -2221,7 +2199,7 @@ class ToolHandler:
         if not self._check_tool_creation_permission("共有ツール"):
             return _error_result(
                 "PermissionDenied",
-                "共有ツール作成が許可されていません。",
+                t("handler.shared_tool_denied"),
             )
 
         common_dir = get_data_dir() / "common_tools"
@@ -2294,7 +2272,7 @@ class ToolHandler:
             rel, success, meta["confidence"],
         )
 
-        outcome_label = "成功" if success else "失敗"
+        outcome_label = t("handler.outcome_success") if success else t("handler.outcome_failure")
         result = (
             f"Procedure outcome recorded: {rel} -> {outcome_label}\n"
             f"confidence: {meta['confidence']:.2f} "
@@ -2370,7 +2348,7 @@ class ToolHandler:
             },
         )
 
-        outcome_label = "成功" if success else "失敗"
+        outcome_label = t("handler.outcome_success") if success else t("handler.outcome_failure")
         result = (
             f"Knowledge outcome recorded: {rel} -> {outcome_label}\n"
             f"confidence: {meta.get('confidence', 0):.2f} "
@@ -3124,7 +3102,7 @@ class ToolHandler:
 
         if not allowed_dirs:
             logger.warning("permission_denied anima=%s path=%s reason=no_allowed_dirs", self._anima_name, path)
-            return _error_result("PermissionDenied", "No allowed paths listed under ファイル操作", suggestion="Add directory paths to permissions.md")
+            return _error_result("PermissionDenied", t("handler.no_file_ops_paths"), suggestion="Add directory paths to permissions.md")
 
         for allowed in allowed_dirs:
             if resolved.is_relative_to(allowed):

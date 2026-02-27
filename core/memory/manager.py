@@ -13,6 +13,7 @@ import re
 from datetime import date, timedelta
 from pathlib import Path
 
+from core.i18n import t
 from core.memory._io import atomic_write_text
 from core.paths import get_common_knowledge_dir, get_common_skills_dir, get_company_dir, get_shared_dir
 from core.schemas import ModelConfig, SkillMeta
@@ -262,7 +263,8 @@ class MemoryManager:
         path = self.episodes_dir / f"{date.today().isoformat()}.md"
         if not path.exists():
             path.write_text(
-                f"# {date.today().isoformat()} 行動ログ\n\n", encoding="utf-8"
+                t("manager.action_log_header", date=date.today().isoformat()),
+                encoding="utf-8",
             )
         with open(path, "a", encoding="utf-8") as f:
             f.write(f"\n{entry}\n")

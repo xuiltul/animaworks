@@ -24,6 +24,7 @@ from pathlib import Path
 
 from typing import TYPE_CHECKING
 
+from core.i18n import t
 from core.time_utils import ensure_aware, now_jst
 from core.tools._async_compat import run_sync
 

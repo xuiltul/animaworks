@@ -19,6 +19,7 @@ from copy import copy
 from pathlib import Path
 from typing import Any
 
+from core.i18n import t
 from core.time_utils import now_iso
 
 logger = logging.getLogger("animaworks.dedup")
@@ -105,7 +106,7 @@ class MessageDeduplicator:
                     m.content[:100] for m in sender_msgs
                 ]
                 summary_text = (
-                    f"[{len(sender_msgs)}件のメッセージを統合] "
+                    t("dedup.messages_merged", count=len(sender_msgs))
                     + " / ".join(summaries)
                 )
                 first.content = summary_text

@@ -26,6 +26,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.i18n import t
 from core.time_utils import ensure_aware, now_iso, now_jst
 
 logger = logging.getLogger("animaworks.activity")
@@ -578,7 +579,7 @@ class ActivityLogger:
 
         parts = []
         if result_count is not None:
-            parts.append(f"{result_count}件")
+            parts.append(t("activity.items_count", count=result_count))
         parts.append(size_str)
 
         detail = f" ({', '.join(parts)})" if parts else ""
@@ -1209,7 +1210,7 @@ class ActivityLogger:
             elif e.type == "cron_executed":
                 self._flush_tool_calls(messages, pending_tool_calls)
                 task_name = e.meta.get("task_name", "")
-                content = e.summary or e.content or task_name or "cronタスク実行"
+                content = e.summary or e.content or task_name or t("activity.cron_task_exec")
                 messages.append({
                     "ts": e.ts,
                     "role": "system",
@@ -1224,7 +1225,7 @@ class ActivityLogger:
                 messages.append({
                     "ts": e.ts,
                     "role": "system",
-                    "content": f"[エラー] {e.summary or e.content}",
+                    "content": t("activity.error_prefix") + (e.summary or e.content),
                     "from_person": "",
                     "tool_calls": [],
                 })

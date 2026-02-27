@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
+from core.i18n import t
 from core.schemas import TaskEntry
 from core.time_utils import ensure_aware, now_iso, now_jst
 
@@ -88,12 +89,12 @@ def _format_elapsed_from_sec(elapsed_sec: float | None) -> str:
         return ""
     minutes = int(elapsed_sec / 60)
     if minutes < 60:
-        return f"⏱️ {minutes}分経過"
+        return t("task_queue.elapsed_minutes", minutes=minutes)
     hours = minutes // 60
     remaining_min = minutes % 60
     if remaining_min:
-        return f"⏱️ {hours}時間{remaining_min}分経過"
-    return f"⏱️ {hours}時間経過"
+        return t("task_queue.elapsed_hours_min", hours=hours, remaining_min=remaining_min)
+    return t("task_queue.elapsed_hours", hours=hours)
 
 
 def _format_deadline_display(deadline: str, now: datetime) -> str:
@@ -103,8 +104,8 @@ def _format_deadline_display(deadline: str, now: datetime) -> str:
     except (ValueError, TypeError):
         return ""
     if now >= dl:
-        return f"🔴 OVERDUE({dl.strftime('%H:%M')}期限)"
-    return f"📅 {dl.strftime('%H:%M')}まで"
+        return t("task_queue.overdue", time=dl.strftime('%H:%M'))
+    return t("task_queue.deadline_by", time=dl.strftime('%H:%M'))
 
 
 class TaskQueueManager:

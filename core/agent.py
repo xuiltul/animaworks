@@ -36,6 +36,7 @@ from core.background import BackgroundTaskManager
 from core.prompt.context import ContextTracker
 from core.memory import MemoryManager
 from core.messenger import Messenger
+from core.i18n import t
 from core.paths import load_prompt
 from core.prompt.builder import BuildResult, build_system_prompt, inject_shortterm
 from core.exceptions import AnimaWorksError  # noqa: F401
@@ -712,11 +713,7 @@ class AgentCore:
             if prompt_tier == TIER_LIGHT:
                 if result.sender_profile:
                     logger.info("Priming: tier=light, returning sender_profile only")
-                    return (
-                        f"## あなたが思い出していること\n\n"
-                        f"### {sender_name} について\n\n"
-                        f"{result.sender_profile}"
-                    )
+                    return t("agent.priming_tier_light_header", sender_name=sender_name) + result.sender_profile
                 return ""
 
             formatted = format_priming_section(result, sender_name)
@@ -727,7 +724,7 @@ class AgentCore:
 
             # T2 Standard: truncate to ~1000 tokens (≈4000 chars)
             if prompt_tier == TIER_STANDARD and len(formatted) > 4000:
-                formatted = formatted[:4000] + "\n\n（以降省略）"
+                formatted = formatted[:4000] + t("agent.omitted_rest")
 
             return formatted
 
@@ -1602,7 +1599,7 @@ class AgentCore:
                     )
                     yield {
                         "type": "error",
-                        "message": f"ストリームが{retry_count}回切断されました。最大リトライ回数に達しました。",
+                        "message": t("agent.stream_retry_exhausted", retry_count=retry_count),
                     }
                     break
 

@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.i18n import t
 from core.paths import load_prompt
 from core.time_utils import now_iso
 
@@ -684,10 +685,10 @@ class ContradictionDetector:
             self._activity_logger.log(
                 event_type="knowledge_contradiction_resolved",
                 content=(
-                    f"矛盾解決: {pair.file_a.name} vs {pair.file_b.name}"
-                    f" → 戦略: {strategy}"
+                    t("contradiction.resolution_summary", file_a=pair.file_a.name, file_b=pair.file_b.name)
+                    + t("contradiction.strategy_label", strategy=strategy)
                 ),
-                summary=f"knowledge矛盾解決({strategy})",
+                summary=t("contradiction.knowledge_resolution", strategy=strategy),
                 meta={
                     "strategy": strategy,
                     "newer": pair.file_b.name,
