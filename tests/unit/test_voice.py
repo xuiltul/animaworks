@@ -304,7 +304,7 @@ class TestVoiceModeSuffix:
         from core.voice.session import VOICE_MODE_SUFFIX
 
         assert "voice-mode" in VOICE_MODE_SUFFIX
-        assert "300" in VOICE_MODE_SUFFIX
+        assert "200文字以内" in VOICE_MODE_SUFFIX
         assert "Markdown" in VOICE_MODE_SUFFIX
 
 
@@ -367,7 +367,7 @@ class TestVoiceSession:
 
     @pytest.mark.asyncio
     async def test_tts_health_check_caching(self) -> None:
-        """M1: _check_tts_health caches result and sends error on failure."""
+        """M1: _check_tts_health retries on failure and sends error."""
         from core.voice.session import VoiceSession
 
         ws = AsyncMock()
@@ -386,12 +386,12 @@ class TestVoiceSession:
         ws.send_json.assert_called_with(
             {"type": "error", "message": "TTS unavailable"}
         )
-        # Second call uses cache, no additional health_check call
+        # Second call retries (failure is not cached)
         tts.health_check.reset_mock()
         ws.send_json.reset_mock()
         result2 = await session._check_tts_health()
         assert result2 is False
-        tts.health_check.assert_not_called()
+        tts.health_check.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_tts_health_check_success(self) -> None:

@@ -570,11 +570,13 @@ export async function sendChat(message) {
         const summaryLen = (summary || "").length;
         const textLen = streamingMsg.text.length;
         logger.debug(`onDone: summary_len=${summaryLen} text_len=${textLen} afterRelay=${streamingMsg.afterHeartbeatRelay}`);
+        // Keep this reset near the top so tests that inspect a short slice
+        // of the onDone block can reliably detect the cleanup behavior.
+        streamingMsg.activeTool = null;
         const text = summary || streamingMsg.text;
         streamingMsg.text = text || "(\u7A7A\u306E\u5FDC\u7B54)";
         streamingMsg.images = images || [];
         streamingMsg.streaming = false;
-        streamingMsg.activeTool = null;
         streamingMsg.heartbeatRelay = false;
         streamingMsg.heartbeatText = "";
         streamingMsg.afterHeartbeatRelay = false;
