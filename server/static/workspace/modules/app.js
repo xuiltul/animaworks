@@ -1445,6 +1445,33 @@ function _wsHidePendingIndicator() {
   if (dom.convPending) dom.convPending.style.display = "none";
 }
 
+const _WS_SEND_BTN_ICONS = {
+  send: `
+    <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+  `,
+  stop: `
+    <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="5" y="5" width="14" height="14" rx="2.5" />
+    </svg>
+  `,
+  interrupt: `
+    <span class="chat-send-icon-group" aria-hidden="true">
+      <svg class="chat-send-icon chat-send-icon-square" viewBox="0 0 24 24" focusable="false">
+        <rect x="5" y="5" width="14" height="14" rx="2.5" />
+      </svg>
+      <svg class="chat-send-icon" viewBox="0 0 24 24" focusable="false">
+        <path d="M12 19V5M5 12l7-7 7 7" />
+      </svg>
+    </span>
+  `,
+};
+
+function _wsSetSendButtonIcon(sendBtn, mode) {
+  sendBtn.innerHTML = _WS_SEND_BTN_ICONS[mode] || _WS_SEND_BTN_ICONS.send;
+}
+
 function _wsUpdateSendButton(isStreaming) {
   const hasInput = (dom.convInput?.value?.trim() || "").length > 0;
 
@@ -1455,17 +1482,17 @@ function _wsUpdateSendButton(isStreaming) {
   if (!dom.convSend) return;
   dom.convSend.classList.remove("stop", "interrupt");
   if (!isStreaming) {
-    dom.convSend.textContent = (convPendingQueue.length > 0 || hasInput) ? "↑" : "↑";
+    _wsSetSendButtonIcon(dom.convSend, "send");
     dom.convSend.disabled = !hasInput && convPendingQueue.length === 0;
   } else if (hasInput) {
-    dom.convSend.textContent = "↑";
+    _wsSetSendButtonIcon(dom.convSend, "send");
     dom.convSend.disabled = false;
   } else if (convPendingQueue.length > 0) {
-    dom.convSend.textContent = "■↑";
+    _wsSetSendButtonIcon(dom.convSend, "interrupt");
     dom.convSend.classList.add("interrupt");
     dom.convSend.disabled = false;
   } else {
-    dom.convSend.textContent = "■";
+    _wsSetSendButtonIcon(dom.convSend, "stop");
     dom.convSend.classList.add("stop");
     dom.convSend.disabled = false;
   }

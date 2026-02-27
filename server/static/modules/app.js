@@ -71,6 +71,35 @@ setStartDashboard(startDashboard);
 
 // ── Mobile Navigation ────────────────────────
 
+const _SIDEBAR_COLLAPSED_KEY = "aw-sidebar-collapsed";
+
+function _isMobileViewport() {
+  return window.matchMedia("(max-width: 768px)").matches;
+}
+
+function _applySidebarCollapsed(collapsed) {
+  document.body.classList.toggle("sidebar-collapsed", collapsed);
+  const btn = document.getElementById("sidebarCollapseBtn");
+  if (!btn) return;
+  btn.setAttribute("aria-pressed", collapsed ? "true" : "false");
+  btn.setAttribute("title", collapsed ? "サイドバーを開く" : "サイドバーを閉じる");
+}
+
+function initDesktopSidebarCollapse() {
+  const btn = document.getElementById("sidebarCollapseBtn");
+  if (!btn) return;
+
+  const initialCollapsed = localStorage.getItem(_SIDEBAR_COLLAPSED_KEY) === "1";
+  _applySidebarCollapsed(initialCollapsed);
+
+  btn.addEventListener("click", () => {
+    if (_isMobileViewport()) return;
+    const nextCollapsed = !document.body.classList.contains("sidebar-collapsed");
+    _applySidebarCollapsed(nextCollapsed);
+    localStorage.setItem(_SIDEBAR_COLLAPSED_KEY, nextCollapsed ? "1" : "0");
+  });
+}
+
 function initMobileNav() {
   const hamburgerBtn = document.getElementById("hamburgerBtn");
   const backdrop = document.getElementById("mobileNavBackdrop");
@@ -128,6 +157,7 @@ async function init() {
 
   // Mobile navigation
   initMobileNav();
+  initDesktopSidebarCollapse();
 
   // Try to authenticate via existing session cookie
   const authenticated = await checkAuth();

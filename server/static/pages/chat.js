@@ -317,8 +317,16 @@ export function render(container) {
             ></textarea>
             <div class="chat-input-actions">
               <button type="button" class="chat-attach-btn" id="chatPageAttachBtn" title="${t("chat.attach_image")}">+</button>
-              <button type="button" class="chat-queue-btn" id="chatPageQueueBtn" disabled title="${t("chat.queue_add")}">↓</button>
-              <button type="submit" class="chat-send-btn" id="chatPageSendBtn" disabled>↑</button>
+              <button type="button" class="chat-queue-btn" id="chatPageQueueBtn" disabled title="${t("chat.queue_add")}">
+                <svg class="chat-queue-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 5v14M5 12l7 7 7-7" />
+                </svg>
+              </button>
+              <button type="submit" class="chat-send-btn" id="chatPageSendBtn" disabled>
+                <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+              </button>
             </div>
           </div>
           <input type="file" id="chatPageFileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none" />
@@ -1941,6 +1949,33 @@ function _hidePendingIndicator() {
   if (bar) bar.style.display = "none";
 }
 
+const _SEND_BTN_ICONS = {
+  send: `
+    <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 19V5M5 12l7-7 7 7" />
+    </svg>
+  `,
+  stop: `
+    <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="5" y="5" width="14" height="14" rx="2.5" />
+    </svg>
+  `,
+  interrupt: `
+    <span class="chat-send-icon-group" aria-hidden="true">
+      <svg class="chat-send-icon chat-send-icon-square" viewBox="0 0 24 24" focusable="false">
+        <rect x="5" y="5" width="14" height="14" rx="2.5" />
+      </svg>
+      <svg class="chat-send-icon" viewBox="0 0 24 24" focusable="false">
+        <path d="M12 19V5M5 12l7-7 7 7" />
+      </svg>
+    </span>
+  `,
+};
+
+function _setSendButtonIcon(sendBtn, mode) {
+  sendBtn.innerHTML = _SEND_BTN_ICONS[mode] || _SEND_BTN_ICONS.send;
+}
+
 function _updateSendButton() {
   const sendBtn = _$("chatPageSendBtn");
   const queueBtn = _$("chatPageQueueBtn");
@@ -1958,17 +1993,17 @@ function _updateSendButton() {
   if (!sendBtn) return;
   sendBtn.classList.remove("stop", "interrupt");
   if (!_isChatStreaming) {
-    sendBtn.textContent = (_pendingQueue.length > 0 || hasInput) ? "↑" : "↑";
+    _setSendButtonIcon(sendBtn, "send");
     sendBtn.disabled = !_selectedAnima || (!hasInput && _pendingQueue.length === 0);
   } else if (hasInput) {
-    sendBtn.textContent = "↑";
+    _setSendButtonIcon(sendBtn, "send");
     sendBtn.disabled = false;
   } else if (_pendingQueue.length > 0) {
-    sendBtn.textContent = "■↑";
+    _setSendButtonIcon(sendBtn, "interrupt");
     sendBtn.classList.add("interrupt");
     sendBtn.disabled = false;
   } else {
-    sendBtn.textContent = "■";
+    _setSendButtonIcon(sendBtn, "stop");
     sendBtn.classList.add("stop");
     sendBtn.disabled = false;
   }

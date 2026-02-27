@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/styles/tokens.css">
   <link rel="stylesheet" href="/styles/base.css">
   <link rel="stylesheet" href="/styles/layout.css?v=20260227b">
-  <link rel="stylesheet" href="/styles/sidebar-nav.css">
+  <link rel="stylesheet" href="/styles/sidebar-nav.css?v=20260227d">
   <link rel="stylesheet" href="/styles/dashboard.css">
   <link rel="stylesheet" href="/styles/chat.css?v=20260227e">
   <link rel="stylesheet" href="/styles/sidebar.css">
@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="/styles/avatar.css">
   <link rel="stylesheet" href="/styles/assets.css">
   <link rel="stylesheet" href="/styles/board.css">
-  <link rel="stylesheet" href="/styles/responsive.css?v=20260227c">
+  <link rel="stylesheet" href="/styles/responsive.css?v=20260227d">
   <link rel="stylesheet" href="/styles/voice.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -30,6 +30,11 @@
 
   <header class="app-header">
     <button class="hamburger-btn" id="hamburgerBtn" aria-label="Open menu" data-i18n-aria-label="common.aria_menu">&#x2630;</button>
+    <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="Toggle sidebar" title="サイドバーを開閉">
+      <svg class="sidebar-collapse-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M15 6l-6 6 6 6" />
+      </svg>
+    </button>
     <h1 class="app-title">AnimaWorks</h1>
     <div class="header-spacer"></div>
     <div class="user-info" id="userInfo">
@@ -130,6 +135,6 @@
       if (window.lucide) lucide.createIcons();
     });
   </script>
-  <script type="module" src="/modules/app.js?v=20260227c"></script>
+  <script type="module" src="/modules/app.js?v=20260227d"></script>
 </body>
 </html>

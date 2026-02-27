@@ -112,8 +112,16 @@
                 <textarea class="ws-conv-input" id="wsConvInput" data-i18n-placeholder="ws.message_placeholder" placeholder="メッセージを入力... (Ctrl+Enter, Alt+Enter でキュー)" rows="1"></textarea>
                 <div class="chat-input-actions">
                   <button class="chat-attach-btn" type="button" id="wsConvAttachBtn" data-i18n-title="ws.attach_image" title="画像を添付">+</button>
-                  <button class="chat-queue-btn" type="button" id="wsConvQueueBtn" data-i18n-title="chat.queue_add" title="キューに追加 (Alt+Enter)">↓</button>
-                  <button class="ws-conv-send" id="wsConvSend">↑</button>
+                  <button class="chat-queue-btn" type="button" id="wsConvQueueBtn" data-i18n-title="chat.queue_add" title="キューに追加 (Alt+Enter)">
+                    <svg class="chat-queue-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M12 5v14M5 12l7 7 7-7" />
+                    </svg>
+                  </button>
+                  <button class="ws-conv-send" id="wsConvSend">
+                    <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M12 19V5M5 12l7-7 7 7" />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <input type="file" id="wsConvFileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none" />

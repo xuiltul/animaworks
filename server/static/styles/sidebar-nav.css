@@ -11,6 +11,7 @@
   flex-direction: column;
   overflow-y: auto;
   flex-shrink: 0;
+  transition: width 0.18s ease, min-width 0.18s ease;
 }
 
 /* ── Brand ───────────────────────────────────── */
@@ -150,4 +151,30 @@
 
 .theme-switch input:checked + .theme-slider::before {
   transform: translateX(16px);
+}
+
+@media (min-width: 769px) {
+  body.sidebar-collapsed .sidebar-nav {
+    width: 64px;
+    min-width: 64px;
+  }
+
+  body.sidebar-collapsed .sidebar-brand,
+  body.sidebar-collapsed .sidebar-nav .nav-label,
+  body.sidebar-collapsed .sidebar-nav .theme-toggle,
+  body.sidebar-collapsed .sidebar-nav .nav-divider:last-of-type {
+    display: none;
+  }
+
+  body.sidebar-collapsed .sidebar-nav .nav-item {
+    justify-content: center;
+    padding: 10px 0;
+    gap: 0;
+  }
+
+  body.sidebar-collapsed .sidebar-nav .nav-emoji,
+  body.sidebar-collapsed .sidebar-nav .nav-lucide {
+    width: 24px;
+    text-align: center;
+  }
 }

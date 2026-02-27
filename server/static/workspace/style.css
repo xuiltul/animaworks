@@ -1343,6 +1343,37 @@ html, body {
   flex-shrink: 0;
 }
 
+.chat-send-icon-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  line-height: 0;
+  pointer-events: none;
+}
+
+.chat-send-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  pointer-events: none;
+}
+
+.chat-send-icon rect {
+  fill: currentColor;
+  stroke: none;
+}
+
+.chat-send-icon-square {
+  width: 12px;
+  height: 12px;
+}
+
 .chat-input-actions {
   display: grid;
   grid-template-columns: repeat(2, 34px);
@@ -1511,6 +1542,18 @@ html, body {
   transition: all 0.15s;
   flex-shrink: 0;
   align-self: flex-end;
+}
+
+.chat-queue-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  pointer-events: none;
 }
 
 .chat-queue-btn:hover:not(:disabled) {
@@ -2173,8 +2216,9 @@ html, body {
   /* Tap targets: minimum 40px */
   .chat-send-btn,
   .ws-conv-send {
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
   }
 
   .chat-queue-btn,
