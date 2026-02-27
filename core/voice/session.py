@@ -28,7 +28,7 @@ MIN_SPEECH_BYTES = int(MIN_SPEECH_SEC * PCM16_SAMPLE_RATE * PCM16_BYTES_PER_SAMP
 SILENCE_RMS_THRESHOLD = 0.008
 
 VOICE_MODE_SUFFIX = (
-    "\n\n[voice-mode: 音声会話です。話し言葉で300文字以内で簡潔に回答してください。"
+    "\n\n[voice-mode: 音声会話です。話し言葉で200文字以内で簡潔に回答してください。"
     "Markdown記法（見出し・太字・リスト・コードブロック等）は使わないでください]"
 )
 

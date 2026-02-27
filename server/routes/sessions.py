@@ -137,6 +137,7 @@ def create_sessions_router() -> APIRouter:
         limit: int = 50,
         before: str | None = None,
         thread_id: str = "default",
+        strict_thread: bool = False,
         request: Request = None,
     ):
         """Get conversation history from activity log.
@@ -155,6 +156,7 @@ def create_sessions_router() -> APIRouter:
             before=before,
             limit=limit,
             thread_id=thread_id,
+            strict_thread=strict_thread,
         )
 
     @router.get("/animas/{name}/sessions/{session_id}")

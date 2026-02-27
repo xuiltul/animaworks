@@ -1320,6 +1320,8 @@ async function _fetchConversationHistory(animaName, limit = _HISTORY_PAGE_SIZE, 
     url += `&before=${encodeURIComponent(before)}`;
   }
   url += `&thread_id=${encodeURIComponent(threadId)}`;
+  // Use strict thread filtering to keep main/sub-thread histories isolated.
+  url += "&strict_thread=1";
   return await api(url);
 }
 

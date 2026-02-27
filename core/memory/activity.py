@@ -1010,6 +1010,7 @@ class ActivityLogger:
         limit: int = 50,
         session_gap_minutes: int = 10,
         thread_id: str | None = None,
+        strict_thread: bool = False,
     ) -> dict[str, Any]:
         """Build a conversation view from activity log entries.
 
@@ -1026,12 +1027,17 @@ class ActivityLogger:
             thread_id: If given, only include entries whose
                 ``meta.thread_id`` matches. Entries without a ``thread_id``
                 in meta are treated as belonging to ``"default"``.
+            strict_thread: If True, require explicit ``meta.thread_id`` match.
+                Entries without ``meta.thread_id`` are excluded.
 
         Returns:
             ``{"sessions": [...], "has_more": bool, "next_before": str | None}``
         """
         entries = self._load_conversation_entries(
-            before=before, limit=limit, thread_id=thread_id,
+            before=before,
+            limit=limit,
+            thread_id=thread_id,
+            strict_thread=strict_thread,
         )
         messages = self._entries_to_messages(entries)
 
@@ -1060,6 +1066,7 @@ class ActivityLogger:
         before: str | None = None,
         limit: int = 50,
         thread_id: str | None = None,
+        strict_thread: bool = False,
     ) -> list[ActivityEntry]:
         """Load conversation-relevant entries, scanning backwards.
 
@@ -1069,7 +1076,7 @@ class ActivityLogger:
 
         When *thread_id* is given, only entries whose ``meta.thread_id``
         matches are returned.  Entries without the field are treated as
-        belonging to ``"default"``.
+        belonging to ``"default"`` unless *strict_thread* is True.
         """
         target_raw = limit * 3 + 50  # overshoot to ensure enough messages
         entries: list[ActivityEntry] = []
@@ -1103,9 +1110,17 @@ class ActivityLogger:
                     if before and ts >= before:
                         continue
                     if thread_id is not None:
-                        entry_tid = raw.get("meta", {}).get("thread_id", "default")
-                        if entry_tid != thread_id:
-                            continue
+                        meta = raw.get("meta", {})
+                        has_thread_id = isinstance(meta, dict) and "thread_id" in meta
+                        if strict_thread:
+                            if not has_thread_id:
+                                continue
+                            if meta.get("thread_id") != thread_id:
+                                continue
+                        else:
+                            entry_tid = meta.get("thread_id", "default") if isinstance(meta, dict) else "default"
+                            if entry_tid != thread_id:
+                                continue
                     # Map JSONL keys
                     if "from" in raw:
                         raw["from_person"] = raw.pop("from")
