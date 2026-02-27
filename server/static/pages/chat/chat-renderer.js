@@ -3,106 +3,43 @@ import {
   $, setThreadUnread, refreshAnimaUnread, threadTimeValue,
   mergeThreadsFromSessions, scheduleSaveChatUiState, CONSTANTS,
 } from "./ctx.js";
+import {
+  renderHistoryMessage as _sharedRenderHistoryMessage,
+  renderSessionDivider as _sharedRenderSessionDivider,
+  bindToolCallHandlers as _sharedBindToolCallHandlers,
+  renderLiveBubble,
+  renderStreamingBubbleInner,
+} from "../../shared/chat/render-utils.js";
+import { createScrollObserver } from "../../shared/chat/scroll-observer.js";
+import { mergePolledHistory } from "../../shared/chat/history-loader.js";
 
 export function createChatRenderer(ctx) {
   const { state, deps } = ctx;
   const { api, t, escapeHtml, renderMarkdown, smartTimestamp, timeStr, renderChatImages } = deps;
 
-  // ── History Message / Tool Call Rendering ──
+  const _renderOpts = () => ({
+    escapeHtml, renderMarkdown, smartTimestamp, renderChatImages,
+    animaName: state.selectedAnima,
+    truncateLen: CONSTANTS.TOOL_RESULT_TRUNCATE,
+    labels: {
+      thinking: t("chat.thinking"),
+      toolRunning: (tool) => t("chat.tool_running", { tool }),
+      currentSession: t("chat.current_session"),
+      heartbeatRelay: t("chat.heartbeat_relay"),
+      heartbeatRelayDone: t("chat.heartbeat_relay_done"),
+    },
+  });
 
   function renderHistoryMessage(msg) {
-    const ts = msg.ts ? smartTimestamp(msg.ts) : "";
-    const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
-
-    if (msg.role === "system") {
-      return `<div class="chat-bubble assistant" style="opacity:0.7; font-style:italic;">${escapeHtml(msg.content || "")}${tsHtml}</div>`;
-    }
-    if (msg.role === "assistant") {
-      const content = msg.content ? renderMarkdown(msg.content, state.selectedAnima) : "";
-      const toolHtml = renderToolCalls(msg.tool_calls);
-      const imagesHtml = renderChatImages(msg.images, { animaName: state.selectedAnima });
-      return `<div class="chat-bubble assistant">${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
-    }
-    const fromLabel = msg.from_person && msg.from_person !== "human"
-      ? `<div style="font-size:0.72rem; opacity:0.7; margin-bottom:2px;">${escapeHtml(msg.from_person)}</div>` : "";
-    return `<div class="chat-bubble user">${fromLabel}<div class="chat-text">${escapeHtml(msg.content || "")}</div>${tsHtml}</div>`;
-  }
-
-  function renderToolCalls(toolCalls) {
-    if (!toolCalls || toolCalls.length === 0) return "";
-    return toolCalls.map((tc, idx) => {
-      const errorClass = tc.is_error ? " tool-call-error" : "";
-      const toolName = escapeHtml(tc.tool_name || "unknown");
-      const errorLabel = tc.is_error ? " [ERROR]" : "";
-      return `<div class="tool-call-row${errorClass}" data-tool-idx="${idx}"><span class="tool-call-row-icon">\u25B6</span><span class="tool-call-row-name">${toolName}${errorLabel}</span></div>` +
-        `<div class="tool-call-detail" data-tool-idx="${idx}" style="display:none;">${renderToolCallDetail(tc)}</div>`;
-    }).join("");
-  }
-
-  function renderToolCallDetail(tc) {
-    let html = "";
-    const input = tc.input || "";
-    if (input) {
-      const inputStr = typeof input === "string" ? input : JSON.stringify(input, null, 2);
-      html += `<div class="tool-call-label">\u5165\u529B</div><div class="tool-call-content">${escapeHtml(inputStr)}</div>`;
-    }
-    const result = tc.result || "";
-    if (result) {
-      const resultStr = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-      html += `<div class="tool-call-label">\u7D50\u679C</div>`;
-      if (resultStr.length > CONSTANTS.TOOL_RESULT_TRUNCATE) {
-        const truncated = resultStr.slice(0, CONSTANTS.TOOL_RESULT_TRUNCATE);
-        html += `<div class="tool-call-content" data-full-result="${escapeHtml(resultStr)}">${escapeHtml(truncated)}...</div>`;
-        html += `<button class="tool-call-show-more">\u3082\u3063\u3068\u898B\u308B</button>`;
-      } else {
-        html += `<div class="tool-call-content">${escapeHtml(resultStr)}</div>`;
-      }
-    }
-    return html;
-  }
-
-  function bindToolCallHandlers(container) {
-    if (!container) return;
-    container.querySelectorAll(".tool-call-row").forEach(row => {
-      row.addEventListener("click", () => {
-        const idx = row.dataset.toolIdx;
-        const detail = row.nextElementSibling;
-        if (!detail || detail.dataset.toolIdx !== idx) return;
-        const isExpanded = row.classList.contains("expanded");
-        row.classList.toggle("expanded", !isExpanded);
-        detail.style.display = isExpanded ? "none" : "";
-      });
-    });
-    container.querySelectorAll(".tool-call-show-more").forEach(btn => {
-      btn.addEventListener("click", e => {
-        e.stopPropagation();
-        const contentEl = btn.previousElementSibling;
-        if (!contentEl) return;
-        const fullResult = contentEl.dataset.fullResult;
-        if (fullResult) {
-          contentEl.textContent = fullResult;
-          delete contentEl.dataset.fullResult;
-          btn.remove();
-        }
-      });
-    });
+    return _sharedRenderHistoryMessage(msg, _renderOpts());
   }
 
   function renderSessionDivider(session, isFirst) {
-    if (isFirst) return "";
-    const trigger = session.trigger || "chat";
-    let label = "";
-    let extraClass = "";
-    if (trigger === "heartbeat") {
-      label = "\u2764 \u30CF\u30FC\u30C8\u30D3\u30FC\u30C8";
-      extraClass = " session-divider-heartbeat";
-    } else if (trigger === "cron") {
-      label = "\u23F0 Cron\u30BF\u30B9\u30AF";
-      extraClass = " session-divider-cron";
-    } else {
-      label = session.session_start ? smartTimestamp(session.session_start) : "";
-    }
-    return `<div class="session-divider${extraClass}"><span class="session-divider-label">${escapeHtml(label)}</span></div>`;
+    return _sharedRenderSessionDivider(session, isFirst, _renderOpts());
+  }
+
+  function bindToolCallHandlers(container) {
+    _sharedBindToolCallHandlers(container);
   }
 
   // ── Main Chat Rendering ──
@@ -145,34 +82,8 @@ export function createChatRenderer(ctx) {
       if (hs.sessions.length > 0) {
         liveHtml += `<div class="session-divider"><span class="session-divider-label">${t("chat.current_session")}</span></div>`;
       }
-      liveHtml += history.map(m => {
-        const ts = m.timestamp ? smartTimestamp(m.timestamp) : "";
-        const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
-
-        if (m.role === "thinking") {
-          return `<div class="chat-bubble thinking"><span class="thinking-animation">${t("chat.thinking")}</span></div>`;
-        }
-        if (m.role === "assistant") {
-          const streamClass = m.streaming ? " streaming" : "";
-          let thinkingHtml = "";
-          if (m.thinking && m.thinkingText) {
-            thinkingHtml = `<div class="thinking-inline-preview">${escapeHtml(m.thinkingText)}</div>`;
-          }
-          let content = "";
-          if (m.text) {
-            content = renderMarkdown(m.text, state.selectedAnima);
-          } else if (m.streaming) {
-            content = '<span class="cursor-blink"></span>';
-          }
-          const toolHtml = m.activeTool
-            ? `<div class="tool-indicator"><span class="tool-spinner"></span>${t("chat.tool_running", { tool: m.activeTool })}</div>` : "";
-          const imagesHtml = renderChatImages(m.images, { animaName: state.selectedAnima });
-          return `<div class="chat-bubble assistant${streamClass}">${thinkingHtml}${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
-        }
-        const imagesHtml = renderChatImages(m.images);
-        const textHtml = m.text ? `<div class="chat-text">${escapeHtml(m.text)}</div>` : "";
-        return `<div class="chat-bubble user">${imagesHtml}${textHtml}${tsHtml}</div>`;
-      }).join("");
+      const opts = _renderOpts();
+      liveHtml += history.map(m => renderLiveBubble(m, opts)).join("");
     }
 
     messagesEl.innerHTML = topHtml + sessionsHtml + liveHtml;
@@ -193,26 +104,7 @@ export function createChatRenderer(ctx) {
     const bubble = bubbles[bubbles.length - 1];
     if (!bubble) return;
 
-    const thinkingHtml = (msg.thinking && msg.thinkingText)
-      ? `<div class="thinking-inline-preview">${escapeHtml(msg.thinkingText)}</div>` : "";
-    let mainHtml = "";
-
-    if (msg.heartbeatRelay) {
-      mainHtml += `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${t("chat.heartbeat_relay")}</div>`;
-      if (msg.heartbeatText) mainHtml += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
-    } else if (msg.afterHeartbeatRelay && !msg.text) {
-      mainHtml = `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${t("chat.heartbeat_relay_done")}</div>`;
-    } else if (msg.text) {
-      mainHtml = renderMarkdown(msg.text, state.selectedAnima);
-    } else {
-      mainHtml = '<span class="cursor-blink"></span>';
-    }
-
-    let html = `${thinkingHtml}${mainHtml}`;
-    if (msg.activeTool) {
-      html += `<div class="tool-indicator"><span class="tool-spinner"></span>${t("chat.tool_running", { tool: msg.activeTool })}</div>`;
-    }
-    bubble.innerHTML = html;
+    bubble.innerHTML = renderStreamingBubbleInner(msg, _renderOpts());
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
@@ -226,24 +118,21 @@ export function createChatRenderer(ctx) {
     scheduleSaveChatUiState(ctx);
   }
 
-  // ── Infinite Scroll ──
+  // ── Infinite Scroll (shared scroll-observer) ──
+
+  let _scrollObs = null;
 
   function setupChatObserver() {
-    if (state.chatObserver) state.chatObserver.disconnect();
+    if (_scrollObs) _scrollObs.disconnect();
+    if (state.chatObserver) { state.chatObserver.disconnect(); state.chatObserver = null; }
     const messagesEl = $("chatPageMessages");
     if (!messagesEl) return;
-    state.chatObserver = new IntersectionObserver(
-      entries => { for (const entry of entries) if (entry.isIntersecting) loadOlderMessages(); },
-      { root: messagesEl, rootMargin: "200px 0px 0px 0px" },
-    );
+    _scrollObs = createScrollObserver({ container: messagesEl, onLoadMore: loadOlderMessages });
+    _scrollObs.observe();
   }
 
   function observeChatSentinel() {
-    if (!state.chatObserver) return;
-    const messagesEl = $("chatPageMessages");
-    if (!messagesEl) return;
-    const sentinel = messagesEl.querySelector(".chat-load-sentinel");
-    if (sentinel) state.chatObserver.observe(sentinel);
+    if (_scrollObs) _scrollObs.refresh();
   }
 
   async function loadOlderMessages() {
@@ -319,33 +208,10 @@ export function createChatRenderer(ctx) {
       if (!state.historyState[name]) state.historyState[name] = {};
       const prev = state.historyState[name][tid];
 
-      if (!prev || prev.sessions.length === 0) {
-        state.historyState[name][tid] = {
-          sessions: conv.sessions, hasMore: conv.has_more || false,
-          nextBefore: conv.next_before || null, loading: false,
-        };
-        renderChat(true);
-        return;
-      }
+      const { changed, merged: mergedHs } = mergePolledHistory(prev, conv);
+      if (!changed && prev) return;
 
-      if (prev.loading) return;
-
-      const pollOldestStart = conv.sessions[0]?.session_start || "";
-      const olderSessions = pollOldestStart
-        ? prev.sessions.filter(s => s.session_start && s.session_start < pollOldestStart)
-        : [];
-      const currentPolledPart = pollOldestStart
-        ? prev.sessions.filter(s => !s.session_start || s.session_start >= pollOldestStart)
-        : prev.sessions;
-      const changed = JSON.stringify(currentPolledPart) !== JSON.stringify(conv.sessions);
-      if (!changed) return;
-
-      const merged = [...olderSessions, ...conv.sessions];
-      prev.sessions = merged;
-      if (olderSessions.length === 0) {
-        prev.hasMore = conv.has_more || false;
-        prev.nextBefore = conv.next_before || null;
-      }
+      state.historyState[name][tid] = mergedHs;
 
       const messagesEl = $("chatPageMessages");
       const shouldStick = messagesEl

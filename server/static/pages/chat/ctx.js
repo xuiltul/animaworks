@@ -7,6 +7,13 @@ import { createLogger } from "../../shared/logger.js";
 import { createImageInput, initLightbox, renderChatImages } from "../../shared/image-input.js";
 import { initVoiceUI, updateVoiceUIAnima } from "../../modules/voice-ui.js";
 import { getIcon, getDisplaySummary } from "../../shared/activity-types.js";
+import {
+  getDraftKey as _getDraftKey, saveDraft as _saveDraft, loadDraft as _loadDraft, clearDraft as _clearDraft,
+} from "../../shared/chat/draft.js";
+import {
+  threadTimeValue, defaultThreadLabel as _defaultThreadLabel,
+  mergeThreadsFromSessions as _mergeThreads,
+} from "../../shared/chat/thread-logic.js";
 
 const logger = createLogger("chat-page");
 
@@ -66,25 +73,25 @@ export function chatInputMaxHeight() {
   return window.matchMedia("(max-width: 768px)").matches ? 140 : 260;
 }
 
-// ── Draft Persistence ──
+// ── Draft Persistence (delegates to shared/chat/draft.js) ──
 export function getDraftKey(animaName) {
   const user = localStorage.getItem("animaworks_user") || "guest";
-  return `aw:draft:dashboard-chat:${user}:${animaName || "_"}`;
+  return _getDraftKey("dashboard-chat", user, animaName);
 }
 
 export function saveDraft(animaName, text) {
   if (!animaName) return;
-  localStorage.setItem(getDraftKey(animaName), text || "");
+  _saveDraft(getDraftKey(animaName), text || "");
 }
 
 export function loadDraft(animaName) {
   if (!animaName) return "";
-  return localStorage.getItem(getDraftKey(animaName)) || "";
+  return _loadDraft(getDraftKey(animaName));
 }
 
 export function clearDraft(animaName) {
   if (!animaName) return;
-  localStorage.removeItem(getDraftKey(animaName));
+  _clearDraft(getDraftKey(animaName));
 }
 
 // ── Tab / Thread Helpers ──
@@ -103,16 +110,10 @@ export function setThreadUnread(ctx, animaName, threadId, unread) {
   if (item) item.unread = Boolean(unread);
 }
 
-export function threadTimeValue(ts) {
-  if (!ts) return 0;
-  const v = Date.parse(ts);
-  return Number.isNaN(v) ? 0 : v;
-}
+export { threadTimeValue };
 
 export function defaultThreadLabel(threadId, lastTs = "") {
-  if (threadId === "default") return "メイン";
-  if (!lastTs) return "スレッド";
-  return `スレッド ${timeStr(lastTs)}`;
+  return _defaultThreadLabel(threadId, lastTs, timeStr);
 }
 
 export function refreshAnimaUnread(ctx, animaName) {
@@ -134,34 +135,7 @@ export function isBusinessTheme() {
 export function mergeThreadsFromSessions(ctx, animaName, sessionsData) {
   if (!animaName || !sessionsData) return;
   const existing = ctx.state.threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
-  const byId = new Map(existing.map(th => [th.id, { ...th }]));
-
-  if (!byId.has("default")) {
-    byId.set("default", { id: "default", label: "メイン", unread: false, lastTs: 0 });
-  }
-
-  for (const th of sessionsData.threads || []) {
-    const id = th?.thread_id;
-    if (!id || id === "default") continue;
-    const prev = byId.get(id) || { id, unread: false };
-    const nextTs = threadTimeValue(th.last_timestamp || "");
-    const prevTs = threadTimeValue(prev.lastTs || "");
-    byId.set(id, {
-      ...prev,
-      id,
-      label: prev.label || defaultThreadLabel(id, th.last_timestamp || ""),
-      lastTs: Math.max(prevTs, nextTs),
-    });
-  }
-
-  const def = byId.get("default") || { id: "default", label: "メイン", unread: false, lastTs: 0 };
-  byId.delete("default");
-  const rest = Array.from(byId.values()).sort((a, b) => {
-    const diff = threadTimeValue(b.lastTs || "") - threadTimeValue(a.lastTs || "");
-    if (diff !== 0) return diff;
-    return String(a.label || "").localeCompare(String(b.label || ""), "ja");
-  });
-  ctx.state.threads[animaName] = [def, ...rest];
+  ctx.state.threads[animaName] = _mergeThreads(existing, sessionsData, { timeStr });
 }
 
 // ── Chat UI State Persistence ──
