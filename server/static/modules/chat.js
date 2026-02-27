@@ -294,7 +294,8 @@ function _renderHistoryMessage(msg) {
     }
     const content = msg.content ? renderMarkdown(msg.content) : "";
     const toolHtml = _renderToolCalls(msg.tool_calls);
-    return `<div class="chat-bubble assistant">${thinkingHtml}${content}${toolHtml}${tsHtml}</div>`;
+    const imagesHtml = renderChatImages(msg.images, { animaName: state.selectedAnima });
+    return `<div class="chat-bubble assistant">${thinkingHtml}${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
   }
 
   // human / user
@@ -330,9 +331,10 @@ function _renderLiveChatMessage(m) {
     const toolHtml = m.activeTool
       ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(m.activeTool)} \u3092\u5B9F\u884C\u4E2D...</div>`
       : "";
-    return `<div class="chat-bubble assistant${streamClass}${notifClass}">${thinkingHtml}${content}${bootstrapHtml}${toolHtml}</div>`;
+    const imagesHtml = renderChatImages(m.images, { animaName: state.selectedAnima });
+    return `<div class="chat-bubble assistant${streamClass}${notifClass}">${thinkingHtml}${content}${imagesHtml}${bootstrapHtml}${toolHtml}</div>`;
   }
-  const imagesHtml = renderChatImages(m.images);
+  const imagesHtml = renderChatImages(m.images, { animaName: state.selectedAnima });
   const textHtml = m.text ? `<div class="chat-text">${escapeHtml(m.text)}</div>` : "";
   return `<div class="chat-bubble user">${imagesHtml}${textHtml}</div>`;
 }
@@ -405,7 +407,8 @@ export function renderChat() {
 export function renderStreamingBubble(msg) {
   const chatMessages = dom.chatMessages || document.getElementById("chatMessages");
   if (!chatMessages) return;
-  const bubble = chatMessages.querySelector(".chat-bubble.assistant.streaming");
+  const bubbles = chatMessages.querySelectorAll(".chat-bubble.assistant.streaming");
+  const bubble = bubbles[bubbles.length - 1];
   if (!bubble) return;
 
   let html = "";
@@ -426,11 +429,7 @@ export function renderStreamingBubble(msg) {
   } else if (msg.afterHeartbeatRelay && !msg.text) {
     html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>\u5FDC\u7B54\u3092\u6E96\u5099\u4E2D...</div>';
   } else if (msg.text) {
-    try {
-      html = marked.parse(msg.text, { breaks: true });
-    } catch {
-      html = escapeHtml(msg.text);
-    }
+    html = renderMarkdown(msg.text);
   } else {
     html = '<span class="cursor-blink"></span>';
   }
@@ -533,7 +532,6 @@ export async function sendChat(message) {
         logger.debug(`onHeartbeatRelayStart: ${message}`);
         streamingMsg.heartbeatRelay = true;
         streamingMsg.heartbeatText = "";
-        streamingMsg.text = "";
         renderStreamingBubble(streamingMsg);
         addActivity("system", name, `\u30CF\u30FC\u30C8\u30D3\u30FC\u30C8\u4E2D\u7D99: ${message}`);
       },
@@ -568,12 +566,13 @@ export async function sendChat(message) {
         streamingMsg.streaming = false;
         renderChat();
       },
-      onDone: ({ summary }) => {
+      onDone: ({ summary, images }) => {
         const summaryLen = (summary || "").length;
         const textLen = streamingMsg.text.length;
         logger.debug(`onDone: summary_len=${summaryLen} text_len=${textLen} afterRelay=${streamingMsg.afterHeartbeatRelay}`);
         const text = summary || streamingMsg.text;
         streamingMsg.text = text || "(\u7A7A\u306E\u5FDC\u7B54)";
+        streamingMsg.images = images || [];
         streamingMsg.streaming = false;
         streamingMsg.activeTool = null;
         streamingMsg.heartbeatRelay = false;
@@ -748,9 +747,10 @@ export async function resumeActiveStream(animaName) {
         streamingMsg.streaming = false;
         renderChat();
       },
-      onDone: ({ summary }) => {
+      onDone: ({ summary, images }) => {
         const text = summary || streamingMsg.text;
         streamingMsg.text = text || "(\u7A7A\u306E\u5FDC\u7B54)";
+        streamingMsg.images = images || [];
         streamingMsg.streaming = false;
         streamingMsg.activeTool = null;
         streamingMsg.afterHeartbeatRelay = false;

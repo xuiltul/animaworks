@@ -114,7 +114,7 @@ class RAGMemorySearch:
     def _ensure_shared_skills_indexed(self, vector_store) -> None:
         """Index common_skills/ into ``shared_common_skills`` collection."""
         cs_dir = self._common_skills_dir
-        if not cs_dir.is_dir() or not any(cs_dir.glob("*.md")):
+        if not cs_dir.is_dir() or not any(cs_dir.glob("*/SKILL.md")):
             logger.debug("No common_skills files found, skipping shared skills indexing")
             return
 

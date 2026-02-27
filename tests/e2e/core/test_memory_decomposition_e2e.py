@@ -140,7 +140,8 @@ class TestFacadeDelegation:
 
     def test_list_skill_metas(self, mm: MemoryManager) -> None:
         """list_skill_metas returns metas from the skills directory."""
-        (mm.skills_dir / "a.md").write_text("---\nname: alpha\ndescription: テスト\n---\n\n")
+        (mm.skills_dir / "a" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (mm.skills_dir / "a" / "SKILL.md").write_text("---\nname: alpha\ndescription: テスト\n---\n\n")
         result = mm.list_skill_metas()
         assert len(result) == 1
         assert result[0].name == "alpha"
@@ -236,7 +237,8 @@ class TestNewBypassCompat:
         anima_dir = tmp_path / "animas" / "test"
         skills_dir = anima_dir / "skills"
         skills_dir.mkdir(parents=True)
-        (skills_dir / "test.md").write_text("---\nname: t\ndescription: d\n---\n\n")
+        (skills_dir / "test" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (skills_dir / "test" / "SKILL.md").write_text("---\nname: t\ndescription: d\n---\n\n")
 
         mm = MemoryManager.__new__(MemoryManager)
         mm.anima_dir = anima_dir

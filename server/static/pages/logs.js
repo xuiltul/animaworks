@@ -1,6 +1,7 @@
 // ── Log Viewer ──────────────────────────────
 import { api } from "../modules/api.js";
 import { escapeHtml } from "../modules/state.js";
+import { t } from "/shared/i18n.js";
 
 let _container = null;
 let _eventSource = null;
@@ -46,7 +47,7 @@ export function render(container) {
     <div class="card">
       <div class="card-body">
         <pre id="logContent" style="max-height:600px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; margin:0; font-size:0.8rem; line-height:1.4;">
-ログファイルを選択してください</pre>
+${t("logs.select_prompt")}</pre>
       </div>
     </div>
   `;
@@ -80,10 +81,10 @@ function _bindEvents() {
     streamBtn.addEventListener("click", () => {
       if (_streaming) {
         _stopStreaming();
-        streamBtn.textContent = "ストリーミング開始";
+        streamBtn.textContent = t("logs.stream_start");
       } else {
         _startStreaming();
-        streamBtn.textContent = "ストリーミング停止";
+        streamBtn.textContent = t("logs.stream_stop");
       }
     });
   }
@@ -107,7 +108,7 @@ async function _loadFileList() {
     const files = data.files || data || [];
 
     if (Array.isArray(files) && files.length > 0) {
-      let opts = '<option value="">ファイルを選択...</option>';
+      let opts = `<option value="">${t("logs.file_select")}</option>`;
       for (const f of files) {
         const name = typeof f === "string" ? f : (f.name || f.filename || "");
         if (name) {
@@ -116,12 +117,12 @@ async function _loadFileList() {
       }
       select.innerHTML = opts;
     } else {
-      select.innerHTML = '<option value="">ログファイルなし</option>';
+      select.innerHTML = `<option value="">${t("logs.no_files")}</option>`;
     }
   } catch {
-    select.innerHTML = '<option value="">ログAPIが未実装です。Phase 3で追加予定。</option>';
+    select.innerHTML = `<option value="">${t("logs.api_unimplemented")}</option>`;
     const content = document.getElementById("logContent");
-    if (content) content.textContent = "ログAPIが未実装です。Phase 3で追加予定。";
+    if (content) content.textContent = t("logs.api_unimplemented");
   }
 }
 
@@ -129,7 +130,7 @@ async function _loadLogContent(filename) {
   const content = document.getElementById("logContent");
   if (!content) return;
 
-  content.textContent = "読み込み中...";
+  content.textContent = t("common.loading");
 
   try {
     const data = await api(`/api/system/logs/${encodeURIComponent(filename)}?offset=0&limit=200`);
@@ -145,7 +146,7 @@ async function _loadLogContent(filename) {
       content.textContent = JSON.stringify(data, null, 2);
     }
   } catch (err) {
-    content.textContent = `ログの読み込みに失敗しました: ${err.message}`;
+    content.textContent = `${t("logs.load_failed")}: ${err.message}`;
   }
 }
 
@@ -246,14 +247,14 @@ function _startStreaming() {
     _eventSource.onerror = () => {
       _stopStreaming();
       const btn = document.getElementById("logStreamToggle");
-      if (btn) btn.textContent = "ストリーミング開始";
+      if (btn) btn.textContent = t("logs.stream_start");
       const content = document.getElementById("logContent");
-      if (content) content.textContent += "\n[ストリーミング接続が切断されました]";
+      if (content) content.textContent += "\n" + t("logs.stream_disconnected");
     };
   } catch {
     _streaming = false;
     const content = document.getElementById("logContent");
-    if (content) content.textContent += "\n[ストリーミングの開始に失敗しました]";
+    if (content) content.textContent += "\n" + t("logs.stream_start_failed");
   }
 }
 

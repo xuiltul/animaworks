@@ -3,12 +3,26 @@
  * Integrates into existing chat input areas and renders voice chat bubbles.
  */
 import { voiceManager } from './voice.js';
+import { t } from '/shared/i18n.js';
 
 let _uiElements = null;
 let _voiceStreamingMsg = null;
 let _chatCallbacks = null;
+let _voiceListeners = [];
 
 const MIC_ICON_SVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>`;
+
+function _bindVoice(event, handler) {
+  voiceManager.on(event, handler);
+  _voiceListeners.push([event, handler]);
+}
+
+function _unbindAllVoiceListeners() {
+  for (const [event, handler] of _voiceListeners) {
+    voiceManager.off(event, handler);
+  }
+  _voiceListeners = [];
+}
 
 /**
  * @param {HTMLElement} chatInputForm
@@ -27,7 +41,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks) {
   const micBtn = document.createElement('button');
   micBtn.type = 'button';
   micBtn.className = 'voice-mic-btn';
-  micBtn.title = '音声入力';
+  micBtn.title = t('voice.mic_input');
   micBtn.innerHTML = MIC_ICON_SVG;
 
   const recIndicator = document.createElement('span');
@@ -42,7 +56,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks) {
   modeToggle.type = 'button';
   modeToggle.className = 'voice-mode-toggle';
   modeToggle.textContent = 'PTT';
-  modeToggle.title = '入力モード切替（PTT/自動）';
+  modeToggle.title = t('voice.mode_toggle');
   modeToggle.style.display = 'none';
 
   const volumeSlider = document.createElement('input');
@@ -61,7 +75,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks) {
   container.append(micBtn, recIndicator, ttsIndicator, thinkingIndicator, modeToggle, volumeSlider);
 
   const sendBtn = chatInputForm.querySelector(
-    '[id$="SendBtn"], .chat-send-btn, button[type="submit"]'
+    '[id$="SendBtn"], .chat-send-btn, .ws-conv-send, button[type="submit"]'
   );
   if (sendBtn && sendBtn.parentNode) {
     sendBtn.parentNode.insertBefore(container, sendBtn);
@@ -181,11 +195,8 @@ export function initVoiceUI(chatInputForm, animaName, callbacks) {
 
   function _toggleRecordingVAD() {
     if (!voiceActive || voiceManager.mode !== 'vad') return false;
-    if (voiceManager.isRecording) {
-      voiceManager.stopRecording();
-    } else {
-      voiceManager.startRecording();
-    }
+    // In AUTO(VAD), mic button should not manually start/stop recording.
+    // Recording is controlled only by VAD speech start/end callbacks.
     return true;
   }
 
@@ -217,44 +228,45 @@ export function initVoiceUI(chatInputForm, animaName, callbacks) {
     voiceManager.setVolume(parseInt(volumeSlider.value, 10) / 100);
   });
 
-  voiceManager.on('recordingStart', () => {
+  _bindVoice('recordingStart', () => {
     recIndicator.style.display = '';
     micBtn.classList.add('recording');
   });
-  voiceManager.on('recordingStop', () => {
+  _bindVoice('recordingStop', () => {
     recIndicator.style.display = 'none';
     micBtn.classList.remove('recording');
   });
-  voiceManager.on('ttsStart', () => {
+  _bindVoice('ttsStart', () => {
     ttsIndicator.style.display = '';
   });
-  voiceManager.on('ttsDone', () => {
+  _bindVoice('ttsDone', () => {
     if (!voiceManager.isTTSPlaying) ttsIndicator.style.display = 'none';
   });
-  voiceManager.on('playbackEnd', () => {
+  _bindVoice('playbackEnd', () => {
     ttsIndicator.style.display = 'none';
   });
-  voiceManager.on('transcript', ({ text }) => {
+  _bindVoice('transcript', ({ text }) => {
     if (!text || !animaName || !_chatCallbacks) return;
     _chatCallbacks.addUserBubble(text);
   });
-  voiceManager.on('responseStart', () => {
+  _bindVoice('responseStart', () => {
     if (!animaName || !_chatCallbacks) return;
     _voiceStreamingMsg = _chatCallbacks.addStreamingBubble();
   });
-  voiceManager.on('responseText', ({ text }) => {
+  _bindVoice('responseText', ({ text }) => {
     if (!_voiceStreamingMsg || !_chatCallbacks) return;
     _voiceStreamingMsg.text += text;
     _chatCallbacks.updateStreamingBubble(_voiceStreamingMsg);
   });
-  voiceManager.on('responseDone', () => {
+  _bindVoice('responseDone', ({ emotion }) => {
     if (!_voiceStreamingMsg || !_chatCallbacks) return;
     _voiceStreamingMsg.streaming = false;
     if (!_voiceStreamingMsg.text) _voiceStreamingMsg.text = '(空の応答)';
     _chatCallbacks.finalizeStreamingBubble(_voiceStreamingMsg);
+    _chatCallbacks.applyEmotion?.(emotion);
     _voiceStreamingMsg = null;
   });
-  voiceManager.on('thinkingStatus', (thinking) => {
+  _bindVoice('thinkingStatus', (thinking) => {
     thinkingIndicator.style.display = thinking ? '' : 'none';
     if (_voiceStreamingMsg && _chatCallbacks) {
       if (thinking) {
@@ -266,13 +278,13 @@ export function initVoiceUI(chatInputForm, animaName, callbacks) {
       _chatCallbacks.updateStreamingBubble(_voiceStreamingMsg);
     }
   });
-  voiceManager.on('thinkingDelta', ({ text }) => {
+  _bindVoice('thinkingDelta', ({ text }) => {
     if (_voiceStreamingMsg && _chatCallbacks) {
       _voiceStreamingMsg.thinkingText = (_voiceStreamingMsg.thinkingText || '') + text;
       _chatCallbacks.updateStreamingBubble(_voiceStreamingMsg);
     }
   });
-  voiceManager.on('disconnected', () => {
+  _bindVoice('disconnected', () => {
     voiceActive = false;
     _voiceStreamingMsg = null;
     micBtn.classList.remove('active', 'recording');
@@ -282,7 +294,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks) {
     modeToggle.style.display = 'none';
     volumeSlider.style.display = 'none';
   });
-  voiceManager.on('error', ({ message }) => {
+  _bindVoice('error', ({ message }) => {
     console.warn('[VoiceUI] Error:', message);
   });
 
@@ -290,6 +302,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks) {
 }
 
 export function destroyVoiceUI() {
+  _unbindAllVoiceListeners();
   if (_uiElements) {
     voiceManager.disconnect();
     _uiElements.container.remove();

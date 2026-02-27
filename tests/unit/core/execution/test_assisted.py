@@ -12,6 +12,7 @@ import pytest
 
 from core.execution.assisted import (
     _MAX_TOOL_OUTPUT_BYTES,
+    _looks_like_tool_intent,
     _strip_tool_call_block,
     _truncate_tool_output,
     extract_tool_call,
@@ -134,8 +135,10 @@ class TestToTextFormat:
     def test_empty_schemas(self):
         result = to_text_format([])
         assert "利用可能なツール" in result
-        # No tool entries
-        assert "**" not in result.split("1回のメッセージで")[1] if "1回のメッセージで" in result else True
+        # No tool entries in the tool list section
+        assert "ツール一覧" in result
+        tool_list_section = result.split("ツール一覧")[-1]
+        assert "- **" not in tool_list_section
 
     def test_single_tool_with_required_args(self):
         schemas = [{
@@ -175,6 +178,59 @@ class TestToTextFormat:
         result = to_text_format([])
         assert '{"tool":' in result
         assert "```json" in result
+
+    def test_contains_fewshot_examples(self):
+        result = to_text_format([])
+        assert "docker ps" in result
+        assert "execute_command" in result
+
+    def test_contains_anti_hallucination_rule(self):
+        result = to_text_format([])
+        assert "推測" in result or "fabricate" in result.lower()
+
+
+# ── _looks_like_tool_intent ──────────────────────────────────
+
+
+class TestLooksLikeToolIntent:
+    """Test tool-intent detection for Mode B re-prompting."""
+
+    def test_japanese_intent_shirabemasu(self):
+        assert _looks_like_tool_intent("調べてみますね。少々お待ちください。")
+
+    def test_japanese_intent_kakunin(self):
+        assert _looks_like_tool_intent("確認しますね。")
+
+    def test_japanese_intent_jikkou(self):
+        assert _looks_like_tool_intent("実行してみます。")
+
+    def test_japanese_intent_kensaku(self):
+        assert _looks_like_tool_intent("メモリの情報を検索します。")
+
+    def test_japanese_intent_check(self):
+        assert _looks_like_tool_intent("チェックしてみますね。")
+
+    def test_english_ill_check(self):
+        assert _looks_like_tool_intent("I'll check the process status.")
+
+    def test_english_let_me_run(self):
+        assert _looks_like_tool_intent("Let me run that command for you.")
+
+    def test_english_i_will_search(self):
+        assert _looks_like_tool_intent("I will search for the relevant files.")
+
+    def test_plain_text_no_intent(self):
+        assert not _looks_like_tool_intent("こんにちは！今日はいい天気ですね。")
+
+    def test_empty_string(self):
+        assert not _looks_like_tool_intent("")
+
+    def test_actual_tool_call_not_flagged(self):
+        text = '```json\n{"tool": "execute_command", "arguments": {"command": "docker ps"}}\n```'
+        assert not _looks_like_tool_intent(text)
+
+    def test_very_long_text_not_flagged(self):
+        assert not _looks_like_tool_intent("調べます。" + "x" * 3000)
 
 
 # ── _truncate_tool_output ────────────────────────────────────

@@ -189,8 +189,9 @@ class TestModeBSkillInjection:
             model="ollama/gemma3:27b",
             execution_mode="assisted",
         )
-        # Create a personal skill
-        (agent.anima_dir / "skills" / "test_skill.md").write_text(
+        # Create a personal skill (directory structure)
+        (agent.anima_dir / "skills" / "test_skill").mkdir(parents=True, exist_ok=True)
+        (agent.anima_dir / "skills" / "test_skill" / "SKILL.md").write_text(
             "# Test Skill\n## 概要\nA test skill for validation\n## 手順\n1. Do something",
             encoding="utf-8",
         )
@@ -232,7 +233,8 @@ class TestModeBSkillInjection:
         # Create a common skill
         common_skills_dir = data_dir / "common_skills"
         common_skills_dir.mkdir(exist_ok=True)
-        (common_skills_dir / "shared_skill.md").write_text(
+        (common_skills_dir / "shared_skill" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (common_skills_dir / "shared_skill" / "SKILL.md").write_text(
             "# Shared\n## 概要\nA shared skill for all animas\n## 手順\n1. Step",
             encoding="utf-8",
         )

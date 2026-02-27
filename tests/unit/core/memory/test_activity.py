@@ -490,3 +490,27 @@ class TestTimeDiff:
         from core.memory.activity import _time_diff
 
         assert _time_diff("not-a-date", "2026-02-20T10:00:00") == float("inf")
+
+
+class TestConversationImages:
+    def test_response_sent_images_are_restored_in_messages(self, activity_logger: ActivityLogger) -> None:
+        entries = [
+            ActivityEntry(
+                ts="2026-02-20T10:00:00",
+                type="response_sent",
+                content="Here is an image",
+                meta={
+                    "images": [
+                        {
+                            "type": "image",
+                            "source": "generated",
+                            "path": "assets/avatar_fullbody.png",
+                        }
+                    ]
+                },
+            )
+        ]
+        messages = activity_logger._entries_to_messages(entries)
+        assert len(messages) == 1
+        assert messages[0]["role"] == "assistant"
+        assert messages[0]["images"][0]["path"] == "assets/avatar_fullbody.png"

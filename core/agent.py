@@ -36,6 +36,7 @@ from core.background import BackgroundTaskManager
 from core.prompt.context import ContextTracker
 from core.memory import MemoryManager
 from core.messenger import Messenger
+from core.i18n import t
 from core.paths import load_prompt
 from core.prompt.builder import BuildResult, build_system_prompt, inject_shortterm
 from core.exceptions import AnimaWorksError  # noqa: F401
@@ -187,6 +188,7 @@ class AgentCore:
         self.memory = memory
         self.model_config = model_config or ModelConfig()
         self.messenger = messenger
+        self._interrupt_event: asyncio.Event | None = None
         self._tool_registry = self._init_tool_registry()
         self._personal_tools = self._discover_personal_tools()
         self._sdk_available = self._check_sdk()
@@ -223,6 +225,12 @@ class AgentCore:
             "direct" if self.model_config.api_key else f"env:{self.model_config.api_key_env}",
             self.model_config.api_base_url or "(default)",
         )
+
+    def set_interrupt_event(self, event: asyncio.Event) -> None:
+        """Set interrupt event for execution cancellation."""
+        self._interrupt_event = event
+        if hasattr(self._executor, "_interrupt_event"):
+            self._executor._interrupt_event = event
 
     def set_on_message_sent(self, fn: Callable[[str, str, str], None]) -> None:
         """Inject a callback invoked after a send_message tool call."""
@@ -497,6 +505,7 @@ class AgentCore:
                     anima_dir=self.anima_dir,
                     tool_registry=self._tool_registry,
                     personal_tools=self._personal_tools,
+                    interrupt_event=self._interrupt_event,
                 )
             except ImportError:
                 logger.warning(
@@ -515,6 +524,7 @@ class AgentCore:
                     tool_registry=self._tool_registry,
                     memory=self.memory,
                     personal_tools=self._personal_tools,
+                    interrupt_event=self._interrupt_event,
                 )
             except ImportError:
                 logger.warning(
@@ -530,6 +540,7 @@ class AgentCore:
                 tool_registry=self._tool_registry,
                 memory=self.memory,
                 personal_tools=self._personal_tools,
+                interrupt_event=self._interrupt_event,
             )
 
         if mode == "c":
@@ -540,6 +551,7 @@ class AgentCore:
                     anima_dir=self.anima_dir,
                     tool_registry=self._tool_registry,
                     personal_tools=self._personal_tools,
+                    interrupt_event=self._interrupt_event,
                 )
             except ImportError:
                 logger.warning(
@@ -553,6 +565,7 @@ class AgentCore:
                     tool_registry=self._tool_registry,
                     memory=self.memory,
                     personal_tools=self._personal_tools,
+                    interrupt_event=self._interrupt_event,
                 )
 
         if mode == "a":
@@ -563,6 +576,7 @@ class AgentCore:
                 tool_registry=self._tool_registry,
                 memory=self.memory,
                 personal_tools=self._personal_tools,
+                interrupt_event=self._interrupt_event,
             )
 
         # mode == "b" (basic)
@@ -574,6 +588,7 @@ class AgentCore:
             messenger=self.messenger,
             tool_registry=self._tool_registry,
             personal_tools=self._personal_tools,
+            interrupt_event=self._interrupt_event,
         )
 
     def _resolve_api_key(self) -> str | None:
@@ -698,11 +713,7 @@ class AgentCore:
             if prompt_tier == TIER_LIGHT:
                 if result.sender_profile:
                     logger.info("Priming: tier=light, returning sender_profile only")
-                    return (
-                        f"## あなたが思い出していること\n\n"
-                        f"### {sender_name} について\n\n"
-                        f"{result.sender_profile}"
-                    )
+                    return t("agent.priming_tier_light_header", sender_name=sender_name) + result.sender_profile
                 return ""
 
             formatted = format_priming_section(result, sender_name)
@@ -713,7 +724,7 @@ class AgentCore:
 
             # T2 Standard: truncate to ~1000 tokens (≈4000 chars)
             if prompt_tier == TIER_STANDARD and len(formatted) > 4000:
-                formatted = formatted[:4000] + "\n\n（以降省略）"
+                formatted = formatted[:4000] + t("agent.omitted_rest")
 
             return formatted
 
@@ -964,6 +975,7 @@ class AgentCore:
             tool_registry=self._tool_registry,
             memory=self.memory,
             personal_tools=self._personal_tools,
+            interrupt_event=self._interrupt_event,
         )
 
     # ── Public API ─────────────────────────────────────────
@@ -1587,7 +1599,7 @@ class AgentCore:
                     )
                     yield {
                         "type": "error",
-                        "message": f"ストリームが{retry_count}回切断されました。最大リトライ回数に達しました。",
+                        "message": t("agent.stream_retry_exhausted", retry_count=retry_count),
                     }
                     break
 

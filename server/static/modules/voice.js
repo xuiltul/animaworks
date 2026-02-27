@@ -223,7 +223,10 @@ export class VoiceManager {
   }
 
   async _startVAD() {
-    if (this._vad) return;
+    if (this._vad) {
+      await this._vad.start();
+      return;
+    }
     this._vad = new VoiceVAD({
       onSpeechStart: () => this.startRecording(),
       onSpeechEnd: () => this.stopRecording(),

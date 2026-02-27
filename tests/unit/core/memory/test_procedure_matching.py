@@ -245,7 +245,8 @@ class TestPrimingChannelDProcedures:
         skills_dir.mkdir(parents=True, exist_ok=True)
         proc_dir.mkdir(parents=True, exist_ok=True)
 
-        (skills_dir / "deploy.md").write_text(
+        (skills_dir / "deploy" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (skills_dir / "deploy" / "SKILL.md").write_text(
             "---\ndescription: \"「deploy」アプリケーションのデプロイ手順\"\n---\n\n# Deploy Skill",
             encoding="utf-8",
         )

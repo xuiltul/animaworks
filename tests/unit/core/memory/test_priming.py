@@ -56,8 +56,9 @@ def temp_anima_dir():
             encoding="utf-8",
         )
 
-        # Create sample skill file with YAML frontmatter
-        skill_file = anima_dir / "skills" / "web_search.md"
+        # Create sample skill file with YAML frontmatter (directory structure)
+        (anima_dir / "skills" / "web_search").mkdir(parents=True, exist_ok=True)
+        skill_file = anima_dir / "skills" / "web_search" / "SKILL.md"
         skill_file.write_text(
             "---\n"
             "description: \"「web search」「web検索」を実行して情報を収集する\"\n"
@@ -249,7 +250,8 @@ if __name__ == "__main__":
             )
 
             (anima_dir / "knowledge" / "test.md").write_text("テスト知識", encoding="utf-8")
-            (anima_dir / "skills" / "test_skill.md").write_text("## 概要\nテストスキル", encoding="utf-8")
+            (anima_dir / "skills" / "test_skill").mkdir(parents=True, exist_ok=True)
+            (anima_dir / "skills" / "test_skill" / "SKILL.md").write_text("## 概要\nテストスキル", encoding="utf-8")
 
             engine = PrimingEngine(anima_dir)
             result = await engine.prime_memories("テストメッセージ", "human")

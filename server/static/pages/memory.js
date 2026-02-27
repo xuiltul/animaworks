@@ -1,6 +1,7 @@
 // ── Memory Browser (Full Page) ──────────────
 import { api } from "../modules/api.js";
 import { escapeHtml, renderMarkdown } from "../modules/state.js";
+import { t } from "/shared/i18n.js";
 
 let _selectedAnima = null;
 let _activeTab = "episodes";
@@ -16,20 +17,20 @@ export function render(container) {
 
   container.innerHTML = `
     <div class="page-header">
-      <h2>記憶ブラウザ</h2>
+      <h2>${t("memory.page_title")}</h2>
     </div>
 
     <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem;">
       <label style="font-weight:500;">Anima:</label>
       <select id="memoryAnimaSelect" class="anima-dropdown" style="flex:1; max-width:300px;">
-        <option value="">Animaを選択...</option>
+        <option value="">${t("memory.select_anima")}</option>
       </select>
     </div>
 
     <div class="page-tabs" style="margin-bottom:1rem;">
-      <button class="page-tab active" data-tab="episodes">エピソード</button>
-      <button class="page-tab" data-tab="knowledge">知識</button>
-      <button class="page-tab" data-tab="procedures">手順書</button>
+      <button class="page-tab active" data-tab="episodes">${t("chat.memory_episodes")}</button>
+      <button class="page-tab" data-tab="knowledge">${t("chat.memory_knowledge")}</button>
+      <button class="page-tab" data-tab="procedures">${t("chat.memory_procedures")}</button>
     </div>
 
     <div class="card-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom:1.5rem;" id="memoryStatsBar">
@@ -37,7 +38,7 @@ export function render(container) {
 
     <div class="card">
       <div class="card-body" id="memoryMainContent">
-        <div class="loading-placeholder">Animaを選択してください</div>
+        <div class="loading-placeholder">${t("assets.select_anima")}</div>
       </div>
     </div>
   `;
@@ -86,13 +87,13 @@ async function _loadAnimaList() {
 
   try {
     _animas = await api("/api/animas");
-    let opts = '<option value="">Animaを選択...</option>';
+    let opts = `<option value="">${t("memory.select_anima")}</option>`;
     for (const p of _animas) {
       opts += `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`;
     }
     select.innerHTML = opts;
   } catch {
-    select.innerHTML = '<option value="">取得失敗</option>';
+    select.innerHTML = `<option value="">${t("memory.fetch_failed")}</option>`;
   }
 }
 
@@ -127,15 +128,15 @@ async function _loadStats() {
 
   bar.innerHTML = `
     <div class="stat-card">
-      <div class="stat-label">エピソード</div>
+      <div class="stat-label">${t("chat.memory_episodes")}</div>
       <div class="stat-value">${epCount}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">知識</div>
+      <div class="stat-label">${t("chat.memory_knowledge")}</div>
       <div class="stat-value">${knCount}</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">手順書</div>
+      <div class="stat-label">${t("chat.memory_procedures")}</div>
       <div class="stat-value">${prCount}</div>
     </div>
   `;
@@ -146,11 +147,11 @@ async function _loadFileList() {
   if (!content) return;
 
   if (!_selectedAnima) {
-    content.innerHTML = '<div class="loading-placeholder">Animaを選択してください</div>';
+    content.innerHTML = `<div class="loading-placeholder">${t("assets.select_anima")}</div>`;
     return;
   }
 
-  content.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  content.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   const endpoint = `/api/animas/${encodeURIComponent(_selectedAnima)}/${_activeTab}`;
 
@@ -159,7 +160,7 @@ async function _loadFileList() {
     const files = data.files || [];
 
     if (files.length === 0) {
-      content.innerHTML = '<div class="loading-placeholder">ファイルがありません</div>';
+      content.innerHTML = `<div class="loading-placeholder">${t("memory.no_files")}</div>`;
       return;
     }
 
@@ -177,7 +178,7 @@ async function _loadFileList() {
       item.addEventListener("mouseleave", () => { item.style.background = ""; });
     });
   } catch (err) {
-    content.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    content.innerHTML = `<div class="loading-placeholder">${t("memory.fetch_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -189,9 +190,9 @@ async function _loadFileContent(file) {
 
   content.innerHTML = `
     <div>
-      <button class="btn-secondary" id="memoryBackToList" style="margin-bottom:1rem;">&larr; 一覧に戻る</button>
+      <button class="btn-secondary" id="memoryBackToList" style="margin-bottom:1rem;">&larr; ${t("animas.back")}</button>
       <h3 style="margin-bottom:0.75rem;">${escapeHtml(file)}</h3>
-      <div id="memoryFileBody" class="loading-placeholder">読み込み中...</div>
+      <div id="memoryFileBody" class="loading-placeholder">${t("common.loading")}</div>
     </div>
   `;
 
@@ -206,7 +207,7 @@ async function _loadFileContent(file) {
     const data = await api(endpoint);
     const body = document.getElementById("memoryFileBody");
     if (body) {
-      const raw = data.content || "(内容なし)";
+      const raw = data.content || t("chat.no_content");
       body.className = "";
       body.innerHTML = `<div style="background:var(--bg-secondary, #f8f9fa); padding:1rem; border-radius:0.5rem;">${renderMarkdown(raw)}</div>`;
     }
@@ -214,7 +215,7 @@ async function _loadFileContent(file) {
     const body = document.getElementById("memoryFileBody");
     if (body) {
       body.className = "loading-placeholder";
-      body.textContent = `読み込み失敗: ${err.message}`;
+      body.textContent = `${t("memory.fetch_failed")}: ${err.message}`;
     }
   }
 }

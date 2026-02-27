@@ -4,11 +4,11 @@
 Read, Write, Edit, Bash, Grep, Glob
 
 ## Readable Locations
-- Your own directory and all subdirectories
+- All directories under my directory
 - Under /shared/
 
 ## Writable Locations
-- Your own directory and all subdirectories
+- All directories under my directory
 
 ## Executable Commands
 General commands

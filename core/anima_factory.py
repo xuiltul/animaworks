@@ -542,6 +542,19 @@ def _extract_section_content(md_content: str, heading: str) -> str | None:
     return body
 
 
+def _expand_permission_placeholders(content: str, anima_name: str) -> str:
+    """Expand placeholders in permissions.md content.
+
+    Supported placeholders:
+      - ``{name}`` → anima name
+      - ``{animaworks_home}`` → runtime data directory (e.g. ~/.animaworks)
+    """
+    from core.paths import get_data_dir
+    content = content.replace("{name}", anima_name)
+    content = content.replace("{animaworks_home}", str(get_data_dir()))
+    return content
+
+
 def _apply_defaults_from_sheet(anima_dir: Path, md_content: str) -> None:
     """Apply character-sheet sections to anima files, keeping template defaults.
 
@@ -576,6 +589,7 @@ def _apply_defaults_from_sheet(anima_dir: Path, md_content: str) -> None:
     # Permissions
     permissions = _extract_section_content(md_content, headings["permissions"])
     if permissions:
+        permissions = _expand_permission_placeholders(permissions, anima_dir.name)
         (anima_dir / "permissions.md").write_text(permissions + "\n", encoding="utf-8")
         logger.debug("Wrote permissions.md from character sheet for %s", anima_dir.name)
 
@@ -603,9 +617,7 @@ def _apply_role_defaults(anima_dir: Path, role: str) -> None:
     perm_src = role_dir / "permissions.md"
     if perm_src.exists():
         perm_content = perm_src.read_text(encoding="utf-8")
-        # Replace {name} placeholder
-        if "{name}" in perm_content:
-            perm_content = perm_content.replace("{name}", anima_dir.name)
+        perm_content = _expand_permission_placeholders(perm_content, anima_dir.name)
         (anima_dir / "permissions.md").write_text(perm_content, encoding="utf-8")
 
     # Copy specialty_prompt.md

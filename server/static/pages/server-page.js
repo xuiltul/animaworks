@@ -1,48 +1,49 @@
 // ── Server Communication ────────────────────
 import { api } from "../modules/api.js";
 import { escapeHtml, timeStr } from "../modules/state.js";
+import { t } from "/shared/i18n.js";
 
 let _refreshInterval = null;
 
 export function render(container) {
   container.innerHTML = `
     <div class="page-header">
-      <h2>サーバー通信</h2>
+      <h2>${t("nav.server")}</h2>
     </div>
 
     <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
       <div class="stat-card">
-        <div class="stat-label">サーバー稼働</div>
+        <div class="stat-label">${t("server.uptime_label")}</div>
         <div class="stat-value" id="serverUptime">--</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">接続クライアント</div>
+        <div class="stat-label">${t("server.connections_label")}</div>
         <div class="stat-value" id="serverClients">--</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">スケジューラジョブ</div>
+        <div class="stat-label">${t("server.jobs_label")}</div>
         <div class="stat-value" id="serverJobs">--</div>
       </div>
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="card-header">WebSocket接続</div>
+      <div class="card-header">${t("server.ws_connections")}</div>
       <div class="card-body" id="serverWsContent">
-        <div class="loading-placeholder">読み込み中...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="card-header">スケジューラ状況</div>
+      <div class="card-header">${t("server.scheduler_status")}</div>
       <div class="card-body" id="serverSchedulerContent">
-        <div class="loading-placeholder">読み込み中...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header">システムステータス</div>
+      <div class="card-header">${t("server.system_status")}</div>
       <div class="card-body" id="serverStatusContent">
-        <div class="loading-placeholder">読み込み中...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
     </div>
   `;
@@ -76,16 +77,16 @@ async function _loadStatus() {
 
     // Server is running if we got a response
     if (uptimeEl) {
-      uptimeEl.textContent = "稼働中";
+      uptimeEl.textContent = t("server.running");
     }
 
     const rows = [];
-    rows.push(["Anima数", data.animas ?? 0]);
-    rows.push(["スケジューラ", data.scheduler_running ? "稼働中" : "停止"]);
+    rows.push([t("home.anima_count"), data.animas ?? 0]);
+    rows.push([t("server.scheduler"), data.scheduler_running ? t("server.running") : t("server.stopped")]);
 
     if (data.processes) {
       const processCount = Object.keys(data.processes).length;
-      rows.push(["プロセス数", processCount]);
+      rows.push([t("server.process_count"), processCount]);
     }
 
     statusContent.innerHTML = `
@@ -96,8 +97,8 @@ async function _loadStatus() {
       </table>
     `;
   } catch (err) {
-    if (uptimeEl) uptimeEl.textContent = "停止";
-    statusContent.innerHTML = `<div class="loading-placeholder">ステータス取得失敗: ${escapeHtml(err.message)}</div>`;
+    if (uptimeEl) uptimeEl.textContent = t("server.stopped");
+    statusContent.innerHTML = `<div class="loading-placeholder">${t("server.status_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -117,7 +118,7 @@ async function _loadConnections() {
 
     // WebSocket connections summary
     if (wsCount > 0) {
-      rows.push(`<tr><td>WebSocket</td><td><code>--</code></td><td>${wsCount} 接続</td></tr>`);
+      rows.push(`<tr><td>WebSocket</td><td><code>--</code></td><td>${wsCount} ${t("server.connections_unit")}</td></tr>`);
     }
 
     // Process connections
@@ -125,22 +126,22 @@ async function _loadConnections() {
     for (const [name, info] of Object.entries(processes)) {
       const status = info.status || "unknown";
       const pid = info.pid || "--";
-      rows.push(`<tr><td>プロセス</td><td><code>${escapeHtml(name)} (PID: ${pid})</code></td><td>${escapeHtml(status)}</td></tr>`);
+      rows.push(`<tr><td>${t("server.process")}</td><td><code>${escapeHtml(name)} (PID: ${pid})</code></td><td>${escapeHtml(status)}</td></tr>`);
     }
 
     if (rows.length > 0) {
       content.innerHTML = `
         <table class="data-table">
-          <thead><tr><th>タイプ</th><th>ID</th><th>状態</th></tr></thead>
+          <thead><tr><th>${t("server.conn_type")}</th><th>${t("server.conn_id")}</th><th>${t("server.conn_state")}</th></tr></thead>
           <tbody>${rows.join("")}</tbody>
         </table>
       `;
     } else {
-      content.innerHTML = '<div class="loading-placeholder">接続中のクライアントはありません</div>';
+      content.innerHTML = `<div class="loading-placeholder">${t("server.no_connections")}</div>`;
       if (clientsEl) clientsEl.textContent = "0";
     }
   } catch {
-    content.innerHTML = '<div class="loading-placeholder">このAPIは未実装です</div>';
+    content.innerHTML = `<div class="loading-placeholder">${t("server.api_unimplemented")}</div>`;
     if (clientsEl) clientsEl.textContent = "--";
   }
 }
@@ -159,7 +160,7 @@ async function _loadScheduler() {
     if (jobs.length > 0) {
       content.innerHTML = `
         <table class="data-table">
-          <thead><tr><th>ジョブ名</th><th>パーソン</th><th>スケジュール</th><th>最終実行</th><th>次回実行</th></tr></thead>
+          <thead><tr><th>${t("server.job_name")}</th><th>${t("server.job_person")}</th><th>${t("server.job_schedule")}</th><th>${t("server.job_last_run")}</th><th>${t("server.job_next_run")}</th></tr></thead>
           <tbody>
             ${jobs.map(j => `
               <tr>
@@ -174,10 +175,10 @@ async function _loadScheduler() {
         </table>
       `;
     } else {
-      content.innerHTML = '<div class="loading-placeholder">スケジュールされたジョブはありません</div>';
+      content.innerHTML = `<div class="loading-placeholder">${t("server.no_jobs")}</div>`;
     }
   } catch {
-    content.innerHTML = '<div class="loading-placeholder">このAPIは未実装です</div>';
+    content.innerHTML = `<div class="loading-placeholder">${t("server.api_unimplemented")}</div>`;
     if (jobsEl) jobsEl.textContent = "--";
   }
 }

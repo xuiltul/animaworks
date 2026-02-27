@@ -449,9 +449,18 @@ class TestBuildHeartbeatPromptReflection:
             summary="チームの連携パターン変化",
         )
 
+        def _mock_load_prompt(name, **kwargs):
+            if name == "fragments/recent_reflections":
+                return (
+                    "## 直近の振り返り（前回までの気づき）\n\n"
+                    "以下は過去のハートビートで得た気づきです。"
+                    "関連があれば今回の判断に活かしてください。"
+                )
+            return "prompt"
+
         with patch("core.anima.AgentCore") as MockAgent, \
              patch("core.anima.ConversationMemory") as MockConv, \
-             patch("core.anima.load_prompt", return_value="prompt"):
+             patch("core.anima.load_prompt", side_effect=_mock_load_prompt):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
@@ -459,7 +468,6 @@ class TestBuildHeartbeatPromptReflection:
 
             parts = await dp._build_heartbeat_prompt()
 
-        # Join all parts and check for reflection section
         full_prompt = "\n\n".join(parts)
         assert "直近の振り返り（前回までの気づき）" in full_prompt
         assert "チームの連携パターンが変化している" in full_prompt

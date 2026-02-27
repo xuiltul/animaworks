@@ -7,6 +7,73 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-02-27
+
+### Added
+- surface assistant image artifacts in chat and history
+- add persistent dashboard chat tabs with unread stars
+- multi-thread chat backend + frontend
+- add frontend i18n with shared i18n.js module and locale JSON files (L6)
+- add core/i18n.py and externalize hardcoded Japanese strings in Python (L5)
+- add English translations for knowledge, skills, and roles templates (L4)
+- message queue with management UI and queue-anytime support
+- pending message queue, icon-only buttons, dynamic button state
+- add pending message queue with interrupt-and-send for chat UI
+- implement call_human reply routing from Slack (Issue #1)
+- intercept SDK Task tool → pending LLM task for background execution
+- add voice output sanitization and voice-mode suffix for TTS
+- migrate skill format from flat files to directory structure
+- Mode B補助輪強化 — ツール仕様テキスト改善 + インテント検出リプロンプト
+- add process control buttons and LLM session interrupt to WebUI
+- add web_fetch internal tool for Anima URL content retrieval
+
+### Fixed
+- improve add-conversation anima menu UX
+- refine chat tab UI behavior and responsive layout
+- preserve streaming partial responses during heartbeat relay
+- polish chat input UX and refresh static asset versions
+- make VAD auto mode fully hands-free
+- close remaining assistant-image review gaps
+- isolate thread histories in chat view and tighten voice reply length
+- improve workspace voice input UX and metadata handling
+- restore VAD auto mode and suppress silent STT hallucination
+- prevent duplicated voice stream updates on UI reinit
+- improve chat UI behaviors and thinking stream visibility
+- show avatar icons in anima chat tabs
+- restore old chat threads and improve tab UX
+- improve workspace streaming UX and sync docs navigation
+- improve workspace stream resume and thinking preview behavior
+- avoid task-intercept blocked misclassification
+- resume dashboard chat stream after page return
+- clear chat display immediately when switching threads
+- clear chat input immediately after send submission
+- make channel ID regex case-insensitive for consistency
+- thread_id validation and conversation view filtering
+- close prior activity group on next trigger
+- update review docs and chat sidebar responsiveness
+- persist chat drafts until successful send
+- resolve review revision findings for i18n L4-L6
+- update tests for i18n string changes and adapt evaluation docs
+- remove bottom whitespace in chat sidebar memory section
+- avoid no-response when stream events are missing
+- make send/queue buttons perfect circles with explicit width+height
+- prevent mobile auto-zoom on chat input focus
+- catch StopAsyncIteration on Agent SDK session resume
+- add voice chat balloon callbacks to standalone chat page
+- prevent duplicate process spawn via _starting/_restarting guards
+- add per-anima mode_s_auth to prevent shared API key rate limiting
+- address review findings — missing interrupt_event paths, CSS :active parity
+
+### Changed
+- address round-2 review findings for reply routing
+- address review findings for call_human reply routing
+- Cursor-style input — embed buttons inside textarea container
+- use English persona-aware message for Task intercept deny reason
+
+### Performance
+- parallelize anima startup and make web server start first
+
+
 ## [0.4.2] - 2026-02-26
 
 ### Added
@@ -266,7 +333,7 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.4.2...HEAD
-[0.4.2]: https://github.com/xuiltul/animaworks/compare/v0.4.1...v0.4.2
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/xuiltul/animaworks/compare/v0.4.2...v0.4.3
 [0.4.0]: https://github.com/xuiltul/animaworks/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/xuiltul/animaworks/compare/v0.3.0...v0.3.1

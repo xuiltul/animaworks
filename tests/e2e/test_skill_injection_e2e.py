@@ -295,7 +295,7 @@ class TestUnifiedSkillTableE2E:
             d.mkdir(parents=True, exist_ok=True)
 
         _make_skill_file(
-            skills_dir / "cron-management.md",
+            skills_dir / "cron-management" / "SKILL.md",
             name="cron-management",
             description="cron.mdの読み書き・更新スキル",
             body="## cron.mdの構造\n\nschedule: フィールドにcron式を記載する。",
@@ -374,7 +374,7 @@ class TestHandleSkillIntegration:
             d.mkdir(parents=True, exist_ok=True)
 
         _make_skill_file(
-            skills_dir / "test-skill.md",
+            skills_dir / "test-skill" / "SKILL.md",
             name="test-skill",
             description="A test skill for integration",
             body="## Steps\n\n1. Do this.\n2. Do that.",

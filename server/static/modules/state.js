@@ -73,9 +73,18 @@ export function statusClass(status) {
   return "status-offline";
 }
 
+const _markedRenderer = new marked.Renderer();
+const _origLinkRenderer = _markedRenderer.link.bind(_markedRenderer);
+_markedRenderer.link = function (token) {
+  const html = _origLinkRenderer(token);
+  return html.replace(/^<a /, '<a target="_blank" rel="noopener noreferrer" ');
+};
+
+const _markedOptions = { breaks: true, renderer: _markedRenderer };
+
 export function renderMarkdown(text) {
   try {
-    return marked.parse(text, { breaks: true });
+    return marked.parse(text, _markedOptions);
   } catch {
     return escapeHtml(text);
   }
@@ -84,7 +93,7 @@ export function renderMarkdown(text) {
 export function renderSafeMarkdown(text) {
   if (!text) return "";
   try {
-    return marked.parse(escapeHtml(text), { breaks: true });
+    return marked.parse(escapeHtml(text), _markedOptions);
   } catch {
     return escapeHtml(text);
   }

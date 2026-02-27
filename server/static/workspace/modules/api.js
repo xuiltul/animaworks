@@ -101,9 +101,10 @@ export function fetchSession(name, sessionId) {
   return request(`/api/animas/${encodeURIComponent(name)}/sessions/${encodeURIComponent(sessionId)}`);
 }
 
-export function fetchConversationHistory(name, limit = 50, before = null) {
+export function fetchConversationHistory(name, limit = 50, before = null, threadId = "default") {
   const params = new URLSearchParams({ limit: String(limit) });
   if (before) params.set("before", before);
+  params.set("thread_id", threadId);
   return request(`/api/animas/${encodeURIComponent(name)}/conversation/history?${params}`);
 }
 

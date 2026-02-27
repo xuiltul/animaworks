@@ -4,6 +4,7 @@
 import { getState, setState } from "./state.js";
 import * as api from "./api.js";
 import { escapeHtml, stripMdExtension } from "./utils.js";
+import { t } from "/shared/i18n.js";
 
 const TABS = [
   { key: "episodes", label: "Episodes" },
@@ -50,14 +51,14 @@ export function renderMemoryBrowser(container) {
     <div class="memory-browser">
       <div class="memory-tabs">
         ${TABS.map(
-          (t) =>
-            `<button class="memory-tab${t.key === activeMemoryTab ? " active" : ""}"
-                    data-tab="${t.key}">${t.label}</button>`
+          (tab) =>
+            `<button class="memory-tab${tab.key === activeMemoryTab ? " active" : ""}"
+                    data-tab="${tab.key}">${tab.label}</button>`
         ).join("")}
       </div>
       <div class="memory-file-list"></div>
       <div class="memory-content-area" style="display:none">
-        <button class="memory-back-btn">&larr; Back</button>
+        <button class="memory-back-btn">&larr; ${t("ws.back")}</button>
         <div class="memory-content-title"></div>
         <div class="memory-content-body"></div>
       </div>
@@ -102,11 +103,11 @@ export async function loadMemoryTab(tab) {
   const { selectedAnima } = getState();
 
   if (!selectedAnima) {
-    fileList.innerHTML = '<div class="loading-placeholder">Anima を選択してください</div>';
+    fileList.innerHTML = `<div class="loading-placeholder">${t("ws.select_anima")}</div>`;
     return;
   }
 
-  fileList.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  fileList.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     let data;
@@ -116,7 +117,7 @@ export async function loadMemoryTab(tab) {
 
     const files = data.files || [];
     if (files.length === 0) {
-      fileList.innerHTML = '<div class="loading-placeholder">ファイルがありません</div>';
+      fileList.innerHTML = `<div class="loading-placeholder">${t("memory.no_files")}</div>`;
       return;
     }
 
@@ -134,7 +135,7 @@ export async function loadMemoryTab(tab) {
     });
   } catch (err) {
     console.error("Failed to load memory files:", err);
-    fileList.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    fileList.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -148,7 +149,7 @@ async function loadMemoryContent(tab, file) {
 
   showContentArea();
   contentTitle.textContent = stripMdExtension(file);
-  contentBody.textContent = "読み込み中...";
+  contentBody.textContent = t("common.loading");
 
   try {
     let data;
@@ -156,9 +157,9 @@ async function loadMemoryContent(tab, file) {
     else if (tab === "knowledge") data = await api.fetchKnowledgeTopic(selectedAnima, file);
     else data = await api.fetchProcedure(selectedAnima, file);
 
-    contentBody.textContent = data.content || "(内容なし)";
+    contentBody.textContent = data.content || t("chat.no_content");
   } catch (err) {
     console.error("Failed to load memory content:", err);
-    contentBody.textContent = `[エラー] ${err.message}`;
+    contentBody.textContent = `[${t("tools.error")}] ${err.message}`;
   }
 }

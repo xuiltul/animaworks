@@ -2,6 +2,7 @@
 // Dropdown for anima selection + detail card rendering.
 
 import { getState, setState } from "./state.js";
+import { t } from "/shared/i18n.js";
 import { fetchAnimas, fetchAnimaDetail } from "./api.js";
 import { escapeHtml, renderSimpleMarkdown } from "./utils.js";
 
@@ -65,14 +66,14 @@ function renderDropdown() {
   const { animas, selectedAnima } = getState();
 
   let html = '<select class="anima-dropdown" id="wsAnimaDropdown">';
-  html += '<option value="" disabled>Select an anima...</option>';
+  html += `<option value="" disabled>${t("ws.select_anima")}</option>`;
 
   for (const p of animas) {
     const selected = p.name === selectedAnima ? " selected" : "";
     if (p.status === "bootstrapping" || p.bootstrapping) {
-      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>\u23F3 ${escapeHtml(p.name)} (制作中...)</option>`;
+      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>\u23F3 ${escapeHtml(p.name)} (${t("animas.bootstrapping")})</option>`;
     } else if (p.status === "not_found" || p.status === "stopped") {
-      html += `<option value="${escapeHtml(p.name)}"${selected}>\uD83D\uDCA4 ${escapeHtml(p.name)} (停止中)</option>`;
+      html += `<option value="${escapeHtml(p.name)}"${selected}>\uD83D\uDCA4 ${escapeHtml(p.name)} (${t("animas.stopped")})</option>`;
     } else {
       const st = p.status ? ` (${p.status})` : "";
       html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${st}</option>`;
@@ -102,7 +103,7 @@ function renderStatusPanel() {
   if (!selectedAnima) {
     _statusContainer.innerHTML = `
       <div class="anima-status-panel">
-        <div class="loading-placeholder">Select an anima to view details</div>
+        <div class="loading-placeholder">${t("ws.select_anima_detail")}</div>
       </div>
     `;
     return;
@@ -111,7 +112,7 @@ function renderStatusPanel() {
   if (!animaDetail) {
     _statusContainer.innerHTML = `
       <div class="anima-status-panel">
-        <div class="loading-placeholder">Loading...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
     `;
     return;
@@ -180,7 +181,7 @@ function renderStatusPanel() {
 
   // Fallback if no sections
   if (!sectionsHtml) {
-    sectionsHtml = '<div class="loading-placeholder">No detail available</div>';
+    sectionsHtml = `<div class="loading-placeholder">${t("ws.no_detail")}</div>`;
   }
 
   _statusContainer.innerHTML = `
@@ -248,7 +249,7 @@ export async function loadAnimas() {
     console.error("Failed to load animas:", err);
     if (_selectorContainer) {
       _selectorContainer.innerHTML =
-        '<div class="loading-placeholder" style="color:#ef4444;">Failed to load animas</div>';
+        `<div class="loading-placeholder" style="color:#ef4444;">${t("animas.detail_load_failed")}</div>`;
     }
   }
 }
@@ -271,7 +272,7 @@ export async function selectAnima(name) {
       _statusContainer.innerHTML = `
         <div class="anima-status-panel">
           <div class="loading-placeholder" style="color:#ef4444;">
-            Failed to load details for ${escapeHtml(name)}
+            ${t("animas.detail_load_failed")}: ${escapeHtml(name)}
           </div>
         </div>
       `;

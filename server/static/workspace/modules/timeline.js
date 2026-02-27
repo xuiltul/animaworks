@@ -21,6 +21,7 @@
 import { showMessage as showMessagePopup } from "./message-popup.js";
 import { getIcon, getDisplaySummary, normalizeEvent } from "../../shared/activity-types.js";
 import { renderSimpleMarkdown } from "./utils.js";
+import { t } from "/shared/i18n.js";
 
 // ── Timestamp helper ──────────────────────────────
 
@@ -135,7 +136,7 @@ function _buildDOM(officePanel) {
 
   const title = document.createElement("span");
   title.className = "timeline-title";
-  title.textContent = "Activity Timeline";
+  title.textContent = t("ws.timeline_title");
 
   const count = document.createElement("span");
   count.className = "timeline-count";
@@ -178,7 +179,7 @@ function _buildDOM(officePanel) {
   const loadMoreBtn = document.createElement("button");
   loadMoreBtn.className = "tl-load-more";
   loadMoreBtn.id = "wsTimelineLoadMore";
-  loadMoreBtn.textContent = "もっと読み込む";
+  loadMoreBtn.textContent = t("ws.load_more");
   loadMoreBtn.style.cssText = "display:none; width:100%; padding:0.5rem; margin-top:0.5rem; background:var(--bg-secondary, #f3f4f6); border:1px solid var(--border-color, #e5e7eb); border-radius:6px; cursor:pointer; color:var(--text-secondary, #666); font-size:0.8rem;";
   loadMoreBtn.addEventListener("click", () => _loadMore());
 
@@ -500,7 +501,7 @@ export async function loadHistory(hours = 48) {
 async function _loadMore() {
   const btn = document.getElementById("wsTimelineLoadMore");
   if (btn) {
-    btn.textContent = "読み込み中...";
+    btn.textContent = t("common.loading");
     btn.disabled = true;
   }
   try {
@@ -543,7 +544,7 @@ async function _loadMore() {
     console.warn("[timeline] Failed to load more:", err);
   } finally {
     if (btn) {
-      btn.textContent = "もっと読み込む";
+      btn.textContent = t("ws.load_more");
       btn.disabled = false;
     }
   }

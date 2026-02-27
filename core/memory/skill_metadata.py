@@ -176,6 +176,7 @@ def _match_tier3_vector(
     for skill in candidates:
         candidate_by_path[str(skill.path)] = skill
         candidate_by_path[skill.path.stem] = skill
+        candidate_by_path[skill.path.parent.name] = skill
         candidate_by_path[skill.name] = skill
 
     matched: list[SkillMeta] = []
@@ -188,6 +189,9 @@ def _match_tier3_vector(
         if skill is None and file_path:
             stem = Path(str(file_path)).stem
             skill = candidate_by_path.get(stem)
+        if skill is None and file_path:
+            parent_name = Path(str(file_path)).parent.name
+            skill = candidate_by_path.get(parent_name)
         if skill and skill.name not in seen:
             matched.append(skill)
             seen.add(skill.name)
@@ -209,10 +213,11 @@ class SkillMetadataService:
         """Extract SkillMeta from a skill file's YAML frontmatter.
 
         Supports Claude Code format (name + description frontmatter only).
-        Falls back to filename stem and empty description if no frontmatter.
+        Falls back to path.parent.name for skills (name/SKILL.md), path.stem
+        for procedures (flat {name}.md files).
         """
         text = path.read_text(encoding="utf-8")
-        name = path.stem
+        name = path.parent.name if path.name == "SKILL.md" else path.stem
         description = ""
         allowed_tools: list[str] = []
 
@@ -261,7 +266,7 @@ class SkillMetadataService:
         """Return SkillMeta for each personal skill."""
         return [
             self.extract_skill_meta(f, is_common=False)
-            for f in sorted(self._skills_dir.glob("*.md"))
+            for f in sorted(self._skills_dir.glob("*/SKILL.md"))
         ]
 
     def list_common_skill_metas(self) -> list[SkillMeta]:
@@ -270,7 +275,7 @@ class SkillMetadataService:
             return []
         return [
             self.extract_skill_meta(f, is_common=True)
-            for f in sorted(self._common_skills_dir.glob("*.md"))
+            for f in sorted(self._common_skills_dir.glob("*/SKILL.md"))
         ]
 
     def list_skill_summaries(self) -> list[tuple[str, str]]:

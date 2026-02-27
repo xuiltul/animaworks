@@ -100,15 +100,17 @@ async def _reconcile_assets_at_startup(animas_dir: Path) -> None:
         logger.exception("Startup asset reconciliation failed")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Only start anima processes when setup is complete
-    if app.state.setup_complete:
+async def _startup_animas_background(app: FastAPI) -> None:
+    """Background task: start anima processes and post-startup services.
+
+    Runs after the web server is already accepting requests so that the
+    dashboard is reachable immediately.
+    """
+    try:
         # Register anima lifecycle callbacks for reconciliation
         def _on_anima_added(name: str) -> None:
             if name not in app.state.anima_names:
                 app.state.anima_names.append(name)
-                # Sync full org structure (registers new anima + repairs others)
                 from core.org_sync import sync_org_structure
 
                 sync_org_structure(app.state.animas_dir)
@@ -122,6 +124,7 @@ async def lifespan(app: FastAPI):
         app.state.supervisor.on_anima_added = _on_anima_added
         app.state.supervisor.on_anima_removed = _on_anima_removed
 
+        # Start all anima processes (parallel internally)
         await app.state.supervisor.start_all(app.state.anima_names)
 
         # Sync org structure from identity.md/status.json → config.json
@@ -133,10 +136,38 @@ async def lifespan(app: FastAPI):
             logger.exception("Org structure sync failed at startup")
 
         # Reconcile missing anima assets (fallback for failed bootstrap)
-        import asyncio
-
         asyncio.create_task(_reconcile_assets_at_startup(app.state.animas_dir))
 
+        # ── Slack Socket Mode ─────────────────────────────────
+        try:
+            from server.slack_socket import SlackSocketModeManager
+
+            socket_manager = SlackSocketModeManager()
+            await socket_manager.start()
+            app.state.slack_socket_manager = socket_manager
+        except Exception:
+            logger.exception("Slack Socket Mode startup failed")
+            app.state.slack_socket_manager = None
+
+        logger.info("All anima processes started")
+
+    except asyncio.CancelledError:
+        logger.info("Anima background startup cancelled (shutdown)")
+    except Exception:
+        logger.exception("Background anima startup failed")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Only start anima processes when setup is complete
+    if app.state.setup_complete:
+        # ── WebSocket heartbeat (start first so dashboard is responsive) ──
+        await app.state.ws_manager.start_heartbeat()
+
+        # ── Stream Registry cleanup ────────────────────────
+        await app.state.stream_registry.start_cleanup_loop()
+
+        # ── Periodic schedulers (don't depend on running animas) ──
         shared_dir = app.state.shared_dir
 
         msg_log_scheduler = AsyncIOScheduler(timezone="Asia/Tokyo")
@@ -186,29 +217,27 @@ async def lifespan(app: FastAPI):
         msg_log_scheduler.start()
         app.state.msg_log_scheduler = msg_log_scheduler
 
-        # ── WebSocket heartbeat ────────────────────────────────
-        await app.state.ws_manager.start_heartbeat()
+        # ── Start anima processes in background (parallel) ──
+        # Web server is already accepting requests at this point.
+        app.state._anima_startup_task = asyncio.create_task(
+            _startup_animas_background(app),
+        )
 
-        # ── Stream Registry cleanup ────────────────────────
-        await app.state.stream_registry.start_cleanup_loop()
-
-        # ── Slack Socket Mode ─────────────────────────────────
-        try:
-            from server.slack_socket import SlackSocketModeManager
-
-            socket_manager = SlackSocketModeManager()
-            await socket_manager.start()
-            app.state.slack_socket_manager = socket_manager
-        except Exception:
-            logger.exception("Slack Socket Mode startup failed")
-            app.state.slack_socket_manager = None
-
-        logger.info("Server started with process isolation")
+        logger.info("Server started (anima processes launching in background)")
     else:
         logger.info("Server started in setup mode (setup not yet complete)")
     yield
-    # Shutdown all processes
+    # Shutdown
     if app.state.setup_complete:
+        # Cancel background startup if still running
+        startup_task = getattr(app.state, "_anima_startup_task", None)
+        if startup_task and not startup_task.done():
+            startup_task.cancel()
+            try:
+                await startup_task
+            except asyncio.CancelledError:
+                pass
+
         await app.state.ws_manager.stop_heartbeat()
         app.state.stream_registry.cancel_all_producers()
         await app.state.stream_registry.await_all_producers(timeout=5.0)

@@ -155,6 +155,7 @@ class TestCronTriggerGrouping:
         assert len(groups) == 2
         assert groups[0]["type"] == "cron"
         assert groups[0]["event_count"] == 2
+        assert groups[0]["is_open"] is False
         assert groups[1]["type"] == "heartbeat"
 
 

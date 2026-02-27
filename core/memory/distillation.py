@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
+from core.i18n import t
 from core.paths import load_prompt
 from core.time_utils import now_iso, now_jst
 
@@ -470,7 +471,7 @@ class ProceduralDistiller:
         """
         parts: list[str] = []
         for i, cluster in enumerate(clusters, 1):
-            lines = [f"### パターン {i} ({len(cluster)}回繰り返し)"]
+            lines = [t("distillation.pattern_n_repeat", i=i, count=len(cluster))]
             for entry in cluster[:10]:  # Limit entries per cluster
                 ts = entry.get("ts", "")[:16]
                 etype = entry.get("type", "")
@@ -505,7 +506,7 @@ class ProceduralDistiller:
             return []
 
         section_text = section.group(1)
-        if "(なし)" in section_text:
+        if t("distillation.none") in section_text:
             return []
 
         items: list[dict] = []
@@ -543,7 +544,7 @@ class ProceduralDistiller:
             return []
 
         section_text = section.group(1)
-        if "(なし)" in section_text:
+        if t("distillation.none") in section_text:
             return []
 
         items: list[dict] = []
@@ -636,7 +637,7 @@ class ProceduralDistiller:
             meta = self._read_metadata(f)
             desc = meta.get("description", f.stem)
             summaries.append(f"- {f.stem}: {desc}")
-        return "\n".join(summaries) if summaries else "(なし)"
+        return "\n".join(summaries) if summaries else t("distillation.none")
 
     @staticmethod
     def _read_metadata(path: Path) -> dict:

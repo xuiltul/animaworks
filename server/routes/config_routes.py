@@ -10,6 +10,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 
+from core.i18n import t
+
 logger = logging.getLogger("animaworks.routes.config")
 
 
@@ -79,14 +81,14 @@ def create_config_router() -> APIRouter:
 
         return {
             "checks": [
-                {"label": "設定ファイル", "ok": config_exists},
-                {"label": "Anima登録", "ok": animas_count > 0,
-                 "detail": f"{animas_count}名"},
-                {"label": "共有ディレクトリ", "ok": shared_dir.exists()},
-                {"label": "Anthropic APIキー", "ok": has_anthropic},
-                {"label": "OpenAI APIキー", "ok": has_openai},
-                {"label": "Google APIキー", "ok": has_google},
-                {"label": "初期化完了", "ok": initialized},
+                {"label": t("config.config_file"), "ok": config_exists},
+                {"label": t("config.anima_registration"), "ok": animas_count > 0,
+                 "detail": t("config.anima_count_detail", count=animas_count)},
+                {"label": t("config.shared_dir"), "ok": shared_dir.exists()},
+                {"label": t("config.anthropic_api_key"), "ok": has_anthropic},
+                {"label": t("config.openai_api_key"), "ok": has_openai},
+                {"label": t("config.google_api_key"), "ok": has_google},
+                {"label": t("config.init_complete"), "ok": initialized},
             ],
             "config_exists": config_exists,
             "animas_count": animas_count,

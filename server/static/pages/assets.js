@@ -1,6 +1,7 @@
 // ── Asset Management ────────────────────────
 import { api } from "../modules/api.js";
 import { escapeHtml } from "../modules/state.js";
+import { t } from "/shared/i18n.js";
 
 let _container = null;
 let _animas = [];
@@ -24,16 +25,16 @@ export async function render(container) {
 
   container.innerHTML = `
     <div class="page-header">
-      <h2>アセット管理</h2>
-      <p>キャラクターアセットの閲覧とリメイク</p>
+      <h2>${t("assets.page_title")}</h2>
+      <p>${t("assets.page_subtitle")}</p>
     </div>
 
     <div class="assets-anima-selector" id="assetsAnimaSelector">
-      <div class="loading-placeholder">Anima一覧を読み込み中...</div>
+      <div class="loading-placeholder">${t("assets.loading_list")}</div>
     </div>
 
     <div id="assetsGalleryContent">
-      <div class="loading-placeholder">Animaを選択してください</div>
+      <div class="loading-placeholder">${t("assets.select_anima")}</div>
     </div>
   `;
 
@@ -85,7 +86,7 @@ async function _loadAnimaList() {
     _animas = await api("/api/animas");
 
     if (_animas.length === 0) {
-      selector.innerHTML = '<div class="loading-placeholder">Animaが登録されていません</div>';
+      selector.innerHTML = `<div class="loading-placeholder">${t("animas.not_registered")}</div>`;
       return;
     }
 
@@ -99,7 +100,7 @@ async function _loadAnimaList() {
       selector.appendChild(btn);
     }
   } catch (err) {
-    selector.innerHTML = `<div class="loading-placeholder">Anima取得失敗: ${escapeHtml(err.message)}</div>`;
+    selector.innerHTML = `<div class="loading-placeholder">${t("assets.fetch_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -126,14 +127,14 @@ async function _loadGallery() {
   const content = document.getElementById("assetsGalleryContent");
   if (!content || !_selectedAnima) return;
 
-  content.innerHTML = '<div class="loading-placeholder">アセットを読み込み中...</div>';
+  content.innerHTML = `<div class="loading-placeholder">${t("assets.loading")}</div>`;
 
   const enc = encodeURIComponent(_selectedAnima);
 
   try {
     _metadata = await api(`/api/animas/${enc}/assets/metadata`);
   } catch (err) {
-    content.innerHTML = `<div class="loading-placeholder">アセット情報の取得に失敗しました: ${escapeHtml(err.message)}</div>`;
+    content.innerHTML = `<div class="loading-placeholder">${t("assets.fetch_failed")}: ${escapeHtml(err.message)}</div>`;
     return;
   }
 
@@ -156,7 +157,7 @@ async function _loadGallery() {
       <div class="assets-thumb-placeholder">
         <span class="assets-badge-icon">3D</span>
       </div>
-      <div class="assets-thumb-label">3Dモデル</div>
+      <div class="assets-thumb-label">${t("assets.model_3d")}</div>
       <span class="assets-badge">${modelCount}</span>
     </div>
   `;
@@ -167,7 +168,7 @@ async function _loadGallery() {
       <div class="assets-thumb-placeholder">
         <span class="assets-badge-icon">Anim</span>
       </div>
-      <div class="assets-thumb-label">アニメーション</div>
+      <div class="assets-thumb-label">${t("assets.animation")}</div>
       <span class="assets-badge">${animCount}</span>
     </div>
   `;
@@ -221,7 +222,7 @@ function _openRemakeModal() {
   const currentFullbodyUrl = assets.avatar_fullbody?.url || "";
 
   // Build style-from options (other animas)
-  let styleOptions = '<option value="">-- 選択してください --</option>';
+  let styleOptions = `<option value="">-- ${t("assets.select_prompt")} --</option>`;
   for (const p of _animas) {
     if (p.name !== _selectedAnima) {
       styleOptions += `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`;
@@ -242,18 +243,18 @@ function _openRemakeModal() {
         <div class="assets-modal-columns">
           <!-- Left: Current image -->
           <div class="assets-modal-col">
-            <div class="assets-modal-col-label">Current</div>
+            <div class="assets-modal-col-label">${t("assets.current")}</div>
             ${currentFullbodyUrl
               ? `<img class="assets-modal-preview-img" src="${escapeHtml(currentFullbodyUrl)}" alt="Current fullbody">`
-              : '<div class="assets-modal-preview-placeholder">No fullbody image</div>'
+              : `<div class="assets-modal-preview-placeholder">${t("assets.no_fullbody")}</div>`
             }
           </div>
 
           <!-- Right: Preview image -->
           <div class="assets-modal-col">
-            <div class="assets-modal-col-label">Preview</div>
+            <div class="assets-modal-col-label">${t("assets.preview")}</div>
             <div id="assetsPreviewContainer" class="assets-modal-preview-placeholder">
-              プレビュー生成待ち
+              ${t("assets.preview_pending")}
             </div>
           </div>
         </div>
@@ -338,7 +339,7 @@ async function _generatePreview() {
   const infoExtracted = parseFloat(document.getElementById("assetsInfoExtract")?.value || "0.8");
 
   if (!styleFrom) {
-    _showModalError("Style FromのAnimaを選択してください");
+    _showModalError(t("assets.style_from_select"));
     return;
   }
 
@@ -352,7 +353,7 @@ async function _generatePreview() {
 
   // Show loading state in preview
   if (previewContainer) {
-    previewContainer.innerHTML = '<div class="assets-spinner"></div><div style="margin-top:0.5rem;">プレビュー生成中...</div>';
+    previewContainer.innerHTML = `<div class="assets-spinner"></div><div style="margin-top:0.5rem;">${t("assets.preview_generating")}</div>`;
     previewContainer.className = "assets-modal-preview-placeholder";
   }
 
@@ -379,7 +380,7 @@ async function _generatePreview() {
 
   } catch (err) {
     if (previewContainer) {
-      previewContainer.innerHTML = `<div class="assets-error">プレビュー生成失敗: ${escapeHtml(err.message)}</div>`;
+      previewContainer.innerHTML = `<div class="assets-error">${t("assets.preview_failed")}: ${escapeHtml(err.message)}</div>`;
       previewContainer.className = "assets-modal-preview-placeholder";
     }
     if (generateBtn) { generateBtn.disabled = false; generateBtn.textContent = "Generate Preview"; }
@@ -395,7 +396,7 @@ function _showPreviewImage(url) {
     img.alt = "Preview";
     img.src = url + (url.includes("?") ? "&" : "?") + "t=" + Date.now();
     img.addEventListener("error", () => {
-      previewContainer.innerHTML = '<div class="assets-error">プレビュー画像の読み込みに失敗しました</div>';
+      previewContainer.innerHTML = `<div class="assets-error">${t("assets.preview_load_failed")}</div>`;
       previewContainer.className = "assets-modal-preview-placeholder";
     });
     previewContainer.innerHTML = "";
@@ -456,7 +457,7 @@ async function _acceptAndRebuild() {
     // Otherwise wait for WebSocket progress updates
 
   } catch (err) {
-    _showModalError(`リビルド失敗: ${err.message}`);
+    _showModalError(`${t("assets.rebuild_failed")}: ${err.message}`);
     if (acceptBtn) { acceptBtn.disabled = false; acceptBtn.textContent = "Accept & Rebuild All"; }
     if (retryBtn) { retryBtn.disabled = false; }
     if (cancelBtn) { cancelBtn.disabled = false; }

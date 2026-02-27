@@ -1,6 +1,8 @@
 // ── Unified Activity Type Definitions ──────────
 // Canonical event type → icon mapping, shared across all activity views.
 
+import { t } from "/shared/i18n.js";
+
 // ── Type icons ──────────────────────────────────
 export const TYPE_ICONS = {
   message_received: { emoji: "📨", lucide: "mail" },
@@ -41,46 +43,47 @@ export function getIcon(type) {
 
 // ── Filter categories (detailed API types) ──────
 export const TYPE_CATEGORIES = [
-  { label: "All", types: [] },
-  { label: "💬 MSG", types: ["message_received", "response_sent", "dm_received", "dm_sent"] },
-  { label: "📢 CH", types: ["channel_read", "channel_post"] },
-  { label: "🔄 HB", types: ["heartbeat_start", "heartbeat_end", "heartbeat_reflection"] },
-  { label: "⏰ CRON", types: ["cron_executed"] },
-  { label: "🔧 Tool", types: ["tool_use", "tool_result"] },
-  { label: "📝 Mem", types: ["memory_write"] },
-  { label: "📣 Notify", types: ["human_notify"] },
-  { label: "⚠️ Err", types: ["error", "issue_resolved"] },
+  { label: "All", i18nKey: "activity.filter_all", types: [] },
+  { label: "💬 MSG", i18nKey: "activity.filter_msg", types: ["message_received", "response_sent", "dm_received", "dm_sent"] },
+  { label: "📢 CH", i18nKey: "activity.filter_ch", types: ["channel_read", "channel_post"] },
+  { label: "🔄 HB", i18nKey: "activity.filter_hb", types: ["heartbeat_start", "heartbeat_end", "heartbeat_reflection"] },
+  { label: "⏰ CRON", i18nKey: "activity.filter_cron", types: ["cron_executed"] },
+  { label: "🔧 Tool", i18nKey: "activity.filter_tool", types: ["tool_use", "tool_result"] },
+  { label: "📝 Mem", i18nKey: "activity.filter_mem", types: ["memory_write"] },
+  { label: "📣 Notify", i18nKey: "activity.filter_notify", types: ["human_notify"] },
+  { label: "⚠️ Err", i18nKey: "activity.filter_err", types: ["error", "issue_resolved"] },
 ];
 
-// ── Type-based default summaries ────────────────
-const TYPE_DEFAULTS = {
-  message_received: "メッセージ受信",
-  response_sent: "応答送信",
-  channel_read: "チャネル確認",
-  channel_post: "チャネル投稿",
-  dm_received: "DM受信",
-  dm_sent: "DM送信",
-  human_notify: "人間通知",
-  tool_use: "ツール実行",
-  tool_result: "ツール結果",
-  heartbeat_start: "定期巡回開始",
-  heartbeat_end: "定期巡回完了",
-  heartbeat_reflection: "巡回振り返り",
-  cron_executed: "スケジュール実行",
-  memory_write: "記憶書き込み",
-  error: "エラー",
-  issue_resolved: "解決済み",
+// ── Type-based default summaries (i18n keys) ────
+const TYPE_DEFAULT_KEYS = {
+  message_received: "activity_types.message_received",
+  response_sent: "activity_types.response_sent",
+  channel_read: "activity_types.channel_read",
+  channel_post: "activity_types.channel_post",
+  dm_received: "activity_types.dm_received",
+  dm_sent: "activity_types.dm_sent",
+  human_notify: "activity_types.human_notify",
+  tool_use: "activity_types.tool_use",
+  tool_result: "activity_types.tool_result",
+  heartbeat_start: "activity_types.heartbeat_start",
+  heartbeat_end: "activity_types.heartbeat_end",
+  heartbeat_reflection: "activity_types.heartbeat_reflection",
+  cron_executed: "activity_types.cron_executed",
+  memory_write: "activity_types.memory_write",
+  error: "activity_types.error",
+  issue_resolved: "activity_types.issue_resolved",
 };
 
 export function getDisplaySummary(evt) {
   if (evt.type === "tool_use") {
-    return evt.tool || "ツール実行";
+    return evt.tool || t("activity_types.tool_use");
   }
   if (evt.summary) return evt.summary;
   if (evt.content) {
     return evt.content.length > 200 ? evt.content.slice(0, 200) + "…" : evt.content;
   }
-  return TYPE_DEFAULTS[evt.type] || "";
+  const key = TYPE_DEFAULT_KEYS[evt.type];
+  return key ? t(key) : "";
 }
 
 // ── Event normalizer (for workspace timeline compatibility) ──

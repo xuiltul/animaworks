@@ -277,8 +277,14 @@
   }
 
   .chat-send-btn {
-    min-height: 44px;
-    padding: 10px 16px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .chat-queue-btn,
+  .chat-attach-btn {
+    width: 36px;
+    height: 36px;
   }
 
   .chat-input {
@@ -424,7 +430,7 @@
 .chat-page-layout {
   display: flex;
   gap: 1rem;
-  height: calc(100svh - 140px);
+  height: 100%;
   min-height: 400px;
 }
 
@@ -438,10 +444,23 @@
 .chat-page-sidebar {
   width: 340px;
   flex-shrink: 0;
+  border-left: 1px solid var(--aw-color-border-light);
+  overflow-y: auto;
+}
+
+.chat-page-sidebar .right-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--aw-color-bg-primary);
+}
+
+.chat-memory-section {
+  border-top: 1px solid var(--aw-color-border-light);
+  margin-top: 0.75rem;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--aw-color-border-light);
-  overflow: hidden;
+  flex-shrink: 0;
 }
 
 /* Mobile tabs: hidden on desktop */
@@ -452,6 +471,26 @@
 /* ── Chat Page Mobile (< 768px) ──────────── */
 
 @media (max-width: 768px) {
+  .chat-anima-tabs-header {
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .chat-add-conversation {
+    width: 100%;
+  }
+
+  .chat-add-conversation-btn {
+    width: 100%;
+  }
+
+  .chat-add-conversation-menu {
+    left: 0;
+    right: auto;
+    width: 100%;
+    max-height: 280px;
+  }
+
   .chat-mobile-tabs {
     display: flex;
     border-bottom: 2px solid var(--aw-color-border-light);
@@ -479,7 +518,7 @@
   }
 
   .chat-page-layout {
-    height: calc(100svh - 140px);
+    height: 100%;
     gap: 0;
   }
 

@@ -338,6 +338,32 @@ def create_animas_router() -> APIRouter:
             "pid": proc_status.get("pid"),
         }
 
+    @router.post("/animas/{name}/interrupt")
+    async def interrupt_anima(name: str, request: Request):
+        """Interrupt the current LLM session without stopping the process."""
+        supervisor = request.app.state.supervisor
+        anima_names = request.app.state.anima_names
+
+        if name not in anima_names:
+            raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
+
+        if name not in supervisor.processes:
+            return {"status": "not_running", "name": name}
+
+        try:
+            result = await supervisor.send_request(
+                anima_name=name,
+                method="interrupt",
+                params={},
+                timeout=10.0,
+            )
+            return result
+        except asyncio.TimeoutError:
+            return {"status": "timeout", "name": name}
+        except Exception as e:
+            logger.warning("Failed to interrupt %s: %s", name, e)
+            raise HTTPException(status_code=500, detail=str(e))
+
     # ── Reload Config ─────────────────────────────────────
 
     @router.post("/animas/{name}/reload")

@@ -50,6 +50,22 @@ def _make_skill_file(
     return path
 
 
+def _make_skill_dir_file(
+    directory: Path,
+    name: str,
+    *,
+    content: str = "# Skill\nDo something.",
+    frontmatter: str = "",
+) -> Path:
+    """Create a skill in {directory}/{name}/SKILL.md (directory-based structure)."""
+    skill_dir = directory / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    text = f"---\n{frontmatter}---\n\n{content}" if frontmatter else content
+    path = skill_dir / "SKILL.md"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
 def _make_skill_meta(
     name: str,
     description: str = "",
@@ -176,12 +192,12 @@ class TestResolveSkillPath:
         skills = tmp_path / "skills"
         common = tmp_path / "common_skills"
         procedures = tmp_path / "procedures"
-        _make_skill_file(skills, "deploy")
-        _make_skill_file(common, "deploy")
+        _make_skill_dir_file(skills, "deploy")
+        _make_skill_dir_file(common, "deploy")
         _make_skill_file(procedures, "deploy")
 
         path, skill_type = _resolve_skill_path("deploy", skills, common, procedures)
-        assert path == skills / "deploy.md"
+        assert path == skills / "deploy" / "SKILL.md"
         assert skill_type == "個人"
 
     def test_fallback_to_common_skill(self, tmp_path: Path):
@@ -189,10 +205,10 @@ class TestResolveSkillPath:
         common = tmp_path / "common_skills"
         procedures = tmp_path / "procedures"
         skills.mkdir(parents=True)
-        _make_skill_file(common, "review")
+        _make_skill_dir_file(common, "review")
 
         path, skill_type = _resolve_skill_path("review", skills, common, procedures)
-        assert path == common / "review.md"
+        assert path == common / "review" / "SKILL.md"
         assert skill_type == "共通"
 
     def test_fallback_to_procedure(self, tmp_path: Path):
@@ -224,14 +240,14 @@ class TestResolveSkillPath:
         skills = tmp_path / "skills"
         common = tmp_path / "common_skills"
         procedures = tmp_path / "procedures"
-        _make_skill_file(skills, "shared_skill", content="Personal version")
-        _make_skill_file(common, "shared_skill", content="Common version")
+        _make_skill_dir_file(skills, "shared_skill", content="Personal version")
+        _make_skill_dir_file(common, "shared_skill", content="Common version")
         procedures.mkdir(parents=True)
 
         path, skill_type = _resolve_skill_path(
             "shared_skill", skills, common, procedures
         )
-        assert path == skills / "shared_skill.md"
+        assert path == skills / "shared_skill" / "SKILL.md"
         assert skill_type == "個人"
         assert "Personal version" in path.read_text(encoding="utf-8")
 
@@ -279,14 +295,14 @@ class TestResolveSkillPath:
         skills = tmp_path / "skills"
         common = tmp_path / "common_skills"
         procedures = tmp_path / "procedures"
-        _make_skill_file(skills, "my-skill_v2")
+        _make_skill_dir_file(skills, "my-skill_v2")
         common.mkdir(parents=True)
         procedures.mkdir(parents=True)
 
         path, skill_type = _resolve_skill_path(
             "my-skill_v2", skills, common, procedures
         )
-        assert path == skills / "my-skill_v2.md"
+        assert path == skills / "my-skill_v2" / "SKILL.md"
         assert skill_type == "個人"
 
 
@@ -401,7 +417,7 @@ class TestLoadAndRenderSkill:
 
     def test_skill_content_returned_without_frontmatter(self, tmp_path: Path):
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(
+        _make_skill_dir_file(
             skills_dir,
             "deploy",
             frontmatter="description: Deploy to production\n",
@@ -418,7 +434,7 @@ class TestLoadAndRenderSkill:
 
     def test_builtin_placeholders_replaced(self, tmp_path: Path):
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(
+        _make_skill_dir_file(
             skills_dir,
             "greet",
             content="Hello from {{anima_name}} at {{anima_dir}}.",
@@ -434,7 +450,7 @@ class TestLoadAndRenderSkill:
 
     def test_allowed_tools_soft_constraint_included(self, tmp_path: Path):
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(
+        _make_skill_dir_file(
             skills_dir,
             "search",
             frontmatter=(
@@ -454,7 +470,7 @@ class TestLoadAndRenderSkill:
 
     def test_no_allowed_tools_no_constraint_section(self, tmp_path: Path):
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(
+        _make_skill_dir_file(
             skills_dir,
             "simple",
             frontmatter="description: Simple skill\n",
@@ -468,8 +484,8 @@ class TestLoadAndRenderSkill:
     def test_nonexistent_skill_error_with_available_list(self, tmp_path: Path):
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
         # Create some skills so the available list is populated
-        _make_skill_file(skills_dir, "deploy")
-        _make_skill_file(common, "review")
+        _make_skill_dir_file(skills_dir, "deploy")
+        _make_skill_dir_file(common, "review")
         _make_skill_file(procs, "onboarding")
 
         result = load_and_render_skill(
@@ -492,7 +508,7 @@ class TestLoadAndRenderSkill:
 
     def test_context_parameter_appended(self, tmp_path: Path):
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(skills_dir, "deploy", content="# Deploy\nDeploy steps.")
+        _make_skill_dir_file(skills_dir, "deploy", content="# Deploy\nDeploy steps.")
         result = load_and_render_skill(
             "deploy",
             anima_dir,
@@ -506,7 +522,7 @@ class TestLoadAndRenderSkill:
 
     def test_empty_context_omits_section(self, tmp_path: Path):
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(skills_dir, "deploy", content="# Deploy\nDeploy steps.")
+        _make_skill_dir_file(skills_dir, "deploy", content="# Deploy\nDeploy steps.")
         result = load_and_render_skill(
             "deploy", anima_dir, skills_dir, common, procs, context=""
         )
@@ -515,7 +531,7 @@ class TestLoadAndRenderSkill:
     def test_context_default_omits_section(self, tmp_path: Path):
         """When context is not provided at all, section is omitted."""
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(skills_dir, "deploy", content="# Deploy\nDeploy steps.")
+        _make_skill_dir_file(skills_dir, "deploy", content="# Deploy\nDeploy steps.")
         result = load_and_render_skill(
             "deploy", anima_dir, skills_dir, common, procs
         )
@@ -524,7 +540,7 @@ class TestLoadAndRenderSkill:
     def test_now_jst_placeholder_replaced(self, tmp_path: Path):
         """The {{now_jst}} builtin is replaced with a timestamp."""
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(
+        _make_skill_dir_file(
             skills_dir, "timed", content="Current time: {{now_jst}}"
         )
         result = load_and_render_skill(
@@ -537,7 +553,7 @@ class TestLoadAndRenderSkill:
     def test_common_skill_loaded(self, tmp_path: Path):
         """Skills from common_skills_dir are loaded correctly."""
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
-        _make_skill_file(common, "shared_review", content="# Review\nReview steps.")
+        _make_skill_dir_file(common, "shared_review", content="# Review\nReview steps.")
         result = load_and_render_skill(
             "shared_review", anima_dir, skills_dir, common, procs
         )
@@ -560,7 +576,7 @@ class TestLoadAndRenderSkill:
         # Create a file that traversal would try to reach
         secret = tmp_path / "secret.md"
         secret.write_text("TOP SECRET", encoding="utf-8")
-        _make_skill_file(skills_dir, "legit", content="# Legit skill")
+        _make_skill_dir_file(skills_dir, "legit", content="# Legit skill")
 
         result = load_and_render_skill(
             "../../secret", anima_dir, skills_dir, common, procs

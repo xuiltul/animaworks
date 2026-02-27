@@ -11,6 +11,12 @@ export class VoiceVAD {
   }
 
   async start() {
+    if (this._myvad) {
+      this._active = true;
+      this._myvad.start();
+      return true;
+    }
+
     // Dynamic import of vad-web from CDN
     if (!window.vad) {
       try {

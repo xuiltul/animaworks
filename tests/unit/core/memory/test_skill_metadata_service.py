@@ -101,6 +101,18 @@ class TestExtractSkillMetaWithoutFrontmatter:
         assert meta.name == "simple"
         assert meta.description == ""
 
+    def test_skill_dir_structure_uses_parent_name(self, tmp_path: Path) -> None:
+        """SKILL.md in {name}/SKILL.md uses parent directory name as fallback."""
+        skill_file = tmp_path / "deploy" / "SKILL.md"
+        skill_file.parent.mkdir(parents=True, exist_ok=True)
+        skill_file.write_text("# Deploy\n\nDeploy steps.\n", encoding="utf-8")
+
+        meta = SkillMetadataService.extract_skill_meta(skill_file)
+
+        assert meta.name == "deploy"
+        assert meta.description == ""
+        assert meta.path == skill_file
+
 
 class TestExtractSkillMetaLegacyFormat:
     """Legacy format with ## 概要 section extracts description."""
@@ -204,11 +216,13 @@ class TestListSkillMetas:
         common_dir = tmp_path / "common_skills"
         common_dir.mkdir()
 
-        (skills_dir / "alpha.md").write_text(
+        (skills_dir / "alpha" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (skills_dir / "alpha" / "SKILL.md").write_text(
             "---\nname: alpha\ndescription: Alpha skill\n---\n\nAlpha body.\n",
             encoding="utf-8",
         )
-        (skills_dir / "beta.md").write_text(
+        (skills_dir / "beta" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (skills_dir / "beta" / "SKILL.md").write_text(
             "---\nname: beta\ndescription: Beta skill\n---\n\nBeta body.\n",
             encoding="utf-8",
         )
@@ -229,7 +243,8 @@ class TestListSkillMetas:
         common_dir = tmp_path / "common_skills"
         common_dir.mkdir()
 
-        (skills_dir / "valid.md").write_text("# Valid\n", encoding="utf-8")
+        (skills_dir / "valid" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (skills_dir / "valid" / "SKILL.md").write_text("# Valid\n", encoding="utf-8")
         (skills_dir / "ignore.txt").write_text("not a skill\n", encoding="utf-8")
 
         service = SkillMetadataService(skills_dir, common_dir)
@@ -256,9 +271,9 @@ class TestListSkillMetas:
         common_dir = tmp_path / "common_skills"
         common_dir.mkdir()
 
-        (skills_dir / "charlie.md").write_text("# Charlie\n", encoding="utf-8")
-        (skills_dir / "alpha.md").write_text("# Alpha\n", encoding="utf-8")
-        (skills_dir / "bravo.md").write_text("# Bravo\n", encoding="utf-8")
+        for name in ("charlie", "alpha", "bravo"):
+            (skills_dir / name / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+            (skills_dir / name / "SKILL.md").write_text(f"# {name.capitalize()}\n", encoding="utf-8")
 
         service = SkillMetadataService(skills_dir, common_dir)
         metas = service.list_skill_metas()
@@ -290,7 +305,8 @@ class TestListCommonSkillMetas:
         common_dir = tmp_path / "common_skills"
         common_dir.mkdir()
 
-        (common_dir / "shared-tool.md").write_text(
+        (common_dir / "shared-tool" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (common_dir / "shared-tool" / "SKILL.md").write_text(
             "---\nname: shared-tool\ndescription: A shared tool\n---\n\nShared.\n",
             encoding="utf-8",
         )
@@ -315,11 +331,13 @@ class TestListSkillSummaries:
         common_dir = tmp_path / "common_skills"
         common_dir.mkdir()
 
-        (skills_dir / "coding.md").write_text(
+        (skills_dir / "coding" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (skills_dir / "coding" / "SKILL.md").write_text(
             "---\nname: coding\ndescription: Write code efficiently\n---\n\n# Coding\n",
             encoding="utf-8",
         )
-        (skills_dir / "review.md").write_text(
+        (skills_dir / "review" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (skills_dir / "review" / "SKILL.md").write_text(
             "---\nname: review\ndescription: Code review process\n---\n\n# Review\n",
             encoding="utf-8",
         )
@@ -361,7 +379,8 @@ class TestListCommonSkillSummaries:
         common_dir = tmp_path / "common_skills"
         common_dir.mkdir()
 
-        (common_dir / "cron-management.md").write_text(
+        (common_dir / "cron-management" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (common_dir / "cron-management" / "SKILL.md").write_text(
             "---\nname: cron-management\ndescription: Manage cron tasks\n---\n\n# Cron\n",
             encoding="utf-8",
         )

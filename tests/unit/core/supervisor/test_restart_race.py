@@ -4,7 +4,8 @@
 """Unit tests for restart/reconciliation race condition fix.
 
 Verifies that start_anima() and _reconcile() skip animas that are
-currently in the _restarting set, preventing duplicate child processes.
+currently in the _restarting or _starting set, preventing duplicate
+child processes.
 """
 
 from __future__ import annotations
@@ -148,3 +149,138 @@ class TestReconcileRestartingGuard:
 
         # _reconcile should skip animas in _restarting (guard is in _reconcile itself)
         supervisor.start_anima.assert_not_awaited()
+
+
+class TestStartAnimaStartingGuard:
+    """start_anima() should skip if anima is already in _starting set."""
+
+    @pytest.mark.asyncio
+    async def test_start_anima_skips_when_already_starting(self, supervisor: ProcessSupervisor):
+        """start_anima() returns early when the same anima is already starting."""
+        supervisor._starting.add("test-anima")
+
+        with patch("core.supervisor.manager.ProcessHandle") as MockHandle:
+            await supervisor.start_anima("test-anima")
+
+            # ProcessHandle should never be instantiated
+            MockHandle.assert_not_called()
+
+        assert "test-anima" not in supervisor.processes
+
+    @pytest.mark.asyncio
+    async def test_start_anima_sets_and_clears_starting_flag(self, supervisor: ProcessSupervisor):
+        """start_anima() adds anima to _starting before spawn and removes after."""
+        entered_starting: list[bool] = []
+
+        original_start = ProcessSupervisor.start_anima
+
+        with patch("core.supervisor.manager.ProcessHandle") as MockHandle:
+            mock_handle = AsyncMock()
+            mock_handle.get_pid.return_value = 99999
+            mock_handle.send_request = AsyncMock(
+                return_value=MagicMock(error=None, result={"needs_bootstrap": False})
+            )
+
+            async def capture_starting(*args, **kwargs):
+                # Capture the flag state during handle.start()
+                entered_starting.append("test-anima" in supervisor._starting)
+
+            mock_handle.start = capture_starting
+            MockHandle.return_value = mock_handle
+
+            await supervisor.start_anima("test-anima")
+
+        # Flag was set during handle.start()
+        assert entered_starting == [True]
+        # Flag is cleared after start_anima returns
+        assert "test-anima" not in supervisor._starting
+
+    @pytest.mark.asyncio
+    async def test_start_anima_clears_starting_on_failure(self, supervisor: ProcessSupervisor):
+        """_starting flag is cleared even when process start fails."""
+        with patch("core.supervisor.manager.ProcessHandle") as MockHandle:
+            mock_handle = AsyncMock()
+            mock_handle.start = AsyncMock(side_effect=RuntimeError("spawn failed"))
+            MockHandle.return_value = mock_handle
+
+            with pytest.raises(RuntimeError, match="spawn failed"):
+                await supervisor.start_anima("test-anima")
+
+        # Flag must be cleared even after failure
+        assert "test-anima" not in supervisor._starting
+        assert "test-anima" not in supervisor.processes
+
+
+class TestReconcileStartingGuard:
+    """_reconcile() should skip animas in _starting set."""
+
+    @pytest.mark.asyncio
+    async def test_reconcile_skips_starting_anima(self, supervisor: ProcessSupervisor):
+        """_reconcile() should not start an anima that is already being started."""
+        anima_dir = supervisor.animas_dir / "test-anima"
+        anima_dir.mkdir()
+        (anima_dir / "identity.md").write_text("Test identity")
+        (anima_dir / "status.json").write_text('{"enabled": true}')
+
+        supervisor._starting.add("test-anima")
+        supervisor.start_anima = AsyncMock()
+
+        with patch.object(supervisor, "_reconcile_assets", new_callable=AsyncMock):
+            await supervisor._reconcile()
+
+        supervisor.start_anima.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_reconcile_starts_when_not_starting(self, supervisor: ProcessSupervisor):
+        """_reconcile() starts an anima that is NOT in _starting set."""
+        anima_dir = supervisor.animas_dir / "test-anima"
+        anima_dir.mkdir()
+        (anima_dir / "identity.md").write_text("Test identity")
+        (anima_dir / "status.json").write_text('{"enabled": true}')
+
+        assert "test-anima" not in supervisor._starting
+        supervisor.start_anima = AsyncMock()
+
+        with patch.object(supervisor, "_reconcile_assets", new_callable=AsyncMock):
+            await supervisor._reconcile()
+
+        supervisor.start_anima.assert_awaited_once_with("test-anima")
+
+
+class TestRestartAnimaRestartingGuard:
+    """restart_anima() guards with _restarting during stop-start window."""
+
+    @pytest.mark.asyncio
+    async def test_restart_anima_sets_restarting_guard(self, supervisor: ProcessSupervisor):
+        """restart_anima() adds to _restarting before stop and clears after start."""
+        observed_states: list[bool] = []
+
+        supervisor.stop_anima = AsyncMock()
+
+        async def _capturing_start(name: str) -> None:
+            observed_states.append(name in supervisor._restarting)
+            supervisor.processes[name] = MagicMock()
+
+        supervisor.start_anima = _capturing_start
+        supervisor.processes["test-anima"] = MagicMock()
+
+        await supervisor.restart_anima("test-anima")
+
+        assert observed_states == [True]
+        assert "test-anima" not in supervisor._restarting
+
+    @pytest.mark.asyncio
+    async def test_restart_anima_clears_restarting_on_failure(self, supervisor: ProcessSupervisor):
+        """_restarting is cleared even when restart_anima() fails."""
+        supervisor.stop_anima = AsyncMock()
+
+        async def _failing_start(name: str) -> None:
+            raise RuntimeError("start failed")
+
+        supervisor.start_anima = _failing_start
+        supervisor.processes["test-anima"] = MagicMock()
+
+        with pytest.raises(RuntimeError, match="start failed"):
+            await supervisor.restart_anima("test-anima")
+
+        assert "test-anima" not in supervisor._restarting

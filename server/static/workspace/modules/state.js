@@ -16,6 +16,9 @@ let state = {
   conversationOpen: false,       // Whether conversation panel is open in right sidebar
   conversationAnima: null,      // Anima name shown in conversation panel
   characterStates: {},           // Map: animaName → animationState (idle/working/thinking/error/sleeping)
+  activeThreadId: "default",
+  threads: {},                  // { [animaName]: [{ id, label, unread }] }
+  chatMessagesByThread: {},     // { [animaName]: { [threadId]: Message[] } }
 };
 
 const listeners = new Set();

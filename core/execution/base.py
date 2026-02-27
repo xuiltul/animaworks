@@ -9,6 +9,7 @@ from __future__ import annotations
 
 """Base class and result type for execution engines."""
 
+import asyncio
 import os
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
@@ -165,9 +166,11 @@ class BaseExecutor(ABC):
         self,
         model_config: ModelConfig,
         anima_dir: Path,
+        interrupt_event: asyncio.Event | None = None,
     ) -> None:
         self._model_config = model_config
         self._anima_dir = anima_dir
+        self._interrupt_event = interrupt_event
         self.reminder_queue: SystemReminderQueue = SystemReminderQueue()
 
     # -- Properties ----------------------------------------
@@ -264,6 +267,10 @@ class BaseExecutor(ABC):
         if self._model_config.model.startswith("ollama/"):
             return 300
         return 600
+
+    def _check_interrupted(self) -> bool:
+        """Return True if the interrupt event has been set."""
+        return self._interrupt_event is not None and self._interrupt_event.is_set()
 
     # -- Execution -----------------------------------------
 

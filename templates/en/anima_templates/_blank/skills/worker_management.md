@@ -1,33 +1,33 @@
 ---
 name: worker-management
 description: >-
-  AnimaWorks server process operations and management skill.
-  Hot reload after code updates (server reload), Anima process restart,
-  server status check (running Anima list, memory usage).
-  "Reload", "Apply updates", "Reload config", "System status", "Server restart", "Check processes"
+  Skill for operating and managing AnimaWorks server processes.
+  Perform hot reload (server reload) after code updates, Anima process restart,
+  and server status checks (list of running Anima, memory usage).
+  "Reload", "Apply updates", "Refresh", "System status", "Server restart", "Process check"
 ---
 
 # Skill: System Management
 
-## CLI Commands (recommended)
+## CLI Commands (Recommended)
 
-Use the `animaworks` CLI for per-Anima management. **Prefer CLI over direct API calls.**
+Use the `animaworks` CLI for individual Anima management. **Prefer CLI over direct API calls.**
 
 ```bash
-# Restart individual Anima (e.g., after config changes)
+# Restart individual Anima (to apply config changes, etc.)
 animaworks anima restart <name>
 
 # Status check (all or individual)
 animaworks anima status
 animaworks anima status <name>
 
-# Change model (updates status.json + auto restart)
+# Model change (updates status.json + auto restart)
 animaworks anima set-model <name> <model>
 
-# Change role
+# Role change
 animaworks anima set-role <name> <role>
 
-# List Anima
+# Anima list
 animaworks anima list
 
 # Disable / Enable
@@ -38,7 +38,7 @@ animaworks anima enable <name>
 animaworks anima delete <name>
 ```
 
-### Common usage
+### Common Usage
 
 ```bash
 # Restart specific Anima after config.json change
@@ -48,35 +48,35 @@ animaworks anima restart tsumugi
 animaworks anima set-model tsumugi claude-sonnet-4-6
 ```
 
-## API Reference (when CLI is unavailable)
+## API Reference (When CLI Unavailable)
 
 Base URL: `http://localhost:18500`
 
 | Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/system/status` | GET | System status |
-| `/api/system/reload` | POST | **Hot reload all anima** |
+|--------------|---------|------|
+| `/api/system/status` | GET | System status check |
+| `/api/system/reload` | POST | **Hot reload all animas** |
 | `/api/animas` | GET | Anima list |
 | `/api/animas/{name}` | GET | Anima details |
-| `/api/animas/{name}/restart` | POST | Restart individual Anima |
-| `/api/animas/{name}/stop` | POST | Stop individual Anima |
-| `/api/animas/{name}/start` | POST | Start stopped Anima |
+| `/api/animas/{name}/restart` | POST | Individual restart |
+| `/api/animas/{name}/stop` | POST | Individual stop |
+| `/api/animas/{name}/start` | POST | Start stopped anima |
 | `/api/animas/{name}/chat` | POST | Send message |
 | `/api/animas/{name}/trigger` | POST | Trigger heartbeat immediately |
 
-## Reload procedure (after code updates)
+## Reload Procedure (After Program Update)
 
 ```bash
 curl -s -X POST http://localhost:18500/api/system/reload | python3 -m json.tool
 ```
 
-- `added`: Newly detected anima
-- `refreshed`: Reloaded anima (file changes applied)
-- `removed`: Anima removed from disk
-- **No server restart needed. This endpoint reflects config and prompt changes immediately**
+- `added`: Newly detected animas
+- `refreshed`: Reloaded animas (file changes applied)
+- `removed`: Animas removed from disk
+- **No server restart needed. Config and prompt changes take effect immediately via this endpoint**
 
 ## Notes
 
-- Stopping an Anima does not remove its data (memory, settings)
-- **Do not stop yourself**
-- Prefer CLI → API for per-Anima operations
+- Stopping a worker does not delete anima data (memory, settings)
+- **Do not perform operations that stop yourself**
+- Use CLI → API priority for individual operations

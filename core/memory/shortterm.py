@@ -20,6 +20,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.i18n import t
 from core.time_utils import now_jst
 
 logger = logging.getLogger("animaworks.shortterm_memory")
@@ -263,7 +264,7 @@ class ShortTermMemory:
         # Truncate accumulated_response if too long
         response = state.accumulated_response
         if len(response) > _MAX_RESPONSE_CHARS:
-            response = "...(前半省略)...\n" + response[-_MAX_RESPONSE_CHARS:]
+            response = t("shortterm.ellipsis_omitted") + response[-_MAX_RESPONSE_CHARS:]
 
         # Tool use summary (last 20)
         tool_lines = ""
@@ -279,24 +280,24 @@ class ShortTermMemory:
             tool_lines = "\n".join(entries)
 
         return f"""\
-# 短期記憶（セッション引き継ぎ）
+{t("shortterm.title")}
 
-## メタ情報
-- セッションID: {state.session_id}
-- 時刻: {state.timestamp}
-- トリガー: {state.trigger}
-- コンテキスト使用率: {state.context_usage_ratio:.0%}
-- ターン数: {state.turn_count}
+{t("shortterm.meta_header")}
+- {t("shortterm.session_id", value=state.session_id)}
+- {t("shortterm.timestamp", value=state.timestamp)}
+- {t("shortterm.trigger", value=state.trigger)}
+- {t("shortterm.context_usage", value=f"{state.context_usage_ratio:.0%}")}
+- {t("shortterm.turn_count", value=state.turn_count)}
 
-## 元の依頼
+{t("shortterm.original_request")}
 {state.original_prompt}
 
-## これまでの作業内容
+{t("shortterm.work_so_far")}
 {response}
 
-## 使用したツール（直近）
-{tool_lines or "(なし)"}
+{t("shortterm.tools_used_recent")}
+{tool_lines or t("shortterm.none")}
 
-## 補足
-{state.notes or "(なし)"}
+{t("shortterm.notes_header")}
+{state.notes or t("shortterm.none")}
 """

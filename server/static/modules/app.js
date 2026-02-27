@@ -2,6 +2,7 @@
    AnimaWorks — Dashboard App (Entry Point)
    ============================================ */
 
+import { initI18n, applyTranslations, t } from "/shared/i18n.js";
 import { state } from "./state.js";
 import { connectWebSocket } from "./websocket.js";
 // state.authMode is set by login.js checkAuth()
@@ -57,8 +58,8 @@ function showAuthBannerIfNeeded() {
   banner.id = "authBanner";
   banner.className = "auth-banner";
   banner.innerHTML = `
-    <span>パスワードが未設定です。セキュリティのため、<a href="#/setup">セットアップページ</a>でパスワードを設定してください。</span>
-    <button class="auth-banner-close" aria-label="閉じる">&times;</button>
+    <span>${t("app.auth_banner")}</span>
+    <button class="auth-banner-close" aria-label="${t("common.aria_close")}">&times;</button>
   `;
   banner.querySelector(".auth-banner-close").addEventListener("click", () => banner.remove());
 
@@ -109,6 +110,10 @@ function initMobileNav() {
 // ── Init ────────────────────────────────────
 
 async function init() {
+  // i18n (before auth so UI looks correct)
+  await initI18n();
+  applyTranslations();
+
   // Theme (before auth so UI looks correct immediately)
   await initTheme();
   const themeSwitch = document.getElementById("themeSwitch");

@@ -172,7 +172,10 @@ def index_command(args: argparse.Namespace) -> None:
 
             if args.dry_run:
                 # Just count files
-                md_files = list(memory_dir.glob("*.md"))
+                if memory_type in ("skills", "common_skills"):
+                    md_files = list(memory_dir.glob("*/SKILL.md"))
+                else:
+                    md_files = list(memory_dir.glob("*.md"))
                 logger.info("  Would index %d files in %s/", len(md_files), memory_type)
                 continue
 

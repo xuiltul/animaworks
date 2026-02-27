@@ -18,6 +18,7 @@ from core.tooling.handler import ToolHandler
 
 def _build_config(animas: dict[str, dict]) -> MagicMock:
     config = MagicMock()
+    config.locale = "ja"
     config.animas = {
         name: AnimaModelConfig(**fields)
         for name, fields in animas.items()

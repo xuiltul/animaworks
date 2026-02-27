@@ -1,5 +1,6 @@
 /* ── System Status ─────────────────────────── */
 
+import { t } from "/shared/i18n.js";
 import { state, dom } from "./state.js";
 import { api } from "./api.js";
 
@@ -11,10 +12,10 @@ export async function loadSystemStatus() {
     const dot = dom.systemStatus.querySelector(".status-dot");
     if (schedulerRunning) {
       dot.className = "status-dot status-idle";
-      dom.systemStatusText.textContent = `稼働中 (${animaCount}名)`;
+      dom.systemStatusText.textContent = t("status.scheduler_running", { count: animaCount });
     } else {
       dot.className = "status-dot status-error";
-      dom.systemStatusText.textContent = "スケジューラ停止";
+      dom.systemStatusText.textContent = t("status.scheduler_stopped");
     }
   } catch {
     updateSystemStatus();
@@ -25,9 +26,9 @@ export function updateSystemStatus() {
   const dot = dom.systemStatus.querySelector(".status-dot");
   if (state.wsConnected) {
     dot.className = "status-dot status-idle";
-    dom.systemStatusText.textContent = `接続済 (${state.animas.length}名)`;
+    dom.systemStatusText.textContent = t("status.connected", { count: state.animas.length });
   } else {
     dot.className = "status-dot status-offline";
-    dom.systemStatusText.textContent = "再接続中...";
+    dom.systemStatusText.textContent = t("status.reconnecting");
   }
 }

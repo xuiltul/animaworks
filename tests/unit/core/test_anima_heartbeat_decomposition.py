@@ -172,8 +172,8 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            # Should contain recovery note content
-            recovery_parts = [p for p in parts if "前回のバックグラウンド障害情報" in p]
+            # Should contain recovery note content (load_prompt is mocked to return "<name>")
+            recovery_parts = [p for p in parts if "recovery_note_header" in p]
             assert len(recovery_parts) == 1
             assert "Previous crash info" in recovery_parts[0]
             # Recovery note file should be removed
@@ -201,7 +201,7 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            recovery_parts = [p for p in parts if "前回のバックグラウンド障害情報" in p]
+            recovery_parts = [p for p in parts if "recovery_note_header" in p]
             assert len(recovery_parts) == 0
         finally:
             _stop_patches(mocks)
@@ -224,7 +224,7 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            bg_parts = [p for p in parts if "バックグラウンドタスク完了通知" in p]
+            bg_parts = [p for p in parts if "bg_task_notification" in p]
             assert len(bg_parts) == 1
             assert "Task A done" in bg_parts[0]
             assert "Task B done" in bg_parts[0]
@@ -247,7 +247,7 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            bg_parts = [p for p in parts if "バックグラウンドタスク完了通知" in p]
+            bg_parts = [p for p in parts if "bg_task_notification" in p]
             assert len(bg_parts) == 0
         finally:
             _stop_patches(mocks)
@@ -317,9 +317,8 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            dialogue_parts = [p for p in parts if "直近の対話履歴" in p]
+            dialogue_parts = [p for p in parts if "What's the status?" in p]
             assert len(dialogue_parts) == 1
-            assert "What's the status?" in dialogue_parts[0]
         finally:
             _stop_patches(mocks)
 
@@ -339,7 +338,7 @@ class TestBuildHeartbeatPrompt:
 
                 parts = await dp._build_heartbeat_prompt()
 
-            dialogue_parts = [p for p in parts if "直近の対話履歴" in p]
+            dialogue_parts = [p for p in parts if "対話" in p or "dialogue" in p]
             assert len(dialogue_parts) == 0
         finally:
             _stop_patches(mocks)
@@ -360,7 +359,7 @@ class TestBuildHeartbeatPrompt:
                 # Should not raise
                 parts = await dp._build_heartbeat_prompt()
 
-            dialogue_parts = [p for p in parts if "直近の対話履歴" in p]
+            dialogue_parts = [p for p in parts if "対話" in p or "dialogue" in p]
             assert len(dialogue_parts) == 0
         finally:
             _stop_patches(mocks)

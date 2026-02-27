@@ -1,11 +1,11 @@
 // ── Chat Page (Self-Contained) ──────────────
+import { t } from "/shared/i18n.js";
 import { api } from "../modules/api.js";
 import { escapeHtml, renderMarkdown, renderSafeMarkdown, timeStr, smartTimestamp } from "../modules/state.js";
-import { streamChat } from "../shared/chat-stream.js";
+import { streamChat, fetchActiveStream, fetchStreamProgress } from "../shared/chat-stream.js";
 import { createLogger } from "../shared/logger.js";
 import { createImageInput, initLightbox, renderChatImages } from "../shared/image-input.js";
-import { initVoiceUI } from "../modules/voice-ui.js";
-import { updateVoiceAnima } from "../modules/chat.js";
+import { initVoiceUI, updateVoiceUIAnima } from "../modules/voice-ui.js";
 import { getIcon, getDisplaySummary } from "../shared/activity-types.js";
 
 const logger = createLogger("chat-page");
@@ -17,6 +17,7 @@ let _animas = [];
 let _selectedAnima = null;
 let _chatHistories = {};
 let _animaDetail = null;
+let _animaTabs = [];  // [{ name, unreadStar }]
 let _activeRightTab = "state";
 let _activeMemoryTab = "episodes";
 let _intervals = [];
@@ -24,10 +25,219 @@ let _boundListeners = [];
 let _historyState = {};  // Per-anima: { sessions, hasMore, nextBefore, loading }
 let _chatObserver = null;
 let _isChatStreaming = false;
+let _selectedThreadId = "default";
+let _threads = {};  // { [animaName]: [{ id, label, unread }] }
+let _activeThreadByAnima = {};  // { [animaName]: threadId }
+let _animaLastAccess = {}; // { [animaName]: epoch_ms }
 const _HISTORY_PAGE_SIZE = 50;
 const _TOOL_RESULT_TRUNCATE = 500;
+const _THREAD_VISIBLE_NON_DEFAULT = 5;
 let _imageInputManager = null;
 let _bustupUrl = null;
+let _pendingQueue = [];       // Array<{ text, images, displayImages }>
+let _chatAbortController = null;
+let _chatUiStateSaveTimer = null;
+let _animaTabAvatarUrls = {}; // { [animaName]: string | null }
+let _animaTabAvatarLoading = {}; // { [animaName]: Promise<void> }
+
+// ── Chat Draft Persistence ───────────────────
+
+function _getDraftKey(animaName) {
+  const user = localStorage.getItem("animaworks_user") || "guest";
+  const anima = animaName || "_";
+  return `aw:draft:dashboard-chat:${user}:${anima}`;
+}
+
+function _saveDraft(animaName, text) {
+  if (!animaName) return;
+  localStorage.setItem(_getDraftKey(animaName), text || "");
+}
+
+function _loadDraft(animaName) {
+  if (!animaName) return "";
+  return localStorage.getItem(_getDraftKey(animaName)) || "";
+}
+
+function _clearDraft(animaName) {
+  if (!animaName) return;
+  localStorage.removeItem(_getDraftKey(animaName));
+}
+
+// ── Chat UI State Persistence ────────────────
+
+function _getTabEntry(animaName) {
+  return _animaTabs.find((tab) => tab.name === animaName) || null;
+}
+
+function _isTabOpen(animaName) {
+  return Boolean(_getTabEntry(animaName));
+}
+
+function _setThreadUnread(animaName, threadId, unread) {
+  const list = _threads[animaName];
+  if (!Array.isArray(list)) return;
+  const item = list.find((t) => t.id === threadId);
+  if (item) item.unread = Boolean(unread);
+}
+
+function _threadTimeValue(ts) {
+  if (!ts) return 0;
+  const v = Date.parse(ts);
+  return Number.isNaN(v) ? 0 : v;
+}
+
+function _defaultThreadLabel(threadId, lastTs = "") {
+  if (threadId === "default") return "メイン";
+  if (!lastTs) return "スレッド";
+  const hhmm = timeStr(lastTs);
+  return `スレッド ${hhmm}`;
+}
+
+function _mergeThreadsFromSessions(animaName, sessionsData) {
+  if (!animaName || !sessionsData) return;
+  const existing = _threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
+  const byId = new Map(existing.map((t) => [t.id, { ...t }]));
+
+  // Ensure default always exists.
+  if (!byId.has("default")) {
+    byId.set("default", { id: "default", label: "メイン", unread: false, lastTs: 0 });
+  }
+
+  for (const t of sessionsData.threads || []) {
+    const id = t?.thread_id;
+    if (!id || id === "default") continue;
+    const prev = byId.get(id) || { id, unread: false };
+    const nextTs = _threadTimeValue(t.last_timestamp || "");
+    const prevTs = _threadTimeValue(prev.lastTs || "");
+    byId.set(id, {
+      ...prev,
+      id,
+      label: prev.label || _defaultThreadLabel(id, t.last_timestamp || ""),
+      lastTs: Math.max(prevTs, nextTs),
+    });
+  }
+
+  const defaultThread = byId.get("default") || { id: "default", label: "メイン", unread: false, lastTs: 0 };
+  byId.delete("default");
+  const rest = Array.from(byId.values()).sort((a, b) => {
+    const diff = _threadTimeValue(b.lastTs || "") - _threadTimeValue(a.lastTs || "");
+    if (diff !== 0) return diff;
+    return String(a.label || "").localeCompare(String(b.label || ""), "ja");
+  });
+  _threads[animaName] = [defaultThread, ...rest];
+}
+
+function _isBusinessTheme() {
+  return document.body.classList.contains("theme-business");
+}
+
+async function _ensureAnimaTabAvatar(name) {
+  if (!name || _isBusinessTheme()) return;
+  if (Object.prototype.hasOwnProperty.call(_animaTabAvatarUrls, name)) return;
+  if (_animaTabAvatarLoading[name]) return _animaTabAvatarLoading[name];
+
+  _animaTabAvatarLoading[name] = (async () => {
+    let found = null;
+    // Chat tab icon should use bustup image.
+    const candidates = ["avatar_bustup.png"];
+    for (const filename of candidates) {
+      const url = `/api/animas/${encodeURIComponent(name)}/assets/${encodeURIComponent(filename)}`;
+      try {
+        const resp = await fetch(url, { method: "HEAD" });
+        if (resp.ok) {
+          found = url;
+          break;
+        }
+      } catch {
+        // Try next candidate.
+      }
+    }
+    _animaTabAvatarUrls[name] = found;
+    delete _animaTabAvatarLoading[name];
+    _renderAnimaTabs();
+    _renderAddConversationMenu();
+  })();
+  return _animaTabAvatarLoading[name];
+}
+
+function _buildAnimaTabAvatar(name) {
+  const initial = escapeHtml((name || "").charAt(0).toUpperCase() || "?");
+  if (_isBusinessTheme()) {
+    return `<span class="anima-tab-avatar anima-tab-avatar-initial">${initial}</span>`;
+  }
+  const url = _animaTabAvatarUrls[name];
+  if (url) {
+    return `<img class="anima-tab-avatar anima-tab-avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
+  }
+  return `<span class="anima-tab-avatar anima-tab-avatar-initial">${initial}</span>`;
+}
+
+function _refreshAnimaUnread(animaName) {
+  const tab = _getTabEntry(animaName);
+  if (!tab) return;
+  const list = _threads[animaName] || [];
+  tab.unreadStar = list.some((t) => t.unread);
+}
+
+function _clearUnreadForActiveThread(animaName, threadId) {
+  _setThreadUnread(animaName, threadId, false);
+  _refreshAnimaUnread(animaName);
+}
+
+function _serializeChatUiState() {
+  const threadState = {};
+  for (const tab of _animaTabs) {
+    const name = tab.name;
+    const list = _threads[name] || [{ id: "default", label: "メイン", unread: false }];
+    threadState[name] = {
+      active_thread_id: _activeThreadByAnima[name] || "default",
+      threads: list.map((t) => ({
+        id: t.id,
+        label: t.label,
+        unread: Boolean(t.unread),
+      })),
+    };
+  }
+  return {
+    version: 1,
+    active_anima: _selectedAnima,
+    anima_tabs: _animaTabs.map((tab) => ({
+      name: tab.name,
+      unread_star: Boolean(tab.unreadStar),
+    })),
+    anima_last_access: { ..._animaLastAccess },
+    thread_state: threadState,
+  };
+}
+
+async function _saveChatUiStateNow() {
+  try {
+    await api("/api/chat/ui-state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state: _serializeChatUiState() }),
+    });
+  } catch (err) {
+    logger.debug("Failed to persist chat ui state", err);
+  }
+}
+
+function _scheduleSaveChatUiState() {
+  if (_chatUiStateSaveTimer) clearTimeout(_chatUiStateSaveTimer);
+  _chatUiStateSaveTimer = setTimeout(() => {
+    _chatUiStateSaveTimer = null;
+    _saveChatUiStateNow();
+  }, 300);
+}
+
+async function _fetchChatUiState() {
+  try {
+    const data = await api("/api/chat/ui-state");
+    return data?.state || null;
+  } catch {
+    return null;
+  }
+}
 
 // ── DOM refs (local) ───────────────────────
 
@@ -41,6 +251,11 @@ export function render(container) {
   _selectedAnima = null;
   _chatHistories = {};
   _historyState = {};
+  _animaTabs = [];
+  _selectedThreadId = "default";
+  _threads = {};
+  _activeThreadByAnima = {};
+  _animaLastAccess = {};
   _animaDetail = null;
   _activeRightTab = "state";
   _activeMemoryTab = "episodes";
@@ -50,40 +265,55 @@ export function render(container) {
   container.innerHTML = `
     <!-- Mobile Tab Bar (hidden on desktop, visible on mobile) -->
     <nav class="chat-mobile-tabs" id="chatMobileTabs">
-      <button class="chat-mobile-tab active" data-panel="chat" id="chatMobileTabChat">チャット</button>
-      <button class="chat-mobile-tab" data-panel="info" id="chatMobileTabInfo">キャラクター概要</button>
+      <button class="chat-mobile-tab active" data-panel="chat" id="chatMobileTabChat">${t("nav.chat")}</button>
+      <button class="chat-mobile-tab" data-panel="info" id="chatMobileTabInfo">${t("chat.character_summary")}</button>
     </nav>
 
     <div class="chat-page-layout">
       <!-- Left: Chat Panel -->
       <div class="chat-page-main">
-        <!-- Anima Selector -->
-        <div style="display:flex; align-items:center; gap:0.75rem; padding:0.75rem; border-bottom:1px solid var(--border-color, #eee);">
-          <div id="chatPageAvatar" class="anima-avatar-container"></div>
-          <select id="chatPageAnimaSelect" class="anima-dropdown" style="flex:1;">
-            <option value="" disabled selected>Animaを選択...</option>
-          </select>
+        <div class="chat-anima-tabs-header">
+          <div class="anima-tabs" id="chatAnimaTabs"></div>
+          <div class="chat-add-conversation" id="chatAddConversationArea">
+            <button type="button" id="chatAddConversationBtn" class="chat-add-conversation-btn">${t("chat.anima_select")}</button>
+            <div id="chatAddConversationMenu" class="chat-add-conversation-menu" role="listbox" aria-label="${t("chat.anima_select")}"></div>
+          </div>
+        </div>
+
+        <div class="thread-tabs" id="chatThreadTabs">
+          <button class="thread-tab active" data-thread="default">メイン</button>
+          <button class="thread-tab-new" id="chatNewThreadBtn" title="新しいスレッド">＋</button>
         </div>
 
         <!-- Chat Messages -->
         <div id="chatPageMessages" class="chat-messages" style="flex:1; overflow-y:auto; padding:1rem;">
-          <div class="chat-empty">Animaを選択してチャットを開始</div>
+          <div class="chat-empty">${t("chat.anima_select_first")}</div>
         </div>
 
         <!-- Chat Input -->
-        <form id="chatPageForm" class="chat-input-form" style="padding:0.75rem; border-top:1px solid var(--border-color, #eee);">
+        <form id="chatPageForm" class="chat-input-form">
           <div class="image-preview-bar" id="chatPagePreviewBar" style="display:none"></div>
-          <div class="chat-input-row">
+          <div class="pending-queue-bar" id="chatPagePending" style="display:none">
+            <div class="pending-queue-header">
+              <span class="pending-queue-label" id="chatPagePendingLabel">${t("chat.queue_label")}</span>
+              <button class="pending-queue-clear" id="chatPagePendingCancel" type="button" title="${t("chat.queue_clear_all")}">✕ all</button>
+            </div>
+            <div id="chatPagePendingList"></div>
+          </div>
+          <div class="chat-input-wrap">
             <textarea
               id="chatPageInput"
               class="chat-input"
-              placeholder="メッセージを入力... (Ctrl+Enter で送信)"
+              placeholder="${t("chat.placeholder")}"
               autocomplete="off"
               rows="1"
               disabled
             ></textarea>
-            <button type="button" class="chat-attach-btn" id="chatPageAttachBtn" title="画像を添付">+</button>
-            <button type="submit" class="chat-send-btn" id="chatPageSendBtn" disabled>送信</button>
+            <div class="chat-input-actions">
+              <button type="button" class="chat-attach-btn" id="chatPageAttachBtn" title="${t("chat.attach_image")}">+</button>
+              <button type="button" class="chat-queue-btn" id="chatPageQueueBtn" disabled title="${t("chat.queue_add")}">↓</button>
+              <button type="submit" class="chat-send-btn" id="chatPageSendBtn" disabled>↑</button>
+            </div>
           </div>
           <input type="file" id="chatPageFileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none" />
         </form>
@@ -93,49 +323,49 @@ export function render(container) {
       <div class="chat-page-sidebar mobile-hidden">
         <!-- Right tabs -->
         <nav class="right-tabs" style="display:flex; border-bottom:1px solid var(--border-color, #eee);">
-          <button class="right-tab active" data-tab="state" id="chatTabState">現在の状態</button>
-          <button class="right-tab" data-tab="activity" id="chatTabActivity">アクティビティ</button>
-          <button class="right-tab" data-tab="history" id="chatTabHistory">会話履歴</button>
+          <button class="right-tab active" data-tab="state" id="chatTabState">${t("chat.state_current")}</button>
+          <button class="right-tab" data-tab="activity" id="chatTabActivity">${t("nav.activity")}</button>
+          <button class="right-tab" data-tab="history" id="chatTabHistory">${t("chat.history_conversation")}</button>
         </nav>
 
-        <div id="chatRightTabContent" style="flex:1; overflow-y:auto; padding:0.75rem;">
+        <div id="chatRightTabContent" style="padding:0.75rem;">
           <!-- State pane (default) -->
           <div id="chatPaneState">
-            <pre class="state-content" id="chatAnimaState" style="white-space:pre-wrap; word-break:break-word; margin:0;">Animaを選択してください</pre>
+            <pre class="state-content" id="chatAnimaState" style="white-space:pre-wrap; word-break:break-word; margin:0;">${t("chat.anima_select_first")}</pre>
           </div>
           <!-- Activity pane -->
           <div id="chatPaneActivity" style="display:none;">
             <div id="chatActivityFeed" class="activity-feed">
-              <div class="activity-empty">イベントを待機中...</div>
+              <div class="activity-empty">${t("activity.feed_empty")}</div>
             </div>
           </div>
           <!-- History pane -->
           <div id="chatPaneHistory" style="display:none;">
             <div id="chatHistorySessionList">
-              <div class="loading-placeholder">Animaを選択してください</div>
+              <div class="loading-placeholder">${t("chat.anima_select_first")}</div>
             </div>
             <div id="chatHistoryDetail" style="display:none;">
-              <button class="memory-back-btn" id="chatHistoryBackBtn">&larr; 一覧に戻る</button>
+              <button class="memory-back-btn" id="chatHistoryBackBtn">&larr; ${t("chat.back_list")}</button>
               <h3 id="chatHistoryDetailTitle" style="margin:0.5rem 0;"></h3>
               <div id="chatHistoryConversation" style="max-height:400px; overflow-y:auto;"></div>
             </div>
           </div>
-        </div>
 
-        <!-- Memory Browser -->
-        <div style="border-top:1px solid var(--border-color, #eee); max-height:40%; display:flex; flex-direction:column;">
-          <nav class="memory-tabs" style="display:flex; border-bottom:1px solid var(--border-color, #eee);">
-            <button class="memory-tab active" data-tab="episodes">エピソード</button>
-            <button class="memory-tab" data-tab="knowledge">知識</button>
-            <button class="memory-tab" data-tab="procedures">手順書</button>
-          </nav>
-          <div id="chatMemoryFileList" class="memory-file-list" style="flex:1; overflow-y:auto; padding:0.5rem;">
-            <div class="loading-placeholder">Animaを選択してください</div>
-          </div>
-          <div id="chatMemoryContentArea" style="display:none; flex:1; overflow-y:auto; padding:0.5rem;">
-            <button class="memory-back-btn" id="chatMemoryBackBtn">&larr; 一覧に戻る</button>
-            <h3 id="chatMemoryContentTitle" style="margin:0.5rem 0;"></h3>
-            <pre id="chatMemoryContentBody" class="memory-content-body" style="white-space:pre-wrap; word-break:break-word;"></pre>
+          <!-- Memory Browser (inside scrollable area) -->
+          <div class="chat-memory-section">
+            <nav class="memory-tabs" style="display:flex; border-bottom:1px solid var(--border-color, #eee);">
+              <button class="memory-tab active" data-tab="episodes">${t("chat.memory_episodes")}</button>
+              <button class="memory-tab" data-tab="knowledge">${t("chat.memory_knowledge")}</button>
+              <button class="memory-tab" data-tab="procedures">${t("chat.memory_procedures")}</button>
+            </nav>
+            <div id="chatMemoryFileList" class="memory-file-list" style="padding:0.5rem;">
+              <div class="loading-placeholder">${t("chat.anima_select")}</div>
+            </div>
+            <div id="chatMemoryContentArea" style="display:none; padding:0.5rem;">
+              <button class="memory-back-btn" id="chatMemoryBackBtn">&larr; ${t("chat.memory_back")}</button>
+              <h3 id="chatMemoryContentTitle" style="margin:0.5rem 0;"></h3>
+              <pre id="chatMemoryContentBody" class="memory-content-body" style="white-space:pre-wrap; word-break:break-word;"></pre>
+            </div>
           </div>
         </div>
       </div>
@@ -153,11 +383,17 @@ export function render(container) {
 export function destroy() {
   for (const id of _intervals) clearInterval(id);
   _intervals = [];
+  if (_chatUiStateSaveTimer) {
+    clearTimeout(_chatUiStateSaveTimer);
+    _chatUiStateSaveTimer = null;
+  }
   for (const { el, event, handler } of _boundListeners) {
     el.removeEventListener(event, handler);
   }
   _boundListeners = [];
   if (_chatObserver) { _chatObserver.disconnect(); _chatObserver = null; }
+  if (_chatAbortController) { _chatAbortController.abort(); _chatAbortController = null; }
+  _pendingQueue = [];
   _removeBustupOverlay();
   _bustupUrl = null;
   _container = null;
@@ -165,8 +401,15 @@ export function destroy() {
   _selectedAnima = null;
   _chatHistories = {};
   _historyState = {};
+  _animaTabs = [];
+  _selectedThreadId = "default";
+  _threads = {};
+  _activeThreadByAnima = {};
+  _animaLastAccess = {};
   _animaDetail = null;
   _imageInputManager = null;
+  _animaTabAvatarUrls = {};
+  _animaTabAvatarLoading = {};
 }
 
 // ── Event Binding ──────────────────────────
@@ -179,20 +422,30 @@ function _bindEvents() {
     });
   }
 
-  // Bustup overlay on avatar click
-  _addListener("chatPageAvatar", "click", () => {
-    if (_bustupUrl) _showBustupOverlay();
-  });
-
   // Escape to dismiss bustup overlay
   document.addEventListener("keydown", _onBustupEscape);
   _boundListeners.push({ el: document, event: "keydown", handler: _onBustupEscape });
 
-  // Anima selector
-  _addListener("chatPageAnimaSelect", "change", (e) => {
-    const name = e.target.value;
-    if (name) _selectAnima(name);
+  // Add conversation picker
+  _addListener("chatAddConversationBtn", "click", (e) => {
+    e.stopPropagation();
+    const area = _$("chatAddConversationArea");
+    if (!area) return;
+    const nextOpen = !area.classList.contains("open");
+    area.classList.toggle("open", nextOpen);
+    if (nextOpen) _renderAddConversationMenu();
   });
+  const closeAddConversationMenu = (e) => {
+    const area = _$("chatAddConversationArea");
+    if (!area || !area.classList.contains("open")) return;
+    if (e.target instanceof Element && area.contains(e.target)) return;
+    area.classList.remove("open");
+  };
+  document.addEventListener("pointerdown", closeAddConversationMenu);
+  _boundListeners.push({ el: document, event: "pointerdown", handler: closeAddConversationMenu });
+
+  // New thread button
+  _addListener("chatNewThreadBtn", "click", () => _createNewThread());
 
   // Chat form submit
   _addListener("chatPageForm", "submit", (e) => {
@@ -200,21 +453,50 @@ function _bindEvents() {
     _submitChat();
   });
 
-  // Textarea: Ctrl+Enter
+  // Focus textarea when clicking empty area inside the input wrapper.
+  const inputWrap = _container.querySelector(".chat-input-wrap");
+  const focusChatInputFromWrap = (e) => {
+    if (e.target instanceof Element && e.target.closest("button, input, select, textarea, a")) return;
+    const input = _$("chatPageInput");
+    input?.focus();
+  };
+  if (inputWrap) {
+    inputWrap.addEventListener("pointerdown", focusChatInputFromWrap);
+    _boundListeners.push({ el: inputWrap, event: "pointerdown", handler: focusChatInputFromWrap });
+    inputWrap.addEventListener("click", focusChatInputFromWrap);
+    _boundListeners.push({ el: inputWrap, event: "click", handler: focusChatInputFromWrap });
+  }
+
+  // Textarea: Ctrl+Enter = send, Alt+Enter = queue
   _addListener("chatPageInput", "keydown", (e) => {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    if (e.key === "Enter" && e.altKey) {
+      e.preventDefault();
+      _addToQueue();
+    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       _submitChat();
     }
   });
 
-  // Auto-resize textarea
+  // Queue button
+  _addListener("chatPageQueueBtn", "click", () => _addToQueue());
+
+  // Pending queue cancel all
+  _addListener("chatPagePendingCancel", "click", () => {
+    _pendingQueue = [];
+    _hidePendingIndicator();
+    _updateSendButton();
+  });
+
+  // Auto-resize textarea + dynamic button update
   _addListener("chatPageInput", "input", () => {
     const el = _$("chatPageInput");
     if (el) {
       el.style.height = "auto";
       el.style.height = Math.min(el.scrollHeight, 200) + "px";
+      _saveDraft(_selectedAnima, el.value || "");
     }
+    _updateSendButton();
   });
 
   // Right tab switching
@@ -289,68 +571,215 @@ function _addListener(id, event, handler) {
 
 async function _loadAnimas() {
   try {
-    _animas = await api("/api/animas");
-    _renderAnimaDropdown();
-    if (_animas.length > 0 && !_selectedAnima) {
-      _selectAnima(_animas[0].name);
+    const [animas, uiState] = await Promise.all([
+      api("/api/animas"),
+      _fetchChatUiState(),
+    ]);
+    _animas = animas || [];
+    _restoreChatUiState(uiState);
+    _renderAddConversationMenu();
+    _renderAnimaTabs();
+    if (_animas.length > 0 && !_selectedAnima && !_isChatStreaming) {
+      const firstTab = _animaTabs[0]?.name;
+      _openOrSelectAnima(firstTab || _animas[0].name);
+    } else if (_selectedAnima) {
+      _selectAnima(_selectedAnima);
     }
   } catch (err) {
     logger.error("Failed to load animas", err);
   }
 }
 
-function _renderAnimaDropdown() {
-  const select = _$("chatPageAnimaSelect");
-  if (!select) return;
+function _restoreChatUiState(uiState) {
+  if (!uiState || typeof uiState !== "object") return;
+  const known = new Set((_animas || []).map((a) => a.name));
 
-  let html = '<option value="" disabled>Animaを選択...</option>';
-  for (const p of _animas) {
-    const selected = p.name === _selectedAnima ? " selected" : "";
-    if (p.status === "bootstrapping" || p.bootstrapping) {
-      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>\u23F3 ${escapeHtml(p.name)} (制作中...)</option>`;
-    } else if (p.status === "not_found" || p.status === "stopped") {
-      html += `<option value="${escapeHtml(p.name)}"${selected}>\uD83D\uDCA4 ${escapeHtml(p.name)} (停止中)</option>`;
-    } else {
-      const statusLabel = p.status ? ` (${p.status})` : "";
-      html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${statusLabel}</option>`;
+  _animaTabs = [];
+  _threads = {};
+  _activeThreadByAnima = {};
+  _animaLastAccess = {};
+
+  const tabs = Array.isArray(uiState.anima_tabs) ? uiState.anima_tabs : [];
+  const threadState = uiState.thread_state && typeof uiState.thread_state === "object"
+    ? uiState.thread_state
+    : {};
+  const accessState = uiState.anima_last_access && typeof uiState.anima_last_access === "object"
+    ? uiState.anima_last_access
+    : {};
+
+  for (const tab of tabs) {
+    const name = tab?.name;
+    if (!name || !known.has(name)) continue;
+    _animaTabs.push({
+      name,
+      unreadStar: Boolean(tab.unread_star),
+    });
+  }
+
+  for (const tab of _animaTabs) {
+    const name = tab.name;
+    const persisted = threadState[name] || {};
+    const list = Array.isArray(persisted.threads) ? persisted.threads : [];
+    const normalized = list
+      .filter((t) => t && typeof t.id === "string")
+      .map((t) => ({
+        id: t.id,
+        label: typeof t.label === "string" && t.label ? t.label : "新しいスレッド",
+        unread: Boolean(t.unread),
+      }));
+    if (!normalized.some((t) => t.id === "default")) {
+      normalized.unshift({ id: "default", label: "メイン", unread: false });
+    }
+    _threads[name] = normalized;
+    _activeThreadByAnima[name] = persisted.active_thread_id || "default";
+    _refreshAnimaUnread(name);
+  }
+
+  for (const [name, ts] of Object.entries(accessState)) {
+    if (!known.has(name)) continue;
+    const value = Number(ts);
+    if (Number.isFinite(value) && value > 0) {
+      _animaLastAccess[name] = value;
     }
   }
-  select.innerHTML = html;
+
+  const active = uiState.active_anima;
+  if (typeof active === "string" && _isTabOpen(active)) {
+    _selectedAnima = active;
+    _selectedThreadId = _activeThreadByAnima[active] || "default";
+  }
+}
+
+function _buildAddConversationAvatar(name) {
+  const initial = escapeHtml((name || "").charAt(0).toUpperCase() || "?");
+  if (_isBusinessTheme()) {
+    return `<span class="add-conversation-avatar add-conversation-avatar-initial">${initial}</span>`;
+  }
+  const url = _animaTabAvatarUrls[name];
+  if (url) {
+    return `<img class="add-conversation-avatar add-conversation-avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
+  }
+  return `<span class="add-conversation-avatar add-conversation-avatar-initial">${initial}</span>`;
+}
+
+function _renderAddConversationMenu() {
+  const menu = _$("chatAddConversationMenu");
+  if (!menu) return;
+
+  const sortedAnimas = [..._animas].sort((a, b) => {
+    const at = Number(_animaLastAccess[a.name] || 0);
+    const bt = Number(_animaLastAccess[b.name] || 0);
+    if (bt !== at) return bt - at;
+    return String(a.name || "").localeCompare(String(b.name || ""), "ja");
+  });
+
+  let html = "";
+  for (const p of sortedAnimas) {
+    const statusLabel = p.status ? ` (${p.status})` : "";
+    const openLabel = _isTabOpen(p.name) ? " · 表示中" : "";
+    const disabled = p.status === "bootstrapping" || p.bootstrapping;
+    const sleepBadge = p.status === "not_found" || p.status === "stopped" ? "\uD83D\uDCA4 " : "";
+    const avatar = _buildAddConversationAvatar(p.name);
+    if (disabled) {
+      html += `<div class="chat-add-conversation-item disabled">${avatar}<span class="chat-add-conversation-name">\u23F3 ${escapeHtml(p.name)}${statusLabel}</span></div>`;
+    } else {
+      html += `<button type="button" class="chat-add-conversation-item" data-anima="${escapeHtml(p.name)}">${avatar}<span class="chat-add-conversation-name">${sleepBadge}${escapeHtml(p.name)}${statusLabel}${openLabel}</span></button>`;
+    }
+  }
+  menu.innerHTML = html || `<div class="chat-add-conversation-empty">${t("chat.anima_select_first")}</div>`;
+
+  for (const p of sortedAnimas) {
+    _ensureAnimaTabAvatar(p.name);
+  }
+
+  menu.querySelectorAll(".chat-add-conversation-item[data-anima]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      const name = e.currentTarget?.dataset?.anima;
+      if (!name) return;
+      _openOrSelectAnima(name);
+      const area = _$("chatAddConversationArea");
+      if (area) area.classList.remove("open");
+    });
+  });
 }
 
 async function _selectAnima(name) {
-  _selectedAnima = name;
-  updateVoiceAnima(name);
+  const prevAnima = _selectedAnima;
+  const currentInput = _$("chatPageInput");
+  if (prevAnima && currentInput) {
+    _saveDraft(prevAnima, currentInput.value || "");
+    _activeThreadByAnima[prevAnima] = _selectedThreadId || "default";
+  }
 
-  const select = _$("chatPageAnimaSelect");
-  if (select) select.value = name;
+  _selectedAnima = name;
+  _animaLastAccess[name] = Date.now();
+  _bustupUrl = null;
+  _pendingQueue = [];
+  _hidePendingIndicator();
+  _selectedThreadId = _activeThreadByAnima[name] || "default";
+  _clearUnreadForActiveThread(name, _selectedThreadId);
+  _updateVoiceAnima(name);
+
+  if (!_threads[name]) {
+    _threads[name] = [{ id: "default", label: "メイン", unread: false }];
+  }
+  if (!_threads[name].some((t) => t.id === _selectedThreadId)) {
+    _selectedThreadId = "default";
+  }
+  _activeThreadByAnima[name] = _selectedThreadId;
+  if (!_isTabOpen(name)) {
+    _animaTabs.push({ name, unreadStar: false });
+  }
+  _refreshAnimaUnread(name);
+
+  _renderAddConversationMenu();
+  _ensureAnimaTabAvatar(name).catch(() => {});
+  _renderAnimaTabs();
 
   const input = _$("chatPageInput");
   const sendBtn = _$("chatPageSendBtn");
-  if (input) { input.disabled = false; input.placeholder = `${name} にメッセージ...`; }
+  if (input) { input.disabled = false; input.placeholder = t("chat.message_to", { name }); }
   if (sendBtn) sendBtn.disabled = false;
+  if (input) {
+    input.value = _loadDraft(name);
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 200) + "px";
+  }
+  _updateSendButton();
 
   // Load conversation history (activity_log API) + anima detail in parallel
-  const needConv = !_historyState[name] || _historyState[name].sessions.length === 0;
+  const tid = _selectedThreadId;
+  const needConv = !_historyState[name]?.[tid] || _historyState[name][tid].sessions.length === 0;
   const convPromise = needConv
-    ? _fetchConversationHistory(name).catch(() => null)
+    ? _fetchConversationHistory(name, _HISTORY_PAGE_SIZE, null, tid).catch(() => null)
     : Promise.resolve(null);
   const detailPromise = api(`/api/animas/${encodeURIComponent(name)}`).catch(() => null);
+  const sessionsPromise = api(`/api/animas/${encodeURIComponent(name)}/sessions`).catch(() => null);
 
-  const [conv, detail] = await Promise.all([convPromise, detailPromise]);
+  const [conv, detail, sessionsData] = await Promise.all([convPromise, detailPromise, sessionsPromise]);
 
   // Apply conversation history
+  if (!_historyState[name]) _historyState[name] = {};
   if (conv && conv.sessions && conv.sessions.length > 0) {
-    _historyState[name] = {
+    _historyState[name][tid] = {
       sessions: conv.sessions,
       hasMore: conv.has_more || false,
       nextBefore: conv.next_before || null,
       loading: false,
     };
   } else if (needConv) {
-    _historyState[name] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+    _historyState[name][tid] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
   }
 
+  if (sessionsData) {
+    _mergeThreadsFromSessions(name, sessionsData);
+  }
+  if (!_threads[name].some((t) => t.id === _selectedThreadId)) {
+    _selectedThreadId = "default";
+    _activeThreadByAnima[name] = "default";
+  }
+
+  _renderThreadTabs();
   _renderChat();
 
   // Apply anima detail
@@ -360,13 +789,351 @@ async function _selectAnima(name) {
   } else {
     _animaDetail = null;
     const stateEl = _$("chatAnimaState");
-    if (stateEl) stateEl.textContent = "詳細の読み込み失敗";
+    if (stateEl) stateEl.textContent = t("animas.detail_load_failed");
   }
 
   // Load secondary data in parallel
-  const secondaryPromises = [_updateAvatar(), _loadMemoryTab(), _loadActivity()];
+  const secondaryPromises = [_loadMemoryTab(), _loadActivity()];
   if (_activeRightTab === "history") secondaryPromises.push(_loadSessionList());
   await Promise.all(secondaryPromises);
+
+  // If anima is currently thinking/processing, resume stream after page return.
+  const selectedAnimaObj = _animas.find((p) => p.name === name);
+  if (selectedAnimaObj && (selectedAnimaObj.status === "thinking" || selectedAnimaObj.status === "processing")) {
+    _resumeActiveStream(name);
+  }
+  _scheduleSaveChatUiState();
+}
+
+function _openOrSelectAnima(name) {
+  if (!name) return;
+  if (!_isTabOpen(name)) {
+    _animaTabs.push({ name, unreadStar: false });
+    if (!_threads[name]) {
+      _threads[name] = [{ id: "default", label: "メイン", unread: false }];
+    }
+    _activeThreadByAnima[name] = _activeThreadByAnima[name] || "default";
+  }
+  _renderAnimaTabs();
+  _selectAnima(name);
+}
+
+function _closeAnimaTab(name) {
+  if (!name || _animaTabs.length <= 1) return;
+  const idx = _animaTabs.findIndex((t) => t.name === name);
+  if (idx < 0) return;
+  const wasSelected = _selectedAnima === name;
+  _animaTabs.splice(idx, 1);
+
+  if (wasSelected) {
+    const next = _animaTabs[Math.max(0, idx - 1)];
+    if (next) {
+      _openOrSelectAnima(next.name);
+    }
+  } else {
+    _renderAddConversationMenu();
+    _renderAnimaTabs();
+  }
+  _scheduleSaveChatUiState();
+}
+
+function _renderAnimaTabs() {
+  const container = _$("chatAnimaTabs");
+  if (!container) return;
+  if (_animaTabs.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+  const html = _animaTabs.map((tab) => {
+    const activeClass = tab.name === _selectedAnima ? " active" : "";
+    const star = tab.unreadStar ? '<span class="tab-star" aria-label="unread">★</span>' : "";
+    const avatar = _buildAnimaTabAvatar(tab.name);
+    const closeBtn = _animaTabs.length > 1
+      ? ` <button type="button" class="anima-tab-close" data-anima="${escapeHtml(tab.name)}" title="タブを閉じる" aria-label="閉じる">&times;</button>`
+      : "";
+    return `<span class="anima-tab-wrap"><button type="button" class="anima-tab${activeClass}" data-anima="${escapeHtml(tab.name)}">${avatar}<span class="anima-tab-name">${escapeHtml(tab.name)}</span>${star}</button>${closeBtn}</span>`;
+  }).join("");
+  container.innerHTML = html;
+
+  // Load missing avatars asynchronously and re-render when ready.
+  for (const tab of _animaTabs) {
+    _ensureAnimaTabAvatar(tab.name);
+  }
+
+  container.querySelectorAll(".anima-tab").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const anima = e.currentTarget?.dataset?.anima;
+      if (!anima) return;
+      if (anima === _selectedAnima) {
+        _showBustupOverlay();
+        return;
+      }
+      _openOrSelectAnima(anima);
+    });
+  });
+  container.querySelectorAll(".anima-tab-close").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const anima = e.currentTarget?.dataset?.anima;
+      if (anima) _closeAnimaTab(anima);
+    });
+  });
+}
+
+async function _resumeActiveStream(animaName) {
+  if (_isChatStreaming || _chatAbortController) return;
+
+  try {
+    const active = await fetchActiveStream(animaName);
+    if (!active || active.status !== "streaming") return;
+
+    const progress = await fetchStreamProgress(animaName, active.response_id);
+    if (!progress) return;
+
+    const tid = _selectedThreadId || "default";
+    if (!_chatHistories[animaName]) _chatHistories[animaName] = {};
+    if (!_chatHistories[animaName][tid]) _chatHistories[animaName][tid] = [];
+    const history = _chatHistories[animaName][tid];
+
+    const streamingMsg = {
+      role: "assistant",
+      text: progress.full_text || "",
+      streaming: true,
+      activeTool: progress.active_tool || null,
+      timestamp: new Date().toISOString(),
+      thinkingText: "",
+      thinking: false,
+    };
+    history.push(streamingMsg);
+    _renderChat();
+
+    _isChatStreaming = true;
+    _chatAbortController = new AbortController();
+    _updateSendButton();
+
+    const currentUser = localStorage.getItem("animaworks_user") || "human";
+    const resumeBody = JSON.stringify({
+      message: "",
+      from_person: currentUser,
+      resume: active.response_id,
+      last_event_id: progress.last_event_id || "",
+    });
+
+    await streamChat(animaName, resumeBody, _chatAbortController.signal, {
+      onTextDelta: (text) => {
+        streamingMsg.text += text;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onToolStart: (toolName) => {
+        streamingMsg.activeTool = toolName;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onToolEnd: () => {
+        streamingMsg.activeTool = null;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onThinkingStart: () => {
+        streamingMsg.thinkingText = "";
+        streamingMsg.thinking = true;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onThinkingDelta: (text) => {
+        streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + text;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onThinkingEnd: () => {
+        streamingMsg.thinking = false;
+        _renderStreamingBubble(streamingMsg);
+      },
+      onError: ({ message: errorMsg }) => {
+        streamingMsg.text += `\n${t("chat.error_prefix")} ${errorMsg}`;
+        streamingMsg.streaming = false;
+        _renderChat();
+      },
+      onDone: ({ summary, images }) => {
+        const text = summary || streamingMsg.text;
+        streamingMsg.text = text || t("chat.empty_response");
+        streamingMsg.images = images || [];
+        streamingMsg.streaming = false;
+        streamingMsg.activeTool = null;
+        _renderChat();
+        _markResponseComplete(animaName, tid);
+      },
+    });
+
+    if (streamingMsg.streaming) {
+      streamingMsg.streaming = false;
+      if (!streamingMsg.text) streamingMsg.text = t("chat.empty_response");
+      _renderChat();
+    }
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      logger.error("Resume stream error", { anima: animaName, error: err.message });
+    }
+  } finally {
+    _isChatStreaming = false;
+    _chatAbortController = null;
+    _updateSendButton();
+  }
+}
+
+// ── Thread Tabs ────────────────────────────
+
+function _renderThreadTabs() {
+  const container = _$("chatThreadTabs");
+  if (!container || !_selectedAnima) return;
+
+  const list = _threads[_selectedAnima] || [{ id: "default", label: "メイン", unread: false }];
+  const defaultThread = list.find((t) => t.id === "default") || { id: "default", label: "メイン", unread: false };
+  const nonDefault = list.filter((t) => t.id !== "default").sort((a, b) => {
+    const diff = _threadTimeValue(b.lastTs || "") - _threadTimeValue(a.lastTs || "");
+    if (diff !== 0) return diff;
+    return String(a.label || "").localeCompare(String(b.label || ""), "ja");
+  });
+
+  let visibleNonDefault = nonDefault.slice(0, _THREAD_VISIBLE_NON_DEFAULT);
+  const activeHidden = _selectedThreadId !== "default" && !visibleNonDefault.some((t) => t.id === _selectedThreadId);
+  if (activeHidden) {
+    const activeThread = nonDefault.find((t) => t.id === _selectedThreadId);
+    if (activeThread) {
+      visibleNonDefault = [activeThread, ...visibleNonDefault.slice(0, Math.max(0, _THREAD_VISIBLE_NON_DEFAULT - 1))];
+      const unique = new Map();
+      for (const t of visibleNonDefault) unique.set(t.id, t);
+      visibleNonDefault = Array.from(unique.values());
+    }
+  }
+  const visibleIds = new Set(visibleNonDefault.map((t) => t.id));
+  const hiddenThreads = nonDefault.filter((t) => !visibleIds.has(t.id));
+
+  let html = "";
+  const visible = [defaultThread, ...visibleNonDefault];
+  for (const t of visible) {
+    const activeClass = t.id === _selectedThreadId ? " active" : "";
+    const star = t.unread ? ' <span class="tab-star" aria-label="unread">★</span>' : "";
+    const closeBtn = t.id !== "default"
+      ? ` <button type="button" class="thread-tab-close" data-thread="${escapeHtml(t.id)}" title="スレッドを閉じる" aria-label="閉じる">&times;</button>`
+      : "";
+    html += `<span class="thread-tab-wrap"><button type="button" class="thread-tab${activeClass}" data-thread="${escapeHtml(t.id)}">${escapeHtml(t.label)}${star}</button>${closeBtn}</span>`;
+  }
+
+  if (hiddenThreads.length > 0) {
+    html += `<span class="thread-more-wrap">
+      <label class="thread-more-label" for="chatThreadMoreSelect">他 ${hiddenThreads.length} 件</label>
+      <select id="chatThreadMoreSelect" class="thread-more-select">
+        <option value="">スレッドを選択...</option>
+        ${hiddenThreads.map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.label)}${t.unread ? " ★" : ""}</option>`).join("")}
+      </select>
+    </span>`;
+  }
+  html += `<button type="button" class="thread-tab-new" id="chatNewThreadBtn" title="新しいスレッド">＋</button>`;
+
+  container.innerHTML = html;
+
+  container.querySelectorAll(".thread-tab").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const tid = e.target.dataset.thread;
+      if (tid) _selectThread(tid);
+    });
+  });
+  container.querySelectorAll(".thread-tab-close").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const tid = e.target.dataset.thread;
+      if (tid) _closeThread(tid);
+    });
+  });
+  const newBtn = _$("chatNewThreadBtn");
+  if (newBtn) newBtn.addEventListener("click", () => _createNewThread());
+
+  const moreSelect = _$("chatThreadMoreSelect");
+  if (moreSelect) {
+    moreSelect.addEventListener("change", (e) => {
+      const tid = e.target.value;
+      if (tid) _selectThread(tid);
+      e.target.value = "";
+    });
+  }
+}
+
+async function _selectThread(threadId) {
+  if (threadId === _selectedThreadId) return;
+  _selectedThreadId = threadId;
+  _activeThreadByAnima[_selectedAnima] = threadId;
+  _clearUnreadForActiveThread(_selectedAnima, threadId);
+  _refreshAnimaUnread(_selectedAnima);
+  _renderAnimaTabs();
+  _renderThreadTabs();
+
+  const name = _selectedAnima;
+  if (!name) return;
+
+  const hs = _historyState[name]?.[threadId];
+  const needLoad = !hs || hs.sessions.length === 0;
+  _renderChat();
+
+  if (needLoad) {
+    try {
+      const conv = await _fetchConversationHistory(name, _HISTORY_PAGE_SIZE, null, threadId);
+      if (!_historyState[name]) _historyState[name] = {};
+      if (conv && conv.sessions && conv.sessions.length > 0) {
+        _historyState[name][threadId] = {
+          sessions: conv.sessions,
+          hasMore: conv.has_more || false,
+          nextBefore: conv.next_before || null,
+          loading: false,
+        };
+      } else {
+        _historyState[name][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+      }
+    } catch {
+      if (!_historyState[name]) _historyState[name] = {};
+      _historyState[name][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+    }
+  }
+  _renderChat();
+  _scheduleSaveChatUiState();
+}
+
+function _createNewThread() {
+  if (!_selectedAnima) return;
+  const threadId = crypto.randomUUID().slice(0, 8);
+  const list = _threads[_selectedAnima] || [{ id: "default", label: "メイン", unread: false }];
+  list.push({ id: threadId, label: "新しいスレッド", unread: false });
+  _threads[_selectedAnima] = list;
+
+  if (!_chatHistories[_selectedAnima]) _chatHistories[_selectedAnima] = {};
+  _chatHistories[_selectedAnima][threadId] = [];
+
+  if (!_historyState[_selectedAnima]) _historyState[_selectedAnima] = {};
+  _historyState[_selectedAnima][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+
+  _renderThreadTabs();
+  _selectThread(threadId);
+  _scheduleSaveChatUiState();
+}
+
+function _closeThread(threadId) {
+  if (threadId === "default") return;
+  if (!_selectedAnima) return;
+
+  const list = _threads[_selectedAnima];
+  if (!list) return;
+  const idx = list.findIndex((t) => t.id === threadId);
+  if (idx < 0) return;
+
+  list.splice(idx, 1);
+  delete _chatHistories[_selectedAnima]?.[threadId];
+  delete _historyState[_selectedAnima]?.[threadId];
+
+  if (_selectedThreadId === threadId) {
+    _selectedThreadId = "default";
+    _activeThreadByAnima[_selectedAnima] = "default";
+  }
+  _refreshAnimaUnread(_selectedAnima);
+  _renderAnimaTabs();
+  _renderThreadTabs();
+  _renderChat();
+  _scheduleSaveChatUiState();
 }
 
 // ── Avatar ─────────────────────────────────
@@ -381,7 +1148,7 @@ async function _updateAvatar() {
 
   _bustupUrl = null;
   const name = _selectedAnima;
-  const candidates = ["avatar_bustup.png", "avatar_chibi.png"];
+  const candidates = ["avatar_bustup.png"];
   for (const filename of candidates) {
     const url = `/api/animas/${encodeURIComponent(name)}/assets/${encodeURIComponent(filename)}`;
     try {
@@ -400,8 +1167,18 @@ async function _updateAvatar() {
 
 // ── Bustup Overlay ──────────────────────────
 
-function _showBustupOverlay() {
-  if (!_bustupUrl || !_selectedAnima) return;
+async function _showBustupOverlay() {
+  if (!_selectedAnima) return;
+  if (!_bustupUrl) {
+    const url = `/api/animas/${encodeURIComponent(_selectedAnima)}/assets/avatar_bustup.png`;
+    try {
+      const resp = await fetch(url, { method: "HEAD" });
+      if (resp.ok) _bustupUrl = url;
+    } catch {
+      // noop
+    }
+  }
+  if (!_bustupUrl) return;
   _removeBustupOverlay();
 
   const overlay = document.createElement("div");
@@ -436,14 +1213,15 @@ function _renderChat(scrollToBottom = true) {
   if (!messagesEl) return;
 
   const name = _selectedAnima;
-  const history = _chatHistories[name] || [];
-  const hs = _historyState[name] || { sessions: [], hasMore: false, nextBefore: null, loading: false };
+  const tid = _selectedThreadId;
+  const history = _chatHistories[name]?.[tid] || [];
+  const hs = _historyState[name]?.[tid] || { sessions: [], hasMore: false, nextBefore: null, loading: false };
 
   if (hs.sessions.length === 0 && history.length === 0) {
     if (hs.loading) {
-      messagesEl.innerHTML = '<div class="chat-empty"><span class="tool-spinner"></span> \u8AAD\u307F\u8FBC\u307F\u4E2D...</div>';
+      messagesEl.innerHTML = `<div class="chat-empty"><span class="tool-spinner"></span> ${t("common.loading")}</div>`;
     } else {
-      messagesEl.innerHTML = '<div class="chat-empty">\u30E1\u30C3\u30BB\u30FC\u30B8\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093</div>';
+      messagesEl.innerHTML = `<div class="chat-empty">${t("chat.messages_empty")}</div>`;
     }
     return;
   }
@@ -452,7 +1230,7 @@ function _renderChat(scrollToBottom = true) {
   // Sentinel for infinite scroll
   if (hs.hasMore) {
     if (hs.loading) {
-      topHtml += '<div class="history-loading-more"><span class="tool-spinner"></span> \u904E\u53BB\u306E\u4F1A\u8A71\u3092\u8AAD\u307F\u8FBC\u307F\u4E2D...</div>';
+      topHtml += `<div class="history-loading-more"><span class="tool-spinner"></span> ${t("chat.past_loading")}</div>`;
     }
     topHtml += '<div class="chat-load-sentinel"></div>';
   }
@@ -475,22 +1253,20 @@ function _renderChat(scrollToBottom = true) {
   let liveHtml = "";
   if (history.length > 0) {
     if (hs.sessions.length > 0) {
-      liveHtml += '<div class="session-divider"><span class="session-divider-label">\u73FE\u5728\u306E\u30BB\u30C3\u30B7\u30E7\u30F3</span></div>';
+      liveHtml += `<div class="session-divider"><span class="session-divider-label">${t("chat.current_session")}</span></div>`;
     }
     liveHtml += history.map(m => {
       const ts = m.timestamp ? smartTimestamp(m.timestamp) : "";
       const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
 
       if (m.role === "thinking") {
-        return '<div class="chat-bubble thinking"><span class="thinking-animation">\u8003\u3048\u4E2D</span></div>';
+        return `<div class="chat-bubble thinking"><span class="thinking-animation">${t("chat.thinking")}</span></div>`;
       }
       if (m.role === "assistant") {
         const streamClass = m.streaming ? " streaming" : "";
         let thinkingHtml = "";
-        if (m.thinkingText) {
-          const thSummary = `Thinking (${m.thinkingText.length} chars)`;
-          const thRendered = renderSafeMarkdown(m.thinkingText);
-          thinkingHtml = `<details class="thinking-block"><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(thSummary)}</summary><div class="thinking-content">${thRendered}</div></details>`;
+        if (m.thinking && m.thinkingText) {
+          thinkingHtml = `<div class="thinking-inline-preview">${escapeHtml(m.thinkingText)}</div>`;
         }
         let content = "";
         if (m.text) {
@@ -499,9 +1275,10 @@ function _renderChat(scrollToBottom = true) {
           content = '<span class="cursor-blink"></span>';
         }
         const toolHtml = m.activeTool
-          ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(m.activeTool)} \u3092\u5B9F\u884C\u4E2D...</div>`
+          ? `<div class="tool-indicator"><span class="tool-spinner"></span>${t("chat.tool_running", { tool: m.activeTool })}</div>`
           : "";
-        return `<div class="chat-bubble assistant${streamClass}">${thinkingHtml}${content}${toolHtml}${tsHtml}</div>`;
+        const imagesHtml = renderChatImages(m.images, { animaName: _selectedAnima });
+        return `<div class="chat-bubble assistant${streamClass}">${thinkingHtml}${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
       }
       const imagesHtml = renderChatImages(m.images);
       const textHtml = m.text ? `<div class="chat-text">${escapeHtml(m.text)}</div>` : "";
@@ -529,38 +1306,47 @@ function _renderChat(scrollToBottom = true) {
 function _renderStreamingBubble(msg) {
   const messagesEl = _$("chatPageMessages");
   if (!messagesEl) return;
-  const bubble = messagesEl.querySelector(".chat-bubble.assistant.streaming");
+  const bubbles = messagesEl.querySelectorAll(".chat-bubble.assistant.streaming");
+  const bubble = bubbles[bubbles.length - 1];
   if (!bubble) return;
 
-  let html = "";
-
-  if (msg.thinkingText) {
-    const open = msg.thinking ? " open" : "";
-    const summary = msg.thinking ? "Thinking..." : `Thinking (${msg.thinkingText.length} chars)`;
-    const thHtml = renderSafeMarkdown(msg.thinkingText);
-    html += `<details class="thinking-block"${open}><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(summary)}</summary><div class="thinking-content">${thHtml}</div></details>`;
-  }
+  const thinkingHtml = (msg.thinking && msg.thinkingText)
+    ? `<div class="thinking-inline-preview">${escapeHtml(msg.thinkingText)}</div>`
+    : "";
+  let mainHtml = "";
 
   if (msg.heartbeatRelay) {
-    html += '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>ハートビート処理中...</div>';
+    mainHtml += `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${t("chat.heartbeat_relay")}</div>`;
     if (msg.heartbeatText) {
-      html += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
+      mainHtml += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
     }
   } else if (msg.afterHeartbeatRelay && !msg.text) {
-    html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>応答を準備中...</div>';
+    mainHtml = `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${t("chat.heartbeat_relay_done")}</div>`;
   } else if (msg.text) {
-    try { html = marked.parse(msg.text, { breaks: true }); }
-    catch { html = escapeHtml(msg.text); }
+    mainHtml = renderMarkdown(msg.text);
   } else {
-    html = '<span class="cursor-blink"></span>';
+    mainHtml = '<span class="cursor-blink"></span>';
   }
+  let html = `${thinkingHtml}${mainHtml}`;
 
   if (msg.activeTool) {
-    html += `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(msg.activeTool)} を実行中...</div>`;
+    html += `<div class="tool-indicator"><span class="tool-spinner"></span>${t("chat.tool_running", { tool: msg.activeTool })}</div>`;
   }
 
   bubble.innerHTML = html;
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function _markResponseComplete(animaName, threadId) {
+  if (!animaName || !threadId) return;
+  const isActive = _selectedAnima === animaName && _selectedThreadId === threadId;
+  _setThreadUnread(animaName, threadId, !isActive);
+  _refreshAnimaUnread(animaName);
+  if (animaName === _selectedAnima) {
+    _renderThreadTabs();
+  }
+  _renderAnimaTabs();
+  _scheduleSaveChatUiState();
 }
 
 // ── Infinite Scroll ─────────────────────────────
@@ -590,8 +1376,9 @@ function _observeChatSentinel() {
 
 async function _loadOlderMessages() {
   const name = _selectedAnima;
+  const tid = _selectedThreadId;
   if (!name) return;
-  const hs = _historyState[name];
+  const hs = _historyState[name]?.[tid];
   if (!hs || !hs.hasMore || hs.loading) return;
   if (_isChatStreaming) return;
 
@@ -599,7 +1386,7 @@ async function _loadOlderMessages() {
   _renderChat(false);
 
   try {
-    const data = await _fetchConversationHistory(name, _HISTORY_PAGE_SIZE, hs.nextBefore);
+    const data = await _fetchConversationHistory(name, _HISTORY_PAGE_SIZE, hs.nextBefore, tid);
 
     if (data && data.sessions && data.sessions.length > 0) {
       hs.sessions = [...data.sessions, ...hs.sessions];
@@ -618,11 +1405,14 @@ async function _loadOlderMessages() {
 
 // ── Conversation History API ──────────────────
 
-async function _fetchConversationHistory(animaName, limit = _HISTORY_PAGE_SIZE, before = null) {
+async function _fetchConversationHistory(animaName, limit = _HISTORY_PAGE_SIZE, before = null, threadId = "default") {
   let url = `/api/animas/${encodeURIComponent(animaName)}/conversation/history?limit=${limit}`;
   if (before) {
     url += `&before=${encodeURIComponent(before)}`;
   }
+  url += `&thread_id=${encodeURIComponent(threadId)}`;
+  // Use strict thread filtering to keep main/sub-thread histories isolated.
+  url += "&strict_thread=1";
   return await api(url);
 }
 
@@ -639,7 +1429,8 @@ function _renderHistoryMessage(msg) {
   if (msg.role === "assistant") {
     const content = msg.content ? renderMarkdown(msg.content) : "";
     const toolHtml = _renderToolCalls(msg.tool_calls);
-    return `<div class="chat-bubble assistant">${content}${toolHtml}${tsHtml}</div>`;
+    const imagesHtml = renderChatImages(msg.images, { animaName: _selectedAnima });
+    return `<div class="chat-bubble assistant">${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
   }
 
   // human / user
@@ -760,15 +1551,58 @@ function _submitChat() {
   if (!input) return;
   const msg = input.value.trim();
   const hasImages = _imageInputManager && _imageInputManager.getImageCount() > 0;
-  if (!msg && !hasImages) return;
-  input.value = "";
-  input.style.height = "auto";
-  _sendChat(msg);
+
+  // ── Not streaming ──
+  if (!_isChatStreaming) {
+    if (msg || hasImages) {
+      _pendingQueue.push({
+        text: msg,
+        images: _imageInputManager?.getPendingImages() || [],
+        displayImages: _imageInputManager?.getDisplayImages() || [],
+      });
+      input.value = "";
+      input.style.height = "auto";
+      _saveDraft(_selectedAnima, "");
+      _imageInputManager?.clearImages();
+    }
+    if (_pendingQueue.length === 0) return;
+    const next = _pendingQueue.shift();
+    _showPendingIndicator();
+    if (_pendingQueue.length === 0) _hidePendingIndicator();
+    _sendChat(next.text, { images: next.images, displayImages: next.displayImages });
+    return;
+  }
+
+  // ── Streaming + has input → add to queue ──
+  if (msg || hasImages) {
+    _pendingQueue.push({
+      text: msg,
+      images: _imageInputManager?.getPendingImages() || [],
+      displayImages: _imageInputManager?.getDisplayImages() || [],
+    });
+    input.value = "";
+    input.style.height = "auto";
+    _saveDraft(_selectedAnima, "");
+    _imageInputManager?.clearImages();
+    _showPendingIndicator();
+    _updateSendButton();
+    return;
+  }
+
+  // ── Streaming + empty input + has queue → interrupt & drain queue ──
+  if (_pendingQueue.length > 0) {
+    _interruptAndSendPending();
+    return;
+  }
+
+  // ── Streaming + empty input + no queue → just stop ──
+  _stopStreaming();
 }
 
-async function _sendChat(message) {
+async function _sendChat(message, overrideImages = null) {
   const name = _selectedAnima;
-  const images = _imageInputManager?.getPendingImages() || [];
+  const images = overrideImages?.images || _imageInputManager?.getPendingImages() || [];
+  const displayImages = overrideImages?.displayImages || _imageInputManager?.getDisplayImages() || [];
   if (!name || (!message.trim() && images.length === 0)) return;
 
   // Guard: block sending to bootstrapping animas
@@ -778,46 +1612,60 @@ async function _sendChat(message) {
     if (msgs) {
       const systemMsg = document.createElement("div");
       systemMsg.className = "chat-bubble assistant";
-      systemMsg.textContent = "このキャラクターは現在制作中です。完了までお待ちください。";
+      systemMsg.textContent = t("chat.bootstrapping");
       msgs.appendChild(systemMsg);
       msgs.scrollTop = msgs.scrollHeight;
     }
     return;
   }
 
-  if (!_chatHistories[name]) _chatHistories[name] = [];
-  const history = _chatHistories[name];
+  const tid = _selectedThreadId;
+  if (!_chatHistories[name]) _chatHistories[name] = {};
+  if (!_chatHistories[name][tid]) _chatHistories[name][tid] = [];
+  const history = _chatHistories[name][tid];
 
-  // Capture display images (with dataUrl for rendering)
-  const displayImages = _imageInputManager?.getDisplayImages() || [];
+  // Update thread label on first message if it's "新しいスレッド"
+  const threadList = _threads[name] || [];
+  const threadEntry = threadList.find((t) => t.id === tid);
+  if (threadEntry && threadEntry.label === "新しいスレッド" && message.trim()) {
+    threadEntry.label = message.trim().slice(0, 20) + (message.trim().length > 20 ? "..." : "");
+    _renderThreadTabs();
+    _scheduleSaveChatUiState();
+  }
 
   const sendTs = new Date().toISOString();
   history.push({ role: "user", text: message, images: displayImages, timestamp: sendTs });
+  if (threadEntry) {
+    threadEntry.lastTs = sendTs;
+  }
   const streamingMsg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: sendTs, thinkingText: "", thinking: false };
   history.push(streamingMsg);
   _renderChat();
 
   const input = _$("chatPageInput");
   const sendBtn = _$("chatPageSendBtn");
-  if (input) input.disabled = true;
-  if (sendBtn) sendBtn.disabled = true;
   _isChatStreaming = true;
+  _chatAbortController = new AbortController();
+  _updateSendButton();
+  if (input) input.placeholder = t("chat.message_to", { name });
 
-  // Clear images after capturing
-  _imageInputManager?.clearImages();
+  if (!overrideImages) {
+    _imageInputManager?.clearImages();
+  }
 
-  _addLocalActivity("chat", name, `ユーザー: ${message}`);
+  _addLocalActivity("chat", name, `${t("chat.user_prefix")} ${message}`);
 
   try {
+    let sendSucceeded = false;
     const currentUser = localStorage.getItem("animaworks_user") || "human";
-    const bodyObj = { message, from_person: currentUser };
+    const bodyObj = { message, from_person: currentUser, thread_id: tid };
     if (images.length > 0) {
       bodyObj.images = images;
     }
     const body = JSON.stringify(bodyObj);
 
     logger.debug(`_sendChat: starting stream for ${name} msg_len=${message.length}`);
-    await streamChat(name, body, null, {
+    await streamChat(name, body, _chatAbortController.signal, {
       onTextDelta: (text) => {
         streamingMsg.afterHeartbeatRelay = false;
         streamingMsg.text += text;
@@ -841,9 +1689,8 @@ async function _sendChat(message) {
         logger.debug(`onHeartbeatRelayStart: ${message}`);
         streamingMsg.heartbeatRelay = true;
         streamingMsg.heartbeatText = "";
-        streamingMsg.text = "";
         _renderStreamingBubble(streamingMsg);
-        _addLocalActivity("system", name, `ハートビート中継: ${message}`);
+        _addLocalActivity("system", name, `${t("chat.heartbeat_relay")}: ${message}`);
       },
       onHeartbeatRelay: ({ text }) => {
         streamingMsg.heartbeatText = (streamingMsg.heartbeatText || "") + text;
@@ -872,16 +1719,17 @@ async function _sendChat(message) {
       },
       onError: ({ message: errorMsg }) => {
         logger.debug(`onError: ${errorMsg}`);
-        streamingMsg.text += `\n[エラー] ${errorMsg}`;
+        streamingMsg.text += `\n${t("chat.error_prefix")} ${errorMsg}`;
         streamingMsg.streaming = false;
         _renderChat();
       },
-      onDone: ({ summary }) => {
+      onDone: ({ summary, images }) => {
         const summaryLen = (summary || "").length;
         const textLen = streamingMsg.text.length;
         logger.debug(`onDone: summary_len=${summaryLen} text_len=${textLen} afterRelay=${streamingMsg.afterHeartbeatRelay}`);
         const text = summary || streamingMsg.text;
-        streamingMsg.text = text || "(空の応答)";
+        streamingMsg.text = text || t("chat.empty_response");
+        streamingMsg.images = images || [];
         streamingMsg.streaming = false;
         streamingMsg.activeTool = null;
         streamingMsg.heartbeatRelay = false;
@@ -889,7 +1737,8 @@ async function _sendChat(message) {
         streamingMsg.afterHeartbeatRelay = false;
         logger.debug(`onDone: final text_len=${streamingMsg.text.length}`);
         _renderChat();
-        _addLocalActivity("chat", name, `応答: ${streamingMsg.text.slice(0, 100)}`);
+        _addLocalActivity("chat", name, `${t("chat.response_prefix")} ${streamingMsg.text.slice(0, 100)}`);
+        _markResponseComplete(name, tid);
       },
     });
 
@@ -899,27 +1748,165 @@ async function _sendChat(message) {
       streamingMsg.streaming = false;
       if (!streamingMsg.text) {
         streamingMsg.text = streamingMsg.afterHeartbeatRelay
-          ? "(応答の受信に失敗しました。再送信してください)"
-          : "(空の応答)";
+          ? t("chat.receive_failed")
+          : t("chat.empty_response");
       }
       streamingMsg.afterHeartbeatRelay = false;
       _renderChat();
     }
     logger.debug(`_sendChat: stream completed for ${name}`);
-  } catch (err) {
-    if (err.name !== "AbortError") {
-      logger.error("Chat stream error", { anima: name, error: err.message, name: err.name });
+    sendSucceeded = true;
+
+    const input = _$("chatPageInput");
+    if (sendSucceeded && input && input.value.trim() === message.trim()) {
+      input.value = "";
+      input.style.height = "auto";
+      _clearDraft(name);
     }
-    logger.debug(`_sendChat: catch — error=${err.message} name=${err.name}`);
-    streamingMsg.text = `[エラー] ${err.message}`;
-    streamingMsg.streaming = false;
-    streamingMsg.activeTool = null;
-    _renderChat();
+  } catch (err) {
+    if (err.name === "AbortError") {
+      streamingMsg.streaming = false;
+      streamingMsg.activeTool = null;
+      if (!streamingMsg.text) streamingMsg.text = t("chat.interrupted");
+      _renderChat();
+    } else {
+      logger.error("Chat stream error", { anima: name, error: err.message, name: err.name });
+      streamingMsg.text += `\n${t("chat.error_prefix")} ${err.message}`;
+      streamingMsg.streaming = false;
+      streamingMsg.activeTool = null;
+      _renderChat();
+    }
   } finally {
     _isChatStreaming = false;
-    if (input) { input.disabled = false; input.focus(); }
-    if (sendBtn) sendBtn.disabled = false;
+    _chatAbortController = null;
+    if (input) {
+      input.placeholder = t("chat.message_to", { name });
+      _saveDraft(name, input.value || "");
+      input.focus();
+    }
+    _updateSendButton();
+
+    // Auto-send next queued message
+    if (_pendingQueue.length > 0) {
+      const next = _pendingQueue.shift();
+      _showPendingIndicator();
+      if (_pendingQueue.length === 0) _hidePendingIndicator();
+      setTimeout(() => {
+        _sendChat(next.text, { images: next.images, displayImages: next.displayImages });
+      }, 150);
+    }
   }
+}
+
+// ── Queue Helpers ─────────────────
+
+function _addToQueue() {
+  const input = _$("chatPageInput");
+  if (!input) return;
+  const msg = input.value.trim();
+  const hasImages = _imageInputManager && _imageInputManager.getImageCount() > 0;
+  if (!msg && !hasImages) return;
+  _pendingQueue.push({
+    text: msg,
+    images: _imageInputManager?.getPendingImages() || [],
+    displayImages: _imageInputManager?.getDisplayImages() || [],
+  });
+  input.value = "";
+  input.style.height = "auto";
+  _saveDraft(_selectedAnima, "");
+  _imageInputManager?.clearImages();
+  _showPendingIndicator();
+  _updateSendButton();
+}
+
+function _showPendingIndicator() {
+  const bar = _$("chatPagePending");
+  const list = _$("chatPagePendingList");
+  const label = _$("chatPagePendingLabel");
+  if (!bar || !list) return;
+  if (_pendingQueue.length === 0) { bar.style.display = "none"; return; }
+  if (label) label.textContent = `${t("chat.queue_label")} (${_pendingQueue.length})`;
+  list.innerHTML = _pendingQueue.map((p, i) => {
+    const txt = escapeHtml(p.text.length > 60 ? p.text.slice(0, 60) + "…" : p.text);
+    const img = p.images?.length ? ` <span style="opacity:0.6">(+${p.images.length} images)</span>` : "";
+    return `<div class="pending-queue-item" data-idx="${i}">` +
+      `<span class="pending-queue-item-num">${i + 1}.</span>` +
+      `<span class="pending-queue-item-text">${txt || "(images only)"}${img}</span>` +
+      `<button class="pending-queue-item-del" data-idx="${i}" type="button">✕</button>` +
+      `</div>`;
+  }).join("");
+  bar.style.display = "";
+
+  list.onclick = (e) => {
+    const delBtn = e.target.closest(".pending-queue-item-del");
+    if (delBtn) {
+      e.stopPropagation();
+      const idx = parseInt(delBtn.dataset.idx, 10);
+      _pendingQueue.splice(idx, 1);
+      _showPendingIndicator();
+      _updateSendButton();
+      return;
+    }
+    const item = e.target.closest(".pending-queue-item");
+    if (item) {
+      const idx = parseInt(item.dataset.idx, 10);
+      const removed = _pendingQueue.splice(idx, 1)[0];
+      if (removed) {
+        const input = _$("chatPageInput");
+        if (input) { input.value = removed.text; input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 200) + "px"; input.focus(); }
+      }
+      _showPendingIndicator();
+      _updateSendButton();
+    }
+  };
+}
+
+function _hidePendingIndicator() {
+  const bar = _$("chatPagePending");
+  if (bar) bar.style.display = "none";
+}
+
+function _updateSendButton() {
+  const sendBtn = _$("chatPageSendBtn");
+  const queueBtn = _$("chatPageQueueBtn");
+  const inputVal = _$("chatPageInput")?.value?.trim() || "";
+  const hasInput = inputVal.length > 0;
+
+  if (queueBtn) {
+    queueBtn.disabled = !hasInput || !_selectedAnima;
+  }
+
+  if (!sendBtn) return;
+  sendBtn.classList.remove("stop", "interrupt");
+  if (!_isChatStreaming) {
+    sendBtn.textContent = (_pendingQueue.length > 0 || hasInput) ? "↑" : "↑";
+    sendBtn.disabled = !_selectedAnima || (!hasInput && _pendingQueue.length === 0);
+  } else if (hasInput) {
+    sendBtn.textContent = "↑";
+    sendBtn.disabled = false;
+  } else if (_pendingQueue.length > 0) {
+    sendBtn.textContent = "■↑";
+    sendBtn.classList.add("interrupt");
+    sendBtn.disabled = false;
+  } else {
+    sendBtn.textContent = "■";
+    sendBtn.classList.add("stop");
+    sendBtn.disabled = false;
+  }
+}
+
+function _stopStreaming() {
+  if (!_selectedAnima) return;
+  if (_chatAbortController) {
+    _chatAbortController.abort();
+  }
+  fetch(`/api/animas/${encodeURIComponent(_selectedAnima)}/interrupt`, {
+    method: "POST",
+  }).catch(() => {});
+}
+
+function _interruptAndSendPending() {
+  _stopStreaming();
 }
 
 // ── Mobile Tab Switching ─────────────────────
@@ -976,7 +1963,7 @@ function _renderAnimaState() {
 
   const d = _animaDetail;
   if (!d || !d.state) {
-    el.textContent = "状態情報なし";
+    el.textContent = t("animas.no_state");
     return;
   }
   el.textContent = typeof d.state === "string" ? d.state : JSON.stringify(d.state, null, 2);
@@ -1022,7 +2009,7 @@ async function _loadActivity() {
     if (!feed) return;
 
     if (events.length === 0) {
-      feed.innerHTML = '<div class="activity-empty">アクティビティなし</div>';
+      feed.innerHTML = `<div class="activity-empty">${t("activity.empty")}</div>`;
       return;
     }
 
@@ -1050,11 +2037,11 @@ async function _loadActivity() {
 async function _loadSessionList() {
   const list = _$("chatHistorySessionList");
   if (!list || !_selectedAnima) {
-    if (list) list.innerHTML = '<div class="loading-placeholder">Animaを選択してください</div>';
+    if (list) list.innerHTML = `<div class="loading-placeholder">${t("chat.anima_select_first")}</div>`;
     return;
   }
 
-  list.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  list.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api(`/api/animas/${encodeURIComponent(_selectedAnima)}/sessions`);
@@ -1065,23 +2052,23 @@ async function _loadSessionList() {
       const ac = data.active_conversation;
       const lastTime = ac.last_timestamp ? timeStr(ac.last_timestamp) : "--:--";
       html += `
-        <div class="session-section-header">現在の会話</div>
+        <div class="session-section-header">${t("chat.history_current")}</div>
         <div class="session-item session-active" data-type="active">
-          <div class="session-item-title">進行中の会話</div>
+          <div class="session-item-title">${t("ws.conversation_active")}</div>
           <div class="session-item-meta">
-            ${ac.total_turn_count}ターン ${ac.has_summary ? "(要約あり)" : ""} | 最終: ${lastTime}
+            ${t("chat.session_turns", { count: ac.total_turn_count })} ${ac.has_summary ? t("chat.session_summary") : ""} | ${t("chat.last_label")}: ${lastTime}
           </div>
         </div>`;
     }
 
     // Archived Sessions
     if (data.archived_sessions && data.archived_sessions.length > 0) {
-      html += '<div class="session-section-header">セッションアーカイブ</div>';
+      html += `<div class="session-section-header">${t("chat.history_archive")}</div>`;
       for (const s of data.archived_sessions) {
         const ts = s.timestamp ? timeStr(s.timestamp) : s.id;
         html += `
           <div class="session-item" data-type="archive" data-id="${escapeHtml(s.id)}">
-            <div class="session-item-title">${escapeHtml(s.trigger || "セッション")} (${s.turn_count}ターン)</div>
+            <div class="session-item-title">${escapeHtml(s.trigger || t("chat.session"))} (${t("chat.session_turns", { count: s.turn_count })})</div>
             <div class="session-item-meta">${ts} | ctx: ${(s.context_usage_ratio * 100).toFixed(0)}%</div>
             ${s.original_prompt_preview ? `<div class="session-item-preview">${escapeHtml(s.original_prompt_preview)}</div>` : ""}
           </div>`;
@@ -1090,19 +2077,19 @@ async function _loadSessionList() {
 
     // Transcripts
     if (data.transcripts && data.transcripts.length > 0) {
-      html += '<div class="session-section-header">会話ログ</div>';
+      html += `<div class="session-section-header">${t("chat.history_transcript")}</div>`;
       for (const t of data.transcripts) {
         html += `
           <div class="session-item" data-type="transcript" data-date="${escapeHtml(t.date)}">
             <div class="session-item-title">${escapeHtml(t.date)}</div>
-            <div class="session-item-meta">${t.message_count}メッセージ</div>
+            <div class="session-item-meta">${t.message_count} messages</div>
           </div>`;
       }
     }
 
     // Episodes
     if (data.episodes && data.episodes.length > 0) {
-      html += '<div class="session-section-header">エピソードログ</div>';
+      html += `<div class="session-section-header">${t("chat.episode_log")}</div>`;
       for (const e of data.episodes) {
         html += `
           <div class="session-item" data-type="episode" data-date="${escapeHtml(e.date)}">
@@ -1112,7 +2099,7 @@ async function _loadSessionList() {
       }
     }
 
-    if (!html) html = '<div class="loading-placeholder">履歴がありません</div>';
+    if (!html) html = `<div class="loading-placeholder">${t("chat.history_empty")}</div>`;
     list.innerHTML = html;
 
     // Bind click handlers
@@ -1126,7 +2113,7 @@ async function _loadSessionList() {
       });
     });
   } catch (err) {
-    list.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    list.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -1141,12 +2128,12 @@ function _showHistoryDetail(title) {
 
 async function _loadActiveConversation() {
   if (!_selectedAnima) return;
-  _showHistoryDetail("\u4F1A\u8A71\u5C65\u6B74");
+  _showHistoryDetail(t("chat.history_detail_title"));
   const conv = _$("chatHistoryConversation");
   if (conv) conv.innerHTML = '<div class="loading-placeholder">\u8AAD\u307F\u8FBC\u307F\u4E2D...</div>';
 
   try {
-    const data = await _fetchConversationHistory(_selectedAnima, 50);
+    const data = await _fetchConversationHistory(_selectedAnima, 50, null, _selectedThreadId);
     _renderConversationHistoryDetail(data);
   } catch {
     if (conv) conv.innerHTML = '<div class="loading-placeholder">\u8AAD\u307F\u8FBC\u307F\u5931\u6557</div>';
@@ -1184,9 +2171,9 @@ function _renderConversationHistoryDetail(data) {
 
 async function _loadArchivedSession(sessionId) {
   if (!_selectedAnima) return;
-  _showHistoryDetail(`セッション: ${sessionId}`);
+  _showHistoryDetail(t("chat.session_detail", { id: sessionId }));
   const conv = _$("chatHistoryConversation");
-  if (conv) conv.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  if (conv) conv.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api(`/api/animas/${encodeURIComponent(_selectedAnima)}/sessions/${encodeURIComponent(sessionId)}`);
@@ -1195,36 +2182,36 @@ async function _loadArchivedSession(sessionId) {
     } else if (data.data) {
       const d = data.data;
       let html = `<div class="history-session-meta">
-        <div><strong>トリガー:</strong> ${escapeHtml(d.trigger || "不明")}</div>
-        <div><strong>ターン数:</strong> ${d.turn_count || 0}</div>
-        <div><strong>コンテキスト使用率:</strong> ${((d.context_usage_ratio || 0) * 100).toFixed(0)}%</div>
+        <div><strong>${t("chat.state_label")}</strong> ${escapeHtml(d.trigger || t("chat.state_unknown"))}</div>
+        <div><strong>${t("chat.turn_count")}</strong> ${d.turn_count || 0}</div>
+        <div><strong>${t("chat.context_usage")}</strong> ${((d.context_usage_ratio || 0) * 100).toFixed(0)}%</div>
       </div>`;
       if (d.original_prompt) {
-        html += `<div class="history-section"><div class="history-section-label">依頼内容</div><pre class="history-pre">${escapeHtml(d.original_prompt)}</pre></div>`;
+        html += `<div class="history-section"><div class="history-section-label">${t("chat.request_label")}</div><pre class="history-pre">${escapeHtml(d.original_prompt)}</pre></div>`;
       }
       if (d.accumulated_response) {
-        html += `<div class="history-section"><div class="history-section-label">応答</div><div>${renderMarkdown(d.accumulated_response)}</div></div>`;
+        html += `<div class="history-section"><div class="history-section-label">${t("chat.response_label")}</div><div>${renderMarkdown(d.accumulated_response)}</div></div>`;
       }
       if (conv) conv.innerHTML = html;
     } else {
-      if (conv) conv.innerHTML = '<div class="loading-placeholder">データがありません</div>';
+      if (conv) conv.innerHTML = `<div class="loading-placeholder">${t("chat.no_data")}</div>`;
     }
   } catch {
-    if (conv) conv.innerHTML = '<div class="loading-placeholder">読み込み失敗</div>';
+    if (conv) conv.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}</div>`;
   }
 }
 
 async function _loadTranscript(date) {
   if (!_selectedAnima) return;
-  _showHistoryDetail(`会話ログ: ${date}`);
+  _showHistoryDetail(t("chat.transcript_detail", { date }));
   const conv = _$("chatHistoryConversation");
-  if (conv) conv.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  if (conv) conv.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api(`/api/animas/${encodeURIComponent(_selectedAnima)}/transcripts/${encodeURIComponent(date)}`);
     _renderTranscriptDetail(data);
   } catch {
-    if (conv) conv.innerHTML = '<div class="loading-placeholder">読み込み失敗</div>';
+    if (conv) conv.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}</div>`;
   }
 }
 
@@ -1234,11 +2221,11 @@ function _renderTranscriptDetail(data) {
 
   let html = "";
   if (data.turns && data.turns.length > 0) {
-    for (const t of data.turns) {
-      const ts = t.timestamp ? timeStr(t.timestamp) : "";
-      const bubbleClass = t.role === "assistant" ? "assistant" : "user";
-      const roleLabel = t.role === "human" ? "ユーザー" : t.role;
-      const content = t.role === "assistant" ? renderMarkdown(t.content || "") : escapeHtml(t.content || "");
+    for (const turn of data.turns) {
+      const ts = turn.timestamp ? timeStr(turn.timestamp) : "";
+      const bubbleClass = turn.role === "assistant" ? "assistant" : "user";
+      const roleLabel = turn.role === "human" ? t("chat.role_human") : turn.role;
+      const content = turn.role === "assistant" ? renderMarkdown(turn.content || "") : escapeHtml(turn.content || "");
       html += `
         <div class="history-turn">
           <div class="history-turn-meta">${ts} - ${escapeHtml(roleLabel)}</div>
@@ -1247,22 +2234,22 @@ function _renderTranscriptDetail(data) {
     }
   }
 
-  if (!html) html = '<div class="loading-placeholder">会話データがありません</div>';
+  if (!html) html = `<div class="loading-placeholder">${t("chat.history_no_data")}</div>`;
   conv.innerHTML = html;
   conv.scrollTop = conv.scrollHeight;
 }
 
 async function _loadEpisode(date) {
   if (!_selectedAnima) return;
-  _showHistoryDetail(`エピソード: ${date}`);
+  _showHistoryDetail(t("chat.episode_detail", { date }));
   const conv = _$("chatHistoryConversation");
-  if (conv) conv.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  if (conv) conv.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api(`/api/animas/${encodeURIComponent(_selectedAnima)}/episodes/${encodeURIComponent(date)}`);
-    if (conv) conv.innerHTML = `<div class="history-markdown">${renderMarkdown(data.content || "(内容なし)")}</div>`;
+    if (conv) conv.innerHTML = `<div class="history-markdown">${renderMarkdown(data.content || t("chat.no_content"))}</div>`;
   } catch {
-    if (conv) conv.innerHTML = '<div class="loading-placeholder">読み込み失敗</div>';
+    if (conv) conv.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}</div>`;
   }
 }
 
@@ -1273,11 +2260,11 @@ async function _loadMemoryTab() {
   if (!fileList) return;
 
   if (!_selectedAnima) {
-    fileList.innerHTML = '<div class="loading-placeholder">Animaを選択してください</div>';
+    fileList.innerHTML = `<div class="loading-placeholder">${t("chat.anima_select_first")}</div>`;
     return;
   }
 
-  fileList.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  fileList.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   const endpoint = `/api/animas/${encodeURIComponent(_selectedAnima)}/${_activeMemoryTab}`;
 
@@ -1285,7 +2272,7 @@ async function _loadMemoryTab() {
     const data = await api(endpoint);
     const files = data.files || [];
     if (files.length === 0) {
-      fileList.innerHTML = '<div class="loading-placeholder">ファイルがありません</div>';
+      fileList.innerHTML = `<div class="loading-placeholder">${t("memory.no_files")}</div>`;
       return;
     }
 
@@ -1299,7 +2286,44 @@ async function _loadMemoryTab() {
       });
     });
   } catch (err) {
-    fileList.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    fileList.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// ── Voice Chat Callbacks ────────────────────
+
+function _buildVoiceChatCallbacks(animaName) {
+  return {
+    addUserBubble(text) {
+      const tid = _selectedThreadId;
+      if (!_chatHistories[animaName]) _chatHistories[animaName] = {};
+      if (!_chatHistories[animaName][tid]) _chatHistories[animaName][tid] = [];
+      _chatHistories[animaName][tid].push({ role: 'user', text, timestamp: new Date().toISOString() });
+      _renderChat();
+    },
+    addStreamingBubble() {
+      const tid = _selectedThreadId;
+      if (!_chatHistories[animaName]) _chatHistories[animaName] = {};
+      if (!_chatHistories[animaName][tid]) _chatHistories[animaName][tid] = [];
+      const msg = { role: 'assistant', text: '', streaming: true, activeTool: null, timestamp: new Date().toISOString() };
+      _chatHistories[animaName][tid].push(msg);
+      _renderChat();
+      return msg;
+    },
+    updateStreamingBubble(msg) {
+      _renderStreamingBubble(msg);
+    },
+    finalizeStreamingBubble(_msg) {
+      _renderChat();
+    },
+  };
+}
+
+function _updateVoiceAnima(animaName) {
+  updateVoiceUIAnima(animaName);
+  const chatInputForm = _$("chatPageForm") || document.querySelector(".chat-input-form");
+  if (chatInputForm && animaName) {
+    initVoiceUI(chatInputForm, animaName, _buildVoiceChatCallbacks(animaName));
   }
 }
 
@@ -1324,7 +2348,7 @@ function _initImageInput() {
   // Initialize voice input
   const chatInputFormEl = _$("chatPageForm") || document.querySelector(".chat-input-form");
   if (chatInputFormEl && _selectedAnima) {
-    initVoiceUI(chatInputFormEl, _selectedAnima);
+    initVoiceUI(chatInputFormEl, _selectedAnima, _buildVoiceChatCallbacks(_selectedAnima));
   }
 }
 
@@ -1339,14 +2363,14 @@ async function _loadMemoryContent(tab, file) {
   if (fileList) fileList.style.display = "none";
   if (contentArea) contentArea.style.display = "";
   if (titleEl) titleEl.textContent = file;
-  if (bodyEl) bodyEl.textContent = "読み込み中...";
+    if (bodyEl) bodyEl.textContent = t("common.loading");
 
   const endpoint = `/api/animas/${encodeURIComponent(_selectedAnima)}/${tab}/${encodeURIComponent(file)}`;
 
   try {
     const data = await api(endpoint);
-    if (bodyEl) bodyEl.textContent = data.content || "(内容なし)";
+    if (bodyEl) bodyEl.textContent = data.content || t("chat.no_content");
   } catch (err) {
-    if (bodyEl) bodyEl.textContent = `[エラー] ${err.message}`;
+    if (bodyEl) bodyEl.textContent = `${t("chat.error_prefix")} ${err.message}`;
   }
 }

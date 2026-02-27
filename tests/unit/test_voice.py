@@ -188,6 +188,126 @@ class TestVoiceSTT:
         assert result["raw_text"] == "async test"
 
 
+# ── TestSanitizeForTTS ────────────────────────────────────────────
+
+
+class TestSanitizeForTTS:
+    def test_strip_emotion_tag(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = 'こんにちは！\n<!-- emotion: {"emotion": "smile"} -->'
+        assert sanitize_for_tts(text) == "こんにちは！"
+
+    def test_strip_emotion_tag_multiline(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = 'はい。\n<!-- emotion: {\n"emotion": "laugh"\n} -->'
+        assert sanitize_for_tts(text) == "はい。"
+
+    def test_strip_markdown_heading(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        assert sanitize_for_tts("## 見出し") == "見出し"
+        assert sanitize_for_tts("# H1\n## H2") == "H1\nH2"
+
+    def test_strip_bold_italic(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        assert sanitize_for_tts("これは**太字**です") == "これは太字です"
+        assert sanitize_for_tts("これは*斜体*です") == "これは斜体です"
+
+    def test_strip_code_block(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = "説明:\n```python\nprint('hello')\n```\n以上です。"
+        assert sanitize_for_tts(text) == "説明:\n\n以上です。"
+
+    def test_strip_inline_code(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        assert sanitize_for_tts("`command` を実行") == "command を実行"
+
+    def test_strip_link(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        assert sanitize_for_tts("[リンク](https://example.com)") == "リンク"
+
+    def test_strip_list_markers(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = "- 項目1\n- 項目2\n1. 番号1"
+        result = sanitize_for_tts(text)
+        assert "- " not in result
+        assert "1. " not in result
+        assert "項目1" in result
+        assert "番号1" in result
+
+    def test_strip_table_pipes(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = "| 列1 | 列2 |"
+        result = sanitize_for_tts(text)
+        assert "|" not in result
+        assert "列1" in result
+
+    def test_strip_horizontal_rule(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = "上\n---\n下"
+        result = sanitize_for_tts(text)
+        assert "---" not in result
+        assert "上" in result
+        assert "下" in result
+
+    def test_empty_after_sanitize(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        assert sanitize_for_tts('<!-- emotion: {"emotion": "neutral"} -->') == ""
+
+    def test_plain_text_unchanged(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = "普通のテキストです。変わりません。"
+        assert sanitize_for_tts(text) == text
+
+    def test_combined(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = (
+            "## 回答\n\n"
+            "これは**重要**なポイントです。\n"
+            "- 項目A\n"
+            "- 項目B\n\n"
+            '<!-- emotion: {"emotion": "smile"} -->'
+        )
+        result = sanitize_for_tts(text)
+        assert "##" not in result
+        assert "**" not in result
+        assert "- " not in result
+        assert "<!--" not in result
+        assert "重要" in result
+        assert "項目A" in result
+
+
+    def test_strip_trailing_html_comment(self) -> None:
+        from core.voice.session import sanitize_for_tts
+
+        text = '了解しました。\n<!-- emothion: {"emotion": "smile"} -->'
+        assert sanitize_for_tts(text) == "了解しました。"
+
+
+# ── TestVoiceModeSuffix ──────────────────────────────────────────
+
+
+class TestVoiceModeSuffix:
+    def test_suffix_constant_exists(self) -> None:
+        from core.voice.session import VOICE_MODE_SUFFIX
+
+        assert "voice-mode" in VOICE_MODE_SUFFIX
+        assert "300" in VOICE_MODE_SUFFIX
+        assert "Markdown" in VOICE_MODE_SUFFIX
+
+
 # ── TestVoiceSession ────────────────────────────────────────────
 
 

@@ -1,38 +1,39 @@
 // ── Setup Status ────────────────────────────
 import { api } from "../modules/api.js";
 import { escapeHtml } from "../modules/state.js";
+import { t } from "/shared/i18n.js";
 
 export function render(container) {
   container.innerHTML = `
     <div class="page-header">
-      <h2>セットアップ状況</h2>
+      <h2>${t("setup.page_title")}</h2>
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="card-header">初期化チェックリスト</div>
+      <div class="card-header">${t("setup.check_init")}</div>
       <div class="card-body" id="setupChecklist">
-        <div class="loading-placeholder">読み込み中...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="card-header">現在の設定</div>
+      <div class="card-header">${t("setup.config_current")}</div>
       <div class="card-body" id="setupConfig">
-        <div class="loading-placeholder">読み込み中...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="card-header">APIキー設定状況</div>
+      <div class="card-header">${t("setup.api_keys")}</div>
       <div class="card-body" id="setupApiKeys">
-        <div class="loading-placeholder">読み込み中...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="card-header">認証設定</div>
+      <div class="card-header">${t("setup.auth_settings")}</div>
       <div class="card-body" id="authSettings">
-        <div class="loading-placeholder">読み込み中...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
     </div>
   `;
@@ -92,13 +93,13 @@ async function _loadChecklist() {
     }
   } else {
     // Infer status
-    checks.push({ label: "サーバー稼働中", ok: !!systemData });
-    checks.push({ label: "パーソンディレクトリ", ok: animas.length > 0 });
-    checks.push({ label: "スケジューラ", ok: systemData?.scheduler_running ?? false });
+    checks.push({ label: t("setup.check_server"), ok: !!systemData });
+    checks.push({ label: t("setup.check_person_dir"), ok: animas.length > 0 });
+    checks.push({ label: t("setup.check_scheduler"), ok: systemData?.scheduler_running ?? false });
   }
 
   if (checks.length === 0) {
-    el.innerHTML = '<div class="loading-placeholder">チェック項目を取得できませんでした</div>';
+    el.innerHTML = `<div class="loading-placeholder">${t("setup.check_failed")}</div>`;
     return;
   }
 
@@ -142,7 +143,7 @@ async function _loadConfig() {
     configEl.innerHTML = `
       <div class="data-table-wrapper">
         <table class="data-table">
-          <thead><tr><th>設定項目</th><th>値</th></tr></thead>
+          <thead><tr><th>${t("setup.config_key")}</th><th>${t("setup.config_value")}</th></tr></thead>
           <tbody>
             ${rows.map(r => `<tr><td>${escapeHtml(r.key)}</td><td><code>${escapeHtml(r.val)}</code></td></tr>`).join("")}
           </tbody>
@@ -165,12 +166,12 @@ async function _loadConfig() {
           `;
         }).join("");
       } else {
-        keysEl.innerHTML = '<div class="loading-placeholder">APIキー情報が設定に含まれていません</div>';
+        keysEl.innerHTML = `<div class="loading-placeholder">${t("setup.api_keys_not_in_config")}</div>`;
       }
     }
   } catch {
-    configEl.innerHTML = '<div class="loading-placeholder">APIが未実装です</div>';
-    if (keysEl) keysEl.innerHTML = '<div class="loading-placeholder">設定APIが利用できません</div>';
+    configEl.innerHTML = `<div class="loading-placeholder">${t("setup.api_unimplemented")}</div>`;
+    if (keysEl) keysEl.innerHTML = `<div class="loading-placeholder">${t("setup.config_unavailable")}</div>`;
   }
 }
 
@@ -187,7 +188,7 @@ async function _loadAuthSettings() {
     let html = "";
 
     // Auth mode info
-    const modeLabel = { local_trust: "ローカルトラスト（未認証）", password: "パスワード認証", multi_user: "マルチユーザー認証" };
+    const modeLabel = { local_trust: t("setup.auth_local_trust"), password: t("setup.auth_password"), multi_user: t("setup.auth_multi_user") };
     html += `<div style="margin-bottom: 1rem;">
       <strong>認証モード:</strong> <code>${escapeHtml(modeLabel[me.auth_mode] || me.auth_mode || "不明")}</code>
     </div>`;
@@ -197,13 +198,13 @@ async function _loadAuthSettings() {
     const skipCurrentPw = me.auth_mode === "local_trust";
     html += `
       <div style="margin-bottom: 1.5rem;">
-        <h4 style="margin-bottom: 0.5rem;">${isInitial ? "パスワード設定" : "パスワード変更"}</h4>
+        <h4 style="margin-bottom: 0.5rem;">${isInitial ? t("setup.password_set") : t("setup.password_change")}</h4>
         <form id="changePasswordForm" style="display:flex; flex-direction:column; gap:0.5rem; max-width:300px;">
-          ${isInitial || skipCurrentPw ? "" : '<input type="password" id="currentPassword" placeholder="現在のパスワード" required>'}
-          <input type="password" id="newPassword" placeholder="新しいパスワード" required>
-          <input type="password" id="confirmPassword" placeholder="新しいパスワード（確認）" required>
+          ${isInitial || skipCurrentPw ? "" : `<input type="password" id="currentPassword" placeholder="${t("setup.password_current")}" required>`}
+          <input type="password" id="newPassword" placeholder="${t("setup.password_new")}" required>
+          <input type="password" id="confirmPassword" placeholder="${t("setup.password_confirm")}" required>
           <div id="pwChangeResult" class="login-error hidden"></div>
-          <button type="submit" class="btn-login" style="width:auto;">${isInitial ? "設定" : "変更"}</button>
+          <button type="submit" class="btn-login" style="width:auto;">${isInitial ? t("setup.password_set_btn") : t("setup.password_change_btn")}</button>
         </form>
       </div>
     `;
@@ -212,16 +213,16 @@ async function _loadAuthSettings() {
     if (me.role === "owner") {
       html += `
         <div style="margin-bottom: 1.5rem;">
-          <h4 style="margin-bottom: 0.5rem;">ユーザー管理</h4>
+          <h4 style="margin-bottom: 0.5rem;">${t("setup.user_management")}</h4>
           <table class="data-table">
-            <thead><tr><th>ユーザー名</th><th>表示名</th><th>ロール</th><th>操作</th></tr></thead>
+            <thead><tr><th>${t("setup.user_username")}</th><th>${t("setup.user_displayname")}</th><th>${t("setup.user_role")}</th><th>${t("setup.user_actions")}</th></tr></thead>
             <tbody>
               ${users.map(u => `
                 <tr>
                   <td>${escapeHtml(u.username)}</td>
                   <td>${escapeHtml(u.display_name)}</td>
                   <td>${escapeHtml(u.role)}</td>
-                  <td>${u.role !== "owner" ? `<button class="btn-delete-user" data-user="${escapeHtml(u.username)}" style="color:#ef4444;cursor:pointer;border:none;background:none;">削除</button>` : "-"}</td>
+                  <td>${u.role !== "owner" ? `<button class="btn-delete-user" data-user="${escapeHtml(u.username)}" style="color:#ef4444;cursor:pointer;border:none;background:none;">${t("setup.user_delete")}</button>` : "-"}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -229,13 +230,13 @@ async function _loadAuthSettings() {
         </div>
 
         <div>
-          <h4 style="margin-bottom: 0.5rem;">ユーザー追加</h4>
+          <h4 style="margin-bottom: 0.5rem;">${t("setup.user_add")}</h4>
           <form id="addUserForm" style="display:flex; flex-direction:column; gap:0.5rem; max-width:300px;">
-            <input type="text" id="newUsername" placeholder="ユーザー名" required>
-            <input type="text" id="newDisplayName" placeholder="表示名">
-            <input type="password" id="newUserPassword" placeholder="パスワード" required>
+            <input type="text" id="newUsername" placeholder="${t("setup.user_username")}" required>
+            <input type="text" id="newDisplayName" placeholder="${t("setup.user_displayname")}">
+            <input type="password" id="newUserPassword" placeholder="${t("setup.user_password")}" required>
             <div id="addUserResult" class="login-error hidden"></div>
-            <button type="submit" class="btn-login" style="width:auto;">追加</button>
+            <button type="submit" class="btn-login" style="width:auto;">${t("setup.user_add_btn")}</button>
           </form>
         </div>
       `;
@@ -253,7 +254,7 @@ async function _loadAuthSettings() {
         const confirmPw = document.getElementById("confirmPassword").value;
 
         if (newPw !== confirmPw) {
-          result.textContent = "新しいパスワードが一致しません";
+          result.textContent = t("setup.password_mismatch");
           result.classList.remove("hidden");
           return;
         }
@@ -272,19 +273,19 @@ async function _loadAuthSettings() {
           const data = await res.json();
           if (res.ok) {
             const willReload = isInitial || skipCurrentPw;
-            result.textContent = willReload ? "パスワードを設定しました。ページをリロードします…" : "パスワードを変更しました";
+            result.textContent = willReload ? t("setup.password_set_success") : t("setup.password_change_success");
             result.style.color = "#22c55e";
             result.classList.remove("hidden");
             pwForm.reset();
             if (willReload) setTimeout(() => location.reload(), 1000);
           } else {
             result.style.color = "#ef4444";
-            result.textContent = data.error || "変更に失敗しました";
+            result.textContent = data.error || t("setup.password_failed");
             result.classList.remove("hidden");
           }
         } catch {
           result.style.color = "#ef4444";
-          result.textContent = "通信エラー";
+          result.textContent = t("setup.network_error");
           result.classList.remove("hidden");
         }
       });
@@ -294,7 +295,7 @@ async function _loadAuthSettings() {
     el.querySelectorAll(".btn-delete-user").forEach(btn => {
       btn.addEventListener("click", async () => {
         const username = btn.dataset.user;
-        if (!confirm(`ユーザー "${username}" を削除しますか？`)) return;
+        if (!confirm(t("setup.user_delete_confirm", { username }))) return;
 
         try {
           const res = await fetch(`/api/users/${username}`, {
@@ -305,10 +306,10 @@ async function _loadAuthSettings() {
             _loadAuthSettings(); // Reload
           } else {
             const data = await res.json();
-            alert(data.error || "削除に失敗しました");
+            alert(data.error || t("setup.user_delete_failed"));
           }
         } catch {
-          alert("通信エラー");
+          alert(t("setup.network_error"));
         }
       });
     });
@@ -333,24 +334,24 @@ async function _loadAuthSettings() {
           });
           const data = await res.json();
           if (res.ok) {
-            result.textContent = `ユーザー "${data.username}" を追加しました`;
+            result.textContent = t("setup.user_add_success", { username: data.username });
             result.style.color = "#22c55e";
             result.classList.remove("hidden");
             addForm.reset();
             _loadAuthSettings(); // Reload user list
           } else {
             result.style.color = "#ef4444";
-            result.textContent = data.error || "追加に失敗しました";
+            result.textContent = data.error || t("setup.user_add_failed");
             result.classList.remove("hidden");
           }
         } catch {
           result.style.color = "#ef4444";
-          result.textContent = "通信エラー";
+          result.textContent = t("setup.network_error");
           result.classList.remove("hidden");
         }
       });
     }
   } catch {
-    el.innerHTML = '<div class="loading-placeholder">認証設定を取得できませんでした（ローカルトラストモード）</div>';
+    el.innerHTML = `<div class="loading-placeholder">${t("setup.auth_fetch_failed")}</div>`;
   }
 }

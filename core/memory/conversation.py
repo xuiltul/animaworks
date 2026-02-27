@@ -29,6 +29,7 @@ from typing import ClassVar
 from core.time_utils import ensure_aware, now_iso, now_jst
 from typing import TYPE_CHECKING, Any, cast
 
+from core.i18n import t
 from core.memory._io import atomic_write_text
 from core.paths import load_prompt
 from core.schemas import ModelConfig
@@ -180,16 +181,23 @@ class ConversationMemory:
         self,
         anima_dir: Path,
         model_config: ModelConfig,
+        thread_id: str = "default",
     ) -> None:
         self.anima_dir = anima_dir
         self.anima_name = anima_dir.name
         self.model_config = model_config
+        self.thread_id = thread_id
         self._state_dir = anima_dir / "state"
-        self._state_path = self._state_dir / "conversation.json"
+        if thread_id == "default":
+            self._state_path = self._state_dir / "conversation.json"
+        else:
+            conv_dir = self._state_dir / "conversations"
+            conv_dir.mkdir(parents=True, exist_ok=True)
+            self._state_path = conv_dir / f"{thread_id}.json"
         self._transcript_dir = anima_dir / "transcripts"
         self._state: ConversationState | None = None
 
-        _key = str(anima_dir)
+        _key = f"{anima_dir}:{thread_id}"
         if _key not in self.__class__._class_locks:
             self.__class__._class_locks[_key] = asyncio.Lock()
         self._finalize_lock = self.__class__._class_locks[_key]
@@ -362,7 +370,7 @@ class ConversationMemory:
                 "Truncating %s turn content from %d to %d chars",
                 role, len(content), _MAX_STORED_CONTENT_CHARS,
             )
-            content = content[:_MAX_STORED_CONTENT_CHARS] + f"\n[...truncated, original {len(content)} chars]"
+            content = content[:_MAX_STORED_CONTENT_CHARS] + t("conversation.truncated_suffix", length=len(content))
         # Cap tool records per turn
         records = tool_records or []
         if len(records) > _MAX_TOOL_RECORDS_PER_TURN:
@@ -441,13 +449,13 @@ class ConversationMemory:
             messages.append({
                 "role": "user",
                 "content": (
-                    f"[会話の要約（{state.compressed_turn_count}ターン分）]"
-                    f"\n\n{state.compressed_summary}"
+                    t("conversation.summary_label", count=state.compressed_turn_count)
+                    + f"\n\n{state.compressed_summary}"
                 ),
             })
             messages.append({
                 "role": "assistant",
-                "content": "承知しました。これまでの会話内容を把握しました。",
+                "content": t("conversation.summary_ack"),
             })
 
         # Track total tool records rendered
@@ -583,29 +591,29 @@ class ConversationMemory:
 
         if state.compressed_summary:
             parts.append(
-                f"### 会話の要約（{state.compressed_turn_count}ターン分）\n\n"
-                f"{state.compressed_summary}"
+                t("conversation.history_summary_header", count=state.compressed_turn_count)
+                + f"\n\n{state.compressed_summary}"
             )
 
         if state.turns:
             display_turns = state.turns[-_MAX_DISPLAY_TURNS:]
             turn_lines: list[str] = []
-            for t in display_turns:
+            for turn in display_turns:
                 # Extract time portion for compact display
-                ts = t.timestamp[11:16] if len(t.timestamp) >= 16 else t.timestamp
-                role_label = "あなた" if t.role == "assistant" else t.role
-                display = t.content
-                if t.role == "assistant" and len(display) > _MAX_RESPONSE_CHARS_IN_HISTORY:
+                ts = turn.timestamp[11:16] if len(turn.timestamp) >= 16 else turn.timestamp
+                role_label = t("conversation.role_you") if turn.role == "assistant" else turn.role
+                display = turn.content
+                if turn.role == "assistant" and len(display) > _MAX_RESPONSE_CHARS_IN_HISTORY:
                     display = display[:_MAX_RESPONSE_CHARS_IN_HISTORY] + "..."
-                elif t.role != "assistant" and len(display) > _MAX_HUMAN_CHARS_IN_HISTORY:
+                elif turn.role != "assistant" and len(display) > _MAX_HUMAN_CHARS_IN_HISTORY:
                     display = display[:_MAX_HUMAN_CHARS_IN_HISTORY] + "..."
-                if t.role == "assistant" and t.tool_records:
-                    tool_names = ", ".join(tr.tool_name for tr in t.tool_records)
-                    display += f"\n[実行ツール: {tool_names}]"
+                if turn.role == "assistant" and turn.tool_records:
+                    tool_names = ", ".join(tr.tool_name for tr in turn.tool_records)
+                    display += "\n" + t("conversation.tools_executed", tool_names=tool_names)
                 turn_lines.append(f"**[{ts}] {role_label}:**\n{display}")
 
             if parts:
-                parts.append("### 直近の会話\n\n" + "\n\n".join(turn_lines))
+                parts.append(t("conversation.recent_conversation_header") + "\n\n" + "\n\n".join(turn_lines))
             else:
                 parts.append("\n\n".join(turn_lines))
 
@@ -613,7 +621,7 @@ class ConversationMemory:
 
         if max_chars and len(result) > max_chars:
             result = result[-max_chars:]
-            result = "...(前半省略)...\n" + result
+            result = t("conversation.ellipsis_omitted") + "\n" + result
 
         return result
 
@@ -697,12 +705,12 @@ class ConversationMemory:
     ) -> str:
         """Format turns into readable text for the compression prompt."""
         lines: list[str] = []
-        for t in turns:
-            role = "あなた" if t.role == "assistant" else t.role
-            text = f"[{t.timestamp}] {role}: {t.content}"
-            if t.tool_records:
-                tools = ", ".join(tr.tool_name for tr in t.tool_records)
-                text += f"\n  [使用ツール: {tools}]"
+        for turn in turns:
+            role = t("conversation.role_you") if turn.role == "assistant" else turn.role
+            text = f"[{turn.timestamp}] {role}: {turn.content}"
+            if turn.tool_records:
+                tools = ", ".join(tr.tool_name for tr in turn.tool_records)
+                text += "\n  " + t("conversation.tools_used", tools=tools)
             lines.append(text)
         return "\n\n".join(lines)
 
@@ -729,9 +737,9 @@ class ConversationMemory:
 
         user_content = ""
         if old_summary:
-            user_content += f"## 既存の要約\n\n{old_summary}\n\n---\n\n"
-        user_content += f"## 新しい会話ターン\n\n{new_turns}\n\n"
-        user_content += "上記を統合した新しい要約を作成してください。"
+            user_content += f"{t('conversation.existing_summary_header')}\n\n{old_summary}\n\n---\n\n"
+        user_content += f"{t('conversation.new_turns_header')}\n\n{new_turns}\n\n"
+        user_content += t("conversation.integrate_instruction")
 
         return await self._call_llm(system, user_content, max_tokens=2000)
 
@@ -897,7 +905,7 @@ class ConversationMemory:
                 return ""
 
             # Format as context
-            lines = ["## セッション中のその他の活動"]
+            lines = [t("conversation.activity_context_header")]
             for e in session_entries:
                 text = e.summary or e.content[:100]
                 lines.append(f"- [{e.type}] {text}")
@@ -940,7 +948,7 @@ class ConversationMemory:
         episode_body = episode_match.group(1).strip() if episode_match else raw.strip()
 
         lines = episode_body.splitlines()
-        title = lines[0][:50] if lines else "会話"
+        title = lines[0][:50] if lines else t("conversation.title_fallback")
         body = "\n".join(lines[1:]).strip() if len(lines) > 1 else episode_body
 
         # Extract ## ステート変更 section
@@ -1005,14 +1013,14 @@ class ConversationMemory:
         # Append resolved items with checkmark
         for item in parsed.resolved_items:
             if item not in current:
-                marker = f"- ✅ {item}（自動検出: {now_jst().strftime('%m/%d %H:%M')}）"
+                marker = t("conversation.resolved_marker", item=item, ts=now_jst().strftime('%m/%d %H:%M'))
                 current += f"\n{marker}"
                 updated = True
 
         # Append new tasks
         for task in parsed.new_tasks:
             if task not in current:
-                current += f"\n- [ ] {task}（自動検出: {now_jst().strftime('%m/%d %H:%M')}）"
+                current += "\n" + t("conversation.new_task_marker", task=task, ts=now_jst().strftime('%m/%d %H:%M'))
                 updated = True
 
         if updated:
@@ -1103,7 +1111,7 @@ class ConversationMemory:
                 activity.log(
                     "issue_resolved",
                     content=item,
-                    summary=f"解決済み: {item[:100]}",
+                    summary=t("conversation.resolution_summary", item=item[:100]),
                 )
             except Exception:
                 logger.debug("Failed to log issue_resolved event", exc_info=True)

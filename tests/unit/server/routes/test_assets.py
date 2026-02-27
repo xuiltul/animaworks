@@ -206,6 +206,101 @@ class TestGetAsset:
         assert resp.status_code == 200
 
 
+class TestGetAttachment:
+    async def test_serve_attachment(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        anima_dir = animas_dir / "alice"
+        attachment_dir = anima_dir / "attachments"
+        attachment_dir.mkdir(parents=True)
+        (attachment_dir / "uploaded.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/animas/alice/attachments/uploaded.png")
+        assert resp.status_code == 200
+        assert "image/png" in resp.headers.get("content-type", "")
+
+
+class TestMediaProxy:
+    async def test_proxy_rejects_non_https(self, tmp_path):
+        app = _make_test_app(animas_dir=tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/media/proxy", params={"url": "http://example.com/a.png"})
+        assert resp.status_code == 400
+
+    @patch("server.routes.assets.socket.getaddrinfo")
+    async def test_proxy_blocks_non_allowlisted_domain(self, mock_getaddrinfo, tmp_path):
+        mock_getaddrinfo.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
+        app = _make_test_app(animas_dir=tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/media/proxy", params={"url": "https://example.com/a.png"})
+        assert resp.status_code == 403
+
+    @patch("server.routes.assets.socket.getaddrinfo")
+    @patch("server.routes.assets.httpx.AsyncClient.get")
+    async def test_proxy_success(self, mock_get, mock_getaddrinfo, tmp_path):
+        mock_getaddrinfo.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.headers = {"content-type": "image/png", "content-length": "8"}
+        mock_resp.content = b"\x89PNG\r\n\x1a\n"
+        mock_get.return_value = mock_resp
+
+        app = _make_test_app(animas_dir=tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.request(
+                "GET",
+                "/api/media/proxy",
+                params={"url": "https://images.unsplash.com/photo.png"},
+            )
+        assert resp.status_code == 200
+        assert "image/png" in resp.headers.get("content-type", "")
+
+    @patch("server.routes.assets.socket.getaddrinfo")
+    @patch("server.routes.assets.httpx.AsyncClient.get")
+    async def test_proxy_redirect_revalidates_host(self, mock_get, mock_getaddrinfo, tmp_path):
+        mock_getaddrinfo.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
+        first = MagicMock()
+        first.status_code = 302
+        first.headers = {"location": "https://example.com/not-allowed.png"}
+        first.content = b""
+        mock_get.return_value = first
+
+        app = _make_test_app(animas_dir=tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.request(
+                "GET",
+                "/api/media/proxy",
+                params={"url": "https://images.unsplash.com/photo.png"},
+            )
+        assert resp.status_code == 403
+
+    @patch("server.routes.assets.socket.getaddrinfo")
+    @patch("server.routes.assets.httpx.AsyncClient.get")
+    async def test_proxy_rejects_header_magic_mismatch(self, mock_get, mock_getaddrinfo, tmp_path):
+        mock_getaddrinfo.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.headers = {"content-type": "image/png", "content-length": "11"}
+        mock_resp.content = b"not-an-image"
+        mock_get.return_value = mock_resp
+
+        app = _make_test_app(animas_dir=tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.request(
+                "GET",
+                "/api/media/proxy",
+                params={"url": "https://images.unsplash.com/photo.png"},
+            )
+        assert resp.status_code == 415
+
+
 # ── POST /animas/{name}/assets/generate ─────────────────
 
 

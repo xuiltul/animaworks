@@ -309,6 +309,25 @@ FILE_TOOLS: list[dict[str, Any]] = [
 
 SEARCH_TOOLS: list[dict[str, Any]] = [
     {
+        "name": "web_fetch",
+        "description": (
+            "Fetch content from a URL and return it as markdown. "
+            "Use this to read web pages, documentation, articles. "
+            "Content is from external sources (untrusted). "
+            "Results may be truncated for large pages."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The URL to fetch (must be fully-formed, HTTPS preferred)",
+                },
+            },
+            "required": ["url"],
+        },
+    },
+    {
         "name": "search_code",
         "description": (
             "Search for a text pattern in files using regex. "
@@ -811,6 +830,66 @@ SKILL_TOOLS: list[dict[str, Any]] = [
             "required": ["skill_name"],
         },
     },
+    {
+        "name": "create_skill",
+        "description": (
+            "スキルをディレクトリ構造で作成する。"
+            "SKILL.md（frontmatter + 本文）を生成し、"
+            "オプションでreferences/やtemplates/にファイルを配置する。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "skill_name": {
+                    "type": "string",
+                    "description": "スキル名（ケバブケース。例: my-skill）",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "frontmatter description（トリガーキーワード含む）",
+                },
+                "body": {
+                    "type": "string",
+                    "description": "SKILL.md本文（Markdown）",
+                },
+                "location": {
+                    "type": "string",
+                    "enum": ["personal", "common"],
+                    "description": "保存先。personal=個人スキル、common=共通スキル。デフォルト: personal",
+                },
+                "references": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "filename": {"type": "string"},
+                            "content": {"type": "string"},
+                        },
+                        "required": ["filename", "content"],
+                    },
+                    "description": "references/ に配置するファイル群（任意）",
+                },
+                "templates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "filename": {"type": "string"},
+                            "content": {"type": "string"},
+                        },
+                        "required": ["filename", "content"],
+                    },
+                    "description": "templates/ に配置するファイル群（任意）",
+                },
+                "allowed_tools": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "frontmatter allowed_tools（任意）",
+                },
+            },
+            "required": ["skill_name", "description", "body"],
+        },
+    },
 ]
 
 TASK_TOOLS: list[dict[str, Any]] = [
@@ -939,6 +1018,10 @@ def to_text_format(
     Generates a markdown-formatted tool guide that instructs the LLM to
     output tool calls as JSON code blocks.  Used by ``AssistedExecutor``
     to inject tool specifications into the system prompt.
+
+    Includes imperative instructions, few-shot examples, and
+    anti-hallucination rules to maximise tool-call compliance from
+    weaker models.
     """
     from core.tooling.prompt_db import _get_locale
 
@@ -946,22 +1029,60 @@ def to_text_format(
 
     if loc == "ja":
         header = "## 利用可能なツール"
-        instruction = "ツールを使いたい場合、以下の形式で ```json コードブロックとして出力してください:"
+        instruction = (
+            "外部情報の取得やコマンド実行が必要な場合は、"
+            "**必ず**以下の形式で ```json コードブロックを出力してツールを呼び出してください:"
+        )
         example = '{"tool": "ツール名", "arguments": {"引数名": "値"}}'
-        result_note = "ツールの実行結果は次のメッセージで提供されます。"
-        text_note = "ツールを使う必要がなければ、普通にテキストで返答してください。"
-        one_call = "1回のメッセージでツール呼び出しは1つだけにしてください。"
+        rules = [
+            "ツールの実行結果は次のメッセージで提供されます。結果を待ってから回答してください。",
+            "ツールを使う必要がなければ、普通にテキストで返答してください。",
+            "1回のメッセージでツール呼び出しは1つだけにしてください。",
+            "**重要**: コマンド出力・ファイル内容・プロセス情報などを推測や想像で生成してはいけません。必ずツールで取得してください。",
+            "「調べます」「確認します」とだけ言って終わらないでください。調べるならツールを呼び出してください。",
+        ]
+        fewshot_header = "### 使用例"
+        fewshot_items = [
+            (
+                "ユーザー: docker ps して",
+                '```json\n{"tool": "execute_command", "arguments": {"command": "docker ps"}}\n```',
+            ),
+            (
+                "ユーザー: 今のメモリ使用量を教えて",
+                '```json\n{"tool": "execute_command", "arguments": {"command": "free -h"}}\n```',
+            ),
+        ]
         args_label = "引数"
         required_label = "(必須)"
+        tools_header = "### ツール一覧"
     else:
         header = "## Available Tools"
-        instruction = "To use a tool, output a ```json code block in the following format:"
+        instruction = (
+            "When you need external information or command execution, "
+            "you **MUST** output a ```json code block to invoke a tool:"
+        )
         example = '{"tool": "tool_name", "arguments": {"arg_name": "value"}}'
-        result_note = "Tool results will be provided in the next message."
-        text_note = "If you don't need to use a tool, respond with plain text."
-        one_call = "Only one tool call per message."
+        rules = [
+            "Tool results will be provided in the next message. Wait for results before answering.",
+            "If you don't need to use a tool, respond with plain text.",
+            "Only one tool call per message.",
+            "**Important**: NEVER fabricate command output, file contents, or system information. Always use a tool to retrieve real data.",
+            "Do NOT just say \"I'll check\" without actually calling a tool.",
+        ]
+        fewshot_header = "### Examples"
+        fewshot_items = [
+            (
+                "User: run docker ps",
+                '```json\n{"tool": "execute_command", "arguments": {"command": "docker ps"}}\n```',
+            ),
+            (
+                "User: show current memory usage",
+                '```json\n{"tool": "execute_command", "arguments": {"command": "free -h"}}\n```',
+            ),
+        ]
         args_label = "Args"
         required_label = "(required)"
+        tools_header = "### Tool List"
 
     lines = [
         header,
@@ -972,11 +1093,23 @@ def to_text_format(
         example,
         "```",
         "",
-        result_note,
-        text_note,
-        one_call,
-        "",
     ]
+    for rule in rules:
+        lines.append(f"- {rule}")
+    lines.append("")
+
+    # Few-shot examples
+    lines.append(fewshot_header)
+    lines.append("")
+    for prompt_ex, call_ex in fewshot_items:
+        lines.append(prompt_ex)
+        lines.append("")
+        lines.append(call_ex)
+        lines.append("")
+
+    # Tool list
+    lines.append(tools_header)
+    lines.append("")
     for schema in schemas:
         name = schema["name"]
         desc = schema.get("description", "")
@@ -1074,6 +1207,9 @@ def build_tool_list(
         )
         skill_tool_schema = {**SKILL_TOOLS[0], "description": desc}
         tools.append(skill_tool_schema)
+        # create_skill has static description; append remaining SKILL_TOOLS
+        for st in SKILL_TOOLS[1:]:
+            tools.append(st)
     return tools
 
 

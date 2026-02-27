@@ -49,6 +49,24 @@ def create_sessions_router() -> APIRouter:
                 "has_summary": bool(conv_state.compressed_summary),
             }
 
+        # Thread conversations
+        threads = []
+        conv_dir = anima_dir / "state" / "conversations"
+        if conv_dir.is_dir():
+            for conv_file in sorted(conv_dir.glob("*.json"), reverse=True):
+                try:
+                    data = json.loads(conv_file.read_text(encoding="utf-8"))
+                    turns = data.get("turns", [])
+                    threads.append({
+                        "thread_id": conv_file.stem,
+                        "turn_count": len(turns),
+                        "total_turn_count": len(turns) + data.get("compressed_turn_count", 0),
+                        "last_timestamp": turns[-1].get("timestamp", "") if turns else "",
+                        "has_summary": bool(data.get("compressed_summary", "")),
+                    })
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
         # Archived sessions — metadata only (no full content read)
         stm = ShortTermMemory(anima_dir)
         archived = []
@@ -105,6 +123,7 @@ def create_sessions_router() -> APIRouter:
         return {
             "anima": name,
             "active_conversation": active_conv,
+            "threads": threads,
             "archived_sessions": archived,
             "episodes": episodes,
             "transcripts": transcripts,
@@ -117,6 +136,8 @@ def create_sessions_router() -> APIRouter:
         name: str,
         limit: int = 50,
         before: str | None = None,
+        thread_id: str = "default",
+        strict_thread: bool = False,
         request: Request = None,
     ):
         """Get conversation history from activity log.
@@ -134,6 +155,8 @@ def create_sessions_router() -> APIRouter:
         return activity.get_conversation_view(
             before=before,
             limit=limit,
+            thread_id=thread_id,
+            strict_thread=strict_thread,
         )
 
     @router.get("/animas/{name}/sessions/{session_id}")
