@@ -28,6 +28,81 @@
   margin-top: 80px;
 }
 
+/* --- Thread Tabs --- */
+.thread-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color, #eee);
+  flex-wrap: wrap;
+  min-height: 40px;
+}
+
+.thread-tab-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.thread-tab {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.thread-tab:hover,
+.thread-tab:active {
+  background: var(--aw-color-bg-hover);
+  color: var(--aw-color-text-primary);
+}
+
+.thread-tab.active {
+  background: var(--aw-color-accent);
+  color: var(--aw-color-bg-primary);
+}
+
+.thread-tab-close {
+  padding: 0 4px;
+  font-size: 1rem;
+  line-height: 1;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--aw-color-text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.thread-tab-close:hover,
+.thread-tab-close:active {
+  background: var(--aw-color-bg-hover);
+  color: var(--aw-color-text-primary);
+}
+
+.thread-tab-new {
+  padding: 0.35rem 0.6rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-left: 4px;
+}
+
+.thread-tab-new:hover,
+.thread-tab-new:active {
+  background: var(--aw-color-bg-hover);
+  color: var(--aw-color-accent);
+}
+
 .chat-ts {
   display: block;
   font-size: 0.65rem;

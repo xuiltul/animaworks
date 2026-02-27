@@ -62,7 +62,7 @@ class TestProcessMessageStreamBootstrapGuard:
         assert dp.needs_bootstrap is True
 
         # Acquire lock to simulate ongoing bootstrap
-        await dp._conversation_lock.acquire()
+        await dp._get_thread_lock("default").acquire()
 
         try:
             chunks: list[dict] = []
@@ -73,7 +73,7 @@ class TestProcessMessageStreamBootstrapGuard:
             assert chunks[0]["type"] == "bootstrap_busy"
             assert "初期化中" in chunks[0]["message"]
         finally:
-            dp._conversation_lock.release()
+            dp._get_thread_lock("default").release()
 
     async def test_no_bootstrap_file_proceeds_normally(self, tmp_path: Path):
         """When needs_bootstrap=False, stream should proceed normally

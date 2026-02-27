@@ -88,6 +88,8 @@ class DigitalAnima:
     1 anima = 1 directory.
     """
 
+    _MAX_THREAD_LOCKS = 20
+
     def __init__(self, anima_dir: Path, shared_dir: Path) -> None:
         self.anima_dir = anima_dir
         self.name = anima_dir.name
@@ -103,7 +105,7 @@ class DigitalAnima:
         self.agent.set_interrupt_event(self._interrupt_event)
 
         # 3-lock structure: conversation (human chat) / inbox (Anima-to-Anima MSG) / background (HB/cron/TaskExec)
-        self._conversation_lock = asyncio.Lock()
+        self._conversation_locks: dict[str, asyncio.Lock] = {}
         self._inbox_lock = asyncio.Lock()
         self._background_lock = asyncio.Lock()
         self._state_file_lock = threading.Lock()  # protects current_task.md / pending.md
@@ -127,6 +129,22 @@ class DigitalAnima:
             self.agent.background_manager.on_complete = self._on_background_task_complete
 
         logger.info("DigitalAnima '%s' initialized from %s", self.name, anima_dir)
+
+    def _get_thread_lock(self, thread_id: str) -> asyncio.Lock:
+        """Get or create a per-thread conversation lock.
+
+        Implements LRU eviction when max locks reached. Locked (in-use)
+        locks are never evicted.
+        """
+        if thread_id not in self._conversation_locks:
+            if len(self._conversation_locks) >= self._MAX_THREAD_LOCKS:
+                # Evict oldest idle lock
+                for k in list(self._conversation_locks):
+                    if not self._conversation_locks[k].locked():
+                        del self._conversation_locks[k]
+                        break
+            self._conversation_locks[thread_id] = asyncio.Lock()
+        return self._conversation_locks[thread_id]
 
     def set_on_message_sent(
         self, fn: Callable[[str, str, str], None],
@@ -398,7 +416,7 @@ class DigitalAnima:
         logger.info("[%s] run_bootstrap START", self.name)
         from core.tooling.handler import active_session_type
         try:
-            async with self._conversation_lock:
+            async with self._get_thread_lock("default"):
                 self._status_slots["conversation"] = "bootstrapping"
                 self._task_slots["conversation"] = "Initial bootstrap"
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
@@ -437,6 +455,7 @@ class DigitalAnima:
         images: list[dict[str, Any]] | None = None,
         attachment_paths: list[str] | None = None,
         intent: str = "",
+        thread_id: str = "default",
     ) -> str:
         self._interrupt_event.clear()
         logger.info(
@@ -445,7 +464,7 @@ class DigitalAnima:
         )
         from core.tooling.handler import active_session_type
         try:
-            async with self._conversation_lock:
+            async with self._get_thread_lock(thread_id):
                 logger.info(
                     "[%s] process_message START (lock acquired) from=%s",
                     self.name, from_person,
@@ -455,7 +474,7 @@ class DigitalAnima:
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
                 # Build history-aware prompt via conversation memory
-                conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+                conv_memory = ConversationMemory(self.anima_dir, self.model_config, thread_id=thread_id)
                 await conv_memory.compress_if_needed()
 
                 # Determine prompt and history strategy per execution mode
@@ -483,7 +502,7 @@ class DigitalAnima:
                 conv_memory.save()
 
                 # Activity log: message received
-                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat", meta={"from_type": "human"})
+                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat", meta={"from_type": "human", "thread_id": thread_id})
 
                 try:
                     result = await self.agent.run_cycle(
@@ -506,7 +525,7 @@ class DigitalAnima:
                     conv_memory.save()
 
                     # Activity log: response sent (with thinking text if present)
-                    resp_meta = {"thinking_text": result.thinking_text} if result.thinking_text else None
+                    resp_meta = {"thinking_text": result.thinking_text, "thread_id": thread_id} if result.thinking_text else {"thread_id": thread_id}
                     self._activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat", meta=resp_meta)
 
                     logger.info(
@@ -520,7 +539,7 @@ class DigitalAnima:
                     self._activity.log(
                         "error",
                         summary=t("anima.process_message_error", exc=type(exc).__name__),
-                        meta={"phase": "process_message", "error": str(exc)[:200]},
+                        meta={"phase": "process_message", "error": str(exc)[:200], "thread_id": thread_id},
                     )
                     # Save error marker so the failed exchange is visible
                     conv_memory.append_turn(
@@ -542,6 +561,7 @@ class DigitalAnima:
         images: list[dict[str, Any]] | None = None,
         attachment_paths: list[str] | None = None,
         intent: str = "",
+        thread_id: str = "default",
     ) -> AsyncGenerator[dict, None]:
         """Streaming version of process_message.
 
@@ -551,7 +571,7 @@ class DigitalAnima:
         """
         self._interrupt_event.clear()
         # ── Bootstrap guard: return immediately if bootstrap is running ──
-        if self.needs_bootstrap and self._conversation_lock.locked():
+        if self.needs_bootstrap and self._get_thread_lock(thread_id).locked():
             logger.info(
                 "[%s] process_message_stream REJECTED (bootstrapping) from=%s",
                 self.name, from_person,
@@ -568,7 +588,7 @@ class DigitalAnima:
         )
         from core.tooling.handler import active_session_type
         try:
-            async with self._conversation_lock:
+            async with self._get_thread_lock(thread_id):
                 logger.info(
                     "[%s] process_message_stream START (lock acquired) from=%s",
                     self.name, from_person,
@@ -578,7 +598,7 @@ class DigitalAnima:
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
                 # Build history-aware prompt via conversation memory
-                conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+                conv_memory = ConversationMemory(self.anima_dir, self.model_config, thread_id=thread_id)
                 await conv_memory.compress_if_needed()
 
                 # Determine prompt and history strategy per execution mode
@@ -606,10 +626,10 @@ class DigitalAnima:
                 conv_memory.save()
 
                 # Activity log: message received
-                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat", meta={"from_type": "human"})
+                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat", meta={"from_type": "human", "thread_id": thread_id})
 
                 # Streaming journal: write-ahead log for crash recovery
-                journal = StreamingJournal(self.anima_dir)
+                journal = StreamingJournal(self.anima_dir, thread_id=thread_id)
                 journal.open(
                     trigger=f"message:{from_person}",
                     from_person=from_person,
@@ -659,7 +679,7 @@ class DigitalAnima:
 
                             # Activity log: response sent (with thinking text if present)
                             thinking_text = cycle_result.get("thinking_text", "")
-                            resp_meta = {"thinking_text": thinking_text} if thinking_text else None
+                            resp_meta = {"thinking_text": thinking_text, "thread_id": thread_id} if thinking_text else {"thread_id": thread_id}
                             self._activity.log("response_sent", content=summary, to_person=from_person, channel="chat", meta=resp_meta)
 
                             # Finalize streaming journal (deletes the file)
@@ -688,7 +708,7 @@ class DigitalAnima:
                     self._activity.log(
                         "error",
                         summary=t("anima.process_stream_error", exc=type(exc).__name__),
-                        meta={"phase": "process_message_stream", "error_code": error_code, "error": str(exc)[:200]},
+                        meta={"phase": "process_message_stream", "error_code": error_code, "error": str(exc)[:200], "thread_id": thread_id},
                     )
                     yield {
                         "type": "error",
@@ -742,7 +762,7 @@ class DigitalAnima:
 
         logger.info("[%s] process_greet START", self.name)
         from core.tooling.handler import active_session_type
-        async with self._conversation_lock:
+        async with self._get_thread_lock("default"):
             prev_status = self._status_slots.get("conversation", "idle")
             prev_task = self._task_slots.get("conversation", "")
             _session_token = self.agent._tool_handler.set_active_session_type("chat")

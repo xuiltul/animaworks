@@ -4,7 +4,7 @@
 """Unit tests for 3-path execution separation (Heartbeat/Inbox/TaskExec).
 
 Covers:
-- 3-lock structure (_conversation_lock, _inbox_lock, _background_lock, _state_file_lock)
+- 3-lock structure (_conversation_locks, _inbox_lock, _background_lock, _state_file_lock)
 - Trigger-based prompt section filtering (chat/inbox/heartbeat/cron/task)
 - New prompt template loading (inbox_message, task_exec, task_delegation_rules)
 - Heartbeat plan-focus (no inbox processing, Observe/Plan/Reflect)
@@ -67,7 +67,7 @@ class TestThreeLockStructure:
             assert "background" in dp._status_slots
 
     async def test_inbox_and_conversation_concurrent(self, data_dir, make_anima):
-        """_inbox_lock and _conversation_lock can both be held simultaneously."""
+        """_inbox_lock and _conversation_locks can both be held simultaneously."""
         anima_dir = make_anima("concurrent_test")
         shared_dir = data_dir / "shared"
 
@@ -76,11 +76,11 @@ class TestThreeLockStructure:
             from core.anima import DigitalAnima
             dp = DigitalAnima(anima_dir, shared_dir)
 
-            async with dp._conversation_lock:
+            async with dp._get_thread_lock("default"):
                 acquired = dp._inbox_lock.locked() is False
-                assert acquired, "_inbox_lock should be available while _conversation_lock is held"
+                assert acquired, "_inbox_lock should be available while conversation lock is held"
                 async with dp._inbox_lock:
-                    assert dp._conversation_lock.locked()
+                    assert dp._get_thread_lock("default").locked()
                     assert dp._inbox_lock.locked()
 
     async def test_inbox_and_background_concurrent(self, data_dir, make_anima):

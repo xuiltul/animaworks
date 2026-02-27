@@ -199,100 +199,108 @@ class AnimaRunner:
         file survives on disk.  Read it, record the partial response in
         conversation memory, and log the crash event.
 
-        Checks both ``chat`` and ``heartbeat`` session types.
+        Checks both ``chat`` and ``heartbeat`` session types, including
+        thread-specific subdirectories.
         """
         for session_type in ("chat", "heartbeat"):
-            if not StreamingJournal.has_orphan(self._anima_dir, session_type):
-                continue
+            # Collect all thread_ids with orphaned journals
+            thread_ids = StreamingJournal.list_orphan_thread_ids(self._anima_dir, session_type)
 
-            recovery = StreamingJournal.recover(self._anima_dir, session_type)
-            if recovery is None:
-                continue
+            for thread_id in thread_ids:
+                recovery = StreamingJournal.recover(self._anima_dir, session_type, thread_id=thread_id)
+                if recovery is None:
+                    continue
 
-            logger.warning(
-                "Recovered streaming journal for %s [%s]: %d chars, %d tool calls, trigger=%s",
-                self.anima_name,
-                session_type,
-                len(recovery.recovered_text),
-                len(recovery.tool_calls),
-                recovery.trigger,
-            )
-
-            # Record recovered text in conversation memory
-            if recovery.recovered_text and self.anima:
-                try:
-                    from core.memory.conversation import ConversationMemory
-                    conv_memory = ConversationMemory(
-                        self._anima_dir,
-                        self.anima.model_config,
-                    )
-                    saved_text = (
-                        recovery.recovered_text
-                        + "\n[応答が中断されました]"
-                    )
-                    conv_memory.append_turn("assistant", saved_text)
-                    conv_memory.save()
-                    StreamingJournal.confirm_recovery(self._anima_dir, session_type)
-                    logger.info(
-                        "Recovered %d chars into conversation memory for %s [%s]",
-                        len(recovery.recovered_text),
-                        self.anima_name,
-                        session_type,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to save recovered journal to conversation memory: %s [%s]",
-                        self.anima_name,
-                        session_type,
-                    )
-            else:
-                # No text to save, but still need to clean up the journal
-                StreamingJournal.confirm_recovery(self._anima_dir, session_type)
-
-            # Record crash event in activity log
-            try:
-                from core.memory.activity import ActivityLogger
-                activity = ActivityLogger(self._anima_dir)
-                activity.log(
-                    "error",
-                    summary=f"応答が中断されました（前回セッションの未完了ストリームを回復, {session_type}）",
-                    meta={
-                        "recovered_chars": len(recovery.recovered_text),
-                        "trigger": recovery.trigger,
-                        "tool_calls": len(recovery.tool_calls),
-                        "from_person": recovery.from_person,
-                        "started_at": recovery.started_at,
-                        "last_event_at": recovery.last_event_at,
-                        "session_type": session_type,
-                    },
-                )
-            except Exception:
-                logger.debug(
-                    "Failed to log crash recovery to activity log: %s [%s]",
+                logger.warning(
+                    "Recovered streaming journal for %s [%s] thread=%s: %d chars, %d tool calls, trigger=%s",
                     self.anima_name,
                     session_type,
-                    exc_info=True,
+                    thread_id,
+                    len(recovery.recovered_text),
+                    len(recovery.tool_calls),
+                    recovery.trigger,
                 )
 
-            # Record tool_use events in activity log
-            if recovery.tool_calls:
-                try:
-                    from core.memory.activity import ActivityLogger as _AL
-                    _activity = _AL(self._anima_dir)
-                    for tc in recovery.tool_calls:
-                        _activity.log(
-                            "tool_use",
-                            summary=f"[recovered] {tc.get('tool', 'unknown')}",
-                            tool=tc.get("tool", "unknown"),
-                            meta={"recovered": True, **tc},
+                # Record recovered text in conversation memory
+                if recovery.recovered_text and self.anima:
+                    try:
+                        from core.memory.conversation import ConversationMemory
+                        conv_memory = ConversationMemory(
+                            self._anima_dir,
+                            self.anima.model_config,
+                            thread_id=thread_id,
                         )
+                        saved_text = (
+                            recovery.recovered_text
+                            + "\n[応答が中断されました]"
+                        )
+                        conv_memory.append_turn("assistant", saved_text)
+                        conv_memory.save()
+                        StreamingJournal.confirm_recovery(self._anima_dir, session_type, thread_id=thread_id)
+                        logger.info(
+                            "Recovered %d chars into conversation memory for %s [%s] thread=%s",
+                            len(recovery.recovered_text),
+                            self.anima_name,
+                            session_type,
+                            thread_id,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to save recovered journal to conversation memory: %s [%s] thread=%s",
+                            self.anima_name,
+                            session_type,
+                            thread_id,
+                        )
+                else:
+                    StreamingJournal.confirm_recovery(self._anima_dir, session_type, thread_id=thread_id)
+
+                # Record crash event in activity log
+                try:
+                    from core.memory.activity import ActivityLogger
+                    activity = ActivityLogger(self._anima_dir)
+                    activity.log(
+                        "error",
+                        summary=f"応答が中断されました（前回セッションの未完了ストリームを回復, {session_type}）",
+                        meta={
+                            "recovered_chars": len(recovery.recovered_text),
+                            "trigger": recovery.trigger,
+                            "tool_calls": len(recovery.tool_calls),
+                            "from_person": recovery.from_person,
+                            "started_at": recovery.started_at,
+                            "last_event_at": recovery.last_event_at,
+                            "session_type": session_type,
+                            "thread_id": thread_id,
+                        },
+                    )
                 except Exception:
                     logger.debug(
-                        "Failed to log recovered tool_use events: %s [%s]",
+                        "Failed to log crash recovery to activity log: %s [%s] thread=%s",
                         self.anima_name,
                         session_type,
+                        thread_id,
                         exc_info=True,
                     )
+
+                # Record tool_use events in activity log
+                if recovery.tool_calls:
+                    try:
+                        from core.memory.activity import ActivityLogger as _AL
+                        _activity = _AL(self._anima_dir)
+                        for tc in recovery.tool_calls:
+                            _activity.log(
+                                "tool_use",
+                                summary=f"[recovered] {tc.get('tool', 'unknown')}",
+                                tool=tc.get("tool", "unknown"),
+                                meta={"recovered": True, **tc},
+                            )
+                    except Exception:
+                        logger.debug(
+                            "Failed to log recovered tool_use events: %s [%s] thread=%s",
+                            self.anima_name,
+                            session_type,
+                            thread_id,
+                            exc_info=True,
+                        )
 
     # ── Event Emission ─────────────────────────────────────────────
 
@@ -380,11 +388,13 @@ class AnimaRunner:
         intent = params.get("intent") or ""
         images = params.get("images") or None
         attachment_paths = params.get("attachment_paths") or None
+        thread_id = params.get("thread_id", "default")
 
         result = await self.anima.process_message(
             message, from_person=from_person,
             intent=intent,
             images=images, attachment_paths=attachment_paths,
+            thread_id=thread_id,
         )
 
         return {

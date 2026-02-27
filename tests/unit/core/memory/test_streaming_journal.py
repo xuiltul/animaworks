@@ -373,7 +373,7 @@ class TestRecoverStreamingJournal:
             runner._recover_streaming_journal()
 
         # ConversationMemory was instantiated with anima_dir and model_config
-        conv_cls.assert_called_once_with(anima_dir, runner.anima.model_config)
+        conv_cls.assert_called_once_with(anima_dir, runner.anima.model_config, thread_id="default")
 
         # append_turn received the recovered text + crash marker
         mock_conv.append_turn.assert_called_once()

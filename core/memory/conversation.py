@@ -181,16 +181,23 @@ class ConversationMemory:
         self,
         anima_dir: Path,
         model_config: ModelConfig,
+        thread_id: str = "default",
     ) -> None:
         self.anima_dir = anima_dir
         self.anima_name = anima_dir.name
         self.model_config = model_config
+        self.thread_id = thread_id
         self._state_dir = anima_dir / "state"
-        self._state_path = self._state_dir / "conversation.json"
+        if thread_id == "default":
+            self._state_path = self._state_dir / "conversation.json"
+        else:
+            conv_dir = self._state_dir / "conversations"
+            conv_dir.mkdir(parents=True, exist_ok=True)
+            self._state_path = conv_dir / f"{thread_id}.json"
         self._transcript_dir = anima_dir / "transcripts"
         self._state: ConversationState | None = None
 
-        _key = str(anima_dir)
+        _key = f"{anima_dir}:{thread_id}"
         if _key not in self.__class__._class_locks:
             self.__class__._class_locks[_key] = asyncio.Lock()
         self._finalize_lock = self.__class__._class_locks[_key]

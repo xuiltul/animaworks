@@ -78,6 +78,7 @@ function cacheDom() {
   dom.convLayout = document.getElementById("wsConvLayout");
   dom.convBack = document.getElementById("wsConvBack");
   dom.convAnimaName = document.getElementById("wsConvAnimaName");
+  dom.threadTabs = document.getElementById("wsThreadTabs");
   dom.convCanvas = document.getElementById("wsConvCanvas");
   dom.convMessages = document.getElementById("wsConvMessages");
   dom.convInput = document.getElementById("wsConvInput");
@@ -365,7 +366,7 @@ function _wsClearDraft(animaName) {
 }
 
 // ── History State (Session-Aware Rendering) ──────────
-const _historyState = {};  // { [animaName]: { sessions, hasMore, nextBefore, loading } }
+const _historyState = {};  // { [animaName]: { [threadId]: { sessions, hasMore, nextBefore, loading } } }
 const HISTORY_PAGE_SIZE = 50;
 const TOOL_RESULT_TRUNCATE = 500;
 let _scrollObserver = null;
@@ -375,7 +376,12 @@ async function openConversation(animaName) {
 
   _wsSaveDraft();
   destroyVoiceUI();
-  setState({ conversationOpen: true, conversationAnima: animaName });
+  setState({ conversationOpen: true, conversationAnima: animaName, activeThreadId: "default" });
+
+  const { threads } = getState();
+  if (!threads[animaName]) {
+    setState({ threads: { ...threads, [animaName]: [{ id: "default", label: "メイン", unread: false }] } });
+  }
 
   // Show conversation overlay on top of office
   dom.convOverlay.classList.remove("hidden");
@@ -412,6 +418,7 @@ async function openConversation(animaName) {
 
   // Load and render chat history, then trigger greeting
   await loadAndRenderConvMessages(animaName);
+  _renderWsThreadTabs();
   triggerGreeting(animaName);
 
   // Focus input
@@ -422,6 +429,146 @@ async function openConversation(animaName) {
   if (convInputArea && animaName) {
     initVoiceUI(convInputArea, animaName, _buildVoiceChatCallbacks(animaName));
   }
+}
+
+// ── Thread Tabs (Workspace) ──────────────────────
+
+function _renderWsThreadTabs() {
+  const container = dom.threadTabs;
+  const animaName = getState().conversationAnima;
+  if (!container || !animaName) return;
+
+  const list = getState().threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
+  const activeThreadId = getState().activeThreadId || "default";
+
+  let html = "";
+  for (const t of list) {
+    const activeClass = t.id === activeThreadId ? " active" : "";
+    const closeBtn = t.id !== "default"
+      ? ` <button type="button" class="thread-tab-close" data-thread="${escapeHtml(t.id)}" title="スレッドを閉じる" aria-label="閉じる">&times;</button>`
+      : "";
+    html += `<span class="thread-tab-wrap"><button type="button" class="thread-tab${activeClass}" data-thread="${escapeHtml(t.id)}">${escapeHtml(t.label)}</button>${closeBtn}</span>`;
+  }
+  html += `<button type="button" class="thread-tab-new" id="wsNewThreadBtn" title="新しいスレッド">＋</button>`;
+
+  container.innerHTML = html;
+
+  container.querySelectorAll(".thread-tab").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const tid = e.target.dataset.thread;
+      if (tid) _selectWsThread(tid);
+    });
+  });
+  container.querySelectorAll(".thread-tab-close").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const tid = e.target.dataset.thread;
+      if (tid) _closeWsThread(tid);
+    });
+  });
+  const newBtn = document.getElementById("wsNewThreadBtn");
+  if (newBtn) newBtn.addEventListener("click", () => _createWsNewThread());
+}
+
+async function _selectWsThread(threadId) {
+  const current = getState().activeThreadId;
+  if (threadId === current) return;
+
+  setState({ activeThreadId: threadId });
+  _renderWsThreadTabs();
+
+  const animaName = getState().conversationAnima;
+  if (!animaName) return;
+
+  const hs = _historyState[animaName]?.[threadId];
+  const needLoad = !hs || hs.sessions.length === 0;
+
+  if (needLoad) {
+    if (!_historyState[animaName]) _historyState[animaName] = {};
+    _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: true };
+    renderConvMessages();
+
+    try {
+      const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE, null, threadId);
+      if (data && data.sessions && data.sessions.length > 0) {
+        _historyState[animaName][threadId] = {
+          sessions: data.sessions,
+          hasMore: data.has_more || false,
+          nextBefore: data.next_before || null,
+          loading: false,
+        };
+      } else {
+        _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+      }
+    } catch {
+      _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+    }
+  }
+
+  renderConvMessages();
+  _observeSentinel();
+}
+
+function _createWsNewThread() {
+  const animaName = getState().conversationAnima;
+  if (!animaName) return;
+
+  const threadId = crypto.randomUUID().slice(0, 8);
+  const { threads, chatMessagesByThread } = getState();
+  const list = threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
+  list.push({ id: threadId, label: "新しいスレッド", unread: false });
+
+  const nextThreads = { ...threads, [animaName]: list };
+  const nextByThread = { ...chatMessagesByThread };
+  if (!nextByThread[animaName]) nextByThread[animaName] = {};
+  nextByThread[animaName][threadId] = [];
+
+  setState({
+    threads: nextThreads,
+    chatMessagesByThread: nextByThread,
+    activeThreadId: threadId,
+  });
+
+  if (!_historyState[animaName]) _historyState[animaName] = {};
+  _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+
+  _renderWsThreadTabs();
+  renderConvMessages();
+  _observeSentinel();
+}
+
+function _closeWsThread(threadId) {
+  if (threadId === "default") return;
+
+  const animaName = getState().conversationAnima;
+  if (!animaName) return;
+
+  const { threads, chatMessagesByThread, activeThreadId } = getState();
+  const list = threads[animaName];
+  if (!list) return;
+
+  const idx = list.findIndex((t) => t.id === threadId);
+  if (idx < 0) return;
+
+  const nextList = list.filter((t) => t.id !== threadId);
+  const nextThreads = { ...threads, [animaName]: nextList };
+  const nextByThread = { ...chatMessagesByThread };
+  if (nextByThread[animaName]) {
+    const { [threadId]: _, ...rest } = nextByThread[animaName];
+    nextByThread[animaName] = rest;
+  }
+  delete _historyState[animaName]?.[threadId];
+
+  const switchToDefault = activeThreadId === threadId;
+  setState({
+    threads: nextThreads,
+    chatMessagesByThread: nextByThread,
+    ...(switchToDefault ? { activeThreadId: "default" } : {}),
+  });
+
+  _renderWsThreadTabs();
+  renderConvMessages();
+  _observeSentinel();
 }
 
 function closeConversation() {
@@ -492,14 +639,19 @@ async function triggerGreeting(animaName) {
     _lastGreetTime[animaName] = Date.now();
     const now = new Date().toISOString();
 
-    // Add visit marker + greeting message to chat
-    const { chatMessages } = getState();
+    // Add visit marker + greeting message to chat (thread-aware)
+    const { conversationAnima, activeThreadId, chatMessagesByThread } = getState();
+    const threadId = activeThreadId || "default";
+    const current = chatMessagesByThread?.[conversationAnima]?.[threadId] || [];
     const newMessages = [
-      ...chatMessages,
+      ...current,
       { role: "system", text: "デスクを訪問しました", timestamp: now },
       { role: "assistant", text: data.response, timestamp: now },
     ];
-    setState({ chatMessages: newMessages });
+    const nextByThread = { ...chatMessagesByThread };
+    if (!nextByThread[conversationAnima]) nextByThread[conversationAnima] = {};
+    nextByThread[conversationAnima][threadId] = newMessages;
+    setState({ chatMessagesByThread: nextByThread });
     renderConvMessages();
 
     // Update bust-up expression
@@ -679,12 +831,13 @@ function renderConvBubble(msg) {
 function renderConvMessages() {
   if (!dom.convMessages) return;
 
-  const animaName = getState().conversationAnima;
-  const hs = animaName ? _historyState[animaName] : null;
-  const { chatMessages } = getState();
+  const { activeThreadId, conversationAnima } = getState();
+  const animaName = conversationAnima;
+  const threadMessages = getState().chatMessagesByThread?.[animaName]?.[activeThreadId || "default"] || [];
+  const hs = animaName ? _historyState[animaName]?.[activeThreadId || "default"] : null;
 
   // No history and no live messages
-  if ((!hs || hs.sessions.length === 0) && chatMessages.length === 0) {
+  if ((!hs || hs.sessions.length === 0) && threadMessages.length === 0) {
     if (hs && hs.loading) {
       dom.convMessages.innerHTML = '<div class="chat-empty"><span class="tool-spinner"></span> \u8AAD\u307F\u8FBC\u307F\u4E2D...</div>';
     } else {
@@ -718,11 +871,11 @@ function renderConvMessages() {
   }
 
   // Render live chat messages (current streaming session)
-  if (chatMessages.length > 0) {
+  if (threadMessages.length > 0) {
     if (hs && hs.sessions.length > 0) {
       html += '<div class="session-divider"><span class="session-divider-label">\u73FE\u5728\u306E\u30BB\u30C3\u30B7\u30E7\u30F3</span></div>';
     }
-    html += chatMessages.map(renderConvBubble).join("");
+    html += threadMessages.map(renderConvBubble).join("");
   }
 
   dom.convMessages.innerHTML = html;
@@ -739,26 +892,35 @@ function renderConvMessages() {
 async function loadAndRenderConvMessages(animaName) {
   if (!animaName) return;
 
-  // Initialize history state (loading)
-  _historyState[animaName] = { sessions: [], hasMore: false, nextBefore: null, loading: true };
-  setState({ chatMessages: [] });
+  const threadId = getState().activeThreadId || "default";
+
+  // Initialize history state (loading) per-thread
+  if (!_historyState[animaName]) _historyState[animaName] = {};
+  _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: true };
+
+  const { chatMessagesByThread } = getState();
+  const nextByThread = { ...chatMessagesByThread };
+  if (!nextByThread[animaName]) nextByThread[animaName] = {};
+  nextByThread[animaName][threadId] = [];
+  setState({ chatMessagesByThread: nextByThread });
+
   renderConvMessages();  // Shows loading indicator
 
   try {
-    const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE);
+    const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE, null, threadId);
     if (data && data.sessions) {
-      _historyState[animaName] = {
+      _historyState[animaName][threadId] = {
         sessions: data.sessions,
         hasMore: data.has_more || false,
         nextBefore: data.next_before || null,
         loading: false,
       };
     } else {
-      _historyState[animaName] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+      _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
     }
   } catch (err) {
     logger.error("Failed to load conversation", { anima: animaName, error: err.message });
-    _historyState[animaName] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+    _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
   }
 
   renderConvMessages();
@@ -782,15 +944,20 @@ async function resumeConversationStream(animaName) {
     const progress = await fetchStreamProgress(animaName, active.response_id);
     if (!progress) return;
 
-    // Show accumulated text in streaming bubble
-    const { chatMessages } = getState();
+    // Show accumulated text in streaming bubble (thread-aware)
+    const { activeThreadId, chatMessagesByThread } = getState();
+    const threadId = activeThreadId || "default";
     const streamingMsg = {
       role: "assistant",
       text: progress.full_text || "",
       streaming: true,
       activeTool: progress.active_tool || null,
     };
-    setState({ chatMessages: [...chatMessages, streamingMsg] });
+    const current = chatMessagesByThread?.[animaName]?.[threadId] || [];
+    const nextByThread = { ...chatMessagesByThread };
+    if (!nextByThread[animaName]) nextByThread[animaName] = {};
+    nextByThread[animaName][threadId] = [...current, streamingMsg];
+    setState({ chatMessagesByThread: nextByThread });
     renderConvMessages();
 
     convStreamController = new AbortController();
@@ -838,14 +1005,24 @@ async function resumeConversationStream(animaName) {
         streamingMsg.activeTool = null;
         setExpression(emotion);
         setTimeout(() => setExpression("neutral"), 3000);
-        setState({ chatMessages: [...getState().chatMessages] });
+        const st = getState();
+        const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+        const nextByThread = { ...st.chatMessagesByThread };
+        if (!nextByThread[animaName]) nextByThread[animaName] = {};
+        nextByThread[animaName][threadId] = [...arr];
+        setState({ chatMessagesByThread: nextByThread });
         renderConvMessages();
       },
       onError: ({ message: errorMsg }) => {
         streamingMsg.text += `\n[エラー: ${errorMsg}]`;
         streamingMsg.streaming = false;
         setExpression("troubled");
-        setState({ chatMessages: [...getState().chatMessages] });
+        const st = getState();
+        const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+        const nextByThread = { ...st.chatMessagesByThread };
+        if (!nextByThread[animaName]) nextByThread[animaName] = {};
+        nextByThread[animaName][threadId] = [...arr];
+        setState({ chatMessagesByThread: nextByThread });
         renderConvMessages();
       },
     });
@@ -854,7 +1031,12 @@ async function resumeConversationStream(animaName) {
     if (streamingMsg.streaming) {
       streamingMsg.streaming = false;
       if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
-      setState({ chatMessages: [...getState().chatMessages] });
+      const st = getState();
+      const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+      const nextByThread = { ...st.chatMessagesByThread };
+      if (!nextByThread[animaName]) nextByThread[animaName] = {};
+      nextByThread[animaName][threadId] = [...arr];
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
     }
   } catch (err) {
@@ -906,9 +1088,10 @@ function _observeSentinel() {
 
 async function _loadMoreHistory() {
   const animaName = getState().conversationAnima;
+  const threadId = getState().activeThreadId || "default";
   if (!animaName) return;
 
-  const hs = _historyState[animaName];
+  const hs = _historyState[animaName]?.[threadId];
   if (!hs || !hs.hasMore || hs.loading) return;
 
   hs.loading = true;
@@ -922,7 +1105,7 @@ async function _loadMoreHistory() {
   }
 
   try {
-    const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE, hs.nextBefore);
+    const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE, hs.nextBefore, threadId);
     if (data && data.sessions && data.sessions.length > 0) {
       hs.sessions = [...data.sessions, ...hs.sessions];
       hs.hasMore = data.has_more || false;
@@ -1003,14 +1186,27 @@ async function _sendConversation(text, overrideImages = null) {
   if (!text && images.length === 0) return;
 
   const animaName = getState().conversationAnima;
+  const threadId = getState().activeThreadId || "default";
   if (!animaName) return;
 
-  // Add user message + streaming assistant placeholder
-  const { chatMessages } = getState();
+  // Capture display images (with dataUrl for rendering)
+  const displayImages = convImageInputManager?.getDisplayImages() || [];
+
+  // Clear input
+  dom.convInput.value = "";
+  dom.convInput.disabled = true;
+  dom.convSend.disabled = true;
+
+  // Add user message + streaming assistant placeholder (thread-aware)
+  const { chatMessagesByThread } = getState();
+  const current = chatMessagesByThread?.[animaName]?.[threadId] || [];
   const sendTs = new Date().toISOString();
   const userMsg = { role: "user", text: text || "", images: displayImages, timestamp: sendTs };
   const streamingMsg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: sendTs, thinkingText: "", thinking: false };
-  setState({ chatMessages: [...chatMessages, userMsg, streamingMsg] });
+  const nextByThread = { ...chatMessagesByThread };
+  if (!nextByThread[animaName]) nextByThread[animaName] = {};
+  nextByThread[animaName][threadId] = [...current, userMsg, streamingMsg];
+  setState({ chatMessagesByThread: nextByThread });
   renderConvMessages();
 
   if (!overrideImages) {
@@ -1023,7 +1219,7 @@ async function _sendConversation(text, overrideImages = null) {
   try {
     let sendSucceeded = false;
     const userName = getCurrentUser() || "guest";
-    const bodyObj = { message: text || "", from_person: userName };
+    const bodyObj = { message: text || "", from_person: userName, thread_id: threadId };
     if (images.length > 0) {
       bodyObj.images = images;
     }
@@ -1098,9 +1294,23 @@ async function _sendConversation(text, overrideImages = null) {
 
     setTalking(false);
 
+    // Finalize streaming message (thread-aware) + update thread label on first message
     streamingMsg.streaming = false;
     if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
-    setState({ chatMessages: [...getState().chatMessages] });
+    const st = getState();
+    const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+    const nextByThread = { ...st.chatMessagesByThread };
+    if (!nextByThread[animaName]) nextByThread[animaName] = {};
+    nextByThread[animaName] = { ...nextByThread[animaName], [threadId]: [...arr] };
+    setState({ chatMessagesByThread: nextByThread });
+    const threadList = st.threads[animaName] || [];
+    const entry = threadList.find((t) => t.id === threadId);
+    if (entry && entry.label === "新しいスレッド" && (text || "").trim()) {
+      const firstLine = (text || "").trim().slice(0, 20) + ((text || "").trim().length > 20 ? "..." : "");
+      const nextThreads = { ...st.threads, [animaName]: threadList.map((t) => t.id === threadId ? { ...t, label: firstLine } : t) };
+      setState({ threads: nextThreads });
+      _renderWsThreadTabs();
+    }
     renderConvMessages();
     sendSucceeded = true;
 
@@ -1114,14 +1324,24 @@ async function _sendConversation(text, overrideImages = null) {
       streamingMsg.streaming = false;
       streamingMsg.activeTool = null;
       if (!streamingMsg.text) streamingMsg.text = "(中断されました)";
-      setState({ chatMessages: [...getState().chatMessages] });
+      const abortSt = getState();
+      const abortArr = abortSt.chatMessagesByThread?.[animaName]?.[threadId] || [];
+      const abortNext = { ...abortSt.chatMessagesByThread };
+      if (!abortNext[animaName]) abortNext[animaName] = {};
+      abortNext[animaName] = { ...abortNext[animaName], [threadId]: [...abortArr] };
+      setState({ chatMessagesByThread: abortNext });
       renderConvMessages();
     } else {
       logger.error("Conversation stream error", { anima: animaName, error: err.message, name: err.name });
       streamingMsg.text = `[エラー] ${err.message}`;
       streamingMsg.streaming = false;
       streamingMsg.activeTool = null;
-      setState({ chatMessages: [...getState().chatMessages] });
+      const st = getState();
+      const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+      const nextByThread = { ...st.chatMessagesByThread };
+      if (!nextByThread[animaName]) nextByThread[animaName] = {};
+      nextByThread[animaName] = { ...nextByThread[animaName], [threadId]: [...arr] };
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
       setExpression("troubled");
     }
@@ -1298,16 +1518,26 @@ function updateStreamingBubble(msg) {
 function _buildVoiceChatCallbacks(animaName) {
   return {
     addUserBubble(text) {
-      const { chatMessages } = getState();
+      const { conversationAnima, activeThreadId, chatMessagesByThread } = getState();
+      const threadId = activeThreadId || "default";
+      const current = chatMessagesByThread?.[conversationAnima]?.[threadId] || [];
       const ts = new Date().toISOString();
-      setState({ chatMessages: [...chatMessages, { role: "user", text, timestamp: ts }] });
+      const nextByThread = { ...chatMessagesByThread };
+      if (!nextByThread[conversationAnima]) nextByThread[conversationAnima] = {};
+      nextByThread[conversationAnima][threadId] = [...current, { role: "user", text, timestamp: ts }];
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
     },
     addStreamingBubble() {
-      const { chatMessages } = getState();
+      const { conversationAnima, activeThreadId, chatMessagesByThread } = getState();
+      const threadId = activeThreadId || "default";
+      const current = chatMessagesByThread?.[conversationAnima]?.[threadId] || [];
       const ts = new Date().toISOString();
       const msg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: ts, thinkingText: "", thinking: false };
-      setState({ chatMessages: [...chatMessages, msg] });
+      const nextByThread = { ...chatMessagesByThread };
+      if (!nextByThread[conversationAnima]) nextByThread[conversationAnima] = {};
+      nextByThread[conversationAnima][threadId] = [...current, msg];
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
       return msg;
     },
@@ -1315,7 +1545,13 @@ function _buildVoiceChatCallbacks(animaName) {
       updateStreamingBubble(msg);
     },
     finalizeStreamingBubble(msg) {
-      setState({ chatMessages: [...getState().chatMessages] });
+      const { conversationAnima, activeThreadId, chatMessagesByThread } = getState();
+      const threadId = activeThreadId || "default";
+      const arr = chatMessagesByThread?.[conversationAnima]?.[threadId] || [];
+      const nextByThread = { ...chatMessagesByThread };
+      if (!nextByThread[conversationAnima]) nextByThread[conversationAnima] = {};
+      nextByThread[conversationAnima][threadId] = [...arr];
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
     },
   };

@@ -272,7 +272,7 @@ class TestHeartbeatConcurrency:
         # Acquire conversation lock to simulate an active user conversation.
         # With the new concurrent design, heartbeat uses _background_lock
         # and should NOT be skipped.
-        async with dp._conversation_lock:
+        async with dp._get_thread_lock("default"):
             result = await dp.run_heartbeat()
 
         assert result.trigger == "heartbeat"

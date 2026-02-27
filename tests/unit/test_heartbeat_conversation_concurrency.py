@@ -86,10 +86,10 @@ class TestLockSeparation:
     """Verify that conversation and background locks are independent."""
 
     def test_anima_has_separate_locks(self, anima: "DigitalAnima") -> None:
-        """DigitalAnima should have _conversation_lock and _background_lock."""
-        assert hasattr(anima, "_conversation_lock")
+        """DigitalAnima should have _conversation_locks dict and _background_lock."""
+        assert hasattr(anima, "_conversation_locks")
         assert hasattr(anima, "_background_lock")
-        assert anima._conversation_lock is not anima._background_lock
+        assert anima._get_thread_lock("default") is not anima._background_lock
 
     def test_no_legacy_lock(self, anima: "DigitalAnima") -> None:
         """DigitalAnima should NOT have the old single _lock."""
@@ -157,9 +157,9 @@ class TestConcurrentLockAcquisition:
         self, anima: "DigitalAnima",
     ) -> None:
         """Both locks should be acquirable at the same time."""
-        async with anima._conversation_lock:
+        async with anima._get_thread_lock("default"):
             async with anima._background_lock:
-                assert anima._conversation_lock.locked()
+                assert anima._get_thread_lock("default").locked()
                 assert anima._background_lock.locked()
 
     async def test_conversation_does_not_block_background(
@@ -167,7 +167,7 @@ class TestConcurrentLockAcquisition:
     ) -> None:
         """Acquiring conversation lock should not prevent background lock acquisition."""
         acquired = False
-        async with anima._conversation_lock:
+        async with anima._get_thread_lock("default"):
             # This should NOT block
             async with anima._background_lock:
                 acquired = True
@@ -179,7 +179,7 @@ class TestConcurrentLockAcquisition:
         """Acquiring background lock should not prevent conversation lock acquisition."""
         acquired = False
         async with anima._background_lock:
-            async with anima._conversation_lock:
+            async with anima._get_thread_lock("default"):
                 acquired = True
         assert acquired
 

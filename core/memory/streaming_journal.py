@@ -65,11 +65,15 @@ class StreamingJournal:
     recovered on the next startup.
     """
 
-    def __init__(self, anima_dir: Path, session_type: str = "chat") -> None:
+    def __init__(self, anima_dir: Path, session_type: str = "chat", thread_id: str = "default") -> None:
         self._anima_dir = anima_dir
         self._shortterm_dir = anima_dir / "shortterm"
         self._session_type = session_type
-        self._journal_path = self._shortterm_dir / f"streaming_journal_{session_type}.jsonl"
+        self._thread_id = thread_id
+        if thread_id == "default":
+            self._journal_path = self._shortterm_dir / f"streaming_journal_{session_type}.jsonl"
+        else:
+            self._journal_path = self._shortterm_dir / session_type / thread_id / "streaming_journal.jsonl"
         self._fd: TextIOWrapper | None = None
         self._buffer: str = ""
         self._last_flush: float = 0.0
@@ -88,10 +92,10 @@ class StreamingJournal:
         If an orphaned journal already exists (e.g. from a concurrent
         heartbeat + chat), it is recovered first to prevent data loss.
         """
-        self._shortterm_dir.mkdir(parents=True, exist_ok=True)
+        self._journal_path.parent.mkdir(parents=True, exist_ok=True)
         # Recover orphaned journal before overwriting — persist to episode log
         if self._journal_path.exists():
-            recovery = StreamingJournal.recover(self._anima_dir, self._session_type)
+            recovery = StreamingJournal.recover(self._anima_dir, self._session_type, self._thread_id)
             if recovery and recovery.recovered_text:
                 logger.warning(
                     "Orphaned journal recovered on open: %d chars, trigger=%s",
@@ -217,22 +221,30 @@ class StreamingJournal:
             legacy = anima_dir / "shortterm" / "streaming_journal.jsonl"
             if legacy.exists():
                 return True
+        # Check thread subdirectories
+        thread_dir = anima_dir / "shortterm" / session_type
+        if thread_dir.is_dir():
+            for journal in thread_dir.rglob("streaming_journal.jsonl"):
+                return True
         return False
 
     @classmethod
-    def recover(cls, anima_dir: Path, session_type: str = "chat") -> JournalRecovery | None:
+    def recover(cls, anima_dir: Path, session_type: str = "chat", thread_id: str = "default") -> JournalRecovery | None:
         """Read and delete an orphaned journal.
 
         Returns ``None`` if no journal exists.  Corrupted JSONL lines
         are silently skipped.
         """
-        path = anima_dir / "shortterm" / f"streaming_journal_{session_type}.jsonl"
-        # Migrate legacy filename if needed
-        if not path.exists() and session_type == "chat":
-            legacy = anima_dir / "shortterm" / "streaming_journal.jsonl"
-            if legacy.exists():
-                legacy.rename(path)
-                logger.info("Migrated legacy journal: %s -> %s", legacy, path)
+        if thread_id != "default":
+            path = anima_dir / "shortterm" / session_type / thread_id / "streaming_journal.jsonl"
+        else:
+            path = anima_dir / "shortterm" / f"streaming_journal_{session_type}.jsonl"
+            # Migrate legacy filename if needed
+            if not path.exists() and session_type == "chat":
+                legacy = anima_dir / "shortterm" / "streaming_journal.jsonl"
+                if legacy.exists():
+                    legacy.rename(path)
+                    logger.info("Migrated legacy journal: %s -> %s", legacy, path)
         if not path.exists():
             return None
 
@@ -338,20 +350,49 @@ class StreamingJournal:
         return recovery
 
     @classmethod
-    def confirm_recovery(cls, anima_dir: Path, session_type: str = "chat") -> None:
+    def confirm_recovery(cls, anima_dir: Path, session_type: str = "chat", thread_id: str = "default") -> None:
         """Delete journal after recovery data has been safely persisted."""
-        path = anima_dir / "shortterm" / f"streaming_journal_{session_type}.jsonl"
+        if thread_id != "default":
+            path = anima_dir / "shortterm" / session_type / thread_id / "streaming_journal.jsonl"
+        else:
+            path = anima_dir / "shortterm" / f"streaming_journal_{session_type}.jsonl"
         try:
             path.unlink(missing_ok=True)
         except OSError:
             logger.warning("Failed to delete recovered journal: %s", path)
         # Also clean up legacy file if present
-        if session_type == "chat":
+        if session_type == "chat" and thread_id == "default":
             legacy = anima_dir / "shortterm" / "streaming_journal.jsonl"
             try:
                 legacy.unlink(missing_ok=True)
             except OSError:
                 pass
+
+    @classmethod
+    def list_orphan_thread_ids(cls, anima_dir: Path, session_type: str = "chat") -> list[str]:
+        """List thread_ids that have orphaned journals.
+
+        Returns list of thread_ids. "default" is included if the default
+        journal path has an orphan.
+        """
+        result: list[str] = []
+        # Check default path
+        default_path = anima_dir / "shortterm" / f"streaming_journal_{session_type}.jsonl"
+        if default_path.exists():
+            result.append("default")
+        # Check legacy
+        if session_type == "chat":
+            legacy = anima_dir / "shortterm" / "streaming_journal.jsonl"
+            if legacy.exists() and "default" not in result:
+                result.append("default")
+        # Check thread subdirectories
+        thread_dir = anima_dir / "shortterm" / session_type
+        if thread_dir.is_dir():
+            for journal in thread_dir.rglob("streaming_journal.jsonl"):
+                tid = journal.parent.name
+                if tid != session_type:
+                    result.append(tid)
+        return result
 
     # ── Private helpers ───────────────────────────────────────
 

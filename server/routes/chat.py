@@ -50,6 +50,7 @@ class ChatRequest(BaseModel):
     images: list[ImageAttachment] = []
     resume: str | None = None
     last_event_id: str | None = None
+    thread_id: str = "default"
 
 
 class ChatResponse(BaseModel):
@@ -397,6 +398,7 @@ async def _run_producer(
                 "stream": True,
                 "images": [img.model_dump() for img in body.images] if body.images else [],
                 "attachment_paths": saved_paths,
+                "thread_id": body.thread_id,
             },
             timeout=_timeout,
         ):
@@ -679,6 +681,7 @@ def create_chat_router() -> APIRouter:
                     "intent": body.intent,
                     "images": [img.model_dump() for img in body.images] if body.images else [],
                     "attachment_paths": saved_paths,
+                    "thread_id": body.thread_id,
                 },
                 timeout=60.0
             )

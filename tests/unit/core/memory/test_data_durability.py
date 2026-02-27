@@ -502,7 +502,7 @@ class TestRunnerToolUseRecovery:
             runner._recover_streaming_journal()
 
         # confirm_recovery should have been called
-        mock_confirm.assert_called_once_with(anima_dir, "chat")
+        mock_confirm.assert_called_once_with(anima_dir, "chat", thread_id="default")
 
         # And conv.save() should have been called before confirm_recovery
         mock_conv.save.assert_called_once()
