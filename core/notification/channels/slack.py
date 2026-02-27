@@ -137,6 +137,9 @@ class SlackChannel(NotificationChannel):
         priority: str,
         anima_name: str,
     ) -> str:
+        # Webhook API does not return a message ts, so we cannot save a
+        # notification mapping here.  Reply routing only works for messages
+        # sent via the Bot Token API (chat.postMessage).
         text = self._build_text(subject, body, priority, anima_name)
 
         try:

@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.notification.reply_routing import route_thread_reply
+
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -226,10 +228,10 @@ class TestSanitizeSlackReply:
         assert "this link" in result
 
 
-# ── Webhook handler thread_ts routing ────────────────────
+# ── route_thread_reply shared helper ─────────────────────
 
 
-class TestWebhookThreadRouting:
+class TestRouteThreadReply:
     def test_thread_reply_routes_to_originator(self, routing_dir: Path) -> None:
         from core.notification.reply_routing import save_notification_mapping
 
@@ -244,14 +246,21 @@ class TestWebhookThreadRouting:
             "thread_ts": "parent.ts",
         }
 
+        shared_dir = routing_dir / "shared"
         messenger_mock = MagicMock()
-        with patch("server.routes.webhooks.Messenger", return_value=messenger_mock), \
-             patch("server.routes.webhooks.get_data_dir", return_value=routing_dir):
-            from server.routes.webhooks import create_webhooks_router
-            _verify_routing_via_thread(event, messenger_mock, "mikoto")
+        with patch("core.messenger.Messenger", return_value=messenger_mock):
+            result = route_thread_reply(event, shared_dir)
 
-    def test_no_thread_ts_falls_through(self, routing_dir: Path) -> None:
-        """Messages without thread_ts use normal channel-based routing."""
+        assert result is True
+        messenger_mock.receive_external.assert_called_once_with(
+            content="Got it, looking into this now",
+            source="slack",
+            source_message_id="reply.ts",
+            external_user_id="U_HUMAN",
+            external_channel_id="C001",
+        )
+
+    def test_no_thread_ts_returns_false(self, routing_dir: Path) -> None:
         event = {
             "type": "message",
             "text": "hello world",
@@ -259,37 +268,58 @@ class TestWebhookThreadRouting:
             "channel": "C001",
             "ts": "msg.ts",
         }
-        assert event.get("thread_ts") is None
+        assert route_thread_reply(event, routing_dir / "shared") is False
 
-    def test_unknown_thread_ts_falls_through(self, routing_dir: Path) -> None:
-        """thread_ts not in notification_map falls through to channel routing."""
-        from core.notification.reply_routing import lookup_notification_mapping
+    def test_unknown_thread_ts_returns_false(self, routing_dir: Path) -> None:
+        event = {
+            "type": "message",
+            "text": "reply to unknown thread",
+            "user": "U_HUMAN",
+            "channel": "C001",
+            "ts": "reply.ts",
+            "thread_ts": "unknown.thread.ts",
+        }
+        assert route_thread_reply(event, routing_dir / "shared") is False
 
-        assert lookup_notification_mapping("unknown.thread.ts") is None
-
-
-# ── Socket handler thread_ts routing ─────────────────────
-
-
-class TestSocketThreadRouting:
-    def test_thread_reply_routes_to_originator(self, routing_dir: Path) -> None:
+    def test_empty_text_returns_false(self, routing_dir: Path) -> None:
         from core.notification.reply_routing import save_notification_mapping
 
         save_notification_mapping("parent.ts", "C001", "aoi")
 
         event = {
             "type": "message",
-            "text": "Acknowledged",
+            "text": "",
+            "user": "U_HUMAN",
+            "channel": "C001",
+            "ts": "reply.ts",
+            "thread_ts": "parent.ts",
+        }
+        assert route_thread_reply(event, routing_dir / "shared") is False
+
+    def test_sanitizes_text_before_delivery(self, routing_dir: Path) -> None:
+        from core.notification.reply_routing import save_notification_mapping
+
+        save_notification_mapping("parent.ts", "C001", "aoi")
+
+        event = {
+            "type": "message",
+            "text": "<@U0123BOT> *Acknowledged*",
             "user": "U_HUMAN",
             "channel": "C001",
             "ts": "reply.ts",
             "thread_ts": "parent.ts",
         }
 
+        shared_dir = routing_dir / "shared"
         messenger_mock = MagicMock()
-        with patch("server.slack_socket.Messenger", return_value=messenger_mock), \
-             patch("server.slack_socket.get_data_dir", return_value=routing_dir):
-            _verify_routing_via_thread(event, messenger_mock, "aoi")
+        with patch("core.messenger.Messenger", return_value=messenger_mock):
+            result = route_thread_reply(event, shared_dir)
+
+        assert result is True
+        call_kwargs = messenger_mock.receive_external.call_args[1]
+        assert "<@U0123BOT>" not in call_kwargs["content"]
+        assert "*" not in call_kwargs["content"]
+        assert "Acknowledged" in call_kwargs["content"]
 
 
 # ── Backward compatibility ───────────────────────────────
@@ -307,32 +337,3 @@ class TestBackwardCompat:
         }
         assert "thread_ts" not in event
         assert "subtype" not in event
-
-
-# ── Helpers ──────────────────────────────────────────────
-
-
-def _verify_routing_via_thread(
-    event: dict,
-    messenger_mock: MagicMock,
-    expected_anima: str,
-) -> None:
-    """Verify that receive_external is called with the right Anima target.
-
-    This tests the core logic: thread_ts lookup → sanitize → deliver.
-    """
-    from core.notification.reply_routing import (
-        lookup_notification_mapping,
-        sanitize_slack_reply,
-    )
-
-    thread_ts = event.get("thread_ts")
-    assert thread_ts is not None
-
-    mapping = lookup_notification_mapping(thread_ts)
-    assert mapping is not None
-    assert mapping["anima"] == expected_anima
-
-    sanitized = sanitize_slack_reply(event.get("text", ""))
-    assert sanitized
-    assert len(sanitized) <= 4000
