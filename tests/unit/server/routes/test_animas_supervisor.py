@@ -239,6 +239,7 @@ class TestListAnimasSupervisorField:
         data = resp.json()
         anima_item = data[0]
 
-        # All pre-existing fields must still be present
+        # 既存フィールドが維持されていることを確認する。
+        # 新規フィールド追加は許容するため、完全一致ではなく包含で検証する。
         expected_fields = {"name", "status", "bootstrapping", "pid", "uptime_sec", "appearance", "supervisor", "model"}
-        assert set(anima_item.keys()) == expected_fields
+        assert expected_fields.issubset(set(anima_item.keys()))

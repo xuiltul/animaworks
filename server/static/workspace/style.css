@@ -1414,7 +1414,8 @@ html, body {
   background: #dc2626;
 }
 
-.ws-conv-send.stop:hover {
+.ws-conv-send.stop:hover,
+.ws-conv-send.stop:active {
   filter: brightness(0.9);
 }
 
@@ -1422,7 +1423,8 @@ html, body {
   background: #d97706;
 }
 
-.ws-conv-send.interrupt:hover {
+.ws-conv-send.interrupt:hover,
+.ws-conv-send.interrupt:active {
   filter: brightness(0.9);
 }
 
@@ -1470,7 +1472,8 @@ html, body {
   padding: 0 2px;
 }
 
-.pending-queue-clear:hover {
+.pending-queue-clear:hover,
+.pending-queue-clear:active {
   color: #dc2626;
 }
 
@@ -1484,7 +1487,8 @@ html, body {
   min-width: 0;
 }
 
-.pending-queue-item:hover {
+.pending-queue-item:hover,
+.pending-queue-item:active {
   background: rgba(0, 0, 0, 0.05);
 }
 
@@ -1522,7 +1526,8 @@ html, body {
   opacity: 1;
 }
 
-.pending-queue-item-del:hover {
+.pending-queue-item-del:hover,
+.pending-queue-item-del:active {
   color: #dc2626;
 }
 
@@ -1556,7 +1561,8 @@ html, body {
   pointer-events: none;
 }
 
-.chat-queue-btn:hover:not(:disabled) {
+.chat-queue-btn:hover:not(:disabled),
+.chat-queue-btn:active:not(:disabled) {
   border-color: #2563eb;
   color: #2563eb;
 }
@@ -3112,7 +3118,8 @@ html, body {
   border-radius: 6px;
 }
 
-.org-itree-node:hover {
+.org-itree-node:hover,
+.org-itree-node:active {
   background: var(--aw-color-bg-hover, #f0f0f0);
 }
 

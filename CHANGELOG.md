@@ -7,6 +7,30 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-02-27
+
+### Added
+- expose permitted external tools as native MCP tools in Mode S
+
+### Fixed
+- harden media proxy with extracted secure module
+- harden parsing paths and align e2e expectations
+- switch chat controls to SVG and add desktop sidebar toggle
+- improve workspace chat tab stream indicators
+- auto-refresh chat view every 5 seconds
+- enrich cron job parsing with next and last run data
+- streamline memory tabs and support scheduler job fallbacks
+- load scheduler jobs from split API fields
+- tighten chat input box height on chat and workspace
+- reduce workspace chat action button sizes
+- harden log viewer path handling and polish UI behaviors
+- resolve markdown image paths and add attachment fallback
+- scale down images in chat bubbles rendered via markdown
+- voice TTS not switching when changing anima tab
+- resume active stream on reload regardless of process status
+- streaming stop button now scoped to current anima+thread
+
+
 ## [0.4.3] - 2026-02-27
 
 ### Added
@@ -333,7 +357,8 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/xuiltul/animaworks/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/xuiltul/animaworks/compare/v0.4.2...v0.4.3
 [0.4.0]: https://github.com/xuiltul/animaworks/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/xuiltul/animaworks/compare/v0.3.0...v0.3.1

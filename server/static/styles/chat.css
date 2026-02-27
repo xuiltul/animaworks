@@ -715,7 +715,8 @@
   padding: 0 2px;
 }
 
-.pending-queue-clear:hover {
+.pending-queue-clear:hover,
+.pending-queue-clear:active {
   color: var(--aw-color-error);
 }
 
@@ -729,7 +730,8 @@
   min-width: 0;
 }
 
-.pending-queue-item:hover {
+.pending-queue-item:hover,
+.pending-queue-item:active {
   background: rgba(0, 0, 0, 0.05);
 }
 
@@ -767,7 +769,8 @@
   opacity: 1;
 }
 
-.pending-queue-item-del:hover {
+.pending-queue-item-del:hover,
+.pending-queue-item-del:active {
   color: var(--aw-color-error);
 }
 
@@ -801,7 +804,8 @@
   pointer-events: none;
 }
 
-.chat-queue-btn:hover:not(:disabled) {
+.chat-queue-btn:hover:not(:disabled),
+.chat-queue-btn:active:not(:disabled) {
   border-color: var(--aw-color-accent);
   color: var(--aw-color-accent);
 }
@@ -817,7 +821,8 @@
   color: #fff;
 }
 
-.chat-send-btn.stop:hover:not(:disabled) {
+.chat-send-btn.stop:hover:not(:disabled),
+.chat-send-btn.stop:active:not(:disabled) {
   filter: brightness(0.9);
 }
 
@@ -827,7 +832,8 @@
   color: #fff;
 }
 
-.chat-send-btn.interrupt:hover:not(:disabled) {
+.chat-send-btn.interrupt:hover:not(:disabled),
+.chat-send-btn.interrupt:active:not(:disabled) {
   filter: brightness(0.9);
 }
 

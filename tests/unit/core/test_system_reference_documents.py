@@ -833,6 +833,7 @@ _EXPECTED_FILES = [
     "communication/sending-limits.md",
     "operations/background-tasks.md",
     "operations/heartbeat-cron-guide.md",
+    "operations/mode-s-auth-guide.md",
     "operations/project-setup.md",
     "operations/task-management.md",
     "operations/tool-usage-overview.md",
@@ -855,10 +856,11 @@ class TestTemplateFilesExist:
         assert full_path.exists(), f"Missing template: {rel_path}"
 
     def test_total_file_count(self):
-        """Exactly 18 .md files should exist in common_knowledge."""
+        """Markdown file count should match _EXPECTED_FILES."""
         md_files = list(_TEMPLATES_CK_DIR.rglob("*.md"))
-        assert len(md_files) == 18, (
-            f"Expected 18 .md files, found {len(md_files)}: "
+        expected_count = len(_EXPECTED_FILES)
+        assert len(md_files) == expected_count, (
+            f"Expected {expected_count} .md files, found {len(md_files)}: "
             f"{[str(f.relative_to(_TEMPLATES_CK_DIR)) for f in md_files]}"
         )
 

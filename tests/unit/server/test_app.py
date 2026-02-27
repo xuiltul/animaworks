@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -191,6 +192,9 @@ class TestLifespan:
              patch("core.org_sync.detect_orphan_animas"), \
              patch("server.app._reconcile_assets_at_startup", new_callable=AsyncMock):
             async with lifespan(mock_app):
+                # start_all はバックグラウンドタスクで起動されるため、
+                # 1ティック進めて実行機会を与える。
+                await asyncio.sleep(0)
                 mock_supervisor.start_all.assert_awaited_once_with(["alice"])
 
         mock_supervisor.shutdown_all.assert_awaited_once()
