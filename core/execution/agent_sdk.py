@@ -355,6 +355,49 @@ def _guard_glob(tool_input: dict[str, Any]) -> dict[str, Any] | None:
     return {**tool_input, "head_limit": _GLOB_DEFAULT_HEAD_LIMIT}
 
 
+async def _image_prompt_messages(
+    prompt: str,
+    images: list[dict[str, Any]],
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Yield a single SDK user message with image content blocks.
+
+    The Agent SDK ``query()`` accepts ``str | AsyncIterable[dict]``.
+    When images are present we build an Anthropic-format multimodal
+    content block list and wrap it in the SDK's message envelope.
+    """
+    content_blocks: list[dict[str, Any]] = []
+    for img in images:
+        content_blocks.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": img["media_type"],
+                "data": img["data"],
+            },
+        })
+    content_blocks.append({"type": "text", "text": prompt})
+    yield {
+        "type": "user",
+        "message": {"role": "user", "content": content_blocks},
+        "parent_tool_use_id": None,
+    }
+
+
+def _build_sdk_query_input(
+    prompt: str,
+    images: list[dict[str, Any]] | None,
+) -> str | AsyncGenerator[dict[str, Any], None]:
+    """Return the appropriate input for ``ClaudeSDKClient.query()``.
+
+    Text-only prompts are passed as plain strings.  When images are
+    present, an async generator of Anthropic-format message dicts is
+    returned.  Each call produces a fresh generator (they are single-use).
+    """
+    if images:
+        return _image_prompt_messages(prompt, images)
+    return prompt
+
+
 def _cleanup_tool_outputs(anima_dir: Path) -> None:
     """Remove temporary tool output files created during the session."""
     tool_output_dir = anima_dir / "shortterm" / "tool_outputs"
@@ -1133,6 +1176,7 @@ class AgentSDKExecutor(BaseExecutor):
         session_stats: dict[str, Any],
         tracker: ContextTracker | None,
         session_type: str = "chat",
+        images: list[dict[str, Any]] | None = None,
     ) -> "ResultMessage | None":
         """Run query + message loop for blocking (non-streaming) execution.
 
@@ -1153,7 +1197,7 @@ class AgentSDKExecutor(BaseExecutor):
 
         result_message: ResultMessage | None = None
 
-        await client.query(prompt)
+        await client.query(_build_sdk_query_input(prompt, images))
         async for message in client.receive_response():
             if self._check_interrupted():
                 logger.info("Agent SDK execute interrupted")
@@ -1225,11 +1269,6 @@ class AgentSDKExecutor(BaseExecutor):
         Returns ``ExecutionResult`` with the response text and the SDK
         ``ResultMessage`` (used for session chaining by AgentCore).
         """
-        if images:
-            logger.warning(
-                "Agent SDK (Mode S) does not support multimodal image input; "
-                "images will be ignored"
-            )
         from claude_agent_sdk import (
             ClaudeSDKClient,
             ClaudeSDKError,
@@ -1277,6 +1316,7 @@ class AgentSDKExecutor(BaseExecutor):
                 result_message = await self._process_blocking_messages(
                     client, prompt, response_text, pending_records,
                     session_stats, tracker, session_type,
+                    images=images,
                 )
             logger.debug("ClaudeSDKClient disconnected")
         except (ProcessError, ClaudeSDKError) as e:
@@ -1300,6 +1340,7 @@ class AgentSDKExecutor(BaseExecutor):
                         result_message = await self._process_blocking_messages(
                             client, prompt, response_text, pending_records,
                             session_stats, tracker, session_type,
+                            images=images,
                         )
                 except Exception as retry_exc:
                     logger.exception("Agent SDK execution error (fresh session retry)")
@@ -1364,11 +1405,6 @@ class AgentSDKExecutor(BaseExecutor):
             ``{"type": "tool_end", "tool_id": "...", "tool_name": "..."}``
             ``{"type": "done", "full_text": "...", "result_message": ...}``
         """
-        if images:
-            logger.warning(
-                "Agent SDK (Mode S) streaming does not support multimodal "
-                "image input; images will be ignored"
-            )
         from claude_agent_sdk import (
             AssistantMessage,
             ClaudeSDKClient,
@@ -1424,7 +1460,7 @@ class AgentSDKExecutor(BaseExecutor):
             nonlocal result_message, message_count
             got_stream_event = False
             _in_thinking_block = False
-            await client.query(prompt)
+            await client.query(_build_sdk_query_input(prompt, images))
             async for message in client.receive_messages():
                 if self._check_interrupted():
                     logger.info("Agent SDK streaming interrupted")
@@ -1477,6 +1513,10 @@ class AgentSDKExecutor(BaseExecutor):
                             yield {"type": "thinking_end"}
 
                 elif isinstance(message, AssistantMessage):
+                    if not got_stream_event:
+                        # Resume時に先頭へ混ざる履歴メッセージは
+                        # 今回ターンの出力ではないため無視する。
+                        continue
                     message_count += 1
                     for block in message.content:
                         if isinstance(block, TextBlock):
@@ -1495,6 +1535,9 @@ class AgentSDKExecutor(BaseExecutor):
                                 }
 
                 elif isinstance(message, UserMessage):
+                    if not got_stream_event:
+                        # 履歴側の ToolResult は現在ターンの集計対象外。
+                        continue
                     if isinstance(message.content, list):
                         for block in message.content:
                             if isinstance(block, ToolResultBlock):

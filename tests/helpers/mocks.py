@@ -195,8 +195,8 @@ class MockClaudeSDKClient:
     async def __aexit__(self, *args: Any) -> None:
         pass
 
-    async def query(self, prompt: str) -> None:
-        pass
+    async def query(self, prompt: Any) -> None:
+        self._last_query_prompt = prompt
 
     async def receive_response(self):
         for msg in self._messages:

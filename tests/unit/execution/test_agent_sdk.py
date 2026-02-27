@@ -392,6 +392,113 @@ class TestAgentSDKExecutorStreaming:
             )
 
 
+# ── Image input (multimodal) ──────────────────────────────────
+
+
+class TestAgentSDKImageInput:
+    """Mode S image input via _build_sdk_query_input / _image_prompt_messages."""
+
+    def _make_executor(self, model_config, anima_dir, **kwargs):
+        with patch_agent_sdk():
+            from core.execution.agent_sdk import AgentSDKExecutor
+            return AgentSDKExecutor(
+                model_config=model_config,
+                anima_dir=anima_dir,
+                **kwargs,
+            )
+
+    async def test_build_sdk_query_input_text_only(self, model_config, anima_dir):
+        """Text-only prompt returns a plain string."""
+        with patch_agent_sdk():
+            from core.execution.agent_sdk import _build_sdk_query_input
+            result = _build_sdk_query_input("hello", None)
+            assert isinstance(result, str)
+            assert result == "hello"
+
+    async def test_build_sdk_query_input_with_images(self, model_config, anima_dir):
+        """Images present → returns an async generator with content blocks."""
+        with patch_agent_sdk():
+            from core.execution.agent_sdk import _build_sdk_query_input
+            images = [{"media_type": "image/jpeg", "data": "dGVzdA=="}]
+            result = _build_sdk_query_input("describe this", images)
+            assert not isinstance(result, str)
+
+            # Consume the async generator
+            messages = []
+            async for msg in result:
+                messages.append(msg)
+
+            assert len(messages) == 1
+            msg = messages[0]
+            assert msg["type"] == "user"
+            content = msg["message"]["content"]
+            assert len(content) == 2
+            assert content[0]["type"] == "image"
+            assert content[0]["source"]["media_type"] == "image/jpeg"
+            assert content[0]["source"]["data"] == "dGVzdA=="
+            assert content[1]["type"] == "text"
+            assert content[1]["text"] == "describe this"
+
+    async def test_build_sdk_query_input_multiple_images(self, model_config, anima_dir):
+        """Multiple images produce multiple image blocks before the text block."""
+        with patch_agent_sdk():
+            from core.execution.agent_sdk import _build_sdk_query_input
+            images = [
+                {"media_type": "image/png", "data": "aW1nMQ=="},
+                {"media_type": "image/jpeg", "data": "aW1nMg=="},
+            ]
+            result = _build_sdk_query_input("compare these", images)
+            messages = []
+            async for msg in result:
+                messages.append(msg)
+
+            content = messages[0]["message"]["content"]
+            assert len(content) == 3
+            assert content[0]["type"] == "image"
+            assert content[1]["type"] == "image"
+            assert content[2]["type"] == "text"
+
+    async def test_execute_with_images_passes_to_query(self, model_config, anima_dir):
+        """execute() with images should build multimodal prompt (no warning log)."""
+        with patch_agent_sdk(response_text="I see a cat"):
+            from core.execution.agent_sdk import AgentSDKExecutor
+            executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+            images = [{"media_type": "image/jpeg", "data": "dGVzdA=="}]
+            result = await executor.execute("What is this?", system_prompt="sys", images=images)
+            assert "I see a cat" in result.text
+
+    async def test_streaming_with_images_passes_to_query(self, model_config, anima_dir):
+        """execute_streaming() with images should build multimodal prompt."""
+        from core.prompt.context import ContextTracker
+        tracker = ContextTracker(model="claude-sonnet-4-6")
+
+        with patch_agent_sdk_streaming(text_deltas=["I see ", "a cat"]):
+            from core.execution.agent_sdk import AgentSDKExecutor
+            executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+            images = [{"media_type": "image/jpeg", "data": "dGVzdA=="}]
+
+            events = []
+            async for event in executor.execute_streaming(
+                system_prompt="sys",
+                prompt="What is this?",
+                tracker=tracker,
+                images=images,
+            ):
+                events.append(event)
+
+            text_events = [e for e in events if e["type"] == "text_delta"]
+            assert len(text_events) >= 2
+            done_events = [e for e in events if e["type"] == "done"]
+            assert len(done_events) == 1
+
+    async def test_build_sdk_query_input_empty_images(self, model_config, anima_dir):
+        """Empty images list is treated as text-only."""
+        with patch_agent_sdk():
+            from core.execution.agent_sdk import _build_sdk_query_input
+            result = _build_sdk_query_input("hello", [])
+            assert isinstance(result, str)
+
+
 # ── ExecutionResult.unconfirmed_sends ────────────────────
 
 
