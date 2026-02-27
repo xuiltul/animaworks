@@ -724,7 +724,7 @@
   background: var(--aw-color-bg-primary);
   transition: border-color 0.15s;
   overflow: visible;
-  padding: 6px;
+  padding: 2px 4px;
 }
 
 .chat-input-wrap:focus-within {
@@ -737,7 +737,7 @@
 
 .chat-input {
   width: 100%;
-  padding: 10px 14px;
+  padding: 2px 6px;
   border: none;
   background: transparent;
   font-size: 0.95rem;
@@ -745,7 +745,7 @@
   outline: none;
   resize: none;
   overflow-y: auto;
-  min-height: 84px;
+  min-height: 64px;
   max-height: 260px;
   line-height: 1.5;
 }
@@ -756,9 +756,9 @@
 
 .chat-input-actions {
   display: grid;
-  grid-template-columns: repeat(2, 34px);
-  grid-auto-rows: 34px;
-  gap: 8px;
+  grid-template-columns: repeat(2, 28px);
+  grid-auto-rows: 28px;
+  gap: 6px;
   justify-content: center;
   align-content: center;
   padding: 0;
@@ -771,21 +771,21 @@
   justify-content: center;
   gap: 0;
   margin-right: 0;
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .chat-input-actions .voice-mic-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-width: 1px;
 }
 
 .chat-send-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -794,7 +794,7 @@
   color: var(--aw-color-bg-primary);
   border: none;
   border-radius: 50%;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
@@ -811,8 +811,8 @@
 }
 
 .chat-send-icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   display: block;
   stroke: currentColor;
   stroke-width: 2.2;
@@ -952,8 +952,8 @@
 
 /* Queue add button */
 .chat-queue-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -969,8 +969,8 @@
 }
 
 .chat-queue-icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   display: block;
   stroke: currentColor;
   stroke-width: 2.2;
@@ -1265,12 +1265,12 @@
 }
 
 .chat-attach-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--aw-color-border, #ddd);
   border-radius: 50%;
   background: transparent;
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--aw-color-text-muted);
   cursor: pointer;

@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
@@ -719,6 +720,8 @@ class ConversationMemory:
         import litellm
 
         model = self.model_config.fallback_model or self.model_config.model
+        kwargs: dict[str, Any] = {}
+        self._apply_provider_kwargs(model, kwargs)
         response = cast(Any, await litellm.acompletion(
             model=model,
             messages=[
@@ -726,8 +729,30 @@ class ConversationMemory:
                 {"role": "user", "content": user_content},
             ],
             max_tokens=max_tokens,
+            **kwargs,
         ))
         return response.choices[0].message.content or ""
+
+    def _apply_provider_kwargs(self, model: str, kwargs: dict[str, Any]) -> None:
+        """Populate *kwargs* with provider-specific credentials."""
+        extra = self.model_config.extra_keys
+
+        if model.startswith("azure/"):
+            api_version = extra.get("api_version") or os.environ.get("AZURE_API_VERSION")
+            if api_version:
+                kwargs["api_version"] = api_version
+
+        elif model.startswith("vertex_ai/"):
+            for key in ("vertex_project", "vertex_location", "vertex_credentials"):
+                val = extra.get(key) or os.environ.get(key.upper())
+                if val:
+                    kwargs[key] = val
+
+        elif model.startswith("bedrock/"):
+            for key in ("aws_access_key_id", "aws_secret_access_key", "aws_region_name"):
+                val = extra.get(key) or os.environ.get(key.upper())
+                if val:
+                    kwargs[key] = val
 
     async def _call_compression_llm(
         self, old_summary: str, new_turns: str
