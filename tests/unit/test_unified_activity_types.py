@@ -98,8 +98,9 @@ class TestSharedActivityTypesModule:
         assert '"📌"' in content, "getIcon fallback should use 📌 emoji"
 
     def test_type_defaults_defined(self) -> None:
+        """TYPE_DEFAULT_KEYS holds i18n keys for type-based default summaries."""
         content = _SHARED_MODULE.read_text(encoding="utf-8")
-        assert "TYPE_DEFAULTS" in content
+        assert "TYPE_DEFAULT_KEYS" in content
 
 
 # ── Consumer File Tests ──────────────────────────────────
@@ -199,9 +200,9 @@ class TestBackendActivityLogSummary:
 
     def test_heartbeat_start_has_summary(self) -> None:
         content = self._ANIMA_PY.read_text(encoding="utf-8")
-        pattern = r'activity\.log\("heartbeat_start",\s*summary="定期巡回開始"\)'
+        pattern = r'activity\.log\("heartbeat_start",\s*summary=t\("anima\.heartbeat_start"\)\)'
         assert re.search(pattern, content), (
-            "heartbeat_start activity.log() should include summary='定期巡回開始'"
+            "heartbeat_start activity.log() should include summary=t('anima.heartbeat_start')"
         )
 
     def test_message_received_has_summary(self) -> None:

@@ -93,8 +93,9 @@ class AnthropicFallbackExecutor(BaseExecutor):
         tool_registry: list[str],
         memory: MemoryManager,
         personal_tools: dict[str, str] | None = None,
+        interrupt_event: asyncio.Event | None = None,
     ) -> None:
-        super().__init__(model_config, anima_dir)
+        super().__init__(model_config, anima_dir, interrupt_event=interrupt_event)
         self._tool_handler = tool_handler
         self._tool_registry = tool_registry
         self._memory = memory
@@ -185,6 +186,10 @@ class AnthropicFallbackExecutor(BaseExecutor):
         )
 
         for iteration in range(max_iterations):
+            if self._check_interrupted():
+                logger.info("Anthropic execute interrupted at iteration=%d", iteration)
+                return ExecutionResult(text="[Session interrupted by user]")
+
             is_final_iteration = (
                 max_iterations > 1 and iteration == max_iterations - 1
             )
@@ -394,6 +399,12 @@ class AnthropicFallbackExecutor(BaseExecutor):
             all_response_text, executor_name="AnthropicFallback",
         ):
             for iteration in range(_MAX_ITERATIONS):
+                if self._check_interrupted():
+                    logger.info("Anthropic streaming interrupted at iteration=%d", iteration)
+                    yield {"type": "text_delta", "text": "[Session interrupted by user]"}
+                    yield {"type": "done", "full_text": "[Session interrupted by user]", "result_message": None}
+                    return
+
                 is_final_iteration = (
                     _MAX_ITERATIONS > 1 and iteration == _MAX_ITERATIONS - 1
                 )

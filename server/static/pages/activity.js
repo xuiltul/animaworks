@@ -2,6 +2,7 @@
 import { api } from "../modules/api.js";
 import { escapeHtml, smartTimestamp, renderMarkdown } from "../modules/state.js";
 import { getIcon, getDisplaySummary, TYPE_CATEGORIES } from "../shared/activity-types.js";
+import { t } from "/shared/i18n.js";
 
 let _refreshInterval = null;
 let _groups = [];
@@ -41,19 +42,19 @@ export function render(container) {
   container.innerHTML = `
     <div class="activity-page">
       <div class="activity-header">
-        <h2>アクティビティタイムライン</h2>
+        <h2>${t("activity.page_title")}</h2>
         <span class="activity-count" id="activityCount"></span>
       </div>
 
       <div class="activity-filters">
         <select class="activity-anima-select" id="activityAnimaSelect">
-          <option value="">全Anima</option>
+          <option value="">${t("activity.all_animas")}</option>
         </select>
         <div id="activityTypeChips" style="display:flex; gap:0.35rem; flex-wrap:wrap;"></div>
       </div>
 
       <div class="activity-list" id="activityList">
-        <div class="loading-placeholder">読み込み中...</div>
+        <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
 
       <div id="activityLoadMoreWrap"></div>
@@ -109,7 +110,7 @@ function _buildTypeChips() {
     const chip = TYPE_CATEGORIES[i];
     const btn = document.createElement("button");
     btn.className = "activity-type-chip" + (i === 0 ? " active" : "");
-    btn.textContent = chip.label;
+    btn.textContent = chip.i18nKey ? t(chip.i18nKey) : chip.label;
     btn.dataset.index = i;
 
     btn.addEventListener("click", () => {
@@ -186,7 +187,7 @@ async function _loadEvents(reset) {
     _renderLoadMore();
   } catch (err) {
     if (list) {
-      list.innerHTML = `<div class="activity-empty">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+      list.innerHTML = `<div class="activity-empty">${t("activity.load_failed")}: ${escapeHtml(err.message)}</div>`;
     }
   }
 }
@@ -196,7 +197,7 @@ async function _loadEvents(reset) {
 function _updateCount() {
   const el = document.getElementById("activityCount");
   if (el) {
-    el.textContent = `[${_groups.length}グループ / ${_totalEvents}件]`;
+    el.textContent = t("activity.count_display", { groups: _groups.length, events: _totalEvents });
   }
 }
 
@@ -205,7 +206,7 @@ function _renderList() {
   if (!list) return;
 
   if (_groups.length === 0) {
-    list.innerHTML = '<div class="activity-empty">アクティビティはまだありません</div>';
+    list.innerHTML = `<div class="activity-empty">${t("activity.empty")}</div>`;
     return;
   }
 
@@ -266,15 +267,15 @@ function _createGroupHeader(grp) {
 
   let label = "";
   if (grp.type === "heartbeat") label = `Heartbeat ${timeRange}`;
-  else if (grp.type === "chat") label = `ユーザー対話 ${timeRange}`;
+  else if (grp.type === "chat") label = `${t("activity.label_user_chat")} ${timeRange}`;
   else if (grp.type === "dm") label = `DM ${grp.summary || ""} ${timeRange}`;
   else if (grp.type === "cron") label = `Cron ${grp.summary || ""} ${timeRange}`;
   else if (grp.type === "task") label = `Task ${grp.summary || ""} ${timeRange}`;
-  else if (grp.type === "inbox") label = `Inbox処理 ${timeRange}`;
-  else if (grp.type === "task_exec") label = `タスク実行 ${grp.summary || ""} ${timeRange}`;
+  else if (grp.type === "inbox") label = `${t("activity.label_inbox")} ${timeRange}`;
+  else if (grp.type === "task_exec") label = `${t("activity.label_task_exec")} ${grp.summary || ""} ${timeRange}`;
   else label = `${grp.type} ${timeRange}`;
 
-  const openBadge = grp.is_open ? '<span class="activity-group-badge-open">(進行中)</span>' : "";
+  const openBadge = grp.is_open ? `<span class="activity-group-badge-open">${t("activity.badge_ongoing")}</span>` : "";
 
   header.innerHTML =
     `<span class="activity-group-chevron">${chevron}</span>` +
@@ -282,7 +283,7 @@ function _createGroupHeader(grp) {
     `<span class="activity-row-anima">${escapeHtml(anima)}</span>` +
     `<span class="activity-group-label">${escapeHtml(label)}</span>` +
     openBadge +
-    `<span class="activity-group-count">(${count}件)</span>`;
+    `<span class="activity-group-count">${t("activity.count_items", { count })}</span>`;
 
   header.addEventListener("click", () => {
     if (_expandedGroups.has(grp.id)) {
@@ -314,7 +315,7 @@ function _createGroupEvents(grp) {
   if (events.length > maxInitial) {
     const moreBtn = document.createElement("div");
     moreBtn.className = "activity-group-show-more";
-    moreBtn.textContent = `さらに ${events.length - maxInitial} 件を表示`;
+    moreBtn.textContent = t("activity.show_more", { count: events.length - maxInitial });
     moreBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       moreBtn.remove();
@@ -367,12 +368,12 @@ function _renderLoadMore() {
   if (!wrap) return;
 
   if (_hasMore) {
-    wrap.innerHTML = `<button class="activity-load-more" id="activityLoadMoreBtn">もっと読み込む (${_groups.length}/${_totalGroups}グループ)</button>`;
+    wrap.innerHTML = `<button class="activity-load-more" id="activityLoadMoreBtn">${t("activity.load_more_btn", { current: _groups.length, total: _totalGroups })}</button>`;
     const btn = document.getElementById("activityLoadMoreBtn");
     if (btn) {
       btn.addEventListener("click", () => {
         btn.disabled = true;
-        btn.textContent = "読み込み中...";
+        btn.textContent = t("common.loading");
         _loadEvents(false);
       });
     }

@@ -223,8 +223,12 @@ class MemoryIndexer:
             logger.warning("Directory not found: %s", directory)
             return 0
 
+        if memory_type in ("skills", "common_skills"):
+            pattern = "*/SKILL.md"
+        else:
+            pattern = "*.md"
         total_chunks = 0
-        for md_file in sorted(directory.glob("*.md")):
+        for md_file in sorted(directory.glob(pattern)):
             total_chunks += self.index_file(md_file, memory_type, force=force)
 
         logger.info(

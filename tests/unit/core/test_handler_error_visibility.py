@@ -70,10 +70,10 @@ class TestResolveRecipientError:
     @patch("core.config.models.load_config")
     @patch("core.paths.get_animas_dir")
     @patch("core.outbound.resolve_recipient")
-    def test_resolve_recipient_value_error_returns_unknown_recipient(
+    def test_resolve_recipient_value_error_returns_fallback_guidance(
         self, mock_resolve, mock_animas_dir, mock_config, tmp_path
     ):
-        """ValueError from resolve_recipient should return UnknownRecipient error."""
+        """ValueError from resolve_recipient should return fallback guidance (not hard error)."""
         mock_animas_dir.return_value = tmp_path / "animas"
         (tmp_path / "animas").mkdir()
         mock_config.return_value = MagicMock()
@@ -82,9 +82,9 @@ class TestResolveRecipientError:
         handler = self._make_handler(tmp_path)
         result = handler._handle_send_message({"to": "ghost", "content": "hello", "intent": "report"})
 
-        parsed = json.loads(result)
-        assert parsed["status"] == "error"
-        assert parsed["error_type"] == "UnknownRecipient"
+        # Should return plain guidance text, not a JSON error
+        assert "ghost" in result
+        assert "send_message で送信できません" in result
 
 
 # ── Change 3: send_external empty channel early return ──

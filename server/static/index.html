@@ -7,10 +7,10 @@
   <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg">
   <link rel="stylesheet" href="/styles/tokens.css">
   <link rel="stylesheet" href="/styles/base.css">
-  <link rel="stylesheet" href="/styles/layout.css">
+  <link rel="stylesheet" href="/styles/layout.css?v=20260227b">
   <link rel="stylesheet" href="/styles/sidebar-nav.css">
   <link rel="stylesheet" href="/styles/dashboard.css">
-  <link rel="stylesheet" href="/styles/chat.css">
+  <link rel="stylesheet" href="/styles/chat.css?v=20260227b">
   <link rel="stylesheet" href="/styles/sidebar.css">
   <link rel="stylesheet" href="/styles/activity.css">
   <link rel="stylesheet" href="/styles/memory.css">
@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="/styles/avatar.css">
   <link rel="stylesheet" href="/styles/assets.css">
   <link rel="stylesheet" href="/styles/board.css">
-  <link rel="stylesheet" href="/styles/responsive.css">
+  <link rel="stylesheet" href="/styles/responsive.css?v=20260227b">
   <link rel="stylesheet" href="/styles/voice.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -29,16 +29,16 @@
   </div>
 
   <header class="app-header">
-    <button class="hamburger-btn" id="hamburgerBtn" aria-label="メニューを開く">&#x2630;</button>
+    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Open menu" data-i18n-aria-label="common.aria_menu">&#x2630;</button>
     <h1 class="app-title">AnimaWorks</h1>
     <div class="header-spacer"></div>
     <div class="user-info" id="userInfo">
       <span class="user-label" id="currentUserLabel"></span>
-      <button class="btn-logout" id="logoutBtn">ログアウト</button>
+      <button class="btn-logout" id="logoutBtn" data-i18n="ws.logout">Log out</button>
     </div>
     <div class="system-status" id="systemStatus">
       <span class="status-dot status-idle"></span>
-      <span id="systemStatusText">接続中...</span>
+      <span id="systemStatusText" data-i18n="status.connecting">接続中...</span>
     </div>
   </header>
 
@@ -52,60 +52,60 @@
         <li><a href="#/chat" class="nav-item active" data-route="/chat">
           <span class="nav-emoji">&#x1F4AC;</span>
           <i data-lucide="message-circle" class="nav-lucide"></i>
-          <span class="nav-label">チャット</span></a></li>
+          <span class="nav-label" data-i18n="nav.chat">Chat</span></a></li>
         <li><a href="#/board" class="nav-item" data-route="/board">
           <span class="nav-emoji">&#x1F4CB;</span>
           <i data-lucide="clipboard-list" class="nav-lucide"></i>
-          <span class="nav-label">ボード</span></a></li>
+          <span class="nav-label" data-i18n="nav.board">Board</span></a></li>
         <li><a href="#/" class="nav-item" data-route="/">
           <span class="nav-emoji">&#x1F9E9;</span>
           <i data-lucide="layout-dashboard" class="nav-lucide"></i>
-          <span class="nav-label">ダッシュボード</span></a></li>
+          <span class="nav-label" data-i18n="nav.dashboard">Dashboard</span></a></li>
         <li><a href="#/activity" class="nav-item" data-route="/activity">
           <span class="nav-emoji">&#x1F4CA;</span>
           <i data-lucide="activity" class="nav-lucide"></i>
-          <span class="nav-label">アクティビティ</span></a></li>
+          <span class="nav-label" data-i18n="nav.activity">Activity</span></a></li>
         <li><a href="#/setup" class="nav-item" data-route="/setup">
           <span class="nav-emoji">&#x2699;</span>
           <i data-lucide="settings" class="nav-lucide"></i>
-          <span class="nav-label">セットアップ</span></a></li>
+          <span class="nav-label" data-i18n="nav.setup">Setup</span></a></li>
         <li><a href="#/users" class="nav-item" data-route="/users">
           <span class="nav-emoji">&#x1F465;</span>
           <i data-lucide="users" class="nav-lucide"></i>
-          <span class="nav-label">ユーザー</span></a></li>
+          <span class="nav-label" data-i18n="nav.users">Users</span></a></li>
         <li><a href="#/animas" class="nav-item" data-route="/animas">
           <span class="nav-emoji">&#x1F338;</span>
           <i data-lucide="bot" class="nav-lucide"></i>
-          <span class="nav-label">Anima管理</span></a></li>
+          <span class="nav-label" data-i18n="nav.animas">Anima Management</span></a></li>
         <li><a href="#/processes" class="nav-item" data-route="/processes">
           <span class="nav-emoji">&#x1F4BB;</span>
           <i data-lucide="cpu" class="nav-lucide"></i>
-          <span class="nav-label">プロセス監視</span></a></li>
+          <span class="nav-label" data-i18n="nav.processes">Process Monitoring</span></a></li>
         <li><a href="#/server" class="nav-item" data-route="/server">
           <span class="nav-emoji">&#x1F310;</span>
           <i data-lucide="globe" class="nav-lucide"></i>
-          <span class="nav-label">サーバー通信</span></a></li>
+          <span class="nav-label" data-i18n="nav.server">Server</span></a></li>
         <li><a href="#/memory" class="nav-item" data-route="/memory">
           <span class="nav-emoji">&#x1F4DA;</span>
           <i data-lucide="brain" class="nav-lucide"></i>
-          <span class="nav-label">記憶ブラウザ</span></a></li>
+          <span class="nav-label" data-i18n="nav.memory">Memory Browser</span></a></li>
         <li><a href="#/logs" class="nav-item" data-route="/logs">
           <span class="nav-emoji">&#x1F4C4;</span>
           <i data-lucide="file-text" class="nav-lucide"></i>
-          <span class="nav-label">ログ</span></a></li>
+          <span class="nav-label" data-i18n="nav.logs">Logs</span></a></li>
         <li><a href="#/assets" class="nav-item" data-route="/assets">
           <span class="nav-emoji">&#x1F3A8;</span>
           <i data-lucide="palette" class="nav-lucide"></i>
-          <span class="nav-label">アセット</span></a></li>
+          <span class="nav-label" data-i18n="nav.assets">Assets</span></a></li>
         <li><a href="#/tool-prompts" class="nav-item" data-route="/tool-prompts">
           <span class="nav-emoji">&#x1F4DD;</span>
           <i data-lucide="pencil-ruler" class="nav-lucide"></i>
-          <span class="nav-label">プロンプト設定</span></a></li>
+          <span class="nav-label" data-i18n="nav.tool_prompts">Prompt Settings</span></a></li>
         <li class="nav-divider"></li>
         <li><a href="/workspace/" class="nav-item nav-external" target="_blank">
           <span class="nav-emoji">&#x1F3AE;</span>
           <i data-lucide="building-2" class="nav-lucide"></i>
-          <span class="nav-label">Workspace &#x2197;</span></a></li>
+          <span class="nav-label" data-i18n="nav.workspace">Workspace &#x2197;</span></a></li>
       </ul>
       <div class="nav-divider"></div>
       <div class="theme-toggle" id="themeToggle">
@@ -130,6 +130,6 @@
       if (window.lucide) lucide.createIcons();
     });
   </script>
-  <script type="module" src="/modules/app.js?v=20260219a"></script>
+  <script type="module" src="/modules/app.js?v=20260227b"></script>
 </body>
 </html>

@@ -496,6 +496,57 @@ def _cache_subordinate_paths(
     return sub_activity_dirs, sub_mgmt_files
 
 
+def _intercept_task_to_pending(
+    anima_dir: Path,
+    tool_input: dict[str, Any],
+    tool_use_id: str | None,
+) -> str:
+    """Convert a Task tool call into a pending LLM task JSON.
+
+    Writes a task descriptor to ``state/pending/`` so that
+    ``PendingTaskExecutor`` picks it up and runs it as an independent
+    minimal-context LLM session.  Returns the generated task_id.
+    """
+    import uuid as _uuid
+    from datetime import timezone as _tz
+
+    task_id = _uuid.uuid4().hex[:12]
+    description = tool_input.get("description", "Background task")
+    prompt = tool_input.get("prompt", description)
+
+    task_desc = {
+        "task_type": "llm",
+        "task_id": task_id,
+        "title": description,
+        "description": prompt,
+        "context": "",
+        "acceptance_criteria": [],
+        "constraints": [],
+        "file_paths": [],
+        "submitted_by": "self_task_intercept",
+        "submitted_at": datetime.now(_tz.utc).isoformat(),
+    }
+
+    pending_dir = anima_dir / "state" / "pending"
+    pending_dir.mkdir(parents=True, exist_ok=True)
+    task_path = pending_dir / f"{task_id}.json"
+    task_path.write_text(
+        json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    _log_tool_use(
+        anima_dir, "Task", tool_input, tool_use_id=tool_use_id,
+        blocked=False,
+    )
+
+    logger.info(
+        "Task tool intercepted → pending LLM task: id=%s title=%s",
+        task_id, description,
+    )
+    return task_id
+
+
 def _build_pre_tool_hook(
     anima_dir: Path,
     *,
@@ -503,6 +554,7 @@ def _build_pre_tool_hook(
     context_window: int = 200_000,
     session_stats: dict[str, Any] | None = None,
     superuser: bool = False,
+    on_task_intercepted: Callable[[], None] | None = None,
 ) -> Callable:
     """Build a PreToolUse hook with security checks, output guards, and tool logging.
 
@@ -522,6 +574,7 @@ def _build_pre_tool_hook(
 
     # Cache subordinate paths once at hook build time
     _sub_activity_dirs, _sub_mgmt_files = _cache_subordinate_paths(anima_dir)
+    intercepted_task_ids: set[str] = set()
 
     async def _pre_tool_hook(
         input_data: HookInput,
@@ -557,6 +610,54 @@ def _build_pre_tool_hook(
                         f"context_observation: estimated {estimated_tokens} tokens, "
                         f"remaining {remaining} — SDK managing"
                     ),
+                )
+
+        # Task tool intercept → pending LLM task
+        if tool_name == "Task":
+            task_id = _intercept_task_to_pending(
+                anima_dir, tool_input, tool_use_id,
+            )
+            intercepted_task_ids.add(task_id)
+            if on_task_intercepted is not None:
+                try:
+                    on_task_intercepted()
+                except Exception:
+                    logger.debug("on_task_intercepted callback failed", exc_info=True)
+            return SyncHookJSONOutput(
+                hookSpecificOutput=PreToolUseHookSpecificOutput(
+                    hookEventName="PreToolUse",
+                    permissionDecision="deny",
+                    permissionDecisionReason=(
+                        f"INTERCEPT_OK: Task accepted (task_id: {task_id}). "
+                        f"This task was redirected to state/pending and will run in "
+                        f"your background task executor shortly. "
+                        f"Do not call TaskOutput for this task_id in this session. "
+                        f"Continue the conversation now."
+                    ),
+                )
+            )
+
+        # TaskOutput for intercepted Task is not backed by SDK task IDs.
+        if tool_name == "TaskOutput":
+            task_id = str(tool_input.get("task_id", "")).strip()
+            if task_id and task_id in intercepted_task_ids:
+                _log_tool_use(
+                    anima_dir,
+                    "TaskOutput",
+                    tool_input,
+                    tool_use_id=tool_use_id,
+                    blocked=False,
+                )
+                return SyncHookJSONOutput(
+                    hookSpecificOutput=PreToolUseHookSpecificOutput(
+                        hookEventName="PreToolUse",
+                        permissionDecision="deny",
+                        permissionDecisionReason=(
+                            f"INTERCEPT_OK: task_id {task_id} is managed by "
+                            f"PendingTaskExecutor (not SDK TaskOutput). "
+                            f"Treat this as expected and continue."
+                        ),
+                    )
                 )
 
         # Write / Edit: check file path
@@ -798,8 +899,9 @@ class AgentSDKExecutor(BaseExecutor):
         anima_dir: Path,
         tool_registry: list[str] | None = None,
         personal_tools: dict[str, str] | None = None,
+        interrupt_event: asyncio.Event | None = None,
     ) -> None:
-        super().__init__(model_config, anima_dir)
+        super().__init__(model_config, anima_dir, interrupt_event=interrupt_event)
         self._tool_registry = tool_registry or []
         self._personal_tools = personal_tools or {}
 
@@ -817,14 +919,17 @@ class AgentSDKExecutor(BaseExecutor):
     def _build_env(self) -> dict[str, str]:
         """Build env dict for the Claude Code child process.
 
-        Mode S does NOT pass ``ANTHROPIC_API_KEY`` so that the Claude Code
-        subprocess uses its own subscription authentication (Max plan etc.)
-        instead of consuming API credits.
+        Authentication mode is determined by ``mode_s_auth`` (per-Anima
+        setting from status.json / anima_defaults):
 
-        Sets ``ANIMAWORKS_ANIMA_DIR`` so that ``animaworks-tool`` can
-        discover personal tools in the anima's ``tools/`` directory.
-        ``ANIMAWORKS_PROJECT_DIR`` is propagated so tools can locate
-        ``main.py``.
+        * ``"api"`` — credential has ``api_key`` →
+          ``ANTHROPIC_API_KEY`` is set to that key.
+        * ``"bedrock"`` — credential ``keys`` contain ``aws_access_key_id``
+          → ``CLAUDE_CODE_USE_BEDROCK=1`` plus AWS env vars.
+        * ``"vertex"`` — credential ``keys`` contain ``vertex_project`` →
+          ``CLAUDE_CODE_USE_VERTEX=1`` plus GCP env vars.
+        * ``"max"`` / ``None`` (default) — subscription auth →
+          ``ANTHROPIC_API_KEY=""`` (Max plan).
         """
         from core.paths import PROJECT_DIR
 
@@ -833,13 +938,55 @@ class AgentSDKExecutor(BaseExecutor):
             "ANIMAWORKS_PROJECT_DIR": str(PROJECT_DIR),
             "PATH": f"{self._anima_dir}:{os.environ.get('PATH', '/usr/bin:/bin')}",
             "CLAUDE_CODE_DISABLE_SKILL_IMPROVEMENT": "true",
-            # Block API key leaking from parent (load_dotenv) — force Max plan auth.
-            "ANTHROPIC_API_KEY": "",
-            # Prevent nested-session detection when animaworks itself runs
-            # inside Claude Code (the bundled CLI checks this variable).
             "CLAUDECODE": "",
         }
-        # Only pass ANTHROPIC_BASE_URL if a custom endpoint is configured.
+
+        auth = self._model_config.mode_s_auth
+        extra = self._model_config.extra_keys
+        api_key = self._resolve_api_key()
+
+        if auth == "api":
+            if api_key:
+                env["ANTHROPIC_API_KEY"] = api_key
+                logger.info("Mode S auth: API direct (mode_s_auth=api)")
+            else:
+                logger.warning(
+                    "Mode S auth: mode_s_auth=api but no api_key found; "
+                    "falling back to Max plan"
+                )
+                env["ANTHROPIC_API_KEY"] = ""
+        elif auth == "bedrock":
+            env["ANTHROPIC_API_KEY"] = ""
+            env["CLAUDE_CODE_USE_BEDROCK"] = "1"
+            for env_key, extra_key in (
+                ("AWS_ACCESS_KEY_ID", "aws_access_key_id"),
+                ("AWS_SECRET_ACCESS_KEY", "aws_secret_access_key"),
+                ("AWS_SESSION_TOKEN", "aws_session_token"),
+                ("AWS_REGION", "aws_region_name"),
+                ("AWS_PROFILE", "aws_profile"),
+            ):
+                val = extra.get(extra_key) or os.environ.get(env_key)
+                if val:
+                    env[env_key] = val
+            logger.info("Mode S auth: Bedrock (mode_s_auth=bedrock)")
+        elif auth == "vertex":
+            env["ANTHROPIC_API_KEY"] = ""
+            env["CLAUDE_CODE_USE_VERTEX"] = "1"
+            for env_key, extra_key in (
+                ("CLOUD_ML_PROJECT_ID", "vertex_project"),
+                ("CLOUD_ML_REGION", "vertex_location"),
+                ("GOOGLE_APPLICATION_CREDENTIALS", "vertex_credentials"),
+            ):
+                val = extra.get(extra_key) or os.environ.get(env_key)
+                if val:
+                    env[env_key] = val
+            logger.info("Mode S auth: Vertex AI (mode_s_auth=vertex)")
+        else:
+            # Default: Max plan (subscription auth).  Block any API key
+            # that might leak from the parent process or anima_defaults.
+            env["ANTHROPIC_API_KEY"] = ""
+            logger.info("Mode S auth: Max plan (mode_s_auth=%s)", auth)
+
         if self._model_config.api_base_url:
             env["ANTHROPIC_BASE_URL"] = self._model_config.api_base_url
         return env
@@ -1008,6 +1155,11 @@ class AgentSDKExecutor(BaseExecutor):
 
         await client.query(prompt)
         async for message in client.receive_response():
+            if self._check_interrupted():
+                logger.info("Agent SDK execute interrupted")
+                response_text.append("[Session interrupted by user]")
+                return result_message
+
             if isinstance(message, ResultMessage):
                 result_message = message
                 if message.session_id:
@@ -1274,6 +1426,11 @@ class AgentSDKExecutor(BaseExecutor):
             _in_thinking_block = False
             await client.query(prompt)
             async for message in client.receive_messages():
+                if self._check_interrupted():
+                    logger.info("Agent SDK streaming interrupted")
+                    yield {"type": "text_delta", "text": "[Session interrupted by user]"}
+                    return
+
                 if isinstance(message, StreamEvent):
                     got_stream_event = True
                     event = message.event
@@ -1320,8 +1477,6 @@ class AgentSDKExecutor(BaseExecutor):
                             yield {"type": "thinking_end"}
 
                 elif isinstance(message, AssistantMessage):
-                    if not got_stream_event:
-                        continue
                     message_count += 1
                     for block in message.content:
                         if isinstance(block, TextBlock):
@@ -1340,8 +1495,6 @@ class AgentSDKExecutor(BaseExecutor):
                                 }
 
                 elif isinstance(message, UserMessage):
-                    if not got_stream_event:
-                        continue
                     if isinstance(message.content, list):
                         for block in message.content:
                             if isinstance(block, ToolResultBlock):
@@ -1447,6 +1600,14 @@ class AgentSDKExecutor(BaseExecutor):
                                 RESUME_TIMEOUT_SEC, session_id_to_resume,
                             )
                             await stream_gen.aclose()
+                            _clear_session_id(self._anima_dir, session_type)
+                            fell_back = True
+                        except StopAsyncIteration:
+                            logger.warning(
+                                "Resume stream empty (session_id=%s), "
+                                "falling back to fresh session.",
+                                session_id_to_resume,
+                            )
                             _clear_session_id(self._anima_dir, session_type)
                             fell_back = True
                         else:

@@ -153,17 +153,17 @@ def _resolve_skill_path(
     if "/" in name or "\\" in name or ".." in name:
         return None, ""
 
-    # 1. Personal skills (highest priority)
-    candidate = skills_dir / f"{name}.md"
+    # 1. Personal skills: {name}/SKILL.md
+    candidate = skills_dir / name / "SKILL.md"
     if candidate.is_file():
         return candidate, "個人"
 
-    # 2. Common skills
-    candidate = common_skills_dir / f"{name}.md"
+    # 2. Common skills: {name}/SKILL.md
+    candidate = common_skills_dir / name / "SKILL.md"
     if candidate.is_file():
         return candidate, "共通"
 
-    # 3. Procedures
+    # 3. Procedures (flat file, unchanged)
     candidate = procedures_dir / f"{name}.md"
     if candidate.is_file():
         return candidate, "手順"
@@ -178,9 +178,11 @@ def _list_available_names(
 ) -> list[str]:
     """List all available skill/procedure names."""
     names: list[str] = []
-    for d in (skills_dir, common_skills_dir, procedures_dir):
+    for d in (skills_dir, common_skills_dir):
         if d.is_dir():
-            names.extend(f.stem for f in sorted(d.glob("*.md")))
+            names.extend(f.parent.name for f in sorted(d.glob("*/SKILL.md")))
+    if procedures_dir.is_dir():
+        names.extend(f.stem for f in sorted(procedures_dir.glob("*.md")))
     return names
 
 

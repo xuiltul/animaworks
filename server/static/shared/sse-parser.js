@@ -1,6 +1,7 @@
 // ── Shared SSE Parser ──────────────────────────────────
 // Common SSE parsing and error message utilities used across all chat modules.
 
+import { t } from "/shared/i18n.js";
 import { createLogger } from './logger.js';
 
 const logger = createLogger('sse-parser');
@@ -56,13 +57,16 @@ export function parseConvSSE(buffer) {
  * @param {object} data - SSE error event data with code and message fields
  * @returns {string} User-friendly error message
  */
+const SSE_ERROR_KEYS = {
+  'IPC_TIMEOUT': 'sse.ipc_timeout',
+  'TOOL_ERROR': 'sse.tool_error',
+  'LLM_ERROR': 'sse.llm_error',
+  'STREAM_ERROR': 'sse.stream_error',
+  'ANIMA_NOT_FOUND': 'sse.anima_not_found',
+};
+
 export function getErrorMessage(data) {
-  const messages = {
-    'IPC_TIMEOUT': '応答がタイムアウトしました',
-    'TOOL_ERROR': 'ツール実行中にエラーが発生しました',
-    'LLM_ERROR': 'AIモデルとの通信でエラーが発生しました',
-    'STREAM_ERROR': '通信エラーが発生しました',
-    'ANIMA_NOT_FOUND': 'Animaが見つかりませんでした',
-  };
-  return messages[data.code] || data.error || data.message || 'エラーが発生しました';
+  const key = SSE_ERROR_KEYS[data.code];
+  if (key) return t(key);
+  return data.error || data.message || t('sse.generic_error');
 }

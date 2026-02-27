@@ -113,6 +113,7 @@ class TestPostChannelRateLimitingE2E:
 
         with patch("core.config.models.load_config") as mock_cfg:
             mock_cfg.return_value = MagicMock()
+            mock_cfg.return_value.locale = "ja"
             mock_cfg.return_value.heartbeat.channel_post_cooldown_s = 300
             result4 = handler2.handle("post_channel", {
                 "channel": "general",

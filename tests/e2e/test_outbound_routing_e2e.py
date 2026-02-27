@@ -157,8 +157,9 @@ class TestSendMessageToAlias:
                 "send_message", {"to": "nobody", "content": "hi", "intent": "report"},
             )
 
-        data = json.loads(result)
-        assert data["error_type"] == "UnknownRecipient"
+        # Fallback guidance: plain text instead of JSON error
+        assert "nobody" in result
+        assert "send_message で送信できません" in result
 
 
 # ── TestRobustRecipientHandling ──────────────────────────

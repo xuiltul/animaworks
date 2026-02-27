@@ -9,8 +9,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
+from core.i18n import t
 from core.voice.sentence_splitter import StreamingSentenceSplitter
 from core.voice.stt import VoiceSTT
 from core.voice.tts_base import BaseTTSProvider, TTSConfig
@@ -19,6 +21,70 @@ logger = logging.getLogger(__name__)
 
 IPC_STREAM_TIMEOUT = 60.0
 MAX_AUDIO_BUFFER_BYTES = 60 * 16_000 * 2  # 60 seconds of 16kHz 16-bit mono PCM
+PCM16_SAMPLE_RATE = 16_000
+PCM16_BYTES_PER_SAMPLE = 2
+MIN_SPEECH_SEC = 0.35
+MIN_SPEECH_BYTES = int(MIN_SPEECH_SEC * PCM16_SAMPLE_RATE * PCM16_BYTES_PER_SAMPLE)
+SILENCE_RMS_THRESHOLD = 0.008
+
+VOICE_MODE_SUFFIX = (
+    "\n\n[voice-mode: 音声会話です。話し言葉で200文字以内で簡潔に回答してください。"
+    "Markdown記法（見出し・太字・リスト・コードブロック等）は使わないでください]"
+)
+
+# ── TTS output sanitization ──────────────────────────────────
+
+_RE_EMOTION_TAG = re.compile(r"<!--\s*emotion:\s*\{.*?\}\s*-->", re.DOTALL)
+_RE_MD_CODE_BLOCK = re.compile(r"```[\s\S]*?```")
+_RE_MD_HEADING = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_RE_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_RE_MD_ITALIC = re.compile(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)")
+_RE_MD_INLINE_CODE = re.compile(r"`([^`]+)`")
+_RE_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_RE_MD_LIST_BULLET = re.compile(r"^[\s]*[-*+]\s+", re.MULTILINE)
+_RE_MD_LIST_NUMBERED = re.compile(r"^[\s]*\d+\.\s+", re.MULTILINE)
+_RE_MD_TABLE_PIPE = re.compile(r"\|")
+_RE_MD_HR = re.compile(r"^-{3,}$", re.MULTILINE)
+_RE_TRAILING_HTML_COMMENT = re.compile(r"\s*<!--[\s\S]*?-->\s*$", re.DOTALL)
+
+
+def sanitize_for_tts(text: str) -> str:
+    """Strip Markdown formatting and emotion metadata for TTS consumption."""
+    text = _RE_EMOTION_TAG.sub("", text)
+    text = _RE_TRAILING_HTML_COMMENT.sub("", text)
+    text = _RE_MD_CODE_BLOCK.sub("", text)
+    text = _RE_MD_HEADING.sub("", text)
+    text = _RE_MD_BOLD.sub(r"\1", text)
+    text = _RE_MD_ITALIC.sub(r"\1", text)
+    text = _RE_MD_INLINE_CODE.sub(r"\1", text)
+    text = _RE_MD_LINK.sub(r"\1", text)
+    text = _RE_MD_LIST_BULLET.sub("", text)
+    text = _RE_MD_LIST_NUMBERED.sub("", text)
+    text = _RE_MD_TABLE_PIPE.sub("", text)
+    text = _RE_MD_HR.sub("", text)
+    return text.strip()
+
+
+def _normalized_rms_from_pcm16(audio_data: bytes) -> float:
+    """Calculate normalized RMS from 16-bit mono PCM bytes."""
+    if len(audio_data) < PCM16_BYTES_PER_SAMPLE:
+        return 0.0
+    sample_count = len(audio_data) // PCM16_BYTES_PER_SAMPLE
+    if sample_count == 0:
+        return 0.0
+    samples = memoryview(audio_data).cast("h")
+    # Downsample for large chunks to keep CPU usage low.
+    step = 4 if sample_count > 64_000 else 1
+    sum_sq = 0.0
+    count = 0
+    for i in range(0, sample_count, step):
+        value = samples[i] / 32768.0
+        sum_sq += value * value
+        count += 1
+    if count == 0:
+        return 0.0
+    return (sum_sq / count) ** 0.5
+
 
 # ── VoiceSession ────────────────────────────────────────────────
 
@@ -108,13 +174,22 @@ class VoiceSession:
 
         if not audio_data:
             return
+        if len(audio_data) < MIN_SPEECH_BYTES:
+            logger.debug("Ignore short voice chunk: bytes=%s", len(audio_data))
+            return
+        rms = _normalized_rms_from_pcm16(audio_data)
+        if rms < SILENCE_RMS_THRESHOLD:
+            logger.debug(
+                "Ignore likely silence: rms=%.5f bytes=%s", rms, len(audio_data)
+            )
+            return
 
         # 1. STT
         try:
             result = await self._stt.transcribe_buffer_async(audio_data)
         except Exception as e:
             logger.exception("STT failed: %s", e)
-            await self._send_error("音声認識に失敗しました")
+            await self._send_error(t("voice.stt_failed"))
             return
 
         text = result.get("raw_text", "").strip()
@@ -166,7 +241,7 @@ class VoiceSession:
                 anima_name=self._anima_name,
                 method="process_message",
                 params={
-                    "message": text,
+                    "message": text + VOICE_MODE_SUFFIX,
                     "from_person": from_person,
                     "intent": "",
                     "stream": True,
@@ -249,7 +324,7 @@ class VoiceSession:
 
     async def _synthesize_and_send(self, text: str) -> None:
         """TTS synthesize a sentence and send audio to client."""
-        text = text.strip()
+        text = sanitize_for_tts(text)
         if not text:
             return
         try:

@@ -2,6 +2,7 @@
 
 import { state, dom, escapeHtml } from "./state.js";
 import { api } from "./api.js";
+import { t } from "/shared/i18n.js";
 
 export function activateMemoryTab(tab) {
   state.activeMemoryTab = tab;
@@ -22,11 +23,11 @@ export async function loadMemoryTab(tab) {
 
   const name = state.selectedAnima;
   if (!name) {
-    fileList.innerHTML = '<div class="loading-placeholder">Animaを選択してください</div>';
+    fileList.innerHTML = `<div class="loading-placeholder">${t("assets.select_anima")}</div>`;
     return;
   }
 
-  fileList.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  fileList.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   let endpoint;
   if (tab === "episodes") endpoint = `/api/animas/${encodeURIComponent(name)}/episodes`;
@@ -37,7 +38,7 @@ export async function loadMemoryTab(tab) {
     const data = await api(endpoint);
     const files = data.files || [];
     if (files.length === 0) {
-      fileList.innerHTML = '<div class="loading-placeholder">ファイルがありません</div>';
+      fileList.innerHTML = `<div class="loading-placeholder">${t("memory.no_files")}</div>`;
       return;
     }
     fileList.innerHTML = files.map((f) =>
@@ -51,7 +52,7 @@ export async function loadMemoryTab(tab) {
     });
   } catch (err) {
     console.error("Failed to load memory files:", err);
-    fileList.innerHTML = '<div class="loading-placeholder">読み込み失敗</div>';
+    fileList.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}</div>`;
   }
 }
 
@@ -73,12 +74,12 @@ async function loadMemoryContent(tab, file) {
   if (fileList) fileList.style.display = "none";
   contentArea.style.display = "";
   if (contentTitle) contentTitle.textContent = file;
-  if (contentBody) contentBody.textContent = "読み込み中...";
+  if (contentBody) contentBody.textContent = t("common.loading");
 
   try {
     const data = await api(endpoint);
-    if (contentBody) contentBody.textContent = data.content || "(内容なし)";
+    if (contentBody) contentBody.textContent = data.content || t("chat.no_content");
   } catch (err) {
-    if (contentBody) contentBody.textContent = `[エラー] ${err.message}`;
+    if (contentBody) contentBody.textContent = `[${t("tools.error")}] ${err.message}`;
   }
 }

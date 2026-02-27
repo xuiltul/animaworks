@@ -532,22 +532,12 @@ class ReconsolidationEngine:
         failure_count = meta.get("failure_count", 0)
         confidence = meta.get("confidence", 0.5)
 
-        prompt = f"""以下の知識ファイルが繰り返し不正確と報告されています。改善してください。
-
-【現在の知識内容】
-{content[:3000]}
-
-【メタデータ】
-- 失敗回数: {failure_count}
-- 信頼度: {confidence}
-
-タスク:
-1. この知識がなぜ不正確と判断されたか考察してください
-2. 改善された知識を出力してください
-
-出力形式:
-改善後の知識テキストのみを出力してください（説明やコメントは不要）。
-コードフェンス（```）で囲まないでください。"""
+        prompt = load_prompt(
+            "memory/knowledge_revision",
+            content=content[:3000],
+            failure_count=failure_count,
+            confidence=confidence,
+        )
 
         try:
             import litellm

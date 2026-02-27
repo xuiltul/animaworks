@@ -632,6 +632,18 @@ html, body {
   white-space: pre;
 }
 
+/* ── Streaming Thinking Preview ────────────────────── */
+
+.thinking-inline-preview {
+  margin-bottom: 8px;
+  color: rgba(26, 26, 26, 0.48);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-style: italic;
+}
+
 /* ── Tool Indicator ────────────────────── */
 
 .tool-indicator {
@@ -716,16 +728,21 @@ html, body {
 }
 
 .chat-send-btn {
-  padding: 10px 20px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #2563eb;
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 50%;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: background 0.15s;
-  align-self: flex-end;
+  flex-shrink: 0;
 }
 
 .chat-send-btn:hover {
@@ -1082,7 +1099,7 @@ html, body {
   align-items: stretch;
   justify-content: center;
   background: rgba(0, 0, 0, 0.35);
-  padding: 20px;
+  padding: 20px 20px 0;
   animation: overlay-fade-in 0.25s ease-out;
 }
 
@@ -1160,6 +1177,83 @@ html, body {
   white-space: nowrap;
 }
 
+/* ── Thread Tabs (Workspace) ────────────────────── */
+.thread-tabs.ws-thread-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0.5rem 16px;
+  border-bottom: 1px solid #e5e5e5;
+  flex-wrap: wrap;
+  min-height: 40px;
+  flex-shrink: 0;
+  background: #fafafa;
+}
+
+.ws-thread-tabs .thread-tab-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ws-thread-tabs .thread-tab {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #666;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ws-thread-tabs .thread-tab:hover,
+.ws-thread-tabs .thread-tab:active {
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+.ws-thread-tabs .thread-tab.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.ws-thread-tabs .thread-tab-close {
+  padding: 0 4px;
+  font-size: 1rem;
+  line-height: 1;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ws-thread-tabs .thread-tab-close:hover,
+.ws-thread-tabs .thread-tab-close:active {
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+.ws-thread-tabs .thread-tab-new {
+  padding: 0.35rem 0.6rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #999;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-left: 4px;
+}
+
+.ws-thread-tabs .thread-tab-new:hover,
+.ws-thread-tabs .thread-tab-new:active {
+  background: #f0f0f0;
+  color: #2563eb;
+}
+
 .ws-conv-messages {
   flex: 1;
   overflow-y: auto;
@@ -1179,27 +1273,37 @@ html, body {
   border-top: 1px solid #e5e5e5;
   background: #fff;
   flex-shrink: 0;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+}
+
+/* ── Textarea + Buttons Container (workspace) ── */
+
+.ws-conv-input-area .chat-input-wrap {
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  transition: border-color 0.15s;
+}
+
+.ws-conv-input-area .chat-input-wrap:focus-within {
+  border-color: #2563eb;
 }
 
 .ws-conv-input {
   flex: 1;
-  padding: 10px 14px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  background: #fff;
+  padding: 10px 14px 4px;
+  border: none;
+  background: transparent;
   color: #1a1a1a;
   font-family: inherit;
   font-size: 0.9rem;
   resize: none;
   outline: none;
-  min-height: 40px;
+  min-height: 36px;
   max-height: 120px;
-  transition: border-color 0.15s;
-}
-
-.ws-conv-input:focus {
-  border-color: #2563eb;
 }
 
 .ws-conv-input::placeholder {
@@ -1207,21 +1311,34 @@ html, body {
 }
 
 .ws-conv-input:disabled {
-  background: #f9f9f9;
   color: #aaa;
 }
 
 .ws-conv-send {
-  padding: 10px 20px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #2563eb;
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 50%;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: background 0.15s;
-  align-self: flex-end;
+  flex-shrink: 0;
+}
+
+.chat-input-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 2px 6px 4px;
+  min-height: 36px;
 }
 
 .ws-conv-send:hover {
@@ -1230,6 +1347,150 @@ html, body {
 
 .ws-conv-send:disabled {
   background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.ws-conv-send.stop {
+  background: #dc2626;
+}
+
+.ws-conv-send.stop:hover {
+  filter: brightness(0.9);
+}
+
+.ws-conv-send.interrupt {
+  background: #d97706;
+}
+
+.ws-conv-send.interrupt:hover {
+  filter: brightness(0.9);
+}
+
+/* ── Pending Queue (workspace) ──────────────────── */
+
+.pending-queue-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  max-height: 120px;
+  overflow-y: auto;
+  animation: pendingSlideIn 0.15s ease-out;
+}
+
+@keyframes pendingSlideIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pending-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 2px;
+}
+
+.pending-queue-label {
+  font-weight: 600;
+  color: #92400e;
+  font-size: 0.72rem;
+}
+
+.pending-queue-clear {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: #999;
+  padding: 0 2px;
+}
+
+.pending-queue-clear:hover {
+  color: #dc2626;
+}
+
+.pending-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.pending-queue-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.pending-queue-item-num {
+  flex-shrink: 0;
+  color: #999;
+  font-size: 0.7rem;
+  width: 1.2em;
+  text-align: right;
+}
+
+.pending-queue-item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #92400e;
+}
+
+.pending-queue-item-del {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: #999;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.pending-queue-item:hover .pending-queue-item-del {
+  opacity: 1;
+}
+
+.pending-queue-item-del:hover {
+  color: #dc2626;
+}
+
+.chat-queue-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #999;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  align-self: flex-end;
+}
+
+.chat-queue-btn:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.chat-queue-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -1274,7 +1535,7 @@ html, body {
 
 @media (max-width: 900px) {
   .ws-conv-overlay {
-    padding: 10px;
+    padding: 10px 10px 0;
   }
 
   .ws-conv-layout {
@@ -1880,11 +2141,17 @@ html, body {
     max-width: 85%;
   }
 
-  /* Tap targets: minimum 44px */
+  /* Tap targets: minimum 40px */
   .chat-send-btn,
   .ws-conv-send {
-    min-height: 44px;
-    padding: 10px 20px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .chat-queue-btn,
+  .chat-attach-btn {
+    width: 36px;
+    height: 36px;
   }
 
   .right-tab {
@@ -1924,10 +2191,12 @@ html, body {
   /* Conversation input: reduce max-height for mobile */
   .ws-conv-input {
     max-height: 100px;
+    font-size: 16px;
   }
 
   .chat-input {
     max-height: 100px;
+    font-size: 16px;
   }
 
   /* Login card: reduced padding */
@@ -2271,25 +2540,23 @@ html, body {
 }
 
 .chat-attach-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: 1px solid #ddd;
-  border-radius: 8px;
-  background: #fff;
-  font-size: 1.2rem;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 1rem;
   font-weight: 600;
-  color: #666;
+  color: #999;
   cursor: pointer;
   flex-shrink: 0;
-  align-self: flex-end;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s;
 }
 
 .chat-attach-btn:hover {
-  background: #f3f4f6;
   color: #2563eb;
   border-color: #2563eb;
 }
@@ -2313,6 +2580,19 @@ html, body {
 
 .chat-attached-image:hover {
   opacity: 0.9;
+}
+
+.chat-attached-image-error {
+  min-width: 160px;
+  min-height: 96px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.08) 8px,
+    rgba(255, 255, 255, 0.02) 8px,
+    rgba(255, 255, 255, 0.02) 16px
+  );
+  border: 1px dashed var(--aw-color-border, #666);
 }
 
 .chat-bubble.user .chat-text:empty {

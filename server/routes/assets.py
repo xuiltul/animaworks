@@ -4,11 +4,15 @@ from __future__ import annotations
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
+import ipaddress
 import re
+import socket
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, field_validator
 
 from server.events import emit
@@ -22,6 +26,91 @@ _ASSET_CONTENT_TYPES = {
     ".glb": "model/gltf-binary",
     ".gltf": "model/gltf+json",
 }
+_PROXY_ALLOWED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+}
+_PROXY_MAX_BYTES = 5 * 1024 * 1024
+_PROXY_MAX_REDIRECTS = 3
+_PROXY_ALLOWED_DOMAINS = {
+    "cdn.search.brave.com",
+    "images.unsplash.com",
+    "images.pexels.com",
+    "upload.wikimedia.org",
+}
+
+
+def _is_host_allowed(host: str) -> bool:
+    host_l = host.lower()
+    return any(host_l == d or host_l.endswith(f".{d}") for d in _PROXY_ALLOWED_DOMAINS)
+
+
+def _is_private_or_local_host(host: str) -> bool:
+    """Detect localhost/private addresses including DNS-resolved hosts."""
+    host_l = host.strip().lower()
+    if host_l in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        ip = ipaddress.ip_address(host_l)
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+        )
+    except ValueError:
+        pass
+
+    try:
+        infos = socket.getaddrinfo(host_l, None)
+    except socket.gaierror:
+        return True
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            return True
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+        ):
+            return True
+    return False
+
+
+def _validate_proxy_target(url: str) -> str:
+    """Validate proxy target URL and return normalized URL string."""
+    parsed = urlparse(url)
+    if parsed.scheme.lower() != "https":
+        raise HTTPException(status_code=400, detail="Only HTTPS URLs are allowed")
+    host = parsed.hostname or ""
+    if not host:
+        raise HTTPException(status_code=400, detail="Invalid URL host")
+    if _is_private_or_local_host(host):
+        raise HTTPException(status_code=400, detail="Blocked private/local address")
+    if not _is_host_allowed(host):
+        raise HTTPException(status_code=403, detail="Host is not in allowlist")
+    return parsed.geturl()
+
+
+def _detect_image_content_type(body: bytes) -> str | None:
+    """Detect image content type from magic bytes."""
+    if body.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if body.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if body.startswith(b"GIF87a") or body.startswith(b"GIF89a"):
+        return "image/gif"
+    if len(body) >= 12 and body.startswith(b"RIFF") and body[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 
 class AssetGenerateRequest(BaseModel):
@@ -196,6 +285,108 @@ def create_assets_router() -> APIRouter:
             headers={
                 "Cache-Control": "public, no-cache",
                 "ETag": etag,
+            },
+        )
+
+    @router.api_route("/animas/{name}/attachments/{filename}", methods=["GET", "HEAD"])
+    async def get_attachment(name: str, filename: str, request: Request):
+        """Serve a user-uploaded attachment from a anima's attachments directory."""
+        animas_dir = request.app.state.animas_dir
+        anima_dir = animas_dir / name
+        if not anima_dir.exists():
+            raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
+
+        safe_name = Path(filename).name
+        if safe_name != filename or ".." in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
+        file_path = anima_dir / "attachments" / safe_name
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(status_code=404, detail="Attachment not found")
+
+        suffix = file_path.suffix.lower()
+        content_type = _ASSET_CONTENT_TYPES.get(suffix, "application/octet-stream")
+
+        stat = file_path.stat()
+        etag = f'"{stat.st_mtime_ns}-{stat.st_size}"'
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match and (
+            if_none_match == etag
+            or etag in [t.strip() for t in if_none_match.split(",")]
+            or if_none_match.strip() == "*"
+        ):
+            return Response(
+                status_code=304,
+                headers={
+                    "ETag": etag,
+                    "Cache-Control": "public, no-cache",
+                },
+            )
+
+        return FileResponse(
+            file_path,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, no-cache",
+                "ETag": etag,
+            },
+        )
+
+    @router.get("/media/proxy")
+    async def media_proxy(url: str):
+        """Proxy external images for safer rendering in chat bubbles."""
+        current_url = _validate_proxy_target(url)
+
+        timeout = httpx.Timeout(10.0, connect=5.0)
+        try:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+                upstream = None
+                for _ in range(_PROXY_MAX_REDIRECTS + 1):
+                    upstream = await client.get(current_url)
+                    if upstream.status_code not in {301, 302, 303, 307, 308}:
+                        break
+                    location = upstream.headers.get("location")
+                    if not location:
+                        raise HTTPException(status_code=502, detail="Invalid redirect location")
+                    redirected = urljoin(current_url, location)
+                    current_url = _validate_proxy_target(redirected)
+                else:
+                    raise HTTPException(status_code=508, detail="Too many redirects")
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch upstream image: {exc}") from exc
+
+        if upstream is None:
+            raise HTTPException(status_code=502, detail="Failed to fetch upstream image")
+        if upstream.status_code >= 400:
+            raise HTTPException(status_code=upstream.status_code, detail="Upstream image fetch failed")
+
+        content_type = upstream.headers.get("content-type", "").split(";")[0].strip().lower()
+        if content_type not in _PROXY_ALLOWED_IMAGE_TYPES:
+            raise HTTPException(status_code=415, detail="Unsupported media type")
+
+        declared_size = upstream.headers.get("content-length")
+        if declared_size:
+            try:
+                if int(declared_size) > _PROXY_MAX_BYTES:
+                    raise HTTPException(status_code=413, detail="Image too large")
+            except ValueError:
+                pass
+
+        body = upstream.content
+        if len(body) > _PROXY_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Image too large")
+        detected_type = _detect_image_content_type(body)
+        if not detected_type:
+            raise HTTPException(status_code=415, detail="Invalid image payload")
+        if detected_type != content_type:
+            raise HTTPException(status_code=415, detail="Content type mismatch")
+
+        return Response(
+            content=body,
+            media_type=detected_type,
+            headers={
+                "Cache-Control": "public, max-age=300",
+                "X-Content-Type-Options": "nosniff",
             },
         )
 

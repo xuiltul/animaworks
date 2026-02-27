@@ -2,6 +2,7 @@
 import { api } from "../modules/api.js";
 import { escapeHtml, renderMarkdown, smartTimestamp } from "../modules/state.js";
 import { createLogger } from "../shared/logger.js";
+import { t } from "/shared/i18n.js";
 
 const logger = createLogger("board-page");
 
@@ -47,13 +48,13 @@ export function render(container) {
   container.innerHTML = `
     <div class="board-layout">
       <!-- Mobile toggle for sidebar -->
-      <button class="board-mobile-toggle" id="boardMobileToggle">チャンネル一覧を隠す</button>
+      <button class="board-mobile-toggle" id="boardMobileToggle">${t("board.channel_toggle_hide")}</button>
 
       <!-- Left Sidebar -->
       <div class="board-sidebar" id="boardSidebar">
         <div class="board-sidebar-section">Channels</div>
         <div id="boardChannelList">
-          <div class="loading-placeholder">読み込み中...</div>
+          <div class="loading-placeholder">${t("board.loading")}</div>
         </div>
         <div class="board-sidebar-divider"></div>
         <div class="board-sidebar-section board-dm-section-header">
@@ -71,7 +72,7 @@ export function render(container) {
       <div class="board-main" id="boardMain">
         <div class="board-placeholder" id="boardPlaceholder">
           <div class="board-placeholder-icon">&#x1F4CB;</div>
-          <div class="board-placeholder-text">チャンネルまたはDMを選択してください</div>
+          <div class="board-placeholder-text">${t("board.channel_select")}</div>
         </div>
 
         <!-- Channel/DM view (hidden initially) -->
@@ -91,7 +92,7 @@ export function render(container) {
               autocomplete="off"
               rows="1"
             ></textarea>
-            <button type="submit" class="board-send-btn" id="boardSendBtn">送信</button>
+            <button type="submit" class="board-send-btn" id="boardSendBtn">${t("board.send")}</button>
           </form>
         </div>
       </div>
@@ -178,7 +179,7 @@ function _bindEvents() {
     sidebar.classList.toggle("mobile-hidden", _sidebarCollapsed);
     const btn = _$("boardMobileToggle");
     if (btn) {
-      btn.textContent = _sidebarCollapsed ? "チャンネル一覧を表示" : "チャンネル一覧を隠す";
+      btn.textContent = _sidebarCollapsed ? t("board.channel_toggle_show") : t("board.channel_toggle_hide");
     }
   });
 }
@@ -262,7 +263,7 @@ function _renderChannelList() {
   if (!el) return;
 
   if (_channels.length === 0) {
-    el.innerHTML = '<div class="loading-placeholder" style="padding:8px 16px; font-size:0.82rem;">チャンネルなし</div>';
+    el.innerHTML = `<div class="loading-placeholder" style="padding:8px 16px; font-size:0.82rem;">${t("board.channel_none")}</div>`;
     return;
   }
 
@@ -294,7 +295,7 @@ function _renderDmList() {
   ).sort((a, b) => (a.pair || "").localeCompare(b.pair || ""));
 
   if (filtered.length === 0) {
-    const msg = _dmPairs.length === 0 ? "DMなし" : "該当するDMなし";
+    const msg = _dmPairs.length === 0 ? t("board.dm_none") : t("board.dm_none_filtered");
     el.innerHTML = `<div class="loading-placeholder" style="padding:8px 16px; font-size:0.82rem;">${msg}</div>`;
     return;
   }
@@ -328,7 +329,7 @@ function _populateDmFilter() {
   const sorted = [...names].sort((a, b) => a.localeCompare(b, "ja"));
 
   const prev = select.value;
-  const optionsHtml = ['<option value="">すべて</option>']
+  const optionsHtml = [`<option value="">${t("board.dm_filter_all")}</option>`]
     .concat(sorted.map(n => `<option value="${escapeHtml(n)}"${n === prev ? " selected" : ""}>${escapeHtml(n)}</option>`))
     .join("");
 
@@ -372,7 +373,7 @@ function _selectItem(type, name) {
     _sidebarCollapsed = true;
     sidebar.classList.add("mobile-hidden");
     const btn = _$("boardMobileToggle");
-    if (btn) btn.textContent = "チャンネル一覧を表示";
+    if (btn) btn.textContent = t("board.channel_toggle_show");
   }
 
   // Show the view panel
@@ -396,7 +397,7 @@ function _selectItem(type, name) {
     const dmInfo = _dmPairs.find(d => d.pair === name);
     const participants = dmInfo ? (dmInfo.participants || []).join(" ↔ ") : name;
     if (titleEl) titleEl.textContent = participants;
-    if (metaEl) metaEl.textContent = "ダイレクトメッセージ";
+    if (metaEl) metaEl.textContent = t("board.direct_message");
   }
 
   // Show/hide input bar (hidden for DMs)
@@ -406,7 +407,7 @@ function _selectItem(type, name) {
   // Update input placeholder
   const input = _$("boardInput");
   if (input && type === "channel") {
-    input.placeholder = `#${name} にメッセージを投稿...`;
+    input.placeholder = t("board.message_post", { channel: name });
   }
 
   // Bind scroll handler for infinite scroll
@@ -433,7 +434,7 @@ async function _loadMessages(type, name, isPolling) {
   if (!isPolling) {
     _currentOffset = 0;
     _hasMore = false;
-    messagesEl.innerHTML = '<div class="board-messages-empty">読み込み中...</div>';
+    messagesEl.innerHTML = `<div class="board-messages-empty">${t("board.loading")}</div>`;
   }
 
   try {
@@ -461,7 +462,7 @@ async function _loadMessages(type, name, isPolling) {
   } catch (err) {
     if (type !== _selectedType || name !== _selectedName) return;
     if (!isPolling) {
-      messagesEl.innerHTML = `<div class="board-messages-empty">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+      messagesEl.innerHTML = `<div class="board-messages-empty">${t("board.load_failed")}: ${escapeHtml(err.message)}</div>`;
     }
     logger.error("Failed to load messages", { type, name, error: err.message });
   }
@@ -514,16 +515,16 @@ function _renderMessages() {
   if (!messagesEl) return;
 
   if (_messages.length === 0) {
-    messagesEl.innerHTML = '<div class="board-messages-empty">メッセージはまだありません</div>';
+    messagesEl.innerHTML = `<div class="board-messages-empty">${t("board.messages_empty")}</div>`;
     return;
   }
 
   const wasAtBottom = _isScrolledToBottom(messagesEl);
 
   const loaderHtml = _hasMore
-    ? '<div class="board-messages-loader" style="text-align:center;padding:12px;color:#888;font-size:0.82rem;">読み込み中...</div>'
+    ? `<div class="board-messages-loader" style="text-align:center;padding:12px;color:#888;font-size:0.82rem;">${t("board.loading")}</div>`
     : (_messages.length >= _total && _total > 50
-      ? '<div class="board-messages-end" style="text-align:center;padding:8px;color:#666;font-size:0.8rem;">すべてのメッセージを表示しました</div>'
+      ? `<div class="board-messages-end" style="text-align:center;padding:8px;color:#666;font-size:0.8rem;">${t("board.messages_end")}</div>`
       : '');
 
   const msgItems = _messages.map(msg => {
@@ -608,7 +609,7 @@ async function _submitMessage() {
     if (messagesEl) {
       const errorDiv = document.createElement("div");
       errorDiv.style.cssText = "color:#ef4444; font-size:0.82rem; text-align:center; padding:4px;";
-      errorDiv.textContent = `送信失敗: ${err.message}`;
+      errorDiv.textContent = `${t("board.send_failed")}: ${err.message}`;
       messagesEl.appendChild(errorDiv);
       _scrollToBottom();
     }

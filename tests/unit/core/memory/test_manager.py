@@ -166,7 +166,8 @@ class TestListFiles:
         assert "deploy" in result
 
     def test_list_skill_files(self, mm, anima_dir):
-        (anima_dir / "skills" / "coding.md").write_text("skill", encoding="utf-8")
+        (anima_dir / "skills" / "coding" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (anima_dir / "skills" / "coding" / "SKILL.md").write_text("skill", encoding="utf-8")
         result = mm.list_skill_files()
         assert "coding" in result
 
@@ -193,7 +194,8 @@ class TestExtractSkillSummary:
 
 class TestListSkillSummaries:
     def test_summaries(self, mm, anima_dir):
-        (anima_dir / "skills" / "coding.md").write_text(
+        (anima_dir / "skills" / "coding" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (anima_dir / "skills" / "coding" / "SKILL.md").write_text(
             "# Coding\n## 概要\nWrite code efficiently\n## 手順\n1. Plan",
             encoding="utf-8",
         )
@@ -207,7 +209,8 @@ class TestListCommonSkillSummaries:
     def test_summaries(self, mm, data_dir):
         common_dir = data_dir / "common_skills"
         common_dir.mkdir(exist_ok=True)
-        (common_dir / "cron-management.md").write_text(
+        (common_dir / "cron-management" / "SKILL.md").parent.mkdir(parents=True, exist_ok=True)
+        (common_dir / "cron-management" / "SKILL.md").write_text(
             "# cron-management\n## 概要\nManage cron.md format\n## 手順\n1. Read",
             encoding="utf-8",
         )

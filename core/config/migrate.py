@@ -14,6 +14,8 @@ Also provides cron.md migration from Japanese text schedules to standard
 from __future__ import annotations
 
 import json
+
+from core.i18n import t
 import logging
 import os
 import re
@@ -281,7 +283,7 @@ def migrate_cron_format(anima_dir: Path) -> bool:
         elif section_schedule:
             # Unconvertible schedule — keep original title with comment
             output_lines.append(f"## {section_title}")
-            output_lines.append(f"<!-- MIGRATION NOTE: could not auto-convert '{section_schedule}' to cron expression -->")
+            output_lines.append(t("migrate.migration_note", schedule=section_schedule))
             # Copy body lines as-is
             for bline in section_buffer:
                 output_lines.append(bline)

@@ -92,6 +92,15 @@ def create_webhooks_router() -> APIRouter:
         # Process message events
         event = data.get("event", {})
         if event.get("type") == "message" and "subtype" not in event:
+            # Thread-reply routing for call_human notifications
+            try:
+                from core.notification.reply_routing import route_thread_reply
+
+                if route_thread_reply(event, get_data_dir() / "shared"):
+                    return {"ok": True}
+            except Exception:
+                logger.debug("Reply routing lookup failed", exc_info=True)
+
             channel_id = event.get("channel", "")
             anima_name = slack_config.anima_mapping.get(channel_id)
             if not anima_name:

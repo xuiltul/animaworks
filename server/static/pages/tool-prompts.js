@@ -1,21 +1,22 @@
 // ── Prompt Settings Management ──────────────────
 import { api } from "../modules/api.js";
+import { t } from "/shared/i18n.js";
 
 let _activeTab = "descriptions";
 
 export function render(container) {
   container.innerHTML = `
     <div class="page-header">
-      <h2>プロンプト設定</h2>
+      <h2>${t("tools.page_title")}</h2>
     </div>
     <div class="page-tabs" id="toolPromptTabs">
-      <button class="page-tab active" data-tab="descriptions">ツール説明</button>
-      <button class="page-tab" data-tab="guides">ツールガイド</button>
-      <button class="page-tab" data-tab="sections">システムセクション</button>
-      <button class="page-tab" data-tab="preview">プレビュー</button>
+      <button class="page-tab active" data-tab="descriptions">${t("tools.tab_descriptions")}</button>
+      <button class="page-tab" data-tab="guides">${t("tools.tab_guides")}</button>
+      <button class="page-tab" data-tab="sections">${t("tools.tab_sections")}</button>
+      <button class="page-tab" data-tab="preview">${t("tools.tab_preview")}</button>
     </div>
     <div id="toolPromptContent">
-      <div class="loading-placeholder">読み込み中...</div>
+      <div class="loading-placeholder">${t("common.loading")}</div>
     </div>
   `;
 
@@ -40,7 +41,7 @@ export function destroy() {}
 async function _renderTab() {
   const content = document.getElementById("toolPromptContent");
   if (!content) return;
-  content.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  content.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     if (_activeTab === "descriptions") {
@@ -54,7 +55,7 @@ async function _renderTab() {
     }
   } catch (err) {
     content.innerHTML = `<div class="card"><div class="card-body">
-      <div class="loading-placeholder">読み込みエラー: ${_esc(err.message)}</div>
+      <div class="loading-placeholder">${t("tools.load_error")} ${_esc(err.message)}</div>
     </div></div>`;
   }
 }
@@ -67,7 +68,7 @@ async function _renderDescriptions(container) {
 
   if (descs.length === 0) {
     container.innerHTML = `<div class="card"><div class="card-body">
-      <div class="loading-placeholder">ツール定義がありません。animaworks init を実行してください。</div>
+      <div class="loading-placeholder">${t("tools.no_descriptions")}</div>
     </div></div>`;
     return;
   }
@@ -75,18 +76,18 @@ async function _renderDescriptions(container) {
   container.innerHTML = `
     <div class="card">
       <div class="card-header">
-        <h3>ツール Description（APIスキーマ用）</h3>
+        <h3>${t("tools.desc_header")}</h3>
         <p style="color:var(--text-secondary);font-size:0.85rem;margin:0.25rem 0 0;">
-          各ツールの description を編集できます。変更は次回のツール呼び出し時に反映されます。
+          ${t("tools.desc_hint")}
         </p>
       </div>
       <div class="card-body">
         <table class="data-table" id="descTable">
           <thead>
             <tr>
-              <th style="width:180px;">ツール名</th>
+              <th style="width:180px;">${t("tools.tool_name")}</th>
               <th>Description</th>
-              <th style="width:100px;">操作</th>
+              <th style="width:100px;">${t("tools.save")}</th>
             </tr>
           </thead>
           <tbody>
@@ -163,9 +164,9 @@ async function _renderGuides(container) {
   }
 
   const guideLabels = {
-    s_builtin: "Sモード ビルトインツール（Read/Write/Edit/Bash/Grep/Glob）",
-    s_mcp: "Sモード MCPツール（mcp__aw__*）",
-    non_s: "非Sモード（A/B）のツール使用ガイド",
+    s_builtin: t("tools.guide_s_builtin"),
+    s_mcp: t("tools.guide_s_mcp"),
+    non_s: t("tools.non_s_guide"),
   };
 
   container.innerHTML = guides.map((g) => `
@@ -178,7 +179,7 @@ async function _renderGuides(container) {
         <div style="display:flex;align-items:center;gap:0.5rem;">
           <span class="guide-status" style="font-size:0.8rem;"></span>
           <button class="btn-primary btn-save-guide" data-key="${_esc(g.key)}"
-            style="font-size:0.85rem;padding:0.4rem 1rem;">保存</button>
+            style="font-size:0.85rem;padding:0.4rem 1rem;">${t("tools.save")}</button>
         </div>
       </div>
       <div class="card-body" style="padding:0;">
@@ -200,13 +201,13 @@ async function _renderGuides(container) {
       const content = textarea.value.trim();
 
       if (!content) {
-        status.textContent = "空にできません";
+        status.textContent = t("tools.cannot_empty");
         status.style.color = "#dc2626";
         return;
       }
 
       btn.disabled = true;
-      status.textContent = "保存中...";
+      status.textContent = t("tools.saving");
       status.style.color = "#666";
 
       try {
@@ -215,10 +216,10 @@ async function _renderGuides(container) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content }),
         });
-        status.textContent = "保存完了";
+        status.textContent = t("tools.saved");
         status.style.color = "#16a34a";
       } catch (err) {
-        status.textContent = "エラー";
+        status.textContent = t("tools.error");
         status.style.color = "#dc2626";
       } finally {
         btn.disabled = false;
@@ -236,7 +237,7 @@ async function _renderSections(container) {
 
   if (sections.length === 0) {
     container.innerHTML = `<div class="card"><div class="card-body">
-      <div class="loading-placeholder">システムセクションがありません。animaworks init を実行してください。</div>
+      <div class="loading-placeholder">${t("tools.no_sections")}</div>
     </div></div>`;
     return;
   }
@@ -244,7 +245,7 @@ async function _renderSections(container) {
   container.innerHTML = `
     <div style="margin-bottom:1rem;">
       <p style="color:var(--text-secondary);font-size:0.85rem;margin:0;">
-        システムプロンプトに注入されるセクションを編集できます。条件付きセクションは該当条件でのみ注入されます。
+        ${t("tools.sections_hint")}
       </p>
     </div>
   ` + sections.map((s) => `
@@ -261,7 +262,7 @@ async function _renderSections(container) {
           <span class="section-status" style="font-size:0.8rem;"></span>
           <button class="btn-primary btn-save-section" data-key="${_esc(s.key)}"
             data-condition="${_esc(s.condition || "")}"
-            style="font-size:0.85rem;padding:0.4rem 1rem;">保存</button>
+            style="font-size:0.85rem;padding:0.4rem 1rem;">${t("tools.save")}</button>
         </div>
       </div>
       <div class="card-body" style="padding:0;">
@@ -284,13 +285,13 @@ async function _renderSections(container) {
       const content = textarea.value.trim();
 
       if (!content) {
-        status.textContent = "空にできません";
+        status.textContent = t("tools.cannot_empty");
         status.style.color = "#dc2626";
         return;
       }
 
       btn.disabled = true;
-      status.textContent = "保存中...";
+      status.textContent = t("tools.saving");
       status.style.color = "#666";
 
       try {
@@ -299,10 +300,10 @@ async function _renderSections(container) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content, condition: condition || null }),
         });
-        status.textContent = "保存完了";
+        status.textContent = t("tools.saved");
         status.style.color = "#16a34a";
       } catch (err) {
-        status.textContent = "エラー";
+        status.textContent = t("tools.error");
         status.style.color = "#dc2626";
       } finally {
         btn.disabled = false;
@@ -328,17 +329,17 @@ async function _renderPreview(container) {
 
   container.innerHTML = `
     <div class="card" style="margin-bottom:1rem;">
-      <div class="card-header"><h3>スキーマプレビュー</h3></div>
+      <div class="card-header"><h3>${t("tools.preview_schema")}</h3></div>
       <div class="card-body">
         <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:1rem;">
-          <label>形式:</label>
+          <label>${t("tools.preview_format")}</label>
           <select id="schemaMode" style="padding:0.3rem 0.5rem;border:1px solid #ddd;border-radius:4px;">
             <option value="anthropic">Anthropic</option>
             <option value="litellm">LiteLLM</option>
             <option value="text">Text (Mode B)</option>
           </select>
           <button class="btn-primary" id="btnPreviewSchema" style="font-size:0.85rem;padding:0.35rem 1rem;">
-            プレビュー生成
+            ${t("tools.preview_generate")}
           </button>
         </div>
         <pre id="schemaPreviewOutput"
@@ -348,7 +349,7 @@ async function _renderPreview(container) {
     </div>
 
     <div class="card">
-      <div class="card-header"><h3>システムプロンプト全体プレビュー</h3></div>
+      <div class="card-header"><h3>${t("tools.preview_prompt")}</h3></div>
       <div class="card-body">
         <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:1rem;">
           <label>Anima:</label>
@@ -356,7 +357,7 @@ async function _renderPreview(container) {
             ${animas.map((n) => `<option value="${_esc(n)}">${_esc(n)}</option>`).join("")}
           </select>
           <button class="btn-primary" id="btnPreviewPrompt" style="font-size:0.85rem;padding:0.35rem 1rem;">
-            ビルド&amp;プレビュー
+            ${t("tools.preview_build")}
           </button>
           <span id="promptPreviewStatus" style="font-size:0.8rem;color:#666;"></span>
         </div>
@@ -377,7 +378,7 @@ async function _renderPreview(container) {
     const mode = document.getElementById("schemaMode").value;
     const output = document.getElementById("schemaPreviewOutput");
     output.style.display = "block";
-    output.textContent = "生成中...";
+    output.textContent = t("tools.generating");
 
     try {
       const result = await api("/api/tool-prompts/preview/schema", {
@@ -392,7 +393,7 @@ async function _renderPreview(container) {
         output.textContent = JSON.stringify(result.tools, null, 2);
       }
     } catch (err) {
-      output.textContent = "エラー: " + err.message;
+      output.textContent = t("tools.load_error") + err.message;
     }
   });
 
@@ -404,14 +405,14 @@ async function _renderPreview(container) {
     const status = document.getElementById("promptPreviewStatus");
 
     if (!animaName) {
-      status.textContent = "Animaを選択してください";
+      status.textContent = t("tools.select_anima");
       return;
     }
 
     output.style.display = "block";
-    output.textContent = "ビルド中...";
+    output.textContent = t("tools.building");
     meta.style.display = "none";
-    status.textContent = "ビルド中...";
+    status.textContent = t("tools.building");
 
     try {
       const result = await api("/api/tool-prompts/preview/system-prompt", {
@@ -427,8 +428,8 @@ async function _renderPreview(container) {
       document.getElementById("metaChars").textContent = `${result.char_count} chars`;
       status.textContent = "";
     } catch (err) {
-      output.textContent = "エラー: " + err.message;
-      status.textContent = "エラー";
+      output.textContent = t("tools.load_error") + err.message;
+      status.textContent = t("tools.error");
     }
   });
 }
@@ -443,12 +444,12 @@ function _esc(str) {
 }
 
 function _conditionLabel(condition) {
-  if (!condition) return "常時";
+  if (!condition) return t("tools.condition_always");
   const labels = {
-    "mode:s": "Sモード",
-    "mode:non_s": "非Sモード",
-    "mode:a": "Aモード",
-    "solo_top_level": "ソロトップレベル",
+    "mode:s": t("tools.condition_mode_s"),
+    "mode:non_s": t("tools.non_s_mode"),
+    "mode:a": t("tools.condition_mode_a"),
+    "solo_top_level": t("tools.condition_solo_top"),
   };
   return labels[condition] || condition;
 }

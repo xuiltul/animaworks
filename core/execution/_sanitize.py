@@ -44,6 +44,7 @@ TOOL_TRUST_LEVELS: dict[str, str] = {
     "write_file": "medium",
     "edit_file": "medium",
     "execute_command": "medium",
+    "web_fetch": "untrusted",
     "read_channel": "untrusted",
     "read_dm_history": "untrusted",
     "web_search": "untrusted",

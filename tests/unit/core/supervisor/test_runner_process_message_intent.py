@@ -22,7 +22,9 @@ async def test_handle_process_message_normalizes_none_intent(tmp_path: Path):
         shared_dir=tmp_path / "shared",
     )
     runner.anima = MagicMock()
-    runner.anima.process_message = AsyncMock(return_value="ok")
+    runner.anima.process_message = AsyncMock(
+        return_value={"summary": "ok", "images": [{"path": "assets/a.png"}]}
+    )
     runner.anima.drain_notifications.return_value = []
 
     result = await runner._handle_process_message(
@@ -30,10 +32,33 @@ async def test_handle_process_message_normalizes_none_intent(tmp_path: Path):
     )
 
     assert result["response"] == "ok"
+    assert result["images"] == [{"path": "assets/a.png"}]
+    assert result["cycle_result"]["summary"] == "ok"
     runner.anima.process_message.assert_awaited_once_with(
         "hello",
         from_person="human",
         intent="",
         images=None,
         attachment_paths=None,
+        thread_id="default",
+        include_cycle_result=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_handle_process_message_accepts_legacy_string_result(tmp_path: Path):
+    runner = AnimaRunner(
+        anima_name="sakura",
+        socket_path=tmp_path / "sakura.sock",
+        animas_dir=tmp_path / "animas",
+        shared_dir=tmp_path / "shared",
+    )
+    runner.anima = MagicMock()
+    runner.anima.process_message = AsyncMock(return_value="legacy-text")
+    runner.anima.drain_notifications.return_value = []
+
+    result = await runner._handle_process_message({"message": "hello"})
+
+    assert result["response"] == "legacy-text"
+    assert result["images"] == []
+    assert result["cycle_result"] == {}

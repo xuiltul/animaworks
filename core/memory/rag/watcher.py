@@ -137,7 +137,8 @@ class FileWatcher:
 
         for watch_dir in watch_dirs:
             if watch_dir.is_dir():
-                self.observer.schedule(handler, str(watch_dir), recursive=False)
+                is_skills_dir = watch_dir.name == "skills"
+                self.observer.schedule(handler, str(watch_dir), recursive=is_skills_dir)
                 logger.debug("Watching directory: %s", watch_dir)
 
         # Start observer
@@ -297,7 +298,10 @@ class FileWatcher:
 
         try:
             rel_path = file_path.relative_to(self.anima_dir)
-            parent_dir = rel_path.parts[0]
+            parts = rel_path.parts
+            if "references" in parts or "templates" in parts:
+                return None
+            parent_dir = parts[0]
 
             # Map directory name to memory type
             memory_type_map = {

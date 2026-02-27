@@ -17,6 +17,11 @@
   background: var(--aw-color-bg-secondary);
 }
 
+/* Chat page needs bottom flush layout without shell padding gap. */
+.main-content:has(.chat-page-layout) {
+  padding-bottom: 10px;
+}
+
 /* ── Page-level error ────────────────────────── */
 
 .page-error {

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 
 import asyncio
-import json
 import logging
 import re
 import threading
@@ -28,7 +27,9 @@ from core.memory.streaming_journal import StreamingJournal
 from core.memory.conversation import ConversationMemory, ToolRecord
 from core.memory import MemoryManager
 from core.messenger import InboxItem, Messenger
+from core.i18n import t
 from core.paths import load_prompt
+from core.image_artifacts import extract_image_artifacts_from_tool_records
 from core.exceptions import (  # noqa: F401
     AnimaWorksError,
     ExecutionError,
@@ -55,7 +56,6 @@ _RE_REFLECTION = re.compile(
 )
 
 _MIN_REFLECTION_LENGTH = 50
-
 
 def _extract_reflection(text: str) -> str:
     """Extract [REFLECTION]...[/REFLECTION] block from heartbeat output.
@@ -87,6 +87,18 @@ class DigitalAnima:
     1 anima = 1 directory.
     """
 
+    _MAX_THREAD_LOCKS = 20
+    _THREAD_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,36}$")
+
+    @staticmethod
+    def _validate_thread_id(thread_id: str) -> None:
+        """Validate thread_id to prevent path traversal attacks."""
+        if not DigitalAnima._THREAD_ID_PATTERN.match(thread_id):
+            raise ValueError(
+                f"Invalid thread_id: {thread_id!r}. "
+                "Must be 1-36 alphanumeric, underscore, or hyphen characters."
+            )
+
     def __init__(self, anima_dir: Path, shared_dir: Path) -> None:
         self.anima_dir = anima_dir
         self.name = anima_dir.name
@@ -95,12 +107,14 @@ class DigitalAnima:
         self.memory = MemoryManager(anima_dir)
         self.model_config = self.memory.read_model_config()
         self.messenger = Messenger(shared_dir, self.name)
+        self._interrupt_event = asyncio.Event()
         self.agent = AgentCore(
             anima_dir, self.memory, self.model_config, self.messenger
         )
+        self.agent.set_interrupt_event(self._interrupt_event)
 
         # 3-lock structure: conversation (human chat) / inbox (Anima-to-Anima MSG) / background (HB/cron/TaskExec)
-        self._conversation_lock = asyncio.Lock()
+        self._conversation_locks: dict[str, asyncio.Lock] = {}
         self._inbox_lock = asyncio.Lock()
         self._background_lock = asyncio.Lock()
         self._state_file_lock = threading.Lock()  # protects current_task.md / pending.md
@@ -124,6 +138,22 @@ class DigitalAnima:
             self.agent.background_manager.on_complete = self._on_background_task_complete
 
         logger.info("DigitalAnima '%s' initialized from %s", self.name, anima_dir)
+
+    def _get_thread_lock(self, thread_id: str) -> asyncio.Lock:
+        """Get or create a per-thread conversation lock.
+
+        Implements LRU eviction when max locks reached. Locked (in-use)
+        locks are never evicted.
+        """
+        if thread_id not in self._conversation_locks:
+            if len(self._conversation_locks) >= self._MAX_THREAD_LOCKS:
+                # Evict oldest idle lock
+                for k in list(self._conversation_locks):
+                    if not self._conversation_locks[k].locked():
+                        del self._conversation_locks[k]
+                        break
+            self._conversation_locks[thread_id] = asyncio.Lock()
+        return self._conversation_locks[thread_id]
 
     def set_on_message_sent(
         self, fn: Callable[[str, str, str], None],
@@ -159,6 +189,12 @@ class DigitalAnima:
                 logger.warning("Failed to read notification: %s", path.name)
 
         return notifications
+
+    async def interrupt(self) -> dict[str, Any]:
+        """Interrupt the current LLM session without killing the process."""
+        logger.info("Interrupt requested for anima '%s'", self.name)
+        self._interrupt_event.set()
+        return {"status": "interrupted", "name": self.name}
 
     def reload_config(self) -> dict[str, Any]:
         """Hot-reload ModelConfig from status.json without process restart."""
@@ -213,7 +249,7 @@ class DigitalAnima:
                 notifier = self.agent.human_notifier
                 if notifier:
                     await notifier.notify(
-                        subject=f"バックグラウンドタスク完了: {task.tool_name}",
+                        subject=t("anima.bg_task_done", tool=task.tool_name),
                         body=task.summary(),
                         priority="normal",
                         anima_name=self.name,
@@ -227,9 +263,9 @@ class DigitalAnima:
         # Send inbox notification so next heartbeat picks up the result
         try:
             summary = task.summary()
-            subject = f"バックグラウンドタスク完了: {task.tool_name}"
+            subject = t("anima.bg_task_done", tool=task.tool_name)
             if task.status.value == "failed":
-                subject = f"バックグラウンドタスク失敗: {task.tool_name}"
+                subject = t("anima.bg_task_failed", tool=task.tool_name)
 
             # Write a notification file to the anima's own inbox-like location
             # so the next heartbeat can process it
@@ -238,10 +274,10 @@ class DigitalAnima:
             notif_path = notif_dir / f"{task.task_id}.md"
             notif_content = (
                 f"# {subject}\n\n"
-                f"- タスクID: {task.task_id}\n"
-                f"- ツール: {task.tool_name}\n"
-                f"- ステータス: {task.status.value}\n"
-                f"- 結果: {summary}\n"
+                f"{t('anima.bg_notif_task_id', task_id=task.task_id)}\n"
+                f"{t('anima.bg_notif_tool', tool=task.tool_name)}\n"
+                f"{t('anima.bg_notif_status', status=task.status.value)}\n"
+                f"{t('anima.bg_notif_result', summary=summary)}\n"
             )
             notif_path.write_text(notif_content, encoding="utf-8")
             logger.info(
@@ -389,14 +425,14 @@ class DigitalAnima:
         logger.info("[%s] run_bootstrap START", self.name)
         from core.tooling.handler import active_session_type
         try:
-            async with self._conversation_lock:
+            async with self._get_thread_lock("default"):
                 self._status_slots["conversation"] = "bootstrapping"
                 self._task_slots["conversation"] = "Initial bootstrap"
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
                 conv_memory = ConversationMemory(self.anima_dir, self.model_config)
                 prompt = conv_memory.build_chat_prompt(
-                    "あなたの bootstrap.md ファイルを読み、指示に従ってください。",
+                    t("anima.bootstrap_prompt"),
                     "system",
                 )
 
@@ -428,14 +464,18 @@ class DigitalAnima:
         images: list[dict[str, Any]] | None = None,
         attachment_paths: list[str] | None = None,
         intent: str = "",
-    ) -> str:
+        thread_id: str = "default",
+        include_cycle_result: bool = False,
+    ) -> str | dict[str, Any]:
+        self._validate_thread_id(thread_id)
+        self._interrupt_event.clear()
         logger.info(
             "[%s] process_message WAITING from=%s content_len=%d images=%d",
             self.name, from_person, len(content), len(images or []),
         )
         from core.tooling.handler import active_session_type
         try:
-            async with self._conversation_lock:
+            async with self._get_thread_lock(thread_id):
                 logger.info(
                     "[%s] process_message START (lock acquired) from=%s",
                     self.name, from_person,
@@ -445,7 +485,7 @@ class DigitalAnima:
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
                 # Build history-aware prompt via conversation memory
-                conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+                conv_memory = ConversationMemory(self.anima_dir, self.model_config, thread_id=thread_id)
                 await conv_memory.compress_if_needed()
 
                 # Determine prompt and history strategy per execution mode
@@ -473,7 +513,7 @@ class DigitalAnima:
                 conv_memory.save()
 
                 # Activity log: message received
-                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat", meta={"from_type": "human"})
+                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat", meta={"from_type": "human", "thread_id": thread_id})
 
                 try:
                     result = await self.agent.run_cycle(
@@ -496,25 +536,35 @@ class DigitalAnima:
                     conv_memory.save()
 
                     # Activity log: response sent (with thinking text if present)
-                    resp_meta = {"thinking_text": result.thinking_text} if result.thinking_text else None
+                    response_artifacts = extract_image_artifacts_from_tool_records(
+                        result.tool_call_records
+                    )
+                    resp_meta: dict[str, Any] = {"thread_id": thread_id}
+                    if result.thinking_text:
+                        resp_meta["thinking_text"] = result.thinking_text
+                    if response_artifacts:
+                        resp_meta["images"] = response_artifacts
                     self._activity.log("response_sent", content=result.summary, to_person=from_person, channel="chat", meta=resp_meta)
 
                     logger.info(
                         "[%s] process_message END duration_ms=%d",
                         self.name, result.duration_ms,
                     )
+                    result.images = response_artifacts
+                    if include_cycle_result:
+                        return result.model_dump(mode="json")
                     return result.summary
                 except Exception as exc:
                     logger.exception("[%s] process_message FAILED", self.name)
                     # Activity log: error
                     self._activity.log(
                         "error",
-                        summary=f"process_messageエラー: {type(exc).__name__}",
-                        meta={"phase": "process_message", "error": str(exc)[:200]},
+                        summary=t("anima.process_message_error", exc=type(exc).__name__),
+                        meta={"phase": "process_message", "error": str(exc)[:200], "thread_id": thread_id},
                     )
                     # Save error marker so the failed exchange is visible
                     conv_memory.append_turn(
-                        "assistant", "[ERROR: エージェント実行中にエラーが発生しました]"
+                        "assistant", t("anima.agent_error")
                     )
                     conv_memory.save()
                     raise
@@ -532,6 +582,7 @@ class DigitalAnima:
         images: list[dict[str, Any]] | None = None,
         attachment_paths: list[str] | None = None,
         intent: str = "",
+        thread_id: str = "default",
     ) -> AsyncGenerator[dict, None]:
         """Streaming version of process_message.
 
@@ -539,15 +590,17 @@ class DigitalAnima:
         If bootstrapping is in progress (lock held + needs_bootstrap), yields
         an immediate "initializing" message instead of waiting.
         """
+        self._validate_thread_id(thread_id)
+        self._interrupt_event.clear()
         # ── Bootstrap guard: return immediately if bootstrap is running ──
-        if self.needs_bootstrap and self._conversation_lock.locked():
+        if self.needs_bootstrap and self._get_thread_lock(thread_id).locked():
             logger.info(
                 "[%s] process_message_stream REJECTED (bootstrapping) from=%s",
                 self.name, from_person,
             )
             yield {
                 "type": "bootstrap_busy",
-                "message": "現在初期化中です。しばらくお待ちください。",
+                "message": t("anima.initializing"),
             }
             return
 
@@ -557,7 +610,7 @@ class DigitalAnima:
         )
         from core.tooling.handler import active_session_type
         try:
-            async with self._conversation_lock:
+            async with self._get_thread_lock(thread_id):
                 logger.info(
                     "[%s] process_message_stream START (lock acquired) from=%s",
                     self.name, from_person,
@@ -567,7 +620,7 @@ class DigitalAnima:
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
                 # Build history-aware prompt via conversation memory
-                conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+                conv_memory = ConversationMemory(self.anima_dir, self.model_config, thread_id=thread_id)
                 await conv_memory.compress_if_needed()
 
                 # Determine prompt and history strategy per execution mode
@@ -595,10 +648,10 @@ class DigitalAnima:
                 conv_memory.save()
 
                 # Activity log: message received
-                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat", meta={"from_type": "human"})
+                self._activity.log("message_received", content=content, summary=content[:100], from_person=from_person, channel="chat", meta={"from_type": "human", "thread_id": thread_id})
 
                 # Streaming journal: write-ahead log for crash recovery
-                journal = StreamingJournal(self.anima_dir)
+                journal = StreamingJournal(self.anima_dir, thread_id=thread_id)
                 journal.open(
                     trigger=f"message:{from_person}",
                     from_person=from_person,
@@ -636,6 +689,11 @@ class DigitalAnima:
                             # Record assistant response with tool records
                             cycle_result = chunk.get("cycle_result", {})
                             summary = cycle_result.get("summary", "")
+                            response_artifacts = extract_image_artifacts_from_tool_records(
+                                cycle_result.get("tool_call_records", [])
+                            )
+                            if response_artifacts:
+                                cycle_result["images"] = response_artifacts
                             tool_records = [
                                 ToolRecord.from_dict(r)
                                 for r in cycle_result.get("tool_call_records", [])
@@ -648,7 +706,11 @@ class DigitalAnima:
 
                             # Activity log: response sent (with thinking text if present)
                             thinking_text = cycle_result.get("thinking_text", "")
-                            resp_meta = {"thinking_text": thinking_text} if thinking_text else None
+                            resp_meta: dict[str, Any] = {"thread_id": thread_id}
+                            if thinking_text:
+                                resp_meta["thinking_text"] = thinking_text
+                            if response_artifacts:
+                                resp_meta["images"] = response_artifacts
                             self._activity.log("response_sent", content=summary, to_person=from_person, channel="chat", meta=resp_meta)
 
                             # Finalize streaming journal (deletes the file)
@@ -676,8 +738,8 @@ class DigitalAnima:
                     # Activity log: error
                     self._activity.log(
                         "error",
-                        summary=f"process_message_streamエラー: {type(exc).__name__}",
-                        meta={"phase": "process_message_stream", "error_code": error_code, "error": str(exc)[:200]},
+                        summary=t("anima.process_stream_error", exc=type(exc).__name__),
+                        meta={"phase": "process_message_stream", "error_code": error_code, "error": str(exc)[:200], "thread_id": thread_id},
                     )
                     yield {
                         "type": "error",
@@ -688,9 +750,9 @@ class DigitalAnima:
                     # Save partial response if cycle_done was never received
                     if not cycle_done:
                         if partial_response:
-                            saved_text = partial_response + "\n[応答が中断されました]"
+                            saved_text = partial_response + t("anima.response_interrupted_prefix")
                         else:
-                            saved_text = "[応答が中断されました]"
+                            saved_text = t("anima.response_interrupted")
                         conv_memory.append_turn("assistant", saved_text)
                         conv_memory.save()
                     # Close journal (no-op if already finalized)
@@ -731,14 +793,14 @@ class DigitalAnima:
 
         logger.info("[%s] process_greet START", self.name)
         from core.tooling.handler import active_session_type
-        async with self._conversation_lock:
+        async with self._get_thread_lock("default"):
             prev_status = self._status_slots.get("conversation", "idle")
             prev_task = self._task_slots.get("conversation", "")
             _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
             # Build greet prompt with current state (use primary to include background)
-            status_text = self.primary_status if self.primary_status != "idle" else "待機中"
-            task_text = self.primary_task if self.primary_task else "特になし"
+            status_text = self.primary_status if self.primary_status != "idle" else t("anima.status_idle")
+            task_text = self.primary_task if self.primary_task else t("anima.task_none")
             prompt = load_prompt(
                 "greet", status=status_text, current_task=task_text,
             )
@@ -749,7 +811,7 @@ class DigitalAnima:
             conv_memory = ConversationMemory(self.anima_dir, self.model_config)
 
             # Record visit marker (user turn) before greeting
-            visit_text = "[デスクを訪問]"
+            visit_text = t("anima.visit_desk")
             conv_memory.append_turn("system", visit_text)
             conv_memory.save()
 
@@ -798,7 +860,7 @@ class DigitalAnima:
                 logger.exception("[%s] process_greet FAILED", self.name)
                 # Save error marker in conversation memory
                 conv_memory.append_turn(
-                    "assistant", "[ERROR: 挨拶生成中にエラーが発生しました]"
+                    "assistant", t("anima.greeting_error")
                 )
                 conv_memory.save()
                 raise
@@ -818,12 +880,13 @@ class DigitalAnima:
         Separated from heartbeat to provide instant response to inter-Anima
         messages without triggering the full heartbeat observation cycle.
         """
+        self._interrupt_event.clear()
         logger.info("[%s] process_inbox_message START", self.name)
         try:
             async with self._inbox_lock:
                 self._status_slots["inbox"] = "processing"
 
-                self._activity.log("inbox_processing_start", summary="Inbox MSG処理開始")
+                self._activity.log("inbox_processing_start", summary=t("anima.inbox_start"))
 
                 inbox_result: InboxResult | None = None
                 try:
@@ -939,7 +1002,7 @@ class DigitalAnima:
                             )
                     self._activity.log(
                         "error",
-                        summary=f"inbox処理エラー: {type(exc).__name__}",
+                        summary=t("anima.inbox_error", exc=type(exc).__name__),
                         meta={"phase": "process_inbox_message", "error": str(exc)[:200]},
                     )
                     raise
@@ -975,10 +1038,7 @@ class DigitalAnima:
             try:
                 recovery_content = recovery_note_path.read_text(encoding="utf-8")
                 parts.append(
-                    "## ⚠️ 前回のバックグラウンド障害情報\n\n"
-                    "前回の自律セッションが中断しました。以下の情報を確認し、"
-                    "未完了のタスクを優先的に処理してください。\n\n"
-                    + recovery_content
+                    load_prompt("fragments/recovery_note_header") + "\n\n" + recovery_content
                 )
                 recovery_note_path.unlink(missing_ok=True)
                 logger.info("[%s] Recovery note loaded and removed", self.name)
@@ -990,10 +1050,7 @@ class DigitalAnima:
         if bg_notifications:
             notif_text = "\n\n".join(bg_notifications)
             parts.append(
-                "## バックグラウンドタスク完了通知\n\n"
-                "以下のバックグラウンドタスクが完了しました。"
-                "結果を確認し、必要に応じて対応してください。\n\n"
-                + notif_text
+                load_prompt("fragments/bg_task_notification") + "\n\n" + notif_text
             )
 
         # Inject recent heartbeat history for continuity
@@ -1007,10 +1064,7 @@ class DigitalAnima:
         reflection_text = self._load_recent_reflections()
         if reflection_text:
             parts.append(
-                "## 直近の振り返り（前回までの気づき）\n\n"
-                "以下は過去のハートビートで得た気づきです。"
-                "関連があれば今回の判断に活かしてください。\n\n"
-                + reflection_text
+                load_prompt("fragments/recent_reflections") + "\n\n" + reflection_text
             )
 
         # Inject recent dialogue context for cross-session continuity
@@ -1020,15 +1074,16 @@ class DigitalAnima:
             recent_turns = state.turns[-5:] if state.turns else []
             if recent_turns:
                 conv_lines = []
-                for t in recent_turns:
-                    snippet = t.content[:200]
-                    conv_lines.append(f"- [{t.role}] {snippet}")
+                for turn in recent_turns:
+                    snippet = turn.content[:200]
+                    conv_lines.append(f"- [{turn.role}] {snippet}")
                 conv_summary = "\n".join(conv_lines)
                 parts.append(
-                    f"## 直近の対話履歴\n\n"
-                    f"以下はユーザーとの直近の対話です。"
-                    f"進行中のタスクや指示がある場合、この内容を考慮してください。\n\n"
-                    f"{conv_summary}"
+                    t("agent.recent_dialogue_header") + "\n\n"
+                    + t("agent.recent_dialogue_intro")
+                    + "\n"
+                    + t("agent.recent_dialogue_consider") + "\n\n"
+                    + conv_summary
                 )
         except Exception:
             logger.debug("[%s] Failed to load dialogue context", self.name, exc_info=True)
@@ -1091,12 +1146,7 @@ class DigitalAnima:
 
         # Inject command output if this is a follow-up to a command cron
         if command_output:
-            parts.append(
-                f"## コマンド実行結果\n\n"
-                f"以下はcronコマンドの実行結果です。"
-                f"この内容をもとに指示に従って対応してください。\n\n"
-                f"```\n{command_output}\n```"
-            )
+            parts.append(load_prompt("fragments/command_output", output=command_output))
 
         # Shared background context (same as heartbeat)
         parts.extend(self._build_background_context_parts())
@@ -1234,7 +1284,7 @@ class DigitalAnima:
             m = item.msg
             count = _read_counts.get(item.path.name, 1)
             if count >= 2:
-                prefix = f"- {m.from_person} [⚠️ 未返信{count}回目]: "
+                prefix = t("anima.unread_prefix", from_person=m.from_person, count=count)
             else:
                 prefix = f"- {m.from_person}: "
             lines.append(f"{prefix}{m.content[:800]}")
@@ -1255,11 +1305,12 @@ class DigitalAnima:
                 self.name, len(_recordable),
             )
         for _m in _recordable[:50]:
-            _episode = (
-                f"## {_msg_ts} {_m.from_person}からのメッセージ受信\n\n"
-                f"**送信者**: {_m.from_person}\n"
-                f"**内容**:\n{_m.content[:1000]}\n"
-            )
+            _episode = t(
+                "anima.msg_received_episode",
+                ts=_msg_ts,
+                from_person=_m.from_person,
+                content=_m.content[:1000],
+            ) + "\n"
             try:
                 self.memory.append_episode(_episode)
             except Exception:
@@ -1375,14 +1426,13 @@ class DigitalAnima:
             # A-3: Record important heartbeat actions to episodes
             if result.summary and "HEARTBEAT_OK" not in result.summary:
                 ts = now_jst().strftime("%H:%M")
-                episode_entry = (
-                    f"## {ts} ハートビート活動\n\n"
-                    f"{result.summary[:500]}"
+                episode_entry = t(
+                    "anima.heartbeat_episode",
+                    ts=ts,
+                    summary=result.summary[:500],
                 )
                 if unread_count > 0:
-                    episode_entry += (
-                        f"\n\n（{unread_count}件のメッセージを処理）"
-                    )
+                    episode_entry += t("anima.heartbeat_msgs_processed", count=unread_count)
 
                 # A-3b: Extract and record reflection from accumulated text
                 reflection_text = _extract_reflection(accumulated_text)
@@ -1508,19 +1558,19 @@ class DigitalAnima:
         # Activity log: error
         self._activity.log(
             "error",
-            summary=f"run_heartbeatエラー: {type(error).__name__}",
+            summary=t("anima.heartbeat_error", exc=type(error).__name__),
             meta={"phase": "run_heartbeat", "error": str(error)[:200]},
         )
 
         # ── Save recovery note for next heartbeat ──
         try:
             recovery_path = self.anima_dir / "state" / "recovery_note.md"
-            recovery_content = (
-                f"### エラー情報\n\n"
-                f"- エラー種別: {type(error).__name__}\n"
-                f"- エラー内容: {str(error)[:200]}\n"
-                f"- 発生日時: {now_iso()}\n"
-                f"- 未処理メッセージ数: {unread_count}\n"
+            recovery_content = t(
+                "anima.recovery_error_info",
+                exc_type=type(error).__name__,
+                exc_msg=str(error)[:200],
+                ts=now_iso(),
+                count=unread_count,
             )
             recovery_path.write_text(recovery_content, encoding="utf-8")
             logger.info("[%s] Recovery note saved", self.name)
@@ -1567,6 +1617,7 @@ class DigitalAnima:
         self,
         cascade_suppressed_senders: set[str] | None = None,
     ) -> CycleResult:
+        self._interrupt_event.clear()
         logger.info("[%s] run_heartbeat START", self.name)
         try:
             async with self._background_lock:
@@ -1574,7 +1625,7 @@ class DigitalAnima:
                 self._last_heartbeat = now_jst()
 
                 # Activity log: heartbeat start
-                self._activity.log("heartbeat_start", summary="定期巡回開始")
+                self._activity.log("heartbeat_start", summary=t("anima.heartbeat_start"))
 
                 try:
                     # 1. Build prompt parts
@@ -1638,7 +1689,7 @@ class DigitalAnima:
                 for e in episodes
             )
         else:
-            return ("(本日のエピソードはありません)", "", activity_log_summary)
+            return (t("anima.no_episodes_today"), "", activity_log_summary)
 
         # Format resolved events
         if resolved:
@@ -1706,7 +1757,7 @@ class DigitalAnima:
                             anima_name=self.name,
                             episodes_summary=episodes_summary,
                             resolved_events_summary=resolved_events_summary,
-                            activity_log_summary=activity_log_summary or "(アクティビティログなし)",
+                            activity_log_summary=activity_log_summary or t("anima.no_activity_log"),
                         )
                     else:
                         prompt = load_prompt(
@@ -1717,7 +1768,7 @@ class DigitalAnima:
                     # Activity log
                     self._activity.log(
                         "consolidation_start",
-                        summary=f"{consolidation_type}記憶統合開始",
+                        summary=t("anima.consolidation_start", type=consolidation_type),
                     )
 
                     result = await self.agent.run_cycle(
@@ -1731,7 +1782,7 @@ class DigitalAnima:
                     # Activity log: completion
                     self._activity.log(
                         "consolidation_end",
-                        summary=f"{consolidation_type}記憶統合完了",
+                        summary=t("anima.consolidation_end", type=consolidation_type),
                         content=result.summary[:500] if result.summary else "",
                         meta={
                             "type": consolidation_type,
@@ -1752,7 +1803,7 @@ class DigitalAnima:
                     )
                     self._activity.log(
                         "error",
-                        summary=f"記憶統合エラー: {type(exc).__name__}",
+                        summary=t("anima.consolidation_error", exc=type(exc).__name__),
                         meta={"phase": "run_consolidation", "error": str(exc)[:200]},
                     )
                     raise
@@ -1776,6 +1827,7 @@ class DigitalAnima:
             description: Task description/instruction.
             command_output: Optional stdout from a preceding command cron.
         """
+        self._interrupt_event.clear()
         logger.info("[%s] run_cron_task START task=%s", self.name, task_name)
         from core.tooling.handler import active_session_type
         try:
@@ -1804,7 +1856,7 @@ class DigitalAnima:
                     # Activity log: cron executed
                     self._activity.log(
                         "cron_executed",
-                        summary=f"タスク: {task_name}",
+                        summary=t("anima.cron_task_summary", task=task_name),
                         content=result.summary[:500] if result else "",
                         meta={
                             "task_name": task_name,
@@ -1824,7 +1876,7 @@ class DigitalAnima:
                     # Activity log: error
                     self._activity.log(
                         "error",
-                        summary=f"run_cron_taskエラー: {type(exc).__name__}",
+                        summary=t("anima.cron_task_error", exc=type(exc).__name__),
                         meta={"phase": "run_cron_task", "error": str(exc)[:200]},
                     )
                     raise
@@ -1906,7 +1958,7 @@ class DigitalAnima:
                     # Activity log: error
                     self._activity.log(
                         "error",
-                        summary=f"run_cron_commandエラー: {type(exc).__name__}",
+                        summary=t("anima.cron_cmd_error", exc=type(exc).__name__),
                         meta={"phase": "run_cron_command", "error": str(exc)[:200]},
                     )
                 finally:
@@ -1930,7 +1982,7 @@ class DigitalAnima:
             # which re-raises and never reaches this point on error)
             self._activity.log(
                 "cron_executed",
-                summary=f"コマンド: {task_name}",
+                summary=t("anima.cron_cmd_summary", task=task_name),
                 meta={"task_name": task_name, "exit_code": exit_code, "command": command or "", "tool": tool or ""},
             )
 

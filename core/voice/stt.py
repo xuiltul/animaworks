@@ -98,7 +98,10 @@ class VoiceSTT:
         )
         segments, info = model.transcribe(
             audio_np,
-            beam_size=5,
+            beam_size=1,
+            condition_on_previous_text=False,
+            no_speech_threshold=0.6,
+            temperature=0.0,
             language=language,
             vad_filter=vad_filter,
         )

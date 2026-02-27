@@ -1,6 +1,8 @@
 // ── Anima Birth Reveal Animation ──────────────────────
 // Full-screen "gacha reveal" effect when a Anima's avatar is generated.
 
+import { t } from "/shared/i18n.js";
+
 const FALLBACK_TIMEOUT = 5000;
 
 /**
@@ -42,7 +44,7 @@ export async function playReveal({ name, avatarUrl }) {
     avatar.style.display = "none";
   }
 
-  text.textContent = `${name}さんが生まれました`;
+  text.textContent = t("ws.reveal_born", { name });
 
   // Restore will-change hints before animation
   const flash = overlay.querySelector(".ws-reveal-flash");

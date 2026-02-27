@@ -102,6 +102,23 @@ class SlackChannel(NotificationChannel):
                     msg = f"slack: ERROR - {data.get('error', 'unknown')}"
                     logger.error(msg)
                     return msg
+
+                if anima_name and data.get("ts"):
+                    try:
+                        from core.notification.reply_routing import (
+                            save_notification_mapping,
+                        )
+
+                        save_notification_mapping(
+                            ts=data["ts"],
+                            channel=data.get("channel", channel),
+                            anima_name=anima_name,
+                        )
+                    except Exception:
+                        logger.debug(
+                            "Failed to save notification mapping", exc_info=True,
+                        )
+
             logger.info("Slack notification sent via bot: %s", subject[:50])
             return "slack: OK"
         except httpx.HTTPStatusError as e:
@@ -120,6 +137,9 @@ class SlackChannel(NotificationChannel):
         priority: str,
         anima_name: str,
     ) -> str:
+        # Webhook API does not return a message ts, so we cannot save a
+        # notification mapping here.  Reply routing only works for messages
+        # sent via the Bot Token API (chat.postMessage).
         text = self._build_text(subject, body, priority, anima_name)
 
         try:

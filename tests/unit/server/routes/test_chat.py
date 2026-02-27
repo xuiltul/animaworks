@@ -110,6 +110,29 @@ class TestChat:
         data = resp.json()
         assert data["response"] == "Hello from Alice"
         assert data["anima"] == "alice"
+        assert data["images"] == []
+
+    async def test_chat_includes_images_from_cycle_result(self):
+        supervisor = MagicMock()
+        supervisor.send_request = AsyncMock(return_value={
+            "response": "ok",
+            "replied_to": [],
+            "cycle_result": {
+                "summary": "ok",
+                "images": [{"type": "image", "source": "generated", "path": "assets/a.png"}],
+            },
+        })
+        app = _make_test_app(supervisor=supervisor)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/alice/chat",
+                json={"message": "Hi"},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["images"]) == 1
+        assert data["images"][0]["path"] == "assets/a.png"
 
     async def test_chat_with_from_anima(self):
         alice = _make_mock_anima("alice")
@@ -228,6 +251,29 @@ class TestChatStream:
         body = resp.text
         assert "event: text_delta" in body
         assert "event: done" in body
+
+    async def test_stream_done_contains_images(self):
+        alice = _make_mock_anima("alice")
+
+        async def mock_stream(msg, from_person="human", intent=""):
+            yield {
+                "type": "cycle_done",
+                "cycle_result": {
+                    "summary": "Hello",
+                    "images": [{"type": "image", "source": "generated", "path": "assets/avatar.png"}],
+                },
+            }
+
+        alice.process_message_stream = mock_stream
+        app = _make_test_app({"alice": alice})
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/alice/chat/stream",
+                json={"message": "Hi"},
+            )
+        assert resp.status_code == 200
+        assert '"images": [{"type": "image", "source": "generated", "path": "assets/avatar.png"}]' in resp.text
 
     async def test_stream_forwards_intent_to_supervisor(self):
         supervisor = MagicMock()

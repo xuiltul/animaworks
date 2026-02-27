@@ -26,6 +26,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.i18n import t
 from core.time_utils import ensure_aware, now_iso, now_jst
 
 logger = logging.getLogger("animaworks.activity")
@@ -578,7 +579,7 @@ class ActivityLogger:
 
         parts = []
         if result_count is not None:
-            parts.append(f"{result_count}件")
+            parts.append(t("activity.items_count", count=result_count))
         parts.append(size_str)
 
         detail = f" ({', '.join(parts)})" if parts else ""
@@ -805,6 +806,8 @@ class ActivityLogger:
 
             if is_trigger:
                 if cur is not None:
+                    # Next trigger for the same Anima closes the previous group.
+                    cur["is_open"] = False
                     _AL._finalize_group(cur)
                     groups.append(cur)
                 current_by_anima[anima] = _AL._open_group(entry, evt_dict)
@@ -1006,6 +1009,8 @@ class ActivityLogger:
         before: str | None = None,
         limit: int = 50,
         session_gap_minutes: int = 10,
+        thread_id: str | None = None,
+        strict_thread: bool = False,
     ) -> dict[str, Any]:
         """Build a conversation view from activity log entries.
 
@@ -1019,11 +1024,21 @@ class ActivityLogger:
             limit: Maximum number of *messages* to return (tool_calls are
                 nested within assistant messages and do not count).
             session_gap_minutes: Minimum gap in minutes to start a new session.
+            thread_id: If given, only include entries whose
+                ``meta.thread_id`` matches. Entries without a ``thread_id``
+                in meta are treated as belonging to ``"default"``.
+            strict_thread: If True, require explicit ``meta.thread_id`` match.
+                Entries without ``meta.thread_id`` are excluded.
 
         Returns:
             ``{"sessions": [...], "has_more": bool, "next_before": str | None}``
         """
-        entries = self._load_conversation_entries(before=before, limit=limit)
+        entries = self._load_conversation_entries(
+            before=before,
+            limit=limit,
+            thread_id=thread_id,
+            strict_thread=strict_thread,
+        )
         messages = self._entries_to_messages(entries)
 
         # Apply limit (keep oldest N for chronological order display)
@@ -1050,12 +1065,18 @@ class ActivityLogger:
         *,
         before: str | None = None,
         limit: int = 50,
+        thread_id: str | None = None,
+        strict_thread: bool = False,
     ) -> list[ActivityEntry]:
         """Load conversation-relevant entries, scanning backwards.
 
         Returns entries in chronological order.  Scans enough days to
         collect at least ``limit * 3`` raw entries (to account for
         tool_use/tool_result pairs being folded into messages).
+
+        When *thread_id* is given, only entries whose ``meta.thread_id``
+        matches are returned.  Entries without the field are treated as
+        belonging to ``"default"`` unless *strict_thread* is True.
         """
         target_raw = limit * 3 + 50  # overshoot to ensure enough messages
         entries: list[ActivityEntry] = []
@@ -1088,6 +1109,18 @@ class ActivityLogger:
                     ts = raw.get("ts", "")
                     if before and ts >= before:
                         continue
+                    if thread_id is not None:
+                        meta = raw.get("meta", {})
+                        has_thread_id = isinstance(meta, dict) and "thread_id" in meta
+                        if strict_thread:
+                            if not has_thread_id:
+                                continue
+                            if meta.get("thread_id") != thread_id:
+                                continue
+                        else:
+                            entry_tid = meta.get("thread_id", "default") if isinstance(meta, dict) else "default"
+                            if entry_tid != thread_id:
+                                continue
                     # Map JSONL keys
                     if "from" in raw:
                         raw["from_person"] = raw.pop("from")
@@ -1151,6 +1184,9 @@ class ActivityLogger:
                 }
                 if e.meta.get("thinking_text"):
                     msg["thinking_text"] = e.meta["thinking_text"]
+                images = e.meta.get("images") or e.meta.get("artifacts") or []
+                if isinstance(images, list) and images:
+                    msg["images"] = images
                 messages.append(msg)
                 # Attach any pending tool calls to this assistant message
                 if pending_tool_calls:
@@ -1177,7 +1213,7 @@ class ActivityLogger:
                 }
                 if e.meta.get("blocked"):
                     tc["is_error"] = True
-                    tc["result"] = f"ブロック: {e.meta.get('reason', '')}"
+                    tc["result"] = t("activity.blocked", reason=e.meta.get("reason", ""))
                 pending_tool_calls.append(tc)
 
             elif e.type == "tool_result":
@@ -1189,7 +1225,7 @@ class ActivityLogger:
                 messages.append({
                     "ts": e.ts,
                     "role": "system",
-                    "content": e.summary or "定期巡回開始",
+                    "content": e.summary or t("activity.heartbeat_start"),
                     "from_person": "",
                     "tool_calls": [],
                     "_trigger": "heartbeat",
@@ -1200,7 +1236,7 @@ class ActivityLogger:
                 messages.append({
                     "ts": e.ts,
                     "role": "system",
-                    "content": e.summary or e.content or "定期巡回完了",
+                    "content": e.summary or e.content or t("activity.heartbeat_end"),
                     "from_person": "",
                     "tool_calls": [],
                     "_trigger": "heartbeat",
@@ -1209,7 +1245,7 @@ class ActivityLogger:
             elif e.type == "cron_executed":
                 self._flush_tool_calls(messages, pending_tool_calls)
                 task_name = e.meta.get("task_name", "")
-                content = e.summary or e.content or task_name or "cronタスク実行"
+                content = e.summary or e.content or task_name or t("activity.cron_task_exec")
                 messages.append({
                     "ts": e.ts,
                     "role": "system",
@@ -1224,7 +1260,7 @@ class ActivityLogger:
                 messages.append({
                     "ts": e.ts,
                     "role": "system",
-                    "content": f"[エラー] {e.summary or e.content}",
+                    "content": t("activity.error_prefix") + (e.summary or e.content),
                     "from_person": "",
                     "tool_calls": [],
                 })

@@ -1,14 +1,15 @@
 // ── User Management ─────────────────────────
 import { api } from "../modules/api.js";
 import { escapeHtml } from "../modules/state.js";
+import { t } from "/shared/i18n.js";
 
 export function render(container) {
   container.innerHTML = `
     <div class="page-header">
-      <h2>ユーザー管理</h2>
+      <h2>${t("users.page_title")}</h2>
     </div>
     <div id="usersContent">
-      <div class="loading-placeholder">読み込み中...</div>
+      <div class="loading-placeholder">${t("common.loading")}</div>
     </div>
   `;
 
@@ -32,9 +33,9 @@ async function _loadUsers() {
       content.innerHTML = `
         <div class="card">
           <div class="card-body">
-            <div class="loading-placeholder">登録ユーザーはいません</div>
+            <div class="loading-placeholder">${t("users.no_users")}</div>
             <p style="text-align:center; color:var(--text-secondary, #666); margin-top:0.5rem;">
-              パーソンとの会話を通じてユーザープロファイルが自動作成されます。
+              ${t("users.auto_create_hint")}
             </p>
           </div>
         </div>
@@ -51,7 +52,7 @@ async function _loadUsers() {
                 ${escapeHtml(name.charAt(0).toUpperCase())}
               </div>
               <div style="font-weight:600; font-size:1.05rem; margin-bottom:0.25rem;">${escapeHtml(name)}</div>
-              <div style="color:var(--text-secondary, #666); font-size:0.85rem;">共有ユーザー</div>
+              <div style="color:var(--text-secondary, #666); font-size:0.85rem;">${t("users.shared_user")}</div>
             </div>
           </div>
         `).join("")}
@@ -61,7 +62,7 @@ async function _loadUsers() {
     content.innerHTML = `
       <div class="card">
         <div class="card-body">
-          <div class="loading-placeholder">ユーザー一覧の取得に失敗しました: ${escapeHtml(err.message)}</div>
+          <div class="loading-placeholder">${t("users.fetch_failed")}: ${escapeHtml(err.message)}</div>
         </div>
       </div>
     `;

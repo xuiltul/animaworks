@@ -115,6 +115,39 @@ def test_tool_call_pairing_by_id(anima_dir: Path) -> None:
     assert tc["is_error"] is False
 
 
+def test_assistant_images_restored_from_response_meta(anima_dir: Path) -> None:
+    """response_sent.meta.images should be restored into assistant message payload."""
+    _write_entry(anima_dir, {
+        "ts": _ts(2),
+        "type": "message_received",
+        "content": "画像を見せて",
+        "from": "user",
+        "channel": "chat",
+    })
+    _write_entry(anima_dir, {
+        "ts": _ts(1),
+        "type": "response_sent",
+        "content": "こちらです",
+        "to": "user",
+        "channel": "chat",
+        "meta": {
+            "images": [
+                {
+                    "type": "image",
+                    "source": "generated",
+                    "path": "assets/avatar_fullbody.png",
+                }
+            ]
+        },
+    })
+
+    al = ActivityLogger(anima_dir)
+    result = al.get_conversation_view(limit=50)
+    assistant = result["sessions"][0]["messages"][1]
+    assert assistant["role"] == "assistant"
+    assert assistant["images"][0]["path"] == "assets/avatar_fullbody.png"
+
+
 def test_tool_call_pairing_fallback(anima_dir: Path) -> None:
     """Tool calls without tool_use_id fall back to timestamp+name matching."""
     al = ActivityLogger(anima_dir)

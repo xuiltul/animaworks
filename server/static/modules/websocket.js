@@ -1,5 +1,6 @@
 /* ── WebSocket ─────────────────────────────── */
 
+import { t } from "/shared/i18n.js";
 import { state, dom } from "./state.js";
 import { addActivity } from "./activity.js";
 import { renderAnimaDropdown, updateAnimaAvatar, refreshSelectedAnima } from "./animas.js";
@@ -104,7 +105,7 @@ function handleWsMessage(raw) {
           if (data.current_task !== undefined) existing.current_task = data.current_task;
         }
         renderAnimaDropdown();
-        addActivity("system", animaName, `ステータス: ${statusVal || "不明"}`);
+        addActivity("system", animaName, `${t("websocket.status")} ${statusVal || t("common.unknown")}`);
       }
       break;
     }
@@ -112,7 +113,7 @@ function handleWsMessage(raw) {
     case "anima.heartbeat": {
       const animaName = data.name || data.anima;
       if (animaName) {
-        addActivity("heartbeat", animaName, data.summary || "ハートビート実行");
+        addActivity("heartbeat", animaName, data.summary || t("websocket.heartbeat"));
         if (animaName === state.selectedAnima) {
           refreshSelectedAnima();
         }
@@ -123,7 +124,7 @@ function handleWsMessage(raw) {
     case "anima.cron": {
       const animaName = data.name || data.anima;
       if (animaName) {
-        addActivity("cron", animaName, data.summary || data.task || "スケジュール実行");
+        addActivity("cron", animaName, data.summary || data.task || t("websocket.cron"));
       }
       break;
     }
@@ -160,7 +161,7 @@ function handleWsMessage(raw) {
             existing.bootstrapping = true;
           }
           renderAnimaDropdown();
-          addActivity("system", animaName, "ブートストラップ開始");
+          addActivity("system", animaName, t("websocket.bootstrap_start"));
         } else if (bsStatus === "completed") {
           const existing = state.animas.find((p) => p.name === animaName);
           if (existing) {
@@ -168,7 +169,7 @@ function handleWsMessage(raw) {
             existing.bootstrapping = false;
           }
           renderAnimaDropdown();
-          addActivity("system", animaName, "ブートストラップ完了");
+          addActivity("system", animaName, t("websocket.bootstrap_done"));
           // Pop-in animation for activated anima
           const el = document.querySelector(`[data-anima="${animaName}"]`);
           if (el) {
@@ -187,7 +188,7 @@ function handleWsMessage(raw) {
             existing.bootstrapping = false;
           }
           renderAnimaDropdown();
-          addActivity("system", animaName, "ブートストラップ失敗");
+          addActivity("system", animaName, t("websocket.bootstrap_failed"));
         }
       }
       break;
@@ -196,7 +197,7 @@ function handleWsMessage(raw) {
     case "anima.assets_updated": {
       const animaName = data.name;
       if (animaName) {
-        addActivity("system", animaName, `アセット更新: ${(data.assets || []).join(", ")}`);
+        addActivity("system", animaName, `${t("websocket.assets_updated")} ${(data.assets || []).join(", ")}`);
         if (animaName === state.selectedAnima) {
           updateAnimaAvatar();
         }
@@ -213,7 +214,7 @@ function handleWsMessage(raw) {
       }
       if (eventType === "anima.remake_complete" && data.name) {
         const steps = (data.steps_completed || []).join(", ");
-        addActivity("system", data.name, `アセットリメイク完了: ${steps}`);
+        addActivity("system", data.name, `${t("websocket.remake_complete")} ${steps}`);
       }
       break;
     }
@@ -261,7 +262,7 @@ function handleWsMessage(raw) {
       const toAnima = data.to_person || "";
       if (fromAnima || toAnima) {
         const label = `${fromAnima} → ${toAnima}`;
-        addActivity("message", label, data.summary || "メッセージ送信");
+        addActivity("message", label, data.summary || t("websocket.message_sent"));
       }
       break;
     }
@@ -287,7 +288,7 @@ function handleWsMessage(raw) {
 
     default:
       if (data.name || data.anima) {
-        const summary = data.summary || data.message || eventType || "イベント";
+        const summary = data.summary || data.message || eventType || t("websocket.event");
         addActivity("system", data.name || data.anima, summary);
       }
       break;

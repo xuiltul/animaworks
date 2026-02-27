@@ -99,6 +99,7 @@ class ProcessSupervisor:
         self._scheduler_running: bool = False
         self._restart_counts: dict[str, int] = {}
         self._restarting: set[str] = set()
+        self._starting: set[str] = set()
         self._permanently_failed: set[str] = set()
         self._failed_log_times: dict[str, float] = {}
         self._bootstrapping: set[str] = set()
@@ -128,12 +129,12 @@ class ProcessSupervisor:
 
     async def start_all(self, anima_names: list[str]) -> None:
         """
-        Start all Anima processes.
+        Start all Anima processes in parallel.
 
         Args:
             anima_names: List of anima names to start
         """
-        logger.info("Starting %d Anima processes", len(anima_names))
+        logger.info("Starting %d Anima processes (parallel)", len(anima_names))
 
         # Create socket directory and clean up stale sockets from previous runs
         socket_dir = self.run_dir / "sockets"
@@ -145,9 +146,15 @@ class ProcessSupervisor:
             except OSError as exc:
                 logger.warning("Failed to remove stale socket %s: %s", stale_sock, exc)
 
-        # Start each process
-        for anima_name in anima_names:
-            await self.start_anima(anima_name)
+        # Start all processes in parallel
+        if anima_names:
+            results = await asyncio.gather(
+                *(self.start_anima(name) for name in anima_names),
+                return_exceptions=True,
+            )
+            for name, result in zip(anima_names, results):
+                if isinstance(result, Exception):
+                    logger.error("Failed to start anima %s: %s", name, result)
 
         # Start health check loop
         self._health_check_task = asyncio.create_task(
@@ -173,44 +180,51 @@ class ProcessSupervisor:
         if anima_name in self.processes:
             logger.warning("Process already exists: %s", anima_name)
             return
+        if anima_name in self._starting:
+            logger.debug("Start already in progress: %s", anima_name)
+            return
 
-        socket_dir = self.run_dir / "sockets"
-        socket_dir.mkdir(parents=True, exist_ok=True)
-        socket_path = socket_dir / f"{anima_name}.sock"
-
-        handle = ProcessHandle(
-            anima_name=anima_name,
-            socket_path=socket_path,
-            animas_dir=self.animas_dir,
-            shared_dir=self.shared_dir,
-            log_dir=self.log_dir
-        )
-
+        self._starting.add(anima_name)
         try:
-            await handle.start()
-            self.processes[anima_name] = handle
-            logger.info("Anima process started: %s (PID %s)", anima_name, handle.get_pid())
+            socket_dir = self.run_dir / "sockets"
+            socket_dir.mkdir(parents=True, exist_ok=True)
+            socket_path = socket_dir / f"{anima_name}.sock"
 
-            # Check if bootstrap is needed and launch in background
+            handle = ProcessHandle(
+                anima_name=anima_name,
+                socket_path=socket_path,
+                animas_dir=self.animas_dir,
+                shared_dir=self.shared_dir,
+                log_dir=self.log_dir
+            )
+
             try:
-                status = await self.send_request(
-                    anima_name, "get_status", {}, timeout=10.0,
-                )
-                if status.get("needs_bootstrap"):
-                    logger.info(
-                        "Bootstrap needed for %s, launching background task",
-                        anima_name,
-                    )
-                    asyncio.create_task(self._run_bootstrap(anima_name))
-            except Exception as e:
-                logger.warning(
-                    "Could not check bootstrap status for %s: %s",
-                    anima_name, e,
-                )
+                await handle.start()
+                self.processes[anima_name] = handle
+                logger.info("Anima process started: %s (PID %s)", anima_name, handle.get_pid())
 
-        except Exception as e:
-            logger.error("Failed to start process %s: %s", anima_name, e)
-            raise
+                # Check if bootstrap is needed and launch in background
+                try:
+                    status = await self.send_request(
+                        anima_name, "get_status", {}, timeout=10.0,
+                    )
+                    if status.get("needs_bootstrap"):
+                        logger.info(
+                            "Bootstrap needed for %s, launching background task",
+                            anima_name,
+                        )
+                        asyncio.create_task(self._run_bootstrap(anima_name))
+                except Exception as e:
+                    logger.warning(
+                        "Could not check bootstrap status for %s: %s",
+                        anima_name, e,
+                    )
+
+            except Exception as e:
+                logger.error("Failed to start process %s: %s", anima_name, e)
+                raise
+        finally:
+            self._starting.discard(anima_name)
 
     def is_bootstrapping(self, anima_name: str) -> bool:
         """Check if an anima is currently bootstrapping."""
@@ -364,12 +378,18 @@ class ProcessSupervisor:
             self._permanently_failed.discard(anima_name)
             self._failed_log_times.pop(anima_name, None)
 
-        # Stop existing process
-        if anima_name in self.processes:
-            await self.stop_anima(anima_name)
+        # Guard against reconciliation spawning a duplicate process
+        # during the window between stop and start.
+        self._restarting.add(anima_name)
+        try:
+            # Stop existing process
+            if anima_name in self.processes:
+                await self.stop_anima(anima_name)
 
-        # Start new process
-        await self.start_anima(anima_name)
+            # Start new process
+            await self.start_anima(anima_name)
+        finally:
+            self._restarting.discard(anima_name)
 
     async def shutdown_all(self) -> None:
         """Shutdown all processes gracefully."""
@@ -876,6 +896,9 @@ class ProcessSupervisor:
             if enabled and name not in running:
                 if name in self._restarting:
                     logger.debug("Reconciliation: skipping %s (restart in progress)", name)
+                    continue
+                if name in self._starting:
+                    logger.debug("Reconciliation: skipping %s (start in progress)", name)
                     continue
                 if name in self._bootstrapping:
                     logger.debug("Reconciliation: skipping %s (bootstrap in progress)", name)

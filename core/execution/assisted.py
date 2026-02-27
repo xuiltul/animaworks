@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from core.exceptions import LLMAPIError, ToolExecutionError, ConfigError  # noqa: F401
+from core.i18n import t
 from core.execution._sanitize import wrap_tool_result
 from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
 from core.execution.reminder import MSG_OUTPUT_TRUNCATED, SystemReminderQueue
@@ -48,6 +49,42 @@ from core.tooling.schemas import build_tool_list, to_text_format
 logger = logging.getLogger("animaworks.execution.assisted")
 
 _MAX_TOOL_OUTPUT_BYTES = 4096
+_MAX_INTENT_REPROMPTS = 2
+
+_TOOL_INTENT_PATTERNS_JA = re.compile(
+    r"(?:調べ|確認し|実行し|検索し|取得し|チェックし|見てみ|探し|読み込|読んで)"
+    r"(?:ます|ましょう|てみます|ますね|ましょうか|ていきます)",
+)
+_TOOL_INTENT_PATTERNS_EN = re.compile(
+    r"(?:I(?:'ll| will) (?:check|look|search|run|execute|fetch|retrieve|find|read))"
+    r"|(?:Let me (?:check|look|search|run|execute|fetch|retrieve|find|read))",
+    re.IGNORECASE,
+)
+
+_INTENT_REPROMPT_JA = (
+    "ツールを使う意図があるようですが、実際にツールが呼び出されていません。"
+    "必要な操作を以下の形式で出力してください:\n\n"
+    '```json\n{"tool": "ツール名", "arguments": {"引数名": "値"}}\n```'
+)
+_INTENT_REPROMPT_EN = (
+    "You indicated intent to use a tool but did not actually call one. "
+    "Please output the tool call in the following format:\n\n"
+    '```json\n{"tool": "tool_name", "arguments": {"arg_name": "value"}}\n```'
+)
+
+
+def _looks_like_tool_intent(text: str) -> bool:
+    """Detect whether response text implies the model intended to call a tool.
+
+    Returns True if the text contains phrases like "調べます" or "I'll check"
+    without an actual tool-call JSON block.
+    """
+    if not text or len(text) > 2000:
+        return False
+    return bool(
+        _TOOL_INTENT_PATTERNS_JA.search(text)
+        or _TOOL_INTENT_PATTERNS_EN.search(text)
+    )
 
 
 # ── JSON extraction ─────────────────────────────────────────
@@ -132,7 +169,7 @@ def _truncate_tool_output(result: str, max_bytes: int = _MAX_TOOL_OUTPUT_BYTES) 
     truncated = encoded[:max_bytes].decode("utf-8", errors="ignore")
     return (
         f"{truncated}\n"
-        f"... [出力切り捨て: 元のサイズ {len(encoded)}バイト]"
+        + t("assisted.output_truncated", size=len(encoded))
     )
 
 
@@ -158,8 +195,9 @@ class AssistedExecutor(BaseExecutor):
         messenger: Messenger | None = None,
         tool_registry: list[str] | None = None,
         personal_tools: dict[str, str] | None = None,
+        interrupt_event: asyncio.Event | None = None,
     ) -> None:
-        super().__init__(model_config, anima_dir)
+        super().__init__(model_config, anima_dir, interrupt_event=interrupt_event)
         self._tool_handler = tool_handler
         self._memory = memory
         self._messenger = messenger
@@ -401,6 +439,7 @@ class AssistedExecutor(BaseExecutor):
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
         max_iterations = max_turns_override or self._model_config.max_turns
+        intent_reprompt_count = 0
 
         # ── 2. Tool-call loop ────────────────────────────────
         for iteration in range(max_iterations):
@@ -437,6 +476,31 @@ class AssistedExecutor(BaseExecutor):
             # ── 3. Extract tool call ─────────────────────────
             tool_call = extract_tool_call(content)
             if tool_call is None:
+                # Check for intent-without-action: model says "I'll check"
+                # but doesn't actually call a tool.  Re-prompt up to
+                # _MAX_INTENT_REPROMPTS times to coax out the JSON block.
+                if (
+                    intent_reprompt_count < _MAX_INTENT_REPROMPTS
+                    and _looks_like_tool_intent(content)
+                ):
+                    intent_reprompt_count += 1
+                    logger.info(
+                        "Mode B intent detected without tool call "
+                        "(reprompt %d/%d): %.80s",
+                        intent_reprompt_count,
+                        _MAX_INTENT_REPROMPTS,
+                        content,
+                    )
+                    from core.tooling.prompt_db import _get_locale
+                    reprompt = (
+                        _INTENT_REPROMPT_JA
+                        if _get_locale() == "ja"
+                        else _INTENT_REPROMPT_EN
+                    )
+                    messages.append({"role": "assistant", "content": content})
+                    messages.append({"role": "user", "content": reprompt})
+                    continue
+
                 # No tool call → final response
                 all_response_text.append(content)
                 logger.info(
@@ -459,9 +523,10 @@ class AssistedExecutor(BaseExecutor):
                 messages.append({"role": "assistant", "content": content})
                 messages.append({
                     "role": "user",
-                    "content": (
-                        f"エラー: 不明なツール '{tool_name}' です。"
-                        f"利用可能なツール: {sorted(self._known_tools)}"
+                    "content": t(
+                        "assisted.unknown_tool",
+                        tool_name=tool_name,
+                        available=sorted(self._known_tools),
                     ),
                 })
                 continue
@@ -484,10 +549,10 @@ class AssistedExecutor(BaseExecutor):
                 )
             except ToolExecutionError as e:
                 logger.warning("Mode B tool execution error: %s – %s", tool_name, e)
-                result = f"ツール実行エラー: {e}"
+                result = t("assisted.tool_exec_error", error=e)
             except Exception as e:
                 logger.exception("Mode B unexpected tool error: %s", tool_name)
-                result = f"ツール実行エラー: {e}"
+                result = t("assisted.tool_exec_error", error=e)
 
             result = _truncate_tool_output(str(result))
             all_tool_records.append(ToolCallRecord(
@@ -505,7 +570,7 @@ class AssistedExecutor(BaseExecutor):
             messages.append({"role": "assistant", "content": content})
             messages.append({
                 "role": "user",
-                "content": f"ツール実行結果:\n{wrap_tool_result(tool_name, result)}",
+                "content": t("assisted.tool_result_header") + "\n" + wrap_tool_result(tool_name, result),
             })
 
             # ── Drain reminder queue into tool result message ──
@@ -573,6 +638,7 @@ class AssistedExecutor(BaseExecutor):
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
         max_iterations = max_turns_override or self._model_config.max_turns
+        intent_reprompt_count = 0
 
         # ── 2. Tool-call loop ────────────────────────────────
         async with stream_error_boundary(
@@ -609,6 +675,29 @@ class AssistedExecutor(BaseExecutor):
                 tool_call = extract_tool_call(content)
 
                 if tool_call is None:
+                    # Check for intent-without-action (same as non-streaming)
+                    if (
+                        intent_reprompt_count < _MAX_INTENT_REPROMPTS
+                        and _looks_like_tool_intent(content)
+                    ):
+                        intent_reprompt_count += 1
+                        logger.info(
+                            "Mode B streaming intent detected without tool call "
+                            "(reprompt %d/%d): %.80s",
+                            intent_reprompt_count,
+                            _MAX_INTENT_REPROMPTS,
+                            content,
+                        )
+                        from core.tooling.prompt_db import _get_locale
+                        reprompt = (
+                            _INTENT_REPROMPT_JA
+                            if _get_locale() == "ja"
+                            else _INTENT_REPROMPT_EN
+                        )
+                        messages.append({"role": "assistant", "content": content})
+                        messages.append({"role": "user", "content": reprompt})
+                        continue
+
                     # No tool call → final response
                     all_response_text.append(content)
                     if content:
@@ -633,9 +722,10 @@ class AssistedExecutor(BaseExecutor):
                     messages.append({"role": "assistant", "content": content})
                     messages.append({
                         "role": "user",
-                        "content": (
-                            f"エラー: 不明なツール '{tool_name}' です。"
-                            f"利用可能なツール: {sorted(self._known_tools)}"
+                        "content": t(
+                            "assisted.unknown_tool",
+                            tool_name=tool_name,
+                            available=sorted(self._known_tools),
                         ),
                     })
                     continue
@@ -673,12 +763,12 @@ class AssistedExecutor(BaseExecutor):
                     logger.warning(
                         "Mode B streaming tool error: %s – %s", tool_name, e,
                     )
-                    result = f"ツール実行エラー: {e}"
+                    result = t("assisted.tool_exec_error", error=e)
                 except Exception as e:
                     logger.exception(
                         "Mode B streaming unexpected tool error: %s", tool_name,
                     )
-                    result = f"ツール実行エラー: {e}"
+                    result = t("assisted.tool_exec_error", error=e)
 
                 result = _truncate_tool_output(str(result))
                 all_tool_records.append(ToolCallRecord(
@@ -699,7 +789,7 @@ class AssistedExecutor(BaseExecutor):
                 messages.append({"role": "assistant", "content": content})
                 messages.append({
                     "role": "user",
-                    "content": f"ツール実行結果:\n{wrap_tool_result(tool_name, result)}",
+                    "content": t("assisted.tool_result_header") + "\n" + wrap_tool_result(tool_name, result),
                 })
 
                 # ── Drain reminder queue into tool result message ──

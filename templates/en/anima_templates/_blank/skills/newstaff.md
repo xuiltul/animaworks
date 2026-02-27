@@ -1,9 +1,9 @@
 ---
 name: newstaff
 description: >-
-  Skill to hire and create new Digital Anima in the AnimaWorks organization.
-  Create a character sheet (Markdown) based on discovery, then use the create_anima
-  tool to generate identity/injection/permissions etc. in bulk. New Anima self-configures via bootstrap.
+  Skill for hiring and creating new Digital Anima in the AnimaWorks organization.
+  Create a character sheet (Markdown) based on interviews, then use the create_anima
+  tool to generate identity/injection/permissions in bulk. After creation, self-configure via bootstrap.
   "Create a new employee", "Hire someone", "New employee", "Hiring", "Create Anima", "Recruitment"
 ---
 
@@ -11,119 +11,119 @@ description: >-
 
 ## Prerequisites
 
-- The role direction for the new employee is decided (discover if unclear)
+- The role direction of the employee to create has been decided (if unclear, conduct an interview)
 
 ## Procedure
 
-### 1. Discovery (minimal is fine)
+### 1. Interview (Minimal is OK)
 
-Discover the following from the requester. **Bold items only are required**; others can be auto-generated if unspecified:
+Interview the requester for the following information. **Bold items are required**; others are auto-generated if not specified:
 
 **Required:**
 - **English name** (lowercase alphanumeric only; becomes directory name)
-- **Role / specialty**: What they will handle (e.g., Research, Development, Communication, Infrastructure monitoring)
+- **Role/specialty**: What they will handle (e.g., research, development, communication, infrastructure monitoring)
 
-**Optional (use if specified, otherwise auto-generate):**
+**Optional (reflect if specified, auto-generate if not):**
 - Japanese name
-- Personality direction (e.g., "cheerful", "cool", "gentle" is fine)
+- Personality direction (e.g., "cheerful", "cool", "easy-going" is fine)
 - Age
 - Any other preferences
 
-**Technical settings (use defaults if unspecified):**
+**Technical settings (use defaults if not specified):**
 - Role: `commander` (can delegate to others) or `worker` (receives delegation)
-- supervisor: English name of the supervising Anima (required for worker; self if unspecified)
+- supervisor: English name of the supervising Anima (required for worker; default: self if unspecified)
 
-**LLM model settings:**
+**Brain (LLM model) settings:**
 
 Present this table for selection:
 
 | Level | Execution Mode | Example Models | Features | credential |
-|-------|----------------|----------------|----------|-------------|
+|--------|-----------|-------------|------|------------|
 | S | autonomous | `claude-opus-4-6`, `claude-sonnet-4-6` | Claude Agent SDK. Most capable | anthropic |
-| A | autonomous | `openai/gpt-4.1`, `google/gemini-2.5-pro`, `vertex_ai/gemini-2.5-flash` | Via LiteLLM. Tool use | openai / google / azure / vertex |
-| B | assisted | `ollama/gemma3:27b`, `ollama/qwen2.5-coder:32b` | No tools. Local, low cost | ollama |
+| A | autonomous | `openai/gpt-4.1`, `google/gemini-2.5-pro`, `vertex_ai/gemini-2.5-flash` | Via LiteLLM. Tool use supported | openai / google / azure / vertex |
+| B | assisted | `ollama/gemma3:27b`, `ollama/qwen2.5-coder:32b` | No tools. Local execution, low cost | ollama |
 
-* If unspecified, default (claude-sonnet-4 / autonomous / anthropic) is used.
+※ If not specified, use defaults (claude-sonnet-4 / autonomous / anthropic).
 
-### 2. Character Design (auto-generate)
+### 2. Character Design (Auto-generated)
 
-From the minimal information gathered, create a **consistent, deep character**.
+From the minimal information gathered in the interview, **create a coherent, in-depth character profile**.
 
-Read the **Character Design Guide** at `{data_dir}/prompts/character_design_guide.md` and flesh out the character according to its rules.
+Read the **Character Design Guide** (`{data_dir}/prompts/character_design_guide.md`) in the runtime data directory and flesh out the character according to its rules.
 
-### 3. Create Character Sheet and Bulk Create with create_anima
+### 3. Create Character Sheet and Bulk-create via create_anima
 
-Based on discovery and design, pass the content directly to `create_anima` per the **character sheet spec**.
-No need to use `write_memory_file` — you can pass content directly:
+According to the interview and design results, follow the **Character Sheet Specification** and pass content directly to `create_anima`.
+No need to use `write_memory_file` — content can be passed directly:
 
 ```
 create_anima(
-  character_sheet_content="(full character sheet per spec below)",
+  character_sheet_content="(Full character sheet content per specification below)",
   name="{english_name}",
   supervisor="{supervisor_english_name}"
 )
 ```
 
-**supervisor setting:**
-- Explicitly specify via `supervisor` parameter (recommended)
-- If omitted: taken from character sheet `| Supervisor |` field
-- If neither: you (calling Anima) become supervisor
+**supervisor configuration:**
+- Specify explicitly via `supervisor` parameter (recommended)
+- If omitted: read from `| 上司 |` field in character sheet
+- If neither: the caller Anima becomes supervisor
 
-**Character sheet spec:**
+**Character Sheet Specification:**
 
 ```markdown
-# Character Sheet: {Japanese name}
+# キャラクターシート: {Japanese name}
 
-## Basic Information
+## 基本情報
 
-| Field | Value |
-|-------|-------|
-| English name | {lowercase alphanumeric} |
-| Japanese name | {Japanese full name} |
-| Role / specialty | {Role description} |
-| Supervisor | {supervisor English name} |
-| Role | {commander / worker} |
-| Execution mode | {autonomous / assisted} |
-| Model | {model name} |
+| 項目 | 設定 |
+|------|------|
+| 英名 | {lowercase alphanumeric} |
+| 日本語名 | {Japanese full name} |
+| 役職/専門 | {Role description} |
+| 上司 | {supervisor English name} |
+| 役割 | {commander / worker} |
+| 実行モード | {autonomous / assisted} |
+| モデル | {model name} |
 | credential | {anthropic / openai / google / ollama} |
 
-## Personality (→ identity.md)
+## 人格 (→ identity.md)
 
 {Personality, speaking style, values, backstory, appearance, etc.}
 
-## Role and Conduct (→ injection.md)
+## 役割・行動方針 (→ injection.md)
 
 {Responsible areas, decision criteria, reporting rules, conduct standards, etc.}
 
-## Permissions (→ permissions.md) [optional]
+## 権限 (→ permissions.md) [省略可]
 
 {If omitted: default template applied}
 
-## Regular Tasks (→ heartbeat.md, cron.md) [optional]
+## 定期業務 (→ heartbeat.md, cron.md) [省略可]
 
 {If omitted: generic template applied. New Anima self-adjusts in bootstrap}
 
-## First Startup Instructions (→ bootstrap.md addendum) [optional]
+## 初回起動指示 (→ bootstrap.md 追加指示) [省略可]
 
 {If omitted: standard bootstrap only}
 ```
 
 **Required sections**: Basic information, Personality, Role and conduct
-**Optional sections**: Permissions, Regular tasks, First startup instructions
+**Optional sections**: Permissions, Recurring tasks, First-run instructions
 
-This triggers:
-- Directory structure creation
-- Skeleton file placement
-- bootstrap.md placement
-- status.json creation (including supervisor)
-- config.json registration (model, supervisor, etc.)
-- Default application to omitted sections
+This automatically performs:
+- Bulk creation of directory structure
+- Placement of skeleton files
+- Placement of bootstrap.md
+- Creation of status.json (including supervisor)
+- Registration in config.json (model, supervisor, etc.)
+- Default application for omitted sections
 
-### 4. Verify config.json Model Settings
+### 4. Verify Model Configuration in config.json
 
-create_anima auto-registers to config.json; verify and complete:
+create_anima automatically registers to config.json, but verify/supplement:
 
-- `model`: Model name from discovery
+- `model`: Model name decided in interview
 - `credential`: Credential name to use
 - `execution_mode`: autonomous or assisted
 - `speciality`: Role/specialty
@@ -137,13 +137,13 @@ execute_command(command="curl -s -X POST http://localhost:18500/api/system/reloa
 ### 6. Report to Requester
 
 Report hiring completion:
-- New employee name and role
-- Technical stack configured (model, execution mode)
+- New employee's name and role
+- Configured technical stack (model, execution mode)
 
-⚠️ Do not mention avatar generation (new Anima generates it in bootstrap)
+⚠️ Do not report avatar image generation (new Anima will generate in bootstrap)
 
-### After that, new Anima executes autonomously:
-- Enrich identity.md / injection.md
-- Self-design heartbeat.md / cron.md
+### Thereafter the new Anima runs autonomously:
+- Enrichment of identity.md / injection.md
+- Self-design of heartbeat.md / cron.md
 - Avatar image generation (with supervisor reference)
-- Arrival report to supervisor
+- Onboarding report to supervisor

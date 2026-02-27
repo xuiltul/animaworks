@@ -1,4 +1,5 @@
 // ── Home Dashboard ──────────────────────────
+import { t } from "/shared/i18n.js";
 import { api } from "../modules/api.js";
 import { escapeHtml, timeStr, statusClass } from "../modules/state.js";
 import { animaHashColor } from "../modules/animas.js";
@@ -11,26 +12,26 @@ let _refreshInterval = null;
 export function render(container) {
   container.innerHTML = `
     <div class="page-header">
-      <h2>ダッシュボード</h2>
+      <h2>${t("home.dashboard")}</h2>
     </div>
 
     <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
       <div class="stat-card" id="homeStatAnimas">
-        <div class="stat-label">Anima数</div>
+        <div class="stat-label">${t("home.anima_count")}</div>
         <div class="stat-value" id="homeAnimaCount">--</div>
       </div>
       <div class="stat-card" id="homeStatScheduler">
-        <div class="stat-label">スケジューラ</div>
+        <div class="stat-label">${t("home.scheduler")}</div>
         <div class="stat-value" id="homeSchedulerStatus">--</div>
       </div>
       <div class="stat-card" id="homeStatProcesses">
-        <div class="stat-label">稼働プロセス</div>
+        <div class="stat-label">${t("home.process_count")}</div>
         <div class="stat-value" id="homeProcessCount">--</div>
       </div>
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="card-header">Anima一覧</div>
+      <div class="card-header">${t("home.anima_list")}</div>
       <div class="card-body">
         <div class="card-grid" id="homeAnimaCards" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
           <div class="loading-placeholder">読み込み中...</div>
@@ -39,7 +40,7 @@ export function render(container) {
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
-      <div class="card-header">最近のアクティビティ</div>
+      <div class="card-header">${t("home.recent_activity")}</div>
       <div class="card-body">
         <div id="homeActivityTimeline">
           <div class="loading-placeholder">読み込み中...</div>
@@ -48,12 +49,12 @@ export function render(container) {
     </div>
 
     <div class="card">
-      <div class="card-header">クイックリンク</div>
+      <div class="card-header">${t("home.quick_links")}</div>
       <div class="card-body" style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-        <a href="/workspace/" class="btn-primary" style="text-decoration:none;">Workspace</a>
-        <a href="#/chat" class="btn-secondary" style="text-decoration:none;">チャット</a>
-        <a href="#/animas" class="btn-secondary" style="text-decoration:none;">Anima管理</a>
-        <a href="#/memory" class="btn-secondary" style="text-decoration:none;">記憶ブラウザ</a>
+        <a href="/workspace/" class="btn-primary" style="text-decoration:none;">${t("home.link_workspace")}</a>
+        <a href="#/chat" class="btn-secondary" style="text-decoration:none;">${t("home.link_chat")}</a>
+        <a href="#/animas" class="btn-secondary" style="text-decoration:none;">${t("home.link_animas")}</a>
+        <a href="#/memory" class="btn-secondary" style="text-decoration:none;">${t("home.link_memory")}</a>
       </div>
     </div>
   `;
@@ -84,13 +85,13 @@ async function _loadSystemStatus() {
     const schedulerEl = document.getElementById("homeSchedulerStatus");
     const processCountEl = document.getElementById("homeProcessCount");
     if (animaCountEl) animaCountEl.textContent = data.animas ?? 0;
-    if (schedulerEl) schedulerEl.textContent = data.scheduler_running ? "稼働中" : "停止";
+    if (schedulerEl) schedulerEl.textContent = data.scheduler_running ? t("home.scheduler_running") : t("home.scheduler_stopped");
     const processes = data.processes || {};
     const runningCount = Object.values(processes).filter(p => p.status === "running").length;
     if (processCountEl) processCountEl.textContent = runningCount;
   } catch {
     const el = document.getElementById("homeAnimaCount");
-    if (el) el.textContent = "取得失敗";
+    if (el) el.textContent = t("home.status_fetch_failed");
   }
 }
 
@@ -101,7 +102,7 @@ async function _loadAnimaCards() {
   try {
     const animas = await api("/api/animas");
     if (animas.length === 0) {
-      grid.innerHTML = '<div class="loading-placeholder">Animaが登録されていません</div>';
+      grid.innerHTML = `<div class="loading-placeholder">${t("animas.not_registered")}</div>`;
       return;
     }
 
@@ -145,7 +146,7 @@ async function _loadAnimaCards() {
       _tryLoadAvatar(p.name);
     }
   } catch (err) {
-    grid.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    grid.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -181,7 +182,7 @@ async function _loadActivity() {
     const data = await api("/api/activity/recent?hours=12&limit=10");
     const events = data.events || [];
     if (events.length === 0) {
-      timeline.innerHTML = '<div class="loading-placeholder">最近のアクティビティはありません</div>';
+      timeline.innerHTML = `<div class="loading-placeholder">${t("activity.recent_none")}</div>`;
       return;
     }
 
@@ -202,9 +203,9 @@ async function _loadActivity() {
 
     timeline.innerHTML = `
       <div id="homeActivityEvents">${eventsHtml}</div>
-      <div style="text-align:right;margin-top:0.5rem;"><a href="#/activity" style="color:var(--accent-color,#2563eb);text-decoration:none;font-size:0.85rem;">アクティビティを見る →</a></div>
+      <div style="text-align:right;margin-top:0.5rem;"><a href="#/activity" style="color:var(--accent-color,#2563eb);text-decoration:none;font-size:0.85rem;">${t("activity.view_more")}</a></div>
     `;
   } catch (err) {
-    timeline.innerHTML = `<div class="loading-placeholder">アクティビティ取得失敗: ${escapeHtml(err.message)}</div>`;
+    timeline.innerHTML = `<div class="loading-placeholder">${t("activity.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }

@@ -129,8 +129,8 @@ class TestRevealJSModule:
         assert 'getElementById("wsRevealText")' in self.js
 
     def test_sets_text_content(self):
-        """Should set the birth announcement text."""
-        assert "さんが生まれました" in self.js
+        """Should set the birth announcement text (i18n: t() call)."""
+        assert 't("ws.reveal_born"' in self.js or "t('ws.reveal_born'" in self.js
 
     def test_handles_animation_end(self):
         assert "animationend" in self.js

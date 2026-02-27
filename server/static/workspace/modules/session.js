@@ -4,6 +4,7 @@
 import { getState, setState } from "./state.js";
 import * as api from "./api.js";
 import { escapeHtml, renderSimpleMarkdown, timeStr } from "./utils.js";
+import { t } from "/shared/i18n.js";
 
 const TOOL_RESULT_TRUNCATE = 500;
 
@@ -51,7 +52,7 @@ export function renderSessionList(container) {
     <div class="session-panel">
       <div class="session-list"></div>
       <div class="session-detail" style="display:none">
-        <button class="session-back-btn">&larr; Back</button>
+        <button class="session-back-btn">&larr; ${t("ws.back")}</button>
         <div class="session-detail-title"></div>
         <div class="session-detail-body"></div>
       </div>
@@ -80,11 +81,11 @@ export async function loadSessions() {
   const { selectedAnima } = getState();
 
   if (!selectedAnima) {
-    listArea.innerHTML = '<div class="loading-placeholder">Anima を選択してください</div>';
+    listArea.innerHTML = `<div class="loading-placeholder">${t("ws.select_anima")}</div>`;
     return;
   }
 
-  listArea.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  listArea.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api.fetchSessions(selectedAnima);
@@ -92,7 +93,7 @@ export async function loadSessions() {
     renderItems(data);
   } catch (err) {
     console.error("Failed to load sessions:", err);
-    listArea.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    listArea.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -110,11 +111,11 @@ function renderItems(data) {
     const lastTime = ac.last_timestamp ? timeStr(ac.last_timestamp) : "--:--";
     html += `
       <div class="session-section">
-        <div class="section-header">現在の会話</div>
+        <div class="section-header">${t("chat.history_current")}</div>
         <div class="session-item session-active" data-type="active">
-          <div class="session-item-title">進行中の会話</div>
+          <div class="session-item-title">${t("ws.conversation_active")}</div>
           <div class="session-item-meta">
-            ${ac.total_turn_count || 0}ターン ${ac.has_summary ? "(要約あり)" : ""}
+            ${ac.total_turn_count || 0}${t("ws.turns")} ${ac.has_summary ? t("chat.session_summary") : ""}
             | 最終: ${lastTime}
           </div>
         </div>
@@ -123,12 +124,12 @@ function renderItems(data) {
 
   // 2. Archived sessions
   if (data.archived_sessions && data.archived_sessions.length > 0) {
-    html += '<div class="session-section"><div class="section-header">セッションアーカイブ</div>';
+    html += `<div class="session-section"><div class="section-header">${t("chat.history_archive")}</div>`;
     for (const s of data.archived_sessions) {
       const ts = s.timestamp ? timeStr(s.timestamp) : s.id;
       html += `
         <div class="session-item" data-type="archive" data-id="${escapeHtml(s.id)}">
-          <div class="session-item-title">${escapeHtml(s.trigger || "セッション")} (${s.turn_count || 0}ターン)</div>
+          <div class="session-item-title">${escapeHtml(s.trigger || t("ws.session_default"))} (${s.turn_count || 0}${t("ws.turns")})</div>
           <div class="session-item-meta">${ts}</div>
         </div>`;
     }
@@ -137,12 +138,12 @@ function renderItems(data) {
 
   // 3. Transcripts
   if (data.transcripts && data.transcripts.length > 0) {
-    html += '<div class="session-section"><div class="section-header">会話ログ</div>';
-    for (const t of data.transcripts) {
+    html += `<div class="session-section"><div class="section-header">${t("chat.history_transcript")}</div>`;
+    for (const tr of data.transcripts) {
       html += `
-        <div class="session-item" data-type="transcript" data-date="${escapeHtml(t.date)}">
-          <div class="session-item-title">${escapeHtml(t.date)}</div>
-          <div class="session-item-meta">${t.message_count || 0}メッセージ</div>
+        <div class="session-item" data-type="transcript" data-date="${escapeHtml(tr.date)}">
+          <div class="session-item-title">${escapeHtml(tr.date)}</div>
+          <div class="session-item-meta">${t("chat.messages_count", { count: tr.message_count || 0 })}</div>
         </div>`;
     }
     html += "</div>";
@@ -162,7 +163,7 @@ function renderItems(data) {
   }
 
   if (!html) {
-    html = '<div class="loading-placeholder">履歴がありません</div>';
+    html = `<div class="loading-placeholder">${t("chat.history_empty")}</div>`;
   }
 
   listArea.innerHTML = html;
@@ -192,19 +193,19 @@ function renderTurns(data) {
   if (data.has_summary && data.compressed_summary) {
     html += `
       <div class="history-summary">
-        <div class="history-summary-label">要約 (${data.compressed_turn_count || 0}ターン分)</div>
+        <div class="history-summary-label">${t("ws.summary_label", { count: data.compressed_turn_count || 0 })}</div>
         <div class="history-summary-body">${renderSimpleMarkdown(data.compressed_summary)}</div>
       </div>`;
   }
 
   // Turn list
   if (data.turns && data.turns.length > 0) {
-    for (const t of data.turns) {
-      const ts = t.timestamp ? timeStr(t.timestamp) : "";
-      const roleClass = t.role === "assistant" ? "assistant" : "user";
-      const roleLabel = t.role === "human" ? "ユーザー" : t.role;
+    for (const turn of data.turns) {
+      const ts = turn.timestamp ? timeStr(turn.timestamp) : "";
+      const roleClass = turn.role === "assistant" ? "assistant" : "user";
+      const roleLabel = turn.role === "human" ? t("chat.role_human") : turn.role;
       const content =
-        t.role === "assistant" ? renderSimpleMarkdown(t.content || "") : escapeHtml(t.content || "");
+        turn.role === "assistant" ? renderSimpleMarkdown(turn.content || "") : escapeHtml(turn.content || "");
       html += `
         <div class="session-turn">
           <div class="session-turn-meta">${ts} - ${escapeHtml(roleLabel)}</div>
@@ -214,7 +215,7 @@ function renderTurns(data) {
   }
 
   if (!html) {
-    html = '<div class="loading-placeholder">会話データがありません</div>';
+    html = `<div class="loading-placeholder">${t("chat.history_no_data")}</div>`;
   }
 
   body.innerHTML = html;
@@ -247,18 +248,18 @@ function _renderToolCallDetail(tc) {
   const input = tc.input || "";
   if (input) {
     const inputStr = typeof input === "string" ? input : JSON.stringify(input, null, 2);
-    html += `<div class="tool-call-label">\u5165\u529B</div>`;
+    html += `<div class="tool-call-label">${t("ws.tool_input")}</div>`;
     html += `<div class="tool-call-content">${escapeHtml(inputStr)}</div>`;
   }
 
   const result = tc.result || "";
   if (result) {
     const resultStr = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-    html += `<div class="tool-call-label">\u7D50\u679C</div>`;
+    html += `<div class="tool-call-label">${t("ws.tool_result")}</div>`;
     if (resultStr.length > TOOL_RESULT_TRUNCATE) {
       const truncated = resultStr.slice(0, TOOL_RESULT_TRUNCATE);
       html += `<div class="tool-call-content" data-full-result="${escapeHtml(resultStr)}">${escapeHtml(truncated)}...</div>`;
-      html += `<button class="tool-call-show-more">\u3082\u3063\u3068\u898B\u308B</button>`;
+      html += `<button class="tool-call-show-more">${t("ws.show_more")}</button>`;
     } else {
       html += `<div class="tool-call-content">${escapeHtml(resultStr)}</div>`;
     }
@@ -307,22 +308,22 @@ function renderConversationSessions(data) {
   if (!body) return;
 
   if (!data || !data.sessions || data.sessions.length === 0) {
-    body.innerHTML = '<div class="loading-placeholder">会話データがありません</div>';
+    body.innerHTML = `<div class="loading-placeholder">${t("chat.history_no_data")}</div>`;
     return;
   }
 
   let html = "";
   for (const session of data.sessions) {
     const startTs = session.session_start ? timeStr(session.session_start) : "";
-    const triggerLabel = session.trigger === "heartbeat" ? "定期巡回"
-      : session.trigger === "cron" ? "定時タスク" : "";
+    const triggerLabel = session.trigger === "heartbeat" ? t("ws.trigger_heartbeat")
+      : session.trigger === "cron" ? t("ws.trigger_cron") : "";
     html += `<div class="session-divider">${triggerLabel ? `<span class="session-trigger">${escapeHtml(triggerLabel)}</span> ` : ""}${startTs}</div>`;
 
     if (session.messages) {
       for (const msg of session.messages) {
         const ts = msg.ts ? timeStr(msg.ts) : "";
         const roleClass = msg.role === "assistant" ? "assistant" : msg.role === "system" ? "system" : "user";
-        const roleLabel = msg.role === "human" ? "ユーザー" : msg.role === "system" ? "システム" : msg.role;
+        const roleLabel = msg.role === "human" ? t("chat.role_human") : msg.role === "system" ? t("chat.role_system") : msg.role;
         const content = msg.role === "assistant" ? renderSimpleMarkdown(msg.content || "") : escapeHtml(msg.content || "");
         const toolHtml = msg.role === "assistant" ? _renderToolCalls(msg.tool_calls) : "";
         html += `
@@ -334,7 +335,7 @@ function renderConversationSessions(data) {
     }
   }
 
-  if (!html) html = '<div class="loading-placeholder">会話データがありません</div>';
+  if (!html) html = `<div class="loading-placeholder">${t("chat.history_no_data")}</div>`;
   body.innerHTML = html;
   _bindToolCallHandlers(body);
   body.scrollTop = body.scrollHeight;
@@ -344,16 +345,16 @@ async function loadActiveConversation() {
   const { selectedAnima } = getState();
   if (!selectedAnima) return;
 
-  showDetail("進行中の会話");
+  showDetail(t("ws.conversation_active"));
   const body = getDetailBody();
-  if (body) body.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  if (body) body.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api.fetchConversationHistory(selectedAnima);
     renderConversationSessions(data);
   } catch (err) {
     console.error("Failed to load active conversation:", err);
-    if (body) body.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    if (body) body.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -361,16 +362,16 @@ async function loadArchivedSession(sessionId) {
   const { selectedAnima } = getState();
   if (!selectedAnima) return;
 
-  showDetail(`セッション: ${sessionId}`);
+  showDetail(t("chat.session_detail", { id: sessionId }));
   const body = getDetailBody();
-  if (body) body.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  if (body) body.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api.fetchSession(selectedAnima, sessionId);
     renderArchivedDetail(data);
   } catch (err) {
     console.error("Failed to load archived session:", err);
-    if (body) body.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    if (body) body.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -387,15 +388,15 @@ function renderArchivedDetail(data) {
     const d = data.data;
     let html = `
       <div class="session-meta-block">
-        <div><strong>トリガー:</strong> ${escapeHtml(d.trigger || "不明")}</div>
-        <div><strong>ターン数:</strong> ${d.turn_count || 0}</div>
-        <div><strong>コンテキスト使用率:</strong> ${((d.context_usage_ratio || 0) * 100).toFixed(0)}%</div>
+        <div><strong>${t("chat.state_label")}</strong> ${escapeHtml(d.trigger || t("common.unknown"))}</div>
+        <div><strong>${t("chat.turn_count")}</strong> ${d.turn_count || 0}</div>
+        <div><strong>${t("chat.context_usage")}</strong> ${((d.context_usage_ratio || 0) * 100).toFixed(0)}%</div>
       </div>`;
 
     if (d.original_prompt) {
       html += `
         <div class="session-section-block">
-          <div class="session-section-label">依頼内容</div>
+          <div class="session-section-label">${t("chat.request_label")}</div>
           <pre class="session-pre">${escapeHtml(d.original_prompt)}</pre>
         </div>`;
     }
@@ -403,7 +404,7 @@ function renderArchivedDetail(data) {
     if (d.accumulated_response) {
       html += `
         <div class="session-section-block">
-          <div class="session-section-label">応答</div>
+          <div class="session-section-label">${t("chat.response_label")}</div>
           <div>${renderSimpleMarkdown(d.accumulated_response)}</div>
         </div>`;
     }
@@ -412,23 +413,23 @@ function renderArchivedDetail(data) {
     return;
   }
 
-  body.innerHTML = '<div class="loading-placeholder">データがありません</div>';
+  body.innerHTML = `<div class="loading-placeholder">${t("chat.no_data")}</div>`;
 }
 
 async function loadTranscript(date) {
   const { selectedAnima } = getState();
   if (!selectedAnima) return;
 
-  showDetail(`会話ログ: ${date}`);
+  showDetail(t("chat.transcript_detail", { date }));
   const body = getDetailBody();
-  if (body) body.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  if (body) body.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api.fetchTranscript(selectedAnima, date);
     renderTurns(data);
   } catch (err) {
     console.error("Failed to load transcript:", err);
-    if (body) body.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    if (body) body.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -436,15 +437,15 @@ async function loadEpisode(date) {
   const { selectedAnima } = getState();
   if (!selectedAnima) return;
 
-  showDetail(`エピソード: ${date}`);
+  showDetail(t("chat.episode_detail", { date }));
   const body = getDetailBody();
-  if (body) body.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  if (body) body.innerHTML = `<div class="loading-placeholder">${t("common.loading")}</div>`;
 
   try {
     const data = await api.fetchEpisode(selectedAnima, date);
-    body.innerHTML = `<div class="session-markdown">${renderSimpleMarkdown(data.content || "(内容なし)")}</div>`;
+    body.innerHTML = `<div class="session-markdown">${renderSimpleMarkdown(data.content || t("chat.no_content"))}</div>`;
   } catch (err) {
     console.error("Failed to load episode:", err);
-    if (body) body.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    if (body) body.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }

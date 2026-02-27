@@ -1,5 +1,7 @@
 /* ── Hash Router ───────────────────────────── */
 
+import { applyTranslations, t } from "/shared/i18n.js";
+
 // ── Route Registry ──────────────────────────
 
 const routes = {};
@@ -96,12 +98,14 @@ async function handleRoute() {
       await mod.render(containerEl);
     } else {
       console.error(`[Router] Page module for "${path}" has no render() function`);
-      containerEl.innerHTML = '<div class="page-error">ページの読み込みに失敗しました</div>';
+      containerEl.innerHTML = `<div class="page-error">${t("router.page_load_failed")}</div>`;
     }
+    applyTranslations();
   } catch (err) {
     console.error(`[Router] Failed to load page "${path}":`, err);
-    containerEl.innerHTML = '<div class="page-error">ページの読み込みに失敗しました</div>';
+    containerEl.innerHTML = `<div class="page-error">${t("router.page_load_failed")}</div>`;
     currentPage = null;
+    applyTranslations();
   }
 }
 

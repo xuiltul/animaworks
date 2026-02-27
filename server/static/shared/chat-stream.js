@@ -56,7 +56,7 @@ export async function fetchStreamProgress(animaName, responseId) {
  * @param {function(string): void} [callbacks.onTextDelta] - Text delta received
  * @param {function(string): void} [callbacks.onToolStart] - Tool execution started (tool name)
  * @param {function(): void} [callbacks.onToolEnd] - Tool execution ended
- * @param {function({summary: string, emotion: string}): void} [callbacks.onDone] - Stream completed
+ * @param {function({summary: string, emotion: string, images: Array}): void} [callbacks.onDone] - Stream completed
  * @param {function({message: string}): void} [callbacks.onError] - SSE error event received
  * @param {function(object): void} [callbacks.onBootstrap] - Bootstrap event (data object)
  * @param {function(): void} [callbacks.onChainStart] - Chain continuation event
@@ -203,6 +203,7 @@ async function _processStream(res, callbacks, setResponseId, setLastEventId, sig
             callbacks.onDone?.({
               summary: data.summary || null,
               emotion: data.emotion || "neutral",
+              images: data.images || data.artifacts || [],
             });
             break;
           }

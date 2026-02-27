@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from core.exceptions import AnimaNotFoundError, IPCConnectionError as IPCConnError  # noqa: F401
+from core.i18n import t
 from core.time_utils import now_jst
 from server.dependencies import get_anima
 from server.events import emit, emit_notification, emit_direct, emit_notification_direct
@@ -49,11 +50,13 @@ class ChatRequest(BaseModel):
     images: list[ImageAttachment] = []
     resume: str | None = None
     last_event_id: str | None = None
+    thread_id: str = "default"
 
 
 class ChatResponse(BaseModel):
     response: str
     anima: str
+    images: list[dict[str, Any]] = []
 
 
 # ── Image Helpers ─────────────────────────────────────────────
@@ -64,10 +67,10 @@ def _validate_images(images: list[ImageAttachment]) -> str | None:
         return None
     total_size = sum(len(img.data) for img in images)
     if total_size > MAX_IMAGE_PAYLOAD_SIZE:
-        return f"画像データが大きすぎます（{total_size // 1024 // 1024}MB / 上限20MB）"
+        return t("chat.image_too_large", size_mb=total_size // 1024 // 1024)
     for img in images:
         if img.media_type not in SUPPORTED_IMAGE_TYPES:
-            return f"未対応の画像形式です: {img.media_type}"
+            return t("chat.unsupported_image_format", media_type=img.media_type)
     return None
 
 
@@ -221,12 +224,12 @@ def _handle_chunk(
     if event_type == "bootstrap_busy":
         return _format_sse("bootstrap", {
             "status": "busy",
-            "message": chunk.get("message", "初期化中です"),
+            "message": chunk.get("message", t("chat.bootstrap_busy")),
         }), ""
 
     if event_type == "heartbeat_relay_start":
         return _format_sse("heartbeat_relay_start", {
-            "message": chunk.get("message", "処理中です"),
+            "message": chunk.get("message", t("chat.heartbeat_processing")),
         }), ""
 
     if event_type == "heartbeat_relay":
@@ -292,9 +295,9 @@ def _chunk_to_event(chunk: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
     if event_type == "bootstrap_complete":
         return "bootstrap", {"status": "completed"}
     if event_type == "bootstrap_busy":
-        return "bootstrap", {"status": "busy", "message": chunk.get("message", "初期化中です")}
+        return "bootstrap", {"status": "busy", "message": chunk.get("message", t("chat.bootstrap_busy"))}
     if event_type == "heartbeat_relay_start":
-        return "heartbeat_relay_start", {"message": chunk.get("message", "処理中です")}
+        return "heartbeat_relay_start", {"message": chunk.get("message", t("chat.heartbeat_processing"))}
     if event_type == "heartbeat_relay":
         return "heartbeat_relay", {"text": chunk.get("text", "")}
     if event_type == "heartbeat_relay_done":
@@ -396,6 +399,7 @@ async def _run_producer(
                 "stream": True,
                 "images": [img.model_dump() for img in body.images] if body.images else [],
                 "attachment_paths": saved_paths,
+                "thread_id": body.thread_id,
             },
             timeout=_timeout,
         ):
@@ -472,7 +476,7 @@ async def _run_producer(
             )
             stream.add_event("error", {
                 "code": "STREAM_INCOMPLETE",
-                "message": "ストリームが予期せず終了しました。再試行してください。",
+                "message": t("chat.stream_incomplete"),
             })
 
         registry.mark_complete(stream.response_id, done=stream_done)
@@ -491,19 +495,19 @@ async def _run_producer(
         error_str = str(e)
         if "Process restarting" in error_str:
             logger.warning("[PRODUCER] ANIMA_RESTARTING anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
-            stream.add_event("error", {"code": "ANIMA_RESTARTING", "message": "Animaが再起動中です。しばらく待ってから再試行してください。"})
+            stream.add_event("error", {"code": "ANIMA_RESTARTING", "message": t("chat.anima_restarting")})
         elif "Not connected" in error_str:
             logger.error("[PRODUCER] ANIMA_UNAVAILABLE anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
-            stream.add_event("error", {"code": "ANIMA_UNAVAILABLE", "message": "Animaのプロセスに接続できません。再起動中の可能性があります。"})
+            stream.add_event("error", {"code": "ANIMA_UNAVAILABLE", "message": t("chat.anima_unavailable")})
         elif "Connection closed during stream" in error_str:
             logger.error("[PRODUCER] CONNECTION_LOST anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d", name, stream.response_id, elapsed, ipc_chunk_count)
-            stream.add_event("error", {"code": "CONNECTION_LOST", "message": "通信が切断されました。再試行してください。"})
+            stream.add_event("error", {"code": "CONNECTION_LOST", "message": t("chat.connection_lost")})
         elif "IPC protocol error" in error_str:
             logger.error("[PRODUCER] IPC_PROTOCOL_ERROR anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
-            stream.add_event("error", {"code": "IPC_PROTOCOL_ERROR", "message": "通信エラーが発生しました。再試行してください。"})
+            stream.add_event("error", {"code": "IPC_PROTOCOL_ERROR", "message": t("chat.communication_error")})
         else:
             logger.exception("[PRODUCER] RUNTIME_ERROR anima=%s stream=%s elapsed=%.1fs", name, stream.response_id, elapsed)
-            stream.add_event("error", {"code": "STREAM_ERROR", "message": "内部エラーが発生しました。再試行してください。"})
+            stream.add_event("error", {"code": "STREAM_ERROR", "message": t("chat.internal_error")})
         registry.mark_complete(stream.response_id, done=False)
 
     except (ValueError, IPCConnError) as e:
@@ -521,7 +525,7 @@ async def _run_producer(
     except TimeoutError:
         elapsed = _time.monotonic() - _start
         logger.error("[PRODUCER] IPC_TIMEOUT anima=%s stream=%s elapsed=%.1fs ipc_chunks=%d", name, stream.response_id, elapsed, ipc_chunk_count)
-        stream.add_event("error", {"code": "IPC_TIMEOUT", "message": "応答がタイムアウトしました"})
+        stream.add_event("error", {"code": "IPC_TIMEOUT", "message": t("chat.timeout")})
         registry.mark_complete(stream.response_id, done=False)
 
     except Exception:
@@ -644,7 +648,7 @@ def create_chat_router() -> APIRouter:
         # Guard: reject if anima is bootstrapping
         if supervisor.is_bootstrapping(name):
             return JSONResponse(
-                {"error": "現在キャラクターを作成中です。完了までお待ちください。"},
+                {"error": t("chat.bootstrap_error")},
                 status_code=503,
             )
 
@@ -652,7 +656,7 @@ def create_chat_router() -> APIRouter:
         message_size = len(body.message.encode("utf-8"))
         if message_size > MAX_CHAT_MESSAGE_SIZE:
             return JSONResponse(
-                {"error": f"メッセージが大きすぎます（{message_size // 1024 // 1024}MB / 上限10MB）"},
+                {"error": t("chat.message_too_large", size_mb=message_size // 1024 // 1024)},
                 status_code=413,
             )
 
@@ -678,6 +682,7 @@ def create_chat_router() -> APIRouter:
                     "intent": body.intent,
                     "images": [img.model_dump() for img in body.images] if body.images else [],
                     "attachment_paths": saved_paths,
+                    "thread_id": body.thread_id,
                 },
                 timeout=60.0
             )
@@ -692,7 +697,11 @@ def create_chat_router() -> APIRouter:
             await emit(request, "anima.status", {"name": name, "status": "idle"})
 
             logger.info("chat_response anima=%s response_len=%d", name, len(clean_response))
-            return ChatResponse(response=clean_response, anima=name)
+            images = result.get("images") or []
+            cycle_result = result.get("cycle_result") or {}
+            if not images and isinstance(cycle_result, dict):
+                images = cycle_result.get("images") or cycle_result.get("artifacts") or []
+            return ChatResponse(response=clean_response, anima=name, images=images)
 
         except (KeyError, AnimaNotFoundError):
             from fastapi import HTTPException
@@ -723,7 +732,7 @@ def create_chat_router() -> APIRouter:
         # Guard: reject if anima is bootstrapping
         if supervisor.is_bootstrapping(name):
             return JSONResponse(
-                {"error": "現在キャラクターを作成中です。完了までお待ちください。"},
+                {"error": t("chat.bootstrap_error")},
                 status_code=503,
             )
 
@@ -779,7 +788,7 @@ def create_chat_router() -> APIRouter:
             from fastapi import HTTPException
             raise HTTPException(
                 status_code=413,
-                detail=f"メッセージが大きすぎます（{message_size // 1024 // 1024}MB / 上限10MB）",
+                detail=t("chat.message_too_large", size_mb=message_size // 1024 // 1024),
             )
 
         # Guard: validate image attachments
@@ -797,7 +806,7 @@ def create_chat_router() -> APIRouter:
             async def _bootstrap_busy() -> AsyncIterator[str]:
                 yield _format_sse("bootstrap", {
                     "status": "busy",
-                    "message": "現在キャラクターを作成中です。完了までお待ちください。",
+                    "message": t("chat.bootstrap_error"),
                 })
 
             return StreamingResponse(
@@ -905,7 +914,7 @@ def _handle_resume(
             stream.from_person == from_person if stream else "N/A",
         )
         async def _not_found():
-            yield _format_sse("error", {"code": "STREAM_NOT_FOUND", "message": "Stream not found or access denied"})
+            yield _format_sse("error", {"code": "STREAM_NOT_FOUND", "message": t("chat.stream_not_found")})
         return StreamingResponse(
             _not_found(),
             media_type="text/event-stream",

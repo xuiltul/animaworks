@@ -24,6 +24,7 @@ from pathlib import Path
 
 from typing import TYPE_CHECKING
 
+from core.i18n import t
 from core.time_utils import ensure_aware, now_jst
 from core.tools._async_compat import run_sync
 
@@ -734,7 +735,7 @@ class PrimingEngine:
 
             # Personal skills (highest precedence)
             if self.skills_dir.is_dir():
-                for f in sorted(self.skills_dir.glob("*.md")):
+                for f in sorted(self.skills_dir.glob("*/SKILL.md")):
                     try:
                         meta = MemoryManager._extract_skill_meta(f, is_common=False)
                         if meta.name not in names:
@@ -746,7 +747,7 @@ class PrimingEngine:
             # Common skills
             common_dir = get_common_skills_dir()
             if common_dir.is_dir():
-                for f in sorted(common_dir.glob("*.md")):
+                for f in sorted(common_dir.glob("*/SKILL.md")):
                     try:
                         meta = MemoryManager._extract_skill_meta(f, is_common=True)
                         if meta.name not in names:
@@ -860,16 +861,16 @@ class PrimingEngine:
         if not recent:
             return ""
 
-        lines = ["## 直近のアウトバウンド行動", ""]
+        lines = [t("priming.outbound_header"), ""]
         for e in reversed(recent):
             time_str = e.ts[11:16] if len(e.ts) >= 16 else e.ts
             text_preview = (e.summary or e.content or "")[:80]
             if e.type == "channel_post":
                 ch = e.channel or "?"
-                lines.append(f"- [{time_str}] #{ch} に投稿済み: 「{text_preview}」")
+                lines.append(t("priming.outbound_posted", time_str=time_str, ch=ch, text_preview=text_preview))
             elif e.type in ("dm_sent", "message_sent"):
                 to = e.to_person or "?"
-                lines.append(f"- [{time_str}] {to} にメッセージ送信済み: 「{text_preview}」")
+                lines.append(t("priming.outbound_sent", time_str=time_str, to=to, text_preview=text_preview))
         lines.append("")
         return "\n".join(lines)
 
@@ -1101,40 +1102,40 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
         return ""
 
     parts: list[str] = []
-    parts.append("## あなたが思い出していること")
+    parts.append(t("priming.section_title"))
     parts.append("")
-    parts.append("以下は、この会話に関連してあなたが自然に想起した記憶です。")
+    parts.append(t("priming.section_intro"))
     parts.append("")
 
     if result.sender_profile:
-        parts.append(f"### {sender_name} について")
+        parts.append(t("priming.about_sender", sender_name=sender_name))
         parts.append("")
         parts.append(wrap_priming("sender_profile", result.sender_profile, trust="medium"))
         parts.append("")
 
     if result.recent_activity:
-        parts.append("### 直近のアクティビティ")
+        parts.append(t("priming.recent_activity_header"))
         parts.append("")
         parts.append(wrap_priming("recent_activity", result.recent_activity, trust="untrusted"))
         parts.append("")
 
     if result.related_knowledge:
-        parts.append("### 関連する知識")
+        parts.append(t("priming.related_knowledge_header"))
         parts.append("")
         parts.append(wrap_priming("related_knowledge", result.related_knowledge, trust="medium"))
         parts.append("")
 
     if result.matched_skills:
-        parts.append("### 使えそうなスキル")
+        parts.append(t("priming.matched_skills_header"))
         parts.append("")
         skills_line = ", ".join(result.matched_skills)
-        parts.append(f"あなたが持っているスキル: {skills_line}")
+        parts.append(t("priming.skills_list", skills_line=skills_line))
         parts.append("")
-        parts.append("※詳細はスキルファイルをReadで確認してください。")
+        parts.append(t("priming.skills_detail_hint"))
         parts.append("")
 
     if result.pending_tasks:
-        parts.append("### 未完了タスク")
+        parts.append(t("priming.pending_tasks_header"))
         parts.append("")
         parts.append(wrap_priming("pending_tasks", result.pending_tasks, trust="medium"))
         parts.append("")

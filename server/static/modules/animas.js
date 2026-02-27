@@ -1,6 +1,7 @@
 /* ── Anima Dropdown, Selection, Avatar ────── */
 
 import { state, dom, escapeHtml } from "./state.js";
+import { t } from "/shared/i18n.js";
 import { api } from "./api.js";
 import { renderChat, resumeActiveStream, loadConversationHistory, setupScrollObserver, updateVoiceAnima } from "./chat.js";
 import { loadMemoryTab } from "./memory.js";
@@ -42,13 +43,13 @@ export function renderAnimaDropdown() {
   const dropdown = dom.animaDropdown || document.getElementById("animaDropdown");
   if (!dropdown) return; // Anima dropdown not in DOM (page not active)
 
-  let html = '<option value="" disabled>Animaを選択...</option>';
+  let html = `<option value="" disabled>${t("chat.anima_select")}</option>`;
   for (const p of state.animas) {
     const selected = p.name === state.selectedAnima ? " selected" : "";
     if (p.status === "bootstrapping" || p.bootstrapping) {
-      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>${statusIndicator('\u23F3', 'loader')} ${escapeHtml(p.name)} (制作中...)</option>`;
+      html += `<option value="${escapeHtml(p.name)}"${selected} disabled>${statusIndicator('\u23F3', 'loader')} ${escapeHtml(p.name)} (${t("animas.bootstrapping")})</option>`;
     } else if (p.status === "not_found" || p.status === "stopped") {
-      html += `<option value="${escapeHtml(p.name)}"${selected}>${statusIndicator('\uD83D\uDCA4', 'moon')} ${escapeHtml(p.name)} (停止中)</option>`;
+      html += `<option value="${escapeHtml(p.name)}"${selected}>${statusIndicator('\uD83D\uDCA4', 'moon')} ${escapeHtml(p.name)} (${t("animas.stopped")})</option>`;
     } else {
       const statusLabel = p.status ? ` (${p.status})` : "";
       html += `<option value="${escapeHtml(p.name)}"${selected}>${escapeHtml(p.name)}${statusLabel}</option>`;
@@ -62,7 +63,7 @@ export async function selectAnima(name) {
   // Check if anima is sleeping — offer to start
   const anima = state.animas.find((p) => p.name === name);
   if (anima && (anima.status === "not_found" || anima.status === "stopped")) {
-    const ok = confirm(`${name} は現在停止中です。起動しますか？`);
+    const ok = confirm(t("animas.start_confirm", { name }));
     if (!ok) return;
     try {
       await api(`/api/animas/${encodeURIComponent(name)}/start`, { method: "POST" });
@@ -85,7 +86,7 @@ export async function selectAnima(name) {
   const chatSendBtn = dom.chatSendBtn || document.getElementById("chatSendBtn");
   if (chatInput) {
     chatInput.disabled = false;
-    chatInput.placeholder = `${name} にメッセージ...`;
+    chatInput.placeholder = t("chat.message_to", { name });
   }
   if (chatSendBtn) chatSendBtn.disabled = false;
 
@@ -111,9 +112,9 @@ export async function selectAnima(name) {
   } else {
     state.animaDetail = null;
     const stateContent = dom.animaStateContent || document.getElementById("animaStateContent");
-    if (stateContent) stateContent.textContent = "詳細の読み込み失敗";
+    if (stateContent) stateContent.textContent = t("animas.detail_load_failed");
     const memoryList = dom.memoryFileList || document.getElementById("memoryFileList");
-    if (memoryList) memoryList.innerHTML = '<div class="loading-placeholder">詳細の読み込み失敗</div>';
+    if (memoryList) memoryList.innerHTML = `<div class="loading-placeholder">${t("animas.detail_load_failed")}</div>`;
   }
 
   // Load memory, session list, and avatar in parallel
@@ -172,7 +173,7 @@ export function renderAnimaState() {
 
   const d = state.animaDetail;
   if (!d || !d.state) {
-    stateContent.textContent = "状態情報なし";
+    stateContent.textContent = t("animas.no_state");
     return;
   }
   const stateText = typeof d.state === "string" ? d.state : JSON.stringify(d.state, null, 2);

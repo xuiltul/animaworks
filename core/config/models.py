@@ -96,6 +96,7 @@ class AnimaDefaults(BaseModel):
     thinking: bool | None = None  # Extended thinking (Bedrock: reasoning_effort, Ollama: think)
     thinking_effort: str | None = None  # "low"/"medium"/"high"/"max" (default: "high")
     llm_timeout: int = 600  # default LLM API timeout (seconds)
+    mode_s_auth: str | None = None  # Mode S auth: "max"|"api"|"bedrock"|"vertex"|None(=max)
 
 
 class RAGConfig(BaseModel):
@@ -849,6 +850,7 @@ def load_model_config(anima_dir: Path) -> "ModelConfig":
         thinking_effort=resolved.thinking_effort,
         llm_timeout=resolved.llm_timeout,
         extra_keys=credential.keys or {},
+        mode_s_auth=resolved.mode_s_auth,
     )
 
 

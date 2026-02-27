@@ -1,6 +1,7 @@
 // ── Anima Management ───────────────────────
 import { api } from "../modules/api.js";
 import { escapeHtml, statusClass, renderMarkdown } from "../modules/state.js";
+import { t } from "/shared/i18n.js";
 
 let _viewMode = "list"; // "list" | "detail"
 let _selectedName = null;
@@ -26,10 +27,10 @@ async function _renderList() {
 
   _container.innerHTML = `
     <div class="page-header">
-      <h2>Anima管理</h2>
+      <h2>${t("nav.animas")}</h2>
     </div>
     <div id="animasListContent">
-      <div class="loading-placeholder">読み込み中...</div>
+      <div class="loading-placeholder">${t("common.loading")}</div>
     </div>
   `;
 
@@ -40,7 +41,7 @@ async function _renderList() {
     const animas = await api("/api/animas");
 
     if (animas.length === 0) {
-      content.innerHTML = '<div class="loading-placeholder">Animaが登録されていません</div>';
+      content.innerHTML = `<div class="loading-placeholder">${t("animas.not_registered")}</div>`;
       return;
     }
 
@@ -121,7 +122,7 @@ async function _renderList() {
     });
 
   } catch (err) {
-    content.innerHTML = `<div class="loading-placeholder">読み込み失敗: ${escapeHtml(err.message)}</div>`;
+    content.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -134,11 +135,11 @@ async function _showDetail(name) {
 
   _container.innerHTML = `
     <div class="page-header" style="display:flex; align-items:center; gap:1rem;">
-      <button class="btn-secondary" id="animasBackBtn" style="font-size:0.85rem;">&larr; 一覧に戻る</button>
+      <button class="btn-secondary" id="animasBackBtn" style="font-size:0.85rem;">&larr; ${t("animas.back")}</button>
       <h2>${escapeHtml(name)}</h2>
     </div>
     <div id="animasDetailContent">
-      <div class="loading-placeholder">読み込み中...</div>
+      <div class="loading-placeholder">${t("common.loading")}</div>
     </div>
   `;
 
@@ -165,9 +166,9 @@ async function _showDetail(name) {
     // Identity card
     html += `
       <div class="card">
-        <div class="card-header">アイデンティティ</div>
+        <div class="card-header">${t("animas.identity")}</div>
         <div class="card-body" style="max-height:300px; overflow-y:auto;">
-          ${detail.identity ? renderMarkdown(detail.identity) : '<span style="color:var(--text-secondary, #666);">未設定</span>'}
+          ${detail.identity ? renderMarkdown(detail.identity) : `<span style="color:var(--text-secondary, #666);">${t("animas.not_set")}</span>`}
         </div>
       </div>
     `;
@@ -175,9 +176,9 @@ async function _showDetail(name) {
     // Injection card
     html += `
       <div class="card">
-        <div class="card-header">インジェクション（役割指針）</div>
+        <div class="card-header">${t("animas.injection")}</div>
         <div class="card-body" style="max-height:300px; overflow-y:auto;">
-          ${detail.injection ? renderMarkdown(detail.injection) : '<span style="color:var(--text-secondary, #666);">未設定</span>'}
+          ${detail.injection ? renderMarkdown(detail.injection) : `<span style="color:var(--text-secondary, #666);">${t("animas.not_set")}</span>`}
         </div>
       </div>
     `;
@@ -189,10 +190,10 @@ async function _showDetail(name) {
 
     html += `
       <div class="card">
-        <div class="card-header">現在の状態</div>
+        <div class="card-header">${t("animas.state_current")}</div>
         <div class="card-body">
           <pre style="white-space:pre-wrap; word-break:break-word; margin:0;">${escapeHtml(
-            detail.state ? (typeof detail.state === "string" ? detail.state : JSON.stringify(detail.state, null, 2)) : "状態情報なし"
+            detail.state ? (typeof detail.state === "string" ? detail.state : JSON.stringify(detail.state, null, 2)) : t("animas.no_state")
           )}</pre>
         </div>
       </div>
@@ -200,10 +201,10 @@ async function _showDetail(name) {
 
     html += `
       <div class="card">
-        <div class="card-header">保留タスク</div>
+        <div class="card-header">${t("animas.pending")}</div>
         <div class="card-body">
           <pre style="white-space:pre-wrap; word-break:break-word; margin:0;">${escapeHtml(
-            detail.pending ? (typeof detail.pending === "string" ? detail.pending : JSON.stringify(detail.pending, null, 2)) : "保留タスクなし"
+            detail.pending ? (typeof detail.pending === "string" ? detail.pending : JSON.stringify(detail.pending, null, 2)) : t("animas.no_pending")
           )}</pre>
         </div>
       </div>
@@ -219,15 +220,15 @@ async function _showDetail(name) {
     html += `
       <div class="card-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
         <div class="stat-card">
-          <div class="stat-label">エピソード</div>
+          <div class="stat-label">${t("chat.memory_episodes")}</div>
           <div class="stat-value">${epCount}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">知識</div>
+          <div class="stat-label">${t("chat.memory_knowledge")}</div>
           <div class="stat-value">${knCount}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">手順書</div>
+          <div class="stat-label">${t("chat.memory_procedures")}</div>
           <div class="stat-value">${prCount}</div>
         </div>
       </div>
@@ -237,7 +238,7 @@ async function _showDetail(name) {
     if (animaConfig) {
       html += `
         <div class="card" style="margin-bottom: 1.5rem;">
-          <div class="card-header">モデル設定</div>
+          <div class="card-header">${t("animas.model_config")}</div>
           <div class="card-body">
             <pre style="white-space:pre-wrap; margin:0;">${escapeHtml(JSON.stringify(animaConfig, null, 2))}</pre>
           </div>
@@ -248,7 +249,7 @@ async function _showDetail(name) {
     // Action buttons
     html += `
       <div style="display:flex; gap:0.75rem;">
-        <button class="btn-primary" id="animaDetailTrigger">Heartbeatトリガー</button>
+        <button class="btn-primary" id="animaDetailTrigger">${t("animas.heartbeat_trigger")}</button>
       </div>
     `;
 
@@ -258,19 +259,19 @@ async function _showDetail(name) {
     document.getElementById("animaDetailTrigger")?.addEventListener("click", async (e) => {
       const btn = e.target;
       btn.disabled = true;
-      btn.textContent = "実行中...";
+      btn.textContent = t("animas.running");
       try {
         await fetch(`/api/animas/${encodeURIComponent(name)}/trigger`, { method: "POST" });
-        btn.textContent = "完了";
-        setTimeout(() => { btn.textContent = "Heartbeatトリガー"; btn.disabled = false; }, 2000);
+        btn.textContent = t("animas.success");
+        setTimeout(() => { btn.textContent = t("animas.heartbeat_trigger"); btn.disabled = false; }, 2000);
       } catch {
-        btn.textContent = "失敗";
-        setTimeout(() => { btn.textContent = "Heartbeatトリガー"; btn.disabled = false; }, 2000);
+        btn.textContent = t("animas.failed");
+        setTimeout(() => { btn.textContent = t("animas.heartbeat_trigger"); btn.disabled = false; }, 2000);
       }
     });
 
   } catch (err) {
-    content.innerHTML = `<div class="loading-placeholder">詳細の読み込みに失敗しました: ${escapeHtml(err.message)}</div>`;
+    content.innerHTML = `<div class="loading-placeholder">${t("animas.detail_load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -280,6 +281,6 @@ function _formatUptime(seconds) {
   if (!seconds || seconds < 0) return "--";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}時間${m}分`;
-  return `${m}分`;
+  if (h > 0) return t("animas.uptime_hm", { h, m });
+  return t("animas.uptime_m", { m });
 }

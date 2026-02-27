@@ -207,16 +207,19 @@ class TestEdgeCases:
     """Tests for edge cases: config failure, invalid JSON, missing status.json."""
 
     def test_config_load_failure(self, tmp_path):
-        """When load_config() raises, return ConfigError."""
+        """When load_config() raises, ToolExecutionError wraps it (t() also needs config for locale)."""
+        import core.exceptions as exc
+
         handler = _make_handler(tmp_path, "sakura")
 
         with patch(
             "core.config.models.load_config",
             side_effect=RuntimeError("config broken"),
         ):
-            result = handler.handle("disable_subordinate", {"name": "hinata"})
+            with pytest.raises(exc.ToolExecutionError) as ctx:
+                handler.handle("disable_subordinate", {"name": "hinata"})
 
-        assert "ConfigError" in result
+        assert "config" in str(ctx.value).lower()
 
     def test_disable_with_invalid_status_json(self, tmp_path):
         """When status.json contains invalid JSON, treat as empty and proceed."""

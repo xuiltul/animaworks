@@ -1,6 +1,7 @@
 // ── App Entry Point ──────────────────────
 // Initialization, screen switching, and event delegation.
 
+import { initI18n, applyTranslations } from "/shared/i18n.js";
 import { getState, setState, subscribe } from "./state.js";
 import { fetchSystemStatus, fetchConversationHistory, greetAnima } from "./api.js";
 import { connect, onEvent } from "./websocket.js";
@@ -77,6 +78,7 @@ function cacheDom() {
   dom.convLayout = document.getElementById("wsConvLayout");
   dom.convBack = document.getElementById("wsConvBack");
   dom.convAnimaName = document.getElementById("wsConvAnimaName");
+  dom.threadTabs = document.getElementById("wsThreadTabs");
   dom.convCanvas = document.getElementById("wsConvCanvas");
   dom.convMessages = document.getElementById("wsConvMessages");
   dom.convInput = document.getElementById("wsConvInput");
@@ -84,6 +86,11 @@ function cacheDom() {
   dom.convPreviewBar = document.getElementById("wsConvPreviewBar");
   dom.convAttachBtn = document.getElementById("wsConvAttachBtn");
   dom.convFileInput = document.getElementById("wsConvFileInput");
+  dom.convPending = document.getElementById("wsConvPending");
+  dom.convPendingList = document.getElementById("wsConvPendingList");
+  dom.convPendingLabel = document.getElementById("wsConvPendingLabel");
+  dom.convPendingCancel = document.getElementById("wsConvPendingCancel");
+  dom.convQueueBtn = document.getElementById("wsConvQueueBtn");
 
   // Mobile controls
   dom.mobileSidebarToggle = document.getElementById("wsMobileSidebarToggle");
@@ -332,9 +339,34 @@ function mapAnimaStatusToAnim(status) {
 let bustupInitialized = false;
 let convStreamController = null;
 let convImageInputManager = null;
+let convPendingQueue = [];      // Array<{ text, images, displayImages }>
+
+// ── Conversation Draft Persistence ──────────
+
+function _wsDraftKey(animaName) {
+  const user = getCurrentUser() || "guest";
+  const anima = animaName || "_";
+  return `aw:draft:workspace-conv:${user}:${anima}`;
+}
+
+function _wsSaveDraft() {
+  const animaName = getState().conversationAnima;
+  if (!animaName || !dom.convInput) return;
+  localStorage.setItem(_wsDraftKey(animaName), dom.convInput.value || "");
+}
+
+function _wsLoadDraft(animaName) {
+  if (!animaName) return "";
+  return localStorage.getItem(_wsDraftKey(animaName)) || "";
+}
+
+function _wsClearDraft(animaName) {
+  if (!animaName) return;
+  localStorage.removeItem(_wsDraftKey(animaName));
+}
 
 // ── History State (Session-Aware Rendering) ──────────
-const _historyState = {};  // { [animaName]: { sessions, hasMore, nextBefore, loading } }
+const _historyState = {};  // { [animaName]: { [threadId]: { sessions, hasMore, nextBefore, loading } } }
 const HISTORY_PAGE_SIZE = 50;
 const TOOL_RESULT_TRUNCATE = 500;
 let _scrollObserver = null;
@@ -342,8 +374,14 @@ let _scrollObserver = null;
 async function openConversation(animaName) {
   if (!dom.convOverlay) return;
 
+  _wsSaveDraft();
   destroyVoiceUI();
-  setState({ conversationOpen: true, conversationAnima: animaName });
+  setState({ conversationOpen: true, conversationAnima: animaName, activeThreadId: "default" });
+
+  const { threads } = getState();
+  if (!threads[animaName]) {
+    setState({ threads: { ...threads, [animaName]: [{ id: "default", label: "メイン", unread: false }] } });
+  }
 
   // Show conversation overlay on top of office
   dom.convOverlay.classList.remove("hidden");
@@ -351,6 +389,12 @@ async function openConversation(animaName) {
   // Update anima name + mobile placeholder
   if (dom.convAnimaName) dom.convAnimaName.textContent = animaName;
   updateConvInputPlaceholder();
+  if (dom.convInput) {
+    dom.convInput.value = _wsLoadDraft(animaName);
+    dom.convInput.style.height = "auto";
+    const maxH = isMobileView() ? 100 : 120;
+    dom.convInput.style.height = Math.min(dom.convInput.scrollHeight, maxH) + "px";
+  }
 
   // Reset mobile panels on conversation open
   closeMobileSidebar();
@@ -374,6 +418,7 @@ async function openConversation(animaName) {
 
   // Load and render chat history, then trigger greeting
   await loadAndRenderConvMessages(animaName);
+  _renderWsThreadTabs();
   triggerGreeting(animaName);
 
   // Focus input
@@ -386,9 +431,150 @@ async function openConversation(animaName) {
   }
 }
 
+// ── Thread Tabs (Workspace) ──────────────────────
+
+function _renderWsThreadTabs() {
+  const container = dom.threadTabs;
+  const animaName = getState().conversationAnima;
+  if (!container || !animaName) return;
+
+  const list = getState().threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
+  const activeThreadId = getState().activeThreadId || "default";
+
+  let html = "";
+  for (const t of list) {
+    const activeClass = t.id === activeThreadId ? " active" : "";
+    const closeBtn = t.id !== "default"
+      ? ` <button type="button" class="thread-tab-close" data-thread="${escapeHtml(t.id)}" title="スレッドを閉じる" aria-label="閉じる">&times;</button>`
+      : "";
+    html += `<span class="thread-tab-wrap"><button type="button" class="thread-tab${activeClass}" data-thread="${escapeHtml(t.id)}">${escapeHtml(t.label)}</button>${closeBtn}</span>`;
+  }
+  html += `<button type="button" class="thread-tab-new" id="wsNewThreadBtn" title="新しいスレッド">＋</button>`;
+
+  container.innerHTML = html;
+
+  container.querySelectorAll(".thread-tab").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const tid = e.target.dataset.thread;
+      if (tid) _selectWsThread(tid);
+    });
+  });
+  container.querySelectorAll(".thread-tab-close").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const tid = e.target.dataset.thread;
+      if (tid) _closeWsThread(tid);
+    });
+  });
+  const newBtn = document.getElementById("wsNewThreadBtn");
+  if (newBtn) newBtn.addEventListener("click", () => _createWsNewThread());
+}
+
+async function _selectWsThread(threadId) {
+  const current = getState().activeThreadId;
+  if (threadId === current) return;
+
+  setState({ activeThreadId: threadId });
+  _renderWsThreadTabs();
+
+  const animaName = getState().conversationAnima;
+  if (!animaName) return;
+
+  const hs = _historyState[animaName]?.[threadId];
+  const needLoad = !hs || hs.sessions.length === 0;
+
+  if (needLoad) {
+    if (!_historyState[animaName]) _historyState[animaName] = {};
+    _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: true };
+    renderConvMessages();
+
+    try {
+      const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE, null, threadId);
+      if (data && data.sessions && data.sessions.length > 0) {
+        _historyState[animaName][threadId] = {
+          sessions: data.sessions,
+          hasMore: data.has_more || false,
+          nextBefore: data.next_before || null,
+          loading: false,
+        };
+      } else {
+        _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+      }
+    } catch {
+      _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+    }
+  }
+
+  renderConvMessages();
+  _observeSentinel();
+}
+
+function _createWsNewThread() {
+  const animaName = getState().conversationAnima;
+  if (!animaName) return;
+
+  const threadId = crypto.randomUUID().slice(0, 8);
+  const { threads, chatMessagesByThread } = getState();
+  const list = threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
+  list.push({ id: threadId, label: "新しいスレッド", unread: false });
+
+  const nextThreads = { ...threads, [animaName]: list };
+  const nextByThread = { ...chatMessagesByThread };
+  if (!nextByThread[animaName]) nextByThread[animaName] = {};
+  nextByThread[animaName][threadId] = [];
+
+  setState({
+    threads: nextThreads,
+    chatMessagesByThread: nextByThread,
+    activeThreadId: threadId,
+  });
+
+  if (!_historyState[animaName]) _historyState[animaName] = {};
+  _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+
+  _renderWsThreadTabs();
+  renderConvMessages();
+  _observeSentinel();
+}
+
+function _closeWsThread(threadId) {
+  if (threadId === "default") return;
+
+  const animaName = getState().conversationAnima;
+  if (!animaName) return;
+
+  const { threads, chatMessagesByThread, activeThreadId } = getState();
+  const list = threads[animaName];
+  if (!list) return;
+
+  const idx = list.findIndex((t) => t.id === threadId);
+  if (idx < 0) return;
+
+  const nextList = list.filter((t) => t.id !== threadId);
+  const nextThreads = { ...threads, [animaName]: nextList };
+  const nextByThread = { ...chatMessagesByThread };
+  if (nextByThread[animaName]) {
+    const { [threadId]: _, ...rest } = nextByThread[animaName];
+    nextByThread[animaName] = rest;
+  }
+  delete _historyState[animaName]?.[threadId];
+
+  const switchToDefault = activeThreadId === threadId;
+  setState({
+    threads: nextThreads,
+    chatMessagesByThread: nextByThread,
+    ...(switchToDefault ? { activeThreadId: "default" } : {}),
+  });
+
+  _renderWsThreadTabs();
+  renderConvMessages();
+  _observeSentinel();
+}
+
 function closeConversation() {
   if (!dom.convOverlay) return;
 
+  _wsSaveDraft();
   // Hide conversation overlay
   dom.convOverlay.classList.add("hidden");
 
@@ -414,6 +600,10 @@ function closeConversation() {
 
   setState({ conversationOpen: false, conversationAnima: null });
   setTalking(false);
+
+  // Clear pending queue
+  convPendingQueue = [];
+  _wsHidePendingIndicator();
 
   // Abort any active stream
   if (convStreamController) {
@@ -449,14 +639,19 @@ async function triggerGreeting(animaName) {
     _lastGreetTime[animaName] = Date.now();
     const now = new Date().toISOString();
 
-    // Add visit marker + greeting message to chat
-    const { chatMessages } = getState();
+    // Add visit marker + greeting message to chat (thread-aware)
+    const { conversationAnima, activeThreadId, chatMessagesByThread } = getState();
+    const threadId = activeThreadId || "default";
+    const current = chatMessagesByThread?.[conversationAnima]?.[threadId] || [];
     const newMessages = [
-      ...chatMessages,
+      ...current,
       { role: "system", text: "デスクを訪問しました", timestamp: now },
       { role: "assistant", text: data.response, timestamp: now },
     ];
-    setState({ chatMessages: newMessages });
+    const nextByThread = { ...chatMessagesByThread };
+    if (!nextByThread[conversationAnima]) nextByThread[conversationAnima] = {};
+    nextByThread[conversationAnima][threadId] = newMessages;
+    setState({ chatMessagesByThread: nextByThread });
     renderConvMessages();
 
     // Update bust-up expression
@@ -590,7 +785,8 @@ function _renderHistoryMessage(msg) {
   if (msg.role === "assistant") {
     const content = msg.content ? renderSimpleMarkdown(msg.content) : "";
     const toolHtml = _renderToolCalls(msg.tool_calls);
-    return `<div class="chat-bubble assistant">${content}${toolHtml}${tsHtml}</div>`;
+    const imagesHtml = renderChatImages(msg.images, { animaName: getState().conversationAnima });
+    return `<div class="chat-bubble assistant">${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
   }
 
   // human / user
@@ -610,16 +806,14 @@ function renderConvBubble(msg) {
     return `<div class="chat-visit-marker">${escapeHtml(msg.text)}${tsHtml}</div>`;
   }
   if (msg.role === "user") {
-    const imagesHtml = renderChatImages(msg.images);
+    const imagesHtml = renderChatImages(msg.images, { animaName: getState().conversationAnima });
     const textHtml = msg.text ? `<div class="chat-text">${escapeHtml(msg.text)}</div>` : "";
     return `<div class="chat-bubble user">${imagesHtml}${textHtml}${tsHtml}</div>`;
   }
   const streamClass = msg.streaming ? " streaming" : "";
   let thinkingHtml = "";
-  if (msg.thinkingText) {
-    const thSummary = `Thinking (${msg.thinkingText.length} chars)`;
-    const thRendered = renderSimpleMarkdown(msg.thinkingText);
-    thinkingHtml = `<details class="thinking-block"><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(thSummary)}</summary><div class="thinking-content">${thRendered}</div></details>`;
+  if (msg.thinking && msg.thinkingText) {
+    thinkingHtml = `<div class="thinking-inline-preview">${escapeHtml(msg.thinkingText)}</div>`;
   }
   let content = "";
   if (msg.text) {
@@ -630,18 +824,20 @@ function renderConvBubble(msg) {
   const toolHtml = msg.activeTool
     ? `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(msg.activeTool)} を実行中...</div>`
     : "";
-  return `<div class="chat-bubble assistant${streamClass}">${thinkingHtml}${content}${toolHtml}${tsHtml}</div>`;
+  const imagesHtml = renderChatImages(msg.images, { animaName: getState().conversationAnima });
+  return `<div class="chat-bubble assistant${streamClass}">${thinkingHtml}${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
 }
 
 function renderConvMessages() {
   if (!dom.convMessages) return;
 
-  const animaName = getState().conversationAnima;
-  const hs = animaName ? _historyState[animaName] : null;
-  const { chatMessages } = getState();
+  const { activeThreadId, conversationAnima } = getState();
+  const animaName = conversationAnima;
+  const threadMessages = getState().chatMessagesByThread?.[animaName]?.[activeThreadId || "default"] || [];
+  const hs = animaName ? _historyState[animaName]?.[activeThreadId || "default"] : null;
 
   // No history and no live messages
-  if ((!hs || hs.sessions.length === 0) && chatMessages.length === 0) {
+  if ((!hs || hs.sessions.length === 0) && threadMessages.length === 0) {
     if (hs && hs.loading) {
       dom.convMessages.innerHTML = '<div class="chat-empty"><span class="tool-spinner"></span> \u8AAD\u307F\u8FBC\u307F\u4E2D...</div>';
     } else {
@@ -675,11 +871,11 @@ function renderConvMessages() {
   }
 
   // Render live chat messages (current streaming session)
-  if (chatMessages.length > 0) {
+  if (threadMessages.length > 0) {
     if (hs && hs.sessions.length > 0) {
       html += '<div class="session-divider"><span class="session-divider-label">\u73FE\u5728\u306E\u30BB\u30C3\u30B7\u30E7\u30F3</span></div>';
     }
-    html += chatMessages.map(renderConvBubble).join("");
+    html += threadMessages.map(renderConvBubble).join("");
   }
 
   dom.convMessages.innerHTML = html;
@@ -696,26 +892,35 @@ function renderConvMessages() {
 async function loadAndRenderConvMessages(animaName) {
   if (!animaName) return;
 
-  // Initialize history state (loading)
-  _historyState[animaName] = { sessions: [], hasMore: false, nextBefore: null, loading: true };
-  setState({ chatMessages: [] });
+  const threadId = getState().activeThreadId || "default";
+
+  // Initialize history state (loading) per-thread
+  if (!_historyState[animaName]) _historyState[animaName] = {};
+  _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: true };
+
+  const { chatMessagesByThread } = getState();
+  const nextByThread = { ...chatMessagesByThread };
+  if (!nextByThread[animaName]) nextByThread[animaName] = {};
+  nextByThread[animaName][threadId] = [];
+  setState({ chatMessagesByThread: nextByThread });
+
   renderConvMessages();  // Shows loading indicator
 
   try {
-    const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE);
+    const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE, null, threadId);
     if (data && data.sessions) {
-      _historyState[animaName] = {
+      _historyState[animaName][threadId] = {
         sessions: data.sessions,
         hasMore: data.has_more || false,
         nextBefore: data.next_before || null,
         loading: false,
       };
     } else {
-      _historyState[animaName] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+      _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
     }
   } catch (err) {
     logger.error("Failed to load conversation", { anima: animaName, error: err.message });
-    _historyState[animaName] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
+    _historyState[animaName][threadId] = { sessions: [], hasMore: false, nextBefore: null, loading: false };
   }
 
   renderConvMessages();
@@ -739,20 +944,40 @@ async function resumeConversationStream(animaName) {
     const progress = await fetchStreamProgress(animaName, active.response_id);
     if (!progress) return;
 
-    // Show accumulated text in streaming bubble
-    const { chatMessages } = getState();
-    const streamingMsg = {
-      role: "assistant",
-      text: progress.full_text || "",
-      streaming: true,
-      activeTool: progress.active_tool || null,
-    };
-    setState({ chatMessages: [...chatMessages, streamingMsg] });
+    // Show accumulated text in streaming bubble (thread-aware).
+    // Reuse existing streaming bubble if present to avoid duplicates on re-open.
+    const { activeThreadId, chatMessagesByThread } = getState();
+    const threadId = activeThreadId || "default";
+    const current = chatMessagesByThread?.[animaName]?.[threadId] || [];
+    let streamingMsg = null;
+    if (current.length > 0) {
+      const last = current[current.length - 1];
+      if (last && last.role === "assistant" && last.streaming) {
+        streamingMsg = last;
+      }
+    }
+    if (!streamingMsg) {
+      streamingMsg = {
+        role: "assistant",
+        text: progress.full_text || "",
+        streaming: true,
+        activeTool: progress.active_tool || null,
+      };
+    } else {
+      streamingMsg.text = progress.full_text || streamingMsg.text || "";
+      streamingMsg.activeTool = progress.active_tool || streamingMsg.activeTool || null;
+      streamingMsg.streaming = true;
+    }
+    const nextByThread = { ...chatMessagesByThread };
+    if (!nextByThread[animaName]) nextByThread[animaName] = {};
+    nextByThread[animaName][threadId] = streamingMsg === current[current.length - 1]
+      ? [...current]
+      : [...current, streamingMsg];
+    setState({ chatMessagesByThread: nextByThread });
     renderConvMessages();
 
-    dom.convInput.disabled = true;
-    dom.convSend.disabled = true;
     convStreamController = new AbortController();
+    _wsUpdateSendButton(true);
 
     const resumeBody = JSON.stringify({
       message: "",
@@ -789,21 +1014,32 @@ async function resumeConversationStream(animaName) {
         streamingMsg.thinking = false;
         updateStreamingBubble(streamingMsg);
       },
-      onDone: ({ summary, emotion }) => {
+      onDone: ({ summary, emotion, images }) => {
         if (summary) streamingMsg.text = summary;
+        streamingMsg.images = images || [];
         if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
         streamingMsg.streaming = false;
         streamingMsg.activeTool = null;
         setExpression(emotion);
         setTimeout(() => setExpression("neutral"), 3000);
-        setState({ chatMessages: [...getState().chatMessages] });
+        const st = getState();
+        const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+        const nextByThread = { ...st.chatMessagesByThread };
+        if (!nextByThread[animaName]) nextByThread[animaName] = {};
+        nextByThread[animaName][threadId] = [...arr];
+        setState({ chatMessagesByThread: nextByThread });
         renderConvMessages();
       },
       onError: ({ message: errorMsg }) => {
         streamingMsg.text += `\n[エラー: ${errorMsg}]`;
         streamingMsg.streaming = false;
         setExpression("troubled");
-        setState({ chatMessages: [...getState().chatMessages] });
+        const st = getState();
+        const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+        const nextByThread = { ...st.chatMessagesByThread };
+        if (!nextByThread[animaName]) nextByThread[animaName] = {};
+        nextByThread[animaName][threadId] = [...arr];
+        setState({ chatMessagesByThread: nextByThread });
         renderConvMessages();
       },
     });
@@ -812,15 +1048,31 @@ async function resumeConversationStream(animaName) {
     if (streamingMsg.streaming) {
       streamingMsg.streaming = false;
       if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
-      setState({ chatMessages: [...getState().chatMessages] });
+      const st = getState();
+      const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+      const nextByThread = { ...st.chatMessagesByThread };
+      if (!nextByThread[animaName]) nextByThread[animaName] = {};
+      nextByThread[animaName][threadId] = [...arr];
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
     }
   } catch (err) {
-    logger.error("Resume stream error", { anima: animaName, error: err.message });
+    if (err.name !== "AbortError") {
+      logger.error("Resume stream error", { anima: animaName, error: err.message });
+    }
   } finally {
     convStreamController = null;
-    if (dom.convInput) dom.convInput.disabled = false;
-    if (dom.convSend) dom.convSend.disabled = false;
+    _wsUpdateSendButton(false);
+    dom.convInput?.focus();
+
+    if (convPendingQueue.length > 0) {
+      const next = convPendingQueue.shift();
+      _wsShowPendingIndicator();
+      if (convPendingQueue.length === 0) _wsHidePendingIndicator();
+      setTimeout(() => {
+        _sendConversation(next.text, { images: next.images, displayImages: next.displayImages });
+      }, 150);
+    }
   }
 }
 
@@ -853,9 +1105,10 @@ function _observeSentinel() {
 
 async function _loadMoreHistory() {
   const animaName = getState().conversationAnima;
+  const threadId = getState().activeThreadId || "default";
   if (!animaName) return;
 
-  const hs = _historyState[animaName];
+  const hs = _historyState[animaName]?.[threadId];
   if (!hs || !hs.hasMore || hs.loading) return;
 
   hs.loading = true;
@@ -869,7 +1122,7 @@ async function _loadMoreHistory() {
   }
 
   try {
-    const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE, hs.nextBefore);
+    const data = await fetchConversationHistory(animaName, HISTORY_PAGE_SIZE, hs.nextBefore, threadId);
     if (data && data.sessions && data.sessions.length > 0) {
       hs.sessions = [...data.sessions, ...hs.sessions];
       hs.hasMore = data.has_more || false;
@@ -892,39 +1145,99 @@ async function _loadMoreHistory() {
 
 // ── SSE Streaming for Conversation ──────────────────────
 
-async function sendConversationMessage() {
+function _wsSubmitConversation() {
   const text = dom.convInput?.value?.trim();
-  const images = convImageInputManager?.getPendingImages() || [];
+  const hasImages = convImageInputManager && convImageInputManager.getImageCount() > 0;
+  const isStreaming = !!convStreamController;
+
+  // ── Not streaming ──
+  if (!isStreaming) {
+    if (text || hasImages) {
+      convPendingQueue.push({
+        text: text || "",
+        images: convImageInputManager?.getPendingImages() || [],
+        displayImages: convImageInputManager?.getDisplayImages() || [],
+      });
+      dom.convInput.value = "";
+      dom.convInput.style.height = "auto";
+      _wsSaveDraft();
+      convImageInputManager?.clearImages();
+    }
+    if (convPendingQueue.length === 0) return;
+    const next = convPendingQueue.shift();
+    _wsShowPendingIndicator();
+    if (convPendingQueue.length === 0) _wsHidePendingIndicator();
+    _sendConversation(next.text, { images: next.images, displayImages: next.displayImages });
+    return;
+  }
+
+  // ── Streaming + has input → add to queue ──
+  if (text || hasImages) {
+    convPendingQueue.push({
+      text: text || "",
+      images: convImageInputManager?.getPendingImages() || [],
+      displayImages: convImageInputManager?.getDisplayImages() || [],
+    });
+    dom.convInput.value = "";
+    dom.convInput.style.height = "auto";
+    _wsSaveDraft();
+    convImageInputManager?.clearImages();
+    _wsShowPendingIndicator();
+    _wsUpdateSendButton(true);
+    return;
+  }
+
+  // ── Streaming + empty input + has queue → interrupt & drain queue ──
+  if (convPendingQueue.length > 0) {
+    _wsInterruptAndSendPending();
+    return;
+  }
+
+  // ── Streaming + empty input + no queue → just stop ──
+  _wsStopStreaming();
+}
+
+async function sendConversationMessage() {
+  _wsSubmitConversation();
+}
+
+async function _sendConversation(text, overrideImages = null) {
+  const images = overrideImages?.images || convImageInputManager?.getPendingImages() || [];
+  const displayImages = overrideImages?.displayImages || convImageInputManager?.getDisplayImages() || [];
   if (!text && images.length === 0) return;
 
   const animaName = getState().conversationAnima;
+  const threadId = getState().activeThreadId || "default";
   if (!animaName) return;
-
-  // Capture display images (with dataUrl for rendering)
-  const displayImages = convImageInputManager?.getDisplayImages() || [];
 
   // Clear input
   dom.convInput.value = "";
   dom.convInput.disabled = true;
   dom.convSend.disabled = true;
 
-  // Add user message + streaming assistant placeholder
-  const { chatMessages } = getState();
+  // Add user message + streaming assistant placeholder (thread-aware)
+  const { chatMessagesByThread } = getState();
+  const current = chatMessagesByThread?.[animaName]?.[threadId] || [];
   const sendTs = new Date().toISOString();
   const userMsg = { role: "user", text: text || "", images: displayImages, timestamp: sendTs };
   const streamingMsg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: sendTs, thinkingText: "", thinking: false };
-  setState({ chatMessages: [...chatMessages, userMsg, streamingMsg] });
+  const nextByThread = { ...chatMessagesByThread };
+  if (!nextByThread[animaName]) nextByThread[animaName] = {};
+  nextByThread[animaName][threadId] = [...current, userMsg, streamingMsg];
+  setState({ chatMessagesByThread: nextByThread });
   renderConvMessages();
 
-  // Clear images after capturing
-  convImageInputManager?.clearImages();
+  if (!overrideImages) {
+    convImageInputManager?.clearImages();
+  }
 
-  // Create AbortController for cancellable streaming
   convStreamController = new AbortController();
+  _wsUpdateSendButton(true);
 
   try {
+    let sendSucceeded = false;
     const userName = getCurrentUser() || "guest";
-    const bodyObj = { message: text || "", from_person: userName };
+    const bodyObj = { message: text || "", from_person: userName, thread_id: threadId };
     if (images.length > 0) {
       bodyObj.images = images;
     }
@@ -956,7 +1269,6 @@ async function sendConversationMessage() {
       onHeartbeatRelayStart: ({ message }) => {
         streamingMsg.heartbeatRelay = true;
         streamingMsg.heartbeatText = "";
-        streamingMsg.text = "";
         scheduleStreamingUpdate(streamingMsg);
       },
       onHeartbeatRelay: ({ text }) => {
@@ -982,12 +1294,12 @@ async function sendConversationMessage() {
         streamingMsg.thinking = false;
         updateStreamingBubble(streamingMsg);
       },
-      onDone: ({ summary, emotion }) => {
-        // Use clean summary (emotion tag already stripped server-side)
+      onDone: ({ summary, emotion, images }) => {
         if (summary) {
           streamingMsg.text = summary;
           updateStreamingBubble(streamingMsg);
         }
+        streamingMsg.images = images || [];
         setExpression(emotion);
         setTimeout(() => setExpression("neutral"), 3000);
       },
@@ -1000,27 +1312,178 @@ async function sendConversationMessage() {
 
     setTalking(false);
 
-    // Finalize streaming message
+    // Finalize streaming message (thread-aware) + update thread label on first message
     streamingMsg.streaming = false;
     if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
-    setState({ chatMessages: [...getState().chatMessages] });
+    const st = getState();
+    const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+    const nextByThread = { ...st.chatMessagesByThread };
+    if (!nextByThread[animaName]) nextByThread[animaName] = {};
+    nextByThread[animaName] = { ...nextByThread[animaName], [threadId]: [...arr] };
+    setState({ chatMessagesByThread: nextByThread });
+    const threadList = st.threads[animaName] || [];
+    const entry = threadList.find((t) => t.id === threadId);
+    if (entry && entry.label === "新しいスレッド" && (text || "").trim()) {
+      const firstLine = (text || "").trim().slice(0, 20) + ((text || "").trim().length > 20 ? "..." : "");
+      const nextThreads = { ...st.threads, [animaName]: threadList.map((t) => t.id === threadId ? { ...t, label: firstLine } : t) };
+      setState({ threads: nextThreads });
+      _renderWsThreadTabs();
+    }
     renderConvMessages();
+    sendSucceeded = true;
+
+    if (sendSucceeded && dom.convInput && dom.convInput.value.trim() === text.trim()) {
+      dom.convInput.value = "";
+      dom.convInput.style.height = "auto";
+      _wsClearDraft(animaName);
+    }
   } catch (err) {
-    if (err.name === "AbortError") return;
-    logger.error("Conversation stream error", { anima: animaName, error: err.message, name: err.name });
-    streamingMsg.text = `[エラー] ${err.message}`;
-    streamingMsg.streaming = false;
-    streamingMsg.activeTool = null;
-    setState({ chatMessages: [...getState().chatMessages] });
-    renderConvMessages();
-    setExpression("troubled");
+    if (err.name === "AbortError") {
+      streamingMsg.streaming = false;
+      streamingMsg.activeTool = null;
+      if (!streamingMsg.text) streamingMsg.text = "(中断されました)";
+      const abortSt = getState();
+      const abortArr = abortSt.chatMessagesByThread?.[animaName]?.[threadId] || [];
+      const abortNext = { ...abortSt.chatMessagesByThread };
+      if (!abortNext[animaName]) abortNext[animaName] = {};
+      abortNext[animaName] = { ...abortNext[animaName], [threadId]: [...abortArr] };
+      setState({ chatMessagesByThread: abortNext });
+      renderConvMessages();
+    } else {
+      logger.error("Conversation stream error", { anima: animaName, error: err.message, name: err.name });
+      streamingMsg.text = `[エラー] ${err.message}`;
+      streamingMsg.streaming = false;
+      streamingMsg.activeTool = null;
+      const st = getState();
+      const arr = st.chatMessagesByThread?.[animaName]?.[threadId] || [];
+      const nextByThread = { ...st.chatMessagesByThread };
+      if (!nextByThread[animaName]) nextByThread[animaName] = {};
+      nextByThread[animaName] = { ...nextByThread[animaName], [threadId]: [...arr] };
+      setState({ chatMessagesByThread: nextByThread });
+      renderConvMessages();
+      setExpression("troubled");
+    }
     setTalking(false);
   } finally {
     convStreamController = null;
-    if (dom.convInput) dom.convInput.disabled = false;
-    if (dom.convSend) dom.convSend.disabled = false;
+    _wsUpdateSendButton(false);
+    _wsSaveDraft();
     dom.convInput?.focus();
+
+    if (convPendingQueue.length > 0) {
+      const next = convPendingQueue.shift();
+      _wsShowPendingIndicator();
+      if (convPendingQueue.length === 0) _wsHidePendingIndicator();
+      setTimeout(() => {
+        _sendConversation(next.text, { images: next.images, displayImages: next.displayImages });
+      }, 150);
+    }
   }
+}
+
+// ── Workspace Queue Helpers ──────────────────────
+
+function _wsAddToQueue() {
+  const text = dom.convInput?.value?.trim();
+  const hasImages = convImageInputManager && convImageInputManager.getImageCount() > 0;
+  if (!text && !hasImages) return;
+  convPendingQueue.push({
+    text: text || "",
+    images: convImageInputManager?.getPendingImages() || [],
+    displayImages: convImageInputManager?.getDisplayImages() || [],
+  });
+  if (dom.convInput) { dom.convInput.value = ""; dom.convInput.style.height = "auto"; }
+  _wsSaveDraft();
+  convImageInputManager?.clearImages();
+  _wsShowPendingIndicator();
+  _wsUpdateSendButton(!!convStreamController);
+}
+
+function _wsShowPendingIndicator() {
+  if (!dom.convPending || !dom.convPendingList) return;
+  if (convPendingQueue.length === 0) { dom.convPending.style.display = "none"; return; }
+  if (dom.convPendingLabel) dom.convPendingLabel.textContent = `キュー (${convPendingQueue.length})`;
+  dom.convPendingList.innerHTML = convPendingQueue.map((p, i) => {
+    const txt = escapeHtml(p.text.length > 50 ? p.text.slice(0, 50) + "…" : p.text);
+    const img = p.images?.length ? ` <span style="opacity:0.6">(+${p.images.length}画像)</span>` : "";
+    return `<div class="pending-queue-item" data-idx="${i}">` +
+      `<span class="pending-queue-item-num">${i + 1}.</span>` +
+      `<span class="pending-queue-item-text">${txt || "(画像のみ)"}${img}</span>` +
+      `<button class="pending-queue-item-del" data-idx="${i}" type="button">✕</button>` +
+      `</div>`;
+  }).join("");
+  dom.convPending.style.display = "";
+
+  dom.convPendingList.onclick = (e) => {
+    const delBtn = e.target.closest(".pending-queue-item-del");
+    if (delBtn) {
+      e.stopPropagation();
+      const idx = parseInt(delBtn.dataset.idx, 10);
+      convPendingQueue.splice(idx, 1);
+      _wsShowPendingIndicator();
+      _wsUpdateSendButton(!!convStreamController);
+      return;
+    }
+    const item = e.target.closest(".pending-queue-item");
+    if (item) {
+      const idx = parseInt(item.dataset.idx, 10);
+      const removed = convPendingQueue.splice(idx, 1)[0];
+      if (removed && dom.convInput) {
+        dom.convInput.value = removed.text;
+        dom.convInput.style.height = "auto";
+        const maxH = isMobileView() ? 100 : 120;
+        dom.convInput.style.height = Math.min(dom.convInput.scrollHeight, maxH) + "px";
+        dom.convInput.focus();
+      }
+      _wsShowPendingIndicator();
+      _wsUpdateSendButton(!!convStreamController);
+    }
+  };
+}
+
+function _wsHidePendingIndicator() {
+  if (dom.convPending) dom.convPending.style.display = "none";
+}
+
+function _wsUpdateSendButton(isStreaming) {
+  const hasInput = (dom.convInput?.value?.trim() || "").length > 0;
+
+  if (dom.convQueueBtn) {
+    dom.convQueueBtn.disabled = !hasInput;
+  }
+
+  if (!dom.convSend) return;
+  dom.convSend.classList.remove("stop", "interrupt");
+  if (!isStreaming) {
+    dom.convSend.textContent = (convPendingQueue.length > 0 || hasInput) ? "↑" : "↑";
+    dom.convSend.disabled = !hasInput && convPendingQueue.length === 0;
+  } else if (hasInput) {
+    dom.convSend.textContent = "↑";
+    dom.convSend.disabled = false;
+  } else if (convPendingQueue.length > 0) {
+    dom.convSend.textContent = "■↑";
+    dom.convSend.classList.add("interrupt");
+    dom.convSend.disabled = false;
+  } else {
+    dom.convSend.textContent = "■";
+    dom.convSend.classList.add("stop");
+    dom.convSend.disabled = false;
+  }
+}
+
+function _wsStopStreaming() {
+  const animaName = getState().conversationAnima;
+  if (!animaName) return;
+  if (convStreamController) {
+    convStreamController.abort();
+  }
+  fetch(`/api/animas/${encodeURIComponent(animaName)}/interrupt`, {
+    method: "POST",
+  }).catch(() => {});
+}
+
+function _wsInterruptAndSendPending() {
+  _wsStopStreaming();
 }
 
 // ── Streaming update with rAF throttle ──────────────────────
@@ -1042,28 +1505,27 @@ function scheduleStreamingUpdate(msg) {
 
 function updateStreamingBubble(msg) {
   if (!dom.convMessages) return;
-  const bubble = dom.convMessages.querySelector(".chat-bubble.assistant.streaming");
+  const bubbles = dom.convMessages.querySelectorAll(".chat-bubble.assistant.streaming");
+  const bubble = bubbles[bubbles.length - 1];
   if (!bubble) return;
 
-  let html = "";
-  if (msg.thinkingText) {
-    const open = msg.thinking ? " open" : "";
-    const summary = msg.thinking ? "Thinking..." : `Thinking (${msg.thinkingText.length} chars)`;
-    const thinkingRendered = renderSimpleMarkdown(msg.thinkingText);
-    html += `<details class="thinking-block"${open}><summary class="thinking-summary"><span class="thinking-icon">💭</span> ${escapeHtml(summary)}</summary><div class="thinking-content">${thinkingRendered}</div></details>`;
-  }
+  let mainHtml = "";
+  const thinkingHtml = (msg.thinking && msg.thinkingText)
+    ? `<div class="thinking-inline-preview">${escapeHtml(msg.thinkingText)}</div>`
+    : "";
   if (msg.heartbeatRelay) {
-    html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>ハートビート処理中...</div>';
+    mainHtml = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>ハートビート処理中...</div>';
     if (msg.heartbeatText) {
-      html += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
+      mainHtml += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
     }
   } else if (msg.afterHeartbeatRelay && !msg.text) {
-    html = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>応答を準備中...</div>';
+    mainHtml = '<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>応答を準備中...</div>';
   } else if (msg.text) {
-    html = renderSimpleMarkdown(msg.text);
+    mainHtml = renderSimpleMarkdown(msg.text);
   } else {
-    html = '<span class="cursor-blink"></span>';
+    mainHtml = '<span class="cursor-blink"></span>';
   }
+  let html = `${thinkingHtml}${mainHtml}`;
   if (msg.activeTool) {
     html += `<div class="tool-indicator"><span class="tool-spinner"></span>${escapeHtml(msg.activeTool)} を実行中...</div>`;
   }
@@ -1074,16 +1536,26 @@ function updateStreamingBubble(msg) {
 function _buildVoiceChatCallbacks(animaName) {
   return {
     addUserBubble(text) {
-      const { chatMessages } = getState();
+      const { conversationAnima, activeThreadId, chatMessagesByThread } = getState();
+      const threadId = activeThreadId || "default";
+      const current = chatMessagesByThread?.[conversationAnima]?.[threadId] || [];
       const ts = new Date().toISOString();
-      setState({ chatMessages: [...chatMessages, { role: "user", text, timestamp: ts }] });
+      const nextByThread = { ...chatMessagesByThread };
+      if (!nextByThread[conversationAnima]) nextByThread[conversationAnima] = {};
+      nextByThread[conversationAnima][threadId] = [...current, { role: "user", text, timestamp: ts }];
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
     },
     addStreamingBubble() {
-      const { chatMessages } = getState();
+      const { conversationAnima, activeThreadId, chatMessagesByThread } = getState();
+      const threadId = activeThreadId || "default";
+      const current = chatMessagesByThread?.[conversationAnima]?.[threadId] || [];
       const ts = new Date().toISOString();
       const msg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: ts, thinkingText: "", thinking: false };
-      setState({ chatMessages: [...chatMessages, msg] });
+      const nextByThread = { ...chatMessagesByThread };
+      if (!nextByThread[conversationAnima]) nextByThread[conversationAnima] = {};
+      nextByThread[conversationAnima][threadId] = [...current, msg];
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
       return msg;
     },
@@ -1091,8 +1563,19 @@ function _buildVoiceChatCallbacks(animaName) {
       updateStreamingBubble(msg);
     },
     finalizeStreamingBubble(msg) {
-      setState({ chatMessages: [...getState().chatMessages] });
+      const { conversationAnima, activeThreadId, chatMessagesByThread } = getState();
+      const threadId = activeThreadId || "default";
+      const arr = chatMessagesByThread?.[conversationAnima]?.[threadId] || [];
+      const nextByThread = { ...chatMessagesByThread };
+      if (!nextByThread[conversationAnima]) nextByThread[conversationAnima] = {};
+      nextByThread[conversationAnima][threadId] = [...arr];
+      setState({ chatMessagesByThread: nextByThread });
       renderConvMessages();
+    },
+    applyEmotion(emotion) {
+      if (!emotion) return;
+      setExpression(emotion);
+      setTimeout(() => setExpression("neutral"), 3000);
     },
   };
 }
@@ -1760,30 +2243,53 @@ async function startDashboard() {
     // Close when clicking the backdrop (outside the card)
     if (e.target === dom.convOverlay) closeConversation();
   });
-  dom.convSend?.addEventListener("click", sendConversationMessage);
+  dom.convSend?.addEventListener("click", () => _wsSubmitConversation());
+  dom.convQueueBtn?.addEventListener("click", () => _wsAddToQueue());
   dom.convInput?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && e.altKey) {
+      e.preventDefault();
+      _wsAddToQueue();
+    } else if (e.key === "Enter") {
       if (isMobileView()) {
-        // Mobile: Enter sends, Shift+Enter inserts newline
         if (!e.shiftKey) {
           e.preventDefault();
-          sendConversationMessage();
+          _wsSubmitConversation();
         }
       } else {
-        // Desktop: Ctrl/Cmd+Enter sends
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
-          sendConversationMessage();
+          _wsSubmitConversation();
         }
       }
     }
   });
 
-  // Auto-resize conversation input (100px max on mobile, 120px on desktop)
+  // Make the whole input container focus the textarea (except control buttons).
+  const convInputWrap = document.querySelector(".ws-conv-input-area .chat-input-wrap");
+  const convInputFocusHandler = (e) => {
+    if (e.target instanceof Element && e.target.closest("button, input, select, textarea, a")) return;
+    dom.convInput?.focus();
+  };
+  convInputWrap?.addEventListener("pointerdown", convInputFocusHandler);
+  convInputWrap?.addEventListener("click", (e) => {
+    if (e.target instanceof Element && e.target.closest("button, input, select, textarea, a")) return;
+    dom.convInput?.focus();
+  });
+
+  // Pending queue cancel all
+  dom.convPendingCancel?.addEventListener("click", () => {
+    convPendingQueue = [];
+    _wsHidePendingIndicator();
+    _wsUpdateSendButton(!!convStreamController);
+  });
+
+  // Auto-resize conversation input + dynamic button update
   dom.convInput?.addEventListener("input", () => {
     dom.convInput.style.height = "auto";
     const maxH = isMobileView() ? 100 : 120;
     dom.convInput.style.height = Math.min(dom.convInput.scrollHeight, maxH) + "px";
+    _wsSaveDraft();
+    _wsUpdateSendButton(!!convStreamController);
   });
 
   // ── Conversation Image Input Setup ────────────────
@@ -1879,7 +2385,10 @@ function applyTheme() {
   document.body.classList.toggle("theme-business", theme === "business");
 }
 
-export function init() {
+export async function init() {
+  await initI18n();
+  applyTranslations();
+
   applyTheme();
   cacheDom();
 

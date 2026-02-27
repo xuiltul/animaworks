@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AnimaWorks Workspace</title>
   <link rel="stylesheet" href="/styles/tokens.css">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20260227c">
   <link rel="stylesheet" href="/styles/voice.css">
   <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg">
   <script type="importmap">
@@ -33,16 +33,16 @@
       </div>
       <div class="ws-header-center" id="wsAnimaSelector"></div>
       <div class="ws-header-right">
-        <button class="ws-view-toggle" id="wsViewToggle" title="ビュー切替">
+        <button class="ws-view-toggle" id="wsViewToggle" title="Toggle view" data-i18n-title="ws.view_toggle_title">
           <span class="ws-view-toggle-3d">🏢 3D</span>
           <span class="ws-view-toggle-org">📊 Dashboard</span>
         </button>
         <div class="ws-system-status" id="wsSystemStatus">
           <span class="status-dot status-offline"></span>
-          <span class="status-text">接続中...</span>
+          <span class="status-text" data-i18n="ws.connecting">接続中...</span>
         </div>
         <span class="ws-user-info" id="wsUserInfo"></span>
-        <button class="ws-logout-btn" id="wsLogoutBtn">ログアウト</button>
+        <button class="ws-logout-btn" id="wsLogoutBtn" data-i18n="ws.logout">Log out</button>
       </div>
     </header>
 
@@ -65,10 +65,10 @@
           <aside class="ws-conv-sidebar">
             <!-- Tab Bar -->
             <div class="ws-right-tabs" id="wsRightTabs">
-              <button class="right-tab active" data-tab="state" id="wsTabState">状態</button>
-              <button class="right-tab" data-tab="activity" id="wsTabActivity">活動</button>
-              <button class="right-tab" data-tab="board" id="wsTabBoard">Board</button>
-              <button class="right-tab" data-tab="history" id="wsTabHistory">履歴</button>
+              <button class="right-tab active" data-tab="state" id="wsTabState" data-i18n="ws.state_tab">状態</button>
+              <button class="right-tab" data-tab="activity" id="wsTabActivity" data-i18n="ws.activity_tab">活動</button>
+              <button class="right-tab" data-tab="board" id="wsTabBoard" data-i18n="ws.board_tab">Board</button>
+              <button class="right-tab" data-tab="history" id="wsTabHistory" data-i18n="ws.history_tab">履歴</button>
             </div>
 
             <!-- Tab Panes -->
@@ -81,7 +81,7 @@
 
             <!-- Memory Browser -->
             <div class="ws-memory-panel" id="wsMemoryPanel"></div>
-            <button class="ws-mobile-memory-close" id="wsMobileMemoryClose" aria-label="閉じる">&times;</button>
+            <button class="ws-mobile-memory-close" id="wsMobileMemoryClose" data-i18n-aria-label="common.aria_close">&times;</button>
           </aside>
 
           <!-- Mobile sidebar backdrop -->
@@ -90,20 +90,31 @@
           <!-- Center: Chat -->
           <main class="ws-conv-main">
             <div class="ws-conv-header">
-              <button class="ws-mobile-sidebar-toggle" id="wsMobileSidebarToggle" aria-label="サイドバー">&#9776;</button>
-              <button class="ws-conv-back-btn" id="wsConvBack">&larr; オフィスに戻る</button>
+              <button class="ws-mobile-sidebar-toggle" id="wsMobileSidebarToggle" data-i18n-aria-label="common.aria_sidebar">&#9776;</button>
+              <button class="ws-conv-back-btn" id="wsConvBack" data-i18n="ws.back_office">&larr; Back to office</button>
               <span class="ws-conv-anima-name" id="wsConvAnimaName"></span>
-              <button class="ws-mobile-character-toggle" id="wsMobileCharacterToggle" aria-label="キャラクター">&#128100;</button>
+              <button class="ws-mobile-character-toggle" id="wsMobileCharacterToggle" data-i18n-aria-label="common.aria_character">&#128100;</button>
             </div>
+            <div class="thread-tabs ws-thread-tabs" id="wsThreadTabs"></div>
             <div class="ws-conv-messages" id="wsConvMessages">
-              <div class="chat-empty">メッセージはまだありません</div>
+              <div class="chat-empty" data-i18n="ws.messages_empty">No messages yet</div>
             </div>
             <div class="ws-conv-input-area">
               <div class="image-preview-bar" id="wsConvPreviewBar" style="display:none"></div>
-              <div class="chat-input-row">
-                <textarea class="ws-conv-input" id="wsConvInput" placeholder="メッセージを入力... (Ctrl+Enter)" rows="1"></textarea>
-                <button class="chat-attach-btn" type="button" id="wsConvAttachBtn" title="画像を添付">+</button>
-                <button class="ws-conv-send" id="wsConvSend">送信</button>
+              <div class="pending-queue-bar" id="wsConvPending" style="display:none">
+                <div class="pending-queue-header">
+                  <span class="pending-queue-label" id="wsConvPendingLabel" data-i18n="chat.queue_label">キュー</span>
+                  <button class="pending-queue-clear" id="wsConvPendingCancel" type="button" data-i18n-title="chat.queue_clear_all" title="全クリア">✕ all</button>
+                </div>
+                <div id="wsConvPendingList"></div>
+              </div>
+              <div class="chat-input-wrap">
+                <textarea class="ws-conv-input" id="wsConvInput" data-i18n-placeholder="ws.message_placeholder" placeholder="メッセージを入力... (Ctrl+Enter, Alt+Enter でキュー)" rows="1"></textarea>
+                <div class="chat-input-actions">
+                  <button class="chat-attach-btn" type="button" id="wsConvAttachBtn" data-i18n-title="ws.attach_image" title="画像を添付">+</button>
+                  <button class="chat-queue-btn" type="button" id="wsConvQueueBtn" data-i18n-title="chat.queue_add" title="キューに追加 (Alt+Enter)">↓</button>
+                  <button class="ws-conv-send" id="wsConvSend">↑</button>
+                </div>
               </div>
               <input type="file" id="wsConvFileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none" />
             </div>
@@ -131,6 +142,6 @@
 
   <script src="/vendor/lucide/lucide.min.js"></script>
   <!-- ── Module Entry Point ───────────── -->
-  <script type="module" src="modules/app.js?v=20260219a"></script>
+  <script type="module" src="modules/app.js?v=20260227b"></script>
 </body>
 </html>
