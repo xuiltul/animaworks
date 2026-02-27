@@ -36,6 +36,8 @@ let _bustupUrl = null;
 let _pendingQueue = [];       // Array<{ text, images, displayImages }>
 let _chatAbortController = null;
 let _chatUiStateSaveTimer = null;
+let _animaTabAvatarUrls = {}; // { [animaName]: string | null }
+let _animaTabAvatarLoading = {}; // { [animaName]: Promise<void> }
 
 // ── Chat Draft Persistence ───────────────────
 
@@ -124,13 +126,48 @@ function _mergeThreadsFromSessions(animaName, sessionsData) {
   _threads[animaName] = [defaultThread, ...rest];
 }
 
-function _getAnimaTabIcon(name) {
-  const anima = _animas.find((a) => a.name === name);
-  const status = anima?.status || "";
-  if (status === "thinking" || status === "processing") return "✦";
-  if (status === "bootstrapping") return "⏳";
-  if (status === "stopped" || status === "not_found") return "☾";
-  return "◉";
+function _isBusinessTheme() {
+  return document.body.classList.contains("theme-business");
+}
+
+async function _ensureAnimaTabAvatar(name) {
+  if (!name || _isBusinessTheme()) return;
+  if (Object.prototype.hasOwnProperty.call(_animaTabAvatarUrls, name)) return;
+  if (_animaTabAvatarLoading[name]) return _animaTabAvatarLoading[name];
+
+  _animaTabAvatarLoading[name] = (async () => {
+    let found = null;
+    // Chat tab icon should prioritize face icon (chibi).
+    const candidates = ["avatar_chibi.png", "avatar_bustup.png"];
+    for (const filename of candidates) {
+      const url = `/api/animas/${encodeURIComponent(name)}/assets/${encodeURIComponent(filename)}`;
+      try {
+        const resp = await fetch(url, { method: "HEAD" });
+        if (resp.ok) {
+          found = url;
+          break;
+        }
+      } catch {
+        // Try next candidate.
+      }
+    }
+    _animaTabAvatarUrls[name] = found;
+    delete _animaTabAvatarLoading[name];
+    _renderAnimaTabs();
+  })();
+  return _animaTabAvatarLoading[name];
+}
+
+function _buildAnimaTabAvatar(name) {
+  const initial = escapeHtml((name || "").charAt(0).toUpperCase() || "?");
+  if (_isBusinessTheme()) {
+    return `<span class="anima-tab-avatar anima-tab-avatar-initial">${initial}</span>`;
+  }
+  const url = _animaTabAvatarUrls[name];
+  if (url) {
+    return `<img class="anima-tab-avatar anima-tab-avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
+  }
+  return `<span class="anima-tab-avatar anima-tab-avatar-initial">${initial}</span>`;
 }
 
 function _refreshAnimaUnread(animaName) {
@@ -368,6 +405,8 @@ export function destroy() {
   _activeThreadByAnima = {};
   _animaDetail = null;
   _imageInputManager = null;
+  _animaTabAvatarUrls = {};
+  _animaTabAvatarLoading = {};
 }
 
 // ── Event Binding ──────────────────────────
@@ -735,13 +774,18 @@ function _renderAnimaTabs() {
   const html = _animaTabs.map((tab) => {
     const activeClass = tab.name === _selectedAnima ? " active" : "";
     const star = tab.unreadStar ? '<span class="tab-star" aria-label="unread">★</span>' : "";
-    const icon = _getAnimaTabIcon(tab.name);
+    const avatar = _buildAnimaTabAvatar(tab.name);
     const closeBtn = _animaTabs.length > 1
       ? ` <button type="button" class="anima-tab-close" data-anima="${escapeHtml(tab.name)}" title="タブを閉じる" aria-label="閉じる">&times;</button>`
       : "";
-    return `<span class="anima-tab-wrap"><button type="button" class="anima-tab${activeClass}" data-anima="${escapeHtml(tab.name)}"><span class="anima-tab-icon" aria-hidden="true">${icon}</span><span class="anima-tab-name">${escapeHtml(tab.name)}</span>${star}</button>${closeBtn}</span>`;
+    return `<span class="anima-tab-wrap"><button type="button" class="anima-tab${activeClass}" data-anima="${escapeHtml(tab.name)}">${avatar}<span class="anima-tab-name">${escapeHtml(tab.name)}</span>${star}</button>${closeBtn}</span>`;
   }).join("");
   container.innerHTML = html;
+
+  // Load missing avatars asynchronously and re-render when ready.
+  for (const tab of _animaTabs) {
+    _ensureAnimaTabAvatar(tab.name);
+  }
 
   container.querySelectorAll(".anima-tab").forEach((btn) => {
     btn.addEventListener("click", (e) => {
