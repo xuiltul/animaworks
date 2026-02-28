@@ -48,6 +48,8 @@ class SchedulerManager:
         self.scheduler: AsyncIOScheduler | None = None
         self._heartbeat_running: bool = False
         self._cron_running: set[str] = set()
+        self._cron_md_mtime: float = 0.0
+        self._heartbeat_md_mtime: float = 0.0
 
     # ── Public Properties ────────────────────────────────────────
 
@@ -75,6 +77,7 @@ class SchedulerManager:
 
             # Wire up hot-reload callback
             self._anima.set_on_schedule_changed(self.reload_schedule)
+            self._record_schedule_mtimes()
 
             job_count = len(self.scheduler.get_jobs())
             logger.info(
@@ -177,6 +180,8 @@ class SchedulerManager:
         """Execute a scheduled heartbeat."""
         if not self._anima:
             return
+        # Detect schedule file changes (Mode S Write/Edit bypass)
+        self._check_schedule_freshness()
         if self._heartbeat_running:
             logger.info("Scheduled heartbeat SKIPPED (already running): %s", self._anima_name)
             return
@@ -197,6 +202,14 @@ class SchedulerManager:
     async def cron_tick(self, task: CronTask) -> None:
         """Execute a scheduled cron task."""
         if not self._anima:
+            return
+
+        # Detect schedule file changes and skip stale tasks
+        if self._check_schedule_freshness():
+            logger.info(
+                "Skipping stale cron '%s' for %s (schedule reloaded)",
+                task.name, self._anima_name,
+            )
             return
 
         if task.name in self._cron_running:
@@ -303,6 +316,7 @@ class SchedulerManager:
         # Re-setup from current files
         self._setup_heartbeat()
         self._setup_cron_tasks()
+        self._record_schedule_mtimes()
 
         new_jobs = [j.id for j in self.scheduler.get_jobs()]
         logger.info(
@@ -310,6 +324,50 @@ class SchedulerManager:
             self._anima_name, removed, new_jobs,
         )
         return {"reloaded": name, "removed": removed, "new_jobs": new_jobs}
+
+    # ── Schedule Freshness ─────────────────────────────────────
+
+    def _record_schedule_mtimes(self) -> None:
+        """Snapshot cron.md and heartbeat.md mtimes for later freshness checks."""
+        cron_path = self._anima_dir / "cron.md"
+        hb_path = self._anima_dir / "heartbeat.md"
+        try:
+            self._cron_md_mtime = cron_path.stat().st_mtime if cron_path.is_file() else 0.0
+        except OSError:
+            self._cron_md_mtime = 0.0
+        try:
+            self._heartbeat_md_mtime = hb_path.stat().st_mtime if hb_path.is_file() else 0.0
+        except OSError:
+            self._heartbeat_md_mtime = 0.0
+
+    def _check_schedule_freshness(self) -> bool:
+        """Check if cron.md or heartbeat.md changed since last setup.
+
+        If a change is detected, reloads the schedule and returns True.
+        Returns False when no change is detected.
+        """
+        cron_path = self._anima_dir / "cron.md"
+        hb_path = self._anima_dir / "heartbeat.md"
+        try:
+            cron_mtime = cron_path.stat().st_mtime if cron_path.is_file() else 0.0
+        except OSError:
+            cron_mtime = 0.0
+        try:
+            hb_mtime = hb_path.stat().st_mtime if hb_path.is_file() else 0.0
+        except OSError:
+            hb_mtime = 0.0
+
+        if cron_mtime != self._cron_md_mtime or hb_mtime != self._heartbeat_md_mtime:
+            logger.info(
+                "Schedule file changed for %s "
+                "(cron mtime %.0f->%.0f, hb mtime %.0f->%.0f), reloading",
+                self._anima_name,
+                self._cron_md_mtime, cron_mtime,
+                self._heartbeat_md_mtime, hb_mtime,
+            )
+            self.reload_schedule(self._anima_name)
+            return True
+        return False
 
     # ── Cleanup ──────────────────────────────────────────────────
 

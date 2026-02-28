@@ -11,6 +11,7 @@ import asyncio
 import logging
 import time
 import zlib
+from pathlib import Path
 from typing import Any, Callable, Coroutine
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -38,6 +39,7 @@ class LifecycleManager:
         self._deferred_timers: dict[str, asyncio.Handle] = {}
         self._last_msg_heartbeat_end: dict[str, float] = {}
         self._pair_heartbeat_times: dict[tuple[str, str], list[float]] = {}
+        self._schedule_mtimes: dict[str, tuple[float, float]] = {}
         # Cache heartbeat config at init time (refreshed on reload_anima_schedule)
         hb = load_config().heartbeat
         self._cooldown_s = hb.msg_heartbeat_cooldown_s
@@ -66,11 +68,13 @@ class LifecycleManager:
             anima.set_ws_broadcast(self._ws_broadcast)
         self._setup_heartbeat(anima)
         self._setup_cron_tasks(anima)
+        self._record_schedule_mtimes(anima.name, anima.memory.anima_dir)
         logger.info("Registered '%s' with lifecycle manager", anima.name)
 
     def unregister_anima(self, name: str) -> None:
         """Remove an anima and all their scheduled jobs."""
         self.animas.pop(name, None)
+        self._schedule_mtimes.pop(name, None)
         self._pending_triggers.discard(name)
         timer = self._deferred_timers.pop(name, None)
         if timer:
@@ -115,6 +119,7 @@ class LifecycleManager:
         # Re-setup from current files on disk
         self._setup_heartbeat(anima)
         self._setup_cron_tasks(anima)
+        self._record_schedule_mtimes(name, anima.memory.anima_dir)
 
         new_jobs = [
             j.id for j in self.scheduler.get_jobs()
@@ -125,6 +130,57 @@ class LifecycleManager:
             name, removed, new_jobs,
         )
         return {"reloaded": name, "removed": removed, "new_jobs": new_jobs}
+
+    # ── Schedule Freshness ─────────────────────────────────
+
+    def _record_schedule_mtimes(self, name: str, anima_dir: Path) -> None:
+        """Snapshot cron.md and heartbeat.md mtimes for later freshness checks."""
+        cron_path = anima_dir / "cron.md"
+        hb_path = anima_dir / "heartbeat.md"
+        try:
+            cron_mt = cron_path.stat().st_mtime if cron_path.is_file() else 0.0
+        except OSError:
+            cron_mt = 0.0
+        try:
+            hb_mt = hb_path.stat().st_mtime if hb_path.is_file() else 0.0
+        except OSError:
+            hb_mt = 0.0
+        self._schedule_mtimes[name] = (cron_mt, hb_mt)
+
+    def _check_schedule_freshness(self, name: str) -> bool:
+        """Check if cron.md or heartbeat.md changed since last setup.
+
+        If a change is detected, reloads the schedule and returns True.
+        Returns False when no change is detected or the anima is unknown.
+        """
+        anima = self.animas.get(name)
+        if not anima:
+            return False
+        prev = self._schedule_mtimes.get(name)
+        if prev is None:
+            return False
+
+        anima_dir: Path = anima.memory.anima_dir
+        cron_path = anima_dir / "cron.md"
+        hb_path = anima_dir / "heartbeat.md"
+        try:
+            cron_mt = cron_path.stat().st_mtime if cron_path.is_file() else 0.0
+        except OSError:
+            cron_mt = 0.0
+        try:
+            hb_mt = hb_path.stat().st_mtime if hb_path.is_file() else 0.0
+        except OSError:
+            hb_mt = 0.0
+
+        if (cron_mt, hb_mt) != prev:
+            logger.info(
+                "Schedule file changed for '%s' — reloading "
+                "(cron: %.0f->%.0f, hb: %.0f->%.0f)",
+                name, prev[0], cron_mt, prev[1], hb_mt,
+            )
+            self.reload_anima_schedule(name)
+            return True
+        return False
 
     # ── Heartbeat ─────────────────────────────────────────
 
@@ -179,6 +235,9 @@ class LifecycleManager:
         anima = self.animas.get(name)
         if not anima:
             return
+
+        # Detect schedule file changes (Mode S Write/Edit bypass)
+        self._check_schedule_freshness(name)
 
         # ── Cascade detection for scheduled heartbeats ──
         # NOTE: TOCTOU — inbox is peeked here and re-read inside run_heartbeat().
@@ -250,6 +309,14 @@ class LifecycleManager:
         """Wrapper for cron task execution (both LLM and command types)."""
         anima = self.animas.get(name)
         if not anima:
+            return
+
+        # Detect schedule file changes and skip stale tasks
+        if self._check_schedule_freshness(name):
+            logger.info(
+                "Skipping stale cron '%s' for '%s' (schedule reloaded)",
+                task.name, name,
+            )
             return
 
         logger.info("Cron: %s -> %s [%s]", name, task.name, task.type)
