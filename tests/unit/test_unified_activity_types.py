@@ -27,7 +27,8 @@ _CONSUMER_FILES = [
     _STATIC / "pages" / "home.js",
     _STATIC / "pages" / "chat" / "ctx.js",
     _STATIC / "modules" / "activity.js",
-    _STATIC / "workspace" / "modules" / "timeline.js",
+    _STATIC / "workspace" / "modules" / "timeline-dom.js",
+    _STATIC / "workspace" / "modules" / "timeline-history.js",
     _STATIC / "workspace" / "modules" / "activity.js",
 ]
 
@@ -139,7 +140,7 @@ class TestConsumerFilesUseSharedFunctions:
         _STATIC / "pages" / "home.js",
         _STATIC / "pages" / "chat" / "activity-controller.js",
         _STATIC / "modules" / "activity.js",
-        _STATIC / "workspace" / "modules" / "timeline.js",
+        _STATIC / "workspace" / "modules" / "timeline-dom.js",
         _STATIC / "workspace" / "modules" / "activity.js",
     ]
 
@@ -163,7 +164,7 @@ class TestConsumerFilesUseSharedFunctions:
         assert "getDisplaySummary(" in content
 
     def test_timeline_uses_normalize_event(self) -> None:
-        content = (_STATIC / "workspace" / "modules" / "timeline.js").read_text(encoding="utf-8")
+        content = (_STATIC / "workspace" / "modules" / "timeline-history.js").read_text(encoding="utf-8")
         assert "normalizeEvent(" in content
 
 
