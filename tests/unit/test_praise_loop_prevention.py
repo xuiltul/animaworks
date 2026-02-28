@@ -273,7 +273,7 @@ class TestSuppressBoardFanout:
         from core.tooling.handler import suppress_board_fanout
         token = suppress_board_fanout.set(True)
         try:
-            with patch("core.tooling.handler.logger") as mock_logger:
+            with patch("core.tooling.handler_comms.logger") as mock_logger:
                 handler._handle_post_channel({"channel": "ops", "text": "@all acknowledged"})
 
             # Look for the suppression log message

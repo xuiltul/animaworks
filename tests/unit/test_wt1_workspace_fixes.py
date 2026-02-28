@@ -20,7 +20,11 @@ import pytest
 # ── Paths ──────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-APP_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "app.js"
+APP_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "app-websocket.js"
+ACTIVITY_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "activity.js"
+SIDEBAR_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "sidebar.js"
+CHAT_STREAMING_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "chat-streaming.js"
+RENDER_UTILS_JS = REPO_ROOT / "server" / "static" / "shared" / "chat" / "render-utils.js"
 WEBSOCKET_JS = REPO_ROOT / "server" / "static" / "modules" / "websocket.js"
 TIMELINE_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "timeline.js"
 CHAT_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "chat.js"
@@ -114,32 +118,30 @@ class TestIssueB_ActivitySidebarEmpty:
 
     def test_addActivity_accepts_isoTs_parameter(self) -> None:
         """addActivity function signature must include isoTs parameter."""
-        src = APP_JS.read_text(encoding="utf-8")
+        src = ACTIVITY_JS.read_text(encoding="utf-8")
         match = re.search(r"function\s+addActivity\s*\([^)]*\)", src)
-        assert match, "addActivity function not found in app.js"
+        assert match, "addActivity function not found in activity.js"
         sig = match.group(0)
         assert "isoTs" in sig, f"isoTs parameter missing from addActivity signature: {sig}"
 
     def test_addActivity_uses_isoTs_for_date(self) -> None:
         """addActivity must use isoTs when provided (not always new Date())."""
-        src = APP_JS.read_text(encoding="utf-8")
-        # Find the addActivity function body (first ~10 lines after definition)
+        src = ACTIVITY_JS.read_text(encoding="utf-8")
         idx = src.index("function addActivity")
         block = src[idx:idx + 300]
         assert "isoTs" in block, "isoTs not used in addActivity body"
-        # Should have conditional: isoTs ? new Date(isoTs) : new Date()
         assert "new Date(isoTs)" in block, "addActivity does not parse isoTs into Date"
 
     def test_loadActivityHistory_exists(self) -> None:
-        """loadActivityHistory function must exist in app.js."""
-        src = APP_JS.read_text(encoding="utf-8")
+        """loadActivityHistory function must exist in activity.js."""
+        src = ACTIVITY_JS.read_text(encoding="utf-8")
         assert "function loadActivityHistory" in src or "async function loadActivityHistory" in src
 
     def test_loadActivityHistory_fetches_activity_recent(self) -> None:
         """loadActivityHistory must fetch from /api/activity/recent endpoint."""
-        src = APP_JS.read_text(encoding="utf-8")
+        src = ACTIVITY_JS.read_text(encoding="utf-8")
         match = re.search(
-            r"(?:async\s+)?function\s+loadActivityHistory.*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nclass\s|$)",
+            r"(?:async\s+)?function\s+loadActivityHistory.*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nexport\s|\nclass\s|$)",
             src,
             re.DOTALL,
         )
@@ -151,10 +153,9 @@ class TestIssueB_ActivitySidebarEmpty:
 
     def test_activateRightTab_handles_activity(self) -> None:
         """activateRightTab must have an 'activity' case that calls loadActivityHistory."""
-        src = APP_JS.read_text(encoding="utf-8")
-        # Find the activateRightTab function
+        src = SIDEBAR_JS.read_text(encoding="utf-8")
         match = re.search(
-            r"function\s+activateRightTab\s*\([^)]*\).*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nclass\s)",
+            r"function\s+activateRightTab\s*\([^)]*\).*?(?=\nexport\s+function\s|\nclass\s|$)",
             src,
             re.DOTALL,
         )
@@ -174,77 +175,73 @@ class TestIssueC_ChatJsIntegration:
 
     def test_fetchActiveStream_imported(self) -> None:
         """fetchActiveStream must be imported from chat-stream.js."""
-        src = APP_JS.read_text(encoding="utf-8")
+        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
         assert "fetchActiveStream" in src
-        # Verify it comes from the chat-stream import line
         import_match = re.search(r"import\s*\{[^}]*fetchActiveStream[^}]*\}.*?from.*?chat-stream", src)
         assert import_match, "fetchActiveStream not imported from chat-stream.js"
 
     def test_fetchStreamProgress_imported(self) -> None:
         """fetchStreamProgress must be imported from chat-stream.js."""
-        src = APP_JS.read_text(encoding="utf-8")
+        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
         assert "fetchStreamProgress" in src
         import_match = re.search(r"import\s*\{[^}]*fetchStreamProgress[^}]*\}.*?from.*?chat-stream", src)
         assert import_match, "fetchStreamProgress not imported from chat-stream.js"
 
     def test_onHeartbeatRelayStart_handler(self) -> None:
         """onHeartbeatRelayStart callback must exist in streamChat call."""
-        src = APP_JS.read_text(encoding="utf-8")
+        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
         assert "onHeartbeatRelayStart" in src
 
     def test_onHeartbeatRelay_handler(self) -> None:
         """onHeartbeatRelay callback must exist in streamChat call."""
-        src = APP_JS.read_text(encoding="utf-8")
-        # Must have the plain onHeartbeatRelay (not just Start/Done variants)
-        # Use regex to find exact match not followed by Start or Done
+        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
         matches = re.findall(r"onHeartbeatRelay(?!Start|Done)\b", src)
-        assert len(matches) >= 1, "onHeartbeatRelay handler not found in app.js"
+        assert len(matches) >= 1, "onHeartbeatRelay handler not found in chat-streaming.js"
 
     def test_onHeartbeatRelayDone_handler(self) -> None:
         """onHeartbeatRelayDone callback must exist in streamChat call."""
-        src = APP_JS.read_text(encoding="utf-8")
+        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
         assert "onHeartbeatRelayDone" in src
 
-    def test_heartbeatRelay_rendering_in_updateStreamingBubble(self) -> None:
-        """updateStreamingBubble must handle heartbeatRelay state."""
-        src = APP_JS.read_text(encoding="utf-8")
-        # Find the updateStreamingBubble function
+    def test_heartbeatRelay_rendering_in_renderStreamingBubbleInner(self) -> None:
+        """renderStreamingBubbleInner (shared render utility) must handle heartbeatRelay state."""
+        src = RENDER_UTILS_JS.read_text(encoding="utf-8")
         match = re.search(
-            r"function\s+updateStreamingBubble.*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nclass\s)",
+            r"function\s+renderStreamingBubbleInner.*?(?=\nexport\s+function\s|\nfunction\s|\nclass\s|$)",
             src,
             re.DOTALL,
         )
-        assert match, "updateStreamingBubble function not found"
+        assert match, "renderStreamingBubbleInner function not found"
         body = match.group(0)
-        assert "heartbeatRelay" in body, "heartbeatRelay state not handled in updateStreamingBubble"
+        assert "heartbeatRelay" in body, "heartbeatRelay state not handled in renderStreamingBubbleInner"
 
-    def test_afterHeartbeatRelay_rendering_in_updateStreamingBubble(self) -> None:
-        """updateStreamingBubble must handle afterHeartbeatRelay state."""
-        src = APP_JS.read_text(encoding="utf-8")
+    def test_afterHeartbeatRelay_rendering_in_renderStreamingBubbleInner(self) -> None:
+        """renderStreamingBubbleInner (shared render utility) must handle afterHeartbeatRelay state."""
+        src = RENDER_UTILS_JS.read_text(encoding="utf-8")
         match = re.search(
-            r"function\s+updateStreamingBubble.*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nclass\s)",
+            r"function\s+renderStreamingBubbleInner.*?(?=\nexport\s+function\s|\nfunction\s|\nclass\s|$)",
             src,
             re.DOTALL,
         )
-        assert match, "updateStreamingBubble function not found"
+        assert match, "renderStreamingBubbleInner function not found"
         body = match.group(0)
         assert "afterHeartbeatRelay" in body, (
-            "afterHeartbeatRelay state not handled in updateStreamingBubble"
+            "afterHeartbeatRelay state not handled in renderStreamingBubbleInner"
         )
 
     def test_resumeConversationStream_exists(self) -> None:
         """resumeConversationStream function must exist for page-reload stream recovery."""
-        src = APP_JS.read_text(encoding="utf-8")
+        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
         assert (
             "function resumeConversationStream" in src
             or "async function resumeConversationStream" in src
-        ), "resumeConversationStream function not found in app.js"
+        ), "resumeConversationStream function not found in chat-streaming.js"
 
     def test_resumeConversationStream_uses_fetchActiveStream(self) -> None:
         """resumeConversationStream must call fetchActiveStream for recovery."""
-        src = APP_JS.read_text(encoding="utf-8")
+        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
         match = re.search(
-            r"(?:async\s+)?function\s+resumeConversationStream.*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nclass\s|$)",
+            r"(?:async\s+)?function\s+resumeConversationStream.*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nexport\s|\nclass\s|$)",
             src,
             re.DOTALL,
         )

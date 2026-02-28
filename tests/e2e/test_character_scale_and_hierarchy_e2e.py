@@ -104,7 +104,7 @@ class TestCharacterScaleFix:
     """E2E: Verify character.js uses bone-based bounding box for GLB models."""
 
     def test_character_js_bone_based_bbox(self) -> None:
-        """Fetch character.js and verify it uses bone-based bounding box.
+        """Fetch character-loader.js and verify it uses bone-based bounding box.
 
         The old code used Box3.setFromObject(model) which misses the
         100x armature scale on VRoid/Blender GLB models where the
@@ -119,26 +119,23 @@ class TestCharacterScaleFix:
         app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
         client = TestClient(app)
-        resp = client.get("/workspace/modules/character.js")
+        resp = client.get("/workspace/modules/character-loader.js")
         assert resp.status_code == 200
 
         content = resp.text
 
-        # Must use bone-based approach
         assert "getWorldPosition" in content, (
-            "character.js must use bone.getWorldPosition() for bounding box"
+            "character-loader.js must use bone.getWorldPosition() for bounding box"
         )
         assert "isSkinnedMesh" in content, (
-            "character.js must check isSkinnedMesh before bone traversal"
+            "character-loader.js must check isSkinnedMesh before bone traversal"
         )
         assert "expandByPoint" in content, (
-            "character.js must use box.expandByPoint() with bone positions"
+            "character-loader.js must use box.expandByPoint() with bone positions"
         )
 
-        # Must NOT have the old bare Box3.setFromObject(model) pattern
-        # for initial measurement (only as fallback for non-skinned models)
         assert "new THREE.Box3().setFromObject(model)" not in content, (
-            "character.js must not use Box3().setFromObject(model) directly"
+            "character-loader.js must not use Box3().setFromObject(model) directly"
         )
 
 
@@ -152,7 +149,7 @@ class TestAnimationFirstScaleFix:
     """
 
     def test_animation_before_bbox_via_static_serving(self) -> None:
-        """Fetch character.js and verify animation-first scaling pattern."""
+        """Fetch character-loader.js and verify animation-first scaling pattern."""
         from fastapi import FastAPI
         from fastapi.staticfiles import StaticFiles
         from fastapi.testclient import TestClient
@@ -162,32 +159,29 @@ class TestAnimationFirstScaleFix:
         app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
 
         client = TestClient(app)
-        resp = client.get("/workspace/modules/character.js")
+        resp = client.get("/workspace/modules/character-loader.js")
         assert resp.status_code == 200
 
         content = resp.text
 
-        # AnimationMixer must appear before Box3
         mixer_idx = content.find("new THREE.AnimationMixer")
         box_idx = content.find("new THREE.Box3()")
-        assert mixer_idx != -1, "character.js must create AnimationMixer"
-        assert box_idx != -1, "character.js must create Box3"
+        assert mixer_idx != -1, "character-loader.js must create AnimationMixer"
+        assert box_idx != -1, "character-loader.js must create Box3"
         assert mixer_idx < box_idx, (
             "AnimationMixer must be created before Box3 for animation-first scaling"
         )
 
-        # mixer.setTime(0) must appear before Box3
         set_time_idx = content.find("mixer.setTime(0)")
         assert set_time_idx != -1, (
-            "character.js must call mixer.setTime(0) to apply idle frame"
+            "character-loader.js must call mixer.setTime(0) to apply idle frame"
         )
         assert set_time_idx < box_idx, (
             "mixer.setTime(0) must be called before Box3 computation"
         )
 
-        # Sanity cap
         assert "maxHeight" in content, (
-            "character.js must define maxHeight sanity cap"
+            "character-loader.js must define maxHeight sanity cap"
         )
         assert "maxHeight = 0.8" in content, (
             "maxHeight must be 0.8 to cap oversized characters"

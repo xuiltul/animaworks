@@ -169,14 +169,14 @@ body {
   align-items: center;
   gap: 16px;
   padding: 0 24px;
-  height: 52px;
+  height: 44px;
   background: var(--aw-color-bg-primary);
   border-bottom: 1px solid var(--aw-color-border);
   flex-shrink: 0;
 }
 
 .app-title {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--aw-color-accent);
   letter-spacing: -0.02em;

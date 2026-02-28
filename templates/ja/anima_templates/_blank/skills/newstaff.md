@@ -2,7 +2,7 @@
 name: newstaff
 description: >-
   AnimaWorks組織に新しいDigital Animaを雇用・作成するスキル。
-  キャラクターシート(Markdown)をヒアリングに基づき作成し、create_animaツールで
+  キャラクターシート(Markdown)をヒアリングに基づき作成し、CLIコマンド(animaworks anima create)で
   identity/injection/permissions等を一括生成する。作成後はbootstrapで自己整備。
   「新しい社員を作って」「人を雇って」「新しい社員」「雇用」「Anima作成」「採用」
 ---
@@ -51,17 +51,15 @@ description: >-
 
 ランタイムデータディレクトリの **キャラクター設計ガイド**（`{data_dir}/prompts/character_design_guide.md`）を Read し、そのルールに従ってキャラクターを肉付けすること。
 
-### 3. キャラクターシートを作成し、create_anima で一括作成
+### 3. キャラクターシートを作成し、CLIで一括作成
 
-ヒアリングと設計の結果を**キャラクターシート仕様**に従い、`create_anima` に直接渡す。
-`write_memory_file` でファイルを作る必要はない — コンテンツを直接渡せる:
+ヒアリングと設計の結果を**キャラクターシート仕様**に従いキャラクターシートをファイルに書き出し、CLIコマンドで作成する:
 
-```
-create_anima(
-  character_sheet_content="（下記仕様に従ったキャラクターシート全文）",
-  name="{english_name}",
-  supervisor="{supervisor_english_name}"
-)
+1. キャラクターシートをファイルに書き出す（例: `/tmp/{english_name}.md`）
+2. 以下のコマンドを実行する:
+
+```bash
+animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} --supervisor {supervisor_english_name}
 ```
 
 **supervisorの設定:**
@@ -121,7 +119,7 @@ create_anima(
 
 ### 4. config.json のモデル設定を確認
 
-create_anima が自動でconfig.json に登録するが、以下を確認・補完すること:
+`animaworks anima create` が自動でconfig.json に登録するが、以下を確認・補完すること:
 
 - `model`: ヒアリングで決定したモデル名
 - `credential`: 使用するcredential名

@@ -86,6 +86,37 @@ class TestExtractNameFromMd:
         content = "Some intro\n# Character: Alice\nMore text"
         assert _extract_name_from_md(content) == "alice"
 
+    def test_japanese_heading_uses_table_name(self):
+        """Japanese heading should NOT match; table 英名 row should be used."""
+        content = (
+            "# キャラクターシート: 朝霧 楓\n\n"
+            "## 基本情報\n\n"
+            "| 項目 | 設定 |\n|------|------|\n"
+            "| 英名 | kaede |\n"
+            "| 日本語名 | 朝霧 楓 |\n"
+        )
+        assert _extract_name_from_md(content) == "kaede"
+
+    def test_japanese_heading_without_table_returns_none(self):
+        """Pure Japanese heading with no table or English fallback returns None."""
+        assert _extract_name_from_md("# キャラクターシート: 朝霧 楓") is None
+
+    def test_table_takes_priority_over_heading(self):
+        """Table row is checked before heading fallback."""
+        content = (
+            "# Character: WrongName\n\n"
+            "## 基本情報\n\n"
+            "| 項目 | 設定 |\n|------|------|\n"
+            "| 英名 | correctname |\n"
+        )
+        assert _extract_name_from_md(content) == "correctname"
+
+    def test_heading_only_matches_ascii_start(self):
+        """Heading regex requires first char to be ASCII letter."""
+        assert _extract_name_from_md("# 123invalid") is None
+        assert _extract_name_from_md("# _underscore") is None
+        assert _extract_name_from_md("# validName123") == "validname123"
+
 
 # ── _ensure_runtime_subdirs ───────────────────────────────
 

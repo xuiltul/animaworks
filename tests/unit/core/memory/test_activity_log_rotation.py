@@ -56,9 +56,9 @@ class TestToolResultFormat:
         assert entry.tool == "web_search"
         assert entry.meta["tool_use_id"] == "tu_123"
 
-        # Verify written to disk
-        today = date.today().isoformat()
-        log_file = tmp_path / "activity_log" / f"{today}.jsonl"
+        # Verify written to disk (use entry's own timestamp to avoid TZ mismatch)
+        date_str = entry.ts[:10]
+        log_file = tmp_path / "activity_log" / f"{date_str}.jsonl"
         assert log_file.exists()
         lines = log_file.read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) >= 1

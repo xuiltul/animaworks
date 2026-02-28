@@ -75,7 +75,7 @@ def _common_patches(*, spy_clear=None, retry_max=2):
         patch("core.agent.AgentCore._load_stream_retry_config"),
         patch("core.agent.load_prompt", return_value="sys_prompt"),
         patch("core.agent._save_prompt_log"),
-        patch("core.execution.agent_sdk._clear_session_id", side_effect=clear_side_effect),
+        patch("core.execution._sdk_session._clear_session_id", side_effect=clear_side_effect),
         patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock),
         patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
     ]
@@ -131,7 +131,7 @@ class TestRetryFreshSession:
             patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
             patch("core.agent.load_prompt", return_value="sys_prompt"),
             patch("core.agent._save_prompt_log"),
-            patch("core.execution.agent_sdk._clear_session_id", side_effect=_spy_clear),
+            patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
             patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
         ):
@@ -188,7 +188,7 @@ class TestRetryFreshSession:
             patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
             patch("core.agent.load_prompt", return_value="sys_prompt"),
             patch("core.agent._save_prompt_log"),
-            patch("core.execution.agent_sdk._clear_session_id"),
+            patch("core.execution._sdk_session._clear_session_id"),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
             patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
         ):
@@ -254,7 +254,7 @@ class TestRetryFreshSession:
             patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
             patch("core.agent.load_prompt", return_value="sys_prompt"),
             patch("core.agent._save_prompt_log"),
-            patch("core.execution.agent_sdk._clear_session_id", side_effect=_spy_clear),
+            patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
             patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
         ):
@@ -307,7 +307,7 @@ class TestRetryExhausted:
             patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
             patch("core.agent.load_prompt", return_value="sys_prompt"),
             patch("core.agent._save_prompt_log"),
-            patch("core.execution.agent_sdk._clear_session_id"),
+            patch("core.execution._sdk_session._clear_session_id"),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
             patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
         ):

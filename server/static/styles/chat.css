@@ -37,6 +37,13 @@
   border-bottom: 1px solid var(--border-color, #eee);
 }
 
+.chat-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
 .chat-anima-tabs-header .anima-tabs {
   flex: 1;
   padding: 0;
@@ -63,6 +70,55 @@
 .chat-add-conversation-btn:hover,
 .chat-add-conversation-btn:active {
   background: var(--aw-color-bg-hover);
+}
+
+.chat-right-pane-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-text-primary);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+  flex-shrink: 0;
+}
+
+.chat-right-pane-toggle-btn:hover,
+.chat-right-pane-toggle-btn:active {
+  background: var(--aw-color-bg-hover);
+}
+
+.chat-right-pane-toggle-btn:focus-visible {
+  outline: 2px solid var(--aw-color-accent);
+  outline-offset: 2px;
+}
+
+.chat-right-pane-toggle-icon {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  transition: transform 0.15s;
+}
+
+.chat-right-pane-toggle-btn.is-collapsed .chat-right-pane-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.chat-right-pane-handle {
+  width: 40px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.4rem;
+  flex-shrink: 0;
 }
 
 .chat-add-conversation-menu {
@@ -279,6 +335,126 @@
 .anima-tab-close:active {
   background: var(--aw-color-bg-hover);
   color: var(--aw-color-text-primary);
+}
+
+/* --- Desktop rail layout when sidebar is hidden --- */
+@media (min-width: 769px) {
+  .chat-page-layout.sidebar-hidden {
+    gap: 0;
+  }
+
+  .chat-page-layout.sidebar-hidden .chat-page-sidebar {
+    display: none;
+  }
+
+  .chat-page-layout.sidebar-hidden .chat-right-pane-handle {
+    border-left: 1px solid var(--aw-color-border-light);
+  }
+
+  body.sidebar-collapsed .chat-page-main {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-height: 0;
+  }
+
+  body.sidebar-collapsed .chat-anima-tabs-header {
+    grid-column: 1;
+    grid-row: 1 / 4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.35rem;
+    border-bottom: none;
+    border-right: 1px solid var(--border-color, #eee);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body.sidebar-collapsed .chat-anima-tabs-header .anima-tabs {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  body.sidebar-collapsed .chat-anima-tabs-header .anima-tab-wrap {
+    width: 100%;
+    justify-content: center;
+  }
+
+  body.sidebar-collapsed .chat-anima-tabs-header .anima-tab {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: 999px;
+    justify-content: center;
+    gap: 0;
+  }
+
+  body.sidebar-collapsed .chat-anima-tabs-header .anima-tab-name,
+  body.sidebar-collapsed .chat-anima-tabs-header .anima-tab-close {
+    display: none;
+  }
+
+  body.sidebar-collapsed .chat-anima-tabs-header .anima-tab-avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  body.sidebar-collapsed .chat-add-conversation {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  body.sidebar-collapsed .chat-add-conversation-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 999px;
+    font-size: 0;
+    line-height: 0;
+  }
+
+  body.sidebar-collapsed .chat-add-conversation-btn::before {
+    content: "+";
+    font-size: 1.25rem;
+    line-height: 1;
+    color: var(--aw-color-text-primary);
+  }
+
+  body.sidebar-collapsed .chat-add-conversation-menu {
+    left: calc(100% + 8px);
+    right: auto;
+    top: auto;
+    bottom: 0;
+    width: min(360px, 56vw);
+  }
+
+  body.sidebar-collapsed .thread-tabs {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  body.sidebar-collapsed #chatPageMessages {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 0;
+  }
+
+  body.sidebar-collapsed #chatPageForm {
+    grid-column: 2;
+    grid-row: 3;
+  }
 }
 
 /* --- Thread Tabs --- */
@@ -548,7 +724,7 @@
   background: var(--aw-color-bg-primary);
   transition: border-color 0.15s;
   overflow: visible;
-  padding: 6px;
+  padding: 2px 4px;
 }
 
 .chat-input-wrap:focus-within {
@@ -561,7 +737,7 @@
 
 .chat-input {
   width: 100%;
-  padding: 10px 14px;
+  padding: 2px 6px;
   border: none;
   background: transparent;
   font-size: 0.95rem;
@@ -569,7 +745,7 @@
   outline: none;
   resize: none;
   overflow-y: auto;
-  min-height: 84px;
+  min-height: 64px;
   max-height: 260px;
   line-height: 1.5;
 }
@@ -580,9 +756,9 @@
 
 .chat-input-actions {
   display: grid;
-  grid-template-columns: repeat(2, 34px);
-  grid-auto-rows: 34px;
-  gap: 8px;
+  grid-template-columns: repeat(2, 28px);
+  grid-auto-rows: 28px;
+  gap: 6px;
   justify-content: center;
   align-content: center;
   padding: 0;
@@ -595,21 +771,21 @@
   justify-content: center;
   gap: 0;
   margin-right: 0;
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .chat-input-actions .voice-mic-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-width: 1px;
 }
 
 .chat-send-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -618,7 +794,7 @@
   color: var(--aw-color-bg-primary);
   border: none;
   border-radius: 50%;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
@@ -635,8 +811,8 @@
 }
 
 .chat-send-icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   display: block;
   stroke: currentColor;
   stroke-width: 2.2;
@@ -776,8 +952,8 @@
 
 /* Queue add button */
 .chat-queue-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -793,8 +969,8 @@
 }
 
 .chat-queue-icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   display: block;
   stroke: currentColor;
   stroke-width: 2.2;
@@ -1089,12 +1265,12 @@
 }
 
 .chat-attach-btn {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--aw-color-border, #ddd);
   border-radius: 50%;
   background: transparent;
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--aw-color-text-muted);
   cursor: pointer;
@@ -1507,6 +1683,173 @@
 
 [data-theme="dark"] .thinking-content {
   background: var(--aw-color-bg-tertiary, #1e2126);
+}
+
+/* ── Text Artifact Card ──────────────────────────── */
+
+.text-artifact-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin: 4px 0;
+  background: var(--aw-color-code-bg);
+  border: 1px solid var(--aw-color-border-dark);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter 0.15s;
+  max-width: 100%;
+}
+
+.text-artifact-card:hover,
+.text-artifact-card:active {
+  filter: brightness(1.2);
+}
+
+.text-artifact-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.text-artifact-name {
+  color: var(--aw-color-code-text);
+  font-size: 0.88rem;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Text Artifact Modal ─────────────────────────── */
+
+.text-artifact-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 16px;
+}
+
+.text-artifact-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: 85vh;
+  background: var(--aw-color-bg-primary);
+  border: 1px solid var(--aw-color-border-medium);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.text-artifact-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--aw-color-border);
+  background: var(--aw-color-bg-secondary);
+}
+
+.text-artifact-modal-filename {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--aw-color-text-primary);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-artifact-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: var(--aw-color-text-muted);
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.text-artifact-modal-close:hover,
+.text-artifact-modal-close:active {
+  color: var(--aw-color-text-primary);
+}
+
+.text-artifact-modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
+.text-artifact-modal-textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  max-height: 60vh;
+  resize: vertical;
+  border: none;
+  outline: none;
+  padding: 16px;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--aw-color-text-primary);
+  background: var(--aw-color-bg-primary);
+  tab-size: 4;
+}
+
+.text-artifact-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--aw-color-border);
+  background: var(--aw-color-bg-secondary);
+}
+
+.text-artifact-btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  border: 1px solid var(--aw-color-border-medium);
+  background: var(--aw-color-bg-primary);
+  color: var(--aw-color-text-primary);
+  transition: background 0.15s;
+}
+
+.text-artifact-btn:hover,
+.text-artifact-btn:active {
+  background: var(--aw-color-bg-hover);
+}
+
+.text-artifact-btn-download {
+  background: var(--aw-color-accent);
+  color: #fff;
+  border-color: var(--aw-color-accent);
+}
+
+.text-artifact-btn-download:hover,
+.text-artifact-btn-download:active {
+  background: var(--aw-color-accent-hover);
+}
+
+@media (max-width: 600px) {
+  .text-artifact-modal-overlay {
+    padding: 8px;
+  }
+  .text-artifact-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 8px;
+  }
+  .text-artifact-modal-textarea {
+    max-height: 70vh;
+  }
 }
 
 /* ── Mobile: prevent auto-zoom on input focus ── */

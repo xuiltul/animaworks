@@ -7,6 +7,6 @@
    - 必須セクション: `## 基本情報`, `## 人格`, `## 役割・行動方針`
 2. Bashで以下のコマンドを実行する:
    ```
-   animaworks create-anima --from-md <キャラクターシートのパス> --supervisor $(basename $ANIMAWORKS_ANIMA_DIR)
+   animaworks anima create --from-md <キャラクターシートのパス> --supervisor $(basename $ANIMAWORKS_ANIMA_DIR)
    ```
 3. サーバーのReconciliationが自動的に新Animaを検出・起動します

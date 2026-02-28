@@ -430,7 +430,7 @@ body.sidebar-collapsed .sidebar-collapse-btn {
 
   .app-header {
     padding: 0 8px;
-    height: 48px;
+    height: 44px;
   }
 
   .login-card {
@@ -522,8 +522,20 @@ body.sidebar-collapsed .sidebar-collapse-btn {
     width: 100%;
   }
 
+  .chat-header-actions {
+    width: 100%;
+  }
+
   .chat-add-conversation-btn {
     width: 100%;
+  }
+
+  .chat-right-pane-toggle-btn {
+    display: none;
+  }
+
+  .chat-right-pane-handle {
+    display: none;
   }
 
   .chat-add-conversation-menu {

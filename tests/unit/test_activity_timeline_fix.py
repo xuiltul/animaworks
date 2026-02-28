@@ -16,7 +16,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TIMELINE_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "timeline.js"
-APP_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "app.js"
+APP_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "app-websocket.js"
 
 
 # ── Test 1: timeline.js exports localISOString ─────────

@@ -315,6 +315,18 @@ class TestBlockingExecution:
         assert _load_thread_id(anima_dir, "chat") is None
 
     @pytest.mark.asyncio
+    async def test_execute_interrupted_before_run(self, model_config, anima_dir):
+        interrupt = asyncio.Event()
+        interrupt.set()
+        exc = CodexSDKExecutor(
+            model_config=model_config,
+            anima_dir=anima_dir,
+            interrupt_event=interrupt,
+        )
+        result = await exc.execute(prompt="test", system_prompt="sys")
+        assert "interrupted" in result.text.lower()
+
+    @pytest.mark.asyncio
     async def test_execute_error_returns_error_result(self, executor):
         mock_codex = MagicMock()
         mock_thread = MagicMock()
@@ -451,6 +463,57 @@ class TestStreamingExecution:
         assert "tool_end" in types
         tool_start = next(e for e in events if e["type"] == "tool_start")
         assert tool_start["tool_name"] == "web_search"
+
+    @pytest.mark.asyncio
+    async def test_stream_interrupted_mid_stream(self, model_config, anima_dir):
+        interrupt = asyncio.Event()
+
+        msg_item = MagicMock()
+        msg_item.type = "message"
+        msg_item.content = "Before interrupt"
+
+        msg_event = MagicMock()
+        msg_event.type = "item.completed"
+        msg_event.item = msg_item
+
+        second_event = MagicMock()
+        second_event.type = "item.completed"
+        second_event.item = msg_item
+
+        async def fake_events():
+            yield msg_event
+            interrupt.set()
+            yield second_event
+
+        mock_streamed = MagicMock()
+        mock_streamed.events = fake_events()
+
+        mock_thread = MagicMock()
+        mock_thread.run_streamed = AsyncMock(return_value=mock_streamed)
+        mock_thread.id = "int-thread"
+
+        mock_codex = MagicMock()
+        mock_codex.start_thread.return_value = mock_thread
+
+        exc = CodexSDKExecutor(
+            model_config=model_config,
+            anima_dir=anima_dir,
+            interrupt_event=interrupt,
+        )
+
+        events = []
+        with patch.object(exc, "_create_codex_client", return_value=mock_codex):
+            tracker = ContextTracker(model="codex/o4-mini")
+            async for ev in exc.execute_streaming(
+                system_prompt="test",
+                prompt="Hello",
+                tracker=tracker,
+            ):
+                events.append(ev)
+
+        texts = [e.get("text", "") for e in events if e.get("type") == "text_delta"]
+        combined = " ".join(texts)
+        assert "interrupted" in combined.lower()
 
 
 # ── Mode resolution tests ────────────────────────────────────

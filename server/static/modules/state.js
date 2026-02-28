@@ -100,6 +100,29 @@ _markedRenderer.image = function (token) {
   return `<img src="${src}" alt="${alt}" class="chat-attached-image" loading="lazy" onerror="this.onerror=null;this.classList.add('chat-attached-image-error');this.alt='Image unavailable';" />`;
 };
 
+_markedRenderer.code = function (token) {
+  const lang = (token.lang || "").trim();
+  const fileMatch = lang.match(/^file:(.+)$/i);
+  if (!fileMatch) {
+    const escaped = escapeHtml(token.text || "");
+    const langClass = lang ? ` class="language-${escapeHtml(lang)}"` : "";
+    return `<pre><code${langClass}>${escaped}</code></pre>`;
+  }
+  const filename = fileMatch[1].trim();
+  const content = token.text || "";
+  if (content.length > 100 * 1024) {
+    const id = window.__registerArtifactContent?.(content) || "";
+    return `<div class="text-artifact-card" data-filename="${escapeHtml(filename)}" data-content-id="${escapeHtml(id)}">` +
+      `<span class="text-artifact-icon">\uD83D\uDCC4</span>` +
+      `<span class="text-artifact-name">${escapeHtml(filename)}</span>` +
+      `</div>`;
+  }
+  return `<div class="text-artifact-card" data-filename="${escapeHtml(filename)}" data-content="${escapeHtml(content)}">` +
+    `<span class="text-artifact-icon">\uD83D\uDCC4</span>` +
+    `<span class="text-artifact-name">${escapeHtml(filename)}</span>` +
+    `</div>`;
+};
+
 const _markedOptions = { breaks: true, renderer: _markedRenderer };
 
 export function renderMarkdown(text, animaName) {

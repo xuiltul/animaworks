@@ -29,7 +29,22 @@ export function renderSimpleMarkdown(text, animaName) {
   let html = escapeHtml(stripEmotionTag(text));
 
   // Fenced code blocks: ```lang\n...\n```
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, _lang, code) => {
+  html = html.replace(/```([\w:.\-/]*)\n([\s\S]*?)```/g, (_m, lang, code) => {
+    const fileMatch = lang.match(/^file:(.+)$/i);
+    if (fileMatch) {
+      const filename = fileMatch[1].trim();
+      if (code.length > 100 * 1024) {
+        const id = window.__registerArtifactContent?.(code) || "";
+        return `<div class="text-artifact-card" data-filename="${filename}" data-content-id="${id}">` +
+          `<span class="text-artifact-icon">\uD83D\uDCC4</span>` +
+          `<span class="text-artifact-name">${filename}</span>` +
+          `</div>`;
+      }
+      return `<div class="text-artifact-card" data-filename="${filename}" data-content="${code}">` +
+        `<span class="text-artifact-icon">\uD83D\uDCC4</span>` +
+        `<span class="text-artifact-name">${filename}</span>` +
+        `</div>`;
+    }
     return `<pre class="md-code-block"><code>${code}</code></pre>`;
   });
 

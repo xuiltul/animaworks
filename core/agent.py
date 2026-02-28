@@ -545,7 +545,12 @@ class AgentCore:
 
         if mode == "c":
             try:
-                from core.execution.codex_sdk import CodexSDKExecutor
+                from core.execution.codex_sdk import (
+                    CodexSDKExecutor,
+                    is_codex_sdk_available,
+                )
+                if not is_codex_sdk_available():
+                    raise ImportError("openai_codex_sdk not installed")
                 return CodexSDKExecutor(
                     model_config=self.model_config,
                     anima_dir=self.anima_dir,
@@ -558,8 +563,33 @@ class AgentCore:
                     "CodexSDKExecutor unavailable (openai-codex-sdk not installed), "
                     "falling back to LiteLLM (Mode A)"
                 )
+                fallback_model_config = self.model_config.model_copy(deep=True)
+                fallback_model: str | None = fallback_model_config.fallback_model
+
+                # If fallback_model is not explicitly configured, pick a safe
+                # provider/model based on available credentials.
+                if not fallback_model:
+                    model_name = fallback_model_config.model
+                    uses_anthropic_key = (
+                        bool(fallback_model_config.api_key and fallback_model_config.api_key.startswith("sk-ant-"))
+                        or fallback_model_config.api_key_env.upper().startswith("ANTHROPIC")
+                    )
+                    if model_name.startswith("codex/"):
+                        if uses_anthropic_key:
+                            fallback_model = "anthropic/claude-sonnet-4-6"
+                        else:
+                            bare = model_name.split("/", 1)[1]
+                            fallback_model = f"openai/{bare}"
+
+                if fallback_model:
+                    fallback_model_config.model = fallback_model
+                    logger.warning(
+                        "Mode C fallback remapped model: %s -> %s",
+                        self.model_config.model,
+                        fallback_model_config.model,
+                    )
                 return LiteLLMExecutor(
-                    model_config=self.model_config,
+                    model_config=fallback_model_config,
                     anima_dir=self.anima_dir,
                     tool_handler=self._tool_handler,
                     tool_registry=self._tool_registry,

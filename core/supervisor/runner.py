@@ -258,9 +258,16 @@ class AnimaRunner:
                 try:
                     from core.memory.activity import ActivityLogger
                     activity = ActivityLogger(self._anima_dir)
+                    recovery_summary = (
+                        f"応答が中断されました（前回セッションの未完了ストリームを回復, {session_type}）"
+                    )
+                    recovery_content = recovery_summary
+                    if recovery.recovered_text:
+                        recovery_content = f"{recovery.recovered_text}\n\n{recovery_summary}"
                     activity.log(
                         "error",
-                        summary=f"応答が中断されました（前回セッションの未完了ストリームを回復, {session_type}）",
+                        content=recovery_content,
+                        summary=recovery_summary,
                         meta={
                             "recovered_chars": len(recovery.recovered_text),
                             "trigger": recovery.trigger,

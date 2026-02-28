@@ -17,90 +17,103 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class TestAppJsScrollFix:
-    """Verify app.js contains correct scroll and throttle patterns.
+    """Verify chat-streaming.js contains correct scroll and throttle patterns.
 
-    app.js has two streaming contexts:
-    - The conversation panel (sendConversationMessage) uses scheduleStreamingUpdate
-      with rAF throttling and updateStreamingBubble for rendering.
-    - renderConvMessages uses synchronous scrollTop (non-streaming render).
+    chat-streaming.js handles workspace streaming with scheduleStreamingUpdate
+    (rAF throttling) and updateStreamingBubble for rendering.
+    renderConvMessages lives in chat-history.js for synchronous scrollTop render.
     """
 
     @pytest.fixture()
-    def source(self) -> str:
-        return (PROJECT_ROOT / "server/static/workspace/modules/app.js").read_text()
+    def streaming_source(self) -> str:
+        return (PROJECT_ROOT / "server/static/workspace/modules/chat-streaming.js").read_text()
 
-    def test_update_streaming_bubble_exists(self, source: str):
-        """updateStreamingBubble function should exist in app.js."""
-        assert "function updateStreamingBubble" in source
+    @pytest.fixture()
+    def history_source(self) -> str:
+        return (PROJECT_ROOT / "server/static/workspace/modules/chat-history.js").read_text()
 
-    def test_update_streaming_bubble_updates_inner_html(self, source: str):
+    def test_update_streaming_bubble_exists(self, streaming_source: str):
+        """updateStreamingBubble function should exist in chat-streaming.js."""
+        assert "function updateStreamingBubble" in streaming_source
+
+    def test_update_streaming_bubble_updates_inner_html(self, streaming_source: str):
         """updateStreamingBubble should update bubble.innerHTML."""
-        idx = source.index("function updateStreamingBubble")
-        end_marker = source.find("\n// ──", idx + 1)
+        idx = streaming_source.index("function updateStreamingBubble")
+        end_marker = streaming_source.find("\n// ──", idx + 1)
         if end_marker == -1:
-            end_marker = source.find("\nfunction ", idx + 100)
-        func_body = source[idx:end_marker]
+            end_marker = streaming_source.find("\nfunction ", idx + 100)
+            if end_marker == -1:
+                end_marker = streaming_source.find("\nexport function ", idx + 100)
+        func_body = streaming_source[idx:end_marker]
         assert "bubble.innerHTML" in func_body
 
-    def test_schedule_streaming_update_exists(self, source: str):
+    def test_schedule_streaming_update_exists(self, streaming_source: str):
         """scheduleStreamingUpdate function with rAF throttle guard must exist."""
-        assert "function scheduleStreamingUpdate" in source
-        assert "_convRafPending" in source
+        assert "function scheduleStreamingUpdate" in streaming_source
+        assert "_convRafPending" in streaming_source
 
-    def test_text_delta_uses_throttled_update(self, source: str):
+    def test_text_delta_uses_throttled_update(self, streaming_source: str):
         """onTextDelta callback should call scheduleStreamingUpdate, not updateStreamingBubble directly."""
-        # Find the onTextDelta callback in the conversation streaming code
-        idx = source.index("onTextDelta")
-        # Get surrounding context (next 400 chars to capture the full callback body)
-        context = source[idx:idx + 400]
+        idx = streaming_source.index("onTextDelta")
+        context = streaming_source[idx:idx + 400]
         assert "scheduleStreamingUpdate" in context
 
-    def test_render_conv_messages_renders_chat(self, source: str):
+    def test_render_conv_messages_renders_chat(self, history_source: str):
         """renderConvMessages should render chat messages into the DOM."""
-        idx = source.index("function renderConvMessages")
-        end_idx = source.find("\nasync function", idx + 1)
+        idx = history_source.index("function renderConvMessages")
+        end_idx = history_source.find("\nasync function", idx + 1)
         if end_idx == -1:
-            end_idx = source.find("\nfunction ", idx + 100)
-        func_body = source[idx:end_idx]
+            end_idx = history_source.find("\nfunction ", idx + 100)
+            if end_idx == -1:
+                end_idx = history_source.find("\nexport function ", idx + 100)
+        func_body = history_source[idx:end_idx]
         assert "innerHTML" in func_body
 
 
 class TestWorkspaceAppJsScrollFix:
-    """Verify workspace app.js contains correct scroll and throttle patterns.
+    """Verify workspace chat-streaming.js contains correct scroll and throttle patterns.
 
-    After workspace chat.js deletion, app.js handles all workspace streaming.
-    App.js uses scrollTop-based scrolling (not scrollIntoView).
+    After workspace chat.js deletion, chat-streaming.js handles all workspace streaming.
+    Uses scrollTop-based scrolling (not scrollIntoView).
     """
 
     @pytest.fixture()
-    def source(self) -> str:
-        return (PROJECT_ROOT / "server/static/workspace/modules/app.js").read_text()
+    def streaming_source(self) -> str:
+        return (PROJECT_ROOT / "server/static/workspace/modules/chat-streaming.js").read_text()
 
-    def test_update_streaming_bubble_scrolls(self, source: str):
+    @pytest.fixture()
+    def history_source(self) -> str:
+        return (PROJECT_ROOT / "server/static/workspace/modules/chat-history.js").read_text()
+
+    def test_update_streaming_bubble_scrolls(self, streaming_source: str):
         """updateStreamingBubble should scroll the messages container."""
-        idx = source.index("function updateStreamingBubble")
-        end_marker = source.find("\n// ──", idx + 1)
+        idx = streaming_source.index("function updateStreamingBubble")
+        end_marker = streaming_source.find("\n// ──", idx + 1)
         if end_marker == -1:
-            end_marker = source.find("\nfunction ", idx + 100)
-        func_body = source[idx:end_marker]
+            end_marker = streaming_source.find("\nfunction ", idx + 100)
+            if end_marker == -1:
+                end_marker = streaming_source.find("\nexport function ", idx + 100)
+        func_body = streaming_source[idx:end_marker]
         assert "scrollTop" in func_body or "scrollIntoView" in func_body
 
-    def test_schedule_streaming_update_exists(self, source: str):
+    def test_schedule_streaming_update_exists(self, streaming_source: str):
         """scheduleStreamingUpdate function with rAF throttle guard must exist."""
-        assert "function scheduleStreamingUpdate" in source
-        assert "_convRafPending" in source
+        assert "function scheduleStreamingUpdate" in streaming_source
+        assert "_convRafPending" in streaming_source
 
-    def test_text_delta_uses_throttled_update(self, source: str):
+    def test_text_delta_uses_throttled_update(self, streaming_source: str):
         """onTextDelta handler should call scheduleStreamingUpdate."""
-        idx = source.index("onTextDelta")
-        context = source[idx:idx + 400]
+        idx = streaming_source.index("onTextDelta")
+        context = streaming_source[idx:idx + 400]
         assert "scheduleStreamingUpdate" in context
 
-    def test_render_conv_messages_scrolls(self, source: str):
+    def test_render_conv_messages_scrolls(self, history_source: str):
         """renderConvMessages should scroll messages container."""
-        idx = source.index("function renderConvMessages")
-        end_idx = source.find("\nasync function", idx + 1)
+        idx = history_source.index("function renderConvMessages")
+        end_idx = history_source.find("\nasync function", idx + 1)
         if end_idx == -1:
-            end_idx = source.find("\nfunction ", idx + 100)
-        func_body = source[idx:end_idx]
+            end_idx = history_source.find("\nfunction ", idx + 100)
+            if end_idx == -1:
+                end_idx = history_source.find("\nexport function ", idx + 100)
+        func_body = history_source[idx:end_idx]
         assert "scrollTop" in func_body

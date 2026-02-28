@@ -71,7 +71,7 @@ class TestSessionClearOnDoneFalse:
         with (
             patch("core.config.load_config") as mock_config,
             patch(
-                "core.execution.agent_sdk._clear_session_id",
+                "core.execution._sdk_session._clear_session_id",
                 side_effect=fake_clear_session_id,
             ),
             patch("core.memory.shortterm.ShortTermMemory") as mock_stm_class,
@@ -116,7 +116,7 @@ class TestSessionClearOnDoneFalse:
 
         with (
             patch("core.config.load_config") as mock_config,
-            patch("core.execution.agent_sdk._clear_session_id"),
+            patch("core.execution._sdk_session._clear_session_id"),
             patch.object(
                 __import__(
                     "core.memory.shortterm", fromlist=["ShortTermMemory"]
@@ -149,7 +149,7 @@ class TestSessionClearOnDoneFalse:
 
         with (
             patch("core.config.load_config") as mock_config,
-            patch("core.execution.agent_sdk._clear_session_id"),
+            patch("core.execution._sdk_session._clear_session_id"),
             patch("core.memory.shortterm.ShortTermMemory"),
         ):
             mock_config.return_value.server.keepalive_interval = 30
@@ -190,7 +190,7 @@ class TestSessionClearOnTimeoutError:
         with (
             patch("core.config.load_config") as mock_config,
             patch(
-                "core.execution.agent_sdk._clear_session_id",
+                "core.execution._sdk_session._clear_session_id",
                 side_effect=fake_clear_session_id,
             ),
             patch("core.memory.shortterm.ShortTermMemory"),
@@ -218,7 +218,7 @@ class TestSessionClearOnTimeoutError:
 
         with (
             patch("core.config.load_config") as mock_config,
-            patch("core.execution.agent_sdk._clear_session_id"),
+            patch("core.execution._sdk_session._clear_session_id"),
             patch("core.memory.shortterm.ShortTermMemory"),
         ):
             mock_config.return_value.server.keepalive_interval = 30
@@ -258,7 +258,7 @@ class TestSessionClearOnException:
         with (
             patch("core.config.load_config") as mock_config,
             patch(
-                "core.execution.agent_sdk._clear_session_id",
+                "core.execution._sdk_session._clear_session_id",
                 side_effect=fake_clear_session_id,
             ),
             patch("core.memory.shortterm.ShortTermMemory"),
@@ -286,7 +286,7 @@ class TestSessionClearOnException:
 
         with (
             patch("core.config.load_config") as mock_config,
-            patch("core.execution.agent_sdk._clear_session_id"),
+            patch("core.execution._sdk_session._clear_session_id"),
             patch("core.memory.shortterm.ShortTermMemory"),
         ):
             mock_config.return_value.server.keepalive_interval = 30
@@ -318,7 +318,7 @@ class TestSessionClearOnException:
 
         with (
             patch("core.config.load_config") as mock_config,
-            patch("core.execution.agent_sdk._clear_session_id"),
+            patch("core.execution._sdk_session._clear_session_id"),
             patch.object(
                 __import__(
                     "core.memory.shortterm", fromlist=["ShortTermMemory"]
@@ -360,7 +360,7 @@ class TestNoSessionClearOnSuccess:
         with (
             patch("core.config.load_config") as mock_config,
             patch(
-                "core.execution.agent_sdk._clear_session_id",
+                "core.execution._sdk_session._clear_session_id",
                 side_effect=fake_clear_session_id,
             ),
             patch("core.memory.shortterm.ShortTermMemory"),

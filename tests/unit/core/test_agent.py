@@ -89,6 +89,45 @@ class TestIsClaude:
         assert agent._is_claude_model() is False
 
 
+# ── Mode C fallback ───────────────────────────────────────
+
+
+class TestModeCFallback:
+    def test_mode_c_fallback_remaps_model_when_sdk_missing(self, tmp_path):
+        agent = _make_agent(
+            tmp_path,
+            model="codex/gpt-5.3-codex",
+            resolved_mode="C",
+        )
+        agent.model_config.api_key_env = "OPENAI_API_KEY"
+
+        sentinel_executor = MagicMock(name="litellm_executor")
+        with patch("core.execution.codex_sdk.is_codex_sdk_available", return_value=False), \
+             patch("core.execution.LiteLLMExecutor", return_value=sentinel_executor) as mock_litellm:
+            created = agent._create_executor()
+
+        assert created is sentinel_executor
+        kwargs = mock_litellm.call_args.kwargs
+        assert kwargs["model_config"].model == "openai/gpt-5.3-codex"
+
+    def test_mode_c_fallback_uses_anthropic_when_key_is_anthropic(self, tmp_path):
+        agent = _make_agent(
+            tmp_path,
+            model="codex/gpt-5.3-codex",
+            resolved_mode="C",
+        )
+        agent.model_config.api_key = "sk-ant-test"
+
+        sentinel_executor = MagicMock(name="litellm_executor")
+        with patch("core.execution.codex_sdk.is_codex_sdk_available", return_value=False), \
+             patch("core.execution.LiteLLMExecutor", return_value=sentinel_executor) as mock_litellm:
+            created = agent._create_executor()
+
+        assert created is sentinel_executor
+        kwargs = mock_litellm.call_args.kwargs
+        assert kwargs["model_config"].model == "anthropic/claude-sonnet-4-6"
+
+
 # ── Callbacks / reply tracking ────────────────────────────
 
 

@@ -339,7 +339,7 @@ class TestDiscoverTools:
         mock = AsyncMock(side_effect=[resp_with_tool, resp_final])
         _install_litellm_mock(mock)
         with patch("litellm.acompletion", mock), \
-             patch("core.execution.litellm_loop.load_external_schemas", return_value=mock_schemas):
+             patch("core.execution._litellm_tools.load_external_schemas", return_value=mock_schemas):
             result = await executor.execute("test", system_prompt="sys")
         assert "Category active" in result.text
 

@@ -46,13 +46,13 @@ animaworks anima status {名前}           # 特定Animaのプロセス状態
 
 ```bash
 # キャラクターシート（MD）から作成（推奨）
-animaworks create-anima --from-md {ファイル} [--role {role}] [--name {名前}]
+animaworks anima create --from-md {ファイル} [--role {role}] [--name {名前}]
 
 # テンプレートから作成
-animaworks create-anima --template {テンプレート名} [--name {名前}]
+animaworks anima create --template {テンプレート名} [--name {名前}]
 
 # ブランク作成
-animaworks create-anima --name {名前}
+animaworks anima create --name {名前}
 ```
 
 ### 有効化・無効化・削除

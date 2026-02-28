@@ -20,7 +20,7 @@ _CHAR_JS = (
     / "static"
     / "workspace"
     / "modules"
-    / "character.js"
+    / "character-loader.js"
 )
 
 

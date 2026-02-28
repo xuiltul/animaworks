@@ -20,22 +20,22 @@ import pytest
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _CHARACTER_JS = (
-    _PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "character.js"
+    _PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "character-loader.js"
 )
 
 
 @pytest.fixture
 def character_js_content() -> str:
     """Read character.js content for assertions."""
-    assert _CHARACTER_JS.exists(), f"character.js not found at {_CHARACTER_JS}"
+    assert _CHARACTER_JS.exists(), f"character-loader.js not found at {_CHARACTER_JS}"
     return _CHARACTER_JS.read_text(encoding="utf-8")
 
 
 @pytest.fixture
 def create_glb_body(character_js_content: str) -> str:
     """Extract the _createGLBCharacter function body."""
-    func_start = character_js_content.find("async function _createGLBCharacter")
-    assert func_start != -1, "character.js must contain _createGLBCharacter"
+    func_start = character_js_content.find("async function createGLBCharacter")
+    assert func_start != -1, "character-loader.js must contain createGLBCharacter"
 
     brace_count = 0
     body_start = character_js_content.index("{", func_start)
@@ -214,9 +214,9 @@ class TestAnimationFirstScaling:
         )
 
     def test_uses_state_anim_files(self, create_glb_body: str) -> None:
-        """Must reference _STATE_ANIM_FILES for animation clip mapping."""
-        assert "_STATE_ANIM_FILES" in create_glb_body, (
-            "Must use _STATE_ANIM_FILES to map state names to animation files"
+        """Must reference STATE_ANIM_FILES for animation clip mapping."""
+        assert "STATE_ANIM_FILES" in create_glb_body, (
+            "Must use STATE_ANIM_FILES to map state names to animation files"
         )
 
     def test_embedded_animation_fallback(self, create_glb_body: str) -> None:

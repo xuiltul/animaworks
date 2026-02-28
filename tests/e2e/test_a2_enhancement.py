@@ -128,7 +128,7 @@ class TestDiscoverToolsE2E:
         mock = AsyncMock(side_effect=[resp1, resp2])
         _install_litellm_mock(mock)
         with patch("litellm.acompletion", mock), \
-             patch("core.execution.litellm_loop.load_external_schemas", return_value=mock_schemas):
+             patch("core.execution._litellm_tools.load_external_schemas", return_value=mock_schemas):
             result = await executor.execute("Check chatwork", system_prompt="sys")
         assert "Tools activated" in result.text
 
@@ -147,7 +147,7 @@ class TestDiscoverToolsE2E:
         mock = AsyncMock(side_effect=[resp1, resp2, resp3])
         _install_litellm_mock(mock)
         with patch("litellm.acompletion", mock), \
-             patch("core.execution.litellm_loop.load_external_schemas", return_value=mock_schemas):
+             patch("core.execution._litellm_tools.load_external_schemas", return_value=mock_schemas):
             result = await executor.execute("test", system_prompt="sys")
         assert "Done" in result.text
 

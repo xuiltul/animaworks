@@ -251,7 +251,7 @@ CLIはパワーユーザーと自動化向け。日常操作はWeb UIで。
 
 | コマンド | 説明 |
 |---|---|
-| `animaworks create-anima [--from-md PATH] [--role ROLE] [--name NAME]` | キャラクターシートから作成 |
+| `animaworks anima create [--from-md PATH] [--role ROLE] [--name NAME]` | キャラクターシートから作成 |
 | `animaworks anima status [ANIMA]` | プロセス状態表示 |
 | `animaworks anima restart ANIMA` | プロセス再起動 |
 | `animaworks list` | 全Anima一覧 |

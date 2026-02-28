@@ -19,6 +19,14 @@ from core.time_utils import now_jst
 
 logger = logging.getLogger("animaworks.prompt_builder")
 
+# Modes that use MCP-style tool access (built-in + mcp__aw__*).
+_MCP_MODES = frozenset({"s", "c"})
+
+
+def _is_mcp_mode(execution_mode: str) -> bool:
+    """Return True for modes using built-in tools + MCP (S and C)."""
+    return execution_mode in _MCP_MODES
+
 
 def _parse_kv_template(raw: str) -> dict[str, str]:
     """Parse ``[key]: value`` lines from a template string.
@@ -301,7 +309,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             ),
         ]
         if other_animas:
-            cr_key = "communication_rules_s" if execution_mode == "s" else "communication_rules"
+            cr_key = "communication_rules_s" if _is_mcp_mode(execution_mode) else "communication_rules"
             _cr_store = get_prompt_store()
             _cr = (
                 _cr_store.get_section(cr_key) if _cr_store else None
@@ -355,7 +363,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
 
     # Communication rules: only when there are other animas
     if other_animas:
-        cr_key = "communication_rules_s" if execution_mode == "s" else "communication_rules"
+        cr_key = "communication_rules_s" if _is_mcp_mode(execution_mode) else "communication_rules"
         _cr_store = get_prompt_store()
         _cr = (
             _cr_store.get_section(cr_key) if _cr_store else None
@@ -381,7 +389,7 @@ def _build_messaging_section(
         ", ".join(other_animas) if other_animas else _fs.get("no_other_animas", "(no other employees yet)")
     )
 
-    db_key = "messaging_s" if execution_mode == "s" else "messaging"
+    db_key = "messaging_s" if _is_mcp_mode(execution_mode) else "messaging"
     _msg_store = get_prompt_store()
     raw = (_msg_store.get_section(db_key) if _msg_store else None)
     if raw:
@@ -447,7 +455,7 @@ def _build_recent_tool_section(anima_dir: Path, model_config: Any) -> str:
 
 def _build_human_notification_guidance(execution_mode: str = "") -> str:
     """Build the human notification instruction for top-level Animas."""
-    if execution_mode == "s":
+    if _is_mcp_mode(execution_mode):
         how_to = load_prompt("builder/human_notification_howto_s")
     else:
         how_to = load_prompt("builder/human_notification_howto_other")
@@ -759,7 +767,7 @@ def build_system_prompt(
 
         has_newstaff = any(m.name == "newstaff" for m in skill_metas)
         if has_newstaff:
-            if execution_mode == "s":
+            if _is_mcp_mode(execution_mode):
                 parts.append(load_prompt("builder/hiring_rules_s"))
             else:
                 parts.append(load_prompt("builder/hiring_rules_other"))
@@ -779,7 +787,7 @@ def build_system_prompt(
                 "重い作業が必要な場合は state/pending/ にタスクファイルを書き出してください。"
             )
     else:
-        if execution_mode == "s":
+        if _is_mcp_mode(execution_mode):
             _s_builtin = (
                 _prompt_store.get_guide("s_builtin") if _prompt_store else None
             ) or get_default_guide("s_builtin")

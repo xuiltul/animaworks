@@ -17,7 +17,12 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CHAT_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat.js"
+CHAT_CTX_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "ctx.js"
+CHAT_STREAMING_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "streaming-controller.js"
+CHAT_RENDERER_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "chat-renderer.js"
 WORKSPACE_APP_JS = PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "app.js"
+WORKSPACE_CHAT_THREAD_JS = PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "chat-thread.js"
+WORKSPACE_CHAT_STREAMING_JS = PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "chat-streaming.js"
 WORKSPACE_STATE_JS = PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "state.js"
 CHAT_CSS = PROJECT_ROOT / "server" / "static" / "styles" / "chat.css"
 WORKSPACE_STYLE = PROJECT_ROOT / "server" / "static" / "workspace" / "style.css"
@@ -47,14 +52,14 @@ class TestChatJsThreadTabs:
         assert "chatNewThreadBtn" in js
 
     def test_chat_js_selected_thread_id_initialized_default(self) -> None:
-        """_selectedThreadId variable is initialized to 'default'."""
-        js = _read(CHAT_JS)
-        assert "_selectedThreadId = \"default\"" in js
+        """selectedThreadId is initialized to 'default' in chat context."""
+        js = _read(CHAT_CTX_JS)
+        assert 'selectedThreadId: "default"' in js
 
     def test_chat_js_threads_initialized_empty_object(self) -> None:
-        """_threads variable is initialized as empty object {}."""
-        js = _read(CHAT_JS)
-        assert "_threads = {}" in js
+        """threads is initialized as empty object {} in chat context."""
+        js = _read(CHAT_CTX_JS)
+        assert "threads: {}" in js
 
 
 # ── TestChatJsThreadIdInSendChat ─────────────────────────────
@@ -65,18 +70,16 @@ class TestChatJsThreadIdInSendChat:
     """Verify thread_id is included in send and fetch calls."""
 
     def test_send_chat_includes_thread_id_in_body(self) -> None:
-        """_sendChat function includes thread_id: tid in the body JSON."""
-        js = _read(CHAT_JS)
+        """Streaming controller includes thread_id: tid in the body JSON."""
+        js = _read(CHAT_STREAMING_JS)
         assert "thread_id: tid" in js
         assert "bodyObj" in js or "body" in js
-        # Body is built as JSON with thread_id
         assert re.search(r"thread_id\s*:\s*tid", js)
 
     def test_fetch_conversation_history_includes_thread_id_param(self) -> None:
-        """_fetchConversationHistory includes thread_id parameter in URL."""
-        js = _read(CHAT_JS)
+        """Chat renderer includes thread_id parameter in URL."""
+        js = _read(CHAT_RENDERER_JS)
         assert "thread_id" in js
-        # Template literal: `&thread_id=${encodeURIComponent(threadId)}`
         assert "&thread_id=" in js
         assert "encodeURIComponent" in js and "threadId" in js
 
@@ -89,18 +92,16 @@ class TestChatJsChatHistoryRefactored:
     """Verify _chatHistories and _historyState use per-thread structure."""
 
     def test_render_chat_accesses_chat_histories_by_name_and_tid(self) -> None:
-        """_renderChat accesses _chatHistories[name]?.[tid]."""
-        js = _read(CHAT_JS)
-        assert "_chatHistories[name]" in js
-        # Refactored: per-thread access via [tid] or ?.[tid]
-        assert "?.[tid]" in js or "_chatHistories[name][tid]" in js
+        """Chat renderer accesses chatHistories[name]?.[tid]."""
+        js = _read(CHAT_RENDERER_JS)
+        assert "chatHistories[name]" in js
+        assert "?.[tid]" in js or "chatHistories[name][tid]" in js
 
     def test_render_chat_accesses_history_state_by_name_and_tid(self) -> None:
-        """History state is accessed as _historyState[name]?.[tid]."""
-        js = _read(CHAT_JS)
-        assert "_historyState[name]" in js
-        # Refactored: per-thread access
-        assert "?.[tid]" in js or "?.[threadId]" in js or "_historyState[name][" in js
+        """History state is accessed as historyState[name]?.[tid]."""
+        js = _read(CHAT_RENDERER_JS)
+        assert "historyState[name]" in js
+        assert "?.[tid]" in js or "?.[threadId]" in js or "historyState[name][" in js
 
 
 # ── TestWorkspaceStateFields ────────────────────────────────
@@ -134,14 +135,14 @@ class TestWorkspaceAppJsThreadTabs:
     """Verify workspace app.js thread tab rendering and thread_id in send."""
 
     def test_app_js_contains_thread_tab_rendering(self) -> None:
-        """app.js contains thread tab rendering function/logic."""
-        js = _read(WORKSPACE_APP_JS)
+        """chat-thread.js contains thread tab rendering function/logic."""
+        js = _read(WORKSPACE_CHAT_THREAD_JS)
         assert "thread-tab" in js
         assert "wsThreadTabs" in js or "threadTabs" in js
 
     def test_send_conversation_message_includes_thread_id_in_body(self) -> None:
-        """sendConversationMessage includes thread_id in the body."""
-        js = _read(WORKSPACE_APP_JS)
+        """chat-streaming.js includes thread_id in the body."""
+        js = _read(WORKSPACE_CHAT_STREAMING_JS)
         assert "thread_id" in js
         assert re.search(r"thread_id\s*:\s*threadId", js)
 

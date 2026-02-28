@@ -8,6 +8,7 @@ import {
   bindToolCallHandlers,
   fetchConversationHistory,
 } from "./chat.js";
+import { initTextArtifactHandlers } from "../shared/text-artifact.js";
 
 // ── Local State ──────────────────────────────
 
@@ -120,6 +121,7 @@ function _renderConversationView(container) {
 
   // Bind tool call handlers
   bindToolCallHandlers(container);
+  initTextArtifactHandlers();
 
   // Bind "load more" button
   const loadMoreBtn = container.querySelector("#historyLoadMoreBtn");

@@ -302,12 +302,7 @@ def _extract_name_from_md(content: str) -> str | None:
         # {name}
         英名 Hinata  /  Name Hinata
     """
-    # Try "# Character: Name" or "# Name"
-    m = re.search(r"^#\s+(?:Character:\s*)?(\w+)", content, re.MULTILINE)
-    if m:
-        return m.group(1).lower()
-
-    # Try table row format for both ja and en
+    # Try table row format first (most reliable — works for both ja/en sheets)
     for loc in ("ja", "en"):
         field = FIELD_NAMES[loc]["name"]
         m = re.search(rf"\|\s*{re.escape(field)}\s*\|\s*(\w+)\s*\|", content)
@@ -316,6 +311,11 @@ def _extract_name_from_md(content: str) -> str | None:
         m = re.search(rf"{re.escape(field)}\s+(\w+)", content)
         if m:
             return m.group(1).lower()
+
+    # Fall back to "# Character: Name" or "# Name" (English names only)
+    m = re.search(r"^#\s+(?:Character:\s*)?([a-zA-Z]\w*)", content, re.MULTILINE)
+    if m:
+        return m.group(1).lower()
 
     return None
 

@@ -254,7 +254,7 @@ The CLI is for power users and automation. Day-to-day use is through the Web UI.
 
 | Command | Description |
 |---|---|
-| `animaworks create-anima [--from-md PATH] [--role ROLE] [--name NAME]` | Create from character sheet |
+| `animaworks anima create [--from-md PATH] [--role ROLE] [--name NAME]` | Create from character sheet |
 | `animaworks anima status [ANIMA]` | Show process status |
 | `animaworks anima restart ANIMA` | Restart process |
 | `animaworks list` | List all Animas |

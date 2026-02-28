@@ -2,8 +2,8 @@
 name: newstaff
 description: >-
   Skill for hiring and creating new Digital Anima in the AnimaWorks organization.
-  Create a character sheet (Markdown) based on interviews, then use the create_anima
-  tool to generate identity/injection/permissions in bulk. After creation, self-configure via bootstrap.
+  Create a character sheet (Markdown) based on interviews, then use the CLI command
+  (animaworks anima create) to generate identity/injection/permissions in bulk. After creation, self-configure via bootstrap.
   "Create a new employee", "Hire someone", "New employee", "Hiring", "Create Anima", "Recruitment"
 ---
 
@@ -51,17 +51,15 @@ From the minimal information gathered in the interview, **create a coherent, in-
 
 Read the **Character Design Guide** (`{data_dir}/prompts/character_design_guide.md`) in the runtime data directory and flesh out the character according to its rules.
 
-### 3. Create Character Sheet and Bulk-create via create_anima
+### 3. Create Character Sheet and Bulk-create via CLI
 
-According to the interview and design results, follow the **Character Sheet Specification** and pass content directly to `create_anima`.
-No need to use `write_memory_file` — content can be passed directly:
+According to the interview and design results, follow the **Character Sheet Specification**, write the character sheet to a file, and create via CLI command:
 
-```
-create_anima(
-  character_sheet_content="(Full character sheet content per specification below)",
-  name="{english_name}",
-  supervisor="{supervisor_english_name}"
-)
+1. Write the character sheet to a file (e.g., `/tmp/{english_name}.md`)
+2. Run the following command:
+
+```bash
+animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} --supervisor {supervisor_english_name}
 ```
 
 **supervisor configuration:**
@@ -121,7 +119,7 @@ This automatically performs:
 
 ### 4. Verify Model Configuration in config.json
 
-create_anima automatically registers to config.json, but verify/supplement:
+`animaworks anima create` automatically registers to config.json, but verify/supplement:
 
 - `model`: Model name decided in interview
 - `credential`: Credential name to use

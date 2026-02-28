@@ -113,10 +113,10 @@ Includes identity.md, injection.md, permissions.md, skills, etc.
 
 ```bash
 # List templates
-animaworks create-anima --template <template_name>
+animaworks anima create --template <template_name>
 
 # Create with different name
-animaworks create-anima --template <template_name> --name <anima_name>
+animaworks anima create --template <template_name> --name <anima_name>
 ```
 
 Templates are recommended; character setup is already in place and bootstrap can be skipped.
@@ -126,7 +126,7 @@ Templates are recommended; character setup is already in place and bootstrap can
 Create a character sheet (Markdown) and generate from it.
 
 ```bash
-animaworks create-anima --from-md /path/to/character.md --name ken
+animaworks anima create --from-md /path/to/character.md --name ken
 ```
 
 The Markdown file is copied as `character_sheet.md` in the Anima directory.
@@ -141,7 +141,7 @@ Markdown SHOULD include:
 Creates Anima with a minimal skeleton.
 
 ```bash
-animaworks create-anima --name yuki
+animaworks anima create --name yuki
 ```
 
 Blank creation produces skeleton files with `{name}` replaced by the real name.

@@ -152,11 +152,11 @@ class TestRevealJSModule:
 
 
 class TestAppJSRevealIntegration:
-    """Verify app.js imports and uses the reveal module."""
+    """Verify app-websocket.js imports and uses the reveal module."""
 
     @pytest.fixture(autouse=True)
     def _load_app_js(self):
-        self.app_js = (WORKSPACE_DIR / "modules" / "app.js").read_text(encoding="utf-8")
+        self.app_js = (WORKSPACE_DIR / "modules" / "app-websocket.js").read_text(encoding="utf-8")
 
     def test_imports_play_reveal(self):
         assert 'import { playReveal } from "./reveal.js"' in self.app_js

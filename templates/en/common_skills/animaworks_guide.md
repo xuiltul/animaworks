@@ -46,13 +46,13 @@ animaworks anima status {name}           # Specific Anima process state
 
 ```bash
 # Create from character sheet (MD) — recommended
-animaworks create-anima --from-md {file} [--role {role}] [--name {name}]
+animaworks anima create --from-md {file} [--role {role}] [--name {name}]
 
 # Create from template
-animaworks create-anima --template {template_name} [--name {name}]
+animaworks anima create --template {template_name} [--name {name}]
 
 # Create blank
-animaworks create-anima --name {name}
+animaworks anima create --name {name}
 ```
 
 ### Enable, Disable, Delete

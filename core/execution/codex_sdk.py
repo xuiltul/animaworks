@@ -25,7 +25,7 @@ import logging
 import os
 import sys
 from collections.abc import AsyncGenerator
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,7 @@ from core.memory.shortterm import ShortTermMemory
 
 logger = logging.getLogger("animaworks.execution.codex_sdk")
 
-__all__ = ["CodexSDKExecutor", "clear_codex_thread_ids"]
+__all__ = ["CodexSDKExecutor", "clear_codex_thread_ids", "is_codex_sdk_available"]
 
 RESUME_TIMEOUT_SEC = 15.0
 
@@ -54,6 +54,20 @@ def _resolve_codex_model(model: str) -> str:
     if model.startswith("codex/"):
         return model[len("codex/"):]
     return model
+
+
+def is_codex_sdk_available() -> bool:
+    """Return True when ``openai_codex_sdk`` is importable."""
+    try:
+        import openai_codex_sdk  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _is_openai_api_key(key: str) -> bool:
+    """Return True if *key* looks like a genuine OpenAI API key."""
+    return bool(key) and not key.startswith("sk-ant-")
 
 
 def _escape_toml_string(value: str) -> str:
@@ -166,6 +180,34 @@ def _usage_to_dict(usage: Any) -> dict[str, int]:
     return d
 
 
+@dataclass
+class CodexResultMessage:
+    """Adapter providing the ``num_turns`` / ``session_id`` interface
+    expected by ``AgentCore`` session-chaining logic."""
+
+    num_turns: int = 0
+    session_id: str = ""
+    usage: dict[str, int] | None = None
+
+
+def _wrap_result_message(
+    turn: Any,
+    thread: Any | None = None,
+) -> CodexResultMessage:
+    """Wrap a Codex turn/event into a ``CodexResultMessage``."""
+    usage_raw = getattr(turn, "usage", None)
+    usage = _usage_to_dict(usage_raw) if usage_raw else None
+    num_turns = getattr(turn, "num_turns", 0) or 0
+    session_id = ""
+    if thread:
+        session_id = _get_thread_id(thread) or ""
+    return CodexResultMessage(
+        num_turns=num_turns,
+        session_id=session_id,
+        usage=usage,
+    )
+
+
 # ── Executor ─────────────────────────────────────────────────
 
 class CodexSDKExecutor(BaseExecutor):
@@ -206,8 +248,14 @@ class CodexSDKExecutor(BaseExecutor):
             "HOME": os.environ.get("HOME", "/tmp"),
         }
         api_key = self._resolve_api_key()
-        if api_key:
+        if api_key and _is_openai_api_key(api_key):
             env["OPENAI_API_KEY"] = api_key
+        elif api_key:
+            logger.debug(
+                "Skipping non-OpenAI API key for Codex env "
+                "(prefix=%s…); relying on cached ChatGPT auth",
+                api_key[:8],
+            )
         if self._model_config.api_base_url:
             env["OPENAI_BASE_URL"] = self._model_config.api_base_url
         return env
@@ -223,6 +271,30 @@ class CodexSDKExecutor(BaseExecutor):
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         }
 
+    def _propagate_auth(self) -> None:
+        """Symlink ``auth.json`` from the default CODEX_HOME into per-anima CODEX_HOME.
+
+        This lets animas share the ChatGPT subscription auth obtained via
+        ``codex auth`` (or ``login_with_device_code``).  Token refreshes
+        propagate automatically through the symlink.  If the per-anima
+        directory already has a real ``auth.json`` (e.g. written by a prior
+        API-key login), it is left untouched.
+        """
+        default_auth = Path.home() / ".codex" / "auth.json"
+        target = self._codex_home / "auth.json"
+
+        if target.exists() and not target.is_symlink():
+            return
+
+        if target.is_symlink():
+            if target.resolve() == default_auth.resolve():
+                return
+            target.unlink()
+
+        if default_auth.is_file():
+            target.symlink_to(default_auth)
+            logger.info("Symlinked auth.json → %s", default_auth)
+
     def _write_codex_config(self, system_prompt: str) -> None:
         """Write CODEX_HOME config.toml and model instructions file.
 
@@ -230,6 +302,7 @@ class CodexSDKExecutor(BaseExecutor):
         across sessions so that Codex's thread data (``sessions/``) survives.
         """
         self._codex_home.mkdir(parents=True, exist_ok=True)
+        self._propagate_auth()
 
         instructions_file = self._codex_home / "instructions.md"
         instructions_file.write_text(system_prompt, encoding="utf-8")
@@ -264,7 +337,13 @@ class CodexSDKExecutor(BaseExecutor):
 
     def _create_codex_client(self) -> Any:
         """Create a ``Codex`` SDK client instance."""
-        from openai_codex_sdk import Codex
+        try:
+            from openai_codex_sdk import Codex
+        except ModuleNotFoundError as e:
+            raise ImportError(
+                "openai_codex_sdk is required for Mode C "
+                "(install openai-codex-sdk)."
+            ) from e
 
         return Codex({"env": self._build_env()})
 
@@ -308,6 +387,9 @@ class CodexSDKExecutor(BaseExecutor):
         max_turns_override: int | None = None,
     ) -> ExecutionResult:
         """Run a session via Codex SDK (blocking mode)."""
+        if self._check_interrupted():
+            return ExecutionResult(text="[Session interrupted by user]")
+
         session_type = _resolve_session_type(trigger)
         thread_id = _load_thread_id(self._anima_dir, session_type)
 
@@ -340,6 +422,10 @@ class CodexSDKExecutor(BaseExecutor):
                 logger.exception("Codex SDK execution error")
                 return ExecutionResult(text=f"[Codex SDK Error: {e}]")
 
+        if self._check_interrupted():
+            logger.info("Codex SDK execute interrupted after run")
+            return ExecutionResult(text="[Session interrupted by user]")
+
         tid = _get_thread_id(thread)
         if tid:
             _save_thread_id(self._anima_dir, tid, session_type)
@@ -356,7 +442,7 @@ class CodexSDKExecutor(BaseExecutor):
         replied_to = self._read_replied_to_file()
         return ExecutionResult(
             text=response_text,
-            result_message=turn,
+            result_message=_wrap_result_message(turn, thread),
             replied_to_from_transcript=replied_to,
             tool_call_records=tool_records,
         )
@@ -381,6 +467,11 @@ class CodexSDKExecutor(BaseExecutor):
             ``{"type": "tool_end", "tool_id": "...", "tool_name": "..."}``
             ``{"type": "done", "full_text": "...", "result_message": ...}``
         """
+        if self._check_interrupted():
+            yield {"type": "text_delta", "text": "[Session interrupted by user]"}
+            yield {"type": "done", "full_text": "[Session interrupted by user]", "result_message": None}
+            return
+
         session_type = _resolve_session_type(trigger)
         thread_id = _load_thread_id(self._anima_dir, session_type)
 
@@ -399,6 +490,10 @@ class CodexSDKExecutor(BaseExecutor):
             streamed = await thread.run_streamed(prompt)
 
             async for event in streamed.events:
+                if self._check_interrupted():
+                    logger.info("Codex SDK streaming interrupted")
+                    yield {"type": "text_delta", "text": "[Session interrupted by user]"}
+                    return
                 etype = getattr(event, "type", "")
                 if etype == "item.completed":
                     item = event.item
@@ -425,7 +520,7 @@ class CodexSDKExecutor(BaseExecutor):
                             "tool_name": tool_name,
                         }
                 elif etype == "turn.completed":
-                    turn_result = event
+                    turn_result = _wrap_result_message(event, thread)
                     usage = getattr(event, "usage", None)
                     if usage:
                         tracker.update(

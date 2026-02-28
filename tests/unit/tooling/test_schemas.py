@@ -107,7 +107,7 @@ class TestFileTools:
 class TestSearchTools:
     def test_search_tools_is_list(self):
         assert isinstance(SEARCH_TOOLS, list)
-        assert len(SEARCH_TOOLS) == 2
+        assert len(SEARCH_TOOLS) == 3
 
     def test_search_code_schema(self):
         schema = next(t for t in SEARCH_TOOLS if t["name"] == "search_code")
@@ -275,8 +275,8 @@ class TestBuildToolList:
             include_tool_management=True,
         )
         names = [t["name"] for t in result]
-        # 5 memory + 3 channel + 1 report_procedure_outcome + 1 report_knowledge_outcome + 1 check_permissions + 4 file + 2 search + 1 discovery + 2 tool_management = 20
-        assert len(result) == 20
+        # 5 memory + 3 channel + 1 report_procedure_outcome + 1 report_knowledge_outcome + 1 check_permissions + 4 file + 3 search + 1 discovery + 2 tool_management = 21
+        assert len(result) == 21
         assert "search_code" in names
         assert "list_directory" in names
         assert "discover_tools" in names

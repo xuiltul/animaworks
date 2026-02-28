@@ -19,6 +19,7 @@
 
 /* Chat page needs bottom flush layout without shell padding gap. */
 .main-content:has(.chat-page-layout) {
+  padding-top: 0;
   padding-bottom: 10px;
 }
 

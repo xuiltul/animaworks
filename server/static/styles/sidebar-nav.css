@@ -155,26 +155,10 @@
 
 @media (min-width: 769px) {
   body.sidebar-collapsed .sidebar-nav {
-    width: 64px;
-    min-width: 64px;
-  }
-
-  body.sidebar-collapsed .sidebar-brand,
-  body.sidebar-collapsed .sidebar-nav .nav-label,
-  body.sidebar-collapsed .sidebar-nav .theme-toggle,
-  body.sidebar-collapsed .sidebar-nav .nav-divider:last-of-type {
-    display: none;
-  }
-
-  body.sidebar-collapsed .sidebar-nav .nav-item {
-    justify-content: center;
-    padding: 10px 0;
-    gap: 0;
-  }
-
-  body.sidebar-collapsed .sidebar-nav .nav-emoji,
-  body.sidebar-collapsed .sidebar-nav .nav-lucide {
-    width: 24px;
-    text-align: center;
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
   }
 }

@@ -1,0 +1,384 @@
+from __future__ import annotations
+# AnimaWorks - Digital Anima Framework
+# Copyright (C) 2026 AnimaWorks Authors
+# SPDX-License-Identifier: Apache-2.0
+
+"""PermissionsMixin — file/command permission checks and check_permissions handler."""
+
+import json as _json
+import logging
+import re
+import shlex
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from core.i18n import t
+
+from core.tooling.handler_base import (
+    _BLOCKED_CMD_PATTERNS,
+    _INJECTION_RE,
+    _error_result,
+    _is_protected_write,
+)
+
+if TYPE_CHECKING:
+    from core.memory import MemoryManager
+    from core.tooling.dispatch import ExternalToolDispatcher
+
+logger = logging.getLogger("animaworks.tool_handler")
+
+
+class PermissionsMixin:
+    """Permission checking for file access, command execution, and tool creation."""
+
+    # Declared for type-checker visibility; actual values live on ToolHandler
+    _memory: MemoryManager
+    _anima_dir: Path
+    _anima_name: str
+    _superuser: bool
+    _subordinate_activity_dirs: list[Path]
+    _subordinate_management_files: list[Path]
+    _subordinate_root_dirs: list[Path]
+    _descendant_activity_dirs: list[Path]
+    _descendant_state_files: list[Path]
+    _descendant_state_dirs: list[Path]
+    _dispatch: dict[str, Any]
+    _external: ExternalToolDispatcher
+
+    # Section header aliases
+    _CMD_SECTION_HEADERS = ("コマンド実行", "実行できるコマンド")
+    _FILE_SECTION_HEADERS = ("ファイル操作", "読める場所")
+    _DENIED_CMD_SECTION_HEADERS = ("実行できないコマンド",)
+
+    # ── check_permissions handler ────────────────────────────
+
+    def _handle_check_permissions(self, args: dict[str, Any]) -> str:
+        """Return a summary of what tools, external tools, and file access this anima has."""
+        internal_tools = sorted(self._dispatch.keys())
+
+        external_enabled: list[str] = []
+        external_available: list[str] = []
+        try:
+            from core.tools import TOOL_MODULES
+            all_categories = sorted(TOOL_MODULES.keys())
+            for cat in all_categories:
+                if cat in (self._external.registry if self._external else []):
+                    external_enabled.append(cat)
+                else:
+                    external_available.append(cat)
+        except Exception:
+            logger.debug("Failed to enumerate external tools", exc_info=True)
+
+        permissions_text = self._memory.read_permissions() if self._memory else ""
+
+        file_read: list[str] = [t("handler.file_read_own"), t("handler.file_read_shared")]
+        file_write: list[str] = [t("handler.file_write_own")]
+        if self._subordinate_management_files:
+            file_read.append(t("handler.subordinate_management"))
+            file_write.append(t("handler.subordinate_management"))
+        if self._subordinate_root_dirs:
+            file_read.append(t("handler.subordinate_dir_list"))
+        if self._descendant_activity_dirs:
+            file_read.append(t("handler.descendant_activity"))
+        if self._descendant_state_files:
+            file_read.append(t("handler.descendant_state"))
+        if self._descendant_state_dirs:
+            file_read.append(t("handler.descendant_pending"))
+
+        file_header = self._find_section_header(permissions_text, self._FILE_SECTION_HEADERS)
+        if file_header:
+            extra_dirs = self._parse_permission_section(file_header)
+            for d in extra_dirs:
+                if d.startswith("/"):
+                    file_read.append(d)
+                    file_write.append(d)
+
+        restrictions: list[str] = []
+        denied_cmds = self._parse_denied_commands(permissions_text)
+        if denied_cmds:
+            restrictions.extend(t("handler.cmd_denied", cmd=cmd) for cmd in denied_cmds)
+
+        result = {
+            "internal_tools": internal_tools,
+            "external_tools": {
+                "enabled": external_enabled,
+                "available_but_not_enabled": external_available,
+            },
+            "file_access": {
+                "read": file_read,
+                "write": file_write,
+            },
+            "restrictions": restrictions,
+        }
+
+        return _json.dumps(result, ensure_ascii=False, indent=2)
+
+    # ── Tool creation permission ─────────────────────────────
+
+    def _check_tool_creation_permission(self, kind: str) -> bool:
+        """Check if tool creation is permitted via permissions.md."""
+        permissions = self._memory.read_permissions() if self._memory else ""
+        kw_ja = t("handler.tool_creation_keyword", locale="ja")
+        kw_en = t("handler.tool_creation_keyword", locale="en")
+        if kw_ja not in permissions and kw_en not in permissions:
+            return False
+        _perm_re = re.compile(
+            rf"[-*]?\s*{re.escape(kind)}\s*:\s*(OK|yes|enabled|true)\s*$",
+            re.IGNORECASE,
+        )
+        for line in permissions.splitlines():
+            if _perm_re.match(line.strip()):
+                return True
+        return False
+
+    # ── Permission section parsing ───────────────────────────
+
+    def _parse_permission_section(self, section_header: str) -> list[str]:
+        """Parse a section from permissions.md and return allowed items."""
+        permissions = self._memory.read_permissions()
+        items: list[str] = []
+        in_section = False
+        for line in permissions.splitlines():
+            stripped = line.strip()
+            if section_header in stripped:
+                in_section = True
+                continue
+            if in_section and stripped.startswith("#"):
+                break
+            if in_section and stripped.startswith("-"):
+                item = stripped.lstrip("- ").split(":")[0].strip()
+                if item:
+                    items.append(item)
+        return items
+
+    def _check_file_permission(self, path: str, *, write: bool = False) -> str | None:
+        """Check if the file path is allowed by permissions.md.
+
+        Returns ``None`` if allowed, or an error message string if denied.
+        """
+        if self._superuser:
+            return None
+        resolved = Path(path).resolve()
+
+        # Own anima_dir
+        if resolved.is_relative_to(self._anima_dir.resolve()):
+            if write:
+                err = _is_protected_write(self._anima_dir, resolved)
+                if err:
+                    logger.warning("permission_denied anima=%s path=%s reason=protected_file", self._anima_name, path)
+                    return err
+            return None
+
+        # Supervisor can read direct subordinate's activity_log (work records)
+        if not write:
+            for sub_activity in self._subordinate_activity_dirs:
+                if resolved.is_relative_to(sub_activity):
+                    return None
+
+        # Supervisor can read any descendant's activity_log
+        if not write:
+            for desc_activity in self._descendant_activity_dirs:
+                if resolved.is_relative_to(desc_activity):
+                    return None
+
+        # Supervisor can read any descendant's state files
+        if not write:
+            for desc_state in self._descendant_state_files:
+                if resolved == desc_state:
+                    return None
+
+        # Supervisor can read any descendant's state/pending/ directory
+        if not write:
+            for desc_state_dir in self._descendant_state_dirs:
+                if resolved.is_relative_to(desc_state_dir):
+                    return None
+
+        # Supervisor can read/write subordinate's management files
+        for mgmt_file in self._subordinate_management_files:
+            if resolved == mgmt_file:
+                return None
+
+        # Supervisor can list direct subordinate's root directory
+        if not write:
+            for sub_root in self._subordinate_root_dirs:
+                if resolved == sub_root:
+                    return None
+
+        # Framework shared directories — read-only for all Animas
+        if not write:
+            from core.paths import get_shared_dir, get_common_knowledge_dir, get_common_skills_dir, get_company_dir
+            for shared_dir in (get_shared_dir(), get_common_knowledge_dir(), get_common_skills_dir(), get_company_dir()):
+                if shared_dir.exists() and resolved.is_relative_to(shared_dir.resolve()):
+                    return None
+
+        permissions = self._memory.read_permissions()
+        header = self._find_section_header(permissions, self._FILE_SECTION_HEADERS)
+        if header is None:
+            logger.warning("permission_denied anima=%s path=%s reason=file_ops_not_enabled", self._anima_name, path)
+            return _error_result("PermissionDenied", "File operations not enabled in permissions.md")
+
+        # Parse allowed directory whitelist from permissions.md
+        raw_items = self._parse_permission_section(header)
+        allowed_dirs = [
+            Path(item).resolve() for item in raw_items if item.startswith("/")
+        ]
+
+        if not allowed_dirs:
+            logger.warning("permission_denied anima=%s path=%s reason=no_allowed_dirs", self._anima_name, path)
+            return _error_result("PermissionDenied", t("handler.no_file_ops_paths"), suggestion="Add directory paths to permissions.md")
+
+        for allowed in allowed_dirs:
+            if resolved.is_relative_to(allowed):
+                return None
+
+        logger.warning("permission_denied anima=%s path=%s reason=outside_allowed_dirs", self._anima_name, path)
+        return _error_result("PermissionDenied", f"'{path}' is not under any allowed directory", context={"allowed_dirs": [str(d) for d in allowed_dirs]})
+
+    def _find_section_header(
+        self, permissions: str, candidates: tuple[str, ...],
+    ) -> str | None:
+        """Return the first matching section header found in *permissions*."""
+        for header in candidates:
+            if header in permissions:
+                return header
+        return None
+
+    def _parse_denied_commands(self, permissions: str) -> list[str]:
+        """Parse the denied-commands section from permissions.md."""
+        header = self._find_section_header(
+            permissions, self._DENIED_CMD_SECTION_HEADERS,
+        )
+        if header is None:
+            return []
+
+        lines: list[str] = []
+        in_section = False
+        for line in permissions.splitlines():
+            stripped = line.strip()
+            if header in stripped:
+                in_section = True
+                continue
+            if in_section and stripped.startswith("#"):
+                break
+            if in_section and stripped:
+                lines.append(stripped)
+
+        items: list[str] = []
+        for line in lines:
+            line = line.lstrip("-* ")
+            for part in line.split(","):
+                part = part.strip()
+                if part:
+                    items.append(part)
+        return items
+
+    def _check_command_permission(self, command: str) -> str | None:
+        """Check if the command is allowed by permissions.md and security rules.
+
+        Returns ``None`` if allowed, or an error message string if denied.
+        """
+        if self._superuser:
+            return None
+        if not command or not command.strip():
+            logger.warning("permission_denied anima=%s command=<empty>", self._anima_name)
+            return _error_result("PermissionDenied", "Empty command")
+
+        # Layer 1: Reject injection vectors
+        if _INJECTION_RE.search(command):
+            logger.warning(
+                "permission_denied anima=%s command=%s reason=injection_pattern",
+                self._anima_name, command[:80],
+            )
+            return _error_result(
+                "PermissionDenied",
+                "Command contains injection patterns (;  `  $()  $VAR)",
+                suggestion="Use pipes (|) or logical operators (&&) instead of semicolons. Avoid variable expansion.",
+            )
+
+        # Layer 2: Dangerous command patterns
+        for pattern, reason in _BLOCKED_CMD_PATTERNS:
+            if pattern.search(command):
+                logger.warning(
+                    "permission_denied anima=%s command=%s reason=blocked_pattern(%s)",
+                    self._anima_name, command[:80], reason,
+                )
+                return _error_result("PermissionDenied", reason)
+
+        # Layer 2.5: Per-anima denied commands from permissions.md
+        permissions = self._memory.read_permissions()
+        denied_items = self._parse_denied_commands(permissions)
+        if denied_items:
+            segments = [
+                s.strip()
+                for s in re.split(r"\|(?!\|)|\&\&|\|\|", command)
+                if s.strip()
+            ]
+            for segment in segments:
+                try:
+                    seg_argv = shlex.split(segment)
+                except ValueError:
+                    continue
+                if not seg_argv:
+                    continue
+                cmd_base = seg_argv[0]
+                for denied in denied_items:
+                    if denied in cmd_base or denied in segment:
+                        logger.warning(
+                            "permission_denied anima=%s command=%s reason=denied_list(%s)",
+                            self._anima_name, command[:80], denied,
+                        )
+                        return _error_result(
+                            "PermissionDenied",
+                            f"Command '{cmd_base}' is in denied list ('{denied}')",
+                        )
+
+        # Layer 3: permissions.md section check
+        header = self._find_section_header(permissions, self._CMD_SECTION_HEADERS)
+        if header is None:
+            logger.warning("permission_denied anima=%s command=%s reason=cmd_not_enabled", self._anima_name, command[:80])
+            return _error_result("PermissionDenied", "Command execution not enabled in permissions.md")
+
+        # Layer 4: Per-command allowlist check
+        allowed = self._parse_permission_section(header)
+        if allowed:
+            segments = [s.strip() for s in re.split(r"\|(?!\|)|\&\&|\|\|", command) if s.strip()]
+            for segment in segments:
+                try:
+                    seg_argv = shlex.split(segment)
+                except ValueError as e:
+                    return _error_result("PermissionDenied", f"Invalid command syntax: {e}")
+                if not seg_argv:
+                    continue
+                cmd_base = seg_argv[0]
+                if cmd_base not in allowed:
+                    logger.warning(
+                        "permission_denied anima=%s command=%s reason=not_in_allowed_list cmd=%s",
+                        self._anima_name, command[:80], cmd_base,
+                    )
+                    return _error_result(
+                        "PermissionDenied",
+                        f"Command '{cmd_base}' not in allowed list",
+                        context={"allowed_commands": allowed},
+                    )
+        else:
+            segments = [command]
+
+        # Layer 5: Path traversal check on all segments
+        for segment in segments:
+            try:
+                seg_argv = shlex.split(segment)
+            except ValueError:
+                continue
+            for arg in seg_argv[1:]:
+                if ".." in arg:
+                    try:
+                        resolved = (self._anima_dir / arg).resolve()
+                        if not resolved.is_relative_to(self._anima_dir.resolve()):
+                            return _error_result(
+                                "PermissionDenied",
+                                "Command argument resolves outside anima directory",
+                            )
+                    except (ValueError, OSError):
+                        pass
+
+        return None

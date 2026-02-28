@@ -12,7 +12,12 @@ from __future__ import annotations
 
 from core.supervisor.ipc import IPCClient, IPCServer, IPCRequest, IPCResponse, IPCEvent
 from core.supervisor.process_handle import ProcessHandle, ProcessState, ProcessStats
-from core.supervisor.manager import ProcessSupervisor, RestartPolicy, HealthConfig
+from core.supervisor.manager import (
+    ProcessSupervisor,
+    RestartPolicy,
+    HealthConfig,
+    ReconciliationConfig,
+)
 
 __all__ = [
     "IPCClient",
@@ -26,4 +31,5 @@ __all__ = [
     "ProcessSupervisor",
     "RestartPolicy",
     "HealthConfig",
+    "ReconciliationConfig",
 ]

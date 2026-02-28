@@ -30,7 +30,7 @@ class TestInterceptTaskToPending:
             "prompt": "Read the issue file and create a worktree...",
         }
 
-        with patch("core.execution.agent_sdk._log_tool_use"):
+        with patch("core.execution._sdk_hooks._log_tool_use"):
             task_id = _intercept_task_to_pending(anima_dir, tool_input, "tool-123")
 
         pending_dir = anima_dir / "state" / "pending"
@@ -54,7 +54,7 @@ class TestInterceptTaskToPending:
 
         tool_input = {"description": "Quick background check"}
 
-        with patch("core.execution.agent_sdk._log_tool_use"):
+        with patch("core.execution._sdk_hooks._log_tool_use"):
             _intercept_task_to_pending(anima_dir, tool_input, None)
 
         pending_dir = anima_dir / "state" / "pending"
@@ -72,7 +72,7 @@ class TestInterceptTaskToPending:
 
         tool_input = {"description": "test", "prompt": "do stuff"}
 
-        with patch("core.execution.agent_sdk._log_tool_use") as mock_log:
+        with patch("core.execution._sdk_hooks._log_tool_use") as mock_log:
             _intercept_task_to_pending(anima_dir, tool_input, "tid-1")
 
         mock_log.assert_called_once()
@@ -91,7 +91,7 @@ class TestInterceptTaskToPending:
             "prompt": "Step 1: read file\nStep 2: edit code",
         }
 
-        with patch("core.execution.agent_sdk._log_tool_use"):
+        with patch("core.execution._sdk_hooks._log_tool_use"):
             _intercept_task_to_pending(anima_dir, tool_input, None)
 
         task_desc = json.loads(
@@ -128,7 +128,7 @@ class TestPreToolHookTaskBranch:
         anima_dir.mkdir(parents=True)
         (anima_dir / "state" / "pending").mkdir(parents=True)
 
-        with patch("core.execution.agent_sdk._cache_subordinate_paths", return_value=(set(), set())):
+        with patch("core.execution._sdk_hooks._cache_subordinate_paths", return_value=(set(), set())):
             return _build_pre_tool_hook(anima_dir)
 
     @pytest.fixture()
@@ -147,7 +147,7 @@ class TestPreToolHookTaskBranch:
 
         callback = MagicMock()
 
-        with patch("core.execution.agent_sdk._cache_subordinate_paths", return_value=(set(), set())):
+        with patch("core.execution._sdk_hooks._cache_subordinate_paths", return_value=(set(), set())):
             hook_fn = _build_pre_tool_hook(anima_dir, on_task_intercepted=callback)
 
         return hook_fn, callback, anima_dir
@@ -162,7 +162,7 @@ class TestPreToolHookTaskBranch:
             },
         }
 
-        with patch("core.execution.agent_sdk._log_tool_use"):
+        with patch("core.execution._sdk_hooks._log_tool_use"):
             result = await hook(input_data, "tool-id-1", {})
 
         output = result.get("hookSpecificOutput", {})
@@ -181,7 +181,7 @@ class TestPreToolHookTaskBranch:
             },
         }
 
-        with patch("core.execution.agent_sdk._log_tool_use"):
+        with patch("core.execution._sdk_hooks._log_tool_use"):
             await hook(input_data, "tool-id-2", {})
 
         pending_dir = tmp_path / "animas" / "hook_test" / "state" / "pending"
@@ -197,7 +197,7 @@ class TestPreToolHookTaskBranch:
             "tool_input": {"description": "test", "prompt": "test"},
         }
 
-        with patch("core.execution.agent_sdk._log_tool_use"):
+        with patch("core.execution._sdk_hooks._log_tool_use"):
             await hook_fn(input_data, "tool-id-3", {})
 
         callback.assert_called_once()
@@ -209,9 +209,9 @@ class TestPreToolHookTaskBranch:
             "tool_input": {"file_path": "/tmp/test.txt"},
         }
 
-        with patch("core.execution.agent_sdk._log_tool_use"), \
-             patch("core.execution.agent_sdk._check_a1_file_access", return_value=None), \
-             patch("core.execution.agent_sdk._build_output_guard", return_value=None):
+        with patch("core.execution._sdk_hooks._log_tool_use"), \
+             patch("core.execution._sdk_hooks._check_a1_file_access", return_value=None), \
+             patch("core.execution._sdk_hooks._build_output_guard", return_value=None):
             result = await hook(input_data, "tool-id-4", {})
 
         output = result.get("hookSpecificOutput", {})
@@ -224,9 +224,9 @@ class TestPreToolHookTaskBranch:
             "tool_input": {"command": "echo hello"},
         }
 
-        with patch("core.execution.agent_sdk._log_tool_use"), \
-             patch("core.execution.agent_sdk._check_a1_bash_command", return_value=None), \
-             patch("core.execution.agent_sdk._build_output_guard", return_value=None):
+        with patch("core.execution._sdk_hooks._log_tool_use"), \
+             patch("core.execution._sdk_hooks._check_a1_bash_command", return_value=None), \
+             patch("core.execution._sdk_hooks._build_output_guard", return_value=None):
             result = await hook(input_data, "tool-id-5", {})
 
         output = result.get("hookSpecificOutput", {})
@@ -238,7 +238,7 @@ class TestPreToolHookTaskBranch:
             "tool_name": "Task",
             "tool_input": {"description": "bg", "prompt": "run in background"},
         }
-        with patch("core.execution.agent_sdk._log_tool_use"):
+        with patch("core.execution._sdk_hooks._log_tool_use"):
             task_result = await hook(task_input, "tool-id-task", {})
 
         reason = task_result.get("hookSpecificOutput", {}).get(
@@ -251,7 +251,7 @@ class TestPreToolHookTaskBranch:
             "tool_name": "TaskOutput",
             "tool_input": {"task_id": task_id, "block": False, "timeout": 5000},
         }
-        with patch("core.execution.agent_sdk._log_tool_use"):
+        with patch("core.execution._sdk_hooks._log_tool_use"):
             out_result = await hook(out_input, "tool-id-out", {})
 
         out = out_result.get("hookSpecificOutput", {})

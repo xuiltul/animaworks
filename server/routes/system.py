@@ -168,12 +168,63 @@ def create_system_router() -> APIRouter:
     async def reload_animas(request: Request):
         """Full sync: add new animas, refresh existing, remove deleted."""
         supervisor = request.app.state.supervisor
+        stream_registry = request.app.state.stream_registry
         animas_dir = request.app.state.animas_dir
         current_names = set(request.app.state.anima_names)
 
         added: list[str] = []
         refreshed: list[str] = []
         removed: list[str] = []
+        skipped_busy: list[dict[str, object]] = []
+
+        async def _busy_state(anima_name: str) -> dict[str, object]:
+            """Return runtime busy state used to decide reload skip."""
+            result: dict[str, object] = {
+                "streaming": False,
+                "status": "",
+                "current_task": "",
+                "reasons": [],
+            }
+
+            try:
+                active_stream = stream_registry.get_active(anima_name)
+                if active_stream is not None and active_stream.status == "streaming":
+                    result["streaming"] = True
+                    cast_reasons = result["reasons"]
+                    if isinstance(cast_reasons, list):
+                        cast_reasons.append("streaming")
+            except Exception:
+                logger.debug("Failed to read active stream for %s", anima_name, exc_info=True)
+
+            try:
+                status_resp = await supervisor.send_request(
+                    anima_name, method="get_status", params={}, timeout=3.0,
+                )
+                status_text = str(status_resp.get("status", "") or "")
+                current_task = str(status_resp.get("current_task", "") or "")
+                result["status"] = status_text
+                result["current_task"] = current_task
+                if status_text and status_text != "idle":
+                    cast_reasons = result["reasons"]
+                    if isinstance(cast_reasons, list):
+                        cast_reasons.append(f"status:{status_text}")
+                elif current_task:
+                    cast_reasons = result["reasons"]
+                    if isinstance(cast_reasons, list):
+                        cast_reasons.append("task_running")
+            except Exception:
+                # If status probe fails (e.g. process transiently unavailable),
+                # keep reload behavior unchanged rather than hard-failing.
+                logger.debug("Failed to probe runtime status for %s", anima_name, exc_info=True)
+
+            return result
+
+        # Snapshot busy state at reload request time.
+        # If an anima is streaming/working at this moment, skip forced restart
+        # for this reload cycle even if it becomes idle later.
+        busy_snapshot: dict[str, dict[str, object]] = {}
+        for name in current_names:
+            busy_snapshot[name] = await _busy_state(name)
 
         # Discover current animas on disk
         from core.supervisor.manager import ProcessSupervisor
@@ -201,6 +252,21 @@ def create_system_router() -> APIRouter:
                     added.append(name)
                     logger.info("Hot-loaded anima: %s", name)
                 else:
+                    busy = busy_snapshot.get(name, {})
+                    reasons = busy.get("reasons") if isinstance(busy.get("reasons"), list) else []
+                    if reasons:
+                        skipped_busy.append({
+                            "name": name,
+                            "reasons": reasons,
+                            "status": busy.get("status", ""),
+                            "current_task": busy.get("current_task", ""),
+                        })
+                        logger.info(
+                            "Skipped reload for busy anima: %s (reasons=%s status=%s task=%s)",
+                            name, ",".join(str(r) for r in reasons),
+                            busy.get("status", ""), busy.get("current_task", ""),
+                        )
+                        continue
                     # Existing anima — restart to pick up file changes
                     await supervisor.restart_anima(name)
                     refreshed.append(name)
@@ -217,6 +283,7 @@ def create_system_router() -> APIRouter:
         return {
             "added": added,
             "refreshed": refreshed,
+            "skipped_busy": skipped_busy,
             "removed": removed,
             "total": len(request.app.state.anima_names),
         }

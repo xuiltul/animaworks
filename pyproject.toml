@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "animaworks"
-version = "0.4.4"
+version = "0.4.6"
 description = "AnimaWorks - Digital Anima Framework with library-type memory"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -12,6 +12,7 @@ requires-python = ">=3.12"
 dependencies = [
     "claude-agent-sdk>=0.1.40",
     "anthropic>=0.42.0",
+    "openai-codex-sdk>=0.1.11,<0.2",
     "litellm>=1.55.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",

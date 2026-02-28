@@ -351,7 +351,7 @@ class TestResumeTimeoutGuard:
 
             with (
                 patch("asyncio.wait_for", side_effect=_timeout_on_first_then_succeed),
-                patch("core.execution.agent_sdk._clear_session_id", side_effect=_spy_clear),
+                patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
             ):
                 events = []
                 async for event in executor.execute_streaming(
