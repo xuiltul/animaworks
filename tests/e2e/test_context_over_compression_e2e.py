@@ -501,15 +501,15 @@ class TestPromptLogRotation:
 
     def test_old_files_deleted_recent_kept(self, tmp_path: Path):
         """Log files older than _PROMPT_LOG_RETENTION_DAYS are deleted."""
-        import core.agent as agent_mod
+        import core._agent_prompt_log as _prompt_log_mod
         from core.agent import _rotate_prompt_logs, _PROMPT_LOG_RETENTION_DAYS
 
         log_dir = tmp_path / "prompt_logs"
         log_dir.mkdir()
 
         # Reset the module-level rotation date cache so rotation actually runs
-        original_date = agent_mod._last_rotation_date
-        agent_mod._last_rotation_date = ""
+        original_date = _prompt_log_mod._last_rotation_date
+        _prompt_log_mod._last_rotation_date = ""
 
         try:
             from core.time_utils import now_jst
@@ -542,19 +542,19 @@ class TestPromptLogRotation:
                     assert not fpath.exists(), f"{fpath.name} should be deleted"
         finally:
             # Restore the module-level cache to avoid polluting other tests
-            agent_mod._last_rotation_date = original_date
+            _prompt_log_mod._last_rotation_date = original_date
 
     def test_rotation_runs_once_per_day(self, tmp_path: Path):
         """After rotation runs once, a second call on the same day is a no-op."""
-        import core.agent as agent_mod
+        import core._agent_prompt_log as _prompt_log_mod
         from core.agent import _rotate_prompt_logs
 
         log_dir = tmp_path / "prompt_logs"
         log_dir.mkdir()
 
         # Reset the module-level rotation date cache
-        original_date = agent_mod._last_rotation_date
-        agent_mod._last_rotation_date = ""
+        original_date = _prompt_log_mod._last_rotation_date
+        _prompt_log_mod._last_rotation_date = ""
 
         try:
             from core.time_utils import now_jst
@@ -578,18 +578,18 @@ class TestPromptLogRotation:
                 "Second rotation on the same day should be a no-op"
             )
         finally:
-            agent_mod._last_rotation_date = original_date
+            _prompt_log_mod._last_rotation_date = original_date
 
     def test_rotation_ignores_non_date_files(self, tmp_path: Path):
         """Files that do not match YYYY-MM-DD.jsonl pattern are not deleted."""
-        import core.agent as agent_mod
+        import core._agent_prompt_log as _prompt_log_mod
         from core.agent import _rotate_prompt_logs
 
         log_dir = tmp_path / "prompt_logs"
         log_dir.mkdir()
 
-        original_date = agent_mod._last_rotation_date
-        agent_mod._last_rotation_date = ""
+        original_date = _prompt_log_mod._last_rotation_date
+        _prompt_log_mod._last_rotation_date = ""
 
         try:
             # Create a non-date file
@@ -612,4 +612,4 @@ class TestPromptLogRotation:
             # strings, so non-date filenames may or may not survive depending
             # on lexicographic comparison. We just verify no crash occurs.
         finally:
-            agent_mod._last_rotation_date = original_date
+            _prompt_log_mod._last_rotation_date = original_date

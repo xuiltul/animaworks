@@ -1,0 +1,837 @@
+from __future__ import annotations
+# AnimaWorks - Digital Anima Framework
+# Copyright (C) 2026 AnimaWorks Authors
+# SPDX-License-Identifier: Apache-2.0
+
+"""CycleMixin -- blocking and streaming execution cycles.
+
+Extracted from ``core.agent.AgentCore`` as a Mixin.  All ``self`` references
+are resolved at runtime via MRO when mixed into ``AgentCore``.
+"""
+
+import asyncio
+import logging
+import time
+from collections.abc import AsyncGenerator
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.execution.base import ExecutionResult
+
+from core._agent_prompt_log import _save_prompt_log, _save_prompt_log_end
+from core.prompt.builder import BuildResult, build_system_prompt, inject_shortterm
+from core.prompt.context import ContextTracker
+from core.memory.shortterm import SessionState, ShortTermMemory
+from core.schemas import CycleResult
+from core.time_utils import now_iso
+from core.paths import load_prompt
+from core.i18n import t
+
+logger = logging.getLogger("animaworks.agent")
+
+
+class CycleMixin:
+    """Mixin: blocking and streaming execution cycles + session chaining."""
+
+    # ── Public API ─────────────────────────────────────────
+
+    async def run_cycle(
+        self,
+        prompt: str,
+        trigger: str = "manual",
+        images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
+        message_intent: str = "",
+        max_turns_override: int | None = None,
+    ) -> CycleResult:
+        """Run one agent cycle with autonomous memory search.
+
+        Routing:
+          - Mode B (basic):      ``AssistedExecutor``  -- text-based tool loop
+          - Mode A (autonomous): ``LiteLLMExecutor`` -- LiteLLM + tool_use
+          - Mode C (codex):      ``CodexSDKExecutor`` -- Codex CLI wrapper
+          - Mode S (SDK):        ``AgentSDKExecutor`` -- Claude Agent SDK
+
+        If the context threshold is crossed (A mode only), the session is
+        externalized to short-term memory and automatically continued.
+        S and C modes rely on the SDK's built-in context management.
+        """
+        async with self._agent_lock:
+            return await self._run_cycle_inner(
+                prompt,
+                trigger,
+                images=images,
+                prior_messages=prior_messages,
+                message_intent=message_intent,
+                max_turns_override=max_turns_override,
+            )
+
+    async def _run_cycle_inner(
+        self,
+        prompt: str,
+        trigger: str,
+        images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
+        message_intent: str = "",
+        max_turns_override: int | None = None,
+    ) -> CycleResult:
+        start = time.monotonic()
+        mode = self._resolve_execution_mode()
+        logger.info(
+            "run_cycle START trigger=%s prompt_len=%d mode=%s",
+            trigger, len(prompt), mode,
+        )
+
+        # ── Resolve context window and prompt tier ────────────
+        from core.prompt.context import resolve_context_window
+        from core.prompt.builder import resolve_prompt_tier
+        _ctx_window = resolve_context_window(
+            self.model_config.model,
+            overrides=self._load_context_window_overrides(),
+        )
+        _prompt_tier = resolve_prompt_tier(_ctx_window)
+
+        # ── Priming: Automatic memory retrieval ────────────────
+        overflow_files = self._compute_overflow_files()
+        priming_section = await self._run_priming(
+            prompt,
+            trigger,
+            message_intent=message_intent,
+            overflow_files=overflow_files,
+            prompt_tier=_prompt_tier,
+        )
+
+        shortterm = ShortTermMemory(self.anima_dir)
+        tracker = ContextTracker(
+            model=self.model_config.model,
+            threshold=self.model_config.context_threshold,
+            context_window_overrides=self._load_context_window_overrides(),
+        )
+
+        build_result = build_system_prompt(
+            self.memory,
+            tool_registry=self._tool_registry,
+            personal_tools=self._personal_tools,
+            priming_section=priming_section,
+            execution_mode=mode,
+            message=prompt,
+            retriever=self._get_retriever(),
+            trigger=trigger,
+            context_window=_ctx_window,
+        )
+        system_prompt = build_result.system_prompt
+        injected_procedures = build_result.injected_procedures
+        logger.debug("System prompt assembled, length=%d tier=%s", len(system_prompt), _prompt_tier)
+
+        # ── Context-window-aware tier downgrade ────────────
+        system_prompt = self._fit_prompt_to_context_window(
+            system_prompt, prompt, _ctx_window,
+            priming_section=priming_section, mode=mode, trigger=trigger,
+        )
+
+        if injected_procedures:
+            from core.memory.conversation import ConversationMemory as _CM
+            _cm = _CM(self.anima_dir, self.model_config)
+            _cm.store_injected_procedures(
+                injected_procedures,
+                session_id=self._tool_handler.session_id,
+            )
+        if shortterm.has_pending() and not trigger.startswith("heartbeat"):
+            system_prompt = inject_shortterm(system_prompt, shortterm)
+            logger.info("Injected short-term memory into system prompt")
+
+        # ── Prompt log: save full payload for debugging ───
+        from core.tooling.schemas import load_all_tool_schemas
+        _tool_schemas = load_all_tool_schemas(
+            tool_registry=self._tool_registry,
+            personal_tools=self._personal_tools,
+        )
+        _save_prompt_log(
+            self.anima_dir,
+            trigger=trigger,
+            sender=self._extract_sender(prompt, trigger),
+            model=self.model_config.model,
+            mode=mode,
+            system_prompt=system_prompt,
+            user_message=prompt,
+            tools=self._tool_registry,
+            session_id=self._tool_handler.session_id,
+            context_window=_ctx_window,
+            prior_messages=prior_messages,
+            tool_schemas=_tool_schemas,
+        )
+
+        # ── Helper: convert ExecutionResult tool records to dicts ──
+        def _tool_records_to_dicts(result: "ExecutionResult") -> list[dict]:
+            from dataclasses import asdict as _asdict
+            return [_asdict(r) for r in result.tool_call_records]
+
+        # ── Mode B: text-based tool-call loop ─────────────
+        if mode == "b":
+            result = await self._executor.execute(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                trigger=trigger,
+                images=images,
+                max_turns_override=max_turns_override,
+            )
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(result.tool_call_records),
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "run_cycle END (mode-b) trigger=%s duration_ms=%d response_len=%d",
+                trigger, duration_ms, len(result.text),
+            )
+            return CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=result.text,
+                duration_ms=duration_ms,
+                tool_call_records=_tool_records_to_dicts(result),
+            )
+
+        # ── Mode C: Codex SDK ─────────────────────────────
+        if mode == "c":
+            result = await self._executor.execute(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                tracker=tracker,
+                trigger=trigger,
+                images=images,
+                max_turns_override=max_turns_override,
+            )
+            if result.replied_to_from_transcript:
+                self._tool_handler.merge_replied_to(result.replied_to_from_transcript)
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(result.tool_call_records),
+            )
+            shortterm.clear()
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "run_cycle END (c) trigger=%s duration_ms=%d response_len=%d",
+                trigger, duration_ms, len(result.text),
+            )
+            return CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=result.text,
+                duration_ms=duration_ms,
+                context_usage_ratio=tracker.usage_ratio,
+                tool_call_records=_tool_records_to_dicts(result),
+            )
+
+        # ── Mode A: LiteLLM tool_use loop ─────────────────
+        if mode == "a":
+            result = await self._executor.execute(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                tracker=tracker,
+                shortterm=shortterm,
+                images=images,
+                prior_messages=prior_messages,
+                max_turns_override=max_turns_override,
+            )
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(result.tool_call_records),
+            )
+            shortterm.clear()
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "run_cycle END (a) trigger=%s duration_ms=%d response_len=%d",
+                trigger, duration_ms, len(result.text),
+            )
+            return CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=result.text,
+                duration_ms=duration_ms,
+                context_usage_ratio=tracker.usage_ratio,
+                tool_call_records=_tool_records_to_dicts(result),
+            )
+
+        # ── Mode S: Claude Agent SDK ──────────────────────
+        # Pre-flight: check prompt size to prevent Agent SDK buffer overflow
+        from core.memory.conversation import ConversationMemory
+        conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+        system_prompt, prompt, use_fallback = await self._preflight_size_check(
+            system_prompt, prompt, conv_memory,
+            priming_section=priming_section,
+            mode=mode,
+            message=prompt,
+            trigger=trigger,
+            context_window=_ctx_window,
+        )
+        if use_fallback:
+            executor = self._create_fallback_executor()
+            result = await executor.execute(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                tracker=tracker,
+                images=images,
+                prior_messages=prior_messages,
+                max_turns_override=max_turns_override,
+            )
+        else:
+            result = await self._executor.execute(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                tracker=tracker,
+                images=images,
+                max_turns_override=max_turns_override,
+            )
+        # Merge transcript-parsed replied_to for S mode
+        if result.replied_to_from_transcript:
+            self._tool_handler.merge_replied_to(result.replied_to_from_transcript)
+            logger.info("Merged transcript replied_to: %s", result.replied_to_from_transcript)
+        result_msg = result.result_message
+        accumulated_tool_records = _tool_records_to_dicts(result)
+
+        # S mode: SDK manages context via auto-compact, no session chaining needed
+        if mode == "s":
+            shortterm.clear()
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(accumulated_tool_records),
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "run_cycle END (s) trigger=%s duration_ms=%d response_len=%d",
+                trigger, duration_ms, len(result.text),
+            )
+            return CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=result.text,
+                duration_ms=duration_ms,
+                tool_call_records=accumulated_tool_records,
+            )
+
+        # Session chaining: if threshold was crossed, continue in a new session.
+        # force_chain is set by S mode mid-session context auto-compact (PreToolUse
+        # hook returned continue_=False).  In that case ResultMessage.usage may
+        # not have updated the tracker, so we force the threshold flag.
+        if result.force_chain and not tracker.threshold_exceeded:
+            tracker.force_threshold()
+            logger.info(
+                "Context auto-compact: forcing threshold_exceeded for session "
+                "chaining (S mode mid-session context budget exceeded)"
+            )
+
+        session_chained = False
+        total_turns = result_msg.num_turns if result_msg else 0
+        chain_count = 0
+        accumulated_text = result.text
+
+        while (
+            tracker.threshold_exceeded
+            and chain_count < self.model_config.max_chains
+        ):
+            session_chained = True
+            chain_count += 1
+            logger.info(
+                "Session chain %d/%d: context at %.1f%%",
+                chain_count,
+                self.model_config.max_chains,
+                tracker.usage_ratio * 100,
+            )
+
+            shortterm.clear()
+            shortterm.save(
+                SessionState(
+                    session_id=result_msg.session_id if result_msg else "",
+                    timestamp=now_iso(),
+                    trigger=trigger,
+                    original_prompt=prompt,
+                    accumulated_response=accumulated_text,
+                    context_usage_ratio=tracker.usage_ratio,
+                    turn_count=result_msg.num_turns if result_msg else 0,
+                )
+            )
+
+            tracker.reset()
+            system_prompt_2 = inject_shortterm(
+                build_system_prompt(
+                    self.memory,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                    priming_section=priming_section,
+                    execution_mode=mode,
+                    message=prompt,
+                    retriever=self._get_retriever(),
+                    trigger=trigger,
+                    context_window=_ctx_window,
+                ).system_prompt,
+                shortterm,
+            )
+            continuation_prompt = load_prompt("session_continuation")
+            try:
+                result_2 = await self._executor.execute(
+                    prompt=continuation_prompt,
+                    system_prompt=system_prompt_2,
+                    tracker=tracker,
+                    max_turns_override=max_turns_override,
+                )
+                # Merge from chained session too
+                if result_2.replied_to_from_transcript:
+                    self._tool_handler.merge_replied_to(result_2.replied_to_from_transcript)
+            except Exception:
+                logger.exception(
+                    "Chained session %d failed; preserving short-term memory",
+                    chain_count,
+                )
+                break
+            accumulated_text = accumulated_text + "\n" + result_2.text
+            accumulated_tool_records.extend(_tool_records_to_dicts(result_2))
+            result_msg = result_2.result_message
+            if result_msg:
+                total_turns += result_msg.num_turns
+
+        shortterm.clear()
+
+        _save_prompt_log_end(
+            self.anima_dir,
+            session_id=self._tool_handler.session_id,
+            tool_call_count=len(accumulated_tool_records),
+        )
+
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "run_cycle END trigger=%s duration_ms=%d response_len=%d chained=%s",
+            trigger, duration_ms, len(accumulated_text), session_chained,
+        )
+        return CycleResult(
+            trigger=trigger,
+            action="responded",
+            summary=accumulated_text,
+            duration_ms=duration_ms,
+            context_usage_ratio=tracker.usage_ratio,
+            session_chained=session_chained,
+            total_turns=total_turns,
+            tool_call_records=accumulated_tool_records,
+        )
+
+    # ── Streaming ──────────────────────────────────────────
+
+    async def run_cycle_streaming(
+        self,
+        prompt: str,
+        trigger: str = "manual",
+        images: list[dict[str, Any]] | None = None,
+        prior_messages: list[dict[str, Any]] | None = None,
+        message_intent: str = "",
+        max_turns_override: int | None = None,
+    ) -> AsyncGenerator[dict, None]:
+        """Streaming version of run_cycle.
+
+        Yields stream chunks. Session chaining is handled seamlessly.
+        Final event is ``{"type": "cycle_done", "cycle_result": {...}}``.
+        """
+        start = time.monotonic()
+        mode = self._resolve_execution_mode()
+        logger.info(
+            "run_cycle_streaming START trigger=%s prompt_len=%d mode=%s",
+            trigger, len(prompt), mode,
+        )
+
+        # Non-streaming executors: fall back to blocking execution
+        if not self._executor.supports_streaming:
+            async with self._agent_lock:
+                cycle = await self._run_cycle_inner(
+                    prompt,
+                    trigger,
+                    images=images,
+                    prior_messages=prior_messages,
+                    message_intent=message_intent,
+                    max_turns_override=max_turns_override,
+                )
+            yield {"type": "text_delta", "text": cycle.summary}
+            yield {
+                "type": "cycle_done",
+                "cycle_result": cycle.model_dump(mode="json"),
+            }
+            return
+
+        # ── Resolve context window and prompt tier ────────────
+        from core.prompt.context import resolve_context_window as _rcw
+        from core.prompt.builder import resolve_prompt_tier as _rpt
+        _ctx_window_s = _rcw(
+            self.model_config.model,
+            overrides=self._load_context_window_overrides(),
+        )
+        _prompt_tier_s = _rpt(_ctx_window_s)
+
+        # ── Streaming executor (S / A / all modes) ───────────────
+        overflow_files = self._compute_overflow_files()
+        priming_section = await self._run_priming(
+            prompt,
+            trigger,
+            message_intent=message_intent,
+            overflow_files=overflow_files,
+            prompt_tier=_prompt_tier_s,
+        )
+
+        shortterm = ShortTermMemory(self.anima_dir)
+        tracker = ContextTracker(
+            model=self.model_config.model,
+            threshold=self.model_config.context_threshold,
+            context_window_overrides=self._load_context_window_overrides(),
+        )
+
+        build_result = build_system_prompt(
+            self.memory,
+            tool_registry=self._tool_registry,
+            personal_tools=self._personal_tools,
+            priming_section=priming_section,
+            execution_mode=mode,
+            message=prompt,
+            retriever=self._get_retriever(),
+            trigger=trigger,
+            context_window=_ctx_window_s,
+        )
+        system_prompt = build_result.system_prompt
+
+        # ── Context-window-aware tier downgrade ────────────
+        system_prompt = self._fit_prompt_to_context_window(
+            system_prompt, prompt, _ctx_window_s,
+            priming_section=priming_section, mode=mode, trigger=trigger,
+        )
+
+        if build_result.injected_procedures:
+            from core.memory.conversation import ConversationMemory as _CM
+            _cm = _CM(self.anima_dir, self.model_config)
+            _cm.store_injected_procedures(
+                build_result.injected_procedures,
+                session_id=self._tool_handler.session_id,
+            )
+        if shortterm.has_pending() and not trigger.startswith("heartbeat"):
+            system_prompt = inject_shortterm(system_prompt, shortterm)
+
+        # Pre-flight size check for streaming path
+        from core.memory.conversation import ConversationMemory
+        conv_memory = ConversationMemory(self.anima_dir, self.model_config)
+        system_prompt, prompt, use_fallback = await self._preflight_size_check(
+            system_prompt, prompt, conv_memory,
+            priming_section=priming_section,
+            mode=mode,
+            message=prompt,
+            trigger=trigger,
+            context_window=_ctx_window_s,
+        )
+        if use_fallback:
+            logger.warning("Streaming fallback: using blocking S Fallback for oversized prompt")
+            async with self._agent_lock:
+                cycle = await self._run_cycle_inner(
+                    prompt,
+                    trigger,
+                    message_intent=message_intent,
+                    images=images,
+                    max_turns_override=max_turns_override,
+                )
+            yield {"type": "text_delta", "text": cycle.summary}
+            yield {
+                "type": "cycle_done",
+                "cycle_result": cycle.model_dump(mode="json"),
+            }
+            return
+
+        # ── Prompt log: save full payload for debugging ───
+        from core.tooling.schemas import load_all_tool_schemas as _lats
+        _tool_schemas_s = _lats(
+            tool_registry=self._tool_registry,
+            personal_tools=self._personal_tools,
+        )
+        _save_prompt_log(
+            self.anima_dir,
+            trigger=trigger,
+            sender=self._extract_sender(prompt, trigger),
+            model=self.model_config.model,
+            mode=mode,
+            system_prompt=system_prompt,
+            user_message=prompt,
+            tools=self._tool_registry,
+            session_id=self._tool_handler.session_id,
+            context_window=_ctx_window_s,
+            prior_messages=prior_messages,
+            tool_schemas=_tool_schemas_s,
+        )
+
+        # ── Stream retry configuration ────────────────────
+        retry_cfg = self._load_stream_retry_config()
+        checkpoint_enabled = retry_cfg["checkpoint_enabled"]
+        max_retries = retry_cfg["retry_max"]
+        retry_delay = retry_cfg["retry_delay_s"]
+
+        # Primary session with checkpoint + retry support
+        full_text_parts: list[str] = []
+        thinking_text_parts: list[str] = []
+        all_tool_call_records: list[dict] = []
+        result_message: Any = None
+        _stream_force_chain = False
+        current_prompt = prompt
+        current_system_prompt = system_prompt
+        retry_count = 0
+
+        while True:
+            completed_tools: list[dict[str, Any]] = []
+            text_parts_this_attempt: list[str] = []
+            stream_succeeded = False
+
+            try:
+                async for chunk in self._executor.execute_streaming(
+                    current_system_prompt, current_prompt, tracker,
+                    images=images,
+                    prior_messages=prior_messages,
+                    max_turns_override=max_turns_override,
+                    trigger=trigger,
+                ):
+                    if chunk["type"] == "done":
+                        full_text_parts.append(chunk["full_text"])
+                        text_parts_this_attempt.append(chunk["full_text"])
+                        result_message = chunk["result_message"]
+                        # Accumulate tool call records from executor
+                        all_tool_call_records.extend(
+                            chunk.get("tool_call_records", [])
+                        )
+                        # Merge transcript replied_to
+                        transcript_replied = chunk.get("replied_to_from_transcript", set())
+                        if transcript_replied:
+                            self._tool_handler.merge_replied_to(transcript_replied)
+                        # Capture force_chain from S mode auto-compact
+                        if chunk.get("force_chain", False):
+                            _stream_force_chain = True
+                        stream_succeeded = True
+                    elif chunk["type"] == "tool_end" and checkpoint_enabled:
+                        completed_tools.append({
+                            "tool_name": chunk.get("tool_name", ""),
+                            "tool_id": chunk.get("tool_id", ""),
+                            "summary": chunk.get("tool_name", ""),
+                        })
+                        # Save checkpoint after each tool completion
+                        from core.memory.shortterm import StreamCheckpoint
+                        shortterm.save_checkpoint(StreamCheckpoint(
+                            timestamp=now_iso(),
+                            trigger=trigger,
+                            original_prompt=prompt,
+                            completed_tools=completed_tools,
+                            accumulated_text="\n".join(full_text_parts),
+                            retry_count=retry_count,
+                        ))
+                        yield chunk
+                    else:
+                        if chunk["type"] == "text_delta":
+                            text_parts_this_attempt.append(chunk.get("text", ""))
+                        elif chunk["type"] == "thinking_delta":
+                            thinking_text_parts.append(chunk.get("text", ""))
+                        yield chunk
+
+            except Exception as e:
+                from core.execution.base import StreamDisconnectedError
+
+                is_stream_error = isinstance(e, StreamDisconnectedError)
+                if not is_stream_error:
+                    # Non-stream errors: log and break
+                    logger.exception("Agent SDK streaming error (non-retryable)")
+                    yield {"type": "error", "message": f"[Agent SDK Error: {e}]"}
+                    break
+
+                # ── Stream disconnect: attempt retry ──────────
+                partial_text = getattr(e, "partial_text", "") or ""
+                if partial_text:
+                    full_text_parts.append(partial_text)
+
+                if retry_count >= max_retries:
+                    logger.error(
+                        "Stream retry exhausted (%d/%d)",
+                        retry_count, max_retries,
+                    )
+                    yield {
+                        "type": "error",
+                        "message": t("agent.stream_retry_exhausted", retry_count=retry_count),
+                    }
+                    break
+
+                retry_count += 1
+                logger.warning(
+                    "Stream disconnected, retrying %d/%d after %.1fs",
+                    retry_count, max_retries, retry_delay,
+                )
+                # リトライ1回目は必ずfresh session（壊れたセッションIDを持ち越さない）
+                if retry_count == 1:
+                    try:
+                        if mode == "c":
+                            from core.execution.codex_sdk import clear_codex_thread_ids
+                            clear_codex_thread_ids(self.anima_dir)
+                        else:
+                            from core.execution.agent_sdk import clear_session_ids
+                            clear_session_ids(self.anima_dir)
+                        logger.info("Session IDs cleared for retry 1 (fresh session forced)")
+                    except Exception as e:
+                        logger.warning("Failed to clear session IDs for retry: %s", e)
+                yield {
+                    "type": "retry_start",
+                    "retry": retry_count,
+                    "max_retries": max_retries,
+                }
+
+                # Load checkpoint and build retry prompt
+                from core.execution._session import build_stream_retry_prompt
+                from core.memory.shortterm import StreamCheckpoint
+
+                checkpoint = shortterm.load_checkpoint()
+                if checkpoint is None:
+                    checkpoint = StreamCheckpoint(
+                        timestamp=now_iso(),
+                        trigger=trigger,
+                        original_prompt=prompt,
+                        completed_tools=completed_tools,
+                        accumulated_text="\n".join(full_text_parts),
+                        retry_count=retry_count,
+                    )
+
+                checkpoint.retry_count = retry_count
+                current_prompt = build_stream_retry_prompt(checkpoint)
+
+                # Reset tracker for fresh session
+                tracker.reset()
+                current_system_prompt = build_system_prompt(
+                    self.memory,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                    priming_section=priming_section,
+                    execution_mode=mode,
+                    message=prompt,
+                    retriever=self._get_retriever(),
+                    trigger=trigger,
+                    context_window=_ctx_window_s,
+                ).system_prompt
+
+                await asyncio.sleep(retry_delay)
+                continue
+
+            if stream_succeeded:
+                # Clear checkpoint on success
+                shortterm.clear_checkpoint()
+                break
+
+        # Session chaining — force_chain from S mode mid-session auto-compact.
+        if _stream_force_chain and not tracker.threshold_exceeded:
+            tracker.force_threshold()
+            logger.info(
+                "Context auto-compact (stream): forcing threshold_exceeded "
+                "for session chaining"
+            )
+
+        session_chained = False
+        total_turns = result_message.num_turns if result_message else 0
+        chain_count = 0
+
+        while (
+            tracker.threshold_exceeded
+            and chain_count < self.model_config.max_chains
+        ):
+            session_chained = True
+            chain_count += 1
+            logger.info(
+                "Session chain (stream) %d/%d: context at %.1f%%",
+                chain_count,
+                self.model_config.max_chains,
+                tracker.usage_ratio * 100,
+            )
+
+            yield {"type": "chain_start", "chain": chain_count}
+
+            shortterm.clear()
+            shortterm.save(
+                SessionState(
+                    session_id=result_message.session_id if result_message else "",
+                    timestamp=now_iso(),
+                    trigger=trigger,
+                    original_prompt=prompt,
+                    accumulated_response="\n".join(full_text_parts),
+                    context_usage_ratio=tracker.usage_ratio,
+                    turn_count=result_message.num_turns if result_message else 0,
+                )
+            )
+
+            tracker.reset()
+            system_prompt_2 = inject_shortterm(
+                build_system_prompt(
+                    self.memory,
+                    tool_registry=self._tool_registry,
+                    personal_tools=self._personal_tools,
+                    priming_section=priming_section,
+                    execution_mode=mode,
+                    message=prompt,
+                    retriever=self._get_retriever(),
+                    trigger=trigger,
+                    context_window=_ctx_window_s,
+                ).system_prompt,
+                shortterm,
+            )
+            continuation_prompt = load_prompt("session_continuation")
+
+            try:
+                async for chunk in self._executor.execute_streaming(
+                    system_prompt_2, continuation_prompt, tracker,
+                    max_turns_override=max_turns_override,
+                    trigger=trigger,
+                ):
+                    if chunk["type"] == "done":
+                        full_text_parts.append(chunk["full_text"])
+                        result_message = chunk["result_message"]
+                        all_tool_call_records.extend(
+                            chunk.get("tool_call_records", [])
+                        )
+                        if result_message:
+                            total_turns += result_message.num_turns
+                        # Merge transcript replied_to
+                        transcript_replied = chunk.get("replied_to_from_transcript", set())
+                        if transcript_replied:
+                            self._tool_handler.merge_replied_to(transcript_replied)
+                    else:
+                        yield chunk
+            except Exception:
+                logger.exception(
+                    "Chained session (stream) %d failed", chain_count,
+                )
+                yield {"type": "error", "message": f"Session chain {chain_count} failed"}
+                break
+
+        shortterm.clear()
+
+        _save_prompt_log_end(
+            self.anima_dir,
+            session_id=self._tool_handler.session_id,
+            tool_call_count=len(all_tool_call_records),
+        )
+
+        full_text = "\n".join(full_text_parts)
+        thinking_text = "".join(thinking_text_parts)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "run_cycle_streaming END trigger=%s duration_ms=%d response_len=%d chained=%s retries=%d",
+            trigger, duration_ms, len(full_text), session_chained, retry_count,
+        )
+
+        yield {
+            "type": "cycle_done",
+            "cycle_result": CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=full_text,
+                thinking_text=thinking_text[:10000],
+                duration_ms=duration_ms,
+                context_usage_ratio=tracker.usage_ratio,
+                session_chained=session_chained,
+                total_turns=total_turns,
+                tool_call_records=all_tool_call_records,
+            ).model_dump(mode="json"),
+        }

@@ -68,13 +68,13 @@ def _common_patches(*, spy_clear=None, retry_max=2):
     """Return the common patch context manager args for run_cycle_streaming tests."""
     clear_side_effect = spy_clear if spy_clear is not None else MagicMock()
     return [
-        patch("core.agent.build_system_prompt", return_value=_build_result_mock()),
-        patch("core.agent.inject_shortterm", side_effect=lambda sp, _stm: sp),
+        patch("core._agent_cycle.build_system_prompt", return_value=_build_result_mock()),
+        patch("core._agent_cycle.inject_shortterm", side_effect=lambda sp, _stm: sp),
         patch("core.agent.AgentCore._resolve_execution_mode", return_value="s"),
         patch("core.agent.AgentCore._preflight_size_check"),
         patch("core.agent.AgentCore._load_stream_retry_config"),
-        patch("core.agent.load_prompt", return_value="sys_prompt"),
-        patch("core.agent._save_prompt_log"),
+        patch("core._agent_cycle.load_prompt", return_value="sys_prompt"),
+        patch("core._agent_cycle._save_prompt_log"),
         patch("core.execution._sdk_session._clear_session_id", side_effect=clear_side_effect),
         patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock),
         patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
@@ -124,13 +124,13 @@ class TestRetryFreshSession:
         agent._executor.supports_streaming = True
 
         with (
-            patch("core.agent.build_system_prompt", return_value=_build_result_mock()),
-            patch("core.agent.inject_shortterm", side_effect=lambda sp, _stm: sp),
+            patch("core._agent_cycle.build_system_prompt", return_value=_build_result_mock()),
+            patch("core._agent_cycle.inject_shortterm", side_effect=lambda sp, _stm: sp),
             patch("core.agent.AgentCore._resolve_execution_mode", return_value="s"),
             patch("core.agent.AgentCore._preflight_size_check") as mock_preflight,
             patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
-            patch("core.agent.load_prompt", return_value="sys_prompt"),
-            patch("core.agent._save_prompt_log"),
+            patch("core._agent_cycle.load_prompt", return_value="sys_prompt"),
+            patch("core._agent_cycle._save_prompt_log"),
             patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
             patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
@@ -181,13 +181,13 @@ class TestRetryFreshSession:
         agent._executor.supports_streaming = True
 
         with (
-            patch("core.agent.build_system_prompt", return_value=_build_result_mock()),
-            patch("core.agent.inject_shortterm", side_effect=lambda sp, _stm: sp),
+            patch("core._agent_cycle.build_system_prompt", return_value=_build_result_mock()),
+            patch("core._agent_cycle.inject_shortterm", side_effect=lambda sp, _stm: sp),
             patch("core.agent.AgentCore._resolve_execution_mode", return_value="s"),
             patch("core.agent.AgentCore._preflight_size_check") as mock_preflight,
             patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
-            patch("core.agent.load_prompt", return_value="sys_prompt"),
-            patch("core.agent._save_prompt_log"),
+            patch("core._agent_cycle.load_prompt", return_value="sys_prompt"),
+            patch("core._agent_cycle._save_prompt_log"),
             patch("core.execution._sdk_session._clear_session_id"),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
             patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
@@ -247,13 +247,13 @@ class TestRetryFreshSession:
         agent._executor.supports_streaming = True
 
         with (
-            patch("core.agent.build_system_prompt", return_value=_build_result_mock()),
-            patch("core.agent.inject_shortterm", side_effect=lambda sp, _stm: sp),
+            patch("core._agent_cycle.build_system_prompt", return_value=_build_result_mock()),
+            patch("core._agent_cycle.inject_shortterm", side_effect=lambda sp, _stm: sp),
             patch("core.agent.AgentCore._resolve_execution_mode", return_value="s"),
             patch("core.agent.AgentCore._preflight_size_check") as mock_preflight,
             patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
-            patch("core.agent.load_prompt", return_value="sys_prompt"),
-            patch("core.agent._save_prompt_log"),
+            patch("core._agent_cycle.load_prompt", return_value="sys_prompt"),
+            patch("core._agent_cycle._save_prompt_log"),
             patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
             patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
@@ -300,13 +300,13 @@ class TestRetryExhausted:
         agent._executor.supports_streaming = True
 
         with (
-            patch("core.agent.build_system_prompt", return_value=_build_result_mock()),
-            patch("core.agent.inject_shortterm", side_effect=lambda sp, _stm: sp),
+            patch("core._agent_cycle.build_system_prompt", return_value=_build_result_mock()),
+            patch("core._agent_cycle.inject_shortterm", side_effect=lambda sp, _stm: sp),
             patch("core.agent.AgentCore._resolve_execution_mode", return_value="s"),
             patch("core.agent.AgentCore._preflight_size_check") as mock_preflight,
             patch("core.agent.AgentCore._load_stream_retry_config") as mock_retry_cfg,
-            patch("core.agent.load_prompt", return_value="sys_prompt"),
-            patch("core.agent._save_prompt_log"),
+            patch("core._agent_cycle.load_prompt", return_value="sys_prompt"),
+            patch("core._agent_cycle._save_prompt_log"),
             patch("core.execution._sdk_session._clear_session_id"),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
             patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),

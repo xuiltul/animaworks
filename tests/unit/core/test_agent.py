@@ -185,9 +185,9 @@ class TestRunCycle:
         agent._executor.execute = AsyncMock(return_value=mock_result)
 
         mock_build_result = BuildResult(system_prompt="sysprompt")
-        with patch("core.agent.build_system_prompt", return_value=mock_build_result), \
-             patch("core.agent.inject_shortterm", return_value="sysprompt"), \
-             patch("core.agent.ShortTermMemory") as MockST:
+        with patch("core._agent_cycle.build_system_prompt", return_value=mock_build_result), \
+             patch("core._agent_cycle.inject_shortterm", return_value="sysprompt"), \
+             patch("core._agent_cycle.ShortTermMemory") as MockST:
             MockST.return_value.has_pending.return_value = False
             MockST.return_value.clear = MagicMock()
 
@@ -203,9 +203,9 @@ class TestRunCycle:
         agent._executor.execute = AsyncMock(return_value=mock_result)
 
         mock_build_result = BuildResult(system_prompt="sysprompt")
-        with patch("core.agent.build_system_prompt", return_value=mock_build_result), \
-             patch("core.agent.inject_shortterm", return_value="sysprompt"), \
-             patch("core.agent.ShortTermMemory") as MockST:
+        with patch("core._agent_cycle.build_system_prompt", return_value=mock_build_result), \
+             patch("core._agent_cycle.inject_shortterm", return_value="sysprompt"), \
+             patch("core._agent_cycle.ShortTermMemory") as MockST:
             MockST.return_value.has_pending.return_value = False
             MockST.return_value.clear = MagicMock()
 
@@ -227,10 +227,10 @@ class TestRunCycle:
         agent._executor.execute = AsyncMock(return_value=mock_result)
 
         mock_build_result = BuildResult(system_prompt="sysprompt")
-        with patch("core.agent.build_system_prompt", return_value=mock_build_result), \
-             patch("core.agent.inject_shortterm", return_value="sysprompt"), \
-             patch("core.agent.ShortTermMemory") as MockST, \
-             patch("core.agent.ContextTracker") as MockCT:
+        with patch("core._agent_cycle.build_system_prompt", return_value=mock_build_result), \
+             patch("core._agent_cycle.inject_shortterm", return_value="sysprompt"), \
+             patch("core._agent_cycle.ShortTermMemory") as MockST, \
+             patch("core._agent_cycle.ContextTracker") as MockCT:
             MockST.return_value.has_pending.return_value = False
             MockST.return_value.clear = MagicMock()
             MockCT.return_value.threshold_exceeded = False
