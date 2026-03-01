@@ -67,6 +67,11 @@ scripts/inspect_org_chart.py
 scripts/verify_org_chart_v3.py
 scripts/verify_org_chart_v4.py
 scripts/verify_org_chart_v5.py
+scripts/verify_org_chart_final.py
+
+# Private-only static assets
+server/static/finance/
+server/static/modules/avatar-resolver.js
 
 # Private-only test data
 tests/evaluation/results/
