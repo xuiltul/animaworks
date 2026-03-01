@@ -539,6 +539,11 @@ class CodexSDKExecutor(BaseExecutor):
                         if text:
                             response_text_parts.append(text)
                             yield {"type": "text_delta", "text": text}
+                        else:
+                            logger.debug(
+                                "Codex item.completed message with empty text: %s",
+                                repr(item)[:300],
+                            )
                     elif item_type == "tool_use":
                         tool_name = getattr(item, "name", "unknown")
                         tool_id = getattr(item, "id", "")
@@ -555,6 +560,21 @@ class CodexSDKExecutor(BaseExecutor):
                             "tool_id": tool_id,
                             "tool_name": tool_name,
                         }
+                    else:
+                        text = _extract_item_text(item)
+                        if text:
+                            logger.info(
+                                "Codex item.completed unhandled type=%s "
+                                "but has text (%d chars); emitting",
+                                item_type, len(text),
+                            )
+                            response_text_parts.append(text)
+                            yield {"type": "text_delta", "text": text}
+                        else:
+                            logger.debug(
+                                "Codex item.completed unhandled type=%s: %s",
+                                item_type, repr(item)[:300],
+                            )
                 elif etype == "turn.completed":
                     turn_result = _wrap_result_message(event, thread)
                     usage = getattr(event, "usage", None)
@@ -566,6 +586,23 @@ class CodexSDKExecutor(BaseExecutor):
                     saved_tid = _get_thread_id(thread)
                     if saved_tid:
                         _save_thread_id(self._anima_dir, saved_tid, session_type)
+                elif etype == "text.delta":
+                    text = getattr(event, "text", "") or getattr(event, "delta", "")
+                    if text:
+                        response_text_parts.append(text)
+                        yield {"type": "text_delta", "text": text}
+                elif etype == "response.completed":
+                    resp = getattr(event, "response", event)
+                    text = _extract_item_text(resp)
+                    if text and text not in response_text_parts:
+                        response_text_parts.append(text)
+                        yield {"type": "text_delta", "text": text}
+                else:
+                    logger.debug(
+                        "Codex unhandled event type=%s attrs=%s",
+                        etype,
+                        [a for a in dir(event) if not a.startswith("_")][:15],
+                    )
 
         # Try resume first, fallback to fresh thread
         fell_back = False
