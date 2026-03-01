@@ -103,12 +103,23 @@ def _intercept_task_to_pending(
     description = tool_input.get("description", "Background task")
     prompt = tool_input.get("prompt", description)
 
+    context_parts: list[str] = []
+    for ctx_file in ("current_task.md", "pending.md"):
+        ctx_path = anima_dir / "state" / ctx_file
+        if ctx_path.exists():
+            try:
+                content = ctx_path.read_text(encoding="utf-8").strip()
+                if content and content != "status: idle":
+                    context_parts.append(f"[{ctx_file}]\n{content}")
+            except Exception:
+                pass
+
     task_desc = {
         "task_type": "llm",
         "task_id": task_id,
         "title": description,
         "description": prompt,
-        "context": "",
+        "context": "\n\n".join(context_parts),
         "acceptance_criteria": [],
         "constraints": [],
         "file_paths": [],
@@ -256,10 +267,11 @@ def _build_pre_tool_hook(
                     permissionDecision="deny",
                     permissionDecisionReason=(
                         f"INTERCEPT_OK: Task accepted (task_id: {task_id}). "
-                        f"This task was redirected to state/pending and will run in "
-                        f"your background task executor shortly. "
-                        f"Do not call TaskOutput for this task_id in this session. "
-                        f"Continue the conversation now."
+                        f"Written to state/pending/ for background execution. "
+                        f"The executor has your identity, injection, behavior rules, "
+                        f"memory guide, and org context. "
+                        f"Do NOT call Task or TaskOutput for this task_id again. "
+                        f"Proceed with your current conversation."
                     ),
                 )
             )
@@ -280,9 +292,10 @@ def _build_pre_tool_hook(
                         hookEventName="PreToolUse",
                         permissionDecision="deny",
                         permissionDecisionReason=(
-                            f"INTERCEPT_OK: task_id {task_id} is managed by "
-                            f"PendingTaskExecutor (not SDK TaskOutput). "
-                            f"Treat this as expected and continue."
+                            f"INTERCEPT_OK: task_id {task_id} is already running in "
+                            f"PendingTaskExecutor with full context (identity, injection, "
+                            f"memory guide, org info). Do NOT retry. "
+                            f"Proceed with your current conversation."
                         ),
                     )
                 )

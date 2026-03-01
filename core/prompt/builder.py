@@ -597,19 +597,16 @@ def build_system_prompt(
     # resolved without intervening system boilerplate.
     identity = memory.read_identity()
     if identity:
-        if is_task:
-            identity = "\n".join(identity.split("\n")[:3])
         parts.append(identity)
 
-    if not is_task:
-        injection = memory.read_injection()
-        if injection:
-            parts.append(injection)
+    injection = memory.read_injection()
+    if injection:
+        parts.append(injection)
 
     current_time = now_jst().strftime("%Y-%m-%d %H:%M (%Z)")
     parts.append(f"{_ss.get('current_time_label', '**Current time**:')} {current_time}")
 
-    if not is_task and tier in (TIER_FULL, TIER_STANDARD):
+    if tier in (TIER_FULL, TIER_STANDARD):
         _br = (
             _prompt_store.get_section("behavior_rules") if _prompt_store else None
         ) or load_prompt("behavior_rules")
@@ -636,7 +633,7 @@ def build_system_prompt(
         if company_vision:
             parts.append(company_vision)
 
-    if not is_inbox and not is_background_auto and tier in (TIER_FULL, TIER_STANDARD):
+    if not is_inbox and not is_background_auto and not is_task and tier in (TIER_FULL, TIER_STANDARD):
         specialty = memory.read_specialty_prompt()
         if specialty:
             parts.append(specialty)
@@ -725,9 +722,7 @@ def build_system_prompt(
     # ── Group 4: 記憶と能力 ───────────────────────────────────
     parts.append(_ss.get("group4_header", "# 4. Memory and Capabilities"))
 
-    if is_task:
-        parts.append(f"Anima directory: {pd}")
-    elif tier in (TIER_FULL, TIER_STANDARD):
+    if tier in (TIER_FULL, TIER_STANDARD):
         # Memory directory guide
         _none = _fs.get("none", "(none)")
         _common = _ss.get("common_label", "(shared)")
@@ -895,28 +890,28 @@ def build_system_prompt(
             except Exception:
                 logger.debug("Skipped hiring context injection", exc_info=True)
 
-    # org_context: skip for task
-    if not is_task and tier in (TIER_FULL, TIER_STANDARD):
+    if tier in (TIER_FULL, TIER_STANDARD):
         org_context = _build_org_context(pd.name, other_animas, execution_mode)
         if org_context:
             parts.append(org_context)
 
-        _msg = _build_messaging_section(pd, other_animas, execution_mode)
-        if is_background_auto and len(_msg) > 500:
-            _msg = _msg[:500] + "\n" + _fs.get("summary", "(summary)")
-        parts.append(_msg)
+        if not is_task:
+            _msg = _build_messaging_section(pd, other_animas, execution_mode)
+            if is_background_auto and len(_msg) > 500:
+                _msg = _msg[:500] + "\n" + _fs.get("summary", "(summary)")
+            parts.append(_msg)
 
-        # human_notification: skip for inbox and task
-        if not is_inbox:
-            try:
-                from core.config import load_config as _load_cfg
-                _cfg = _load_cfg()
-                _my_pcfg = _cfg.animas.get(pd.name)
-                _is_top_level = _my_pcfg is None or _my_pcfg.supervisor is None
-                if _is_top_level and _cfg.human_notification.enabled:
-                    parts.append(_build_human_notification_guidance(execution_mode))
-            except Exception:
-                logger.debug("Skipped human notification guidance injection", exc_info=True)
+            # human_notification: skip for inbox and task
+            if not is_inbox:
+                try:
+                    from core.config import load_config as _load_cfg
+                    _cfg = _load_cfg()
+                    _my_pcfg = _cfg.animas.get(pd.name)
+                    _is_top_level = _my_pcfg is None or _my_pcfg.supervisor is None
+                    if _is_top_level and _cfg.human_notification.enabled:
+                        parts.append(_build_human_notification_guidance(execution_mode))
+                except Exception:
+                    logger.debug("Skipped human notification guidance injection", exc_info=True)
     elif not is_task and tier == TIER_LIGHT:
         try:
             parts.append(load_prompt("builder/light_tier_org", anima_name=pd.name))
