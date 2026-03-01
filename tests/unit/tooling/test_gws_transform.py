@@ -199,20 +199,20 @@ class TestT5EmptyRequestTitle:
 
 
 class TestT6MissingSourceId:
-    """T6: source_id field missing → skip that record."""
+    """T6: source_id field missing → auto-fill with hash, Warning only (S3-6)."""
 
-    def test_skips_missing_source_id(self):
+    def test_missing_source_id_succeeds_with_hash(self):
         rec = _make_record()
         del rec["source_id"]
         result = transform_gws_to_notion([rec])
-        assert len(result.success) == 0
-        assert len(result.skipped) == 1
+        assert len(result.success) == 1
+        assert len(result.skipped) == 0
 
-    def test_skips_empty_source_id(self):
+    def test_empty_source_id_succeeds_with_hash(self):
         rec = _make_record(source_id="")
         result = transform_gws_to_notion([rec])
-        assert len(result.success) == 0
-        assert len(result.skipped) == 1
+        assert len(result.success) == 1
+        assert len(result.skipped) == 0
 
 
 # ── T7: 入力が配列でない ─────────────────────────────────────
@@ -278,32 +278,32 @@ class TestT9EmptyArray:
 
 
 class TestT10MixedBatch:
-    """T10: 3 valid + 2 invalid → 3 success + 2 skipped."""
+    """T10: 3 valid + 1 invalid + 1 hash-filled → 4 success + 1 skipped (S3-6)."""
 
     def test_mixed_batch(self):
         records = [
             _make_record(source_id="SRC-001"),  # valid
             _make_record(request_title="", source_id="SRC-002"),  # V1 fail
             _make_record(source_id="SRC-003"),  # valid
-            _make_record(source_id="", request_title="test"),  # V2 fail
+            _make_record(source_id="", request_title="test"),  # S3-6: hash-filled, success
             _make_record(source_id="SRC-005"),  # valid
         ]
         result = transform_gws_to_notion(records)
-        assert len(result.success) == 3
-        assert len(result.skipped) == 2
+        assert len(result.success) == 4
+        assert len(result.skipped) == 1
 
     def test_skip_indices_correct(self):
         records = [
             _make_record(source_id="SRC-001"),
             _make_record(request_title="", source_id="SRC-002"),
             _make_record(source_id="SRC-003"),
-            _make_record(source_id="", request_title="test"),
+            _make_record(source_id="", request_title="test"),  # S3-6: succeeds
             _make_record(source_id="SRC-005"),
         ]
         result = transform_gws_to_notion(records)
         skip_indices = [s.index for s in result.skipped]
         assert 1 in skip_indices
-        assert 3 in skip_indices
+        assert 3 not in skip_indices
 
 
 # ── V3: source_row_url空 → 発生元プロパティ省略 ──────────────

@@ -15,8 +15,10 @@ Phase 1 maps 5 fields: Name, Status, Label, AIによる要約, 発生元.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -62,6 +64,23 @@ class TransformResult:
     skipped: list[SkipRecord] = field(default_factory=list)
     errors: list[ErrorRecord] = field(default_factory=list)
 
+    def summary(self) -> str:
+        """Return a human-readable summary of the transform result."""
+        parts = [
+            f"成功{len(self.success)}件",
+        ]
+
+        skip_part = f"スキップ{len(self.skipped)}件"
+        if self.skipped:
+            reason_counts = Counter(s.reason for s in self.skipped)
+            reason_strs = [f"{reason}:{count}件" for reason, count in reason_counts.items()]
+            skip_part += f"（{'、'.join(reason_strs)}）"
+        parts.append(skip_part)
+
+        parts.append(f"エラー{len(self.errors)}件")
+
+        return f"変換完了: {'、'.join(parts)}"
+
 
 # ── Summary template ─────────────────────────────────────────
 
@@ -98,9 +117,21 @@ def _build_summary(record: dict, max_chars: int) -> str:
     text = "\n".join(lines)
 
     if len(text) > max_chars:
+        logger.warning(
+            "Summary truncated from %d to %d chars", len(text), max_chars,
+        )
         text = text[: max_chars - 3] + "..."
 
     return text
+
+
+# ── Source ID hash fallback ──────────────────────────────────
+
+
+def _generate_source_id_hash(request_title: str, received_at: str) -> str:
+    """Generate a deterministic source_id from title + date via SHA256[:16]."""
+    raw = f"{request_title}{received_at}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 # ── Date validation ──────────────────────────────────────────
@@ -143,9 +174,16 @@ def _transform_single(
     config: TransformConfig,
 ) -> dict[str, Any]:
     """Transform a single GWS record to Notion properties (§3.1)."""
+    request_title = record["request_title"]
+    if len(request_title) > 255:
+        logger.warning(
+            "request_title truncated from %d to 255 chars", len(request_title),
+        )
+        request_title = request_title[:255]
+
     props: dict[str, Any] = {
         "Name": {
-            "title": [{"text": {"content": record["request_title"]}}],
+            "title": [{"text": {"content": request_title}}],
         },
         "Status": {
             "select": {"name": config.default_status},
@@ -231,17 +269,16 @@ def transform_gws_to_notion(
                 )
                 continue
 
-            # V2: source_id required
+            # V2: source_id — auto-fill with hash if missing (Warning only, no skip)
             if not source_id:
-                result.skipped.append(
-                    SkipRecord(
-                        index=i,
-                        source_id="",
-                        reason="source_id is empty or missing",
-                    )
+                received_at_raw = str(record.get("received_at", ""))
+                source_id = _generate_source_id_hash(request_title, received_at_raw)
+                record = {**record, "source_id": source_id}
+                logger.warning(
+                    "Record %d: source_id missing, auto-filled with hash %s",
+                    i,
+                    source_id,
                 )
-                logger.warning("Record %d skipped: source_id empty", i)
-                continue
 
             # V4: received_at must be a valid date
             received_at = record.get("received_at", "")
@@ -250,7 +287,7 @@ def transform_gws_to_notion(
                     SkipRecord(
                         index=i,
                         source_id=source_id,
-                        reason="received_at is not a valid date",
+                        reason=f"received_at is not a valid date (期待: YYYY-MM-DD, 実際: {received_at})",
                     )
                 )
                 logger.warning(
@@ -288,7 +325,7 @@ def transform_gws_to_notion(
             result.errors.append(
                 ErrorRecord(index=i, source_id=source_id, error=str(exc))
             )
-            logger.error(
+            logger.exception(
                 "Record %d error: %s (source_id=%s)", i, exc, source_id
             )
 
