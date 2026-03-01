@@ -158,7 +158,11 @@ export function serializeChatUiState(ctx) {
     const list = threads[name] || [{ id: "default", label: "メイン", unread: false }];
     threadState[name] = {
       active_thread_id: activeThreadByAnima[name] || "default",
-      threads: list.map(th => ({ id: th.id, label: th.label, unread: Boolean(th.unread) })),
+      threads: list.map(th => {
+        const o = { id: th.id, label: th.label, unread: Boolean(th.unread) };
+        if (th.archived) o.archived = true;
+        return o;
+      }),
     };
   }
   return {

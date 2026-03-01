@@ -555,6 +555,89 @@
   max-width: 230px;
 }
 
+/* --- Thread Archive Button & Dropdown --- */
+.thread-archive-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.thread-archive-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0.3rem 0.45rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.thread-archive-btn:hover,
+.thread-archive-btn:active {
+  background: var(--aw-color-bg-hover);
+  color: var(--aw-color-text-primary);
+}
+
+.thread-archive-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--aw-color-text-muted);
+  color: var(--aw-color-bg-primary);
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.thread-archive-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 180px;
+  max-width: 300px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--aw-color-border-medium);
+  border-radius: 10px;
+  background: var(--aw-color-bg-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  z-index: 20;
+}
+
+.thread-archive-wrap.open .thread-archive-menu {
+  display: block;
+}
+
+.thread-archive-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+  color: var(--aw-color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.thread-archive-item:hover,
+.thread-archive-item:active {
+  background: var(--aw-color-bg-hover);
+}
+
 .thread-more-select:focus {
   outline: none;
   border-color: var(--aw-color-accent);

@@ -287,11 +287,15 @@ export function createAnimaController(ctx) {
       const list = Array.isArray(persisted.threads) ? persisted.threads : [];
       const normalized = list
         .filter(th => th && typeof th.id === "string")
-        .map(th => ({
-          id: th.id,
-          label: typeof th.label === "string" && th.label ? th.label : "新しいスレッド",
-          unread: Boolean(th.unread),
-        }));
+        .map(th => {
+          const o = {
+            id: th.id,
+            label: typeof th.label === "string" && th.label ? th.label : "新しいスレッド",
+            unread: Boolean(th.unread),
+          };
+          if (th.archived) o.archived = true;
+          return o;
+        });
       if (!normalized.some(th => th.id === "default")) {
         normalized.unshift({ id: "default", label: "メイン", unread: false });
       }

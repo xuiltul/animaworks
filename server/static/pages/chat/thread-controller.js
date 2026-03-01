@@ -8,6 +8,7 @@ import {
   renderThreadTabsHtml,
   createThread as sharedCreateThread,
   closeThread as sharedCloseThread,
+  restoreThread as sharedRestoreThread,
 } from "../../shared/chat/thread-logic.js";
 
 export function createThreadController(ctx) {
@@ -48,6 +49,36 @@ export function createThreadController(ctx) {
         e.target.value = "";
       });
     }
+
+    const archiveBtn = $("chatArchiveBtn");
+    if (archiveBtn) {
+      archiveBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        const wrap = archiveBtn.closest(".thread-archive-wrap");
+        if (wrap) wrap.classList.toggle("open");
+      });
+    }
+
+    const archiveMenu = $("chatArchiveMenu");
+    if (archiveMenu) {
+      archiveMenu.querySelectorAll(".thread-archive-item").forEach(btn => {
+        btn.addEventListener("click", e => {
+          e.stopPropagation();
+          const tid = e.currentTarget.dataset.thread;
+          if (tid) restoreThread(tid);
+          const wrap = archiveMenu.closest(".thread-archive-wrap");
+          if (wrap) wrap.classList.remove("open");
+        });
+      });
+    }
+
+    // Close archive dropdown on outside click
+    function closeArchiveDropdown(e) {
+      const wrap = container.querySelector(".thread-archive-wrap.open");
+      if (wrap && !wrap.contains(e.target)) wrap.classList.remove("open");
+    }
+    document.removeEventListener("click", closeArchiveDropdown);
+    document.addEventListener("click", closeArchiveDropdown);
   }
 
   async function selectThread(threadId) {
@@ -94,7 +125,7 @@ export function createThreadController(ctx) {
     if (!list.some(th => th.id === threadId)) return;
 
     state.threads[state.selectedAnima] = sharedCloseThread(list, threadId);
-    state.manager.destroySession(state.selectedAnima, threadId);
+    // Don't destroy session — archived threads can be restored
 
     if (state.selectedThreadId === threadId) {
       state.selectedThreadId = "default";
@@ -107,5 +138,16 @@ export function createThreadController(ctx) {
     scheduleSaveChatUiState(ctx);
   }
 
-  return { renderThreadTabs, selectThread, createNewThread, closeThread };
+  function restoreThread(threadId) {
+    if (!state.selectedAnima) return;
+    const list = state.threads[state.selectedAnima];
+    if (!list) return;
+
+    state.threads[state.selectedAnima] = sharedRestoreThread(list, threadId);
+    renderThreadTabs();
+    selectThread(threadId);
+    scheduleSaveChatUiState(ctx);
+  }
+
+  return { renderThreadTabs, selectThread, createNewThread, closeThread, restoreThread };
 }
