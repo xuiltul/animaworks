@@ -1813,7 +1813,7 @@
 /* Inline preview while thinking (hidden once main text arrives) */
 .thinking-inline-preview {
   margin-bottom: 8px;
-  color: rgba(26, 26, 26, 0.48);
+  color: var(--aw-color-text-muted);
   font-size: 0.82rem;
   line-height: 1.5;
   white-space: pre-wrap;
