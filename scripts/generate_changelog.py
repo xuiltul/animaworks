@@ -189,16 +189,58 @@ def update_pyproject_version(version: str) -> None:
     PYPROJECT.write_text(text)
 
 
+def get_current_version() -> str:
+    """pyproject.toml から現在のバージョンを取得する。"""
+    text = PYPROJECT.read_text()
+    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    if not m:
+        raise ValueError("Could not find version in pyproject.toml")
+    return m.group(1)
+
+
+def bump_version(current: str, bump: str = "patch") -> str:
+    """SemVer バージョンをインクリメントする。"""
+    parts = current.split(".")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        raise ValueError(f"Invalid semver: {current}")
+    major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+    if bump == "major":
+        return f"{major + 1}.0.0"
+    if bump == "minor":
+        return f"{major}.{minor + 1}.0"
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def resolve_release_version(release_arg: str | None) -> str | None:
+    """--release 引数をバージョン文字列に解決する。
+
+    patch/minor/major → 自動インクリメント、数値指定 → そのまま。
+    """
+    if not release_arg:
+        return None
+    if release_arg in ("patch", "minor", "major"):
+        current = get_current_version()
+        version = bump_version(current, release_arg)
+        print(f"Auto-increment: {current} → {version} ({release_arg})")
+        return version
+    return release_arg
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate CHANGELOG.md from git commits")
-    parser.add_argument("--release", metavar="VERSION", help="Cut a release (e.g. 0.4.0)")
+    parser.add_argument(
+        "--release", metavar="VERSION_OR_BUMP", nargs="?", const="patch",
+        help="Cut a release. 'patch' (default if no value), 'minor', 'major', or explicit version (e.g. 0.4.7)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print output without modifying files")
     args = parser.parse_args()
+
+    release_version = resolve_release_version(args.release)
 
     last_date = get_last_version_date()
     commits = collect_commits(last_date)
 
-    if not commits and not args.release:
+    if not commits and not release_version:
         print("No new commits since last version. Nothing to update.")
         return
 
@@ -208,21 +250,21 @@ def main() -> None:
     if args.dry_run:
         print("=== Unreleased entries ===")
         print(unreleased_text or "(empty)")
-        if args.release:
-            print(f"\nWould release as v{args.release}")
+        if release_version:
+            print(f"\nWould release as v{release_version}")
         return
 
-    new_text = update_changelog(unreleased_text, release=args.release)
+    new_text = update_changelog(unreleased_text, release=release_version)
     CHANGELOG.write_text(new_text)
     print(f"Updated {CHANGELOG}")
 
-    if args.release:
-        update_pyproject_version(args.release)
-        print(f"Updated {PYPROJECT} version to {args.release}")
+    if release_version:
+        update_pyproject_version(release_version)
+        print(f"Updated {PYPROJECT} version to {release_version}")
         print(f"\nNext steps:")
         print(f"  git add CHANGELOG.md pyproject.toml")
-        print(f"  git commit -m 'release: v{args.release}'")
-        print(f"  git tag v{args.release}")
+        print(f"  git commit -m 'release: v{release_version}'")
+        print(f"  git tag v{release_version}")
 
     total = sum(len(v) for v in categories.values())
     print(f"\n{total} entries across {len(categories)} categories:")
