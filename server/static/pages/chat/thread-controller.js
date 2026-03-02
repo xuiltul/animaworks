@@ -20,6 +20,8 @@ export function createThreadController(ctx) {
     const container = $("chatThreadTabs");
     if (!container || !state.selectedAnima) return;
 
+    _updateThreadDropdownLabel();
+
     const list = state.threads[state.selectedAnima] || [{ id: "default", label: "メイン", unread: false }];
     const streamCtx = state.manager.getStreamingContext(state.selectedAnima);
     container.innerHTML = renderThreadTabsHtml(list, state.selectedThreadId, {
@@ -166,5 +168,86 @@ export function createThreadController(ctx) {
     scheduleSaveChatUiState(ctx);
   }
 
-  return { renderThreadTabs, selectThread, createNewThread, closeThread, restoreThread };
+  function renderThreadDropdownMenu() {
+    const menu = $("chatThreadDropdownMenu");
+    const label = $("chatThreadDropdownLabel");
+    if (!menu || !state.selectedAnima) return;
+
+    const list = state.threads[state.selectedAnima] || [{ id: "default", label: "メイン", unread: false }];
+    const active = list.find(th => th.id === state.selectedThreadId);
+    if (label) label.textContent = active?.label || "メイン";
+
+    const visible = list.filter(th => !th.archived);
+    const archived = list.filter(th => th.archived);
+    const streamCtx = state.manager.getStreamingContext(state.selectedAnima);
+
+    let html = visible.map(th => {
+      const isCurrent = th.id === state.selectedThreadId;
+      const streaming = streamCtx?.thread === th.id;
+      let cls = "chat-thread-dd-item";
+      if (isCurrent) cls += " active";
+      if (streaming) cls += " is-streaming";
+      if (th.unread) cls += " has-unread";
+      const closeBtn = th.id !== "default"
+        ? ` <button class="chat-thread-dd-close" data-thread="${escapeHtml(th.id)}" aria-label="閉じる">&times;</button>`
+        : "";
+      return `<div class="${cls}" data-thread="${escapeHtml(th.id)}">`
+        + `<span class="chat-thread-dd-label">${escapeHtml(th.label || th.id)}</span>`
+        + closeBtn + `</div>`;
+    }).join("");
+
+    if (archived.length > 0) {
+      html += `<div class="chat-thread-dd-sep"></div>`;
+      archived.forEach(th => {
+        html += `<div class="chat-thread-dd-item archived" data-thread="${escapeHtml(th.id)}">`
+          + `<span class="chat-thread-dd-label">${escapeHtml(th.label || th.id)}</span>`
+          + `<span class="chat-thread-dd-restore">↩</span></div>`;
+      });
+    }
+
+    html += `<div class="chat-thread-dd-sep"></div>`;
+    html += `<div class="chat-thread-dd-new" id="chatThreadDdNew">＋ 新しいスレッド</div>`;
+    menu.innerHTML = html;
+
+    menu.querySelectorAll(".chat-thread-dd-item:not(.archived)").forEach(el => {
+      el.addEventListener("click", e => {
+        if (e.target.classList.contains("chat-thread-dd-close")) return;
+        const tid = el.dataset.thread;
+        if (tid) selectThread(tid);
+        $("chatThreadDropdown")?.classList.remove("open");
+      });
+    });
+    menu.querySelectorAll(".chat-thread-dd-close").forEach(btn => {
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+        const tid = btn.dataset.thread;
+        if (tid) closeThread(tid);
+        renderThreadDropdownMenu();
+      });
+    });
+    menu.querySelectorAll(".chat-thread-dd-item.archived").forEach(el => {
+      el.addEventListener("click", () => {
+        const tid = el.dataset.thread;
+        if (tid) restoreThread(tid);
+        $("chatThreadDropdown")?.classList.remove("open");
+      });
+    });
+    const newBtn = $("chatThreadDdNew");
+    if (newBtn) {
+      newBtn.addEventListener("click", () => {
+        createNewThread();
+        $("chatThreadDropdown")?.classList.remove("open");
+      });
+    }
+  }
+
+  function _updateThreadDropdownLabel() {
+    const label = $("chatThreadDropdownLabel");
+    if (!label || !state.selectedAnima) return;
+    const list = state.threads[state.selectedAnima] || [{ id: "default", label: "メイン" }];
+    const active = list.find(th => th.id === state.selectedThreadId);
+    label.textContent = active?.label || "メイン";
+  }
+
+  return { renderThreadTabs, selectThread, createNewThread, closeThread, restoreThread, renderThreadDropdownMenu };
 }

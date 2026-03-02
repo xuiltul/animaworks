@@ -132,8 +132,77 @@ export function createEventsController(ctx) {
       if (list) list.style.display = "";
     });
 
-    // Infinite scroll observer
+    // Infinite scroll observer + scroll-to-bottom tracking
     ctx.controllers.renderer.setupChatObserver();
+    ctx.controllers.renderer.initScrollTracking();
+
+    // ── Mobile unified header ──
+    _bindUnifiedHeader(addListener);
+  }
+
+  function _bindUnifiedHeader(addListener) {
+    // Hamburger: reuse the same logic as the main hamburger
+    addListener("chatUnifiedHamburger", "click", () => {
+      document.body.classList.toggle("mobile-nav-open");
+    });
+
+    // User menu toggle
+    addListener("chatUnifiedUserBtn", "click", e => {
+      e.stopPropagation();
+      const menu = $("chatUnifiedUserMenu");
+      if (menu) menu.classList.toggle("open");
+    });
+    const closeUserMenu = e => {
+      const menu = $("chatUnifiedUserMenu");
+      if (!menu || !menu.classList.contains("open")) return;
+      const btn = $("chatUnifiedUserBtn");
+      if (btn && btn.contains(e.target)) return;
+      if (menu.contains(e.target)) return;
+      menu.classList.remove("open");
+    };
+    document.addEventListener("pointerdown", closeUserMenu);
+    state.boundListeners.push({ el: document, event: "pointerdown", handler: closeUserMenu });
+
+    // User logout
+    addListener("chatUnifiedUserLogout", "click", () => {
+      const mainLogout = document.getElementById("logoutBtn");
+      if (mainLogout) mainLogout.click();
+    });
+
+    // Info panel toggle (reuse sidebar toggle)
+    addListener("chatUnifiedInfoBtn", "click", () => ctx.controllers.sidebar.toggleRightPane());
+
+    // Populate user info
+    _populateUnifiedUser();
+
+    // Thread dropdown toggle
+    addListener("chatThreadDropdownBtn", "click", e => {
+      e.stopPropagation();
+      const dd = $("chatThreadDropdown");
+      if (dd) dd.classList.toggle("open");
+      if (dd?.classList.contains("open")) {
+        ctx.controllers.thread.renderThreadDropdownMenu?.();
+      }
+    });
+    const closeThreadDropdown = e => {
+      const dd = $("chatThreadDropdown");
+      if (!dd || !dd.classList.contains("open")) return;
+      if (dd.contains(e.target)) return;
+      dd.classList.remove("open");
+    };
+    document.addEventListener("pointerdown", closeThreadDropdown);
+    state.boundListeners.push({ el: document, event: "pointerdown", handler: closeThreadDropdown });
+  }
+
+  function _populateUnifiedUser() {
+    const nameEl = $("chatUnifiedUserName");
+    const statusEl = $("chatUnifiedUserStatus");
+    const initialEl = $("chatUnifiedUserInitial");
+    const userName = document.getElementById("currentUserLabel")?.textContent || "?";
+    const statusText = document.getElementById("systemStatusText")?.textContent || "";
+    if (nameEl) nameEl.textContent = userName;
+    if (statusEl) statusEl.textContent = statusText;
+    if (initialEl) initialEl.textContent = (userName.charAt(0) || "?").toUpperCase();
   }
 
   return { bindEvents };

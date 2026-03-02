@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 from typing import Any, cast
 
+from typing import Literal
+
 from core.exceptions import AnimaWorksError  # noqa: F401
 from core.i18n import t
 from core.paths import load_prompt
@@ -36,6 +38,11 @@ REQUIRED_ASSETS: dict[str, str] = {
     "avatar_chibi": "avatar_chibi.png",
     "model_chibi": "avatar_chibi.glb",
     "model_rigged": "avatar_chibi_rigged.glb",
+}
+
+REALISTIC_REQUIRED_ASSETS: dict[str, str] = {
+    "avatar_fullbody_realistic": "avatar_fullbody_realistic.png",
+    "avatar_bustup_realistic": "avatar_bustup_realistic.png",
 }
 
 _3D_ASSET_KEYS = frozenset({"model_chibi", "model_rigged"})
@@ -103,16 +110,32 @@ def _get_lock(anima_name: str) -> asyncio.Lock:
 # ── Asset checking ────────────────────────────────────────────────
 
 
+def _required_assets_for_style(
+    image_style: Literal["anime", "realistic"],
+    enable_3d: bool = True,
+) -> dict[str, str]:
+    """Return the required assets map for the given style."""
+    if image_style == "realistic":
+        return dict(REALISTIC_REQUIRED_ASSETS)
+    assets = dict(REQUIRED_ASSETS)
+    if not enable_3d:
+        for k in _3D_ASSET_KEYS:
+            assets.pop(k, None)
+    return assets
+
+
 def check_anima_assets(
     anima_dir: Path,
     *,
     enable_3d: bool = True,
+    image_style: Literal["anime", "realistic"] = "realistic",
 ) -> dict[str, Any]:
     """Check an anima's asset completeness using metadata logic.
 
     Args:
         anima_dir: Path to the anima's runtime directory.
         enable_3d: Whether 3D assets are required.
+        image_style: Which style's assets to check.
 
     Returns a dict with:
       - ``complete`` (bool): True if all required assets exist.
@@ -126,9 +149,8 @@ def check_anima_assets(
     missing: list[str] = []
     present: list[str] = []
 
-    for key, filename in REQUIRED_ASSETS.items():
-        if not enable_3d and key in _3D_ASSET_KEYS:
-            continue
+    required = _required_assets_for_style(image_style, enable_3d)
+    for key, filename in required.items():
         path = assets_dir / filename
         if has_dir and path.exists() and path.is_file():
             present.append(key)
@@ -147,6 +169,7 @@ def find_animas_with_missing_assets(
     animas_dir: Path,
     *,
     enable_3d: bool = True,
+    image_style: Literal["anime", "realistic"] = "realistic",
 ) -> list[tuple[str, dict[str, Any]]]:
     """Scan all anima directories and return those with incomplete assets.
 
@@ -161,7 +184,9 @@ def find_animas_with_missing_assets(
             continue
         if not (anima_dir / "identity.md").exists():
             continue
-        result = check_anima_assets(anima_dir, enable_3d=enable_3d)
+        result = check_anima_assets(
+            anima_dir, enable_3d=enable_3d, image_style=image_style,
+        )
         if not result["complete"]:
             results.append((anima_dir.name, result))
 
@@ -176,6 +201,7 @@ async def reconcile_anima_assets(
     *,
     prompt: str | None = None,
     enable_3d: bool = True,
+    image_style: Literal["anime", "realistic"] = "realistic",
 ) -> dict[str, Any]:
     """Generate missing assets for a single anima (non-blocking).
 
@@ -188,6 +214,7 @@ async def reconcile_anima_assets(
         prompt: Character prompt for image generation.  If ``None``,
             attempts to extract from identity.md.
         enable_3d: Whether to include 3D model generation steps.
+        image_style: Which image style to generate assets for.
 
     Returns:
         Dict with generation results or skip reason.
@@ -211,19 +238,21 @@ async def reconcile_anima_assets(
         return {"anima": anima_name, "skipped": True, "reason": "locked"}
 
     async with lock:
-        # Re-check after acquiring lock — another task may have generated
-        check = check_anima_assets(anima_dir, enable_3d=enable_3d)
+        check = check_anima_assets(
+            anima_dir, enable_3d=enable_3d, image_style=image_style,
+        )
         if check["complete"]:
             logger.debug("Assets complete for %s (post-lock check)", anima_name)
             return {"anima": anima_name, "skipped": True, "reason": "complete"}
 
         logger.info(
-            "Generating missing assets for %s (missing: %s)",
+            "Generating missing %s assets for %s (missing: %s)",
+            image_style,
             anima_name,
             check["missing"],
         )
 
-        resolved_prompt = prompt or await _extract_prompt(anima_dir)
+        resolved_prompt = prompt or await _extract_prompt(anima_dir, style=image_style)
         if not resolved_prompt:
             logger.warning(
                 "No prompt available for %s — cannot generate assets",
@@ -235,15 +264,16 @@ async def reconcile_anima_assets(
                 "reason": "no_prompt",
             }
 
-        # Determine which pipeline steps to run based on missing assets
         steps: list[str] | None = None
-        if not enable_3d:
+        if image_style == "anime" and not enable_3d:
             steps = ["fullbody", "bustup", "chibi"]
 
         try:
+            from core.config.models import ImageGenConfig
             from core.tools.image_gen import ImageGenPipeline
 
-            pipeline = ImageGenPipeline(anima_dir)
+            image_config = ImageGenConfig(image_style=image_style, enable_3d=enable_3d)
+            pipeline = ImageGenPipeline(anima_dir, config=image_config)
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
                 None,
@@ -290,6 +320,7 @@ async def reconcile_all_assets(
     *,
     ws_manager: Any | None = None,
     enable_3d: bool = True,
+    image_style: Literal["anime", "realistic"] = "realistic",
 ) -> list[dict[str, Any]]:
     """Check all animas and generate missing assets sequentially.
 
@@ -297,18 +328,22 @@ async def reconcile_all_assets(
         animas_dir: Root animas directory.
         ws_manager: Optional WebSocketManager for broadcasting updates.
         enable_3d: Whether to include 3D model generation.
+        image_style: Which image style to generate assets for.
 
     Returns:
         List of per-anima result dicts.
     """
-    incomplete = find_animas_with_missing_assets(animas_dir, enable_3d=enable_3d)
+    incomplete = find_animas_with_missing_assets(
+        animas_dir, enable_3d=enable_3d, image_style=image_style,
+    )
     if not incomplete:
         logger.debug("All animas have complete assets")
         return []
 
     logger.info(
-        "Asset reconciliation: %d anima(s) with missing assets: %s",
+        "Asset reconciliation: %d anima(s) with missing %s assets: %s",
         len(incomplete),
+        image_style,
         [name for name, _ in incomplete],
     )
 
@@ -316,7 +351,7 @@ async def reconcile_all_assets(
     for anima_name, _check in incomplete:
         anima_dir = animas_dir / anima_name
         result = await reconcile_anima_assets(
-            anima_dir, enable_3d=enable_3d,
+            anima_dir, enable_3d=enable_3d, image_style=image_style,
         )
         results.append(result)
 
@@ -338,15 +373,55 @@ async def reconcile_all_assets(
 # ── Helpers ───────────────────────────────────────────────────────
 
 
-async def _extract_prompt(anima_dir: Path) -> str | None:
+def _resolve_prompt(anima_dir: Path, style: str) -> str | None:
+    """Resolve the cached prompt for the given style.
+
+    For ``"realistic"`` style, checks ``assets/prompt_realistic.txt`` first.
+    Falls back to converting the anime prompt via tag replacement.
+    For ``"anime"`` (default), reads ``assets/prompt.txt``.
+
+    Returns ``None`` if no prompt is available.
+    """
+    assets_dir = anima_dir / "assets"
+    if style == "realistic":
+        realistic_path = assets_dir / "prompt_realistic.txt"
+        if realistic_path.exists():
+            text = realistic_path.read_text(encoding="utf-8").strip()
+            if text:
+                return text
+        anime_path = assets_dir / "prompt.txt"
+        if anime_path.exists():
+            anime_text = anime_path.read_text(encoding="utf-8").strip()
+            if anime_text:
+                from core.tools._image_clients import _convert_anime_to_realistic
+                return _convert_anime_to_realistic(anime_text)
+        return None
+
+    prompt_path = assets_dir / "prompt.txt"
+    if prompt_path.exists():
+        text = prompt_path.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    return None
+
+
+async def _extract_prompt(
+    anima_dir: Path,
+    style: str = "anime",
+) -> str | None:
     """Try to extract a generation prompt from the anima's files.
+
+    Args:
+        anima_dir: Anima runtime directory.
+        style: ``"anime"`` or ``"realistic"``.
 
     Fallback chain:
       1. Regex match for explicit ``image_prompt:`` / ``外見:`` fields
          (searches identity.md, then character_sheet.md)
-      2. Cached ``assets/prompt.txt`` from a previous LLM synthesis
+      2. Cached ``assets/prompt.txt`` (or ``prompt_realistic.txt``)
+         from a previous LLM synthesis
       3. LLM synthesis — pass the full character document to LLM which
-         extracts visual appearance and converts to NovelAI tags.
+         extracts visual appearance and converts to tags.
          Tries character_sheet.md first, then identity.md.
     """
     # Collect candidate texts: identity.md first, then character_sheet.md
@@ -368,23 +443,26 @@ async def _extract_prompt(anima_dir: Path) -> str | None:
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                return match.group(1).strip()
+                raw = match.group(1).strip()
+                if style == "realistic":
+                    from core.tools._image_clients import _convert_anime_to_realistic
+                    return _convert_anime_to_realistic(raw)
+                return raw
 
-    # Step 2: Check cached prompt from previous LLM synthesis
-    prompt_cache = anima_dir / "assets" / "prompt.txt"
-    if prompt_cache.exists():
-        cached = prompt_cache.read_text(encoding="utf-8").strip()
-        if cached:
-            logger.debug(
-                "Using cached prompt for %s from assets/prompt.txt",
-                anima_dir.name,
-            )
-            return cached
+    # Step 2: Check cached prompt for the requested style
+    cached = _resolve_prompt(anima_dir, style)
+    if cached:
+        logger.debug(
+            "Using cached %s prompt for %s",
+            style,
+            anima_dir.name,
+        )
+        return cached
 
     # Step 3: Pass the richest available document to LLM for synthesis.
     # Prefer character_sheet.md (has appearance info), fall back to identity.md.
     for text in reversed(candidates):
-        result = await _synthesize_prompt_via_llm(anima_dir, text)
+        result = await _synthesize_prompt_via_llm(anima_dir, text, style=style)
         if result:
             return result
 
@@ -397,13 +475,16 @@ async def _extract_prompt(anima_dir: Path) -> str | None:
 async def _synthesize_prompt_via_llm(
     anima_dir: Path,
     character_text: str,
+    *,
+    style: str = "anime",
 ) -> str | None:
-    """Call LLM to extract appearance from a character sheet into NovelAI tags.
+    """Call LLM to extract appearance from a character sheet into image tags.
 
-    The LLM reads the full character document, picks out visual traits,
-    and returns a comma-separated tag string.
+    For ``"anime"`` style, generates NovelAI Danbooru tags.
+    For ``"realistic"`` style, generates natural-language photographic prompts.
 
-    On success the result is cached to ``assets/prompt.txt``.
+    On success the result is cached to ``assets/prompt.txt`` (anime) or
+    ``assets/prompt_realistic.txt`` (realistic).
     On failure returns ``None`` (logs the error, does not raise).
     """
     anima_name = anima_dir.name
@@ -419,14 +500,21 @@ async def _synthesize_prompt_via_llm(
         )
         return None
 
+    if style == "realistic":
+        system_prompt_name = "fragments/asset_synthesis_system_realistic"
+        user_prompt_key = "asset_reconciler.llm_user_prompt_realistic"
+    else:
+        system_prompt_name = "fragments/asset_synthesis_system"
+        user_prompt_key = "asset_reconciler.llm_user_prompt"
+
     api_key = model_config.api_key or os.environ.get(model_config.api_key_env)
     kwargs: dict[str, Any] = {
         "model": model_config.model,
         "messages": [
-            {"role": "system", "content": load_prompt("fragments/asset_synthesis_system")},
+            {"role": "system", "content": load_prompt(system_prompt_name)},
             {
                 "role": "user",
-                "content": t("asset_reconciler.llm_user_prompt", character_text=character_text),
+                "content": t(user_prompt_key, character_text=character_text),
             },
         ],
         "max_tokens": 256,
@@ -443,8 +531,9 @@ async def _synthesize_prompt_via_llm(
         result = (response.choices[0].message.content or "").strip()
     except Exception as exc:
         logger.warning(
-            "LLM prompt synthesis failed for %s: %s",
+            "LLM prompt synthesis failed for %s (%s): %s",
             anima_name,
+            style,
             exc,
         )
         return None
@@ -452,18 +541,19 @@ async def _synthesize_prompt_via_llm(
     if not result or result == "NO_APPEARANCE_DATA":
         return None
 
-    # Cache result to assets/prompt.txt
+    cache_filename = "prompt_realistic.txt" if style == "realistic" else "prompt.txt"
     try:
         cache_dir = anima_dir / "assets"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        (cache_dir / "prompt.txt").write_text(result + "\n", encoding="utf-8")
+        (cache_dir / cache_filename).write_text(result + "\n", encoding="utf-8")
         logger.info(
-            "Synthesized and cached prompt for %s: %.200s",
+            "Synthesized and cached %s prompt for %s: %.200s",
+            style,
             anima_name,
             result,
         )
     except OSError:
-        logger.debug("Failed to cache prompt.txt for %s", anima_name)
+        logger.debug("Failed to cache %s for %s", cache_filename, anima_name)
 
     return result
 

@@ -81,8 +81,8 @@ function cacheDom() {
 let _currentView = null; // '3d' | 'org'
 
 function getDefaultView() {
-  const theme = localStorage.getItem("aw-theme") || "default";
-  return theme === "business" ? "org" : "3d";
+  const mode = localStorage.getItem("aw-display-mode") || "realistic";
+  return mode === "realistic" ? "org" : "3d";
 }
 
 function getCurrentView() {
@@ -212,15 +212,30 @@ async function onAnimaSelected(name) {
 
 // ── Main Init ──────────────────────
 
+const ALL_THEMES = [
+  "business", "graphite", "ocean", "forest", "sunset",
+  "rose", "lavender", "nord", "monokai", "midnight", "solarized"
+];
+
 function applyTheme() {
   const theme = localStorage.getItem("aw-theme") || "default";
-  document.body.classList.toggle("theme-business", theme === "business");
+  ALL_THEMES.forEach(t => document.body.classList.remove(`theme-${t}`));
+  if (theme !== "default") {
+    document.body.classList.add(`theme-${theme}`);
+  }
+}
+
+function applyDisplayMode() {
+  const mode = localStorage.getItem("aw-display-mode") || "realistic";
+  document.body.classList.remove("mode-anime", "mode-realistic");
+  document.body.classList.add(`mode-${mode}`);
 }
 
 export async function init() {
   await initI18n();
   applyTranslations();
 
+  applyDisplayMode();
   applyTheme();
   cacheDom();
 

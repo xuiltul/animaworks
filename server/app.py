@@ -88,12 +88,17 @@ async def _reconcile_assets_at_startup(animas_dir: Path) -> None:
         from core.config.models import load_config
 
         enable_3d = True
+        image_style = "realistic"
         try:
-            enable_3d = load_config().image_gen.enable_3d
+            cfg = load_config()
+            enable_3d = cfg.image_gen.enable_3d
+            image_style = cfg.image_gen.image_style or "realistic"
         except Exception:
             pass
 
-        results = await reconcile_all_assets(animas_dir, enable_3d=enable_3d)
+        results = await reconcile_all_assets(
+            animas_dir, enable_3d=enable_3d, image_style=image_style,
+        )
         if results:
             logger.info("Startup asset reconciliation: %d anima(s) processed", len(results))
     except Exception:
@@ -195,12 +200,19 @@ async def lifespan(app: FastAPI):
         async def _reconcile_assets_periodic() -> None:
             try:
                 enable_3d = True
+                image_style = "realistic"
                 try:
                     from core.config.models import load_config
-                    enable_3d = load_config().image_gen.enable_3d
+                    _cfg = load_config()
+                    enable_3d = _cfg.image_gen.enable_3d
+                    image_style = _cfg.image_gen.image_style or "realistic"
                 except Exception:
                     pass
-                await reconcile_all_assets(app.state.animas_dir, enable_3d=enable_3d)
+                await reconcile_all_assets(
+                    app.state.animas_dir,
+                    enable_3d=enable_3d,
+                    image_style=image_style,
+                )
             except asyncio.CancelledError:
                 logger.debug("Asset reconciliation cancelled (shutdown)")
             except Exception:
@@ -395,6 +407,9 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
 
         # Localhost trust: skip auth for verified local connections
         if auth_config.trust_localhost and _is_safe_localhost_request(request):
+            # Set owner as authenticated user so /api/auth/me and other routes work
+            if auth_config.owner:
+                request.state.user = auth_config.owner
             return await call_next(request)
 
         # Skip whitelisted paths

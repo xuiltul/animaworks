@@ -7,7 +7,7 @@ You can send messages to other members. The recipient is notified immediately.
 ### How to Send
 
 Use the **mcp__aw__send_message** tool:
-- `to`: Recipient name (e.g. "rin", "hinata")
+- `to`: Recipient name (e.g. "aoi", "taro")
 - `content`: Message content
 - `intent`: Type of message (optional)
 

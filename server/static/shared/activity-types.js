@@ -34,7 +34,7 @@ export const TYPE_ICONS = {
 
 export function getIcon(type) {
   const entry = TYPE_ICONS[type] || { emoji: "📌", lucide: "pin" };
-  const isBusiness = document.body.classList.contains('theme-business');
+  const isBusiness = document.body.classList.contains('mode-realistic');
   if (isBusiness) {
     return `<i data-lucide="${entry.lucide}" style="width:16px;height:16px;display:inline-block;vertical-align:middle;"></i>`;
   }

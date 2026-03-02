@@ -99,7 +99,7 @@ It is automatically recognized during Inbox processing, so you don't need to sea
 To review past Anima-to-Anima DM exchanges:
 
 ```
-read_dm_history(peer="sakura", limit=10)
+read_dm_history(peer="aoi", limit=10)
 ```
 
 - **Data source**: Unified activity log (activity_log) is primary; legacy dm_logs is fallback

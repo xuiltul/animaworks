@@ -235,6 +235,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     "distillation.none": {"ja": "(なし)", "en": "(none)"},
     # ── asset_reconciler.py ──
     "asset_reconciler.llm_user_prompt": {"ja": "以下のキャラクターシートから外見情報を読み取り、NovelAI 互換の画像生成タグに変換してください:\n\n{character_text}", "en": "Read the following character sheet and extract visual appearance into NovelAI-compatible image generation tags:\n\n{character_text}"},
+    "asset_reconciler.llm_user_prompt_realistic": {"ja": "以下のキャラクターシートから外見情報を読み取り、写実的な写真風の画像生成プロンプトに変換してください:\n\n{character_text}", "en": "Read the following character sheet and extract visual appearance into a photorealistic image generation prompt:\n\n{character_text}"},
     # ── migrate.py ──
     "migrate.migration_note": {"ja": "<!-- MIGRATION NOTE: could not auto-convert '{schedule}' to cron expression -->", "en": "<!-- MIGRATION NOTE: could not auto-convert '{schedule}' to cron expression -->"},
     # ── chat.py ──

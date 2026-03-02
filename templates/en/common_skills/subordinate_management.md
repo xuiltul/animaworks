@@ -50,9 +50,9 @@ Supervisor tools automatically enabled for Anima that have subordinates. Manages
 When pausing multiple subordinates, call `disable_subordinate` for each one:
 
 ```
-disable_subordinate(name="hinata", reason="Temporary pause due to reduced workload")
-disable_subordinate(name="natsume", reason="Temporary pause due to reduced workload")
-enable_subordinate(name="hinata")
+disable_subordinate(name="aoi", reason="Temporary pause due to reduced workload")
+disable_subordinate(name="taro", reason="Temporary pause due to reduced workload")
+enable_subordinate(name="aoi")
 ```
 
 ### Model Change and Restart
@@ -60,8 +60,8 @@ enable_subordinate(name="hinata")
 Model changes are saved to status.json, but `restart_subordinate` is required to apply them to the running process:
 
 ```
-set_subordinate_model(name="hinata", model="claude-sonnet-4-6", reason="Load balancing")
-restart_subordinate(name="hinata", reason="Apply model change")
+set_subordinate_model(name="aoi", model="claude-sonnet-4-6", reason="Load balancing")
+restart_subordinate(name="aoi", reason="Apply model change")
 ```
 
 ### Status Confirmation
@@ -69,14 +69,14 @@ restart_subordinate(name="hinata", reason="Apply model change")
 ```
 org_dashboard()                    # Dashboard for all subordinates
 ping_subordinate()                 # Liveness check for all subordinates
-ping_subordinate(name="hinata")    # Liveness check for single subordinate
-read_subordinate_state(name="hinata")  # Current task and pending task content
+ping_subordinate(name="aoi")    # Liveness check for single subordinate
+read_subordinate_state(name="aoi")  # Current task and pending task content
 ```
 
 ### Task Delegation
 
 ```
-delegate_task(name="hinata", instruction="Summarize weekly report", deadline="1d", summary="Weekly report creation")
+delegate_task(name="aoi", instruction="Summarize weekly report", deadline="1d", summary="Weekly report creation")
 task_tracker(status="active")      # Check progress of delegated tasks
 ```
 

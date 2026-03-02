@@ -112,3 +112,36 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, wor
    - `anim_walking.glb`, `anim_running.glb` — 基本アニメーション（リギング同梱）
    - `anim_idle.glb`, `anim_sitting.glb`, `anim_waving.glb`, `anim_talking.glb` — 追加アニメーション（Meshy Animations）
 3. 生成に失敗したステップがあればエラーを記録し、成功したものだけ使用する
+
+### リアリスティック（写実）スタイルのプロンプト
+
+`image_style: realistic` が設定されている場合、Fal.ai Flux Pro でフォトリアリスティック画像を生成する。
+プロンプトは Danbooru タグではなく自然言語の写真的記述を使用する。
+
+**基本構造:**
+
+```
+professional photograph, studio lighting, high resolution, realistic, photorealistic, a young woman/man with {hair_description}, {eye_description}, {outfit_description}, full body, standing, plain white background, looking at viewer
+```
+
+**変換ルール（アニメ→リアリスティック）:**
+
+| アニメタグ | リアリスティック記述 |
+|---|---|
+| `masterpiece, best quality, ...` (品質タグ) | 削除（リアリスティック品質タグに置換） |
+| `anime coloring, clean lineart, soft shading` | 削除 |
+| `1girl` | `a young woman` |
+| `1boy` | `a young man` |
+| `black hair, long hair, low ponytail` | `long black hair in a low ponytail` |
+| `red eyes, narrow eyes` | `sharp red eyes` |
+
+**品質・スタイルタグ（先頭に付与）:**
+
+- スタイル: `professional photograph, studio lighting, high resolution, realistic, photorealistic`
+
+> 注: `assets/prompt_realistic.txt` が存在する場合はそちらが優先される。存在しない場合は `assets/prompt.txt`（アニメ用）から自動変換される。
+
+**生成結果:**
+   - `avatar_fullbody_realistic.png` — 全身写真（Fal Flux Pro）
+   - `avatar_bustup_realistic.png` — バストアップ写真（Flux Kontext）
+   - 表情バリエーション: `avatar_bustup_{emotion}_realistic.png`

@@ -2,7 +2,7 @@
 
 - **上司への報告**: 重要な進捗・問題・判断が必要な事項は上司に報告する
 - **部下への指示**: タスクの指示・確認は部下に直接送信できる。指示は具体的に出すこと:
-  - 対象ファイルのパス（例: `~/.animaworks/animas/yuki/cron.md`）
+  - 対象ファイルのパス（例: `~/.animaworks/animas/aoi/cron.md`）
   - 実行すべきコマンド例（例: `aws ecs describe-services --cluster production-ai-schreiber`）
   - 参照すべきエビデンスやドキュメントの場所
   - 曖昧な指示（「調べて」「確認して」）ではなく、何をどう調べるかを明示する

@@ -21,7 +21,7 @@ class TestCheckAnimaAssets:
 
     def test_no_assets_dir(self, tmp_path: Path) -> None:
         """Anima with no assets/ directory reports all missing."""
-        from core.asset_reconciler import check_anima_assets
+        from core.asset_reconciler import check_anima_assets, REALISTIC_REQUIRED_ASSETS
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
@@ -29,20 +29,20 @@ class TestCheckAnimaAssets:
         result = check_anima_assets(anima_dir)
         assert result["complete"] is False
         assert result["has_assets_dir"] is False
-        assert len(result["missing"]) == 5
+        assert len(result["missing"]) == len(REALISTIC_REQUIRED_ASSETS)
         assert result["present"] == []
 
     def test_empty_assets_dir(self, tmp_path: Path) -> None:
         """Anima with empty assets/ directory reports all missing."""
-        from core.asset_reconciler import check_anima_assets
+        from core.asset_reconciler import REQUIRED_ASSETS, check_anima_assets
 
         anima_dir = tmp_path / "anima"
         (anima_dir / "assets").mkdir(parents=True)
 
-        result = check_anima_assets(anima_dir)
+        result = check_anima_assets(anima_dir, image_style="anime")
         assert result["complete"] is False
         assert result["has_assets_dir"] is True
-        assert len(result["missing"]) == 5
+        assert len(result["missing"]) == len(REQUIRED_ASSETS)
 
     def test_all_assets_present(self, tmp_path: Path) -> None:
         """Anima with all required assets reports complete."""
@@ -54,10 +54,10 @@ class TestCheckAnimaAssets:
         for filename in REQUIRED_ASSETS.values():
             (assets_dir / filename).write_bytes(b"fake")
 
-        result = check_anima_assets(anima_dir)
+        result = check_anima_assets(anima_dir, image_style="anime")
         assert result["complete"] is True
         assert result["missing"] == []
-        assert len(result["present"]) == 5
+        assert len(result["present"]) == len(REQUIRED_ASSETS)
 
     def test_partial_assets(self, tmp_path: Path) -> None:
         """Anima with some assets reports the correct missing ones."""
@@ -69,7 +69,7 @@ class TestCheckAnimaAssets:
         (assets_dir / "avatar_fullbody.png").write_bytes(b"fake")
         (assets_dir / "avatar_bustup.png").write_bytes(b"fake")
 
-        result = check_anima_assets(anima_dir)
+        result = check_anima_assets(anima_dir, image_style="anime")
         assert result["complete"] is False
         assert "avatar_fullbody" in result["present"]
         assert "avatar_bustup" in result["present"]
@@ -104,7 +104,7 @@ class TestFindAnimasWithMissingAssets:
             for filename in REQUIRED_ASSETS.values():
                 (assets_dir / filename).write_bytes(b"fake")
 
-        result = find_animas_with_missing_assets(animas_dir)
+        result = find_animas_with_missing_assets(animas_dir, image_style="anime")
         assert result == []
 
     def test_mixed(self, tmp_path: Path) -> None:
@@ -126,7 +126,7 @@ class TestFindAnimasWithMissingAssets:
         incomplete_dir.mkdir(parents=True)
         (incomplete_dir / "identity.md").write_text("# Bob", encoding="utf-8")
 
-        result = find_animas_with_missing_assets(animas_dir)
+        result = find_animas_with_missing_assets(animas_dir, image_style="anime")
         assert len(result) == 1
         assert result[0][0] == "bob"
 
@@ -341,7 +341,7 @@ class TestReconcileAnimaAssets:
         for filename in REQUIRED_ASSETS.values():
             (assets_dir / filename).write_bytes(b"fake")
 
-        result = await reconcile_anima_assets(anima_dir)
+        result = await reconcile_anima_assets(anima_dir, image_style="anime")
         assert result["skipped"] is True
         assert result["reason"] == "complete"
 
@@ -457,7 +457,7 @@ class TestReconcileAllAssets:
         for filename in REQUIRED_ASSETS.values():
             (assets_dir / filename).write_bytes(b"fake")
 
-        results = await reconcile_all_assets(animas_dir)
+        results = await reconcile_all_assets(animas_dir, image_style="anime")
         assert results == []
 
     @pytest.mark.asyncio

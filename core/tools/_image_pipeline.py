@@ -19,6 +19,9 @@ from core.tools._image_clients import (
     _DEFAULT_ANIMATIONS,
     _EXPRESSION_GUIDANCE,
     _EXPRESSION_PROMPTS,
+    _REALISTIC_BUSTUP_PROMPT,
+    _REALISTIC_EXPRESSION_GUIDANCE,
+    _REALISTIC_EXPRESSION_PROMPTS,
     _image_to_data_uri,
 )
 from core.tools._image_glb import (
@@ -91,7 +94,10 @@ class ImageGenPipeline:
         "model": "avatar_chibi.glb",
         "rigged_model": "avatar_chibi_rigged.glb",
     }
-    # Animation files use pattern: anim_{name}.glb
+    REALISTIC_ASSET_NAMES = {
+        "fullbody": "avatar_fullbody_realistic.png",
+        "bustup": "avatar_bustup_realistic.png",
+    }
 
     def __init__(
         self,
@@ -103,6 +109,23 @@ class ImageGenPipeline:
         self._anima_dir = anima_dir
         self._assets_dir = anima_dir / "assets"
         self._config = config or ImageGenConfig()
+
+    @property
+    def _is_realistic(self) -> bool:
+        return getattr(self._config, "image_style", "anime") == "realistic"
+
+    def _asset_name(self, key: str) -> str:
+        """Return asset filename based on current style."""
+        if self._is_realistic and key in self.REALISTIC_ASSET_NAMES:
+            return self.REALISTIC_ASSET_NAMES[key]
+        return self.ASSET_NAMES[key]
+
+    def _bustup_filename(self, expression: str) -> str:
+        """Return bustup expression filename based on current style."""
+        suffix = "_realistic" if self._is_realistic else ""
+        if expression == "neutral":
+            return f"avatar_bustup{suffix}.png"
+        return f"avatar_bustup_{expression}{suffix}.png"
 
     def generate_bustup_expression(
         self,
@@ -124,19 +147,18 @@ class ImageGenPipeline:
             logger.warning("Unknown expression: %s", expression)
             return None
 
-        output_filename = (
-            "avatar_bustup.png" if expression == "neutral"
-            else f"avatar_bustup_{expression}.png"
-        )
+        output_filename = self._bustup_filename(expression)
         output_path = self._assets_dir / output_filename
 
         if skip_existing and output_path.exists():
             logger.info("Skipping existing: %s", output_path)
             return output_path
 
-        prompt = _EXPRESSION_PROMPTS[expression]
+        if self._is_realistic:
+            prompt = _REALISTIC_EXPRESSION_PROMPTS[expression]
+        else:
+            prompt = _EXPRESSION_PROMPTS[expression]
 
-        # Apply style prefix/suffix
         if self._config.style_prefix:
             prompt = self._config.style_prefix + prompt
         if self._config.style_suffix:
@@ -147,7 +169,10 @@ class ImageGenPipeline:
         from core.tools.image_gen import FluxKontextClient
 
         kontext = FluxKontextClient()
-        guidance = _EXPRESSION_GUIDANCE.get(expression, 5.0)
+        if self._is_realistic:
+            guidance = _REALISTIC_EXPRESSION_GUIDANCE.get(expression, 4.5)
+        else:
+            guidance = _EXPRESSION_GUIDANCE.get(expression, 5.0)
         result_bytes = kontext.generate_from_reference(
             reference_image=reference_image,
             prompt=prompt,
@@ -204,9 +229,12 @@ class ImageGenPipeline:
         )
 
         self._assets_dir.mkdir(parents=True, exist_ok=True)
-        enabled = set(steps) if steps else {
-            "fullbody", "bustup", "chibi", "3d", "rigging", "animations",
-        }
+        if steps:
+            enabled = set(steps)
+        elif self._is_realistic:
+            enabled = {"fullbody", "bustup"}
+        else:
+            enabled = {"fullbody", "bustup", "chibi", "3d", "rigging", "animations"}
         anim_map = animations if animations is not None else _DEFAULT_ANIMATIONS
         result = PipelineResult()
 
@@ -219,7 +247,7 @@ class ImageGenPipeline:
 
         # ── Step 1: Full-body ──
         fullbody_bytes: bytes | None = None
-        fullbody_path = self._assets_dir / self.ASSET_NAMES["fullbody"]
+        fullbody_path = self._assets_dir / self._asset_name("fullbody")
 
         if "fullbody" in enabled:
             if skip_existing and fullbody_path.exists():
@@ -229,10 +257,16 @@ class ImageGenPipeline:
             else:
                 try:
                     _notify("fullbody", "generating", 0)
-                    # Select text-to-image backend: NovelAI (primary) or Fal (fallback)
-                    if os.environ.get("NOVELAI_TOKEN"):
+                    if self._is_realistic:
+                        if not os.environ.get("FAL_KEY"):
+                            raise RuntimeError(
+                                "FAL_KEY required for realistic image generation."
+                            )
+                        logger.info("Step 1: Generating realistic full-body with Fal Flux Pro …")
+                        client: NovelAIClient | FalTextToImageClient = FalTextToImageClient()
+                    elif os.environ.get("NOVELAI_TOKEN"):
                         logger.info("Step 1: Generating full-body with NovelAI …")
-                        client: NovelAIClient | FalTextToImageClient = NovelAIClient()
+                        client = NovelAIClient()
                     elif os.environ.get("FAL_KEY"):
                         logger.info(
                             "Step 1: Generating full-body with Fal Flux Pro (fallback) …",
@@ -316,14 +350,11 @@ class ImageGenPipeline:
         if "bustup" in enabled:
             _notify("bustup", "generating", 0)
             expr_list = expressions or list(_EXPRESSION_PROMPTS.keys())
-            logger.info("Step 2: Generating bustup expressions: %s", expr_list)
+            logger.info("Step 2: Generating bustup expressions (%s): %s",
+                        "realistic" if self._is_realistic else "anime", expr_list)
 
-            # Step 2a: Generate neutral bustup first (from fullbody reference).
-            # This produces a close-up where the face occupies ~40-50% of the
-            # image, making it a much better reference for expression changes
-            # than the original full-body image (~10-15% face area).
             bustup_ref_bytes: bytes | None = None
-            neutral_path = self._assets_dir / "avatar_bustup.png"
+            neutral_path = self._assets_dir / self._bustup_filename("neutral")
 
             if "neutral" in expr_list:
                 try:
@@ -372,7 +403,7 @@ class ImageGenPipeline:
             _notify("bustup", "completed", 100)
 
         if "chibi" in enabled:
-            chibi_path = self._assets_dir / self.ASSET_NAMES["chibi"]
+            chibi_path = self._assets_dir / self._asset_name("chibi")
             if skip_existing and chibi_path.exists():
                 result.skipped.append("chibi")
                 chibi_bytes = chibi_path.read_bytes()
@@ -402,11 +433,11 @@ class ImageGenPipeline:
 
         if "3d" in enabled:
             if chibi_bytes is None:
-                chibi_path = self._assets_dir / self.ASSET_NAMES["chibi"]
+                chibi_path = self._assets_dir / self._asset_name("chibi")
                 if chibi_path.exists():
                     chibi_bytes = chibi_path.read_bytes()
 
-            model_path = self._assets_dir / self.ASSET_NAMES["model"]
+            model_path = self._assets_dir / self._asset_name("model")
             if skip_existing and model_path.exists():
                 result.skipped.append("3d")
                 result.model_path = model_path
@@ -434,7 +465,7 @@ class ImageGenPipeline:
         rig_task_id: str | None = None
 
         if "rigging" in enabled:
-            rigged_path = self._assets_dir / self.ASSET_NAMES["rigged_model"]
+            rigged_path = self._assets_dir / self._asset_name("rigged_model")
             if skip_existing and rigged_path.exists():
                 result.skipped.append("rigging")
                 result.rigged_model_path = rigged_path

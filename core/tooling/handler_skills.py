@@ -357,3 +357,95 @@ class SkillsToolsMixin:
         tasks = manager.list_tasks(status=status_filter)
         result = [t.model_dump() for t in tasks]
         return _json.dumps(result, ensure_ascii=False, indent=2)
+
+    # ── plan_tasks handler (DAG batch submission) ────────────
+
+    def _handle_plan_tasks(self, args: dict[str, Any]) -> str:
+        """Validate and write a DAG batch of tasks to state/pending/.
+
+        Performs cycle detection, duplicate ID check, and dependency
+        reference validation before writing task files.
+        """
+        from datetime import datetime as _dt, timezone as _tz
+
+        batch_id = args.get("batch_id", "")
+        tasks = args.get("tasks", [])
+
+        if not batch_id:
+            return _error_result("batch_id is required")
+        if not tasks:
+            return _error_result("tasks must contain at least one task")
+
+        # Validate task IDs are unique
+        task_ids = [t.get("task_id", "") for t in tasks]
+        if len(task_ids) != len(set(task_ids)):
+            return _error_result("Duplicate task_id found in batch")
+
+        task_id_set = set(task_ids)
+
+        # Validate depends_on references
+        for t in tasks:
+            for dep in t.get("depends_on", []):
+                if dep not in task_id_set:
+                    return _error_result(
+                        f"Task '{t['task_id']}' depends on unknown task_id '{dep}'"
+                    )
+
+        # Validate required fields
+        for t in tasks:
+            if not t.get("task_id") or not t.get("title") or not t.get("description"):
+                return _error_result(
+                    f"Task missing required fields (task_id, title, description): "
+                    f"{t.get('task_id', '?')}"
+                )
+
+        # Cycle detection via topological sort
+        from core.supervisor.pending_executor import _topological_sort
+        try:
+            _topological_sort(tasks)
+        except ValueError:
+            return _error_result("Cycle detected in depends_on references")
+
+        # Write task files to state/pending/
+        pending_dir = self._anima_dir / "state" / "pending"
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        now_iso = _dt.now(_tz.utc).isoformat()
+
+        written: list[str] = []
+        for t in tasks:
+            task_desc = {
+                "task_type": "llm",
+                "task_id": t["task_id"],
+                "batch_id": batch_id,
+                "title": t["title"],
+                "description": t["description"],
+                "parallel": t.get("parallel", False),
+                "depends_on": t.get("depends_on", []),
+                "acceptance_criteria": t.get("acceptance_criteria", []),
+                "constraints": t.get("constraints", []),
+                "file_paths": t.get("file_paths", []),
+                "submitted_by": self._anima_name,
+                "submitted_at": now_iso,
+            }
+            path = pending_dir / f"{t['task_id']}.json"
+            path.write_text(
+                _json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            written.append(t["task_id"])
+
+        # Wake the pending executor
+        if hasattr(self, "_pending_executor_wake") and self._pending_executor_wake:
+            self._pending_executor_wake()
+
+        return _json.dumps({
+            "status": "submitted",
+            "batch_id": batch_id,
+            "task_count": len(written),
+            "task_ids": written,
+            "message": (
+                f"Batch '{batch_id}' submitted with {len(written)} tasks. "
+                f"Parallel tasks will execute concurrently. "
+                f"Tasks with depends_on will wait for dependencies."
+            ),
+        }, ensure_ascii=False)

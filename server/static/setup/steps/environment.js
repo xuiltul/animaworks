@@ -12,6 +12,7 @@ let selectedProvider = "";
 let apiKey = "";
 let apiKeyValid = null; // null = unchecked, true/false
 let ollamaUrl = "http://localhost:11434";
+let selectedImageStyle = "realistic";
 let imageKeys = {
   novelai: "",
   fal: "",
@@ -89,10 +90,26 @@ function render() {
 
     <div class="env-section">
       <div class="env-section-title" data-i18n="env.imagegen.title">${t("env.imagegen.title")}</div>
+      <div class="env-section-desc" data-i18n="env.imagestyle.desc">${t("env.imagestyle.desc")}</div>
+      <div class="image-style-cards">
+        <div class="image-style-card${selectedImageStyle === "realistic" ? " selected" : ""}" data-style="realistic">
+          <div class="image-style-radio"></div>
+          <div>
+            <div class="image-style-name" data-i18n="env.imagestyle.realistic">${t("env.imagestyle.realistic")}</div>
+            <div class="image-style-desc" data-i18n="env.imagestyle.realistic.desc">${t("env.imagestyle.realistic.desc")}</div>
+          </div>
+        </div>
+        <div class="image-style-card${selectedImageStyle === "anime" ? " selected" : ""}" data-style="anime">
+          <div class="image-style-radio"></div>
+          <div>
+            <div class="image-style-name" data-i18n="env.imagestyle.anime">${t("env.imagestyle.anime")}</div>
+            <div class="image-style-desc" data-i18n="env.imagestyle.anime.desc">${t("env.imagestyle.anime.desc")}</div>
+          </div>
+        </div>
+      </div>
+
       <div class="image-key-section">
-        ${renderImageKey("novelai", t("env.novelai"), t("env.novelai.desc"), t("env.recommended"))}
-        ${renderImageKey("fal", t("env.fal"), t("env.fal.desc"), t("env.optional"))}
-        ${renderImageKey("meshy", t("env.meshy"), t("env.meshy.desc"), t("env.optional"))}
+        ${renderImageKeysForStyle()}
       </div>
     </div>
 
@@ -162,6 +179,17 @@ function renderOllamaInput() {
   `;
 }
 
+function renderImageKeysForStyle() {
+  if (selectedImageStyle === "realistic") {
+    return renderImageKey("fal", t("env.fal"), t("env.fal.desc"), t("env.recommended"));
+  }
+  return [
+    renderImageKey("novelai", t("env.novelai"), t("env.novelai.desc"), t("env.recommended")),
+    renderImageKey("fal", t("env.fal"), t("env.fal.desc"), t("env.optional")),
+    renderImageKey("meshy", t("env.meshy"), t("env.meshy.desc"), t("env.optional")),
+  ].join("");
+}
+
 function renderImageKey(id, label, hint, badge) {
   const val = imageKeys[id] || "";
   const status = imageKeyStatus[id];
@@ -191,6 +219,14 @@ function renderImageKey(id, label, hint, badge) {
 }
 
 function bindEvents() {
+  // Image style selection
+  container.querySelectorAll(".image-style-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      selectedImageStyle = card.dataset.style;
+      render();
+    });
+  });
+
   // Provider selection
   container.querySelectorAll(".provider-card").forEach((card) => {
     card.addEventListener("click", () => {
@@ -337,6 +373,7 @@ export function getEnvironmentData() {
     provider: selectedProvider,
     api_key: apiKey || undefined,
     ollama_url: selectedProvider === "ollama" ? ollamaUrl : undefined,
+    image_style: selectedImageStyle,
     image_keys: {
       novelai_token: imageKeys.novelai || undefined,
       fal_key: imageKeys.fal || undefined,

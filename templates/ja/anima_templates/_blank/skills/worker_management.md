@@ -42,10 +42,10 @@ animaworks anima delete <name>
 
 ```bash
 # config.json変更後に特定Animaだけリスタート
-animaworks anima restart tsumugi
+animaworks anima restart aoi
 
 # モデルを変更して自動リスタート
-animaworks anima set-model tsumugi claude-sonnet-4-6
+animaworks anima set-model aoi claude-sonnet-4-6
 ```
 
 ## API リファレンス（CLIが使えない場合）

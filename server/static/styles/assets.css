@@ -471,6 +471,251 @@
    Reduced Motion
    ============================================ */
 
+/* ── Secondary Gallery (Small Thumbnails) ──── */
+
+.assets-thumb-card--small {
+  max-width: 120px;
+}
+
+.assets-thumb-card--small .assets-thumb-img {
+  height: 100px;
+}
+
+.assets-thumb-card--small .assets-thumb-placeholder {
+  height: 100px;
+}
+
+.assets-badge--exists {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--aw-color-success-text, #166534);
+  background: var(--aw-color-success-bg, #dcfce7);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+.assets-badge--missing {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--aw-color-text-muted, #888);
+  background: var(--aw-color-bg-tertiary, #e5e5e5);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+/* ============================================
+   Preview History Navigation
+   ============================================ */
+
+.assets-preview-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.assets-preview-counter {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--assets-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 50px;
+  text-align: center;
+}
+
+/* ============================================
+   Confirm Dialog
+   ============================================ */
+
+.assets-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.assets-confirm-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.assets-confirm-dialog {
+  background: var(--assets-card-bg);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  padding: 24px 28px;
+  max-width: 400px;
+  width: 90%;
+}
+
+.assets-confirm-dialog p {
+  margin: 0 0 16px;
+  font-size: 0.95rem;
+  color: var(--assets-text);
+  line-height: 1.5;
+}
+
+.assets-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ============================================
+   Status Text (replaces Complete button)
+   ============================================ */
+
+.assets-status-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--assets-success);
+  padding: 8px 0;
+}
+
+/* ============================================
+   Action Buttons 3-Zone Layout
+   ============================================ */
+
+.assets-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 0;
+  flex-wrap: wrap;
+}
+
+.assets-modal-actions-left,
+.assets-modal-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================
+   Slider Disabled State
+   ============================================ */
+
+.assets-control-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ============================================
+   Expression Grid
+   ============================================ */
+
+.assets-expression-section {
+  border-top: 1px solid var(--assets-border);
+  padding-top: 16px;
+}
+
+.assets-expression-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.assets-expression-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.assets-expression-card {
+  background: var(--assets-card-bg);
+  border-radius: 8px;
+  box-shadow: var(--assets-card-shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow var(--assets-transition);
+}
+
+.assets-expression-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.assets-expression-img {
+  width: 100%;
+  height: 120px;
+  object-fit: contain;
+  background: var(--aw-color-bg-secondary);
+}
+
+.assets-expression-placeholder {
+  width: 100%;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--aw-color-bg-secondary);
+  color: var(--assets-text-faint);
+  font-size: 0.75rem;
+}
+
+.assets-expression-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+}
+
+.assets-expression-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--assets-text);
+}
+
+.assets-expression-regen-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: var(--aw-color-bg-hover);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--assets-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--assets-transition), color var(--assets-transition);
+}
+
+.assets-expression-regen-btn:hover {
+  background: var(--assets-primary);
+  color: var(--aw-color-bg-primary);
+}
+
+.assets-expression-regen-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Small button variant ──────────────────── */
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+/* ============================================
+   Reduced Motion
+   ============================================ */
+
 @media (prefers-reduced-motion: reduce) {
   .assets-modal-overlay.active {
     animation: none;
@@ -482,6 +727,12 @@
     transition: none;
   }
   .assets-progress-bar-fill {
+    transition: none;
+  }
+  .assets-confirm-overlay {
+    transition: none;
+  }
+  .assets-expression-card {
     transition: none;
   }
 }

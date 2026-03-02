@@ -79,10 +79,10 @@ agent-browser等でスクリーンショットを撮る場合、**自分のattac
 agent-browser screenshot ~/.animaworks/animas/{自分の名前}/attachments/screenshot.png
 ```
 
-例（meiの場合）:
+例（aoiの場合）:
 
 ```bash
-agent-browser screenshot ~/.animaworks/animas/mei/attachments/page_screenshot.png
+agent-browser screenshot ~/.animaworks/animas/aoi/attachments/page_screenshot.png
 ```
 
 保存後、応答に以下を書けば表示される:

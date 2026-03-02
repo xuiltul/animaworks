@@ -286,6 +286,36 @@ def _build_pre_tool_hook(
                 )
             )
 
+        # plan_tasks intercept → DAG batch to pending
+        if tool_name == "plan_tasks":
+            from core.tooling.handler_skills import SkillsToolsMixin
+            from core.tooling.handler_base import _error_result
+
+            class _PlanTasksProxy(SkillsToolsMixin):
+                _anima_dir = anima_dir
+                _anima_name = anima_dir.name
+                _pending_executor_wake = on_task_intercepted
+
+            proxy = _PlanTasksProxy()
+            try:
+                result_str = proxy._handle_plan_tasks(tool_input)
+            except Exception as exc:
+                result_str = _error_result(str(exc))
+
+            _log_tool_use(
+                anima_dir, "plan_tasks", tool_input,
+                tool_use_id=tool_use_id, blocked=False,
+            )
+            return SyncHookJSONOutput(
+                hookSpecificOutput=PreToolUseHookSpecificOutput(
+                    hookEventName="PreToolUse",
+                    permissionDecision="deny",
+                    permissionDecisionReason=(
+                        f"INTERCEPT_OK: plan_tasks result: {result_str}"
+                    ),
+                )
+            )
+
         # TaskOutput for intercepted Task is not backed by SDK task IDs.
         if tool_name == "TaskOutput":
             task_id = str(tool_input.get("task_id", "")).strip()

@@ -21,6 +21,7 @@ export function populateConfirm(data) {
   const userName = data.userinfo?.username || "-";
   const userDisplayName = data.userinfo?.display_name || "";
   const provider = data.environment?.provider || "-";
+  const imageStyle = data.environment?.image_style || "realistic";
   const leaderName = data.leader?.name || "-";
   const imageKeys = data.environment?.image_keys || {};
 
@@ -75,6 +76,10 @@ export function populateConfirm(data) {
           <span class="confirm-key">${t("confirm.provider")}</span>
           <span class="confirm-value">${t(`env.provider.${provider}`) || provider}</span>
         </div>
+        <div class="confirm-row">
+          <span class="confirm-key">${t("confirm.imagestyle")}</span>
+          <span class="confirm-value">${t(`env.imagestyle.${imageStyle}`)}</span>
+        </div>
         ${keySummary}
       </div>
 
@@ -102,11 +107,11 @@ export function populateConfirm(data) {
 export async function completeSetup(data) {
   if (!confirmPanel) return;
 
-  // Build API payload from wizard data
   const payload = {
     locale: data.language?.locale || "ja",
     credentials: {},
     anima: { name: data.leader?.name },
+    image_style: data.environment?.image_style || "realistic",
     user: data.userinfo ? {
       username: data.userinfo.username,
       display_name: data.userinfo.display_name || "",

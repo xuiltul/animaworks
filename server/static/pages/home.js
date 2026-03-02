@@ -4,6 +4,7 @@ import { api } from "../modules/api.js";
 import { escapeHtml, timeStr, statusClass } from "../modules/state.js";
 import { animaHashColor } from "../modules/animas.js";
 import { getIcon, getDisplaySummary } from "../shared/activity-types.js";
+import { bustupCandidates, resolveAvatar } from "../modules/avatar-resolver.js";
 
 let _refreshInterval = null;
 
@@ -33,8 +34,8 @@ export function render(container) {
     <div class="card" style="margin-bottom: 1.5rem;">
       <div class="card-header">${t("home.anima_list")}</div>
       <div class="card-body">
-        <div class="card-grid" id="homeAnimaCards" style="grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));">
-          <div class="loading-placeholder">読み込み中...</div>
+        <div class="org-tree" id="homeOrgTree">
+          <div class="loading-placeholder">${t("common.loading")}</div>
         </div>
       </div>
     </div>
@@ -74,7 +75,7 @@ export function destroy() {
 
 async function _loadAll() {
   _loadSystemStatus();
-  _loadAnimaCards();
+  _loadOrgChart();
   _loadActivity();
 }
 
@@ -95,82 +96,123 @@ async function _loadSystemStatus() {
   }
 }
 
-async function _loadAnimaCards() {
-  const grid = document.getElementById("homeAnimaCards");
-  if (!grid) return;
+async function _loadOrgChart() {
+  const container = document.getElementById("homeOrgTree");
+  if (!container) return;
 
   try {
-    const animas = await api("/api/animas");
-    if (animas.length === 0) {
-      grid.innerHTML = `<div class="loading-placeholder">${t("animas.not_registered")}</div>`;
+    const data = await api("/api/org/chart?include_disabled=true");
+    const tree = data.tree || [];
+    if (tree.length === 0) {
+      container.innerHTML = `<div class="loading-placeholder">${t("animas.not_registered")}</div>`;
       return;
     }
 
-    grid.innerHTML = "";
-    for (const p of animas) {
-      const card = document.createElement("div");
-      card.className = "card";
-      card.style.cssText = "cursor:pointer; transition: transform 0.15s;";
-      card.addEventListener("mouseenter", () => { card.style.transform = "translateY(-2px)"; });
-      card.addEventListener("mouseleave", () => { card.style.transform = ""; });
-
-      const dotClass = statusClass(p.status);
-      const statusLabel = p.status || "offline";
-      const initial = escapeHtml(p.name.charAt(0).toUpperCase());
-      const color = animaHashColor(p.name);
-
-      // Avatar: both img and initial div, CSS controls visibility per theme
-      const avatarHtml = `
-        <div class="anima-avatar-container" style="width:48px;height:48px;margin:0 auto 0.5rem;">
-          <div class="anima-avatar-initial" style="background: ${color}; width:48px; height:48px; font-size:18px;">${initial}</div>
-        </div>`;
-
-      card.innerHTML = `
-        <div class="card-body" style="text-align:center; padding: 1rem;">
-          <div id="homeAvatar_${escapeHtml(p.name)}">${avatarHtml}</div>
-          <div style="font-weight:600; margin-bottom: 0.25rem;">${escapeHtml(p.name)}</div>
-          <span class="status-badge ${statusLabel === 'running' || statusLabel === 'idle' ? 'success' : statusLabel === 'error' ? 'error' : ''}"">
-            <span class="status-dot ${dotClass}" style="display:inline-block;"></span>
-            ${escapeHtml(statusLabel)}
-          </span>
-        </div>
-      `;
-
-      card.addEventListener("click", () => {
-        location.hash = "#/animas";
-      });
-
-      grid.appendChild(card);
-
-      // Try loading avatar image
-      _tryLoadAvatar(p.name);
+    const topRow = document.createElement("div");
+    topRow.className = "org-tree-top-row";
+    for (const node of tree) {
+      topRow.appendChild(_renderColumn(node));
     }
+    container.innerHTML = "";
+    container.appendChild(topRow);
+
+    _loadOrgAvatars(container);
   } catch (err) {
-    grid.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
+    container.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }
 }
 
-async function _tryLoadAvatar(name) {
-  const container = document.getElementById(`homeAvatar_${name}`);
-  if (!container) return;
+function _shortModel(model) {
+  if (!model) return "";
+  return model
+    .replace(/^(openai|google|vertex_ai|azure|ollama|bedrock)\//, "")
+    .replace(/^jp\.anthropic\./, "")
+    .replace(/^anthropic\./, "");
+}
 
-  const initial = escapeHtml(name.charAt(0).toUpperCase());
-  const color = animaHashColor(name);
+function _renderColumn(node) {
+  const col = document.createElement("div");
+  col.className = "org-tree-column";
 
-  const candidates = ["avatar_bustup.png", "avatar_chibi.png"];
-  for (const filename of candidates) {
-    const url = `/api/animas/${encodeURIComponent(name)}/assets/${encodeURIComponent(filename)}`;
-    try {
-      const resp = await fetch(url, { method: "HEAD" });
-      if (resp.ok) {
-        container.innerHTML = `
-          <div class="anima-avatar-container" style="width:48px;height:48px;margin:0 auto 0.5rem;">
-            <img class="anima-avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(name)}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;">
-            <div class="anima-avatar-initial" style="background: ${color}; width:48px; height:48px; font-size:18px;">${initial}</div>
-          </div>`;
-        return;
-      }
-    } catch { /* try next */ }
+  col.appendChild(_buildCard(node, true));
+
+  const children = node.children || [];
+  if (children.length > 0) {
+    const stem = document.createElement("div");
+    stem.className = "org-tree-stem";
+    col.appendChild(stem);
+
+    const ul = document.createElement("ul");
+    ul.className = "org-tree-list";
+    for (const child of children) {
+      ul.appendChild(_renderSubNode(child));
+    }
+    col.appendChild(ul);
+  }
+
+  return col;
+}
+
+function _renderSubNode(node) {
+  const li = document.createElement("li");
+  li.className = "org-tree-node";
+
+  li.appendChild(_buildCard(node, false));
+
+  const children = node.children || [];
+  if (children.length > 0) {
+    const childUl = document.createElement("ul");
+    childUl.className = "org-tree-list";
+    for (const child of children) {
+      childUl.appendChild(_renderSubNode(child));
+    }
+    li.appendChild(childUl);
+  }
+
+  return li;
+}
+
+function _buildCard(node, isRoot = false) {
+  const initial = escapeHtml(node.name.charAt(0).toUpperCase());
+  const color = animaHashColor(node.name);
+  const dotClass = statusClass(node.status);
+  const role = node.speciality || "";
+  const model = _shortModel(node.model);
+  const disabled = node.status === "disabled";
+
+  const card = document.createElement("div");
+  let cls = "org-tree-card";
+  if (isRoot) cls += " org-tree-card--root";
+  if (disabled) cls += " org-tree-card--disabled";
+  card.className = cls;
+  const metaParts = [];
+  if (role) metaParts.push(`<span class="org-tree-role">${escapeHtml(role)}</span>`);
+  if (model) metaParts.push(`<span class="org-tree-model">${escapeHtml(model)}</span>`);
+
+  card.innerHTML = `
+    <div class="org-tree-avatar" id="orgAvatar_${escapeHtml(node.name)}" style="background:${color};">
+      ${initial}
+    </div>
+    <div class="org-tree-info">
+      <div class="org-tree-name">
+        ${escapeHtml(node.name)}
+        <span class="org-tree-status ${dotClass}"></span>
+      </div>
+      ${metaParts.length ? `<div class="org-tree-meta">${metaParts.join("")}</div>` : ""}
+    </div>
+  `;
+  card.addEventListener("click", () => { location.hash = "#/animas"; });
+  return card;
+}
+
+async function _loadOrgAvatars(root) {
+  const avatarEls = root.querySelectorAll("[id^='orgAvatar_']");
+  for (const el of avatarEls) {
+    const name = el.id.replace("orgAvatar_", "");
+    const url = await resolveAvatar(name, bustupCandidates());
+    if (url) {
+      el.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
+    }
   }
 }
 

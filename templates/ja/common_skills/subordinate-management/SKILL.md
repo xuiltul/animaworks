@@ -49,9 +49,9 @@ description: >-
 複数人を休止する場合は1人ずつ `disable_subordinate` を呼ぶ:
 
 ```
-disable_subordinate(name="hinata", reason="業務縮小のため一時休止")
-disable_subordinate(name="natsume", reason="業務縮小のため一時休止")
-enable_subordinate(name="hinata")
+disable_subordinate(name="aoi", reason="業務縮小のため一時休止")
+disable_subordinate(name="taro", reason="業務縮小のため一時休止")
+enable_subordinate(name="aoi")
 ```
 
 ### モデル変更と再起動
@@ -59,8 +59,8 @@ enable_subordinate(name="hinata")
 モデル変更は status.json に保存されるが、実行中プロセスへの反映には `restart_subordinate` が必要:
 
 ```
-set_subordinate_model(name="hinata", model="claude-sonnet-4-6", reason="負荷分散のため")
-restart_subordinate(name="hinata", reason="モデル変更を反映")
+set_subordinate_model(name="aoi", model="claude-sonnet-4-6", reason="負荷分散のため")
+restart_subordinate(name="aoi", reason="モデル変更を反映")
 ```
 
 ### 状態確認
@@ -68,14 +68,14 @@ restart_subordinate(name="hinata", reason="モデル変更を反映")
 ```
 org_dashboard()                    # 配下全体のダッシュボード
 ping_subordinate()                 # 全配下の生存確認
-ping_subordinate(name="hinata")    # 単一の生存確認
-read_subordinate_state(name="hinata")  # 現在タスク・保留タスクの内容
+ping_subordinate(name="aoi")    # 単一の生存確認
+read_subordinate_state(name="aoi")  # 現在タスク・保留タスクの内容
 ```
 
 ### タスク委譲
 
 ```
-delegate_task(name="hinata", instruction="週次レポートをまとめて", deadline="1d", summary="週次レポート作成")
+delegate_task(name="aoi", instruction="週次レポートをまとめて", deadline="1d", summary="週次レポート作成")
 task_tracker(status="active")      # 委譲タスクの進捗確認
 ```
 

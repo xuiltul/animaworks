@@ -1,5 +1,6 @@
 // ── Bustup Overlay Controller ──────────────────
 import { $ } from "./ctx.js";
+import { bustupCandidates, resolveAvatar } from "../../modules/avatar-resolver.js";
 
 export function createAvatarController(ctx) {
   const { state, deps } = ctx;
@@ -15,18 +16,12 @@ export function createAvatarController(ctx) {
 
     state.bustupUrl = null;
     const name = state.selectedAnima;
-    const candidates = ["avatar_bustup.png"];
-    for (const filename of candidates) {
-      const url = `/api/animas/${encodeURIComponent(name)}/assets/${encodeURIComponent(filename)}`;
-      try {
-        const resp = await fetch(url, { method: "HEAD" });
-        if (resp.ok) {
-          if (filename === "avatar_bustup.png") state.bustupUrl = url;
-          container.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="anima-avatar-img">`;
-          container.style.cursor = state.bustupUrl ? "pointer" : "";
-          return;
-        }
-      } catch { /* next */ }
+    const url = await resolveAvatar(name, bustupCandidates());
+    if (url) {
+      state.bustupUrl = url;
+      container.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="anima-avatar-img">`;
+      container.style.cursor = "pointer";
+      return;
     }
     container.style.cursor = "";
     container.innerHTML = `<div class="anima-avatar-placeholder">${escapeHtml(name.charAt(0).toUpperCase())}</div>`;
@@ -35,11 +30,7 @@ export function createAvatarController(ctx) {
   async function showBustupOverlay() {
     if (!state.selectedAnima) return;
     if (!state.bustupUrl) {
-      const url = `/api/animas/${encodeURIComponent(state.selectedAnima)}/assets/avatar_bustup.png`;
-      try {
-        const resp = await fetch(url, { method: "HEAD" });
-        if (resp.ok) state.bustupUrl = url;
-      } catch { /* noop */ }
+      state.bustupUrl = await resolveAvatar(state.selectedAnima, bustupCandidates());
     }
     if (!state.bustupUrl) return;
     removeBustupOverlay();

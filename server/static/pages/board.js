@@ -3,6 +3,7 @@ import { api } from "../modules/api.js";
 import { escapeHtml, renderMarkdown, smartTimestamp } from "../modules/state.js";
 import { createLogger } from "../shared/logger.js";
 import { t } from "/shared/i18n.js";
+import { bustupCandidates, resolveAvatar } from "../modules/avatar-resolver.js";
 
 const logger = createLogger("board-page");
 
@@ -196,20 +197,9 @@ function _addListener(id, event, handler) {
 
 async function _resolveAvatar(name) {
   if (name in _avatarCache) return _avatarCache[name];
-
-  const candidates = ["avatar_bustup.png", "avatar_chibi.png"];
-  for (const filename of candidates) {
-    const url = `/api/animas/${encodeURIComponent(name)}/assets/${encodeURIComponent(filename)}`;
-    try {
-      const resp = await fetch(url, { method: "HEAD" });
-      if (resp.ok) {
-        _avatarCache[name] = url;
-        return url;
-      }
-    } catch { /* try next */ }
-  }
-  _avatarCache[name] = null;
-  return null;
+  const url = await resolveAvatar(name, bustupCandidates());
+  _avatarCache[name] = url;
+  return url;
 }
 
 async function _preloadAvatars(names) {

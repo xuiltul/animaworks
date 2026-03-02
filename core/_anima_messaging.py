@@ -14,6 +14,7 @@ import logging
 import re
 import time
 from collections.abc import AsyncGenerator
+from datetime import date
 from typing import Any
 
 from core.time_utils import now_jst
@@ -37,6 +38,42 @@ logger = logging.getLogger("animaworks.anima")
 
 class MessagingMixin:
     """Mixin: human chat processing, bootstrap, and greeting."""
+
+    def _log_human_conversation(
+        self,
+        content: str,
+        from_person: str,
+        thread_id: str = "default",
+    ) -> None:
+        """Append human message to shared conversation log.
+
+        Writes to ``shared/users/{from_person}/conversations/YYYY-MM-DD.jsonl``
+        so that any Anima can search what the human discussed across all Animas.
+        """
+        if from_person in ("system", "") or from_person == self.name:
+            return
+        try:
+            shared_dir = (
+                self.anima_dir.parent.parent
+                / "shared" / "users" / from_person / "conversations"
+            )
+            shared_dir.mkdir(parents=True, exist_ok=True)
+
+            today = date.today().isoformat()
+            log_file = shared_dir / f"{today}.jsonl"
+
+            record = {
+                "ts": now_jst().isoformat(),
+                "anima": self.name,
+                "content": content,
+                "thread_id": thread_id,
+            }
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except Exception:
+            logger.warning(
+                "[%s] Failed to log human conversation", self.name, exc_info=True,
+            )
 
     async def run_bootstrap(self) -> CycleResult:
         """Run the first-time bootstrap process in the background.
@@ -146,6 +183,17 @@ class MessagingMixin:
                 )
                 conv_memory.save()
 
+                # Transcript: record human message
+                conv_memory.write_transcript(
+                    "human", content,
+                    from_person=from_person,
+                    thread_id=thread_id,
+                    attachments=attachment_paths or None,
+                )
+
+                # Shared conversation log: record human message
+                self._log_human_conversation(content, from_person, thread_id)
+
                 # Activity log: message received
                 self._activity.log(
                     "message_received",
@@ -177,6 +225,13 @@ class MessagingMixin:
                         tool_records=tool_records,
                     )
                     conv_memory.save()
+
+                    # Transcript: record assistant response
+                    conv_memory.write_transcript(
+                        "assistant", result.summary,
+                        thread_id=thread_id,
+                        tool_names=[r.tool_name for r in tool_records if r.tool_name] or None,
+                    )
 
                     # Activity log: response sent (with thinking text if present)
                     response_artifacts = extract_image_artifacts_from_tool_records(
@@ -293,6 +348,17 @@ class MessagingMixin:
                 )
                 conv_memory.save()
 
+                # Transcript: record human message
+                conv_memory.write_transcript(
+                    "human", content,
+                    from_person=from_person,
+                    thread_id=thread_id,
+                    attachments=attachment_paths or None,
+                )
+
+                # Shared conversation log: record human message
+                self._log_human_conversation(content, from_person, thread_id)
+
                 # Activity log: message received
                 self._activity.log(
                     "message_received",
@@ -358,6 +424,13 @@ class MessagingMixin:
                                 tool_records=tool_records,
                             )
                             conv_memory.save()
+
+                            # Transcript: record assistant response
+                            conv_memory.write_transcript(
+                                "assistant", summary,
+                                thread_id=thread_id,
+                                tool_names=[r.tool_name for r in tool_records if r.tool_name] or None,
+                            )
 
                             # Activity log: response sent (with thinking text if present)
                             thinking_text = cycle_result.get("thinking_text", "")

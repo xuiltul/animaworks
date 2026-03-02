@@ -15,6 +15,8 @@ export function createStreamingController(ctx) {
   const { t, escapeHtml, logger, fetchActiveStream, fetchStreamProgress } = deps;
   const mgr = state.manager;
 
+  mgr.addEventListener("stream-state-changed", () => { updateSendButton(); });
+
   function isAnimaStreaming(name) { return mgr.isStreamingForAnima(name); }
 
   function setSendButtonIcon(sendBtn, mode) {
@@ -186,9 +188,10 @@ export function createStreamingController(ctx) {
     const name = overrideImages?.targetAnima || state.selectedAnima;
     const images = overrideImages?.images || state.imageInputManager?.getPendingImages() || [];
     const displayImages = overrideImages?.displayImages || state.imageInputManager?.getDisplayImages() || [];
+    const tid = overrideImages?.targetThread || state.selectedThreadId;
     if (!name || (!message.trim() && images.length === 0)) return;
-    if (isAnimaStreaming(name)) {
-      logger.warn("Blocked: this anima is already streaming", { anima: name });
+    if (mgr.isStreamingFor(name, tid)) {
+      logger.warn("Blocked: this thread is already streaming", { anima: name, thread: tid });
       return;
     }
 
@@ -204,8 +207,6 @@ export function createStreamingController(ctx) {
       }
       return;
     }
-
-    const tid = overrideImages?.targetThread || state.selectedThreadId;
     const threadList = state.threads[name] || [];
     const threadEntry = threadList.find(th => th.id === tid);
     if (threadEntry && threadEntry.label === "新しいスレッド" && message.trim()) {
@@ -220,6 +221,9 @@ export function createStreamingController(ctx) {
     ctx.controllers.thread.renderThreadTabs();
     if (input) input.placeholder = t("chat.message_to", { name });
     if (!overrideImages) state.imageInputManager?.clearImages();
+
+    // User actively sent a message → re-attach scroll to bottom
+    ctx.controllers.renderer.reattach();
 
     ctx.controllers.activity.addLocalActivity("chat", name, `${t("chat.user_prefix")} ${message}`);
 
@@ -242,7 +246,7 @@ export function createStreamingController(ctx) {
     };
 
     const renderBubble = (streamingMsg) => { if (isVisible()) ctx.controllers.renderer.renderStreamingBubble(streamingMsg); };
-    const renderFull = () => { if (isVisible()) ctx.controllers.renderer.renderChat(); };
+    const renderFull = () => { if (isVisible()) ctx.controllers.renderer.renderChat(!ctx.controllers.renderer.isUserDetached()); };
 
     logger.debug(`_sendChat: starting stream for ${name} msg_len=${message.length}`);
 
@@ -254,7 +258,7 @@ export function createStreamingController(ctx) {
       images,
       displayImages,
       callbacks: {
-        onStreamCreated: msg => { streamingMsg = msg; renderFull(); },
+        onStreamCreated: msg => { streamingMsg = msg; renderFull(); updateSendButton(); },
         onTextDelta: text => {
           if (!streamingMsg?.streaming) return;
           streamingMsg.afterHeartbeatRelay = false;
@@ -363,33 +367,34 @@ export function createStreamingController(ctx) {
   }
 
   async function resumeActiveStream(animaName) {
-    if (isAnimaStreaming(animaName)) return;
     const tid = state.selectedThreadId || "default";
+    if (mgr.isStreamingFor(animaName, tid)) return;
 
     ctx.controllers.renderer.renderChat();
 
     const renderIfVisible = (msg) => {
       if (state.selectedAnima === animaName) ctx.controllers.renderer.renderStreamingBubble(msg);
     };
+    const smartScroll = () => !ctx.controllers.renderer.isUserDetached();
 
     let streamingMsg = null;
 
     await mgr.resumeStream(animaName, tid, {
       callbacks: {
-        onStreamCreated: msg => { streamingMsg = msg; ctx.controllers.renderer.renderChat(); },
+        onStreamCreated: msg => { streamingMsg = msg; ctx.controllers.renderer.renderChat(smartScroll()); updateSendButton(); },
         onTextDelta: text => { if (streamingMsg?.streaming) { streamingMsg.text += text; renderIfVisible(streamingMsg); } },
         onToolStart: toolName => { if (streamingMsg?.streaming) { streamingMsg.activeTool = toolName; renderIfVisible(streamingMsg); } },
         onToolEnd: () => { if (streamingMsg?.streaming) { streamingMsg.activeTool = null; renderIfVisible(streamingMsg); } },
         onThinkingStart: () => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = ""; streamingMsg.thinking = true; renderIfVisible(streamingMsg); } },
         onThinkingDelta: text => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + text; renderIfVisible(streamingMsg); } },
         onThinkingEnd: () => { if (streamingMsg?.streaming) { streamingMsg.thinking = false; renderIfVisible(streamingMsg); } },
-        onError: ({ message: errorMsg }) => { if (streamingMsg) { streamingMsg.text += `\n${t("chat.error_prefix")} ${errorMsg}`; streamingMsg.streaming = false; if (state.selectedAnima === animaName) ctx.controllers.renderer.renderChat(); } },
+        onError: ({ message: errorMsg }) => { if (streamingMsg) { streamingMsg.text += `\n${t("chat.error_prefix")} ${errorMsg}`; streamingMsg.streaming = false; if (state.selectedAnima === animaName) ctx.controllers.renderer.renderChat(smartScroll()); } },
         onDone: ({ summary, images }) => {
           if (streamingMsg) {
             streamingMsg.text = summary || streamingMsg.text || t("chat.empty_response");
             streamingMsg.images = images || [];
             streamingMsg.streaming = false; streamingMsg.activeTool = null;
-            if (state.selectedAnima === animaName) ctx.controllers.renderer.renderChat();
+            if (state.selectedAnima === animaName) ctx.controllers.renderer.renderChat(smartScroll());
             ctx.controllers.renderer.markResponseComplete(animaName, tid);
           }
         },
@@ -399,7 +404,7 @@ export function createStreamingController(ctx) {
           if (streamingMsg?.streaming) {
             streamingMsg.streaming = false;
             if (!streamingMsg.text) streamingMsg.text = t("chat.empty_response");
-            if (state.selectedAnima === animaName) ctx.controllers.renderer.renderChat();
+            if (state.selectedAnima === animaName) ctx.controllers.renderer.renderChat(smartScroll());
           }
           updateSendButton();
           ctx.controllers.anima.renderAnimaTabs();

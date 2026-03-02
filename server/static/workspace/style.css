@@ -533,7 +533,7 @@ html, body {
 }
 
 .chat-bubble.user .chat-ts {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--aw-color-text-muted, #888);
 }
 
 .chat-visit-marker .chat-ts {
@@ -545,10 +545,9 @@ html, body {
 /* ── Chat Bubbles ────────────────────── */
 
 .chat-bubble {
-  max-width: 75%;
-  width: fit-content;
+  width: 100%;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 0;
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.9rem;
@@ -557,28 +556,24 @@ html, body {
 
 .chat-bubble.user {
   margin-left: auto;
-  background: #2563eb;
-  color: #fff;
-  border-bottom-right-radius: 4px;
+  max-width: 85%;
+  width: fit-content;
+  background: var(--aw-color-bg-tertiary, #e5e5e5);
+  color: var(--aw-color-text-primary, #1a1a1a);
+  border-radius: 6px;
 }
 
 .chat-bubble.assistant {
   margin-right: auto;
-  background: #f0f0f0;
-  color: #1a1a1a;
-  border-bottom-left-radius: 4px;
+  background: transparent;
+  color: var(--aw-color-text-primary, #1a1a1a);
   white-space: normal;
 }
 
+/* Streaming bubble: left accent border (案2) */
 .chat-bubble.assistant.streaming {
-  border: 1px solid #e0e7ff;
+  border-left: 3px solid var(--aw-color-accent-light, #93c5fd);
   min-height: 2em;
-  animation: breathe-bg 2s ease-in-out infinite;
-}
-
-@keyframes breathe-bg {
-  0%, 100% { background-color: #f0f0f0; }
-  50%      { background-color: #d0d0de; }
 }
 
 /* Markdown inside assistant bubbles */
@@ -643,7 +638,7 @@ html, body {
 
 .thinking-inline-preview {
   margin-bottom: 8px;
-  color: rgba(26, 26, 26, 0.48);
+  color: var(--aw-color-text-muted);
   font-size: 0.82rem;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -678,18 +673,16 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
-/* ── Cursor Blink ────────────────────── */
-
-.cursor-blink {
-  display: inline-block;
-  width: 8px;
-  height: 1.1em;
-  background: #888;
-  vertical-align: text-bottom;
-  animation: blink 1s step-end infinite;
+/* Streaming cursor: blinking block at end of text (案3) */
+.streaming-cursor {
+  display: inline;
+  font-weight: 300;
+  color: var(--aw-color-accent, #6366f1);
+  animation: blink-cursor 1s step-end infinite;
 }
 
-@keyframes blink {
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
 
@@ -1337,7 +1330,7 @@ html, body {
   padding: 10px 14px;
   border: none;
   background: transparent;
-  color: #1a1a1a;
+  color: var(--aw-color-text-primary);
   font-family: inherit;
   font-size: 0.95rem;
   line-height: 1.5;
@@ -1348,11 +1341,11 @@ html, body {
 }
 
 .ws-conv-input::placeholder {
-  color: #aaa;
+  color: var(--aw-color-text-placeholder, #aaa);
 }
 
 .ws-conv-input:disabled {
-  color: #aaa;
+  color: var(--aw-color-text-muted);
 }
 
 .ws-conv-send {
@@ -3455,6 +3448,5 @@ html, body {
   z-index: 1;
 }
 
-/* ── Business Theme Overrides ──────────────────────── */
-.theme-business .ws-conv-character { display: none !important; }
-.theme-business .ws-mobile-character-toggle { display: none; }
+/* ── Realistic Mode Overrides ─────────────────────── */
+/* (avatar display is now handled by avatar-resolver regardless of mode) */

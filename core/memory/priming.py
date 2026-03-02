@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from core.i18n import t
@@ -141,6 +142,8 @@ class PrimingEngine:
         self._budget_request: int = _BUDGET_REQUEST
         self._budget_heartbeat: int = _BUDGET_HEARTBEAT
         self._heartbeat_context_pct: float = 0.05
+        # Callback to retrieve active parallel tasks (injected by runner)
+        self._get_active_parallel_tasks: Callable[[], dict[str, dict]] | None = None
 
     # ── Main entry point ────────────────────────────────────────
 
@@ -844,23 +847,67 @@ class PrimingEngine:
             return []
 
     async def _channel_e_pending_tasks(self) -> str:
-        """Channel E: Pending task queue summary.
+        """Channel E: Pending task queue summary + active parallel tasks.
 
         Retrieves pending tasks from the persistent task queue.
         Human-origin tasks are marked with 🔴 HIGH priority.
+        Also includes currently running parallel tasks (Level 2 format:
+        title + description summary + status + elapsed time).
         Budget: 300 tokens.
 
         Uses asyncio.to_thread to avoid blocking the event loop
         since TaskQueueManager performs synchronous file I/O.
         """
+        parts: list[str] = []
+
+        # Existing: task queue entries
         try:
             from core.memory.task_queue import TaskQueueManager
             manager = TaskQueueManager(self.anima_dir)
-            return await asyncio.to_thread(
+            queue_summary = await asyncio.to_thread(
                 manager.format_for_priming, _BUDGET_PENDING_TASKS,
             )
+            if queue_summary:
+                parts.append(queue_summary)
         except Exception:
             logger.debug("Channel E (pending_tasks) failed", exc_info=True)
+
+        # New: active parallel tasks from _active_parallel_tasks
+        active = self._get_active_parallel_tasks() if self._get_active_parallel_tasks else {}
+        if active:
+            lines = ["## 実行中の並列タスク"]
+            for tid, info in active.items():
+                elapsed = self._format_elapsed(info.get("started_at", ""))
+                status = info.get("status", "running")
+                deps = info.get("depends_on", [])
+                dep_str = f", depends_on: {','.join(deps)}" if deps else ""
+                lines.append(f"- [{tid}] {info.get('title', '?')} ({status} {elapsed}{dep_str})")
+                desc = info.get("description", "")
+                if desc:
+                    lines.append(f"  {desc[:100]}")
+            parts.append("\n".join(lines))
+
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _format_elapsed(started_at: str) -> str:
+        """Format elapsed time from an ISO timestamp."""
+        if not started_at:
+            return ""
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            start = _dt.fromisoformat(started_at)
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=_tz.utc)
+            elapsed_s = (
+                _dt.now(_tz.utc) - start
+            ).total_seconds()
+            if elapsed_s < 60:
+                return f"{int(elapsed_s)}s"
+            if elapsed_s < 3600:
+                return f"{int(elapsed_s / 60)}m"
+            return f"{elapsed_s / 3600:.1f}h"
+        except (ValueError, TypeError):
             return ""
 
     # ── Recent outbound collection ────────────────────────────────

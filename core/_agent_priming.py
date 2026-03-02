@@ -106,6 +106,11 @@ class PrimingMixin:
                     get_shared_dir(),
                     context_window=ctx_window,
                 )
+                # Inject callback for active parallel tasks (DAG scheduler)
+                if hasattr(self, "_active_parallel_tasks_getter"):
+                    self._priming_engine._get_active_parallel_tasks = (
+                        self._active_parallel_tasks_getter
+                    )
             channel = (
                 "heartbeat" if trigger == "heartbeat"
                 else "cron" if trigger.startswith("cron")

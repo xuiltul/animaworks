@@ -37,7 +37,7 @@ Tasks registered in the queue are displayed in summarized form in the system pro
 #### add_task
 
 ```
-add_task(source="human", original_instruction="Create the monthly sales report and submit it to hinata", assignee="your own name", summary="Monthly report creation", deadline="1d")
+add_task(source="human", original_instruction="Create the monthly sales report and submit it to aoi", assignee="your own name", summary="Monthly report creation", deadline="1d")
 ```
 
 | Parameter | Required | Description |
@@ -47,7 +47,7 @@ add_task(source="human", original_instruction="Create the monthly sales report a
 | `assignee` | MUST | Assignee name (your own name or delegated Anima name) |
 | `summary` | SHOULD | One-line task summary (defaults to first 100 chars of original_instruction if omitted) |
 | `deadline` | MUST | Deadline. Relative format `30m` / `2h` / `1d` or ISO8601 |
-| `relay_chain` | MAY | Delegation chain (e.g. `["taka", "sakura"]`) |
+| `relay_chain` | MAY | Delegation chain (e.g. `["aoi", "taro"]`) |
 
 - When receiving instructions from a human, always record with `add_task` and specify `source="human"` (MUST)
 - Tasks with `source: human` must be processed with highest priority (MUST)
@@ -101,10 +101,10 @@ Record only one task (MUST). Even with multiple parallel tasks, write only the t
 ```markdown
 status: in-progress
 task: Slack integration test
-assigned_by: hinata
+assigned_by: aoi
 started: 2026-02-15 10:00
 context: |
-  Hinata's request: Run Slack API connectivity test and verify that posting to #general works.
+  Aoi's request: Run Slack API connectivity test and verify that posting to #general works.
   Report results when the test is complete.
 blockers: None
 ```
@@ -142,12 +142,12 @@ Order by priority (SHOULD).
 # Pending Tasks
 
 ## [HIGH] Gmail notification template creation
-assigned_by: hinata
+assigned_by: aoi
 received: 2026-02-15 11:00
 deadline: 2026-02-16 EOD
 notes: |
   Auto-notification email for new clients.
-  Create 3 template drafts and submit to hinata.
+  Create 3 template drafts and submit to aoi.
 
 ## [MEDIUM] Knowledge base cleanup
 assigned_by: self
@@ -156,7 +156,7 @@ notes: |
   Add tags to files under knowledge/ to improve search efficiency.
 
 ## [LOW] Weekly report format improvement proposal
-assigned_by: hinata
+assigned_by: aoi
 received: 2026-02-13 15:00
 notes: |
   Review current report format and summarize improvement proposals.
@@ -234,7 +234,7 @@ Format when moving back to pending.md:
 
 ```markdown
 ## [HIGH] Slack integration test (interrupted)
-assigned_by: hinata
+assigned_by: aoi
 received: 2026-02-15 10:00
 progress: |
   API connectivity test completed. Interrupted during channel post test.
@@ -255,7 +255,7 @@ task: AWS S3 bucket setup
 blockers: |
   AWS credentials not configured.
   config.json has no aws credential.
-  Need to request configuration from hinata.
+  Need to request configuration from aoi.
 ```
 
 ### Step 2: Take Action to Unblock
@@ -276,9 +276,9 @@ Move the blocked task to pending.md and keep the block reason.
 
 ```markdown
 ## [HIGH] AWS S3 bucket setup (blocked)
-assigned_by: hinata
+assigned_by: aoi
 received: 2026-02-15 10:00
-blocked_reason: AWS credentials not configured. Requested from hinata (2026-02-15 11:00)
+blocked_reason: AWS credentials not configured. Requested from aoi (2026-02-15 11:00)
 ```
 
 ### Step 4: Resume After Unblock
@@ -343,19 +343,71 @@ File names: `YYYY-MM-DD.md` (daily log).
 ```markdown
 ## 10:00 Task started: Slack integration test
 
-Started Slack API connectivity test per hinata's request.
+Started Slack API connectivity test per aoi's request.
 Confirmed slack: yes in permissions.md.
 
 ## 11:30 Task completed: Slack integration test
 
 Slack API connectivity test completed. Post test to #general succeeded.
-Results reported to hinata.
+Results reported to aoi.
 
 [IMPORTANT] Slack API rate limit: max 1 message per minute.
 Leave gaps when sending in bursts.
 ```
 
 Use `[IMPORTANT]` for key learnings (SHOULD). These are prioritized during Heartbeat and memory consolidation.
+
+## Parallel Task Execution (plan_tasks)
+
+The `plan_tasks` tool lets you submit multiple tasks with dependencies as a batch for parallel execution.
+TaskExec resolves dependencies as a DAG (directed acyclic graph) and runs independent tasks concurrently.
+
+### Usage
+
+```
+plan_tasks(batch_id="build-20260301", tasks=[
+  {{"task_id": "compile", "title": "Compile", "description": "Build the source", "parallel": true}},
+  {{"task_id": "lint", "title": "Lint", "description": "Static analysis", "parallel": true}},
+  {{"task_id": "package", "title": "Package", "description": "Package build artifacts",
+   "depends_on": ["compile", "lint"]}}
+])
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `batch_id` | MUST | Unique batch identifier |
+| `tasks[].task_id` | MUST | Unique task ID within the batch |
+| `tasks[].title` | MUST | Task title |
+| `tasks[].description` | MUST | Work content |
+| `tasks[].parallel` | MAY | `true` for parallel execution (default: `false`) |
+| `tasks[].depends_on` | MAY | Array of predecessor task IDs |
+
+### How It Works
+
+1. `plan_tasks` validates (unique IDs, valid dependencies, cycle detection)
+2. Task files are written to `state/pending/` with `batch_id`
+3. TaskExec detects the batch and determines execution order via topological sort
+4. `parallel: true` tasks with no pending dependencies run concurrently within semaphore limit
+5. Predecessor results are automatically injected into dependent task context
+6. If a predecessor fails, dependent tasks are skipped
+
+### Concurrency Limit
+
+Max parallel tasks is controlled by `config.json` `background_task.max_parallel_llm_tasks` (default: 3, range 1–10).
+
+### Task Result Storage
+
+Completed task result summaries are saved to `state/task_results/{task_id}.json`.
+Dependent tasks automatically receive these results as context.
+
+### When to Use plan_tasks vs Direct Write
+
+| Scenario | Method |
+|----------|--------|
+| Single task | Write JSON directly to `state/pending/` |
+| Multiple independent tasks | `plan_tasks` with `parallel: true` |
+| Tasks with dependencies | `plan_tasks` with `depends_on` |
+| Delegation to subordinates | `delegate_task` (separate mechanism) |
 
 ## Task Delegation (delegate_task)
 

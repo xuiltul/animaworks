@@ -3,12 +3,13 @@ from __future__ import annotations
 """Tests for _log_tool_result() and _handle_tool_result_block() with anima_dir."""
 
 import json
-from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+
+from core.time_utils import now_jst
 
 
 class TestLogToolResult:
@@ -22,7 +23,7 @@ class TestLogToolResult:
             "search result content", is_error=False,
         )
 
-        today = date.today().isoformat()
+        today = now_jst().strftime("%Y-%m-%d")
         log_file = tmp_path / "activity_log" / f"{today}.jsonl"
         assert log_file.exists()
 
@@ -44,7 +45,7 @@ class TestLogToolResult:
             "command not found", is_error=True,
         )
 
-        today = date.today().isoformat()
+        today = now_jst().strftime("%Y-%m-%d")
         log_file = tmp_path / "activity_log" / f"{today}.jsonl"
         raw = json.loads(log_file.read_text(encoding="utf-8").strip())
         assert raw["meta"]["is_error"] is True
@@ -97,7 +98,7 @@ class TestHandleToolResultBlockWithAnimaDir:
             anima_dir=tmp_path,
         )
 
-        today = date.today().isoformat()
+        today = now_jst().strftime("%Y-%m-%d")
         log_file = tmp_path / "activity_log" / f"{today}.jsonl"
         assert log_file.exists()
 

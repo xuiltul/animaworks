@@ -134,8 +134,8 @@ function handleWsMessage(raw) {
       const response = data.response || data.message;
       if (animaName && response) {
         const mgr = ChatSessionManager.getInstance();
-        if (!mgr.isStreamingForAnima(animaName)) {
-          const threadId = data.thread_id || "default";
+        const threadId = data.thread_id || "default";
+        if (!mgr.isStreamingFor(animaName, threadId)) {
           mgr.addMessage(animaName, threadId, {
             role: "assistant", text: response, timestamp: new Date().toISOString(),
           });

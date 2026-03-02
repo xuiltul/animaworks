@@ -602,6 +602,31 @@ def create_system_router() -> APIRouter:
             logger.info("Root log level changed to %s", new_level)
             return {"logger": "root", "level": new_level}
 
+    # ── Display Mode ──────────────────────────────────────────
+
+    @router.post("/settings/display-mode")
+    async def set_display_mode(request: Request):
+        """Update display mode and sync config.image_gen.image_style."""
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+        mode = body.get("mode")
+        if mode not in ("anime", "realistic"):
+            return JSONResponse(
+                {"error": "mode must be 'anime' or 'realistic'"},
+                status_code=400,
+            )
+
+        from core.config.models import load_config, save_config
+
+        config = load_config()
+        config.image_gen.image_style = mode
+        save_config(config)
+        logger.info("Display mode changed to %s (image_style synced)", mode)
+        return {"ok": True, "mode": mode}
+
     # ── Health Check ────────────────────────────────────────
 
     @router.get("/system/health")

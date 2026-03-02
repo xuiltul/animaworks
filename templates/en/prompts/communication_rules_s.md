@@ -2,7 +2,7 @@
 
 - **Reporting to supervisor**: Report important progress, problems, and items requiring judgment to your supervisor
 - **Instructions to subordinates**: You can send task instructions and confirmations directly. Give concrete instructions:
-  - Target file paths (e.g. `~/.animaworks/animas/yuki/cron.md`)
+  - Target file paths (e.g. `~/.animaworks/animas/aoi/cron.md`)
   - Example commands to run (e.g. `aws ecs describe-services --cluster production-ai-schreiber`)
   - Location of evidence or documentation to reference
   - Avoid vague instructions ("investigate," "check"). Be explicit about what and how to investigate

@@ -33,15 +33,19 @@ When Heartbeat discovers work to do, place a JSON file under `state/pending/`:
   "task_type": "llm",
   "task_id": "unique-id",
   "description": "Run API tests and summarize results",
-  "context": "Slack API connectivity test requested by hinata",
+  "context": "Slack API connectivity test requested by aoi",
   "acceptance_criteria": "Summarize test results for all endpoints in a report",
-  "reply_to": {"name": "hinata", "content": "Report completion"},
+  "reply_to": {"name": "aoi", "content": "Report completion"},
   "submitted_by": "heartbeat"
 }
 ```
 
 TaskExec detects this file and runs the task in an LLM session.
 When done, it notifies the `reply_to` party automatically.
+
+To submit multiple tasks with dependencies as a batch, use the `plan_tasks` tool.
+Independent tasks run in parallel; dependent tasks execute after predecessors complete.
+See task_delegation_rules for details.
 
 ### Heartbeat Trigger Types
 

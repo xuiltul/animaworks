@@ -216,6 +216,12 @@ export class ChatSessionManager extends EventTarget {
     return false;
   }
 
+  isStreamingFor(anima, thread = "default") {
+    const key = this.#key(anima, thread);
+    const session = this.#sessions.get(key);
+    return session ? session.isStreaming : false;
+  }
+
   getStreamingContext(anima) {
     for (const [key, session] of this.#sessions) {
       if (key.startsWith(`${anima}:`) && session.isStreaming) {

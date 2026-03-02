@@ -76,6 +76,7 @@ class SetupCompleteRequest(BaseModel):
     credentials: dict[str, dict[str, str]] = {}
     anima: AnimaSetup | None = None
     user: UserSetup | None = None
+    image_style: str = "realistic"
 
 
 # ── Router factory ─────────────────────────────────────────
@@ -192,6 +193,10 @@ def create_setup_router() -> APIRouter:
                     {"error": "Failed to create anima"},
                     status_code=500,
                 )
+
+        # Save image style preference
+        if body.image_style in ("anime", "realistic"):
+            config.image_gen.image_style = body.image_style  # type: ignore[assignment]
 
         # Mark setup as complete
         config.setup_complete = True

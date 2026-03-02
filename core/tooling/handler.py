@@ -218,6 +218,7 @@ class ToolHandler(
             "add_task": self._handle_add_task,
             "update_task": self._handle_update_task,
             "list_tasks": self._handle_list_tasks,
+            "plan_tasks": self._handle_plan_tasks,
         }
 
     # ── Properties and session management ─────────────────────
@@ -259,6 +260,10 @@ class ToolHandler(
     def set_state_file_lock(self, lock: threading.Lock) -> None:
         """Attach a state-file lock from DigitalAnima for concurrent write protection."""
         self._state_file_lock = lock
+
+    def set_pending_executor_wake(self, wake_fn: Callable[[], Any]) -> None:
+        """Attach the PendingTaskExecutor's wake callback for plan_tasks."""
+        self._pending_executor_wake = wake_fn
 
     def _is_state_file(self, path: Path) -> bool:
         """Return True if *path* resolves to state/current_task.md or state/pending.md."""
