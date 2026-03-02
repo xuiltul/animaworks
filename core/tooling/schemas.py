@@ -892,6 +892,63 @@ SKILL_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+PLAN_TASKS_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "plan_tasks",
+        "description": (
+            "Submit multiple tasks as a DAG for parallel/serial execution. "
+            "Independent tasks with parallel=true run concurrently. "
+            "Tasks with depends_on wait for all listed tasks to complete. "
+            "Results from completed dependencies are automatically injected "
+            "into dependent task context."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "batch_id": {
+                    "type": "string",
+                    "description": "Unique identifier for this batch of tasks",
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "task_id": {"type": "string"},
+                            "title": {"type": "string"},
+                            "description": {"type": "string"},
+                            "parallel": {"type": "boolean", "default": False},
+                            "depends_on": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "default": [],
+                            },
+                            "acceptance_criteria": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "default": [],
+                            },
+                            "constraints": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "default": [],
+                            },
+                            "file_paths": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "default": [],
+                            },
+                        },
+                        "required": ["task_id", "title", "description"],
+                    },
+                    "minItems": 1,
+                },
+            },
+            "required": ["batch_id", "tasks"],
+        },
+    },
+]
+
 TASK_TOOLS: list[dict[str, Any]] = [
     {
         "name": "add_task",
@@ -1140,6 +1197,7 @@ def build_tool_list(
     include_supervisor_tools: bool = False,
     include_tool_management: bool = False,
     include_task_tools: bool = False,
+    include_plan_tasks: bool = False,
     include_skill_tools: bool = False,
     skill_metas: list[Any] | None = None,
     common_skill_metas: list[Any] | None = None,
@@ -1157,6 +1215,7 @@ def build_tool_list(
         include_supervisor_tools: Include supervisor tools (disable/enable subordinate).
         include_tool_management: Include refresh_tools/share_tool tools.
         include_task_tools: Include task queue tools (add_task, update_task, list_tasks).
+        include_plan_tasks: Include plan_tasks DAG batch submission tool.
         include_skill_tools: Include skill on-demand loading tool.
         skill_metas: Personal skill metadata for dynamic description generation.
         common_skill_metas: Common skill metadata for dynamic description generation.
@@ -1191,6 +1250,8 @@ def build_tool_list(
         tools.extend(TOOL_MANAGEMENT_TOOLS)
     if include_task_tools:
         tools.extend(TASK_TOOLS)
+    if include_plan_tasks:
+        tools.extend(PLAN_TASKS_TOOLS)
     if external_schemas:
         tools.extend(external_schemas)
     tools = apply_db_descriptions(tools)

@@ -1,14 +1,14 @@
 /* ── Design Tokens ──────────────────────────────────────
    CSS custom properties for theme support.
-   :root = default theme, .theme-business = business theme.
+   :root = default theme. Named theme classes override tokens.
    ────────────────────────────────────────────────────── */
 
 :root {
   /* Primary accent */
-  --aw-color-accent: #2563eb;
-  --aw-color-accent-hover: #1d4ed8;
-  --aw-color-accent-light: #93c5fd;
-  --aw-color-accent-bg: #dbeafe;
+  --aw-color-accent: #374151;
+  --aw-color-accent-hover: #1f2937;
+  --aw-color-accent-light: #9ca3af;
+  --aw-color-accent-bg: #f3f4f6;
 
   /* Backgrounds */
   --aw-color-bg-primary: #fff;
@@ -25,7 +25,7 @@
   --aw-color-text-muted: #888;
   --aw-color-text-faint: #999;
   --aw-color-text-placeholder: #9ca3af;
-  --aw-color-text-link: #2563eb;
+  --aw-color-text-link: #374151;
 
   /* Status */
   --aw-color-success: #22c55e;
@@ -70,7 +70,7 @@
   --aw-color-sidebar-section: #94a3b8;
   --aw-color-sidebar-hover-bg: #f1f5f9;
   --aw-color-sidebar-active-bg: #fff;
-  --aw-color-sidebar-active-text: #2563eb;
+  --aw-color-sidebar-active-text: #374151;
 
   /* Code blocks */
   --aw-color-code-bg: #272822;
@@ -91,6 +91,12 @@
   --aw-color-summary-border: #fef08a;
   --aw-color-summary-label: #a16207;
   --aw-color-summary-body: #444;
+
+  /* Tool call styling */
+  --aw-color-tool-bg: #f5f5f4;
+  --aw-color-tool-text: #57534e;
+  --aw-color-tool-border: #e7e5e4;
+  --aw-color-tool-content-bg: rgba(255, 255, 255, 0.6);
 
   /* Animation control */
   --aw-animation-play-state: running;
@@ -133,12 +139,292 @@
 
   /* Sidebar nav */
   --aw-color-sidebar-bg: #0f172a;
+}
 
-  /* Animation control */
+/* ── Realistic Display Mode ─────────────────────────── */
+.mode-realistic {
   --aw-animation-play-state: paused;
   --aw-animation-duration-multiplier: 0;
-  --aw-avatar-display: none;
-  --aw-avatar-initial-display: flex;
   --aw-emoji-display: none;
   --aw-icon-display: inline-flex;
+}
+
+/* ── Graphite Theme ──────────────────────────────────── */
+.theme-graphite {
+  --aw-color-accent: #1f2937;
+  --aw-color-accent-hover: #111827;
+  --aw-color-accent-light: #6b7280;
+  --aw-color-accent-bg: #f9fafb;
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #f9fafb;
+  --aw-color-bg-subtle: #fafafa;
+  --aw-color-text-primary: #111827;
+  --aw-color-text-secondary: #4b5563;
+  --aw-color-text-link: #1f2937;
+  --aw-color-border: #e5e7eb;
+  --aw-color-border-light: #f3f4f6;
+  --aw-color-sidebar-bg: #111827;
+  --aw-color-sidebar-active-text: #d1d5db;
+}
+
+/* ── Ocean Theme ─────────────────────────────────────── */
+.theme-ocean {
+  --aw-color-accent: #1e40af;
+  --aw-color-accent-hover: #1e3a8a;
+  --aw-color-accent-light: #93c5fd;
+  --aw-color-accent-bg: #eff6ff;
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #f0f5ff;
+  --aw-color-bg-subtle: #f8fafc;
+  --aw-color-text-primary: #0f172a;
+  --aw-color-text-secondary: #334155;
+  --aw-color-text-link: #1e40af;
+  --aw-color-border: #dbeafe;
+  --aw-color-border-light: #eff6ff;
+  --aw-color-sidebar-bg: #0f172a;
+  --aw-color-sidebar-active-text: #93c5fd;
+}
+
+/* ── Forest Theme ────────────────────────────────────── */
+.theme-forest {
+  --aw-color-accent: #166534;
+  --aw-color-accent-hover: #14532d;
+  --aw-color-accent-light: #86efac;
+  --aw-color-accent-bg: #f0fdf4;
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #f0fdf4;
+  --aw-color-bg-subtle: #fafdfb;
+  --aw-color-text-primary: #052e16;
+  --aw-color-text-secondary: #365314;
+  --aw-color-text-link: #166534;
+  --aw-color-border: #dcfce7;
+  --aw-color-border-light: #f0fdf4;
+  --aw-color-sidebar-bg: #052e16;
+  --aw-color-sidebar-active-text: #86efac;
+}
+
+/* ── Sunset Theme ────────────────────────────────────── */
+.theme-sunset {
+  --aw-color-accent: #b45309;
+  --aw-color-accent-hover: #92400e;
+  --aw-color-accent-light: #fbbf24;
+  --aw-color-accent-bg: #fffbeb;
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #fffbeb;
+  --aw-color-bg-subtle: #fefce8;
+  --aw-color-text-primary: #451a03;
+  --aw-color-text-secondary: #78350f;
+  --aw-color-text-link: #b45309;
+  --aw-color-border: #fde68a;
+  --aw-color-border-light: #fef3c7;
+  --aw-color-sidebar-bg: #451a03;
+  --aw-color-sidebar-active-text: #fbbf24;
+}
+
+/* ── Rose Theme ──────────────────────────────────────── */
+.theme-rose {
+  --aw-color-accent: #be185d;
+  --aw-color-accent-hover: #9d174d;
+  --aw-color-accent-light: #f9a8d4;
+  --aw-color-accent-bg: #fdf2f8;
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #fdf2f8;
+  --aw-color-bg-subtle: #fefafc;
+  --aw-color-text-primary: #500724;
+  --aw-color-text-secondary: #831843;
+  --aw-color-text-link: #be185d;
+  --aw-color-border: #fce7f3;
+  --aw-color-border-light: #fdf2f8;
+  --aw-color-sidebar-bg: #500724;
+  --aw-color-sidebar-active-text: #f9a8d4;
+}
+
+/* ── Lavender Theme ──────────────────────────────────── */
+.theme-lavender {
+  --aw-color-accent: #7c3aed;
+  --aw-color-accent-hover: #6d28d9;
+  --aw-color-accent-light: #c4b5fd;
+  --aw-color-accent-bg: #f5f3ff;
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #f5f3ff;
+  --aw-color-bg-subtle: #faf5ff;
+  --aw-color-text-primary: #2e1065;
+  --aw-color-text-secondary: #581c87;
+  --aw-color-text-link: #7c3aed;
+  --aw-color-border: #ede9fe;
+  --aw-color-border-light: #f5f3ff;
+  --aw-color-sidebar-bg: #2e1065;
+  --aw-color-sidebar-active-text: #c4b5fd;
+}
+
+/* ── Nord Theme ──────────────────────────────────────── */
+.theme-nord {
+  --aw-color-accent: #5e81ac;
+  --aw-color-accent-hover: #4c6b8a;
+  --aw-color-accent-light: #88c0d0;
+  --aw-color-accent-bg: #eceff4;
+  --aw-color-bg-primary: #fff;
+  --aw-color-bg-secondary: #eceff4;
+  --aw-color-bg-subtle: #f4f6f9;
+  --aw-color-text-primary: #2e3440;
+  --aw-color-text-secondary: #4c566a;
+  --aw-color-text-link: #5e81ac;
+  --aw-color-border: #d8dee9;
+  --aw-color-border-light: #e5e9f0;
+  --aw-color-sidebar-bg: #2e3440;
+  --aw-color-sidebar-active-text: #88c0d0;
+}
+
+/* ── Monokai Theme (Dark) ────────────────────────────── */
+.theme-monokai {
+  --aw-color-accent: #a6e22e;
+  --aw-color-accent-hover: #b8f040;
+  --aw-color-accent-light: #507810;
+  --aw-color-accent-bg: #3a3d2e;
+  --aw-color-bg-primary: #272822;
+  --aw-color-bg-secondary: #1e1f1a;
+  --aw-color-bg-tertiary: #3e3d32;
+  --aw-color-bg-subtle: #2d2e27;
+  --aw-color-bg-hover: #3e3d32;
+  --aw-color-bg-alt: #333428;
+  --aw-color-bg-panel: #2d2e27;
+  --aw-color-text-primary: #f8f8f2;
+  --aw-color-text-secondary: #cfcfc2;
+  --aw-color-text-muted: #a0a08b;
+  --aw-color-text-faint: #75715e;
+  --aw-color-text-placeholder: #75715e;
+  --aw-color-text-link: #a6e22e;
+  --aw-color-border: #49483e;
+  --aw-color-border-light: #3e3d32;
+  --aw-color-border-medium: #49483e;
+  --aw-color-border-dark: #5a5849;
+  --aw-color-border-input: #49483e;
+  --aw-color-border-subtle: #3e3d32;
+  --aw-color-border-separator: #49483e;
+  --aw-color-sidebar-bg: #1e1f1a;
+  --aw-color-sidebar-text: #f8f8f2;
+  --aw-color-sidebar-muted: #a0a08b;
+  --aw-color-sidebar-section: #75715e;
+  --aw-color-sidebar-hover-bg: #3e3d32;
+  --aw-color-sidebar-active-bg: #3e3d32;
+  --aw-color-sidebar-active-text: #a6e22e;
+  --aw-color-code-bg: #1e1f1a;
+  --aw-color-code-text: #f8f8f2;
+  --aw-color-code-inline-bg: #3e3d32;
+  --aw-color-avatar-border: #49483e;
+  --aw-color-avatar-placeholder-bg: #3e3d32;
+  --aw-color-avatar-placeholder-text: #a0a08b;
+  --aw-color-gray-text: #a0a08b;
+  --aw-color-gray-dark: #cfcfc2;
+  --aw-color-gray-darker: #f8f8f2;
+  --aw-color-summary-bg: #333428;
+  --aw-color-summary-border: #49483e;
+  --aw-color-summary-label: #e6db74;
+  --aw-color-summary-body: #cfcfc2;
+  --aw-color-tool-bg: #3e3d32;
+  --aw-color-tool-text: #cfcfc2;
+  --aw-color-tool-border: #49483e;
+  --aw-color-tool-content-bg: rgba(0, 0, 0, 0.2);
+  --aw-color-warning-bg: #3a3d2e;
+  --aw-color-warning-text: #e6db74;
+  --aw-color-warning-border: #49483e;
+  --aw-color-error-bg: #3d2222;
+  --aw-color-error-text: #f92672;
+  --aw-color-error-border: #5a2e2e;
+  --aw-color-info-bg: #1e2a3a;
+  --aw-color-info-text: #66d9ef;
+  --aw-color-info-border: #2e3d4e;
+  --aw-color-success-bg: #2e3d22;
+  --aw-color-success-text: #a6e22e;
+  --aw-color-success-border: #3d4e2e;
+}
+
+/* ── Midnight Theme (Dark) ───────────────────────────── */
+.theme-midnight {
+  --aw-color-accent: #60a5fa;
+  --aw-color-accent-hover: #93c5fd;
+  --aw-color-accent-light: #1e3a5f;
+  --aw-color-accent-bg: #172554;
+  --aw-color-bg-primary: #0f172a;
+  --aw-color-bg-secondary: #0a1120;
+  --aw-color-bg-tertiary: #1e293b;
+  --aw-color-bg-subtle: #131c30;
+  --aw-color-bg-hover: #1e293b;
+  --aw-color-bg-alt: #172554;
+  --aw-color-bg-panel: #131c30;
+  --aw-color-text-primary: #e2e8f0;
+  --aw-color-text-secondary: #94a3b8;
+  --aw-color-text-muted: #64748b;
+  --aw-color-text-faint: #475569;
+  --aw-color-text-placeholder: #475569;
+  --aw-color-text-link: #60a5fa;
+  --aw-color-border: #1e293b;
+  --aw-color-border-light: #1a2435;
+  --aw-color-border-medium: #334155;
+  --aw-color-border-dark: #475569;
+  --aw-color-border-input: #334155;
+  --aw-color-border-subtle: #1e293b;
+  --aw-color-border-separator: #1e293b;
+  --aw-color-sidebar-bg: #0a1120;
+  --aw-color-sidebar-text: #e2e8f0;
+  --aw-color-sidebar-muted: #94a3b8;
+  --aw-color-sidebar-section: #64748b;
+  --aw-color-sidebar-hover-bg: #1e293b;
+  --aw-color-sidebar-active-bg: #1e293b;
+  --aw-color-sidebar-active-text: #60a5fa;
+  --aw-color-code-bg: #0a1120;
+  --aw-color-code-text: #e2e8f0;
+  --aw-color-code-inline-bg: #1e293b;
+  --aw-color-avatar-border: #334155;
+  --aw-color-avatar-placeholder-bg: #1e293b;
+  --aw-color-avatar-placeholder-text: #94a3b8;
+  --aw-color-gray-text: #94a3b8;
+  --aw-color-gray-dark: #e2e8f0;
+  --aw-color-gray-darker: #f1f5f9;
+  --aw-color-summary-bg: #131c30;
+  --aw-color-summary-border: #1e293b;
+  --aw-color-summary-label: #fbbf24;
+  --aw-color-summary-body: #94a3b8;
+  --aw-color-tool-bg: #1e293b;
+  --aw-color-tool-text: #94a3b8;
+  --aw-color-tool-border: #334155;
+  --aw-color-tool-content-bg: rgba(0, 0, 0, 0.2);
+  --aw-color-warning-bg: #2a2215;
+  --aw-color-warning-text: #fbbf24;
+  --aw-color-warning-border: #3d3520;
+  --aw-color-error-bg: #2a1515;
+  --aw-color-error-text: #f87171;
+  --aw-color-error-border: #3d2020;
+  --aw-color-info-bg: #172554;
+  --aw-color-info-text: #60a5fa;
+  --aw-color-info-border: #1e3a5f;
+  --aw-color-success-bg: #152e15;
+  --aw-color-success-text: #4ade80;
+  --aw-color-success-border: #1e3d1e;
+}
+
+/* ── Solarized Theme ─────────────────────────────────── */
+.theme-solarized {
+  --aw-color-accent: #268bd2;
+  --aw-color-accent-hover: #2176b5;
+  --aw-color-accent-light: #839496;
+  --aw-color-accent-bg: #eee8d5;
+  --aw-color-bg-primary: #fdf6e3;
+  --aw-color-bg-secondary: #eee8d5;
+  --aw-color-bg-subtle: #f5eedb;
+  --aw-color-bg-hover: #e8e2d0;
+  --aw-color-bg-alt: #eee8d5;
+  --aw-color-bg-panel: #f5eedb;
+  --aw-color-text-primary: #073642;
+  --aw-color-text-secondary: #586e75;
+  --aw-color-text-muted: #93a1a1;
+  --aw-color-text-link: #268bd2;
+  --aw-color-border: #eee8d5;
+  --aw-color-border-light: #f5eedb;
+  --aw-color-border-medium: #d6ceb8;
+  --aw-color-sidebar-bg: #073642;
+  --aw-color-sidebar-active-text: #268bd2;
+  --aw-color-code-bg: #002b36;
+  --aw-color-code-text: #93a1a1;
+  --aw-color-code-inline-bg: #eee8d5;
 }

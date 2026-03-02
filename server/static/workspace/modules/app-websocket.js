@@ -15,6 +15,7 @@ import { getSelectedBoard, appendBoardMessage } from "./board.js";
 import { updateAnimaStatus, addActivityItem } from "./org-dashboard.js";
 import { playReveal } from "./reveal.js";
 import { createLogger } from "../../shared/logger.js";
+import { bustupCandidates, resolveAvatar } from "../../modules/avatar-resolver.js";
 
 const logger = createLogger("ws-app");
 
@@ -258,8 +259,8 @@ export function setupWebSocket(deps) {
     const assets = data.assets || [];
     const hasAvatar = assets.some((a) => a.startsWith("avatar_"));
     if (hasAvatar) {
-      const avatarUrl = `/api/animas/${encodeURIComponent(animaName)}/assets/avatar_bustup.png`;
-      await playReveal({ name: animaName, avatarUrl });
+      const avatarUrl = await resolveAvatar(animaName, bustupCandidates());
+      if (avatarUrl) await playReveal({ name: animaName, avatarUrl });
     }
 
     // Refresh 3D character if office is initialised

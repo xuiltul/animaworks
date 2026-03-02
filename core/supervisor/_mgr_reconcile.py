@@ -191,28 +191,36 @@ class ReconcileMixin:
             from core.config.models import load_config
 
             enable_3d = True
+            image_style: str = "realistic"
             try:
-                enable_3d = load_config().image_gen.enable_3d
+                cfg = load_config()
+                enable_3d = cfg.image_gen.enable_3d
+                image_style = cfg.image_gen.image_style
             except Exception:
                 logger.debug(
-                    "Failed to read image_gen.enable_3d from config, using default True",
+                    "Failed to read image_gen config, using defaults",
                     exc_info=True,
                 )
 
             incomplete = find_animas_with_missing_assets(
-                self.animas_dir, enable_3d=enable_3d,
+                self.animas_dir,
+                enable_3d=enable_3d,
+                image_style=image_style,  # type: ignore[arg-type]
             )
             if not incomplete:
                 return
 
             logger.info(
-                "Asset reconciliation: %d anima(s) with missing assets",
+                "Asset reconciliation: %d anima(s) with missing %s assets",
                 len(incomplete),
+                image_style,
             )
             for anima_name, _check in incomplete:
                 anima_dir = self.animas_dir / anima_name
                 result = await reconcile_anima_assets(
-                    anima_dir, enable_3d=enable_3d,
+                    anima_dir,
+                    enable_3d=enable_3d,
+                    image_style=image_style,  # type: ignore[arg-type]
                 )
                 if not result.get("skipped"):
                     await self._broadcast_event(

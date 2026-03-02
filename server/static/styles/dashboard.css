@@ -262,6 +262,204 @@
   font-weight: 600;
 }
 
+/* ── Org Chart Tree ──────────────────────────── */
+
+.org-tree {
+  padding: 4px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Top row: horizontal strip of top-level columns */
+.org-tree-top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: min-content;
+}
+
+/* Each top-level column: root card + vertical subtree */
+.org-tree-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Vertical line from root card to subtree */
+.org-tree-stem {
+  width: 1.5px;
+  height: 14px;
+  background: var(--aw-color-border);
+}
+
+/* ── Subtree (indent tree) ───────────────────── */
+
+.org-tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 20px;
+  width: 100%;
+}
+
+.org-tree-node {
+  position: relative;
+  padding: 3px 0;
+}
+
+/* Vertical rail connecting siblings */
+.org-tree-list > .org-tree-node::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--aw-color-border);
+}
+
+.org-tree-list > .org-tree-node:last-child::before {
+  height: 22px;
+}
+
+/* Horizontal arm to card */
+.org-tree-list > .org-tree-node::after {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 22px;
+  width: 12px;
+  height: 1.5px;
+  background: var(--aw-color-border);
+}
+
+/* ── Card ────────────────────────────────────── */
+
+.org-tree-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 8px;
+  background: var(--aw-color-bg-primary);
+  border: 1px solid var(--aw-color-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+  max-width: 100%;
+}
+
+.org-tree-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  border-color: var(--aw-color-accent-light, var(--aw-color-accent));
+}
+
+.org-tree-card--disabled {
+  opacity: 0.5;
+}
+
+/* Root-level card: centered, slightly larger */
+.org-tree-card--root {
+  padding: 10px 16px 10px 10px;
+}
+
+.org-tree-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  overflow: hidden;
+}
+
+.org-tree-card--root .org-tree-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+}
+
+.org-tree-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.org-tree-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.org-tree-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--aw-color-text-primary);
+  white-space: nowrap;
+}
+
+.org-tree-status {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.org-tree-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.org-tree-role {
+  font-size: 0.72rem;
+  color: var(--aw-color-text-secondary);
+  white-space: nowrap;
+}
+
+.org-tree-model {
+  font-size: 0.65rem;
+  color: var(--aw-color-text-faint);
+  white-space: nowrap;
+  font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+}
+
+.org-tree-role + .org-tree-model::before {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .org-tree-top-row {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .org-tree-column {
+    min-width: calc(50% - 8px);
+  }
+}
+
+@media (max-width: 480px) {
+  .org-tree-column {
+    min-width: 100%;
+  }
+  .org-tree-model {
+    display: none;
+  }
+  .org-tree-role + .org-tree-model::before {
+    display: none;
+  }
+}
+
 /* ── Empty State ─────────────────────────────── */
 
 .empty-state {

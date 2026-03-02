@@ -140,7 +140,7 @@ export function clearUnreadForActiveThread(ctx, animaName, threadId) {
 }
 
 export function isBusinessTheme() {
-  return document.body.classList.contains("theme-business");
+  return document.body.classList.contains("mode-realistic");
 }
 
 export function mergeThreadsFromSessions(ctx, animaName, sessionsData) {

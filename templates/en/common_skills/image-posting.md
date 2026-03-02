@@ -79,10 +79,10 @@ When taking screenshots with agent-browser, **save directly to your own attachme
 agent-browser screenshot ~/.animaworks/animas/{your_name}/attachments/screenshot.png
 ```
 
-Example (for mei):
+Example (for aoi):
 
 ```bash
-agent-browser screenshot ~/.animaworks/animas/mei/attachments/page_screenshot.png
+agent-browser screenshot ~/.animaworks/animas/aoi/attachments/page_screenshot.png
 ```
 
 Then include in your response:

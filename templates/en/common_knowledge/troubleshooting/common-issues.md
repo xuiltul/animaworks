@@ -55,13 +55,13 @@ If it doesn't help, see `troubleshooting/escalation-flowchart.md` and escalate a
 
 ```
 # Wrong name
-send_message(to="Sakura", content="...", intent="report")   # OK
-send_message(to="sakura", content="...", intent="report")  # May fail if name differs
+send_message(to="Aoi", content="...", intent="report")   # OK
+send_message(to="aoi", content="...", intent="report")  # May fail if name differs
 
 # DM requires intent (report / delegation / question only)
 # Max 2 recipients per session, 1 send per recipient
 send_message(
-    to="sakura",
+    to="aoi",
     content="Understood. Starting work.",
     intent="report",           # Required: report / delegation / question
     reply_to="msg-abc123",     # Optional: original message ID

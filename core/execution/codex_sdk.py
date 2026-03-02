@@ -46,6 +46,11 @@ __all__ = ["CodexSDKExecutor", "clear_codex_thread_ids", "is_codex_sdk_available
 
 RESUME_TIMEOUT_SEC = 15.0
 
+# asyncio.StreamReader default limit is 64 KB.  Codex CLI may echo the full
+# context (including system prompt) in a single JSONL line during thread
+# resume, triggering LimitOverrunError.  Skip resume when close to this limit.
+_RESUME_PROMPT_SIZE_LIMIT = 50_000
+
 
 # ── Model name helpers ───────────────────────────────────────
 
@@ -193,6 +198,22 @@ def _usage_to_dict(usage: Any) -> dict[str, int]:
         if val is not None:
             d[key] = int(val)
     return d
+
+
+def _is_limit_overrun(exc: BaseException) -> bool:
+    """Check whether *exc* or its cause chain contains a buffer overflow."""
+    cur: BaseException | None = exc
+    while cur is not None:
+        name = type(cur).__name__
+        if "LimitOverrunError" in name:
+            return True
+        msg = str(cur)
+        if "chunk exceed the limit" in msg or "Separator is not found" in msg:
+            return True
+        cur = cur.__cause__ or cur.__context__
+        if cur is exc:
+            break
+    return False
 
 
 @dataclass
@@ -426,6 +447,15 @@ class CodexSDKExecutor(BaseExecutor):
         session_type = _resolve_session_type(trigger)
         thread_id = _load_thread_id(self._anima_dir, session_type)
 
+        prompt_bytes = len(system_prompt.encode("utf-8"))
+        if thread_id and prompt_bytes > _RESUME_PROMPT_SIZE_LIMIT:
+            logger.info(
+                "Skipping Codex resume (prompt=%d bytes > %d limit) "
+                "to avoid LimitOverrunError; using fresh thread",
+                prompt_bytes, _RESUME_PROMPT_SIZE_LIMIT,
+            )
+            thread_id = None
+
         self._write_codex_config(system_prompt)
         codex = self._create_codex_client()
         thread = self._start_or_resume_thread(codex, thread_id, session_type)
@@ -510,6 +540,15 @@ class CodexSDKExecutor(BaseExecutor):
 
         session_type = _resolve_session_type(trigger)
         thread_id = _load_thread_id(self._anima_dir, session_type)
+
+        prompt_bytes = len(system_prompt.encode("utf-8"))
+        if thread_id and prompt_bytes > _RESUME_PROMPT_SIZE_LIMIT:
+            logger.info(
+                "Skipping Codex resume (prompt=%d bytes > %d limit) "
+                "to avoid LimitOverrunError; using fresh thread",
+                prompt_bytes, _RESUME_PROMPT_SIZE_LIMIT,
+            )
+            thread_id = None
 
         self._write_codex_config(system_prompt)
         codex = self._create_codex_client()
@@ -652,9 +691,11 @@ class CodexSDKExecutor(BaseExecutor):
             except Exception as e:
                 logger.exception("Codex SDK streaming error")
                 partial = "\n".join(response_text_parts)
+                is_buffer_overflow = _is_limit_overrun(e)
                 raise StreamDisconnectedError(
                     f"Codex SDK stream error: {e}",
                     partial_text=partial,
+                    immediate_retry=is_buffer_overflow,
                 ) from e
 
         full_text = "\n".join(response_text_parts)

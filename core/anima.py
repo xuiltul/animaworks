@@ -98,6 +98,10 @@ class DigitalAnima(
         self._cron_idle = asyncio.Event()
         self._cron_idle.set()  # initially idle (no cron running)
         self._state_file_lock = threading.Lock()  # protects current_task.md / pending.md
+
+        # Parallel task execution (DAG scheduler)
+        self._task_semaphore: asyncio.Semaphore | None = None  # lazy init from config
+        self._active_parallel_tasks: dict[str, dict[str, Any]] = {}  # task_id -> {title, description, started_at, batch_id, status}
         self.agent._tool_handler.set_state_file_lock(self._state_file_lock)
         self._status_slots: dict[str, str] = {"inbox": "idle", "background": "idle"}
         self._task_slots: dict[str, str] = {"inbox": "", "background": ""}

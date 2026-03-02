@@ -83,6 +83,8 @@ class TestTryDeferredTrigger:
         limiter._anima.messenger.has_unread.return_value = True
         limiter._anima._inbox_lock = MagicMock()
         limiter._anima._inbox_lock.locked.return_value = False
+        limiter._anima._background_lock = MagicMock()
+        limiter._anima._background_lock.locked.return_value = False
         limiter._deferred_timer = MagicMock()
 
         with patch.object(limiter, "is_in_cooldown", return_value=False), \

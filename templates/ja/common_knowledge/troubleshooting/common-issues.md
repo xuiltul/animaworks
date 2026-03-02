@@ -55,13 +55,13 @@
 
 ```
 # 名前を間違えていた場合
-send_message(to="Sakura", content="...", intent="report")   # OK
-send_message(to="sakura", content="...", intent="report")  # 名前が異なればエラーになる可能性あり
+send_message(to="Aoi", content="...", intent="report")   # OK
+send_message(to="aoi", content="...", intent="report")  # 名前が異なればエラーになる可能性あり
 
 # DM は intent 必須（report / delegation / question のみ）
 # 1セッションあたり最大2人まで、同一宛先へは1回のみ
 send_message(
-    to="sakura",
+    to="aoi",
     content="了解しました。作業を開始します。",
     intent="report",           # 必須: report / delegation / question
     reply_to="msg-abc123",     # 任意: 元メッセージのID

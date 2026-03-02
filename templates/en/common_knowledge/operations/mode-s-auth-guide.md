@@ -166,11 +166,21 @@ To use different auth modes within the same organization, set `mode_s_auth` and 
 }
 ```
 
-| Anima | credential | mode_s_auth | Auth mode | Reason |
-|-------|-----------|-------------|-----------|--------|
-| sakura | `"max"` | omitted | Max plan | Manager. No API cost |
-| kotoha | `"anthropic"` | `"api"` | API Direct | Requires fast streaming |
-| rin | `"bedrock"` | `"bedrock"` | Bedrock | Access only from within AWS VPC |
+| Example (role) | credential | mode_s_auth | Auth mode | Reason |
+|----------------|-----------|-------------|-----------|--------|
+| Max plan Anima | `"max"` | omitted | Max plan | No API cost |
+| API Direct Anima | `"anthropic"` | `"api"` | API Direct | Requires fast streaming |
+| Bedrock Anima | `"bedrock"` | `"bedrock"` | Bedrock | Access only from within AWS VPC |
+
+**How to verify current configuration:** Check `credential` and `mode_s_auth` in each Anima's `status.json`:
+
+```bash
+# Check mode_s_auth for a specific Anima
+cat ~/.animaworks/animas/{name}/status.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'model={d.get(\"model\")}, credential={d.get(\"credential\")}, mode_s_auth={d.get(\"mode_s_auth\")}')"
+
+# List all Animas
+for d in ~/.animaworks/animas/*/; do name=$(basename "$d"); python3 -c "import json; d=json.load(open('$d/status.json')); print(f'$name: credential={d.get(\"credential\")}, mode_s_auth={d.get(\"mode_s_auth\")}')" 2>/dev/null; done
+```
 
 ## Global Default (anima_defaults)
 

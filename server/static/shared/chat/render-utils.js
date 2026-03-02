@@ -228,11 +228,13 @@ export function renderLiveBubble(msg, opts) {
     thinkingHtml = `<div class="thinking-inline-preview">${escapeHtml(msg.thinkingText)}</div>`;
   }
 
+  const streamingCursor = '<span class="streaming-cursor">▌</span>';
   let content = "";
   if (msg.text) {
     content = renderMarkdown(msg.text, opts.animaName);
+    if (msg.streaming) content += streamingCursor;
   } else if (msg.streaming) {
-    content = '<span class="cursor-blink"></span>';
+    content = streamingCursor;
   }
 
   const compLabel = labels.compressing || "会話履歴を圧縮中...";
@@ -245,7 +247,7 @@ export function renderLiveBubble(msg, opts) {
     : "";
   const imagesHtml = renderImages(msg.images, { animaName: opts.animaName });
 
-  return `<div class="chat-bubble assistant${streamClass}"${streamIdAttr}>${thinkingHtml}${content}${imagesHtml}${compressionHtml}${toolHtml}${tsHtml}</div>`;
+  return `<div class="chat-bubble assistant${streamClass}"${streamIdAttr}>${content}${imagesHtml}${compressionHtml}${toolHtml}${thinkingHtml}${tsHtml}</div>`;
 }
 
 /**
@@ -273,11 +275,12 @@ export function renderStreamingBubbleInner(msg, opts) {
     mainHtml = `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${doneLabel}</div>`;
   } else if (msg.text) {
     mainHtml = renderMarkdown(msg.text, opts.animaName);
+    mainHtml += '<span class="streaming-cursor">▌</span>';
   } else {
-    mainHtml = '<span class="cursor-blink"></span>';
+    mainHtml = '<span class="streaming-cursor">▌</span>';
   }
 
-  let html = `${thinkingHtml}${mainHtml}`;
+  let html = mainHtml;
   if (msg.compressing) {
     const compLabel = labels.compressing || "会話履歴を圧縮中...";
     html += `<div class="compression-indicator"><span class="tool-spinner"></span>${compLabel}</div>`;
@@ -286,5 +289,6 @@ export function renderStreamingBubbleInner(msg, opts) {
     const toolLabel = labels.toolRunning || ((tool) => `${tool} を実行中...`);
     html += `<div class="tool-indicator"><span class="tool-spinner"></span>${typeof toolLabel === "function" ? toolLabel(msg.activeTool) : toolLabel}</div>`;
   }
+  html += thinkingHtml;
   return html;
 }

@@ -21,8 +21,8 @@ All settings follow the `AnimaWorksConfig` model with these top-level fields:
   "model_modes": {},
   "anima_defaults": { "model": "claude-sonnet-4-6", "max_tokens": 4096 },
   "animas": {
-    "hinata": { "model": "claude-sonnet-4-6", "supervisor": null },
-    "ken": { "model": "openai/gpt-4.1", "credential": "openai" }
+    "aoi": { "model": "claude-sonnet-4-6", "supervisor": null },
+    "taro": { "model": "openai/gpt-4.1", "credential": "openai", "supervisor": "aoi" }
   },
   "consolidation": { "daily_enabled": true, "daily_time": "02:00" },
   "rag": { "enabled": true },
@@ -126,7 +126,7 @@ Templates are recommended; character setup is already in place and bootstrap can
 Create a character sheet (Markdown) and generate from it.
 
 ```bash
-animaworks anima create --from-md /path/to/character.md --name ken
+animaworks anima create --from-md /path/to/character.md --name taro
 ```
 
 The Markdown file is copied as `character_sheet.md` in the Anima directory.
@@ -141,7 +141,7 @@ Markdown SHOULD include:
 Creates Anima with a minimal skeleton.
 
 ```bash
-animaworks anima create --name yuki
+animaworks anima create --name yuna
 ```
 
 Blank creation produces skeleton files with `{name}` replaced by the real name.
@@ -176,7 +176,7 @@ Names MUST follow:
 - Only lowercase letters, digits, hyphen (`-`), underscore (`_`)
 - Must start with a letter (`a-z`)
 - Must not start with underscore (reserved for templates)
-- Examples: `hinata`, `ken-dev`, `worker01`
+- Examples: `aoi`, `taro-dev`, `worker01`
 
 ## Execution Modes (S / A / B)
 
@@ -262,7 +262,7 @@ Each Anima specifies a credential via the `credential` field.
 Each Anima's `permissions.md` defines allowed tools, paths, and commands.
 
 ```markdown
-# Permissions: hinata
+# Permissions: aoi
 
 ## Tools
 Read, Write, Edit, Bash, Grep, Glob

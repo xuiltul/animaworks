@@ -348,6 +348,49 @@ class ConversationMemory:
                 logger.warning("Skipping malformed transcript line in %s", path)
         return messages
 
+    def write_transcript(
+        self,
+        role: str,
+        content: str,
+        *,
+        from_person: str = "",
+        thread_id: str = "default",
+        attachments: list[str] | None = None,
+        tool_names: list[str] | None = None,
+    ) -> None:
+        """Append a conversation entry to today's transcript file.
+
+        Writes the full, un-truncated message to ``transcripts/{date}.jsonl``
+        for permanent archival.  Only intended for human chat interactions
+        (not heartbeat/cron/inbox).
+        """
+        self._transcript_dir.mkdir(parents=True, exist_ok=True)
+        today = date.today().isoformat()
+        path = self._transcript_dir / f"{today}.jsonl"
+
+        entry: dict[str, Any] = {
+            "ts": now_iso(),
+            "role": role,
+            "content": content,
+        }
+        if from_person:
+            entry["from"] = from_person
+        if thread_id and thread_id != "default":
+            entry["thread_id"] = thread_id
+        if attachments:
+            entry["attachments"] = attachments
+        if tool_names:
+            entry["tool_names"] = tool_names
+
+        line = json.dumps(entry, ensure_ascii=False) + "\n"
+        try:
+            with path.open("a", encoding="utf-8") as f:
+                f.write(line)
+                f.flush()
+                os.fsync(f.fileno())
+        except OSError:
+            logger.warning("Failed to write transcript entry to %s", path, exc_info=True)
+
     # ── Mutation ─────────────────────────────────────────────
 
     def append_turn(
@@ -357,11 +400,11 @@ class ConversationMemory:
         attachments: list[str] | None = None,
         tool_records: list[ToolRecord] | None = None,
     ) -> None:
-        """Record a conversation turn.
+        """Record a conversation turn in the working memory (conversation.json).
 
-        Transcript recording has been replaced by the unified activity log
-        (core.memory.activity.ActivityLogger).  The conversation.json state
-        is still maintained for prompt building and compression.
+        This updates the in-memory state used for prompt building and
+        compression.  For permanent archival, call :meth:`write_transcript`
+        separately (done by ``_anima_messaging`` for human chat sessions).
         """
         state = self.load()
         # Truncate excessively long content at storage time to prevent

@@ -2,6 +2,7 @@
 import { api } from "../modules/api.js";
 import { escapeHtml } from "../modules/state.js";
 import { t } from "/shared/i18n.js";
+import { bustupCandidates, resolveAvatar } from "../modules/avatar-resolver.js";
 
 export function render(container) {
   container.innerHTML = `
@@ -48,7 +49,7 @@ async function _loadUsers() {
         ${users.map(name => `
           <div class="card">
             <div class="card-body" style="text-align:center; padding:1.25rem;">
-              <div class="anima-avatar-placeholder" style="width:56px;height:56px;font-size:1.5rem;margin:0 auto 0.75rem;">
+              <div class="anima-avatar-placeholder" data-user="${escapeHtml(name)}" style="width:56px;height:56px;font-size:1.5rem;margin:0 auto 0.75rem;">
                 ${escapeHtml(name.charAt(0).toUpperCase())}
               </div>
               <div style="font-weight:600; font-size:1.05rem; margin-bottom:0.25rem;">${escapeHtml(name)}</div>
@@ -58,6 +59,8 @@ async function _loadUsers() {
         `).join("")}
       </div>
     `;
+
+    _loadUserAvatars(users);
   } catch (err) {
     content.innerHTML = `
       <div class="card">
@@ -66,5 +69,22 @@ async function _loadUsers() {
         </div>
       </div>
     `;
+  }
+}
+
+async function _loadUserAvatars(users) {
+  const candidates = bustupCandidates();
+  for (const name of users) {
+    try {
+      const url = await resolveAvatar(name, candidates);
+      if (!url) continue;
+      const el = document.querySelector(`.anima-avatar-placeholder[data-user="${CSS.escape(name)}"]`);
+      if (!el) continue;
+      const img = new Image();
+      img.src = url;
+      img.alt = name;
+      img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:50%;";
+      img.onload = () => { el.textContent = ""; el.appendChild(img); };
+    } catch { /* skip */ }
   }
 }

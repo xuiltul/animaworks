@@ -7,6 +7,7 @@
 import { createLogger } from "../../shared/logger.js";
 import { escapeHtml, smartTimestamp } from "./utils.js";
 import { animaHashColor } from "../../shared/avatar-utils.js";
+import { bustupCandidates, resolveAvatar } from "../../modules/avatar-resolver.js";
 
 const logger = createLogger("org-dashboard");
 
@@ -84,7 +85,7 @@ function renderInteractiveTreeNode(node, depth = 0, isLast = true, prefixLines =
   let html = `<div class="org-itree-node" data-name="${escapeHtml(node.name)}" id="orgNode_${escapeHtml(node.name)}">
     ${connector}
     <div class="org-itree-card">
-      <div class="org-itree-avatar" style="background:${color}">${initial}</div>
+      <div class="org-itree-avatar" style="background:${color}" data-anima="${escapeHtml(node.name)}">${initial}</div>
       <div class="org-itree-info">
         <span class="org-itree-name">${escapeHtml(node.name)}</span>
         ${tagHtml}
@@ -193,7 +194,26 @@ export async function initOrgDashboard(container, animas, { onNodeClick } = {}) 
     if (_onNodeClick) _onNodeClick(name);
   });
 
+  _loadOrgAvatars(animas);
+
   logger.info("Org dashboard initialized", { animaCount: animas.length });
+}
+
+async function _loadOrgAvatars(animas) {
+  const candidates = bustupCandidates();
+  for (const p of animas) {
+    try {
+      const url = await resolveAvatar(p.name, candidates);
+      if (!url) continue;
+      const el = _container?.querySelector(`.org-itree-avatar[data-anima="${CSS.escape(p.name)}"]`);
+      if (!el) continue;
+      const img = new Image();
+      img.src = url;
+      img.alt = p.name;
+      img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:6px;";
+      img.onload = () => { el.textContent = ""; el.appendChild(img); };
+    } catch { /* skip */ }
+  }
 }
 
 export function disposeOrgDashboard() {

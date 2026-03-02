@@ -5,21 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AnimaWorks — Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="/shared/favicon.svg">
-  <link rel="stylesheet" href="/styles/tokens.css">
+  <link rel="stylesheet" href="/styles/tokens.css?v=20260302b">
   <link rel="stylesheet" href="/styles/base.css">
   <link rel="stylesheet" href="/styles/layout.css?v=20260227b">
   <link rel="stylesheet" href="/styles/sidebar-nav.css?v=20260227e">
   <link rel="stylesheet" href="/styles/dashboard.css">
-  <link rel="stylesheet" href="/styles/chat.css?v=20260301c">
+  <link rel="stylesheet" href="/styles/chat.css?v=20260302c">
   <link rel="stylesheet" href="/styles/sidebar.css">
   <link rel="stylesheet" href="/styles/activity.css">
   <link rel="stylesheet" href="/styles/memory.css">
   <link rel="stylesheet" href="/styles/history.css">
-  <link rel="stylesheet" href="/styles/avatar.css">
-  <link rel="stylesheet" href="/styles/assets.css">
+  <link rel="stylesheet" href="/styles/avatar.css?v=20260302b">
+  <link rel="stylesheet" href="/styles/assets.css?v=20260302c">
   <link rel="stylesheet" href="/styles/board.css">
-  <link rel="stylesheet" href="/styles/responsive.css?v=20260301g">
+  <link rel="stylesheet" href="/styles/responsive.css?v=20260302c">
   <link rel="stylesheet" href="/styles/voice.css">
+  <link rel="stylesheet" href="/styles/settings.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -71,8 +72,8 @@
           <i data-lucide="activity" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.activity">Activity</span></a></li>
         <li><a href="#/setup" class="nav-item" data-route="/setup">
-          <span class="nav-emoji">&#x2699;</span>
-          <i data-lucide="settings" class="nav-lucide"></i>
+          <span class="nav-emoji">&#x1F527;</span>
+          <i data-lucide="wrench" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.setup">Setup</span></a></li>
         <li><a href="#/users" class="nav-item" data-route="/users">
           <span class="nav-emoji">&#x1F465;</span>
@@ -111,16 +112,12 @@
           <span class="nav-emoji">&#x1F3AE;</span>
           <i data-lucide="building-2" class="nav-lucide"></i>
           <span class="nav-label" data-i18n="nav.workspace">Workspace</span></a></li>
+        <li class="nav-divider"></li>
+        <li><a href="#/settings" class="nav-item" data-route="/settings">
+          <span class="nav-emoji">&#x2699;</span>
+          <i data-lucide="sliders-horizontal" class="nav-lucide"></i>
+          <span class="nav-label" data-i18n="nav.settings">Settings</span></a></li>
       </ul>
-      <div class="nav-divider"></div>
-      <div class="theme-toggle" id="themeToggle">
-        <span class="nav-emoji theme-toggle-icon">&#x1F3A8;</span>
-        <span class="nav-label">Business</span>
-        <label class="theme-switch">
-          <input type="checkbox" id="themeSwitch">
-          <span class="theme-slider"></span>
-        </label>
-      </div>
     </nav>
 
     <!-- Main Content Area -->
@@ -135,6 +132,6 @@
       if (window.lucide) lucide.createIcons();
     });
   </script>
-  <script type="module" src="/modules/app.js?v=20260228d"></script>
+  <script type="module" src="/modules/app.js?v=20260302c"></script>
 </body>
 </html>

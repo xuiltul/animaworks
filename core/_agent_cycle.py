@@ -653,9 +653,12 @@ class CycleMixin:
                     break
 
                 retry_count += 1
+                skip_delay = getattr(e, "immediate_retry", False)
+                actual_delay = 0.5 if skip_delay else retry_delay
                 logger.warning(
-                    "Stream disconnected, retrying %d/%d after %.1fs",
-                    retry_count, max_retries, retry_delay,
+                    "Stream disconnected, retrying %d/%d after %.1fs%s",
+                    retry_count, max_retries, actual_delay,
+                    " (immediate: buffer overflow)" if skip_delay else "",
                 )
                 # リトライ1回目は必ずfresh session（壊れたセッションIDを持ち越さない）
                 if retry_count == 1:
@@ -707,7 +710,7 @@ class CycleMixin:
                     context_window=_ctx_window_s,
                 ).system_prompt
 
-                await asyncio.sleep(retry_delay)
+                await asyncio.sleep(actual_delay)
                 continue
 
             if stream_succeeded:

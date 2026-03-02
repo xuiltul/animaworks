@@ -98,6 +98,7 @@ Follow this flow to find the right document:
 |------|-------------|
 | `troubleshooting/common-issues.md` | Common problems and fixes (undelivered messages, rate limits, blocks, memory search, permissions, tools, context) |
 | `troubleshooting/escalation-flowchart.md` | Decision flowchart for when you're stuck (problem types, urgency, who to escalate to, templates) |
+| `troubleshooting/gmail-credential-setup.md` | Gmail tool credential setup guide (token.json placement, pickle conversion, client_id mismatch) |
 
 ---
 
@@ -125,6 +126,7 @@ Find the right document from relevant keywords.
 | Heartbeat, heartbeat, periodic check | `operations/heartbeat-cron-guide.md` |
 | cron, schedule, scheduled task | `operations/heartbeat-cron-guide.md` |
 | problem, error, stuck, not working | `troubleshooting/common-issues.md` |
+| Gmail, gmail_unread, token.json, OAuth, credential | `troubleshooting/gmail-credential-setup.md` |
 | permission, permission denied, access denied | `troubleshooting/common-issues.md` |
 | tool, discover_tools, not found | `troubleshooting/common-issues.md` |
 | memory, search_memory, search, not found | `troubleshooting/common-issues.md` |

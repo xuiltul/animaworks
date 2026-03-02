@@ -6,12 +6,13 @@
 from __future__ import annotations
 
 import json
-from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+from core.time_utils import now_jst
 
 
 def _make_test_app(shared_dir: Path):
@@ -64,8 +65,8 @@ def _write_activity_log(
 
 
 def _today() -> str:
-    """Return today's date as ISO string for activity_log filenames."""
-    return date.today().isoformat()
+    """Return today's date as ISO string for activity_log filenames (JST)."""
+    return now_jst().strftime("%Y-%m-%d")
 
 
 # ── GET /api/channels ────────────────────────────────────

@@ -7,7 +7,7 @@
 ### 送信方法
 
 **mcp__aw__send_message** ツールを使用してください:
-- `to`: 宛先の名前（例: "rin", "hinata"）
+- `to`: 宛先の名前（例: "aoi", "taro"）
 - `content`: メッセージ内容
 - `intent`: メッセージの種類（省略可）
 

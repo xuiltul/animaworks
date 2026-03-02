@@ -33,15 +33,19 @@
   "task_type": "llm",
   "task_id": "unique-id",
   "description": "APIテストを実施し結果をまとめる",
-  "context": "hinata から依頼されたSlack API接続テスト",
+  "context": "aoi から依頼されたSlack API接続テスト",
   "acceptance_criteria": "全エンドポイントのテスト結果をレポートにまとめる",
-  "reply_to": {"name": "hinata", "content": "テスト完了の報告"},
+  "reply_to": {"name": "aoi", "content": "テスト完了の報告"},
   "submitted_by": "heartbeat"
 }
 ```
 
 TaskExec がこのファイルを検出し、LLM セッションでタスクを実行する。
 完了後、`reply_to` に指定された相手に自動的に結果が通知される。
+
+複数タスクを依存関係付きで一括投入したい場合は `plan_tasks` ツールを使用する。
+独立したタスクは並列実行され、依存タスクは先行タスク完了後に自動実行される。
+詳細は task_delegation_rules を参照。
 
 ### ハートビートのトリガー種別
 

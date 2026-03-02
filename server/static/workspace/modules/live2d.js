@@ -3,6 +3,7 @@
 // Falls back to a coloured silhouette when no image asset exists.
 
 import { probeAsset } from "./api.js";
+import { bustupExpressionCandidates } from "../../modules/avatar-resolver.js";
 
 // ── Character Profiles ──────────────────────
 
@@ -373,13 +374,12 @@ export async function setCharacter(name) {
   _bustupImages = {};
   for (const expr of EXPRESSIONS) {
     try {
-      const filename = expr === "neutral"
-        ? "avatar_bustup.png"
-        : `avatar_bustup_${expr}.png`;
-      const url = await probeAsset(key, filename);
-      if (url) {
-        _bustupImages[expr] = url;
+      let found = null;
+      for (const filename of bustupExpressionCandidates(expr)) {
+        const url = await probeAsset(key, filename);
+        if (url) { found = url; break; }
       }
+      if (found) _bustupImages[expr] = found;
     } catch {
       // expression image not available — skip
     }

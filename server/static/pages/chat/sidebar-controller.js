@@ -20,6 +20,9 @@ export function createSidebarController(ctx) {
     state.rightPaneVisible = nextVisible;
     const layout = $("chatPageLayout");
     if (layout) layout.classList.toggle("sidebar-hidden", !nextVisible);
+    // Keep mobile-hidden in sync so both mechanisms agree
+    const sidebar = state.container?.querySelector(".chat-page-sidebar");
+    if (sidebar) sidebar.classList.toggle("mobile-hidden", !nextVisible);
     applyRightPaneToggleButton(nextVisible);
     if (persist) localStorage.setItem(RIGHT_PANE_VISIBLE_KEY, nextVisible ? "1" : "0");
   }
@@ -30,7 +33,9 @@ export function createSidebarController(ctx) {
 
   function initRightPaneVisibility() {
     const stored = localStorage.getItem(RIGHT_PANE_VISIBLE_KEY);
-    const isVisible = stored !== "0";
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    // On mobile, default to sidebar hidden (user can toggle to open)
+    const isVisible = isMobile ? false : stored !== "0";
     setRightPaneVisible(isVisible, { persist: false });
   }
 

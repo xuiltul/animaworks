@@ -40,3 +40,57 @@ Create a JSON file in the state/pending/ directory in the following format:
 - ❌ "Continue from last time" (executor has no conversation history)
 - ❌ Instructions without file paths (executor would have to start by exploring)
 - ❌ Empty context field (executor makes poor decisions without background info)
+
+## Parallel Task Execution (plan_tasks)
+
+Submit multiple tasks with dependencies as a batch; independent tasks run in parallel.
+
+### plan_tasks Tool
+
+```
+plan_tasks(batch_id="deploy-20260301", tasks=[
+  {{"task_id": "lint", "title": "Run lint", "description": "Lint all files", "parallel": true}},
+  {{"task_id": "test", "title": "Run tests", "description": "Execute unit tests", "parallel": true}},
+  {{"task_id": "deploy", "title": "Deploy", "description": "Deploy after lint and test pass",
+   "parallel": false, "depends_on": ["lint", "test"]}}
+])
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `batch_id` | MUST | Unique batch identifier |
+| `tasks` | MUST | Array of task objects (see below) |
+
+#### Task Object
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `task_id` | MUST | Unique task ID within the batch |
+| `title` | MUST | Task title |
+| `description` | MUST | Concrete work content |
+| `parallel` | MAY | `true` for parallel execution (default: `false`) |
+| `depends_on` | MAY | Array of predecessor task IDs |
+| `context` | MAY | Background information |
+| `file_paths` | MAY | Related file paths |
+| `acceptance_criteria` | MAY | Completion criteria |
+| `constraints` | MAY | Constraints |
+| `reply_to` | MAY | Notification target on completion |
+
+### Execution Rules
+
+- Tasks with `parallel: true` and no pending dependencies run concurrently (within semaphore limit)
+- Tasks with `depends_on` wait until all predecessors succeed
+- Predecessor results are automatically injected into dependent task context
+- If a predecessor fails, dependent tasks are skipped
+- Cyclic dependencies are rejected at validation
+
+### When to Use
+
+- Single task → write directly to `state/pending/`
+- Multiple independent tasks → use `plan_tasks` with `parallel: true`
+- Tasks with dependencies → use `plan_tasks` with `depends_on`
+
+### Task Results
+
+Completed task results are saved to `state/task_results/{task_id}.json`.
+Predecessor result summaries are automatically injected as context for dependent tasks.

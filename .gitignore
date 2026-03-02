@@ -16,7 +16,6 @@ build/
 # Project
 site/
 site-docs/
-# mkdocs.yml は管理対象
 .env
 tmp/
 
@@ -31,6 +30,48 @@ tests/evaluation/ground_truth/
 tests/evaluation/_datasets/
 tests/evaluation/_experiment_data/
 
-# Evaluation results - tracked in repo for reproducibility
-# tests/evaluation/results/ is committed
 .cursor/
+
+# ── Private-only (not in public repo) ──────────
+
+# Root files
+CLA.md
+CLAUDE.md
+mkdocs.yml
+
+# Archive (deprecated code)
+archive/
+
+# Documentation - private sections
+docs/drafts/
+docs/implemented/
+docs/issues/
+docs/legacy/
+docs/records/
+docs/reports/
+docs/research/
+docs/testing/
+docs/index.md
+docs/oss-publication-strategy.md
+
+# Experiments
+experiments/
+
+# Private-only scripts
+scripts/coverage_checker.py
+scripts/file_size_checker.py
+scripts/publish.sh
+scripts/worktree_manager.py
+scripts/capture_org_chart.py
+scripts/inspect_org_chart.py
+scripts/verify_org_chart_v3.py
+scripts/verify_org_chart_v4.py
+scripts/verify_org_chart_v5.py
+scripts/verify_org_chart_final.py
+
+# Private-only static assets
+server/static/finance/
+
+# Private-only test data
+tests/evaluation/results/
+tests/unit/experiments/

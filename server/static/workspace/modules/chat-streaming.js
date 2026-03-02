@@ -95,7 +95,7 @@ export function submitConversation() {
   const { anima, thread } = _animaThread();
   if (!anima) return;
   const mgr = _mgr();
-  const isStreaming = mgr.isStreamingForAnima(anima);
+  const isStreaming = mgr.isStreamingFor(anima, thread);
 
   if (!isStreaming) {
     _enqueueInput();
@@ -113,8 +113,8 @@ export function submitConversation() {
 
 export function addToQueue() {
   if (!_enqueueInput()) return;
-  const { anima } = _animaThread();
-  wsShowPendingIndicator(); wsUpdateSendButton(anima ? _mgr().isStreamingForAnima(anima) : false);
+  const { anima, thread } = _animaThread();
+  wsShowPendingIndicator(); wsUpdateSendButton(anima ? _mgr().isStreamingFor(anima, thread) : false);
 }
 
 async function _sendConversation(text, overrideImages = null) {
@@ -214,9 +214,9 @@ async function _sendConversation(text, overrideImages = null) {
 
 export async function resumeConversationStream(animaName) {
   const mgr = _mgr();
-  if (mgr.isStreamingForAnima(animaName)) return;
-  const dom = _getDom();
   const threadId = getState().activeThreadId || "default";
+  if (mgr.isStreamingFor(animaName, threadId)) return;
+  const dom = _getDom();
 
   wsUpdateSendButton(true);
 
@@ -310,7 +310,7 @@ export function wsShowPendingIndicator() {
       e.stopPropagation();
       mgr.removeFromQueue(anima, thread, parseInt(delBtn.dataset.idx, 10));
       wsShowPendingIndicator();
-      wsUpdateSendButton(mgr.isStreamingForAnima(anima));
+      wsUpdateSendButton(mgr.isStreamingFor(anima, thread));
       return;
     }
     const item = e.target.closest(".pending-queue-item");
@@ -321,7 +321,7 @@ export function wsShowPendingIndicator() {
       dom.convInput.style.height = Math.min(dom.convInput.scrollHeight, isMobileView() ? 100 : 120) + "px";
       dom.convInput.focus();
     }
-    wsShowPendingIndicator(); wsUpdateSendButton(mgr.isStreamingForAnima(anima));
+    wsShowPendingIndicator(); wsUpdateSendButton(mgr.isStreamingFor(anima, thread));
   };
 }
 

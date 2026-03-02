@@ -33,7 +33,7 @@
   transition: filter 0.4s ease, opacity 0.4s ease;
 }
 
-/* ── Business Theme: Initial Icon ────────── */
+/* ── Initial Icon (fallback when no avatar image) ── */
 .anima-avatar-initial {
   display: var(--aw-avatar-initial-display);
   align-items: center;
@@ -46,4 +46,9 @@
   color: var(--aw-color-bg-primary);
   text-transform: uppercase;
   user-select: none;
+}
+
+/* Show initial when avatar container has no image */
+.anima-avatar-container:not(:has(.anima-avatar-img)) .anima-avatar-initial {
+  display: flex;
 }

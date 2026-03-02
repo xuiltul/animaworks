@@ -7,10 +7,33 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-03-02
+
 ### Added
+- アセットRemakeで画像スタイル選択UI追加、configデフォルト参照に変更
+- style-aware prompt separation for realistic image generation
+- asset remake UX improvements — scratch generation, preview history, expression grid
+- unified anime/realistic avatar display and remake support
+- split display mode from color theme, add Settings page
+- smart scroll with floating scroll-to-bottom button
+- image generation pipeline enhancements and asset reconciler updates
+- mobile chat UX improvements, dashboard, and setup wizard enhancements
+- theme system with 10 color presets and dropdown selector
+- DAG scheduler for parallel task execution
+- restore transcript writing and add shared conversation log
 - thread tab styling improvements — subtle active state, streaming pulse, completion indicator
 
 ### Fixed
+- add locale-based ethnicity to realistic prompt conversion
+- replace hardcoded anima names with generic placeholders in templates
+- sidebar active menu text invisible on dark themes
+- thinking inline preview text invisible on dark themes
+- dark theme input text color - use token instead of hardcoded black
+- streaming stop button and per-thread concurrency
+- update tests for asset reconciler default, streaming indicator path, and deferred trigger
+- update streaming indicator test for refactored chat JS
+- prevent Codex SDK LimitOverrunError on thread resume with large prompts
+- use JST date in tool_result_log and channels tests
 - handle additional Codex SDK event types (text.delta, response.completed)
 - use JST date in heartbeat history test for CI timezone compat
 - ensure chat queue auto-drains after streaming completes
@@ -20,7 +43,9 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - resolve CI test failures and add activity group_type filter
 
 ### Changed
+- align private repo tracking with public, merge PR #1
 - rename dashboard anima list label to Org Chart
+
 
 ## [0.4.7] - 2026-03-01
 
@@ -432,8 +457,8 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.4.7...HEAD
-[0.4.7]: https://github.com/xuiltul/animaworks/compare/v0.4.6...v0.4.7
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.4.8...HEAD
+[0.4.8]: https://github.com/xuiltul/animaworks/compare/v0.4.7...v0.4.8
 [0.4.3]: https://github.com/xuiltul/animaworks/compare/v0.4.2...v0.4.3
 [0.4.0]: https://github.com/xuiltul/animaworks/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/xuiltul/animaworks/compare/v0.3.0...v0.3.1

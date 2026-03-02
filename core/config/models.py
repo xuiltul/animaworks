@@ -144,6 +144,7 @@ class ConsolidationConfig(BaseModel):
 class ImageGenConfig(BaseModel):
     """Configuration for image generation and style consistency."""
 
+    image_style: Literal["anime", "realistic"] = "realistic"
     style_reference: str | None = None  # Path to organization-wide style reference image
     style_prefix: str = ""  # Common style tags prepended to character prompt
     style_suffix: str = ""  # Common style tags appended to character prompt
@@ -255,6 +256,7 @@ class BackgroundTaskConfig(BaseModel):
         "run_command": BackgroundToolConfig(threshold_s=60),
     }
     result_retention_hours: int = 24
+    max_parallel_llm_tasks: int = Field(default=3, ge=1, le=10)
 
 
 class ActivityLogConfig(BaseModel):

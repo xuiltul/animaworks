@@ -68,6 +68,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Seed for reproducibility (fullbody generation only)",
     )
     parser.add_argument(
+        "--image-style",
+        choices=["anime", "realistic"],
+        default=None,
+        help="Image style (default: from config.json image_gen.image_style)",
+    )
+    parser.add_argument(
         "--no-backup",
         action="store_true",
         help="Skip automatic backup of existing assets",
@@ -85,6 +91,7 @@ def _run(args: argparse.Namespace) -> None:
     from core.config.models import load_config
     from core.paths import get_data_dir
 
+    config = load_config()
     data_dir = get_data_dir()
     animas_dir = data_dir / "animas"
 
@@ -100,25 +107,34 @@ def _run(args: argparse.Namespace) -> None:
         print(f"Error: Style reference anima '{args.style_from}' not found at {style_dir}")
         return
 
+    # ── Resolve image style ──
+    image_style = args.image_style
+    if image_style is None:
+        image_style = config.image_gen.image_style or "anime"
+    is_realistic = image_style == "realistic"
+
     # ── Validate style reference image ──
-    style_fullbody = style_dir / "assets" / "avatar_fullbody.png"
+    style_ref_filename = (
+        "avatar_fullbody_realistic.png" if is_realistic
+        else "avatar_fullbody.png"
+    )
+    style_fullbody = style_dir / "assets" / style_ref_filename
     if not style_fullbody.exists():
         print(
             f"Error: Style reference anima '{args.style_from}' has no "
-            f"avatar_fullbody.png at {style_fullbody}"
+            f"{style_ref_filename} at {style_fullbody}"
         )
         return
 
-    # ── Resolve prompt ──
+    # ── Resolve prompt (style-aware) ──
     prompt = args.prompt
     if prompt is None:
-        prompt_file = target_dir / "assets" / "prompt.txt"
-        if prompt_file.exists():
-            prompt = prompt_file.read_text(encoding="utf-8").strip()
-        else:
+        from core.asset_reconciler import _resolve_prompt
+        prompt = _resolve_prompt(target_dir, style=image_style)
+        if not prompt:
             print(
-                f"Error: No prompt.txt found for '{args.anima}' and --prompt not specified.\n"
-                f"  Expected at: {prompt_file}\n"
+                f"Error: No prompt available for '{args.anima}' and --prompt not specified.\n"
+                f"  Expected: assets/prompt.txt (anime) or assets/prompt_realistic.txt (realistic)\n"
                 f"  Use --prompt to provide a character prompt."
             )
             return
@@ -152,6 +168,7 @@ def _run(args: argparse.Namespace) -> None:
 
     # ── Dry-run summary ──
     print(f"Remake assets for: {args.anima}")
+    print(f"Image style:       {image_style}")
     print(f"Style reference:   {args.style_from} ({style_fullbody})")
     print(f"Vibe strength:     {args.vibe_strength}")
     print(f"Vibe info extract: {args.vibe_info_extracted}")
@@ -200,13 +217,14 @@ def _run(args: argparse.Namespace) -> None:
     vibe_image = style_fullbody.read_bytes()
     print(f"Loaded style reference: {style_fullbody} ({len(vibe_image):,} bytes)")
 
-    # ── Load config ──
-    config = load_config()
-
     # ── Run pipeline ──
+    from core.config.models import ImageGenConfig
     from core.tools.image_gen import ImageGenPipeline
 
-    pipeline = ImageGenPipeline(target_dir, config=config.image_gen)
+    pipeline = ImageGenPipeline(
+        target_dir,
+        config=ImageGenConfig(image_style=image_style),
+    )
 
     def _progress(step: str, status: str, pct: int) -> None:
         if status == "generating":
