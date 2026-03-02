@@ -70,6 +70,7 @@ scripts/verify_org_chart_v5.py
 scripts/verify_org_chart_final.py
 
 # Private-only static assets
+server/static/files/
 server/static/finance/
 
 # Private-only test data
