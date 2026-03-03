@@ -1276,14 +1276,39 @@ def cli_main(argv: list[str] | None = None) -> None:
             cache.close()
 
 
+# ── Per-Anima credential resolution ──────────────────
+
+def _resolve_write_token(args: dict[str, Any]) -> str:
+    """Resolve the Chatwork write token for the calling Anima.
+
+    Uses ``CHATWORK_API_TOKEN_WRITE__<anima_name>`` if available in
+    shared/credentials.json, otherwise falls back to the default
+    ``CHATWORK_API_TOKEN_WRITE``.
+    """
+    from core.tools._base import _lookup_shared_credentials
+
+    anima_dir = args.get("anima_dir")
+    if anima_dir:
+        anima_name = Path(anima_dir).name
+        per_anima_key = f"CHATWORK_API_TOKEN_WRITE__{anima_name}"
+        token = _lookup_shared_credentials(per_anima_key)
+        if token:
+            logger.debug(
+                "Using per-Anima Chatwork write token for '%s'", anima_name,
+            )
+            return token
+
+    return get_credential(
+        "chatwork_write", "chatwork", env_var="CHATWORK_API_TOKEN_WRITE",
+    )
+
+
 # ── Dispatch ──────────────────────────────────────────
 
 def dispatch(name: str, args: dict[str, Any]) -> Any:
     """Dispatch a tool call by schema name."""
     if name == "chatwork_send":
-        write_token = get_credential(
-            "chatwork_write", "chatwork", env_var="CHATWORK_API_TOKEN_WRITE"
-        )
+        write_token = _resolve_write_token(args)
         write_client = ChatworkClient(api_token=write_token)
         read_client = ChatworkClient()
         room_id = read_client.resolve_room_id(args["room"])
@@ -1326,9 +1351,7 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
         finally:
             cache.close()
     if name == "chatwork_delete":
-        write_token = get_credential(
-            "chatwork_write", "chatwork", env_var="CHATWORK_API_TOKEN_WRITE"
-        )
+        write_token = _resolve_write_token(args)
         write_client = ChatworkClient(api_token=write_token)
         read_client = ChatworkClient()
         room_id = read_client.resolve_room_id(args["room"])

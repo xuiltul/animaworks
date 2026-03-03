@@ -19,6 +19,7 @@ from core.tools.chatwork import (
     clean_chatwork_tags,
     get_tool_schemas,
     _format_timestamp,
+    _resolve_write_token,
     _sync_rooms,
     JST,
 )
@@ -619,3 +620,66 @@ class TestExecutionProfile:
         )
         for key in non_eligible:
             assert EXECUTION_PROFILE[key]["background_eligible"] is False, key
+
+
+# ── _resolve_write_token (per-Anima credential) ──────────────────
+
+
+class TestResolveWriteToken:
+    """Per-Anima Chatwork write token resolution."""
+
+    def test_per_anima_token_used_when_available(self):
+        """When CHATWORK_API_TOKEN_WRITE__<name> exists, it takes priority."""
+        with patch(
+            "core.tools._base._lookup_shared_credentials",
+            return_value="per-anima-token-mei",
+        ) as mock_lookup:
+            token = _resolve_write_token({"anima_dir": "/data/animas/mei"})
+
+        assert token == "per-anima-token-mei"
+        mock_lookup.assert_called_once_with("CHATWORK_API_TOKEN_WRITE__mei")
+
+    def test_fallback_to_default_when_no_per_anima_token(self):
+        """When per-Anima token is not set, fall back to default."""
+        with patch(
+            "core.tools._base._lookup_shared_credentials",
+            return_value=None,
+        ):
+            with patch(
+                "core.tools.chatwork.get_credential",
+                return_value="default-write-token",
+            ) as mock_cred:
+                token = _resolve_write_token({"anima_dir": "/data/animas/kotoha"})
+
+        assert token == "default-write-token"
+        mock_cred.assert_called_once_with(
+            "chatwork_write", "chatwork", env_var="CHATWORK_API_TOKEN_WRITE",
+        )
+
+    def test_fallback_when_no_anima_dir_in_args(self):
+        """When anima_dir is not in args, fall back to default."""
+        with patch(
+            "core.tools.chatwork.get_credential",
+            return_value="default-write-token",
+        ):
+            token = _resolve_write_token({"room": "123", "message": "hi"})
+
+        assert token == "default-write-token"
+
+    def test_anima_name_extracted_from_path(self):
+        """The Anima name is correctly extracted from the directory path."""
+        calls = []
+
+        def mock_lookup(key: str) -> str | None:
+            calls.append(key)
+            return "found-token"
+
+        with patch(
+            "core.tools._base._lookup_shared_credentials",
+            side_effect=mock_lookup,
+        ):
+            _resolve_write_token(
+                {"anima_dir": "/home/main/.animaworks/animas/sakura"}
+            )
+
+        assert calls == ["CHATWORK_API_TOKEN_WRITE__sakura"]

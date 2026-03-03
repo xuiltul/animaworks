@@ -325,7 +325,7 @@ export function createStreamingController(ctx) {
           ctx.controllers.activity.addLocalActivity("chat", name, `${t("chat.response_prefix")} ${streamingMsg.text.slice(0, 100)}`);
           ctx.controllers.renderer.markResponseComplete(name, tid);
 
-          const paneEl = ctx.container?.closest(".chat-pane");
+          const paneEl = ctx.state.container?.closest(".chat-pane");
           if (paneEl && !paneEl.classList.contains("focused")) {
             paneEl.classList.remove("stream-done-flash");
             void paneEl.offsetWidth;
@@ -355,7 +355,7 @@ export function createStreamingController(ctx) {
           if (inputEl && state.selectedAnima === name) {
             inputEl.placeholder = t("chat.message_to", { name });
             saveDraft(name, inputEl.value || "", tid);
-            const paneEl = ctx.container?.closest(".chat-pane");
+            const paneEl = ctx.state.container?.closest(".chat-pane");
             if (!paneEl || paneEl.classList.contains("focused")) {
               inputEl.focus();
             }
