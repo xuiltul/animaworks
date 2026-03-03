@@ -15,7 +15,7 @@ import { getSelectedBoard, appendBoardMessage } from "./board.js";
 import { updateAnimaStatus, addActivityItem } from "./org-dashboard.js";
 import { playReveal } from "./reveal.js";
 import { createLogger } from "../../shared/logger.js";
-import { bustupCandidates, resolveAvatar } from "../../modules/avatar-resolver.js";
+import { bustupCandidates, resolveAvatar, invalidateAvatarCache } from "../../modules/avatar-resolver.js";
 
 const logger = createLogger("ws-app");
 
@@ -253,6 +253,7 @@ export function setupWebSocket(deps) {
 
   wsUnsubscribers.push(onEvent("anima.assets_updated", async (data) => {
     const animaName = data.name;
+    invalidateAvatarCache(animaName).catch(() => {});
     addActivity("system", animaName, `アセット更新: ${(data.assets || []).join(", ")}`);
 
     // ── Reveal animation (Anima birth) ──

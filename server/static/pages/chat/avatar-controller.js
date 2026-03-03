@@ -1,5 +1,5 @@
 // ── Bustup Overlay Controller ──────────────────
-import { bustupCandidates, resolveAvatar } from "../../modules/avatar-resolver.js";
+import { bustupCandidates, resolveAvatar, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 
 export function createAvatarController(ctx) {
   const $ = ctx.$;
@@ -16,7 +16,7 @@ export function createAvatarController(ctx) {
 
     state.bustupUrl = null;
     const name = state.selectedAnima;
-    const url = await resolveAvatar(name, bustupCandidates());
+    const url = await resolveCachedAvatar(name, bustupCandidates(), "S");
     if (url) {
       state.bustupUrl = url;
       container.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="anima-avatar-img">`;

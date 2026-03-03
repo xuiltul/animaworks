@@ -5,7 +5,7 @@ import { t } from "/shared/i18n.js";
 import { api } from "./api.js";
 import { loadMemoryTab } from "./memory.js";
 import { animaHashColor } from "../shared/avatar-utils.js";
-import { bustupCandidates, resolveAvatar } from "./avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar } from "./avatar-resolver.js";
 
 export async function loadAnimas() {
   try {
@@ -118,7 +118,7 @@ export async function updateAnimaAvatar() {
   const color = animaHashColor(name);
 
   let imgHtml = "";
-  const url = await resolveAvatar(name, bustupCandidates());
+  const url = await resolveCachedAvatar(name, bustupCandidates(), "S");
   if (url) {
     imgHtml = `<img class="anima-avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
   }

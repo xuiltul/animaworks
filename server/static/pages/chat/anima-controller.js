@@ -4,7 +4,7 @@ import {
   clearUnreadForActiveThread, loadDraft, saveDraft, chatInputMaxHeight,
   fetchChatUiState, scheduleSaveChatUiState, mergeThreadsFromSessions,
 } from "./ctx.js";
-import { bustupCandidates, resolveAvatar } from "../../modules/avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 
 export function createAnimaController(ctx) {
   const $ = ctx.$;
@@ -57,7 +57,7 @@ export function createAnimaController(ctx) {
     if (state.animaTabAvatarLoading[name]) return state.animaTabAvatarLoading[name];
 
     state.animaTabAvatarLoading[name] = (async () => {
-      const found = await resolveAvatar(name, bustupCandidates());
+      const found = await resolveCachedAvatar(name, bustupCandidates(), "S");
       state.animaTabAvatarUrls[name] = found;
       delete state.animaTabAvatarLoading[name];
       renderAnimaTabs();

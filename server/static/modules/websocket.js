@@ -4,6 +4,7 @@ import { t } from "/shared/i18n.js";
 import { state, dom } from "./state.js";
 import { addActivity } from "./activity.js";
 import { renderAnimaDropdown, updateAnimaAvatar, refreshSelectedAnima } from "./animas.js";
+import { invalidateAvatarCache } from "./avatar-resolver.js";
 import { updateSystemStatus } from "./status.js";
 import { ChatSessionManager } from "../shared/chat/session-manager.js";
 import { createLogger } from "../shared/logger.js";
@@ -192,6 +193,7 @@ function handleWsMessage(raw) {
     case "anima.assets_updated": {
       const animaName = data.name;
       if (animaName) {
+        invalidateAvatarCache(animaName).catch(() => {});
         addActivity("system", animaName, `${t("websocket.assets_updated")} ${(data.assets || []).join(", ")}`);
         if (animaName === state.selectedAnima) {
           updateAnimaAvatar();

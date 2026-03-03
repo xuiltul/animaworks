@@ -3,7 +3,8 @@ import { api } from "../modules/api.js";
 import { escapeHtml, renderMarkdown, smartTimestamp } from "../modules/state.js";
 import { createLogger } from "../shared/logger.js";
 import { t } from "/shared/i18n.js";
-import { bustupCandidates, resolveAvatar } from "../modules/avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar } from "../modules/avatar-resolver.js";
+import { preloadAvatars } from "../modules/image-cache.js";
 
 const logger = createLogger("board-page");
 
@@ -197,7 +198,7 @@ function _addListener(id, event, handler) {
 
 async function _resolveAvatar(name) {
   if (name in _avatarCache) return _avatarCache[name];
-  const url = await resolveAvatar(name, bustupCandidates());
+  const url = await resolveCachedAvatar(name, bustupCandidates(), "S");
   _avatarCache[name] = url;
   return url;
 }
