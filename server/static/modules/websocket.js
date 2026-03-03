@@ -249,12 +249,21 @@ function handleWsMessage(raw) {
 
     case "anima.tool_activity": {
       const animaName = data.name;
-      if (animaName && data.event === "tool_start") {
-        addActivity("tool", animaName, `${data.tool_name || "tool"} ${t("websocket.tool_running") || "実行中..."}`);
-      } else if (animaName && data.event === "tool_end") {
+      const evtType = data.event || data.type || "";
+      const toolName = data.tool_name || data.tool || "tool";
+      if (animaName && evtType === "tool_start") {
+        addActivity("tool", animaName, `${toolName} ${t("websocket.tool_running") || "実行中..."}`);
+      } else if (animaName && evtType === "tool_detail") {
+        addActivity("tool", animaName, `${toolName}: ${data.detail || ""}`);
+      } else if (animaName && (evtType === "tool_end" || evtType === "tool_use")) {
         const suffix = data.is_error ? ` (${t("common.error") || "error"})` : "";
-        addActivity("tool", animaName, `${data.tool_name || "tool"} ${t("websocket.tool_done") || "完了"}${suffix}`);
+        addActivity("tool", animaName, `${toolName} ${t("websocket.tool_done") || "完了"}${suffix}`);
+      } else if (animaName && evtType) {
+        addActivity("tool", animaName, `${data.summary || evtType}`);
       }
+      document.dispatchEvent(
+        new CustomEvent("anima-tool-activity", { detail: { ...data, event: evtType, tool_name: toolName } })
+      );
       break;
     }
 

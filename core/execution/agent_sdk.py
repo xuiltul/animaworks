@@ -101,6 +101,7 @@ from core.execution._sdk_stream import (  # noqa: F401
     _summarise_tool_input,
     _tool_result_content_len,
 )
+from core.execution._tool_summary import make_tool_detail_chunk
 
 logger = logging.getLogger("animaworks.execution.agent_sdk")
 
@@ -753,6 +754,11 @@ class AgentSDKExecutor(BaseExecutor):
                                 block, pending_records, None,
                                 self._model_config.model,
                             )
+                            detail_chunk = make_tool_detail_chunk(
+                                block.name, block.id, block.input or {},
+                            )
+                            if detail_chunk:
+                                yield detail_chunk
                             if block.id in active_tool_ids:
                                 active_tool_ids.discard(block.id)
                                 yield {

@@ -292,6 +292,12 @@ def _chunk_to_event(chunk: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
         return "text_delta", {"text": chunk["text"]}
     if event_type == "tool_start":
         return "tool_start", {"tool_name": chunk["tool_name"], "tool_id": chunk["tool_id"]}
+    if event_type == "tool_detail":
+        return "tool_detail", {
+            "tool_id": chunk.get("tool_id", ""),
+            "tool_name": chunk.get("tool_name", ""),
+            "detail": chunk.get("detail", ""),
+        }
     if event_type == "tool_end":
         payload: dict[str, Any] = {"tool_id": chunk["tool_id"], "tool_name": chunk.get("tool_name", "")}
         record = chunk.get("record")
@@ -370,14 +376,16 @@ async def _emit_ws_side_effects(
         await emit_notification_direct(
             ws_manager, chunk.get("data", {}),
         )
-    elif event_type in ("tool_start", "tool_end") and ws_manager:
+    elif event_type in ("tool_start", "tool_end", "tool_detail") and ws_manager:
         ws_payload: dict[str, Any] = {
             "name": anima_name,
             "event": event_type,
             "tool_name": chunk.get("tool_name", ""),
             "tool_id": chunk.get("tool_id", ""),
         }
-        if event_type == "tool_end":
+        if event_type == "tool_detail":
+            ws_payload["detail"] = chunk.get("detail", "")
+        elif event_type == "tool_end":
             record = chunk.get("record")
             if isinstance(record, dict):
                 if record.get("is_error"):

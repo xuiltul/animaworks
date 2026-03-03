@@ -339,6 +339,22 @@ export function renderStreamingBubbleInner(msg, opts) {
     html += `<div class="tool-indicator"><span class="tool-spinner"></span>${typeof toolLabel === "function" ? toolLabel(msg.activeTool) : toolLabel}</div>`;
   }
 
+  // Subordinate activity
+  const subActivity = msg.subordinateActivity;
+  if (subActivity && Object.keys(subActivity).length > 0) {
+    for (const [subName, act] of Object.entries(subActivity)) {
+      if (act.type === "inbox_processing_end") continue;
+      const icon = act.type === "inbox_processing_start"
+        ? "⏳" : act.type === "tool_end" ? "✓" : "🔧";
+      const label = act.summary || act.type;
+      html += `<div class="subordinate-activity">
+        <img class="subordinate-avatar" src="/api/animas/${encodeURIComponent(subName)}/avatar" alt="" onerror="this.style.display='none'">
+        <span class="subordinate-name">${escapeHtml(subName)}</span>
+        <span class="subordinate-tool">${icon} ${escapeHtml(label)}</span>
+      </div>`;
+    }
+  }
+
   html += thinkingHtml;
   return html;
 }
@@ -362,7 +378,10 @@ function renderToolActivityTimeline(history, activeTool, { escapeHtml, labels })
         : "";
       items += `<div class="tool-activity-item${entry.is_error ? " tool-activity-item--error" : ""}">${icon}<span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${dur}${summary}</div>`;
     } else {
-      items += `<div class="tool-activity-item tool-activity-item--running"><span class="tool-spinner"></span><span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span><span class="tool-activity-dur">実行中</span></div>`;
+      const detailSpan = entry.detail
+        ? `<span class="tool-activity-detail">${escapeHtml(entry.detail.slice(0, 120))}</span>`
+        : "";
+      items += `<div class="tool-activity-item tool-activity-item--running"><span class="tool-spinner"></span><span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${detailSpan}<span class="tool-activity-dur">実行中</span></div>`;
     }
   }
 

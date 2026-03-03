@@ -258,6 +258,23 @@ export function createStreamingController(ctx) {
     // await would not be initialized when SSE callbacks fire during streaming.
     let streamingMsg = null;
 
+    const _onSubordinateActivity = (e) => {
+      const { name: subName, event: evtType, tool_name: toolName, detail: toolDetail, summary } = e.detail || {};
+      if (!streamingMsg?.streaming || subName === name) return;
+      if (!streamingMsg.subordinateActivity) streamingMsg.subordinateActivity = {};
+      if (evtType === "tool_start") {
+        streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 実行中...` };
+      } else if (evtType === "tool_detail") {
+        streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName}: ${toolDetail || ""}` };
+      } else if (evtType === "tool_end") {
+        streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 完了` };
+      } else {
+        streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName || "", summary: summary || evtType };
+      }
+      renderBubble(streamingMsg);
+    };
+    document.addEventListener("anima-tool-activity", _onSubordinateActivity);
+
     const { success, error } = await mgr.sendChat(name, tid, message, {
       images,
       displayImages,
@@ -278,6 +295,19 @@ export function createStreamingController(ctx) {
             tool_id: detail?.tool_id || "",
             started_at: Date.now(),
           });
+          renderBubble(streamingMsg);
+        },
+        onToolDetail: (_toolName, detailText, info) => {
+          if (!streamingMsg?.streaming) return;
+          if (streamingMsg.toolHistory && info?.tool_id) {
+            for (let i = streamingMsg.toolHistory.length - 1; i >= 0; i--) {
+              const entry = streamingMsg.toolHistory[i];
+              if (entry.tool_id === info.tool_id && !entry.completed) {
+                entry.detail = detailText;
+                break;
+              }
+            }
+          }
           renderBubble(streamingMsg);
         },
         onToolEnd: (detail) => {
@@ -368,6 +398,7 @@ export function createStreamingController(ctx) {
         },
       },
       onFinally: () => {
+        document.removeEventListener("anima-tool-activity", _onSubordinateActivity);
         try {
           if (streamingMsg && streamingMsg.streaming) {
             streamingMsg.streaming = false;

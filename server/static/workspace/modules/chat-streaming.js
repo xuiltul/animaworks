@@ -56,6 +56,18 @@ function _baseCallbacks(streamingMsg) {
       setExpression("thinking");
       updateStreamingBubble(streamingMsg);
     },
+    onToolDetail: (_toolName, detailText, info) => {
+      if (streamingMsg.toolHistory && info?.tool_id) {
+        for (let i = streamingMsg.toolHistory.length - 1; i >= 0; i--) {
+          const entry = streamingMsg.toolHistory[i];
+          if (entry.tool_id === info.tool_id && !entry.completed) {
+            entry.detail = detailText;
+            break;
+          }
+        }
+      }
+      updateStreamingBubble(streamingMsg);
+    },
     onToolEnd: (detail) => {
       streamingMsg.activeTool = null;
       if (streamingMsg.toolHistory && detail?.tool_id) {
@@ -161,6 +173,23 @@ async function _sendConversation(text, overrideImages = null) {
   // await would not be initialized when SSE callbacks fire during streaming.
   let streamingMsg = null;
 
+  const _onSubordinateActivity = (e) => {
+    const { name: subName, event: evtType, tool_name: toolName, detail: toolDetail, summary } = e.detail || {};
+    if (!streamingMsg?.streaming || subName === anima) return;
+    if (!streamingMsg.subordinateActivity) streamingMsg.subordinateActivity = {};
+    if (evtType === "tool_start") {
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 実行中...` };
+    } else if (evtType === "tool_detail") {
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName}: ${toolDetail || ""}` };
+    } else if (evtType === "tool_end") {
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 完了` };
+    } else {
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName || "", summary: summary || evtType };
+    }
+    updateStreamingBubble(streamingMsg);
+  };
+  document.addEventListener("anima-tool-activity", _onSubordinateActivity);
+
   const { success, error } = await mgr.sendChat(anima, thread, text, {
     images,
     displayImages,
@@ -174,8 +203,9 @@ async function _sendConversation(text, overrideImages = null) {
       },
       onCompressionStart: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = true; updateStreamingBubble(streamingMsg); } },
       onCompressionEnd: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = false; updateStreamingBubble(streamingMsg); } },
-      onToolStart: (n) => { if (streamingMsg?.streaming) { streamingMsg.activeTool = n; setExpression("thinking"); updateStreamingBubble(streamingMsg); } },
-      onToolEnd: () => { if (streamingMsg?.streaming) { streamingMsg.activeTool = null; setExpression("neutral"); updateStreamingBubble(streamingMsg); } },
+      onToolStart: (n, detail) => { if (streamingMsg?.streaming) { streamingMsg.activeTool = n; if (!streamingMsg.toolHistory) streamingMsg.toolHistory = []; streamingMsg.toolHistory.push({ tool_name: n, tool_id: detail?.tool_id || "", started_at: Date.now() }); setExpression("thinking"); updateStreamingBubble(streamingMsg); } },
+      onToolDetail: (_toolName, detailText, info) => { if (streamingMsg?.streaming && streamingMsg.toolHistory && info?.tool_id) { for (let i = streamingMsg.toolHistory.length - 1; i >= 0; i--) { const entry = streamingMsg.toolHistory[i]; if (entry.tool_id === info.tool_id && !entry.completed) { entry.detail = detailText; break; } } } updateStreamingBubble(streamingMsg); },
+      onToolEnd: (detail) => { if (streamingMsg?.streaming) { streamingMsg.activeTool = null; if (streamingMsg.toolHistory && detail?.tool_id) { for (let i = streamingMsg.toolHistory.length - 1; i >= 0; i--) { const entry = streamingMsg.toolHistory[i]; if (entry.tool_id === detail.tool_id && !entry.completed) { entry.completed = true; entry.duration_ms = Date.now() - entry.started_at; break; } } } setExpression("neutral"); updateStreamingBubble(streamingMsg); } },
       onThinkingStart: () => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = ""; streamingMsg.thinking = true; updateStreamingBubble(streamingMsg); } },
       onThinkingDelta: (t) => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + t; scheduleStreamingUpdate(streamingMsg); } },
       onThinkingEnd: () => { if (streamingMsg?.streaming) { streamingMsg.thinking = false; updateStreamingBubble(streamingMsg); } },
@@ -202,6 +232,7 @@ async function _sendConversation(text, overrideImages = null) {
       },
     },
     onFinally: () => {
+      document.removeEventListener("anima-tool-activity", _onSubordinateActivity);
       try {
         setTalking(false);
         if (streamingMsg?.streaming) {

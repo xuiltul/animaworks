@@ -1541,6 +1541,51 @@
   max-width: 300px;
 }
 
+.tool-activity-detail {
+  margin-left: 6px;
+  font-size: 0.7rem;
+  opacity: 0.8;
+  font-family: var(--aw-font-mono, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+
+.subordinate-activity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  background: var(--aw-color-bg-secondary, #f0f4f8);
+  border-radius: 8px;
+  font-size: 0.76rem;
+  transition: opacity 0.15s ease;
+}
+
+.subordinate-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.subordinate-name {
+  font-weight: 600;
+  color: var(--aw-color-text-secondary);
+  min-width: 40px;
+}
+
+.subordinate-tool {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--aw-font-mono, monospace);
+  opacity: 0.9;
+}
+
 /* ── Heartbeat Relay Indicator ──────────── */
 
 .heartbeat-relay-indicator {

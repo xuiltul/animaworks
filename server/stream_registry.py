@@ -84,6 +84,12 @@ class ResponseStream:
                 "tool_id": payload.get("tool_id", ""),
                 "started_at": int(time.time() * 1000),
             })
+        elif event == "tool_detail":
+            tid = payload.get("tool_id", "")
+            for entry in reversed(self.tool_history):
+                if entry.get("tool_id") == tid and not entry.get("completed"):
+                    entry["detail"] = payload.get("detail", "")
+                    break
         elif event == "tool_end":
             self.active_tool = None
             tid = payload.get("tool_id", "")

@@ -45,6 +45,7 @@ from core.schemas import ModelConfig
 from core.memory.shortterm import ShortTermMemory
 from core.tooling.handler import ToolHandler
 from core.tooling.schemas import build_tool_list, to_text_format
+from core.execution._tool_summary import make_tool_detail_chunk
 
 logger = logging.getLogger("animaworks.execution.assisted")
 
@@ -745,13 +746,16 @@ class AssistedExecutor(BaseExecutor):
                     all_response_text.append(narrative)
                     yield {"type": "text_delta", "text": narrative}
 
-                # ── 6. Yield tool_start ──────────────────────
+                # ── 6. Yield tool_start + tool_detail ────────
                 tool_id = f"assisted_{iteration}_{tool_name}"
                 yield {
                     "type": "tool_start",
                     "tool_name": tool_name,
                     "tool_id": tool_id,
                 }
+                detail_chunk = make_tool_detail_chunk(tool_name, tool_id, tool_args)
+                if detail_chunk:
+                    yield detail_chunk
 
                 # ── 7. Execute tool ──────────────────────────
                 logger.info(

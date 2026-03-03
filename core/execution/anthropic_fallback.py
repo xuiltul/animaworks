@@ -41,6 +41,8 @@ from core.tooling.schemas import (
 )
 import httpx
 
+from core.execution._tool_summary import make_tool_detail_chunk
+
 logger = logging.getLogger("animaworks.execution.anthropic_fallback")
 
 
@@ -552,6 +554,12 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 _trust_order_s = {"trusted": 2, "medium": 1, "untrusted": 0}
                 tool_results = []
                 for tu in tool_uses:
+                    detail_chunk = make_tool_detail_chunk(
+                        tu.name, tu.id, tu.input or {},
+                    )
+                    if detail_chunk:
+                        yield detail_chunk
+
                     try:
                         result = await loop.run_in_executor(
                             None,

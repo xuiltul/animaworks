@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.execution._sanitize import TOOL_TRUST_LEVELS, wrap_tool_result
+from core.execution._tool_summary import make_tool_detail_chunk
 from core.execution.base import ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
 from core.exceptions import ToolExecutionError
 from core.tooling.schemas import (
@@ -245,6 +246,10 @@ class ToolProcessingMixin:
             fn_name = tc["name"]
             fn_args = tc["arguments"]
             tc_id = tc["id"]
+
+            detail_chunk = make_tool_detail_chunk(fn_name, tc_id, fn_args or {})
+            if detail_chunk:
+                yield detail_chunk
 
             # Handle unparseable arguments
             if fn_args is None:
