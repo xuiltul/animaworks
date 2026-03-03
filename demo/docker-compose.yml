@@ -1,0 +1,16 @@
+services:
+  animaworks-demo:
+    build:
+      context: ..
+      dockerfile: demo/Dockerfile
+    ports:
+      - "18500:18500"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      PRESET: ${PRESET:-en-anime}
+      TZ: ${TZ:-Asia/Tokyo}
+    volumes:
+      - animaworks-demo-data:/root/.animaworks
+
+volumes:
+  animaworks-demo-data:
