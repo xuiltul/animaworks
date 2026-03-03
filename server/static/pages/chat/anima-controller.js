@@ -235,6 +235,7 @@ export function createAnimaController(ctx) {
       const hs = createHistoryState();
       applyHistoryData(hs, conv);
       mgr.setHistoryState(name, tid, hs);
+      resolveHistoryAvatars(conv.sessions);
     } else if (needConv) {
       const { createHistoryState } = await import("../../shared/chat/session-manager.js");
       mgr.setHistoryState(name, tid, createHistoryState());
@@ -381,9 +382,24 @@ export function createAnimaController(ctx) {
     }
   }
 
+  function resolveHistoryAvatars(sessions) {
+    if (!sessions || sessions.length === 0) return;
+    const known = new Set(Object.keys(state.animaTabAvatarUrls));
+    const names = new Set();
+    for (const s of sessions) {
+      if (!s.messages) continue;
+      for (const m of s.messages) {
+        if (m.from_person && m.from_person !== "human" && !known.has(m.from_person)) {
+          names.add(m.from_person);
+        }
+      }
+    }
+    for (const n of names) ensureAnimaTabAvatar(n);
+  }
+
   return {
     loadAnimas, restoreChatUiState, selectAnima, openOrSelectAnima,
     closeAnimaTab, renderAnimaTabs, renderAddConversationMenu,
-    ensureAnimaTabAvatar,
+    ensureAnimaTabAvatar, resolveHistoryAvatars,
   };
 }

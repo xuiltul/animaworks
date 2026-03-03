@@ -20,6 +20,7 @@ import { ChatSessionManager } from "../../shared/chat/session-manager.js";
 import { streamChat, fetchActiveStream, fetchStreamProgress } from "../../shared/chat-stream.js";
 import { getCurrentUser } from "./login.js";
 import { fetchConversationHistory } from "./api.js";
+import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 
 export { submitConversation, addToQueue };
 
@@ -88,6 +89,12 @@ export async function openConversation(animaName) {
 
   await setCharacter(animaName);
   setExpression("neutral");
+
+  resolveCachedAvatar(animaName, bustupCandidates(), "S").then(url => {
+    const map = { ...getState().chatAvatarMap, [animaName]: url };
+    setState({ chatAvatarMap: map });
+    renderConvMessages();
+  }).catch(() => {});
 
   await loadAndRenderConvMessages(animaName, { resumeStream: resumeConversationStream });
   renderWsThreadTabs();
