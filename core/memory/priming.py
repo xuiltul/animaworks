@@ -51,6 +51,7 @@ _BUDGET_RECENT_ACTIVITY = 1300  # Unified: old B(600) + E(700)
 _BUDGET_RELATED_KNOWLEDGE = 700
 _BUDGET_SKILL_MATCH = 200
 _BUDGET_PENDING_TASKS = 300
+_BUDGET_RELATED_EPISODES = 500
 
 # Rough characters-per-token for Japanese/English mixed text
 _CHARS_PER_TOKEN = 4
@@ -76,6 +77,7 @@ class PrimingResult:
     matched_skills: list[str] = field(default_factory=list)
     pending_tasks: str = ""
     recent_outbound: str = ""
+    episodes: str = ""
 
     def is_empty(self) -> bool:
         """Return True if no memories were primed."""
@@ -87,6 +89,7 @@ class PrimingResult:
             and not self.matched_skills
             and not self.pending_tasks
             and not self.recent_outbound
+            and not self.episodes
         )
 
     def total_chars(self) -> int:
@@ -99,6 +102,7 @@ class PrimingResult:
             + sum(len(s) for s in self.matched_skills)
             + len(self.pending_tasks)
             + len(self.recent_outbound)
+            + len(self.episodes)
         )
 
     def estimated_tokens(self) -> int:
@@ -112,12 +116,13 @@ class PrimingResult:
 class PrimingEngine:
     """Automatic memory priming engine.
 
-    Executes 5-channel parallel memory retrieval:
+    Executes 6-channel parallel memory retrieval:
       A. Sender profile (direct file read)
       B. Recent activity (unified activity log, replaces old episodes + channels)
       C. Related knowledge (dense vector search)
       D. Skill matching (description-based 3-tier match with vector search)
       E. Pending tasks (persistent task queue summary)
+      F. Episodes (dense vector search over episode memory)
     """
 
     def __init__(
@@ -205,7 +210,7 @@ class PrimingEngine:
 
             channel_c_coro = _noop()
 
-        # Execute 5 channels + outbound collection in parallel
+        # Execute 6 channels + outbound collection in parallel
         results = await asyncio.gather(
             self._channel_a_sender_profile(sender_name),
             self._channel_b_recent_activity(sender_name, keywords, channel=channel),
@@ -213,6 +218,7 @@ class PrimingEngine:
             self._channel_d_skill_match(message, keywords, channel=channel),
             self._channel_e_pending_tasks(),
             self._collect_recent_outbound(),
+            self._channel_f_episodes(keywords, message=message),
             return_exceptions=True,
         )
 
@@ -230,6 +236,7 @@ class PrimingEngine:
         matched_skills = results[3] if isinstance(results[3], list) else []
         pending_tasks = results[4] if isinstance(results[4], str) else ""
         recent_outbound = results[5] if isinstance(results[5], str) else ""
+        episodes = results[6] if isinstance(results[6], str) else ""
 
         # Log exceptions if any
         for i, r in enumerate(results):
@@ -237,11 +244,13 @@ class PrimingEngine:
                 logger.warning("Priming channel %d failed: %s", i, r)
 
         # Apply token budget limits (distribute based on budget)
-        budget_profile = int(_BUDGET_SENDER_PROFILE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
-        budget_activity = max(400, int(_BUDGET_RECENT_ACTIVITY * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS)))
-        budget_knowledge = int(_BUDGET_RELATED_KNOWLEDGE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
-        budget_skills = int(_BUDGET_SKILL_MATCH * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
-        budget_tasks = int(_BUDGET_PENDING_TASKS * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
+        budget_ratio = token_budget / _DEFAULT_MAX_PRIMING_TOKENS
+        budget_profile = int(_BUDGET_SENDER_PROFILE * budget_ratio)
+        budget_activity = max(400, int(_BUDGET_RECENT_ACTIVITY * budget_ratio))
+        budget_knowledge = int(_BUDGET_RELATED_KNOWLEDGE * budget_ratio)
+        budget_skills = int(_BUDGET_SKILL_MATCH * budget_ratio)
+        budget_tasks = int(_BUDGET_PENDING_TASKS * budget_ratio)
+        budget_episodes = int(_BUDGET_RELATED_EPISODES * budget_ratio)
 
         # Split knowledge budget: trusted/medium gets priority, untrusted gets remainder
         truncated_knowledge = self._truncate_head(related_knowledge, budget_knowledge)
@@ -259,17 +268,19 @@ class PrimingEngine:
             matched_skills=matched_skills[:max(1, budget_skills // 50)],  # ~50 tokens per skill name
             pending_tasks=self._truncate_head(pending_tasks, budget_tasks),
             recent_outbound=recent_outbound,
+            episodes=self._truncate_tail(episodes, budget_episodes),
         )
 
         logger.info(
             "Priming complete: %d chars (~%d tokens), sender_prof=%d, activity=%d, "
-            "knowledge=%d, skills=%d, outbound=%d",
+            "knowledge=%d, skills=%d, episodes=%d, outbound=%d",
             result.total_chars(),
             result.estimated_tokens(),
             len(result.sender_profile),
             len(result.recent_activity),
             len(result.related_knowledge),
             len(result.matched_skills),
+            len(result.episodes),
             len(result.recent_outbound),
         )
 
@@ -938,6 +949,62 @@ class PrimingEngine:
                 logger.warning("Channel D: Tier 1/2 fallback also failed: %s", e2)
                 return []
 
+    async def _channel_f_episodes(
+        self,
+        keywords: list[str],
+        *,
+        message: str = "",
+    ) -> str:
+        """Channel F: Episode memory search (vector search).
+
+        Searches episodes/ via dense vector retrieval to surface
+        semantically relevant past experiences.  Complements Channel B
+        (recent activity timeline) by looking further back in time and
+        ranking by semantic similarity rather than recency alone.
+        """
+        if not self.episodes_dir.is_dir() or not keywords:
+            return ""
+
+        try:
+            retriever = self._get_or_create_retriever()
+            if retriever is None:
+                return ""
+
+            kw_part = " ".join(keywords[:5])
+            query = f"{message[:200]} {kw_part}" if message else kw_part
+            anima_name = self.anima_dir.name
+
+            results = retriever.search(
+                query=query,
+                anima_name=anima_name,
+                memory_type="episodes",
+                top_k=3,
+            )
+
+            if not results:
+                return ""
+
+            retriever.record_access(results, anima_name)
+
+            parts: list[str] = []
+            for i, result in enumerate(results):
+                source = result.metadata.get("source_file", result.doc_id)
+                parts.append(
+                    f"--- Episode {i + 1} (score: {result.score:.3f}, "
+                    f"source: {source}) ---\n"
+                    f"{result.content}\n"
+                )
+
+            logger.debug(
+                "Channel F: Episode search returned %d results",
+                len(results),
+            )
+            return "\n".join(parts)
+
+        except Exception as e:
+            logger.warning("Channel F: Episode search failed: %s", e)
+            return ""
+
     async def _channel_e_pending_tasks(self) -> str:
         """Channel E: Pending task queue summary + active parallel tasks.
 
@@ -1325,6 +1392,12 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
                 trust="untrusted", origin=ORIGIN_EXTERNAL_PLATFORM,
             ))
             parts.append("")
+
+    if result.episodes:
+        parts.append(t("priming.episodes_header"))
+        parts.append("")
+        parts.append(wrap_priming("episodes", result.episodes, trust="medium"))
+        parts.append("")
 
     if result.matched_skills:
         parts.append(t("priming.matched_skills_header"))

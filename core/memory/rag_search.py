@@ -200,7 +200,8 @@ class RAGMemorySearch:
 
         # Hybrid: append vector search results when RAG is available
         if self._indexer is not None and scope in (
-            "knowledge", "common_knowledge", "procedures", "conversation_summary", "all",
+            "knowledge", "episodes", "common_knowledge", "procedures",
+            "conversation_summary", "all",
         ):
             try:
                 vector_hits = self._vector_search_memory(query, scope, knowledge_dir)
@@ -219,6 +220,8 @@ class RAGMemorySearch:
         """Map scope to memory_type list for vector search."""
         if scope == "knowledge":
             return ["knowledge"]
+        if scope == "episodes":
+            return ["episodes"]
         if scope == "procedures":
             return ["procedures"]
         if scope == "common_knowledge":
@@ -226,7 +229,7 @@ class RAGMemorySearch:
         if scope == "conversation_summary":
             return ["conversation_summary"]
         if scope == "all":
-            return ["knowledge", "procedures", "conversation_summary"]
+            return ["knowledge", "episodes", "procedures", "conversation_summary"]
         return ["knowledge"]
 
     def _vector_search_memory(

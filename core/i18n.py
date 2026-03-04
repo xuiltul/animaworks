@@ -188,6 +188,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     "priming.section_intro": {"ja": "以下は、この会話に関連してあなたが自然に想起した記憶です。", "en": "Below are memories you naturally recalled relevant to this conversation."},
     "priming.about_sender": {"ja": "### {sender_name} について", "en": "### About {sender_name}"},
     "priming.recent_activity_header": {"ja": "### 直近のアクティビティ", "en": "### Recent Activity"},
+    "priming.episodes_header": {"ja": "### 関連する過去の経験", "en": "### Related Past Experiences"},
     "priming.related_knowledge_header": {"ja": "### 関連する知識", "en": "### Related Knowledge"},
     "priming.matched_skills_header": {"ja": "### 使えそうなスキル", "en": "### Matching Skills"},
     "priming.skills_list": {"ja": "あなたが持っているスキル: {skills_line}", "en": "Your skills: {skills_line}"},
