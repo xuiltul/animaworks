@@ -54,7 +54,9 @@ evaluation = [
 
 [tool.setuptools]
 py-modules = ["main"]
-packages = ["cli", "cli.commands", "core", "core.tools", "core.notification", "core.notification.channels", "server"]
+
+[tool.setuptools.packages.find]
+include = ["cli*", "core*", "server*"]
 
 [project.scripts]
 animaworks = "cli:cli_main"
