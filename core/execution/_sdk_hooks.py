@@ -534,7 +534,7 @@ def _build_pre_tool_hook(
                 return SyncHookJSONOutput()
 
         # plan_tasks intercept → DAG batch to pending
-        if tool_name == "plan_tasks":
+        if tool_name in ("plan_tasks", "mcp__aw__plan_tasks"):
             from core.tooling.handler_skills import SkillsToolsMixin
             from core.tooling.handler_base import _error_result
 

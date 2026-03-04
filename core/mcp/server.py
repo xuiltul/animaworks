@@ -65,6 +65,7 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset({
     "disable_subordinate",
     "enable_subordinate",
     "skill",
+    "plan_tasks",
 })
 
 
@@ -196,6 +197,7 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         KNOWLEDGE_TOOLS,
         MEMORY_TOOLS,
         NOTIFICATION_TOOLS,
+        PLAN_TASKS_TOOLS,
         PROCEDURE_TOOLS,
         SKILL_TOOLS,
         SUPERVISOR_TOOLS,
@@ -211,6 +213,7 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         *KNOWLEDGE_TOOLS,
         *SUPERVISOR_TOOLS,
         *SKILL_TOOLS,
+        *PLAN_TASKS_TOOLS,
     ]
 
     # Load permitted external tool schemas from permissions.md

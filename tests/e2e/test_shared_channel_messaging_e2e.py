@@ -11,16 +11,22 @@ from pathlib import Path
 import pytest
 
 from core.messenger import Messenger
+from tests.helpers.filesystem import create_test_data_dir
 
 
 @pytest.fixture
-def shared_dir(tmp_path: Path) -> Path:
-    d = tmp_path / "shared"
-    d.mkdir()
-    (d / "inbox").mkdir()
-    (d / "channels").mkdir()
-    (d / "dm_logs").mkdir()
-    return d
+def shared_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Create isolated data dir so config.animas is empty (no inbox/receive filtering)."""
+    d = create_test_data_dir(tmp_path)
+    monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(d))
+    from core.config import invalidate_cache
+    invalidate_cache()
+    shared = d / "shared"
+    shared.mkdir(parents=True, exist_ok=True)
+    (shared / "inbox").mkdir(exist_ok=True)
+    (shared / "channels").mkdir(exist_ok=True)
+    (shared / "dm_logs").mkdir(exist_ok=True)
+    return shared
 
 
 class TestE2EDMFlow:
@@ -134,7 +140,7 @@ class TestE2EAtAllMirroring:
         sakura.receive_external(
             "@all The server error is now resolved.",
             source="human",
-            external_user_id="taka",
+            external_user_id="",  # Use empty so from_name=human (passes channel validation)
         )
 
         # Message should be in sakura's inbox
@@ -155,7 +161,7 @@ class TestE2EAtAllMirroring:
         sakura.receive_external(
             "@all Error is resolved",
             source="human",
-            external_user_id="taka",
+            external_user_id="",  # Use empty so from_name=human (passes channel validation)
         )
 
         # All animas should see it in the general channel

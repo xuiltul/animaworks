@@ -235,8 +235,9 @@ class TestMarkdownLineBreakRendering:
         assert "<br>" in _read_source("server/static/workspace/modules/utils.js")
 
     def test_app_js_uses_render_simple_markdown(self):
+        # renderSimpleMarkdown is in utils.js; used by chat-history.js, session.js, timeline-dom.js
         assert "renderSimpleMarkdown" in _read_source(
-            "server/static/workspace/modules/chat-streaming.js"
+            "server/static/workspace/modules/chat-history.js"
         )
 
 

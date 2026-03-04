@@ -477,6 +477,7 @@ async def test_priming_with_vector_search(temp_anima_dir, temp_vector_store):
         sender_name="yamada",
     )
 
-    # Should find chatwork-policy.md in related knowledge
-    assert result.related_knowledge
-    assert "chatwork" in result.related_knowledge.lower() or "山田" in result.related_knowledge
+    # Results from index_directory (no origin set) go to related_knowledge_untrusted
+    combined = (result.related_knowledge or "") + (result.related_knowledge_untrusted or "")
+    assert combined, "Should find knowledge via vector search"
+    assert "chatwork" in combined.lower() or "山田" in combined

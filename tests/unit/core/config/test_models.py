@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -559,13 +560,16 @@ class TestResolveExecutionModeWildcard:
 
     def test_config_legacy_values_normalised(self):
         # config.json model_modes with legacy A2 value → normalised to A
-        config = AnimaWorksConfig(model_modes={"ollama/qwen3:8b": "A2"})
-        assert resolve_execution_mode(config, "ollama/qwen3:8b") == "A"
+        # Patch models.json lookup so config.model_modes is used (models.json takes priority)
+        with patch("core.config.models._match_models_json", return_value=None):
+            config = AnimaWorksConfig(model_modes={"ollama/qwen3:8b": "A2"})
+            assert resolve_execution_mode(config, "ollama/qwen3:8b") == "A"
 
     def test_config_wildcard_overrides_code_default(self):
-        config = AnimaWorksConfig(model_modes={"ollama/gemma3*": "A"})
-        # Code default says B for gemma3*, but config.json overrides
-        assert resolve_execution_mode(config, "ollama/gemma3:27b") == "A"
+        with patch("core.config.models._match_models_json", return_value=None):
+            config = AnimaWorksConfig(model_modes={"ollama/gemma3*": "A"})
+            # Code default says B for gemma3*, but config.json overrides
+            assert resolve_execution_mode(config, "ollama/gemma3:27b") == "A"
 
     def test_empty_config_falls_through_to_code(self):
         config = AnimaWorksConfig(model_modes={})

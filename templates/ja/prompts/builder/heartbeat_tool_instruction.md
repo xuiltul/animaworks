@@ -1,9 +1,9 @@
 Heartbeatでは**観察・報告・計画・フォローアップ**にツールを使ってください。
-- OK: チャネル読み取り、記憶検索、メッセージ送信、タスク更新、pending作成、delegate_task、外部ツール（Chatwork/Slack/Gmail等）の確認
+- OK: チャネル読み取り、記憶検索、メッセージ送信、タスク更新、**plan_tasks**、delegate_task、外部ツール（Chatwork/Slack/Gmail等）の確認
 - NG: コード変更、ファイル大量編集、長時間の分析・調査
 
 **【MUST】Heartbeatのツール使用は最大20ステップまで。**
 20ステップ以内に観察→計画→タスク書き出し・フォローアップを完了すること。
 
-重い作業が必要な場合は、部下がいれば delegate_task で委任するか、state/pending/ にタスクファイルを書き出してください。
+重い作業が必要な場合は、部下がいれば delegate_task で委任するか、plan_tasks ツールでバックグラウンドタスクとして投入してください。
 タスク実行は別セッション（TaskExec）で自動的に行われます。

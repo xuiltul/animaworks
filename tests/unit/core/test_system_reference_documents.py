@@ -834,6 +834,7 @@ _EXPECTED_FILES = [
     "operations/background-tasks.md",
     "operations/heartbeat-cron-guide.md",
     "operations/mode-s-auth-guide.md",
+    "operations/model-guide.md",
     "operations/project-setup.md",
     "operations/task-management.md",
     "operations/tool-usage-overview.md",

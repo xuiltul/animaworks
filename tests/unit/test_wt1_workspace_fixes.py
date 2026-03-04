@@ -207,29 +207,29 @@ class TestIssueC_ChatJsIntegration:
         assert "onHeartbeatRelayDone" in src
 
     def test_heartbeatRelay_rendering_in_renderStreamingBubbleInner(self) -> None:
-        """renderStreamingBubbleInner (shared render utility) must handle heartbeatRelay state."""
+        """renderStreamingBubbleInner delegates to _renderTextZoneContent which handles heartbeatRelay."""
         src = RENDER_UTILS_JS.read_text(encoding="utf-8")
         match = re.search(
-            r"function\s+renderStreamingBubbleInner.*?(?=\nexport\s+function\s|\nfunction\s|\nclass\s|$)",
+            r"function\s+_renderTextZoneContent.*?(?=\nfunction\s+_render|\nexport\s+function\s|$)",
             src,
             re.DOTALL,
         )
-        assert match, "renderStreamingBubbleInner function not found"
+        assert match, "_renderTextZoneContent (streaming helper) not found"
         body = match.group(0)
-        assert "heartbeatRelay" in body, "heartbeatRelay state not handled in renderStreamingBubbleInner"
+        assert "heartbeatRelay" in body, "heartbeatRelay state not handled in streaming text zone"
 
     def test_afterHeartbeatRelay_rendering_in_renderStreamingBubbleInner(self) -> None:
-        """renderStreamingBubbleInner (shared render utility) must handle afterHeartbeatRelay state."""
+        """renderStreamingBubbleInner delegates to _renderTextZoneContent which handles afterHeartbeatRelay."""
         src = RENDER_UTILS_JS.read_text(encoding="utf-8")
         match = re.search(
-            r"function\s+renderStreamingBubbleInner.*?(?=\nexport\s+function\s|\nfunction\s|\nclass\s|$)",
+            r"function\s+_renderTextZoneContent.*?(?=\nfunction\s+_render|\nexport\s+function\s|$)",
             src,
             re.DOTALL,
         )
-        assert match, "renderStreamingBubbleInner function not found"
+        assert match, "_renderTextZoneContent (streaming helper) not found"
         body = match.group(0)
         assert "afterHeartbeatRelay" in body, (
-            "afterHeartbeatRelay state not handled in renderStreamingBubbleInner"
+            "afterHeartbeatRelay state not handled in streaming text zone"
         )
 
     def test_resumeConversationStream_exists(self) -> None:

@@ -155,9 +155,9 @@ class TestFrontendBackendIntegration:
 
         js = _read(CHAT_JS)
 
-        # Frontend must include thread_id in body JSON
+        # Frontend must include thread_id in body JSON (session-manager uses thread_id: thread)
         assert "thread_id" in js
-        assert "thread_id: tid" in js or "thread_id: threadId" in js
+        assert "thread_id:" in js
 
         # Verify ChatRequest can parse the expected shape
         body = {

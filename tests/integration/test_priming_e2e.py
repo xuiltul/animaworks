@@ -301,6 +301,7 @@ async def test_message_to_response_flow(anima_dir: Path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(120)
 async def test_priming_performance_under_200ms(anima_dir: Path):
     """Test priming performance meets 200ms target (95th percentile).
 

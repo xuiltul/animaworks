@@ -237,9 +237,9 @@ class TestConversationDataLossProtection:
         with pytest.raises(RuntimeError, match="Transcript test error"):
             await dp.process_message("transcript input")
 
-        # Transcript JSONL should NOT be written (replaced by activity log)
+        # Human message is written to transcript before agent runs (process_message flow)
         entries = _read_transcript(anima_dir)
-        assert len(entries) == 0
+        assert len(entries) >= 1, "Human message is written to transcript before agent execution"
 
         # But conversation.json must still have the turns
         turns = _read_conversation(anima_dir)

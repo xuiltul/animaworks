@@ -391,14 +391,16 @@ async def test_priming_with_shared_knowledge(temp_dirs, vector_store, monkeypatc
         sender_name="tester",
     )
 
-    # related_knowledge should contain shared results
-    assert result.related_knowledge, (
-        "Priming should return related_knowledge from shared collection"
+    # related_knowledge or related_knowledge_untrusted may contain shared results
+    # (indexed without origin = untrusted)
+    combined = result.related_knowledge + result.related_knowledge_untrusted
+    assert combined, (
+        "Priming should return related knowledge from shared collection"
     )
 
     # Check that [shared] label appears in the output
-    assert "[shared]" in result.related_knowledge, (
-        f"Expected [shared] label in related_knowledge, got:\n{result.related_knowledge}"
+    assert "[shared]" in combined, (
+        f"Expected [shared] label in knowledge, got:\n{combined}"
     )
 
     # Format the priming section and verify structure
@@ -459,14 +461,15 @@ async def test_priming_personal_and_shared_merged(temp_dirs, vector_store, monke
         sender_name="tester",
     )
 
-    assert result.related_knowledge, "Priming should return related knowledge"
+    combined = result.related_knowledge + result.related_knowledge_untrusted
+    assert combined, "Priming should return related knowledge"
 
     # Verify both [personal] and [shared] labels appear
-    has_personal = "[personal]" in result.related_knowledge
-    has_shared = "[shared]" in result.related_knowledge
+    has_personal = "[personal]" in combined
+    has_shared = "[shared]" in combined
     assert has_personal or has_shared, (
         "Priming output should contain at least one labeled result. "
-        f"Got:\n{result.related_knowledge}"
+        f"Got:\n{combined}"
     )
 
 

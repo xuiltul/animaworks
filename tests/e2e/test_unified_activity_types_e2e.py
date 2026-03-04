@@ -193,10 +193,14 @@ class TestDmReceivedSummary:
             MockMM.return_value.append_episode = MagicMock()
             MockMsger.return_value.unread_count.return_value = 1
 
-            mock_msg = MagicMock()
-            mock_msg.from_person = "dave"
-            mock_msg.content = dm_content
-            mock_msg.type = "message"
+            from core.schemas import Message as MsgSchema
+            mock_msg = MsgSchema(
+                from_person="dave",
+                to_person="carol",
+                content=dm_content,
+                type="message",
+                source="anima",
+            )
             MockMsger.return_value.has_unread.return_value = True
             MockMsger.return_value.receive_with_paths.return_value = [InboxItem(msg=mock_msg, path=Path("/fake/msg.json"))]
             MockMsger.return_value.archive_paths.return_value = 1

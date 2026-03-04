@@ -9,7 +9,7 @@
 - STALEタスク・期限間近タスク: 担当者にフォローアップ（send_message）、必要なら上司にエスカレーション
 - 長期待機中タスク（24h超）: 状況確認・リマインド
 - 部下に任せるべきタスク: delegate_task で委任する
-- 自分で後でやるタスク: state/pending/ にタスクファイルを書き出す
+- 自分で後でやるタスク: **plan_tasks ツールで投入する**（自動的に state/pending/ に書き出され、TaskExec が別セッションで実行する）
 - ブロッカーがある場合: 報告のみ行う（send_message / call_human）
 - 上記すべてで対応事項がない場合のみ: HEARTBEAT_OK
 
