@@ -223,7 +223,11 @@ class AssistedExecutor(BaseExecutor):
             include_search_tools=True,
             include_discovery_tools=False,  # Not needed in text mode
             include_notification_tools=self._tool_handler._human_notifier is not None,
+            include_admin_tools=(self._anima_dir / "skills" / "newstaff.md").exists(),
+            include_supervisor_tools=self._has_subordinates(),
             include_tool_management=False,  # Not needed in text mode
+            include_task_tools=True,
+            include_plan_tasks=True,
             include_skill_tools=True,
             skill_metas=self._memory.list_skill_metas(),
             common_skill_metas=self._memory.list_common_skill_metas(),
