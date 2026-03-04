@@ -816,7 +816,8 @@ class OrgToolsMixin:
 
         # ── Activity summary ──
         al = ActivityLogger(desc_dir)
-        entries = al.recent(days=days, limit=10_000)
+        _AUDIT_ENTRY_LIMIT = 10_000
+        entries = al.recent(days=days, limit=_AUDIT_ENTRY_LIMIT)
 
         lines.append(t("handler.audit_activity_header"))
         lines.append("")
@@ -858,8 +859,8 @@ class OrgToolsMixin:
             active = tqm.get_all_active()
             lines.append(t("handler.audit_active_tasks", count=len(active)))
 
-            all_tasks = tqm._load_all()
-            done_count = sum(1 for task in all_tasks.values() if task.status == "done")
+            done_tasks = tqm.list_tasks(status="done")
+            done_count = len(done_tasks)
             lines.append(t("handler.audit_completed_tasks", count=done_count))
         except Exception:
             lines.append(t("handler.audit_active_tasks", count=0))

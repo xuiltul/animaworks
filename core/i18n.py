@@ -128,7 +128,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     "handler.audit_tasks_header": {"ja": "### タスク状況", "en": "### Task Status"},
     "handler.audit_current_task": {"ja": "進行中タスク: {task}", "en": "Current task: {task}"},
     "handler.audit_active_tasks": {"ja": "アクティブタスク: {count}件", "en": "Active tasks: {count}"},
-    "handler.audit_completed_tasks": {"ja": "完了タスク（期間内）: {count}件", "en": "Completed tasks (in period): {count}"},
+    "handler.audit_completed_tasks": {"ja": "完了タスク（累計）: {count}件", "en": "Completed tasks (total): {count}"},
     "handler.audit_errors_header": {"ja": "### エラーサマリー", "en": "### Error Summary"},
     "handler.audit_error_count": {"ja": "エラー件数: {count}件", "en": "Error count: {count}"},
     "handler.audit_error_entry": {"ja": "- [{ts}] {summary}", "en": "- [{ts}] {summary}"},
