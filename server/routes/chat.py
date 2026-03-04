@@ -292,8 +292,23 @@ def _chunk_to_event(chunk: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
         return "text_delta", {"text": chunk["text"]}
     if event_type == "tool_start":
         return "tool_start", {"tool_name": chunk["tool_name"], "tool_id": chunk["tool_id"]}
+    if event_type == "tool_detail":
+        return "tool_detail", {
+            "tool_id": chunk.get("tool_id", ""),
+            "tool_name": chunk.get("tool_name", ""),
+            "detail": chunk.get("detail", ""),
+        }
     if event_type == "tool_end":
-        return "tool_end", {"tool_id": chunk["tool_id"], "tool_name": chunk.get("tool_name", "")}
+        payload: dict[str, Any] = {"tool_id": chunk["tool_id"], "tool_name": chunk.get("tool_name", "")}
+        record = chunk.get("record")
+        if isinstance(record, dict):
+            if record.get("result_summary"):
+                payload["result_summary"] = record["result_summary"][:200]
+            if record.get("input_summary"):
+                payload["input_summary"] = record["input_summary"][:200]
+            if record.get("is_error"):
+                payload["is_error"] = True
+        return "tool_end", payload
     if event_type == "chain_start":
         return "chain_start", {"chain": chunk["chain"]}
     if event_type == "bootstrap_start":
@@ -361,6 +376,21 @@ async def _emit_ws_side_effects(
         await emit_notification_direct(
             ws_manager, chunk.get("data", {}),
         )
+    elif event_type in ("tool_start", "tool_end", "tool_detail") and ws_manager:
+        ws_payload: dict[str, Any] = {
+            "name": anima_name,
+            "event": event_type,
+            "tool_name": chunk.get("tool_name", ""),
+            "tool_id": chunk.get("tool_id", ""),
+        }
+        if event_type == "tool_detail":
+            ws_payload["detail"] = chunk.get("detail", "")
+        elif event_type == "tool_end":
+            record = chunk.get("record")
+            if isinstance(record, dict):
+                if record.get("is_error"):
+                    ws_payload["is_error"] = True
+        await emit_direct(ws_manager, "anima.tool_activity", ws_payload)
 
 
 async def _run_producer(
@@ -876,6 +906,7 @@ def create_chat_router() -> APIRouter:
             "status": stream.status,
             "full_text": stream.full_text,
             "active_tool": stream.active_tool,
+            "tool_history": stream.tool_history,
             "last_event_id": stream.last_event_id,
             "event_count": stream.event_count,
             "emotion": stream.emotion,
@@ -896,6 +927,7 @@ def create_chat_router() -> APIRouter:
             "status": stream.status,
             "full_text": stream.full_text,
             "active_tool": stream.active_tool,
+            "tool_history": stream.tool_history,
             "last_event_id": stream.last_event_id,
             "event_count": stream.event_count,
             "emotion": stream.emotion,

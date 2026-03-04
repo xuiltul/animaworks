@@ -168,8 +168,16 @@ def cmd_anima_status(args: argparse.Namespace) -> None:
 
 def _print_anima_status(name: str, status: dict) -> None:
     """Print formatted anima status."""
+    from core.paths import get_animas_dir
+
     print(f"\n{name}:")
     print(f"  State: {status.get('state', 'unknown')}")
+
+    model, mode = _read_model_from_status_json(get_animas_dir() / name)
+    if model:
+        mode_suffix = f" (Mode {mode})" if mode else ""
+        print(f"  Model: {model}{mode_suffix}")
+
     print(f"  PID: {status.get('pid', 'N/A')}")
     print(f"  Status: {status.get('status', 'unknown')}")
 
@@ -185,6 +193,104 @@ def _print_anima_status(name: str, status: dict) -> None:
 
     if status.get('current_task'):
         print(f"  Current task: {status['current_task']}")
+
+
+def _read_model_from_status_json(anima_dir: Path) -> tuple[str, str]:
+    """Read model and resolve execution mode from status.json.
+
+    Returns:
+        (model_name, execution_mode) — either may be empty string.
+    """
+    status_file = anima_dir / "status.json"
+    if not status_file.exists():
+        return ("", "")
+    try:
+        data = json.loads(status_file.read_text(encoding="utf-8"))
+        model = data.get("model", "")
+        if not model:
+            return ("", "")
+        mode = data.get("execution_mode", "")
+        if not mode and model:
+            try:
+                from core.config.models import load_config, resolve_execution_mode
+                mode = resolve_execution_mode(load_config(), model)
+            except Exception:
+                pass
+        return (model, mode)
+    except Exception:
+        return ("", "")
+
+
+def cmd_anima_info(args: argparse.Namespace) -> None:
+    """Show detailed configuration for a specific anima from status.json."""
+    from core.paths import get_animas_dir
+
+    name: str = args.anima
+    anima_dir = get_animas_dir() / name
+
+    if not anima_dir.exists():
+        print(f"Error: Anima '{name}' not found")
+        sys.exit(1)
+
+    status_file = anima_dir / "status.json"
+    if not status_file.exists():
+        print(f"Error: status.json not found for '{name}'")
+        sys.exit(1)
+
+    try:
+        data = json.loads(status_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"Error reading status.json: {exc}")
+        sys.exit(1)
+
+    if getattr(args, "json_output", False):
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+        return
+
+    model = data.get("model", "-")
+    explicit_mode = data.get("execution_mode", "")
+    try:
+        from core.config.models import load_config, resolve_execution_mode
+        mode = resolve_execution_mode(
+            load_config(), model if model != "-" else "",
+            explicit_override=explicit_mode or None,
+        )
+    except Exception:
+        mode = explicit_mode or "?"
+
+    _MODE_LABELS = {"S": "S (SDK)", "C": "C (Codex)", "A": "A (Autonomous)", "B": "B (Basic)"}
+
+    print(f"Anima:            {name}")
+    print(f"Enabled:          {data.get('enabled', '?')}")
+    print(f"Role:             {data.get('role', '-')}")
+    print(f"Model:            {model}")
+    print(f"Execution Mode:   {_MODE_LABELS.get(mode, mode)}")
+    if data.get("credential"):
+        print(f"Credential:       {data['credential']}")
+    if data.get("fallback_model"):
+        print(f"Fallback Model:   {data['fallback_model']}")
+    print(f"Max Turns:        {data.get('max_turns', '-')}")
+    print(f"Max Chains:       {data.get('max_chains', '-')}")
+    if data.get("context_threshold"):
+        print(f"Context Threshold: {data['context_threshold']}")
+    if data.get("max_tokens"):
+        print(f"Max Tokens:       {data['max_tokens']}")
+    if data.get("llm_timeout"):
+        print(f"LLM Timeout:      {data['llm_timeout']}s")
+    if data.get("thinking"):
+        print(f"Thinking:         {data['thinking']}")
+    if data.get("thinking_effort"):
+        print(f"Thinking Effort:  {data['thinking_effort']}")
+    if data.get("supervisor"):
+        print(f"Supervisor:       {data['supervisor']}")
+    if data.get("mode_s_auth"):
+        print(f"Mode S Auth:      {data['mode_s_auth']}")
+
+    voice = data.get("voice")
+    if voice and isinstance(voice, dict):
+        print("\nVoice:")
+        for k, v in voice.items():
+            print(f"  {k}: {v}")
 
 
 def cmd_anima_delete(args: argparse.Namespace) -> None:
@@ -536,13 +642,14 @@ def cmd_anima_list(args: argparse.Namespace) -> None:
                 response.raise_for_status()
                 animas = response.json()
 
-                print(f"{'Name':<20} {'Enabled':<10} {'Supervisor':<20}")
-                print("-" * 50)
+                print(f"{'Name':<20} {'Enabled':<10} {'Model':<30} {'Supervisor':<20}")
+                print("-" * 80)
                 for anima in animas:
                     name = anima.get("name", "unknown")
                     enabled = anima.get("enabled", "?")
+                    model = anima.get("model", "-") or "-"
                     supervisor = anima.get("supervisor", "-")
-                    print(f"{name:<20} {str(enabled):<10} {supervisor or '-':<20}")
+                    print(f"{name:<20} {str(enabled):<10} {model:<30} {supervisor or '-':<20}")
                 print(f"\nTotal: {len(animas)}")
                 return
             except Exception:
@@ -554,8 +661,8 @@ def cmd_anima_list(args: argparse.Namespace) -> None:
         return
 
     count = 0
-    print(f"{'Name':<20} {'Enabled':<10} {'Role':<15}")
-    print("-" * 45)
+    print(f"{'Name':<20} {'Enabled':<10} {'Role':<15} {'Model':<30}")
+    print("-" * 75)
 
     for entry in sorted(animas_dir.iterdir()):
         if not entry.is_dir():
@@ -566,6 +673,7 @@ def cmd_anima_list(args: argparse.Namespace) -> None:
         name = entry.name
         enabled = "?"
         role = "-"
+        model = "-"
 
         status_file = entry / "status.json"
         if status_file.exists():
@@ -573,10 +681,11 @@ def cmd_anima_list(args: argparse.Namespace) -> None:
                 status_data = json.loads(status_file.read_text(encoding="utf-8"))
                 enabled = str(status_data.get("enabled", "?"))
                 role = status_data.get("role", "-")
+                model = status_data.get("model", "-") or "-"
             except Exception:
                 pass
 
-        print(f"{name:<20} {enabled:<10} {role:<15}")
+        print(f"{name:<20} {enabled:<10} {role:<15} {model:<30}")
         count += 1
 
     print(f"\nTotal: {count}")

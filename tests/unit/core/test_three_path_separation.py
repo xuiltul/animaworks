@@ -129,7 +129,7 @@ class TestPromptTemplates:
     def test_task_delegation_rules_loads(self):
         from core.paths import load_prompt
         result = load_prompt("task_delegation_rules")
-        assert "タスク委任ルール" in result
+        assert "タスク実行の仕組み" in result
         assert "禁止パターン" in result
 
     def test_task_complete_notify_loads(self):

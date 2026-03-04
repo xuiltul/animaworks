@@ -164,6 +164,7 @@ def create_voice_router() -> APIRouter:
 
             await ws.send_json({"type": "status", "state": "ready"})
 
+            running_tasks: list[asyncio.Task] = []
             while True:
                 msg = await ws.receive()
                 if msg["type"] == "websocket.disconnect":
@@ -178,6 +179,7 @@ def create_voice_router() -> APIRouter:
                             if msg_type == "speech_end":
                                 task = asyncio.create_task(session.handle_speech_end())
                                 task.add_done_callback(_speech_end_done)
+                                running_tasks.append(task)
                             elif msg_type == "interrupt":
                                 await session.handle_interrupt()
                         except json.JSONDecodeError:
@@ -192,6 +194,9 @@ def create_voice_router() -> APIRouter:
             except Exception:
                 pass
         finally:
+            for t in running_tasks:
+                if not t.done():
+                    t.cancel()
             if _active_sessions.get(name) == ws:
                 _active_sessions.pop(name, None)
 

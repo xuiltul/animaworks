@@ -1,0 +1,16 @@
+{"ts": "2026-03-02T09:15:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-02T09:16:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-02T09:18:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-02T12:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-02T12:01:00+09:00", "type": "tool_use", "content": "docs/v02-schedule.md", "summary": "チーム進捗状況を確認", "tool": "Read"}
+{"ts": "2026-03-02T12:03:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-02T14:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-02T14:01:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-02T14:03:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-02T15:30:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-02T15:32:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-02T16:00:00+09:00", "type": "channel_post", "content": "v0.2進捗まとめ📋 UIコンポーネント✅ APIエンドポイント✅ 残りはリリースチェックリストのみです！明日のリリースに向けて順調ですよ〜♪", "summary": "進捗まとめをgeneralに投稿", "channel": "general"}
+{"ts": "2026-03-02T16:05:00+09:00", "type": "message_sent", "content": "kaitoさん、進捗まとめをgeneralに投稿しましたよ〜！", "summary": "進捗まとめ投稿を報告", "from": "hina", "to": "kaito"}
+{"ts": "2026-03-02T16:10:00+09:00", "type": "message_received", "content": "ありがとう。明日に向けてしっかり準備しよう。", "summary": "kaitoからの返信", "from": "kaito"}
+{"ts": "2026-03-02T17:00:00+09:00", "type": "heartbeat_start", "summary": "最終巡回"}
+{"ts": "2026-03-02T17:02:00+09:00", "type": "heartbeat_end", "summary": "進捗まとめ投稿完了。リリース準備順調。"}

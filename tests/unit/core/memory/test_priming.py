@@ -225,6 +225,110 @@ def test_keyword_extraction(temp_anima_dir, temp_shared_dir):
     assert "Web" in keywords4 or "検索" in keywords4
 
 
+def test_keyword_extraction_single_char_kanji(temp_anima_dir):
+    """Single-char kanji that carry meaning must survive extraction.
+
+    _RE_WORDS tokenises on whitespace/punctuation boundaries, so tests
+    use space-separated input to exercise the len>=1 filter.
+    """
+    engine = PrimingEngine(temp_anima_dir)
+
+    kw1 = engine._extract_keywords("この Issue を 裏 で 実装 して")
+    assert "裏" in kw1, f"'裏' missing from {kw1}"
+    assert "実装" in kw1
+    assert "Issue" in kw1
+
+    kw2 = engine._extract_keywords("金 の 話")
+    assert "金" in kw2, f"'金' missing from {kw2}"
+    assert "の" not in kw2, "particle 'の' should be excluded"
+
+    kw3 = engine._extract_keywords("型 ヒント 必須")
+    assert "型" in kw3, f"'型' missing from {kw3}"
+
+
+def test_keyword_extraction_particles_still_excluded(temp_anima_dir):
+    """Japanese particles (1-char) must still be excluded by stopwords."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    particles = ["の", "に", "は", "を", "が", "で", "と", "も", "や", "へ"]
+    kw = engine._extract_keywords(" ".join(particles))
+    for p in particles:
+        assert p not in kw, f"particle '{p}' should be excluded"
+
+
+def test_keyword_extraction_english_stopwords_still_excluded(temp_anima_dir):
+    """English stopwords ('a', 'the', 'is', etc.) remain excluded."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    kw = engine._extract_keywords("I want a big project")
+    lower_kw = [w.lower() for w in kw]
+    assert "a" not in lower_kw, "stopword 'a' should be excluded"
+    assert "want" in lower_kw or "big" in lower_kw or "project" in lower_kw
+
+    kw2 = engine._extract_keywords("the system is running")
+    lower_kw2 = [w.lower() for w in kw2]
+    assert "the" not in lower_kw2
+    assert "is" not in lower_kw2
+
+
+@pytest.mark.asyncio
+async def test_channel_c_top_k(temp_anima_dir):
+    """Channel C must call retriever.search with top_k=5."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    from unittest.mock import MagicMock, patch
+
+    mock_retriever = MagicMock()
+    mock_retriever.search.return_value = []
+
+    with patch.object(engine, "_get_or_create_retriever", return_value=mock_retriever):
+        await engine._channel_c_related_knowledge(["test"], message="")
+
+    mock_retriever.search.assert_called_once()
+    call_kwargs = mock_retriever.search.call_args
+    assert call_kwargs.kwargs.get("top_k") == 5 or call_kwargs[1].get("top_k") == 5
+
+
+@pytest.mark.asyncio
+async def test_channel_c_query_includes_message(temp_anima_dir):
+    """Channel C query must prepend message[:200] when message is provided."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    from unittest.mock import MagicMock, patch
+
+    mock_retriever = MagicMock()
+    mock_retriever.search.return_value = []
+
+    msg = "このIssueを裏で実装して"
+
+    with patch.object(engine, "_get_or_create_retriever", return_value=mock_retriever):
+        await engine._channel_c_related_knowledge(["Issue", "裏", "実装"], message=msg)
+
+    call_kwargs = mock_retriever.search.call_args
+    actual_query = call_kwargs.kwargs.get("query") or call_kwargs[1].get("query")
+    assert actual_query is not None
+    assert actual_query.startswith(msg[:200])
+    assert "Issue" in actual_query
+
+
+@pytest.mark.asyncio
+async def test_channel_c_query_keyword_only_when_no_message(temp_anima_dir):
+    """Channel C query falls back to keyword-only when message is empty."""
+    engine = PrimingEngine(temp_anima_dir)
+
+    from unittest.mock import MagicMock, patch
+
+    mock_retriever = MagicMock()
+    mock_retriever.search.return_value = []
+
+    with patch.object(engine, "_get_or_create_retriever", return_value=mock_retriever):
+        await engine._channel_c_related_knowledge(["Issue", "実装"], message="")
+
+    call_kwargs = mock_retriever.search.call_args
+    actual_query = call_kwargs.kwargs.get("query") or call_kwargs[1].get("query")
+    assert actual_query == "Issue 実装"
+
+
 if __name__ == "__main__":
     # Run tests manually
     import sys

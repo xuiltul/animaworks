@@ -8,7 +8,9 @@ System scheduler mixin for ProcessSupervisor.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,6 +19,31 @@ from apscheduler.triggers.cron import CronTrigger
 from core.supervisor.process_handle import ProcessState
 
 logger = logging.getLogger(__name__)
+
+_JST = timezone(timedelta(hours=9))
+
+# ── Marker helpers ──────────────────────────────────────────────────
+_MARKER_DIR_NAME = "run"
+
+
+def _marker_dir(data_dir: Path) -> Path:
+    d = data_dir / _MARKER_DIR_NAME
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _read_marker(marker_path: Path) -> datetime | None:
+    """Read an ISO-8601 timestamp from a marker file."""
+    try:
+        raw = marker_path.read_text().strip()
+        return datetime.fromisoformat(raw)
+    except Exception:
+        return None
+
+
+def _write_marker(marker_path: Path, ts: datetime | None = None) -> None:
+    ts = ts or datetime.now(_JST)
+    marker_path.write_text(ts.isoformat())
 
 
 class SchedulerMixin:
@@ -30,6 +57,7 @@ class SchedulerMixin:
             self.scheduler.start()
             self._scheduler_running = True
             logger.info("System scheduler started")
+            asyncio.ensure_future(self._catchup_missed_jobs())
         except Exception:
             logger.exception("Failed to start system scheduler")
             self.scheduler = None
@@ -163,6 +191,10 @@ class SchedulerMixin:
             targets.append((anima_dir.name, anima_dir))
         return targets
 
+    def _get_data_dir(self) -> Path:
+        """Return the runtime data directory (``~/.animaworks`` or override)."""
+        return self.animas_dir.parent
+
     async def _run_daily_consolidation(self) -> None:
         """Run daily consolidation for all animas via IPC.
 
@@ -251,6 +283,8 @@ class SchedulerMixin:
             except Exception:
                 logger.exception("Daily consolidation failed for %s", anima_name)
 
+        _write_marker(_marker_dir(self._get_data_dir()) / "last_daily_consolidation")
+
     async def _run_weekly_integration(self) -> None:
         """Run weekly integration for all animas via IPC.
 
@@ -307,7 +341,7 @@ class SchedulerMixin:
                 try:
                     from core.memory.forgetting import ForgettingEngine
                     forgetter = ForgettingEngine(anima_dir, anima_name)
-                    reorg_result = forgetter.neurogenesis_reorganize()
+                    reorg_result = await forgetter.neurogenesis_reorganize()
                     logger.info(
                         "Neurogenesis reorganization for %s: %s",
                         anima_name, reorg_result,
@@ -340,6 +374,8 @@ class SchedulerMixin:
             except Exception:
                 logger.exception("Weekly integration failed for %s", anima_name)
 
+        _write_marker(_marker_dir(self._get_data_dir()) / "last_weekly_integration")
+
     async def _run_monthly_forgetting(self) -> None:
         """Run monthly forgetting for all animas."""
         logger.info("Starting system-wide monthly forgetting")
@@ -369,6 +405,8 @@ class SchedulerMixin:
                     )
             except Exception:
                 logger.exception("Monthly forgetting failed for %s", anima_name)
+
+        _write_marker(_marker_dir(self._get_data_dir()) / "last_monthly_forgetting")
 
     async def _run_activity_log_rotation(self) -> None:
         """Run activity log rotation for all animas."""
@@ -407,3 +445,57 @@ class SchedulerMixin:
                 logger.info("Activity log rotation: no files needed rotation")
         except Exception:
             logger.exception("Activity log rotation failed")
+
+    # ── Catch-up for missed scheduled jobs ──────────────────────────
+
+    _CATCHUP_DELAY_SEC = 90
+
+    async def _catchup_missed_jobs(self) -> None:
+        """Run after scheduler start to execute any jobs missed while offline.
+
+        Uses marker files in ``~/.animaworks/run/`` to track the last
+        successful execution of each scheduled job.  If the expected interval
+        has elapsed since the last marker, the job is scheduled for immediate
+        (delayed by ``_CATCHUP_DELAY_SEC`` to let all Anima processes boot).
+        """
+        await asyncio.sleep(self._CATCHUP_DELAY_SEC)
+
+        try:
+            from core.config import load_config
+            consolidation_cfg = getattr(load_config(), "consolidation", None)
+        except Exception:
+            consolidation_cfg = None
+
+        now = datetime.now(_JST)
+        mdir = _marker_dir(self._get_data_dir())
+
+        daily_enabled = getattr(consolidation_cfg, "daily_enabled", True) if consolidation_cfg else True
+        weekly_enabled = getattr(consolidation_cfg, "weekly_enabled", True) if consolidation_cfg else True
+        monthly_enabled = getattr(consolidation_cfg, "monthly_enabled", True) if consolidation_cfg else True
+
+        if daily_enabled:
+            last = _read_marker(mdir / "last_daily_consolidation")
+            if last is None or (now - last) > timedelta(hours=36):
+                logger.info(
+                    "Catch-up: daily consolidation missed (last=%s), running now",
+                    last,
+                )
+                await self._run_daily_consolidation()
+
+        if weekly_enabled:
+            last = _read_marker(mdir / "last_weekly_integration")
+            if last is None or (now - last) > timedelta(days=9):
+                logger.info(
+                    "Catch-up: weekly integration missed (last=%s), running now",
+                    last,
+                )
+                await self._run_weekly_integration()
+
+        if monthly_enabled:
+            last = _read_marker(mdir / "last_monthly_forgetting")
+            if last is None or (now - last) > timedelta(days=35):
+                logger.info(
+                    "Catch-up: monthly forgetting missed (last=%s), running now",
+                    last,
+                )
+                await self._run_monthly_forgetting()

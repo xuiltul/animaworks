@@ -53,7 +53,7 @@ class TestAssetCacheE2E:
         resp1 = client.get("/api/animas/sakura/assets/avatar_chibi_rigged.glb")
         assert resp1.status_code == 200
         assert resp1.headers["content-type"] == "model/gltf-binary"
-        assert "no-cache" in resp1.headers["cache-control"]
+        assert "max-age=" in resp1.headers["cache-control"]
         etag = resp1.headers["etag"]
 
         # 2. Conditional GET with ETag - should return 304
@@ -76,7 +76,7 @@ class TestAssetCacheE2E:
         resp = client.get("/api/animas/sakura/assets/avatar_bustup.png")
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
-        assert "no-cache" in resp.headers["cache-control"]
+        assert "max-age=" in resp.headers["cache-control"]
         assert "etag" in resp.headers
 
     def test_metadata_includes_animation_sizes(self, e2e_app):

@@ -26,36 +26,13 @@ class PrimingMixin:
     """Mixin: priming (auto-recall), context fitting, pre-flight size check."""
 
     def _compute_overflow_files(self) -> list[str] | None:
-        """Pre-compute overflow files for distilled knowledge injection.
+        """Always return None to enable full Channel C search.
 
-        Returns:
-            List of file stems that didn't fit in the knowledge budget,
-            empty list if all fit, or None if collection failed.
+        DK injection still runs in builder.py, but Channel C now searches
+        all knowledge/procedures regardless of DK coverage.
+        Phase 1 of DK removal: docs/issues/20260304_dk-removal-phase1-*.md
         """
-        try:
-            from core.prompt.context import resolve_context_window
-
-            model_config = self.memory.read_model_config()
-            ctx_window = resolve_context_window(model_config.model)
-            knowledge_budget = int(ctx_window * 0.10)
-            distilled = self.memory.collect_distilled_knowledge()
-
-            if not distilled:
-                return []
-
-            used_tokens = 0
-            overflow: list[str] = []
-            for entry in distilled:
-                est_tokens = len(entry["content"]) // 3
-                if used_tokens + est_tokens <= knowledge_budget:
-                    used_tokens += est_tokens
-                else:
-                    overflow.append(entry["name"])
-
-            return overflow
-        except Exception:
-            logger.debug("Failed to compute overflow files", exc_info=True)
-            return None
+        return None
 
     async def _run_priming(
         self,

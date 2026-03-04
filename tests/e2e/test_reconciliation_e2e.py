@@ -21,6 +21,7 @@ def _make_app(animas_dir: Path, shared_dir: Path, anima_names: list[str]):
     from fastapi import FastAPI
     from server.routes.animas import create_animas_router
     from server.routes.system import create_system_router
+    from server.stream_registry import StreamRegistry
 
     app = FastAPI()
     app.state.animas_dir = animas_dir
@@ -32,7 +33,6 @@ def _make_app(animas_dir: Path, shared_dir: Path, anima_names: list[str]):
     supervisor.get_process_status.return_value = {"status": "running", "pid": 1234}
     supervisor.get_all_status.return_value = {}
 
-    # Wire up start/stop to mutate supervisor.processes so route guards work
     async def _start(name: str) -> None:
         supervisor.processes[name] = MagicMock()
 
@@ -47,6 +47,7 @@ def _make_app(animas_dir: Path, shared_dir: Path, anima_names: list[str]):
     ws_manager = MagicMock()
     ws_manager.active_connections = []
     app.state.ws_manager = ws_manager
+    app.state.stream_registry = StreamRegistry()
 
     app.include_router(create_animas_router(), prefix="/api")
     app.include_router(create_system_router(), prefix="/api")

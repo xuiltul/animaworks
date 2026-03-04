@@ -123,6 +123,7 @@ export function createThreadController(ctx) {
     }
     ctx.controllers.renderer.renderChat();
     scheduleSaveChatUiState(ctx);
+    state.paneHost?.savePaneStates?.();
   }
 
   function createNewThread() {

@@ -182,6 +182,7 @@ class TestRunCycle:
         agent = _make_agent(tmp_path, resolved_mode="B")
         mock_result = MagicMock()
         mock_result.text = "Assisted response"
+        mock_result.usage = None
         agent._executor.execute = AsyncMock(return_value=mock_result)
 
         mock_build_result = BuildResult(system_prompt="sysprompt")
@@ -200,6 +201,7 @@ class TestRunCycle:
         agent = _make_agent(tmp_path, model="openai/gpt-4o")
         mock_result = MagicMock()
         mock_result.text = "A2 response"
+        mock_result.usage = None
         agent._executor.execute = AsyncMock(return_value=mock_result)
 
         mock_build_result = BuildResult(system_prompt="sysprompt")
@@ -221,6 +223,7 @@ class TestRunCycle:
 
         mock_result = MagicMock()
         mock_result.text = "S mode response"
+        mock_result.usage = None
         mock_result.result_message = MagicMock()
         mock_result.result_message.num_turns = 3
         mock_result.result_message.session_id = "sess-1"

@@ -184,11 +184,18 @@ export function buildVoiceChatCallbacks(animaName, { renderConvMessages, updateS
       const ts = new Date().toISOString();
       const msg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: ts, thinkingText: "", thinking: false };
       mgr.addMessage(conversationAnima, threadId, msg);
+      const session = mgr.getSession(conversationAnima, threadId);
+      session._streamingMsg = msg;
       renderConvMessages();
       return msg;
     },
     updateStreamingBubble(msg) { updateStreamingBubble(msg); },
     finalizeStreamingBubble() {
+      const { conversationAnima, activeThreadId } = getState();
+      const threadId = activeThreadId || "default";
+      const session = mgr.getSession(conversationAnima, threadId);
+      session._streamingMsg = null;
+      // Do NOT call keepOnlyStreaming - it would clear completed messages before API has them
       renderConvMessages();
     },
     applyEmotion(emotion) {

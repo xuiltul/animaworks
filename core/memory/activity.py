@@ -28,7 +28,9 @@ import os  # noqa: F401  — kept at module level for mock.patch compat
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
+from core.paths import get_data_dir
 from core.time_utils import ensure_aware, now_iso, now_jst  # noqa: F401
 
 # ── Re-export data models & helpers (public API) ─────────────
@@ -75,9 +77,15 @@ class ActivityLogger(
     grouping, conversation view, and rotation are provided by mixins.
     """
 
+    _LIVE_EVENT_TYPES = frozenset({
+        "tool_use",
+        "inbox_processing_start", "inbox_processing_end",
+    })
+
     def __init__(self, anima_dir: Path) -> None:
         self.anima_dir = anima_dir
         self._log_dir = anima_dir / "activity_log"
+        self._anima_name = anima_dir.name
 
     # ── Recording ─────────────────────────────────────────────
 
@@ -130,6 +138,8 @@ class ActivityLogger(
             origin_chain=origin_chain or [],
         )
         self._append(entry)
+        if event_type in self._LIVE_EVENT_TYPES:
+            self._emit_live_event(entry)
         return entry
 
     def _append(self, entry: ActivityEntry) -> None:
@@ -149,6 +159,29 @@ class ActivityLogger(
             raise MemoryWriteError(f"Activity log write failed: {exc}") from exc
         except Exception:
             logger.exception("Failed to append activity log")
+
+    def _emit_live_event(self, entry: ActivityEntry) -> None:
+        """Write event file for ProcessSupervisor to broadcast via WebSocket."""
+        try:
+            event_dir = get_data_dir() / "run" / "events" / self._anima_name
+            event_dir.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "event": "anima.tool_activity",
+                "data": {
+                    "name": self._anima_name,
+                    "type": entry.type,
+                    "tool": entry.tool,
+                    "summary": entry.summary,
+                    "ts": entry.ts,
+                    "meta": entry.meta,
+                },
+            }
+            event_file = event_dir / f"ta_{uuid4().hex[:8]}.json"
+            event_file.write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8",
+            )
+        except Exception:
+            logger.debug("Failed to emit live event", exc_info=True)
 
     # ── Retrieval ─────────────────────────────────────────────
 

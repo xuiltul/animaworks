@@ -14,7 +14,7 @@ Heartbeat is limited to three phases: **Observe → Plan → Reflect**.
 
 - MUST: Only observe, plan, and reflect during Heartbeat
 - MUST NOT: Do long-running execution (coding, heavy tool use, etc.) during Heartbeat
-- MUST: When execution is needed, write tasks out as LLM tasks under `state/pending/`
+- MUST: When execution is needed, delegate via `delegate_task` if subordinates are available, or write tasks out as LLM tasks under `state/pending/`
 
 The **TaskExec path** picks up and runs written tasks automatically.
 TaskExec starts within 3 seconds after Heartbeat finishes.

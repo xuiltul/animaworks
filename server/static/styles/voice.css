@@ -145,6 +145,39 @@
   cursor: pointer;
 }
 
+/* ── Voice Toolbar (PTT/Auto + Volume) ──── */
+
+.voice-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--bg-secondary, #f5f5f5);
+  font-size: 0.78rem;
+  animation: voice-toolbar-in 0.2s ease-out;
+}
+
+@keyframes voice-toolbar-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.voice-toolbar-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.voice-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 /* ── Mobile: larger tap target ─────────── */
 @media (max-width: 768px) {
   .voice-mic-btn {
@@ -160,6 +193,14 @@
   }
   .voice-volume-slider {
     width: 50px;
+  }
+  .voice-toolbar {
+    padding: 6px 10px;
+  }
+  .voice-mode-toggle {
+    min-height: 28px;
+    padding: 4px 10px;
+    font-size: 11px;
   }
 }
 
@@ -179,5 +220,8 @@
   .voice-mode-toggle {
     background: var(--bg-secondary, #2d2d2d);
     color: var(--text-secondary, #aaa);
+  }
+  .voice-toolbar {
+    background: var(--bg-secondary, #2d2d2d);
   }
 }

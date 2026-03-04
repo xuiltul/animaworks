@@ -53,6 +53,7 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset({
     "send_message",
     "post_channel",
     "read_channel",
+    "manage_channel",
     "read_dm_history",
     "add_task",
     "update_task",
@@ -64,6 +65,9 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset({
     "disable_subordinate",
     "enable_subordinate",
     "skill",
+    "plan_tasks",
+    "check_background_task",
+    "list_background_tasks",
 })
 
 
@@ -191,10 +195,12 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         is the union of internal and external tool names.
     """
     from core.tooling.schemas import (
+        BACKGROUND_TASK_TOOLS,
         CHANNEL_TOOLS,
         KNOWLEDGE_TOOLS,
         MEMORY_TOOLS,
         NOTIFICATION_TOOLS,
+        PLAN_TASKS_TOOLS,
         PROCEDURE_TOOLS,
         SKILL_TOOLS,
         SUPERVISOR_TOOLS,
@@ -210,6 +216,8 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         *KNOWLEDGE_TOOLS,
         *SUPERVISOR_TOOLS,
         *SKILL_TOOLS,
+        *PLAN_TASKS_TOOLS,
+        *BACKGROUND_TASK_TOOLS,
     ]
 
     # Load permitted external tool schemas from permissions.md
@@ -329,6 +337,86 @@ MCP_TOOLS: list[Tool]
 _EXPOSED_NAMES: frozenset[str]
 MCP_TOOLS, _EXPOSED_NAMES = _build_mcp_tools()
 
+# ── BackgroundTaskManager for MCP ────────────────────────
+
+
+def _build_background_manager(anima_dir: Path) -> Any:
+    """Build a BackgroundTaskManager for the MCP server process.
+
+    Mirrors ``AgentCore._build_background_manager()`` but operates
+    without the full AgentCore.  Returns None when disabled in config.
+    """
+    try:
+        from core.config.models import load_config
+
+        config = load_config()
+        if not config.background_task.enabled:
+            return None
+
+        from core.background import BackgroundTaskManager
+        from core.tools import TOOL_MODULES
+        from core.tools._base import load_execution_profiles
+
+        profiles = load_execution_profiles(TOOL_MODULES)
+        config_eligible = {
+            name: tc.threshold_s
+            for name, tc in config.background_task.eligible_tools.items()
+        }
+
+        mgr = BackgroundTaskManager.from_profiles(
+            anima_dir=anima_dir,
+            anima_name=anima_dir.name,
+            profiles=profiles,
+            config_eligible=config_eligible or None,
+        )
+
+        mgr.on_complete = _make_on_complete_callback(anima_dir)
+        logger.info("BackgroundTaskManager initialised for MCP (anima=%s)", anima_dir.name)
+        return mgr
+
+    except Exception:
+        logger.debug("BackgroundTaskManager init skipped in MCP", exc_info=True)
+        return None
+
+
+def _make_on_complete_callback(anima_dir: Path) -> Any:
+    """Create an on_complete callback that writes notification files.
+
+    In the MCP subprocess we don't have access to WebSocket or
+    HumanNotifier, so we only write a notification file under
+    ``state/background_notifications/`` for the next heartbeat to pick up.
+    """
+    from core.i18n import t as _t
+
+    async def _on_complete(task: Any) -> None:
+        try:
+            subject = _t("anima.bg_task_done", tool=task.tool_name)
+            if task.status.value == "failed":
+                subject = _t("anima.bg_task_failed", tool=task.tool_name)
+
+            notif_dir = anima_dir / "state" / "background_notifications"
+            notif_dir.mkdir(parents=True, exist_ok=True)
+            notif_path = notif_dir / f"{task.task_id}.md"
+            notif_content = (
+                f"# {subject}\n\n"
+                f"- task_id: {task.task_id}\n"
+                f"- tool: {task.tool_name}\n"
+                f"- status: {task.status.value}\n"
+                f"- result: {task.summary()}\n"
+            )
+            notif_path.write_text(notif_content, encoding="utf-8")
+            logger.info(
+                "MCP bg task notification written: %s (tool=%s, status=%s)",
+                task.task_id, task.tool_name, task.status.value,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to write MCP bg task notification for %s", task.task_id,
+            )
+
+    return _on_complete
+
+
 # ── Lazy ToolHandler initialisation ──────────────────────
 
 _tool_handler: Any = None  # core.tooling.handler.ToolHandler | None
@@ -417,6 +505,9 @@ def _get_tool_handler() -> Any:
             except (ValueError, OSError):
                 pass
 
+        # ── BackgroundTaskManager ──
+        bg_manager = _build_background_manager(anima_dir)
+
         _tool_handler = ToolHandler(
             anima_dir=anima_dir,
             memory=memory,
@@ -426,7 +517,7 @@ def _get_tool_handler() -> Any:
             on_message_sent=None,
             on_schedule_changed=None,
             human_notifier=human_notifier,
-            background_manager=None,
+            background_manager=bg_manager,
             superuser=_superuser,
         )
 

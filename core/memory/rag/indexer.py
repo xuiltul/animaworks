@@ -589,17 +589,17 @@ class MemoryIndexer:
     def _strip_frontmatter(content: str) -> str:
         """Strip YAML frontmatter from content.
 
+        Delegates to the canonical line-based parser to avoid false
+        splits when YAML values contain ``---``.
+
         Args:
             content: File content potentially starting with ``---`` YAML block
 
         Returns:
             Content without frontmatter, or original content if none found
         """
-        if content.startswith("---"):
-            parts = content.split("---", 2)
-            if len(parts) >= 3:
-                return parts[2].strip()
-        return content
+        from core.memory.frontmatter import strip_frontmatter
+        return strip_frontmatter(content).strip()
 
     # ── Helpers ─────────────────────────────────────────────────────
 
@@ -618,22 +618,18 @@ class MemoryIndexer:
     def _parse_frontmatter(raw_content: str) -> dict:
         """Parse YAML frontmatter from raw file content.
 
+        Delegates to the canonical line-based parser to avoid false
+        splits when YAML values contain ``---``.
+
         Args:
             raw_content: Full file content potentially starting with ``---``
 
         Returns:
             Parsed frontmatter dict, or empty dict if absent/unparseable
         """
-        if raw_content.startswith("---"):
-            parts = raw_content.split("---", 2)
-            if len(parts) >= 3:
-                try:
-                    import yaml
-                    fm = yaml.safe_load(parts[1])
-                    return fm if isinstance(fm, dict) else {}
-                except Exception:
-                    return {}
-        return {}
+        from core.memory.frontmatter import parse_frontmatter
+        meta, _ = parse_frontmatter(raw_content)
+        return meta
 
     def _extract_metadata(
         self,

@@ -56,6 +56,12 @@ def _make_handler(tmp_path: Path, anima_name: str = "alice") -> "ToolHandler":
 class TestFanoutAllExcludesStoppedAnimas:
     """Fix 8: @all fanout only targets running Animas (socket present)."""
 
+    @pytest.fixture(autouse=True)
+    def _bypass_acl(self):
+        """Bypass channel ACL checks — these tests use MagicMock messenger."""
+        with patch("core.messenger.is_channel_member", return_value=True):
+            yield
+
     def test_fanout_all_excludes_stopped_animas(self, tmp_path):
         """@all mention should only reach Animas with active socket files.
 
@@ -106,6 +112,12 @@ class TestFanoutAllExcludesStoppedAnimas:
 
 class TestFanoutNamedExcludesStoppedAnimas:
     """Fix 8: Named @mention only reaches running targets."""
+
+    @pytest.fixture(autouse=True)
+    def _bypass_acl(self):
+        """Bypass channel ACL checks — these tests use MagicMock messenger."""
+        with patch("core.messenger.is_channel_member", return_value=True):
+            yield
 
     def test_fanout_named_excludes_stopped_animas(self, tmp_path):
         """Named @bob @dave mention should only reach bob (running).

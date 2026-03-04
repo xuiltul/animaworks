@@ -191,12 +191,23 @@ async function _processStream(res, callbacks, setResponseId, setLastEventId, sig
 
           case "tool_start":
             logger.info(`[SSE-FE] EVENT tool_start tool=${data.tool_name} id=${id}`);
-            callbacks.onToolStart?.(data.tool_name);
+            callbacks.onToolStart?.(data.tool_name, { tool_id: data.tool_id });
+            break;
+
+          case "tool_detail":
+            logger.info(`[SSE-FE] EVENT tool_detail tool=${data.tool_name} detail=${data.detail}`);
+            callbacks.onToolDetail?.(data.tool_name, data.detail, { tool_id: data.tool_id });
             break;
 
           case "tool_end":
             logger.info(`[SSE-FE] EVENT tool_end tool=${data.tool_name || "?"} id=${id}`);
-            callbacks.onToolEnd?.();
+            callbacks.onToolEnd?.({
+              tool_id: data.tool_id,
+              tool_name: data.tool_name || "",
+              result_summary: data.result_summary || "",
+              input_summary: data.input_summary || "",
+              is_error: !!data.is_error,
+            });
             break;
 
           case "done": {

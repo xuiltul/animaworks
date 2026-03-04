@@ -120,6 +120,20 @@ class _FacadeModule(_original_module_class):
 _this.__class__ = _FacadeModule
 
 
+# ── Helpers ───────────────────────────────────────────
+
+_ANIME_MARKER_TAGS = frozenset({
+    "anime coloring", "clean lineart", "soft shading",
+    "masterpiece", "best quality", "absurdres",
+})
+
+
+def _looks_like_anime_prompt(prompt: str) -> bool:
+    """Heuristic: return True if prompt contains Danbooru-style anime tags."""
+    tags = {t.strip().lower() for t in prompt.split(",")}
+    return len(tags & _ANIME_MARKER_TAGS) >= 3
+
+
 # ── Dispatch ──────────────────────────────────────────
 
 
@@ -134,10 +148,30 @@ def dispatch(tool_name: str, args: dict[str, Any]) -> Any:
         config = load_config()
         image_config = config.image_gen
 
+        prompt = args["prompt"]
+
+        # Auto-convert anime prompt when realistic style is configured
+        if image_config.image_style == "realistic" and _looks_like_anime_prompt(prompt):
+            from core.tools._image_clients import _convert_anime_to_realistic
+
+            converted = _convert_anime_to_realistic(prompt)
+            logger.info(
+                "Auto-converted anime prompt to realistic for %s: %.120s → %.120s",
+                anima_dir.name,
+                prompt,
+                converted,
+            )
+            prompt = converted
+
         # Use supervisor's fullbody image as Vibe Transfer reference
         if supervisor_name:
+            ref_name = (
+                "avatar_fullbody_realistic.png"
+                if image_config.image_style == "realistic"
+                else "avatar_fullbody.png"
+            )
             supervisor_fullbody = (
-                get_animas_dir() / supervisor_name / "assets" / "avatar_fullbody.png"
+                get_animas_dir() / supervisor_name / "assets" / ref_name
             )
             if supervisor_fullbody.exists():
                 image_config = image_config.model_copy(
@@ -150,7 +184,7 @@ def dispatch(tool_name: str, args: dict[str, Any]) -> Any:
 
         pipeline = ImageGenPipeline(anima_dir, config=image_config)
         result = pipeline.generate_all(
-            prompt=args["prompt"],
+            prompt=prompt,
             negative_prompt=args.get("negative_prompt", ""),
             skip_existing=args.get("skip_existing", True),
             steps=args.get("steps"),

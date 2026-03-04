@@ -117,7 +117,8 @@ class TestActivityPagination:
             resp = await client.get("/api/activity/recent?limit=3")
         data = resp.json()
         assert len(data["events"]) == 3
-        assert data["total"] == 10
+        # total reflects per-Anima cap (offset+limit = 3), not absolute count
+        assert data["total"] == 3
         assert data["has_more"] is True
         assert data["limit"] == 3
 

@@ -1,0 +1,16 @@
+{"ts": "2026-03-02T09:15:00+09:00", "type": "heartbeat_start", "summary": "Routine patrol started"}
+{"ts": "2026-03-02T09:16:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-02T09:18:00+09:00", "type": "heartbeat_end", "summary": "Patrol complete"}
+{"ts": "2026-03-02T12:00:00+09:00", "type": "heartbeat_start", "summary": "Midday check"}
+{"ts": "2026-03-02T12:01:00+09:00", "type": "tool_use", "content": "docs/v02-schedule.md", "summary": "Checking team progress", "tool": "Read"}
+{"ts": "2026-03-02T12:03:00+09:00", "type": "heartbeat_end", "summary": "Midday check complete"}
+{"ts": "2026-03-02T14:00:00+09:00", "type": "heartbeat_start", "summary": "Afternoon check"}
+{"ts": "2026-03-02T14:01:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-02T14:03:00+09:00", "type": "heartbeat_end", "summary": "Afternoon check complete"}
+{"ts": "2026-03-02T15:30:00+09:00", "type": "heartbeat_start", "summary": "Late afternoon check"}
+{"ts": "2026-03-02T15:32:00+09:00", "type": "heartbeat_end", "summary": "Late afternoon check complete"}
+{"ts": "2026-03-02T16:00:00+09:00", "type": "channel_post", "content": "v0.2 progress update: UI Components done, API Endpoints done. Only the release checklist remains! Looking good for tomorrow's launch.", "summary": "Posted progress summary", "channel": "general"}
+{"ts": "2026-03-02T16:05:00+09:00", "type": "message_sent", "content": "Alex, posted a progress summary on general!", "summary": "Reported progress post", "from": "nova", "to": "alex"}
+{"ts": "2026-03-02T16:10:00+09:00", "type": "message_received", "content": "Thanks Nova. Let's make sure everything's tight for tomorrow.", "summary": "alex acknowledged", "from": "alex"}
+{"ts": "2026-03-02T17:00:00+09:00", "type": "heartbeat_start", "summary": "End of day patrol"}
+{"ts": "2026-03-02T17:02:00+09:00", "type": "heartbeat_end", "summary": "Progress summary posted. Release prep on track."}

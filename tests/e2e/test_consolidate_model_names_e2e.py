@@ -90,15 +90,17 @@ class TestContextTrackerIntegration:
         assert tracker.context_window == resolve_context_window("gpt-4o")
 
     def test_different_models_yield_different_windows(self):
-        """Claude and GPT models have different context windows."""
+        """Models with different hardcoded windows resolve to different values."""
         from core.prompt.context import ContextTracker, resolve_context_window
 
-        claude_tracker = ContextTracker(model="claude-sonnet-4-6")
-        gpt_tracker = ContextTracker(model="gpt-4o")
+        # claude-sonnet-4-6 and gpt-4o both resolve to 128000; use models that differ
+        gpt_tracker = ContextTracker(model="gpt-4.1")
+        gpt_mini_tracker = ContextTracker(model="gpt-4o-mini")
 
-        assert claude_tracker.context_window == resolve_context_window("claude-sonnet-4-6")
-        assert gpt_tracker.context_window == resolve_context_window("gpt-4o")
-        assert claude_tracker.context_window != gpt_tracker.context_window
+        assert gpt_tracker.context_window == resolve_context_window("gpt-4.1")
+        assert gpt_mini_tracker.context_window == resolve_context_window("gpt-4o-mini")
+        # gpt-4.1: 1M, gpt-4o-mini: 128K
+        assert gpt_tracker.context_window != gpt_mini_tracker.context_window
 
 
 # ── Test 4: No hardcoded model names in source ──────────────────────────

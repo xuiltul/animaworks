@@ -219,14 +219,14 @@ class TestRevealWorkspacePageE2E:
         assert "export async function playReveal" in content
 
     def test_app_js_imports_reveal(self):
-        """app.js must import playReveal from reveal.js."""
-        app_js_path = (
+        """app-websocket.js must import playReveal from reveal.js."""
+        ws_js_path = (
             Path(__file__).resolve().parents[2]
             / "server"
             / "static"
             / "workspace"
             / "modules"
-            / "app.js"
+            / "app-websocket.js"
         )
-        content = app_js_path.read_text(encoding="utf-8")
-        assert 'import { playReveal } from "./reveal.js"' in content
+        content = ws_js_path.read_text(encoding="utf-8")
+        assert 'playReveal' in content

@@ -44,14 +44,14 @@ def app_with_assets(tmp_path):
 class TestAssetCacheHeaders:
     """Tests for Cache-Control and ETag headers on asset responses."""
 
-    def test_returns_no_cache_control(self, app_with_assets):
-        """Asset response should have no-cache Cache-Control (always revalidate via ETag)."""
+    def test_returns_cache_control(self, app_with_assets):
+        """Asset response should have Cache-Control with max-age."""
         app, _ = app_with_assets
         client = TestClient(app)
 
         resp = client.get("/api/animas/test-anima/assets/avatar_chibi.glb")
         assert resp.status_code == 200
-        assert "no-cache" in resp.headers["cache-control"]
+        assert "max-age=" in resp.headers["cache-control"]
 
     def test_returns_etag_header(self, app_with_assets):
         """Asset response should include an ETag header."""
@@ -99,7 +99,7 @@ class TestAssetCacheHeaders:
 
         resp = client.head("/api/animas/test-anima/assets/avatar_chibi.glb")
         assert "etag" in resp.headers
-        assert "no-cache" in resp.headers["cache-control"]
+        assert "max-age=" in resp.headers["cache-control"]
 
     def test_etag_changes_on_file_modification(self, app_with_assets):
         """ETag should change when the file is modified."""

@@ -4,7 +4,7 @@ import {
   clearUnreadForActiveThread, loadDraft, saveDraft, chatInputMaxHeight,
   fetchChatUiState, scheduleSaveChatUiState, mergeThreadsFromSessions,
 } from "./ctx.js";
-import { bustupCandidates, resolveAvatar } from "../../modules/avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 
 export function createAnimaController(ctx) {
   const $ = ctx.$;
@@ -57,7 +57,7 @@ export function createAnimaController(ctx) {
     if (state.animaTabAvatarLoading[name]) return state.animaTabAvatarLoading[name];
 
     state.animaTabAvatarLoading[name] = (async () => {
-      const found = await resolveAvatar(name, bustupCandidates());
+      const found = await resolveCachedAvatar(name, bustupCandidates(), "S");
       state.animaTabAvatarUrls[name] = found;
       delete state.animaTabAvatarLoading[name];
       renderAnimaTabs();
@@ -235,6 +235,7 @@ export function createAnimaController(ctx) {
       const hs = createHistoryState();
       applyHistoryData(hs, conv);
       mgr.setHistoryState(name, tid, hs);
+      resolveHistoryAvatars(conv.sessions);
     } else if (needConv) {
       const { createHistoryState } = await import("../../shared/chat/session-manager.js");
       mgr.setHistoryState(name, tid, createHistoryState());
@@ -264,6 +265,7 @@ export function createAnimaController(ctx) {
 
     ctx.controllers.streaming.resumeActiveStream(name);
     scheduleSaveChatUiState(ctx);
+    state.paneHost?.savePaneStates?.();
   }
 
   function openOrSelectAnima(name) {
@@ -358,7 +360,18 @@ export function createAnimaController(ctx) {
       restoreChatUiState(uiState);
       renderAddConversationMenu();
       renderAnimaTabs();
-      if (state.animas.length > 0 && !state.selectedAnima) {
+
+      const paneState = state.paneHost?.getPaneState?.(state.paneIdx);
+      const known = new Set(state.animas.map(a => a.name));
+      if (paneState?.anima && known.has(paneState.anima)) {
+        state.selectedAnima = null;
+        if (!isTabOpen(ctx, paneState.anima)) {
+          state.animaTabs.push({ name: paneState.anima, unreadStar: false });
+        }
+        state.activeThreadByAnima[paneState.anima] = paneState.threadId || "default";
+        renderAnimaTabs();
+        openOrSelectAnima(paneState.anima);
+      } else if (state.animas.length > 0 && !state.selectedAnima) {
         const firstTab = state.animaTabs[0]?.name;
         openOrSelectAnima(firstTab || state.animas[0].name);
       } else if (state.selectedAnima) {
@@ -369,9 +382,24 @@ export function createAnimaController(ctx) {
     }
   }
 
+  function resolveHistoryAvatars(sessions) {
+    if (!sessions || sessions.length === 0) return;
+    const known = new Set(Object.keys(state.animaTabAvatarUrls));
+    const names = new Set();
+    for (const s of sessions) {
+      if (!s.messages) continue;
+      for (const m of s.messages) {
+        if (m.from_person && m.from_person !== "human" && !known.has(m.from_person)) {
+          names.add(m.from_person);
+        }
+      }
+    }
+    for (const n of names) ensureAnimaTabAvatar(n);
+  }
+
   return {
     loadAnimas, restoreChatUiState, selectAnima, openOrSelectAnima,
     closeAnimaTab, renderAnimaTabs, renderAddConversationMenu,
-    ensureAnimaTabAvatar,
+    ensureAnimaTabAvatar, resolveHistoryAvatars,
   };
 }

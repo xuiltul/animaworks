@@ -27,3 +27,9 @@ from core.config.models import (
     resolve_anima_config,
     save_config,
 )
+from core.config.vault import (
+    VaultError,
+    VaultManager,
+    get_vault_manager,
+    invalidate_vault_cache,
+)

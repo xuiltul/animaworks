@@ -7,6 +7,87 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-03-04
+
+### Added
+- DK removal Phase 1+2 — full Channel C search + budget expansion
+- add Priming Channel F (episodes) and search_memory episodes support
+- add check_background_task / list_background_tasks MCP tools
+- add audit_subordinate supervisor tool for monitoring subordinate activity
+- expose plan_tasks via MCP and update heartbeat prompts to recommend it
+- add model info CLI commands, anima info, and comprehensive docs
+- add think tag strip filter for Qwen3.5 content-embedded reasoning
+- improve task awareness — origin_chain human bonus + heartbeat add_task guidance
+- implement live tool activity streaming — tool_detail SSE + subordinate activity broadcast
+- improve heartbeat effectiveness — raise tool limit, filter activity noise, enforce STALE tracking
+- implement live tool activity streaming with real-time UI updates
+- implement Board channel ACL (access control for shared channels)
+- add Qwen 3.5 model support (Mode A + 64K context window)
+- implement credential vault encryption with PyNaCl SealedBox
+- per-Anima Chatwork write token + fix streaming-controller container ref
+- idle conversation pre-compression, Claude auto-update, server PID detection fix
+- update system prompts for S-mode Task tool auto-routing
+- resolve avatar URLs for chat history from_person and workspace
+- add anima avatar display to chat bubbles
+- persist per-pane anima/thread selection across reloads
+- demo README & Quick Start — English/Japanese guides with Docker demo link
+- demo fictional runtime data — 3-day activity logs and state files
+- demo asset infrastructure — directory structure, generation and optimization scripts
+- add chatwork_delete tool for self-message deletion
+- NovaCraft world-building — 4 presets × 3 characters with full personality
+- demo Docker infrastructure with preset selection
+- Task tool delegation + SDK subagent for S-mode
+- add frontend image resize & cache module for avatar thumbnails
+- add token usage tracking and cost estimation
+
+### Fixed
+- auto-convert anime prompts to realistic in asset generation
+- adjust episode budget to 500 tokens per Issue spec
+- skip memory_eval e2e tests when experiments/ unavailable in CI
+- address review findings — ElevenLabs TTSSynthesisError, exception separation, tests
+- replace silent except-pass with debug logging in audit_subordinate
+- patch path for MeshyClient credential mock in asset optimization tests
+- per-thread interrupt event via ContextVar for parallel streams
+- await missing on neurogenesis_reorganize + catch-up missed consolidation jobs
+- transcribe tool broken via submit — composite name + subcommand mismatch
+- address review findings for audit_subordinate
+- update dispatch dict test to include audit_subordinate tool
+- token usage input/output_tokens always 0 — use dict.get() instead of getattr()
+- add missing tool category flags to Mode B AssistedExecutor
+- RC-1 無音嚥下防止 + RC-6 interrupt時response_done保証
+- TTS P0 — stop swallowing synthesis errors (RC-1) and guarantee response_done on interrupt (RC-6)
+- filter subordinate tool activity by org hierarchy on frontend
+- avoid buffering non-think content in StreamingThinkFilter
+- filter subordinate activity to prevent global tool_use event leakage
+- priming Channel C keyword extraction and search accuracy
+- auto-inject frontmatter for knowledge/procedures, repair Priming pipeline
+- prevent subprocess leak by re-raising GeneratorExit in async generators
+- unify started_at to milliseconds in stream_registry.py
+- prevent keepOnlyStreaming from clearing completed chat messages
+- address Critical/Important review findings for Board ACL
+- replace fragile split("---", 2) frontmatter parsing with line-based parser
+- voice TTS playback failure on reconnect — AudioContext state management and server robustness
+- update credential resolver test to expect vault.json in error message
+- guard app.js init() against double execution on Settings navigation
+- prevent mic button presence from shifting send button layout
+- prevent pane auto-focus on stream end, add flash notification
+- モバイル情報パネルが右にズレて崩れる問題を修正
+- address review findings for token usage tracking
+- voice chat UI improvements — layout, VAD loading, TTS sanitization, duplicate response prevention
+
+### Changed
+- simplify streaming-controller and session-manager
+- remove obsolete UI test scripts and re-enable realistic animations
+- separate streaming indicator animation for active vs inactive tabs
+
+### Performance
+- paginate activity API — cap per-Anima loading instead of O(N) full scan
+- zone-based partial DOM updates for streaming chat bubbles
+
+### Other
+- Revert "refactor: simplify streaming-controller and session-manager"
+
+
 ## [0.4.9] - 2026-03-02
 
 ### Added
@@ -472,8 +553,8 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.4.8...HEAD
-[0.4.8]: https://github.com/xuiltul/animaworks/compare/v0.4.7...v0.4.8
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.4.10...HEAD
+[0.4.10]: https://github.com/xuiltul/animaworks/compare/v0.4.9...v0.4.10[0.4.8]: https://github.com/xuiltul/animaworks/compare/v0.4.7...v0.4.8
 [0.4.3]: https://github.com/xuiltul/animaworks/compare/v0.4.2...v0.4.3
 [0.4.0]: https://github.com/xuiltul/animaworks/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/xuiltul/animaworks/compare/v0.3.0...v0.3.1

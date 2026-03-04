@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # ── Execution Profile ─────────────────────────────────────
 
 EXECUTION_PROFILE: dict[str, dict[str, object]] = {
-    "transcribe": {"expected_seconds": 120, "background_eligible": True},
+    "audio": {"expected_seconds": 120, "background_eligible": True},
 }
 
 # Configuration from environment
@@ -369,7 +369,7 @@ def cli_main(argv: list[str] | None = None) -> None:
     )
     sub = parser.add_subparsers(dest="command")
 
-    p_trans = sub.add_parser("transcribe", help="Transcribe an audio file")
+    p_trans = sub.add_parser("audio", help="Transcribe an audio file")
     p_trans.add_argument("audio_path", help="Path to audio file")
     p_trans.add_argument(
         "-l", "--language", default=None,
@@ -380,7 +380,7 @@ def cli_main(argv: list[str] | None = None) -> None:
         help=f"Ollama model for refinement (default: {DEFAULT_LLM_MODEL})",
     )
     p_trans.add_argument(
-        "--raw", action="store_true",
+        "--raw", "--raw-only", action="store_true", dest="raw",
         help="Skip LLM refinement, output raw transcription only.",
     )
     p_trans.add_argument(
@@ -390,6 +390,10 @@ def cli_main(argv: list[str] | None = None) -> None:
     p_trans.add_argument(
         "-o", "--output", default="text", choices=["text", "json"],
         help="Output format (default: text).",
+    )
+    p_trans.add_argument(
+        "-j", "--json", action="store_const", const="json", dest="output",
+        help="Output as JSON (shorthand for -o json).",
     )
     p_trans.add_argument(
         "-q", "--quiet", action="store_true",
@@ -402,7 +406,7 @@ def cli_main(argv: list[str] | None = None) -> None:
         parser.print_help()
         sys.exit(1)
 
-    if args.command == "transcribe":
+    if args.command == "audio":
         audio_path = Path(args.audio_path)
         if not audio_path.exists():
             print(f"Error: File not found: {audio_path}", file=sys.stderr)

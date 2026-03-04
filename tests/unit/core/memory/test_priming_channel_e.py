@@ -163,7 +163,7 @@ class TestPrimeMemoriesWithActivity:
         async def _stub_a(self, name):
             return ""
 
-        async def _stub_b(self, sender_name, keywords):
+        async def _stub_b(self, sender_name, keywords, *, channel=""):
             return "some activity content"
 
         async def _stub_c(self, kw, **kwargs):
@@ -199,7 +199,7 @@ class TestPrimeMemoriesWithActivity:
             return []
 
         # Stub _channel_b to simulate the fallback path returning old channel data
-        async def _stub_b_fallback(self, sender_name, keywords):
+        async def _stub_b_fallback(self, sender_name, keywords, *, channel=""):
             return await self._fallback_episodes_and_channels()
 
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_a_sender_profile", _stub_a)

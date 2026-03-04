@@ -20,6 +20,15 @@ logger = logging.getLogger(__name__)
 # ── Helpers ──────────────────────────────────────────────────────
 
 
+def _experiments_available() -> bool:
+    """Check if experiments package is importable (excluded from CI via .gitignore)."""
+    try:
+        import experiments.memory_eval.dataset  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def _chromadb_available() -> bool:
     """Check if ChromaDB is importable."""
     try:
@@ -27,6 +36,12 @@ def _chromadb_available() -> bool:
         return True
     except ImportError:
         return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _experiments_available(),
+    reason="experiments/ not available (excluded from CI via .gitignore)",
+)
 
 
 # ── Dataset Generation ───────────────────────────────────────────

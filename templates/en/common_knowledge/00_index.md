@@ -44,6 +44,9 @@ Follow this flow to find the right document:
 7.5. **Don't know how to set up or use voice chat?**
    → Read `operations/voice-chat-guide.md`
 
+7.7. **Don't know how to choose or change models / want to understand execution modes?**
+   → Read `operations/model-guide.md`
+
 8. **Message sending was limited / want to know about sending limits?**
    → Read `communication/sending-limits.md`
 
@@ -85,6 +88,7 @@ Follow this flow to find the right document:
 | `operations/tool-usage-overview.md` | Tool usage overview (S/A/B mode tool sets, internal/external/supervisor tools, how to call them) |
 | `operations/background-tasks.md` | Background task guide (using submit, when to use it, how to get results) |
 | `operations/voice-chat-guide.md` | Voice chat guide (STT/TTS setup, WebSocket protocol, per-Anima voice settings, troubleshooting) |
+| `operations/model-guide.md` | Model selection and configuration (execution modes, supported models, models.json, credential setup, context windows) |
 
 ### security/ — Security
 
@@ -119,7 +123,10 @@ Find the right document from relevant keywords.
 | organization, supervisor, subordinate, peer | `organization/structure.md` |
 | role, responsibility, speciality, specialty | `organization/roles.md` |
 | hierarchy, rules, permissions, communication path | `organization/hierarchy-rules.md` |
-| config, model, provider, hot reload, apply config | `operations/project-setup.md` |
+| config, hot reload, apply config | `operations/project-setup.md` |
+| model, models, execution mode, model change, models.json, provider | `operations/model-guide.md` |
+| model selection, context window, credential, set-model, models list, models info | `operations/model-guide.md` |
+| anima info, anima list, anima set-model | `operations/model-guide.md` |
 | add Anima, template, identity | `operations/project-setup.md` |
 | task, progress, block, priority | `operations/task-management.md` |
 | current_task, pending, state management | `operations/task-management.md` |

@@ -1,0 +1,21 @@
+{"ts": "2026-03-01T09:05:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-01T09:06:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-01T09:07:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-01T09:10:00+09:00", "type": "message_received", "content": "ひなちゃん、v0.2リリースまでのスケジュール整理お願いしていい？マイルストーンとタスクの依存関係をまとめてほしいんだ。", "summary": "kaitoからスケジュール整理の依頼", "from": "kaito", "meta": {"intent": "delegation"}}
+{"ts": "2026-03-01T09:11:30+09:00", "type": "message_sent", "content": "了解です！すぐ整理しますね♪", "summary": "スケジュール整理を承諾", "from": "hina", "to": "kaito"}
+{"ts": "2026-03-01T11:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-01T11:01:00+09:00", "type": "tool_use", "content": "docs/milestones.md", "summary": "マイルストーン確認", "tool": "Read"}
+{"ts": "2026-03-01T11:10:00+09:00", "type": "tool_use", "content": "docs/tasks.md", "summary": "タスク一覧確認", "tool": "Read"}
+{"ts": "2026-03-01T11:15:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-01T12:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-01T12:02:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-01T13:00:00+09:00", "type": "tool_use", "content": "docs/v02-schedule.md", "summary": "スケジュールドキュメント作成", "tool": "Write"}
+{"ts": "2026-03-01T14:00:00+09:00", "type": "tool_use", "content": "docs/v02-schedule.md", "summary": "クリティカルパス図追加", "tool": "Write"}
+{"ts": "2026-03-01T14:30:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-01T14:31:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-01T14:33:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-01T15:00:00+09:00", "type": "message_sent", "content": "kaitoさん、v0.2リリースまでのスケジュール整理しましたよ〜！docs/v02-schedule.mdに置いてあります。3/3のリリースまでのクリティカルパスも可視化しておきました♪", "summary": "スケジュール整理完了を報告", "from": "hina", "to": "kaito"}
+{"ts": "2026-03-01T15:01:00+09:00", "type": "channel_post", "content": "v0.2リリースまでのスケジュールまとめました！詳しくはdocs/v02-schedule.mdを見てくださいね〜♪", "summary": "スケジュールまとめをgeneralに投稿", "channel": "general"}
+{"ts": "2026-03-01T15:05:00+09:00", "type": "message_received", "content": "ありがとう、助かるよ。クリティカルパスの可視化もいいね。", "summary": "kaitoがスケジュールを確認", "from": "kaito"}
+{"ts": "2026-03-01T17:00:00+09:00", "type": "heartbeat_start", "summary": "最終巡回"}
+{"ts": "2026-03-01T17:02:00+09:00", "type": "heartbeat_end", "summary": "スケジュール整理完了。チーム順調。"}

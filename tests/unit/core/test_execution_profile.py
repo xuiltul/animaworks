@@ -33,7 +33,7 @@ _TOOL_MODULES = {
 _EXPECTED_BG_ELIGIBLE = {
     "image_gen": {"pipeline", "3d", "rigging", "animations", "fullbody", "bustup", "chibi"},
     "local_llm": {"generate", "chat"},
-    "transcribe": {"transcribe"},
+    "transcribe": {"audio"},
 }
 
 # Modules that require optional dependencies and may fail to import

@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-from core.voice.tts_base import BaseTTSProvider, TTSConfig
+from core.voice.tts_base import BaseTTSProvider, TTSConfig, TTSSynthesisError
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,7 @@ class StyleBertVits2TTS(BaseTTSProvider):
     ) -> AsyncIterator[bytes]:
         """Stream TTS audio chunks. SBV2 returns full WAV; yield as single chunk."""
         audio = await self.synthesize_full(text, config)
-        if audio:
-            yield audio
+        yield audio
 
     async def synthesize_full(self, text: str, config: TTSConfig) -> bytes:
         """Generate complete WAV audio for given text."""
@@ -58,10 +57,12 @@ class StyleBertVits2TTS(BaseTTSProvider):
                     },
                 )
                 r.raise_for_status()
+                if not r.content:
+                    raise TTSSynthesisError("Style-BERT-VITS2: empty audio response")
                 return r.content
             except httpx.HTTPError as e:
                 logger.warning("Style-BERT-VITS2 synthesis failed: %s", e)
-                return b""
+                raise TTSSynthesisError(f"Style-BERT-VITS2 synthesis failed: {e}") from e
 
     async def list_voices(self) -> list[dict]:
         """List available models/speakers from SBV2 API."""

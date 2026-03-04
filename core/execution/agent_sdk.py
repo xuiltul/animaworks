@@ -26,7 +26,7 @@ import logging
 import os
 import sys
 import tempfile
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import asdict
 from typing import Any, TYPE_CHECKING
 
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 from core.prompt.context import CHARS_PER_TOKEN, ContextTracker, resolve_context_window
 from core.exceptions import ExecutionError, LLMAPIError, MemoryWriteError  # noqa: F401
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, TokenUsage, ToolCallRecord
 from core.schemas import ModelConfig
 from core.memory.shortterm import ShortTermMemory
 from pathlib import Path
@@ -84,7 +84,12 @@ from core.execution._sdk_hooks import (  # noqa: F401
     _build_pre_tool_hook,
     _cache_subordinate_paths,
     _collect_all_subordinates,
+    _count_active_tasks,
+    _intercept_task_to_delegation,
     _intercept_task_to_pending,
+    _read_status_json,
+    _role_matches,
+    _select_subordinate,
 )
 from core.execution._sdk_stream import (  # noqa: F401
     _finalize_pending_records,
@@ -96,6 +101,7 @@ from core.execution._sdk_stream import (  # noqa: F401
     _summarise_tool_input,
     _tool_result_content_len,
 )
+from core.execution._tool_summary import make_tool_detail_chunk
 
 logger = logging.getLogger("animaworks.execution.agent_sdk")
 
@@ -236,6 +242,24 @@ class AgentSDKExecutor(BaseExecutor):
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         }
 
+    def _make_pending_executor_wake_callback(self) -> Callable[[], None] | None:
+        """Create a callback that writes a .wake file for PendingTaskExecutor.
+
+        The wake file signals the pending executor (running in the runner
+        subprocess) to check for new tasks immediately rather than waiting
+        for the next poll interval.
+        """
+        wake_path = self._anima_dir / "state" / "pending" / ".wake"
+
+        def _wake() -> None:
+            try:
+                wake_path.parent.mkdir(parents=True, exist_ok=True)
+                wake_path.write_text("1", encoding="utf-8")
+            except Exception:
+                pass
+
+        return _wake
+
     # ── SDK helpers (shared by execute / execute_streaming) ──
 
     def _build_sdk_options(
@@ -300,13 +324,18 @@ class AgentSDKExecutor(BaseExecutor):
             self._model_config.thinking,
         )
 
+        _has_subs = self._has_subordinates()
+
+        _allowed_tools = [
+            "Read", "Write", "Edit", "Bash", "Grep", "Glob",
+            "WebFetch", "WebSearch",
+            "mcp__aw__*",
+        ]
+        _allowed_tools.append("Task")
+
         kwargs: dict[str, Any] = dict(
             system_prompt=prompt_kwarg,
-            allowed_tools=[
-                "Read", "Write", "Edit", "Bash", "Grep", "Glob",
-                "WebFetch", "WebSearch",
-                "mcp__aw__*",
-            ],
+            allowed_tools=_allowed_tools,
             permission_mode="acceptEdits",
             cwd=str(self._anima_dir),
             max_turns=max_turns,
@@ -332,6 +361,8 @@ class AgentSDKExecutor(BaseExecutor):
                         context_window=_cw,
                         session_stats=session_stats,
                         superuser=_is_debug_superuser(self._anima_dir),
+                        on_task_intercepted=self._make_pending_executor_wake_callback(),
+                        has_subordinates=_has_subs,
                     )],
                 )],
                 "PreCompact": [HookMatcher(
@@ -364,6 +395,7 @@ class AgentSDKExecutor(BaseExecutor):
         tracker: ContextTracker | None,
         session_type: str = "chat",
         images: list[dict[str, Any]] | None = None,
+        usage_acc: TokenUsage | None = None,
     ) -> "ResultMessage | None":
         """Run query + message loop for blocking (non-streaming) execution.
 
@@ -397,6 +429,10 @@ class AgentSDKExecutor(BaseExecutor):
                     _save_session_id(self._anima_dir, message.session_id, session_type)
                 if tracker:
                     tracker.update_from_result_message(message.usage)
+                if usage_acc and message.usage:
+                    u = message.usage
+                    usage_acc.input_tokens = u.get("input_tokens", 0) or 0
+                    usage_acc.output_tokens = u.get("output_tokens", 0) or 0
             elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
@@ -492,6 +528,7 @@ class AgentSDKExecutor(BaseExecutor):
         pending_records: dict[str, ToolCallRecord] = {}
         result_message = None
         message_count = 0
+        usage_acc = TokenUsage()
 
         try:
             logger.info(
@@ -504,6 +541,7 @@ class AgentSDKExecutor(BaseExecutor):
                     client, prompt, response_text, pending_records,
                     session_stats, tracker, session_type,
                     images=images,
+                    usage_acc=usage_acc,
                 )
             logger.debug("ClaudeSDKClient disconnected")
         except (ProcessError, ClaudeSDKError) as e:
@@ -528,6 +566,7 @@ class AgentSDKExecutor(BaseExecutor):
                             client, prompt, response_text, pending_records,
                             session_stats, tracker, session_type,
                             images=images,
+                            usage_acc=usage_acc,
                         )
                 except Exception as retry_exc:
                     logger.exception("Agent SDK execution error (fresh session retry)")
@@ -566,6 +605,7 @@ class AgentSDKExecutor(BaseExecutor):
             replied_to_from_transcript=replied_to,
             tool_call_records=all_tool_records,
             force_chain=session_stats.get("force_chain", False),
+            usage=usage_acc,
         )
 
     # ── Streaming execution ──────────────────────────────────
@@ -638,6 +678,7 @@ class AgentSDKExecutor(BaseExecutor):
         result_message: ResultMessage | None = None
         active_tool_ids: set[str] = set()
         message_count = 0
+        usage_acc = TokenUsage()
 
         # --- inline helper: streaming message loop (not extractable because
         #     it yields from the generator) ---
@@ -667,6 +708,8 @@ class AgentSDKExecutor(BaseExecutor):
                         usage = event.get("message", {}).get("usage", {})
                         if usage:
                             tracker.update_from_message_start(usage)
+                            usage_acc.cache_read_tokens += usage.get("cache_read_input_tokens", 0)
+                            usage_acc.cache_write_tokens += usage.get("cache_creation_input_tokens", 0)
 
                     elif event_type == "content_block_start":
                         block = event.get("content_block", {})
@@ -711,6 +754,11 @@ class AgentSDKExecutor(BaseExecutor):
                                 block, pending_records, None,
                                 self._model_config.model,
                             )
+                            detail_chunk = make_tool_detail_chunk(
+                                block.name, block.id, block.input or {},
+                            )
+                            if detail_chunk:
+                                yield detail_chunk
                             if block.id in active_tool_ids:
                                 active_tool_ids.discard(block.id)
                                 yield {
@@ -743,6 +791,10 @@ class AgentSDKExecutor(BaseExecutor):
                     # all turns (not the current context size) and would
                     # produce inaccurate threshold checks.  Context tracking is
                     # handled per-turn via message_start events above.
+                    if message.usage:
+                        u = message.usage
+                        usage_acc.input_tokens = u.get("input_tokens", 0) or 0
+                        usage_acc.output_tokens = u.get("output_tokens", 0) or 0
                     break  # receive_messages() does not auto-stop on ResultMessage
 
                 elif isinstance(message, SystemMessage):
@@ -774,7 +826,7 @@ class AgentSDKExecutor(BaseExecutor):
                     async for event in _stream_messages(fresh_client):
                         yield event
             except BaseException as retry_exc:
-                if isinstance(retry_exc, asyncio.CancelledError):
+                if isinstance(retry_exc, (asyncio.CancelledError, GeneratorExit)):
                     raise
                 if not isinstance(retry_exc, Exception):
                     logger.critical(
@@ -860,7 +912,7 @@ class AgentSDKExecutor(BaseExecutor):
                         yield event
             logger.debug("ClaudeSDKClient disconnected")
         except BaseException as e:
-            if isinstance(e, asyncio.CancelledError):
+            if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
                 raise
             if not isinstance(e, Exception):
                 logger.critical(
@@ -892,4 +944,5 @@ class AgentSDKExecutor(BaseExecutor):
             "replied_to_from_transcript": replied_to,
             "tool_call_records": [asdict(r) for r in all_tool_records],
             "force_chain": session_stats.get("force_chain", False),
+            "usage": usage_acc.to_dict(),
         }

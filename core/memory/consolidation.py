@@ -377,22 +377,18 @@ class ConsolidationEngine:
         at least one file has an origin that indicates external (untrusted)
         data provenance.
         """
+        from core.memory.frontmatter import parse_frontmatter
+
         for filename in filenames:
             filepath = self.knowledge_dir / filename
             if not filepath.exists():
                 continue
             try:
                 text = filepath.read_text(encoding="utf-8")
-                if not text.startswith("---"):
-                    continue
-                end = text.find("---", 3)
-                if end == -1:
-                    continue
-                for line in text[3:end].splitlines():
-                    if line.strip().startswith("origin:"):
-                        val = line.split(":", 1)[1].strip()
-                        if val in self._EXTERNAL_ORIGINS:
-                            return True
+                meta, _ = parse_frontmatter(text)
+                origin = meta.get("origin", "")
+                if origin in self._EXTERNAL_ORIGINS:
+                    return True
             except Exception:
                 continue
         return False
@@ -449,17 +445,14 @@ class ConsolidationEngine:
             indexer = MemoryIndexer(vector_store, self.anima_name, self.anima_dir)
 
             # Re-index all knowledge files, respecting per-file origin
+            from core.memory.frontmatter import parse_frontmatter as _parse_fm
+
             for knowledge_file in self.knowledge_dir.rglob("*.md"):
                 file_origin = "consolidation"
                 try:
                     text = knowledge_file.read_text(encoding="utf-8")
-                    if text.startswith("---"):
-                        end = text.find("---", 3)
-                        if end != -1:
-                            for line in text[3:end].splitlines():
-                                if line.strip().startswith("origin:"):
-                                    file_origin = line.split(":", 1)[1].strip() or file_origin
-                                    break
+                    meta, _ = _parse_fm(text)
+                    file_origin = meta.get("origin", file_origin) or file_origin
                 except Exception:
                     pass
                 indexer.index_file(knowledge_file, memory_type="knowledge", origin=file_origin)

@@ -36,14 +36,25 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
   if (_uiElements) destroyVoiceUI();
   _chatCallbacks = callbacks || null;
 
-  const container = document.createElement('div');
-  container.className = 'voice-controls';
+  // Mic button — stays in .chat-input-actions grid alongside other buttons
+  const micContainer = document.createElement('div');
+  micContainer.className = 'voice-controls';
 
   const micBtn = document.createElement('button');
   micBtn.type = 'button';
   micBtn.className = 'voice-mic-btn';
   micBtn.title = t('voice.mic_input');
   micBtn.innerHTML = MIC_ICON_SVG;
+
+  micContainer.append(micBtn);
+
+  // Voice toolbar — separate row below input, shown when voice is active
+  const toolbar = document.createElement('div');
+  toolbar.className = 'voice-toolbar';
+  toolbar.style.display = 'none';
+
+  const tbStatus = document.createElement('div');
+  tbStatus.className = 'voice-toolbar-status';
 
   const recIndicator = document.createElement('span');
   recIndicator.className = 'voice-rec-indicator';
@@ -53,12 +64,21 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
   ttsIndicator.className = 'voice-tts-indicator';
   ttsIndicator.style.display = 'none';
 
+  const thinkingIndicator = document.createElement('span');
+  thinkingIndicator.className = 'voice-thinking-indicator';
+  thinkingIndicator.textContent = '考え中...';
+  thinkingIndicator.style.display = 'none';
+
+  tbStatus.append(recIndicator, ttsIndicator, thinkingIndicator);
+
+  const tbControls = document.createElement('div');
+  tbControls.className = 'voice-toolbar-controls';
+
   const modeToggle = document.createElement('button');
   modeToggle.type = 'button';
   modeToggle.className = 'voice-mode-toggle';
   modeToggle.textContent = 'PTT';
   modeToggle.title = t('voice.mode_toggle');
-  modeToggle.style.display = 'none';
 
   const volumeSlider = document.createElement('input');
   volumeSlider.type = 'range';
@@ -66,26 +86,29 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
   volumeSlider.min = '0';
   volumeSlider.max = '100';
   volumeSlider.value = '80';
-  volumeSlider.style.display = 'none';
 
-  const thinkingIndicator = document.createElement('span');
-  thinkingIndicator.className = 'voice-thinking-indicator';
-  thinkingIndicator.textContent = '考え中...';
-  thinkingIndicator.style.display = 'none';
+  tbControls.append(modeToggle, volumeSlider);
+  toolbar.append(tbStatus, tbControls);
 
-  container.append(micBtn, recIndicator, ttsIndicator, thinkingIndicator, modeToggle, volumeSlider);
-
-  const sendBtn = chatInputForm.querySelector(
-    '[data-chat-id$="SendBtn"], .chat-send-btn, .ws-conv-send, button[type="submit"]'
-  );
-  if (sendBtn && sendBtn.parentNode) {
-    sendBtn.parentNode.insertBefore(container, sendBtn);
+  // Insert mic button into the pre-allocated slot
+  const voiceSlot = chatInputForm.querySelector('.voice-controls-slot');
+  if (voiceSlot) {
+    voiceSlot.appendChild(micContainer);
   } else {
-    chatInputForm.appendChild(container);
+    chatInputForm.appendChild(micContainer);
+  }
+
+  // Insert toolbar after .chat-input-wrap (inside the input area)
+  const inputWrap = chatInputForm.querySelector('.chat-input-wrap');
+  if (inputWrap) {
+    inputWrap.after(toolbar);
+  } else {
+    chatInputForm.appendChild(toolbar);
   }
 
   _uiElements = {
-    container,
+    container: micContainer,
+    toolbar,
     micBtn,
     recIndicator,
     ttsIndicator,
@@ -113,8 +136,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
       _connecting = false;
       voiceActive = true;
       micBtn.classList.add('active');
-      modeToggle.style.display = '';
-      volumeSlider.style.display = '';
+      toolbar.style.display = '';
       return true;
     } catch {
       _connecting = false;
@@ -292,8 +314,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
     recIndicator.style.display = 'none';
     ttsIndicator.style.display = 'none';
     thinkingIndicator.style.display = 'none';
-    modeToggle.style.display = 'none';
-    volumeSlider.style.display = 'none';
+    toolbar.style.display = 'none';
   });
   _bindVoice('error', ({ message }) => {
     console.warn('[VoiceUI] Error:', message);
@@ -312,6 +333,7 @@ export function destroyVoiceUI() {
   if (_uiElements) {
     voiceManager.disconnect();
     _uiElements.container.remove();
+    _uiElements.toolbar?.remove();
     _uiElements = null;
   }
   _voiceStreamingMsg = null;

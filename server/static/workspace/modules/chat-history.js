@@ -36,6 +36,7 @@ export function renderOpts() {
     smartTimestamp,
     renderChatImages,
     animaName: getState().conversationAnima,
+    avatarMap: getState().chatAvatarMap || {},
     truncateLen: TOOL_RESULT_TRUNCATE,
     labels: {
       thinking: "考え中...",
@@ -88,10 +89,17 @@ export function renderConvMessages() {
   }
 
   if (threadMessages.length > 0) {
-    if (hs && hs.sessions.length > 0) {
-      html += '<div class="session-divider"><span class="session-divider-label">現在のセッション</span></div>';
+    const hasStreaming = threadMessages.some(m => m.streaming);
+    const lastSession = hs?.sessions?.[hs.sessions.length - 1];
+    const lastSessionLastTs = lastSession?.messages?.slice(-1)[0]?.ts ?? "";
+    const lastLiveTs = threadMessages[threadMessages.length - 1]?.timestamp ?? "";
+    const liveIsNewer = hasStreaming || !lastSessionLastTs || lastLiveTs > lastSessionLastTs;
+    if (liveIsNewer) {
+      if (hs && hs.sessions.length > 0) {
+        html += '<div class="session-divider"><span class="session-divider-label">現在のセッション</span></div>';
+      }
+      html += threadMessages.map(m => renderLiveBubble(m, opts)).join("");
     }
-    html += threadMessages.map(m => renderLiveBubble(m, opts)).join("");
   }
 
   dom.convMessages.innerHTML = html;

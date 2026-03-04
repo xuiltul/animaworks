@@ -42,6 +42,7 @@ class ResponseStream:
     complete: bool = False
     full_text: str = ""
     active_tool: str | None = None
+    tool_history: list[dict[str, Any]] = field(default_factory=list)
     emotion: str | None = None
     done: bool = False                                      # True if Anima finished normally
     producer_task: asyncio.Task | None = field(default=None, repr=False)  # Background producer task
@@ -78,8 +79,31 @@ class ResponseStream:
             self.full_text += payload.get("text", "")
         elif event == "tool_start":
             self.active_tool = payload.get("tool_name")
+            self.tool_history.append({
+                "tool_name": payload.get("tool_name", ""),
+                "tool_id": payload.get("tool_id", ""),
+                "started_at": int(time.time() * 1000),
+            })
+        elif event == "tool_detail":
+            tid = payload.get("tool_id", "")
+            for entry in reversed(self.tool_history):
+                if entry.get("tool_id") == tid and not entry.get("completed"):
+                    entry["detail"] = payload.get("detail", "")
+                    break
         elif event == "tool_end":
             self.active_tool = None
+            tid = payload.get("tool_id", "")
+            for entry in reversed(self.tool_history):
+                if entry.get("tool_id") == tid and not entry.get("completed"):
+                    entry["completed"] = True
+                    entry["duration_ms"] = int(time.time() * 1000) - entry["started_at"]
+                    if payload.get("result_summary"):
+                        entry["result_summary"] = payload["result_summary"]
+                    if payload.get("input_summary"):
+                        entry["input_summary"] = payload["input_summary"]
+                    if payload.get("is_error"):
+                        entry["is_error"] = True
+                    break
         elif event == "done":
             self.complete = True
             self.emotion = payload.get("emotion")

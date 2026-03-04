@@ -27,7 +27,11 @@ AnimaWorks ではタスクが3つの独立パスで処理される:
 | **Heartbeat** | 定期巡回 | 状況確認・計画立案（Observe → Plan → Reflect） | 確認・判断のみ。実行は `pending/` に書き出す |
 | **TaskExec** | `pending/` にタスク出現 | LLMタスクの実行 | フル実行（ツール使用含む） |
 
-Heartbeat は **実行しない**。実行が必要なタスクを発見したら `state/pending/` に JSON ファイルとして書き出し、TaskExec パスに委譲する。
+Heartbeat は **実行しない**。実行が必要なタスクを発見したら、部下がいれば `delegate_task` で委任するか、`state/pending/` に JSON ファイルとして書き出して TaskExec パスに委譲する。
+
+なお、Sモード（Claude Agent SDK）の Chat パスでは **Task tool** を使うと自動ルーティングが行われる:
+- 部下がいる場合 → description に基づいて部下に即時委任される
+- 部下がいない場合 → サブエージェントとして即時並列実行される
 
 ### タスクキュー（add_task / update_task / list_tasks）
 
@@ -412,9 +416,10 @@ plan_tasks(batch_id="build-20260301", tasks=[
 | 依存関係付きタスク群 | `plan_tasks` で `depends_on` 指定 |
 | 部下への委譲 | `delegate_task`（別メカニズム） |
 
-## タスク委譲（delegate_task）
+## タスク委譲（delegate_task / Task tool）
 
 部下を持つ Anima（スーパーバイザー）は `delegate_task` ツールでタスクを部下に委譲できる。
+Sモードの Chat パスでは Task tool でも委任可能（自動ルーティングにより部下に即時委任される）。Task tool は description に部下名を含めることで指名委任でき、名前がなければ workload 最小 + role マッチで自動選択される。
 
 ### delegate_task の動作
 

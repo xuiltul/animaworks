@@ -85,7 +85,8 @@ def _find_server_pid_by_process() -> int | None:
     """Scan /proc to find the animaworks server process by command pattern.
 
     This is a fallback when the PID file is missing.  Looks for a process
-    owned by the current user whose cmdline contains the server marker.
+    owned by the current user whose cmdline contains the server marker
+    **and** is a Python interpreter (to avoid matching shell wrappers).
 
     Returns the PID if found, or None.
     """
@@ -94,11 +95,12 @@ def _find_server_pid_by_process() -> int | None:
     if not proc.exists():
         return None
 
+    exclude_pids = {os.getpid(), os.getppid()}
+
     for entry in proc.iterdir():
         if not entry.name.isdigit():
             continue
         try:
-            # Only check processes owned by the current user
             stat = entry.stat()
             if stat.st_uid != my_uid:
                 continue
@@ -107,8 +109,15 @@ def _find_server_pid_by_process() -> int | None:
             ).replace("\x00", " ")
             if any(m in cmdline for m in _SERVER_CMD_MARKERS):
                 pid = int(entry.name)
-                # Exclude ourselves
-                if pid == os.getpid():
+                if pid in exclude_pids:
+                    continue
+                # Only match Python processes to avoid shell wrappers
+                # whose cmdline contains the marker as an eval argument
+                try:
+                    exe_name = (entry / "exe").resolve().name
+                except OSError:
+                    exe_name = ""
+                if "python" not in exe_name:
                     continue
                 return pid
         except (OSError, ValueError, PermissionError):

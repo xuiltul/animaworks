@@ -4,6 +4,7 @@ import { t } from "/shared/i18n.js";
 import { state, dom } from "./state.js";
 import { addActivity } from "./activity.js";
 import { renderAnimaDropdown, updateAnimaAvatar, refreshSelectedAnima } from "./animas.js";
+import { invalidateAvatarCache } from "./avatar-resolver.js";
 import { updateSystemStatus } from "./status.js";
 import { ChatSessionManager } from "../shared/chat/session-manager.js";
 import { createLogger } from "../shared/logger.js";
@@ -192,6 +193,7 @@ function handleWsMessage(raw) {
     case "anima.assets_updated": {
       const animaName = data.name;
       if (animaName) {
+        invalidateAvatarCache(animaName).catch(() => {});
         addActivity("system", animaName, `${t("websocket.assets_updated")} ${(data.assets || []).join(", ")}`);
         if (animaName === state.selectedAnima) {
           updateAnimaAvatar();
@@ -242,6 +244,26 @@ function handleWsMessage(raw) {
         // Add to activity log
         addActivity("notification", animaName, subject || body.slice(0, 100));
       }
+      break;
+    }
+
+    case "anima.tool_activity": {
+      const animaName = data.name;
+      const evtType = data.event || data.type || "";
+      const toolName = data.tool_name || data.tool || "tool";
+      if (animaName && evtType === "tool_start") {
+        addActivity("tool", animaName, `${toolName} ${t("websocket.tool_running") || "実行中..."}`);
+      } else if (animaName && evtType === "tool_detail") {
+        addActivity("tool", animaName, `${toolName}: ${data.detail || ""}`);
+      } else if (animaName && (evtType === "tool_end" || evtType === "tool_use")) {
+        const suffix = data.is_error ? ` (${t("common.error") || "error"})` : "";
+        addActivity("tool", animaName, `${toolName} ${t("websocket.tool_done") || "完了"}${suffix}`);
+      } else if (animaName && evtType) {
+        addActivity("tool", animaName, `${data.summary || evtType}`);
+      }
+      document.dispatchEvent(
+        new CustomEvent("anima-tool-activity", { detail: { ...data, event: evtType, tool_name: toolName } })
+      );
       break;
     }
 

@@ -459,7 +459,7 @@ Sモードでは **Writeツール**（ネイティブ）を使って直接記憶
 - 正しいパラメータ・設定値を発見した → `knowledge/` に記録
 - 作業手順を確立した → `procedures/` に手順書作成
   - 第1見出し（`# ...`）は手順の目的が一目でわかる具体的な1行にすること
-  - YAMLフロントマターは不要（システムが自動付与する）
+  - YAMLフロントマターは任意（省略時はシステムが自動付与する。knowledge/proceduresとも対応済み）
 - 新スキル習得 → `skills/` に記録
 自動統合（日次consolidation）を待たず、重要な発見は即座に書き込むこと。
 
@@ -517,7 +517,7 @@ In S mode use the native **Write tool** to write memory files directly. Record w
 - Correct parameters discovered → `knowledge/`
 - Procedure established → `procedures/` with a new doc
   - First heading (`# ...`) should clearly state the procedure purpose in one line
-  - YAML frontmatter is optional (system adds it)
+  - YAML frontmatter is optional (system auto-adds it for both knowledge/ and procedures/)
 - New skill learned → `skills/`
 Write important discoveries immediately; do not wait for consolidation.
 
@@ -596,7 +596,7 @@ On completion, notifications go to `state/background_notifications/` for the nex
 - 重要な方針・判断基準を確立したとき → knowledge/ に記録
 - 作業手順を確立・改善したとき → procedures/ に手順書を作成
   - 第1見出し（`# ...`）は手順の目的が一目でわかる具体的な1行にすること
-  - YAMLフロントマターは不要（システムが自動付与する）
+  - YAMLフロントマターは任意（省略時はシステムが自動付与する。knowledge/proceduresとも対応済み）
 - 新しいスキル・テクニックを習得したとき → skills/ に記録
 自動統合（日次consolidation）を待たず、重要な発見は即座に書き込むこと。
 
@@ -687,7 +687,7 @@ Use write_memory_file when:
 - Important policy or criteria established → knowledge/
 - Procedure established/improved → procedures/ with new doc
   - First heading (`# ...`) should state purpose clearly in one line
-  - YAML frontmatter optional (system adds it)
+  - YAML frontmatter optional (system auto-adds it for both knowledge/ and procedures/)
 - New skill learned → skills/
 Write immediately; do not wait for consolidation.
 

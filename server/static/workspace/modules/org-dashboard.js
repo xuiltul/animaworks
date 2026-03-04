@@ -7,7 +7,7 @@
 import { createLogger } from "../../shared/logger.js";
 import { escapeHtml, smartTimestamp } from "./utils.js";
 import { animaHashColor } from "../../shared/avatar-utils.js";
-import { bustupCandidates, resolveAvatar } from "../../modules/avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 
 const logger = createLogger("org-dashboard");
 
@@ -203,7 +203,7 @@ async function _loadOrgAvatars(animas) {
   const candidates = bustupCandidates();
   for (const p of animas) {
     try {
-      const url = await resolveAvatar(p.name, candidates);
+      const url = await resolveCachedAvatar(p.name, candidates, "S");
       if (!url) continue;
       const el = _container?.querySelector(`.org-itree-avatar[data-anima="${CSS.escape(p.name)}"]`);
       if (!el) continue;

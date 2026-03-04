@@ -636,6 +636,7 @@ DEFAULT_MODEL_MODE_PATTERNS: dict[str, str] = {
     "deepseek/deepseek-chat": "A",
 
     # ── A: Ollama models with reliable tool_use ──────────
+    "ollama/qwen3.5*": "A",
     "ollama/qwen3:14b": "A",
     "ollama/qwen3:30b": "A",
     "ollama/qwen3:32b": "A",
@@ -702,6 +703,7 @@ KNOWN_MODELS: list[dict[str, str]] = [
     {"name": "xai/grok-3-beta",              "mode": "A", "note": "安定版"},
     {"name": "xai/grok-3-mini-beta",         "mode": "A", "note": "軽量Grok"},
     # ── Ollama Local (Mode A: tool_use 対応) ─────────────────────────────────
+    {"name": "ollama/qwen3.5:9b",            "mode": "A", "note": "GDN hybrid 9B・高効率"},
     {"name": "ollama/glm-4.7",               "mode": "A", "note": "ローカル・tool_use対応"},
     {"name": "ollama/qwen3:14b",             "mode": "A", "note": "ローカル中型"},
     {"name": "ollama/qwen3:32b",             "mode": "A", "note": "ローカル大型"},

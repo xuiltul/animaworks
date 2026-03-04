@@ -5,10 +5,11 @@
 import { getState, setState } from "./state.js";
 import { getCurrentUser } from "./login.js";
 import { escapeHtml } from "./utils.js";
+import { getDescendants } from "../../shared/chat/org-utils.js";
 import { setExpression, setTalking } from "./live2d.js";
 import { createLogger } from "../../shared/logger.js";
 import { renderConvMessages, renderOpts } from "./chat-history.js";
-import { renderStreamingBubbleInner } from "../../shared/chat/render-utils.js";
+import { renderStreamingBubbleInner, updateStreamingZone } from "../../shared/chat/render-utils.js";
 import { renderWsThreadTabs } from "./chat-thread.js";
 import { wsSaveDraft, wsClearDraft, isMobileView } from "./chat-mobile.js";
 import { ChatSessionManager } from "../../shared/chat/session-manager.js";
@@ -47,13 +48,48 @@ function _drainQueue(explicitAnima, explicitThread) {
 
 function _baseCallbacks(streamingMsg) {
   return {
-    onCompressionStart: () => { streamingMsg.compressing = true; updateStreamingBubble(streamingMsg); },
-    onCompressionEnd: () => { streamingMsg.compressing = false; updateStreamingBubble(streamingMsg); },
-    onToolStart: (n) => { streamingMsg.activeTool = n; setExpression("thinking"); updateStreamingBubble(streamingMsg); },
-    onToolEnd: () => { streamingMsg.activeTool = null; setExpression("neutral"); updateStreamingBubble(streamingMsg); },
-    onThinkingStart: () => { streamingMsg.thinkingText = ""; streamingMsg.thinking = true; updateStreamingBubble(streamingMsg); },
-    onThinkingDelta: (t) => { streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + t; scheduleStreamingUpdate(streamingMsg); },
-    onThinkingEnd: () => { streamingMsg.thinking = false; updateStreamingBubble(streamingMsg); },
+    onCompressionStart: () => { streamingMsg.compressing = true; updateStreamingBubble(streamingMsg, "text"); },
+    onCompressionEnd: () => { streamingMsg.compressing = false; updateStreamingBubble(streamingMsg, "text"); },
+    onToolStart: (n, detail) => {
+      streamingMsg.activeTool = n;
+      if (!streamingMsg.toolHistory) streamingMsg.toolHistory = [];
+      streamingMsg.toolHistory.push({ tool_name: n, tool_id: detail?.tool_id || "", started_at: Date.now() });
+      setExpression("thinking");
+      updateStreamingBubble(streamingMsg, "tools");
+    },
+    onToolDetail: (_toolName, detailText, info) => {
+      if (streamingMsg.toolHistory && info?.tool_id) {
+        for (let i = streamingMsg.toolHistory.length - 1; i >= 0; i--) {
+          const entry = streamingMsg.toolHistory[i];
+          if (entry.tool_id === info.tool_id && !entry.completed) {
+            entry.detail = detailText;
+            break;
+          }
+        }
+      }
+      updateStreamingBubble(streamingMsg, "tools");
+    },
+    onToolEnd: (detail) => {
+      streamingMsg.activeTool = null;
+      if (streamingMsg.toolHistory && detail?.tool_id) {
+        for (let i = streamingMsg.toolHistory.length - 1; i >= 0; i--) {
+          const entry = streamingMsg.toolHistory[i];
+          if (entry.tool_id === detail.tool_id && !entry.completed) {
+            entry.completed = true;
+            entry.duration_ms = Date.now() - entry.started_at;
+            entry.result_summary = detail.result_summary || "";
+            entry.input_summary = detail.input_summary || "";
+            entry.is_error = !!detail.is_error;
+            break;
+          }
+        }
+      }
+      setExpression("neutral");
+      updateStreamingBubble(streamingMsg, "tools");
+    },
+    onThinkingStart: () => { streamingMsg.thinkingText = ""; streamingMsg.thinking = true; updateStreamingBubble(streamingMsg, "thinking"); },
+    onThinkingDelta: (t) => { streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + t; scheduleStreamingUpdate(streamingMsg, "thinking"); },
+    onThinkingEnd: () => { streamingMsg.thinking = false; updateStreamingBubble(streamingMsg, "thinking"); },
   };
 }
 
@@ -74,20 +110,28 @@ function _enqueueInput() {
   return entry;
 }
 
-export function scheduleStreamingUpdate(msg) {
+let _convLatestZone = "all";
+
+export function scheduleStreamingUpdate(msg, zone = "text") {
   _convLatestStreamingMsg = msg;
+  if (_convLatestZone !== "all") _convLatestZone = zone;
   if (_convRafPending) return;
   _convRafPending = true;
-  requestAnimationFrame(() => { _convRafPending = false; if (_convLatestStreamingMsg) updateStreamingBubble(_convLatestStreamingMsg); });
+  requestAnimationFrame(() => {
+    _convRafPending = false;
+    const z = _convLatestZone;
+    _convLatestZone = "all";
+    if (_convLatestStreamingMsg) updateStreamingBubble(_convLatestStreamingMsg, z);
+  });
 }
 
-export function updateStreamingBubble(msg) {
+export function updateStreamingBubble(msg, zone = "all") {
   const dom = _getDom();
   if (!dom.convMessages) return;
   const bubbles = dom.convMessages.querySelectorAll(".chat-bubble.assistant.streaming");
   const bubble = bubbles[bubbles.length - 1];
   if (!bubble) return;
-  bubble.innerHTML = renderStreamingBubbleInner(msg, renderOpts());
+  updateStreamingZone(bubble, msg, renderOpts(), zone);
   dom.convMessages.scrollTop = dom.convMessages.scrollHeight;
 }
 
@@ -138,6 +182,46 @@ async function _sendConversation(text, overrideImages = null) {
   // await would not be initialized when SSE callbacks fire during streaming.
   let streamingMsg = null;
 
+  const _SUB_ACTIVITY_TYPES = new Set([
+    "tool_start", "tool_detail", "tool_end",
+    "inbox_processing_start", "inbox_processing_end",
+  ]);
+  let _wsSubThrottleTimer = null;
+  let _wsSubThrottlePending = false;
+  const _throttledWsSubRender = () => {
+    if (_wsSubThrottleTimer) { _wsSubThrottlePending = true; return; }
+    updateStreamingBubble(streamingMsg, "subordinate");
+    _wsSubThrottleTimer = setTimeout(() => {
+      _wsSubThrottleTimer = null;
+      if (_wsSubThrottlePending) { _wsSubThrottlePending = false; updateStreamingBubble(streamingMsg, "subordinate"); }
+    }, 150);
+  };
+  const _wsToolDetailTimers = new Map();
+  const _throttledWsToolDetail = (toolId) => {
+    if (_wsToolDetailTimers.has(toolId)) return;
+    updateStreamingBubble(streamingMsg, "tools");
+    _wsToolDetailTimers.set(toolId, setTimeout(() => { _wsToolDetailTimers.delete(toolId); updateStreamingBubble(streamingMsg, "tools"); }, 200));
+  };
+  const _descendants = getDescendants(anima, getState().animas || []);
+  const _onSubordinateActivity = (e) => {
+    const { name: subName, event: evtType, tool_name: toolName, detail: toolDetail } = e.detail || {};
+    if (!streamingMsg?.streaming || subName === anima) return;
+    if (!_descendants.has(subName)) return;
+    if (!_SUB_ACTIVITY_TYPES.has(evtType)) return;
+    if (!streamingMsg.subordinateActivity) streamingMsg.subordinateActivity = {};
+    if (evtType === "tool_start") {
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 実行中...` };
+    } else if (evtType === "tool_detail") {
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName}: ${toolDetail || ""}` };
+    } else if (evtType === "tool_end") {
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 完了` };
+    } else {
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName || "", summary: evtType };
+    }
+    _throttledWsSubRender();
+  };
+  document.addEventListener("anima-tool-activity", _onSubordinateActivity);
+
   const { success, error } = await mgr.sendChat(anima, thread, text, {
     images,
     displayImages,
@@ -147,18 +231,19 @@ async function _sendConversation(text, overrideImages = null) {
         if (!streamingMsg?.streaming) return;
         streamingMsg.afterHeartbeatRelay = false;
         if (!talkingStarted) { setTalking(true); setExpression("neutral"); talkingStarted = true; }
-        streamingMsg.text += d; scheduleStreamingUpdate(streamingMsg);
+        streamingMsg.text += d; scheduleStreamingUpdate(streamingMsg, "text");
       },
-      onCompressionStart: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = true; updateStreamingBubble(streamingMsg); } },
-      onCompressionEnd: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = false; updateStreamingBubble(streamingMsg); } },
-      onToolStart: (n) => { if (streamingMsg?.streaming) { streamingMsg.activeTool = n; setExpression("thinking"); updateStreamingBubble(streamingMsg); } },
-      onToolEnd: () => { if (streamingMsg?.streaming) { streamingMsg.activeTool = null; setExpression("neutral"); updateStreamingBubble(streamingMsg); } },
-      onThinkingStart: () => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = ""; streamingMsg.thinking = true; updateStreamingBubble(streamingMsg); } },
-      onThinkingDelta: (t) => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + t; scheduleStreamingUpdate(streamingMsg); } },
-      onThinkingEnd: () => { if (streamingMsg?.streaming) { streamingMsg.thinking = false; updateStreamingBubble(streamingMsg); } },
-      onHeartbeatRelayStart: () => { if (streamingMsg?.streaming) { streamingMsg.heartbeatRelay = true; streamingMsg.heartbeatText = ""; scheduleStreamingUpdate(streamingMsg); } },
-      onHeartbeatRelay: ({ text: t }) => { if (streamingMsg?.streaming) { streamingMsg.heartbeatText = (streamingMsg.heartbeatText || "") + t; scheduleStreamingUpdate(streamingMsg); } },
-      onHeartbeatRelayDone: () => { if (streamingMsg?.streaming) { streamingMsg.heartbeatRelay = false; streamingMsg.heartbeatText = ""; streamingMsg.afterHeartbeatRelay = true; scheduleStreamingUpdate(streamingMsg); } },
+      onCompressionStart: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = true; updateStreamingBubble(streamingMsg, "text"); } },
+      onCompressionEnd: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = false; updateStreamingBubble(streamingMsg, "text"); } },
+      onToolStart: (n, detail) => { if (streamingMsg?.streaming) { streamingMsg.activeTool = n; if (!streamingMsg.toolHistory) streamingMsg.toolHistory = []; streamingMsg.toolHistory.push({ tool_name: n, tool_id: detail?.tool_id || "", started_at: Date.now() }); setExpression("thinking"); updateStreamingBubble(streamingMsg, "tools"); } },
+      onToolDetail: (_toolName, detailText, info) => { if (streamingMsg?.streaming && streamingMsg.toolHistory && info?.tool_id) { for (let i = streamingMsg.toolHistory.length - 1; i >= 0; i--) { const entry = streamingMsg.toolHistory[i]; if (entry.tool_id === info.tool_id && !entry.completed) { entry.detail = detailText; break; } } } _throttledWsToolDetail(info?.tool_id || "_"); },
+      onToolEnd: (detail) => { if (streamingMsg?.streaming) { streamingMsg.activeTool = null; if (streamingMsg.toolHistory && detail?.tool_id) { for (let i = streamingMsg.toolHistory.length - 1; i >= 0; i--) { const entry = streamingMsg.toolHistory[i]; if (entry.tool_id === detail.tool_id && !entry.completed) { entry.completed = true; entry.duration_ms = Date.now() - entry.started_at; break; } } } setExpression("neutral"); updateStreamingBubble(streamingMsg, "tools"); } },
+      onThinkingStart: () => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = ""; streamingMsg.thinking = true; updateStreamingBubble(streamingMsg, "thinking"); } },
+      onThinkingDelta: (t) => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + t; scheduleStreamingUpdate(streamingMsg, "thinking"); } },
+      onThinkingEnd: () => { if (streamingMsg?.streaming) { streamingMsg.thinking = false; updateStreamingBubble(streamingMsg, "thinking"); } },
+      onHeartbeatRelayStart: () => { if (streamingMsg?.streaming) { streamingMsg.heartbeatRelay = true; streamingMsg.heartbeatText = ""; scheduleStreamingUpdate(streamingMsg, "text"); } },
+      onHeartbeatRelay: ({ text: t }) => { if (streamingMsg?.streaming) { streamingMsg.heartbeatText = (streamingMsg.heartbeatText || "") + t; scheduleStreamingUpdate(streamingMsg, "text"); } },
+      onHeartbeatRelayDone: () => { if (streamingMsg?.streaming) { streamingMsg.heartbeatRelay = false; streamingMsg.heartbeatText = ""; streamingMsg.afterHeartbeatRelay = true; scheduleStreamingUpdate(streamingMsg, "text"); } },
       onDone: ({ summary, emotion, images: di }) => {
         if (streamingMsg) {
           if (summary) { streamingMsg.text = summary; updateStreamingBubble(streamingMsg); }
@@ -179,6 +264,10 @@ async function _sendConversation(text, overrideImages = null) {
       },
     },
     onFinally: () => {
+      document.removeEventListener("anima-tool-activity", _onSubordinateActivity);
+      if (_wsSubThrottleTimer) { clearTimeout(_wsSubThrottleTimer); _wsSubThrottleTimer = null; }
+      for (const t of _wsToolDetailTimers.values()) clearTimeout(t);
+      _wsToolDetailTimers.clear();
       try {
         setTalking(false);
         if (streamingMsg?.streaming) {
@@ -225,14 +314,14 @@ export async function resumeConversationStream(animaName) {
   const { success } = await mgr.resumeStream(animaName, threadId, {
     callbacks: {
       onStreamCreated: (msg) => { streamingMsg = msg; renderConvMessages(); },
-      onTextDelta: (d) => { if (streamingMsg?.streaming) { streamingMsg.text += d; scheduleStreamingUpdate(streamingMsg); } },
-      onCompressionStart: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = true; updateStreamingBubble(streamingMsg); } },
-      onCompressionEnd: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = false; updateStreamingBubble(streamingMsg); } },
-      onToolStart: (n) => { if (streamingMsg?.streaming) { streamingMsg.activeTool = n; setExpression("thinking"); updateStreamingBubble(streamingMsg); } },
-      onToolEnd: () => { if (streamingMsg?.streaming) { streamingMsg.activeTool = null; setExpression("neutral"); updateStreamingBubble(streamingMsg); } },
-      onThinkingStart: () => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = ""; streamingMsg.thinking = true; updateStreamingBubble(streamingMsg); } },
-      onThinkingDelta: (t) => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + t; scheduleStreamingUpdate(streamingMsg); } },
-      onThinkingEnd: () => { if (streamingMsg?.streaming) { streamingMsg.thinking = false; updateStreamingBubble(streamingMsg); } },
+      onTextDelta: (d) => { if (streamingMsg?.streaming) { streamingMsg.text += d; scheduleStreamingUpdate(streamingMsg, "text"); } },
+      onCompressionStart: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = true; updateStreamingBubble(streamingMsg, "text"); } },
+      onCompressionEnd: () => { if (streamingMsg?.streaming) { streamingMsg.compressing = false; updateStreamingBubble(streamingMsg, "text"); } },
+      onToolStart: (n) => { if (streamingMsg?.streaming) { streamingMsg.activeTool = n; setExpression("thinking"); updateStreamingBubble(streamingMsg, "tools"); } },
+      onToolEnd: () => { if (streamingMsg?.streaming) { streamingMsg.activeTool = null; setExpression("neutral"); updateStreamingBubble(streamingMsg, "tools"); } },
+      onThinkingStart: () => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = ""; streamingMsg.thinking = true; updateStreamingBubble(streamingMsg, "thinking"); } },
+      onThinkingDelta: (t) => { if (streamingMsg?.streaming) { streamingMsg.thinkingText = (streamingMsg.thinkingText || "") + t; scheduleStreamingUpdate(streamingMsg, "thinking"); } },
+      onThinkingEnd: () => { if (streamingMsg?.streaming) { streamingMsg.thinking = false; updateStreamingBubble(streamingMsg, "thinking"); } },
       onDone: ({ summary, emotion, images: di }) => {
         if (streamingMsg) {
           if (summary) streamingMsg.text = summary;

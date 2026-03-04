@@ -178,6 +178,11 @@ class CommsToolsMixin:
         if not channel or not text:
             return _error_result("InvalidArguments", "channel and text are required")
 
+        # ── ACL gate ──
+        from core.messenger import is_channel_member
+        if not is_channel_member(self._messenger.shared_dir, channel, self._anima_name):
+            return t("handler.channel_acl_denied", channel=channel)
+
         current_posted = self.posted_channels_for(active_session_type.get())
         if channel in current_posted:
             alt_channels = {"general", "ops"} - {channel} - current_posted
@@ -256,6 +261,13 @@ class CommsToolsMixin:
             named = {m for m in mentions if m != "all"}
             targets = (named & running) - {self._anima_name}
 
+        # ── ACL filter: only notify channel members ──
+        from core.messenger import is_channel_member
+        targets = {
+            t for t in targets
+            if is_channel_member(self._messenger.shared_dir, channel, t)
+        }
+
         if not targets:
             return
 
@@ -292,6 +304,12 @@ class CommsToolsMixin:
         channel = args.get("channel", "")
         if not channel:
             return _error_result("InvalidArguments", "channel is required")
+
+        # ── ACL gate ──
+        from core.messenger import is_channel_member
+        if not is_channel_member(self._messenger.shared_dir, channel, self._anima_name):
+            return t("handler.channel_acl_denied", channel=channel)
+
         limit = args.get("limit", 20)
         human_only = args.get("human_only", False)
         messages = self._messenger.read_channel(channel, limit=limit, human_only=human_only)
@@ -310,6 +328,115 @@ class CommsToolsMixin:
         if not messages:
             return f"No DM history with {peer}"
         return _json.dumps(messages, ensure_ascii=False, indent=2)
+
+    # ── Channel management handler ────────────────────────────
+
+    def _handle_manage_channel(self, args: dict[str, Any]) -> str:
+        if not self._messenger:
+            return "Error: messenger not configured"
+
+        action = args.get("action", "")
+        channel = args.get("channel", "")
+        if not action or not channel:
+            return _error_result("InvalidArguments", "action and channel are required")
+
+        from core.messenger import (
+            ChannelMeta,
+            load_channel_meta,
+            save_channel_meta,
+            is_channel_member,
+            _validate_name,
+        )
+        from core.exceptions import RecipientNotFoundError
+
+        try:
+            _validate_name(channel, "channel name")
+        except RecipientNotFoundError:
+            return _error_result("InvalidArguments", f"Invalid channel name: {channel!r}")
+
+        shared_dir = self._messenger.shared_dir
+
+        if action == "create":
+            channel_file = shared_dir / "channels" / f"{channel}.jsonl"
+            if channel_file.exists():
+                return t("handler.channel_already_exists", channel=channel)
+            members = args.get("members", [])
+            if self._anima_name not in members:
+                members = [self._anima_name] + members
+            meta = ChannelMeta(
+                members=members,
+                created_by=self._anima_name,
+                created_at=now_iso(),
+                description=args.get("description", ""),
+            )
+            channels_dir = shared_dir / "channels"
+            channels_dir.mkdir(parents=True, exist_ok=True)
+            channel_file.write_text("", encoding="utf-8")
+            save_channel_meta(shared_dir, channel, meta)
+            members_str = ", ".join(members) if members else "open"
+            logger.info("manage_channel create: #%s by %s", channel, self._anima_name)
+            return t("handler.channel_created", channel=channel, members=members_str)
+
+        elif action == "add_member":
+            meta = load_channel_meta(shared_dir, channel)
+            channel_file = shared_dir / "channels" / f"{channel}.jsonl"
+            if not channel_file.exists():
+                return t("handler.channel_not_found", channel=channel)
+            new_members = args.get("members", [])
+            if not new_members:
+                return _error_result("InvalidArguments", "members list is required for add_member")
+            # Reject add_member on open/legacy channels to prevent accidental restriction
+            if meta is None:
+                return t("handler.channel_add_member_open_denied", channel=channel)
+            # Caller must be a member of the channel
+            if not is_channel_member(shared_dir, channel, self._anima_name):
+                return t("handler.channel_acl_not_member", channel=channel)
+            for m in new_members:
+                if m not in meta.members:
+                    meta.members.append(m)
+            save_channel_meta(shared_dir, channel, meta)
+            logger.info("manage_channel add_member: #%s += %s", channel, new_members)
+            return t("handler.channel_members_added", channel=channel, members=", ".join(new_members))
+
+        elif action == "remove_member":
+            meta = load_channel_meta(shared_dir, channel)
+            channel_file = shared_dir / "channels" / f"{channel}.jsonl"
+            if not channel_file.exists():
+                return t("handler.channel_not_found", channel=channel)
+            if meta is None:
+                return t("handler.channel_open", channel=channel)
+            # Caller must be a member of the channel
+            if not is_channel_member(shared_dir, channel, self._anima_name):
+                return t("handler.channel_acl_not_member", channel=channel)
+            remove_members = args.get("members", [])
+            if not remove_members:
+                return _error_result("InvalidArguments", "members list is required for remove_member")
+            meta.members = [m for m in meta.members if m not in remove_members]
+            save_channel_meta(shared_dir, channel, meta)
+            logger.info("manage_channel remove_member: #%s -= %s", channel, remove_members)
+            return t("handler.channel_members_removed", channel=channel, members=", ".join(remove_members))
+
+        elif action == "info":
+            channel_file = shared_dir / "channels" / f"{channel}.jsonl"
+            if not channel_file.exists():
+                return t("handler.channel_not_found", channel=channel)
+            meta = load_channel_meta(shared_dir, channel)
+            if meta is None or not meta.members:
+                return t("handler.channel_open", channel=channel)
+            info = {
+                "channel": channel,
+                "members": meta.members,
+                "created_by": meta.created_by,
+                "created_at": meta.created_at,
+                "description": meta.description,
+            }
+            return _json.dumps(info, ensure_ascii=False, indent=2)
+
+        else:
+            return _error_result(
+                "InvalidArguments",
+                f"Unknown action: {action!r}. Use create, add_member, remove_member, or info.",
+            )
 
     # ── Human notification handler ────────────────────────────
 

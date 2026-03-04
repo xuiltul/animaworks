@@ -1,0 +1,9 @@
+{"ts": "2026-03-03T09:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-03T09:01:00+09:00", "type": "cron_executed", "content": "デイリースタンダップ実行。リリース日の最終確認計画を共有。", "summary": "daily_standup cron実行", "meta": {"task_name": "daily_standup"}}
+{"ts": "2026-03-03T09:02:00+09:00", "type": "channel_post", "content": "おはよう。今日はv0.2リリース日だ。soraくんにリリースチェックリストを任せる。全員気を引き締めていこう。", "summary": "リリース日の計画共有", "channel": "general"}
+{"ts": "2026-03-03T09:03:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-03T09:15:00+09:00", "type": "message_sent", "content": "リリース日だ。チェックリストに沿って最終確認をお願いしたい。テスト全通過、バージョンバンプ、CHANGELOG更新、ビルド確認。問題あったらすぐ報告して。", "summary": "soraにリリースチェックリストを委譲", "from": "kaito", "to": "sora", "meta": {"intent": "delegation"}}
+{"ts": "2026-03-03T09:16:30+09:00", "type": "message_received", "content": "了解っす！チェックリスト順にやっていきます！", "summary": "soraがリリースチェックリスト着手を報告", "from": "sora"}
+{"ts": "2026-03-03T10:30:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-03T10:31:00+09:00", "type": "tool_use", "content": "docs/v02-schedule.md", "summary": "リリース進捗確認", "tool": "Read"}
+{"ts": "2026-03-03T10:33:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}

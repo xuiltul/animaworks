@@ -545,14 +545,16 @@ class PendingTaskExecutor:
             import os
             import subprocess
 
-            cmd = ["animaworks-tool", name]
+            # name may be composite (e.g. "transcribe:audio"); extract module name
+            module_name = name.split(":")[0] if ":" in name else name
+            cmd = ["animaworks-tool", module_name]
             subcmd = args.get("subcommand", "")
             if subcmd:
                 cmd.append(subcmd)
             cmd.extend(args.get("raw_args", []))
             # Remove subcommand from raw_args if it's already the first element
             if subcmd and args.get("raw_args") and args["raw_args"][0] == subcmd:
-                cmd = ["animaworks-tool", name] + args["raw_args"]
+                cmd = ["animaworks-tool", module_name] + args["raw_args"]
             cmd.append("-j")
 
             env = {

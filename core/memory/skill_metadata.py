@@ -221,23 +221,18 @@ class SkillMetadataService:
         description = ""
         allowed_tools: list[str] = []
 
-        # Parse YAML frontmatter (--- delimited)
-        if text.startswith("---"):
-            parts = text.split("---", 2)
-            if len(parts) >= 3:
-                import yaml
-                try:
-                    fm = yaml.safe_load(parts[1])
-                    if isinstance(fm, dict):
-                        name = fm.get("name", name)
-                        description = fm.get("description", "")
-                        if description:
-                            description = str(description).strip()
-                        allowed_tools = fm.get("allowed_tools", [])
-                        if not isinstance(allowed_tools, list):
-                            allowed_tools = []
-                except Exception:
-                    logger.debug("Failed to parse YAML frontmatter in %s", path, exc_info=True)
+        # Parse YAML frontmatter (line-based parser)
+        from core.memory.frontmatter import parse_frontmatter
+
+        fm, _ = parse_frontmatter(text)
+        if fm:
+            name = fm.get("name", name)
+            description = fm.get("description", "")
+            if description:
+                description = str(description).strip()
+            allowed_tools = fm.get("allowed_tools", [])
+            if not isinstance(allowed_tools, list):
+                allowed_tools = []
 
         # Fallback: extract from ## 概要 section (legacy format)
         if not description:

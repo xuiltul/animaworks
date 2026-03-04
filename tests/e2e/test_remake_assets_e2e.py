@@ -26,17 +26,19 @@ from httpx import ASGITransport, AsyncClient
 
 
 def _make_test_app(animas_dir: Path):
-    """Create a test FastAPI app with the assets router and mock ws_manager."""
+    """Create a test FastAPI app with the assets router and mock ws_manager.
+
+    Uses create_router() to match the main app's route structure (/api/animas/...).
+    """
     from fastapi import FastAPI
 
-    from server.routes.assets import create_assets_router
+    from server.routes import create_router
 
     app = FastAPI()
     app.state.animas_dir = animas_dir
     app.state.ws_manager = MagicMock()
     app.state.ws_manager.broadcast = AsyncMock()
-    router = create_assets_router()
-    app.include_router(router, prefix="/api")
+    app.include_router(create_router())
     return app
 
 
@@ -135,13 +137,16 @@ class TestRemakePreview:
                     "style_from": "style-ref",
                     "vibe_strength": 0.7,
                     "seed": 42,
+                    "image_style": "anime",
                 },
             )
 
         assert resp.status_code == 200
         data = resp.json()
         assert "preview_url" in data
-        assert data["preview_url"] == "/api/animas/target/assets/avatar_fullbody.png"
+        assert "/api/animas/target/assets/" in data["preview_url"]
+        assert "_preview_" in data["preview_url"]
+        assert data["preview_url"].endswith(".png")
         assert data["seed_used"] == 42
         assert "backup_id" in data
         assert data["backup_id"].startswith("assets_backup_")
@@ -181,7 +186,7 @@ class TestRemakePreview:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/animas/target/assets/remake-preview",
-                json={"style_from": "style-ref"},
+                json={"style_from": "style-ref", "image_style": "anime"},
             )
 
         assert resp.status_code == 200
@@ -215,7 +220,7 @@ class TestRemakePreview:
         assert "nonexistent" in resp.json()["detail"]
 
     async def test_remake_preview_missing_fullbody(self, tmp_path):
-        """Returns 404 when style-from anima has no avatar_fullbody.png."""
+        """Returns 404 when style-from anima has no fullbody for default style (realistic)."""
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir()
         _setup_anima_with_assets(animas_dir, "target")
@@ -233,7 +238,8 @@ class TestRemakePreview:
             )
 
         assert resp.status_code == 404
-        assert "avatar_fullbody.png" in resp.json()["detail"]
+        # Implementation defaults to realistic style, so looks for avatar_fullbody_realistic.png
+        assert "avatar_fullbody_realistic.png" in resp.json()["detail"]
 
     async def test_remake_preview_target_not_found(self, tmp_path):
         """Returns 404 when target anima does not exist."""
@@ -273,7 +279,7 @@ class TestRemakePreview:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/animas/target/assets/remake-preview",
-                json={"style_from": "style-ref"},
+                json={"style_from": "style-ref", "image_style": "anime"},
             )
 
         assert resp.status_code == 200
@@ -320,7 +326,7 @@ class TestRemakePreview:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/animas/target/assets/remake-preview",
-                json={"style_from": "style-ref"},
+                json={"style_from": "style-ref", "image_style": "anime"},
             )
 
         assert resp.status_code == 500
@@ -357,11 +363,11 @@ class TestRemakePreview:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post(
                 "/api/animas/target/assets/remake-preview",
-                json={"style_from": "style-ref"},
+                json={"style_from": "style-ref", "image_style": "anime"},
             )
             await client.post(
                 "/api/animas/target/assets/remake-preview",
-                json={"style_from": "style-ref"},
+                json={"style_from": "style-ref", "image_style": "anime"},
             )
 
         # No orphaned backups should remain
@@ -402,7 +408,10 @@ class TestRemakeConfirm:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/animas/target/assets/remake-confirm",
-                json={"backup_id": "assets_backup_20260216_120000"},
+                json={
+                    "backup_id": "assets_backup_20260216_120000",
+                    "image_style": "anime",
+                },
             )
 
         assert resp.status_code == 200
@@ -590,6 +599,7 @@ class TestCLIDryRun:
             seed=None,
             no_backup=False,
             dry_run=True,
+            image_style="anime",
         )
 
         _run(args)
@@ -620,6 +630,7 @@ class TestCLIDryRun:
             seed=None,
             no_backup=False,
             dry_run=True,
+            image_style=None,
         )
 
         _run(args)
@@ -655,6 +666,7 @@ class TestCLIDryRun:
             seed=123,
             no_backup=False,
             dry_run=True,
+            image_style="anime",
         )
 
         _run(args)

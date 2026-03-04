@@ -923,7 +923,8 @@ class ConversationMemory:
         """Finalize if session has ended (10-minute idle gap).
 
         Called from heartbeat to detect session boundaries and trigger
-        episode recording for pending conversation turns.
+        episode recording for pending conversation turns.  Also pre-compresses
+        idle conversations so the next chat start is not blocked by compression.
 
         Returns:
             True if finalization was performed.
@@ -940,13 +941,27 @@ class ConversationMemory:
                 )
                 state.last_finalized_turn_index = len(state.turns)
                 self.save()
-            # No unrecorded turns → skip
+
+            # Check idle: last turn must be older than SESSION_GAP_MINUTES
+            last_turn_ts = datetime.fromisoformat(state.turns[-1].timestamp)
+            idle_seconds = (now_jst() - ensure_aware(last_turn_ts)).total_seconds()
+            is_idle = idle_seconds >= SESSION_GAP_MINUTES * 60
+
+            # Pre-compress idle conversations so next chat is not blocked
+            if is_idle and self.needs_compression():
+                logger.info(
+                    "Pre-compressing idle conversation for %s "
+                    "(idle %.0fs, %d turns)",
+                    self.anima_name, idle_seconds, len(state.turns),
+                )
+                await self._compress()
+                state = self.load()  # reload after compression shifted turns
+
+            # No unrecorded turns → skip episode finalization
             new_turns = state.turns[state.last_finalized_turn_index:]
             if not new_turns:
                 return False
-            last_ts = datetime.fromisoformat(new_turns[-1].timestamp)
-            elapsed = (now_jst() - ensure_aware(last_ts)).total_seconds()
-            if elapsed < SESSION_GAP_MINUTES * 60:
+            if not is_idle:
                 return False
             # Load any pending injected procedures stored by the agent
             procedures, session_id = self._load_pending_procedures()

@@ -189,6 +189,7 @@ class ToolHandler(
             "send_message": self._handle_send_message,
             "post_channel": self._handle_post_channel,
             "read_channel": self._handle_read_channel,
+            "manage_channel": self._handle_manage_channel,
             "read_dm_history": self._handle_read_dm_history,
             "read_file": self._handle_read_file,
             "write_file": self._handle_write_file,
@@ -209,6 +210,7 @@ class ToolHandler(
             "check_permissions":     self._handle_check_permissions,
             "delegate_task":         self._handle_delegate_task,
             "task_tracker":          self._handle_task_tracker,
+            "audit_subordinate":     self._handle_audit_subordinate,
             "refresh_tools": self._handle_refresh_tools,
             "share_tool": self._handle_share_tool,
             "report_procedure_outcome": self._handle_report_procedure_outcome,
@@ -219,6 +221,8 @@ class ToolHandler(
             "update_task": self._handle_update_task,
             "list_tasks": self._handle_list_tasks,
             "plan_tasks": self._handle_plan_tasks,
+            "check_background_task": self._handle_check_background_task,
+            "list_background_tasks": self._handle_list_background_tasks,
         }
 
     # ── Properties and session management ─────────────────────

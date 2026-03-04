@@ -12,6 +12,23 @@
 
 ---
 
+## :rocket: 今すぐ試す — Dockerデモ
+
+AnimaWorksを60秒で体験。設定ウィザード不要、APIキーとDockerだけ。
+
+```bash
+git clone https://github.com/xuiltul/animaworks.git
+cd animaworks/demo
+cp .env.example .env          # ANTHROPIC_API_KEY を貼り付け
+docker compose up              # http://localhost:18500 を開く
+```
+
+3人のAIチーム（マネージャー＋エンジニア＋コーディネーター）が即座に稼働開始。3日分のアクティビティ履歴付き。[デモの詳細はこちら →](demo/README.ja.md)
+
+> 言語・スタイルの切替: `PRESET=ja-anime docker compose up` — [全プリセット一覧](demo/README.ja.md#プリセット)
+
+---
+
 ## クイックスタート
 
 ```bash

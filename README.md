@@ -13,6 +13,23 @@ Each agent has its own name, personality, memory, and schedule. They communicate
 
 ---
 
+## :rocket: Try It Now — Docker Demo
+
+See AnimaWorks in action in 60 seconds. No setup wizard, no configuration — just an API key and Docker.
+
+```bash
+git clone https://github.com/xuiltul/animaworks.git
+cd animaworks/demo
+cp .env.example .env          # paste your ANTHROPIC_API_KEY
+docker compose up              # open http://localhost:18500
+```
+
+A 3-person AI team (manager + engineer + coordinator) starts working immediately, complete with 3 days of pre-loaded history. [Read more about the demo →](demo/README.md)
+
+> Switch language/style: `PRESET=ja-anime docker compose up` — see [all presets](demo/README.md#presets)
+
+---
+
 ## Quick Start
 
 ```bash

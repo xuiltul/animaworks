@@ -26,7 +26,11 @@ In AnimaWorks, tasks are processed across three independent paths:
 | **Heartbeat** | Scheduled check | Situation assessment and planning (Observe → Plan → Reflect) | Observation and judgment only. Writes execution to `pending/` |
 | **TaskExec** | Task appears in `pending/` | Execute LLM tasks | Full execution (including tool use) |
 
-Heartbeat does **not** execute. When it finds a task that needs execution, it writes it out as a JSON file to `state/pending/` and delegates to the TaskExec path.
+Heartbeat does **not** execute. When it finds a task that needs execution, it either delegates via `delegate_task` (if subordinates are available) or writes it out as a JSON file to `state/pending/` for the TaskExec path.
+
+In S-mode (Claude Agent SDK) Chat path, the **Task tool** provides automatic routing:
+- With subordinates → immediately delegated to a subordinate based on the description
+- Without subordinates → runs immediately as a parallel sub-agent
 
 ### Task Queue (add_task / update_task / list_tasks)
 
@@ -409,9 +413,10 @@ Dependent tasks automatically receive these results as context.
 | Tasks with dependencies | `plan_tasks` with `depends_on` |
 | Delegation to subordinates | `delegate_task` (separate mechanism) |
 
-## Task Delegation (delegate_task)
+## Task Delegation (delegate_task / Task tool)
 
 Anima with subordinates (supervisors) can delegate tasks to subordinates using the `delegate_task` tool.
+In S-mode Chat path, the Task tool also supports delegation (auto-routed to subordinates). Include a subordinate's name in the Task tool description for direct assignment; if omitted, the least-loaded subordinate with the best role match is auto-selected.
 
 ### How delegate_task Works
 

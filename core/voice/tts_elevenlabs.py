@@ -12,7 +12,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-from core.voice.tts_base import BaseTTSProvider, TTSConfig
+from core.voice.tts_base import BaseTTSProvider, TTSConfig, TTSSynthesisError
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +48,16 @@ class ElevenLabsTTS(BaseTTSProvider):
     async def synthesize(
         self, text: str, config: TTSConfig
     ) -> AsyncIterator[bytes]:
-        """Stream TTS audio chunks via ElevenLabs streaming endpoint."""
+        """Stream TTS audio chunks via ElevenLabs streaming endpoint.
+
+        Raises:
+            TTSSynthesisError: On HTTP errors or missing API key.
+        """
         api_key = self._get_api_key()
         if not api_key:
-            logger.warning(
-                "ElevenLabs: API key not configured (env: %s)", self._api_key_env,
+            raise TTSSynthesisError(
+                f"ElevenLabs: API key not configured (env: {self._api_key_env})"
             )
-            return
         voice_id = await self._resolve_voice_id(config)
         model_id = config.extra.get("model_id") or self._default_model_id
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
@@ -74,12 +77,19 @@ class ElevenLabsTTS(BaseTTSProvider):
                             yield chunk
             except httpx.HTTPError as e:
                 logger.warning("ElevenLabs synthesis failed: %s", e)
+                raise TTSSynthesisError(f"ElevenLabs synthesis failed: {e}") from e
 
     async def synthesize_full(self, text: str, config: TTSConfig) -> bytes:
-        """Generate complete audio (non-streaming)."""
+        """Generate complete audio (non-streaming).
+
+        Raises:
+            TTSSynthesisError: On synthesis failure.
+        """
         chunks: list[bytes] = []
         async for chunk in self.synthesize(text, config):
             chunks.append(chunk)
+        if not chunks:
+            raise TTSSynthesisError("ElevenLabs: empty response from TTS")
         return b"".join(chunks)
 
     async def list_voices(self) -> list[dict]:

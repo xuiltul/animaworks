@@ -247,8 +247,7 @@ class StreamingIPCHandler:
                     },
                 ))
             except BaseException as e:
-                # CancelledError は正常な asyncio ライフサイクル。
-                if isinstance(e, asyncio.CancelledError):
+                if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
                     raise
                 # Mode S で捕捉されなかった BaseException の安全弁。
                 # エラーレスポンスをキューに入れ、親プロセスに正常通知。

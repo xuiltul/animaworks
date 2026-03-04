@@ -1,0 +1,6 @@
+{"ts": "2026-03-03T09:10:00+09:00", "type": "heartbeat_start", "summary": "Routine patrol started"}
+{"ts": "2026-03-03T09:11:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-03T09:13:00+09:00", "type": "heartbeat_end", "summary": "Patrol complete"}
+{"ts": "2026-03-03T10:30:00+09:00", "type": "heartbeat_start", "summary": "Release day check"}
+{"ts": "2026-03-03T10:31:00+09:00", "type": "tool_use", "content": "docs/v02-schedule.md", "summary": "Final schedule check", "tool": "Read"}
+{"ts": "2026-03-03T10:33:00+09:00", "type": "heartbeat_end", "summary": "Release day check complete"}

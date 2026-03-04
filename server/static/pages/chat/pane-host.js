@@ -96,6 +96,7 @@ function paneHtml() {
                 <path d="M12 5v14M5 12l7 7 7-7" />
               </svg>
             </button>
+            <div class="voice-controls-slot"></div>
             <button type="submit" class="chat-send-btn" data-chat-id="chatPageSendBtn" disabled>
               <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M12 19V5M5 12l7-7 7 7" />
@@ -117,6 +118,7 @@ export function createPaneHost(rootContainer) {
   let nextId = 0;
   const _sharedListeners = [];
   let _sharedBound = false;
+  let _savedPaneStates = null;
 
   const hostEl = rootContainer.querySelector('[data-chat-id="chatPaneHost"]');
 
@@ -146,7 +148,8 @@ export function createPaneHost(rootContainer) {
     ctx.state.container = paneEl;
     ctx.state.rootContainer = rootContainer;
     ctx.state.paneId = id;
-    ctx.state.paneHost = { splitPane, removePane };
+    ctx.state.paneIdx = panes.length;
+    ctx.state.paneHost = { splitPane, removePane, savePaneStates, getPaneState };
 
     ctx.controllers.anima = createAnimaController(ctx);
     ctx.controllers.thread = createThreadController(ctx);
@@ -383,9 +386,22 @@ export function createPaneHost(rootContainer) {
         paneCount: panes.length,
         focusedIdx,
         widths: panes.map(p => p.el.style.flex || ""),
+        paneStates: panes.map(p => ({
+          anima: p.ctx.state.selectedAnima || null,
+          threadId: p.ctx.state.selectedThreadId || "default",
+        })),
       };
       localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
     } catch { /* quota exceeded */ }
+  }
+
+  function savePaneStates() {
+    _saveLayout();
+  }
+
+  function getPaneState(idx) {
+    if (!_savedPaneStates || idx < 0 || idx >= _savedPaneStates.length) return null;
+    return _savedPaneStates[idx];
   }
 
   function _saveSplitterWidths(widths) {
@@ -403,6 +419,10 @@ export function createPaneHost(rootContainer) {
       if (!raw) return;
       const layout = JSON.parse(raw);
       if (!layout || typeof layout.paneCount !== "number") return;
+
+      if (Array.isArray(layout.paneStates)) {
+        _savedPaneStates = layout.paneStates;
+      }
 
       const count = _isMobile() ? 1 : Math.min(layout.paneCount, MAX_PANES);
       while (panes.length < count) addPane();

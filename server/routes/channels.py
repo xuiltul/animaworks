@@ -51,11 +51,13 @@ def create_channels_router() -> APIRouter:
 
     @router.get("/channels")
     async def list_channels(request: Request):
-        """List all shared channels with metadata."""
+        """List all shared channels with metadata including ACL info."""
         shared_dir: Path = request.app.state.shared_dir
         channels_dir = shared_dir / "channels"
         if not channels_dir.exists():
             return []
+
+        from core.messenger import load_channel_meta
 
         channels: list[dict] = []
         for f in sorted(channels_dir.glob("*.jsonl")):
@@ -74,11 +76,18 @@ def create_channels_router() -> APIRouter:
                 except (json.JSONDecodeError, IndexError):
                     pass
 
-            channels.append({
+            channel_info: dict = {
                 "name": name,
                 "message_count": count,
                 "last_post_ts": last_ts,
-            })
+            }
+
+            meta = load_channel_meta(shared_dir, name)
+            if meta is not None and meta.members:
+                channel_info["members"] = meta.members
+                channel_info["description"] = meta.description
+
+            channels.append(channel_info)
 
         return channels
 
@@ -89,7 +98,10 @@ def create_channels_router() -> APIRouter:
         limit: int = 50,
         offset: int = 0,
     ):
-        """Get messages from a specific channel."""
+        """Get messages from a specific channel.
+
+        Web UI requests are treated as ``human`` source and bypass ACL.
+        """
         if err := _validate_name(name):
             return err
         shared_dir: Path = request.app.state.shared_dir
@@ -188,7 +200,7 @@ def create_channels_router() -> APIRouter:
             return err
         shared_dir: Path = request.app.state.shared_dir
         messenger = _get_messenger(shared_dir)
-        mentions = messenger.read_channel_mentions(name, name=anima, limit=limit)
+        mentions = messenger.read_channel_mentions(name, name=anima, limit=limit, source="human")
         return {
             "channel": name,
             "anima": anima,

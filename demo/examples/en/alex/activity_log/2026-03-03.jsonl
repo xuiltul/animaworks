@@ -1,0 +1,9 @@
+{"ts": "2026-03-03T09:00:00+09:00", "type": "heartbeat_start", "summary": "Routine patrol started"}
+{"ts": "2026-03-03T09:01:00+09:00", "type": "cron_executed", "content": "Ran daily standup. Release day — shared final plan on general.", "summary": "daily_standup cron executed", "meta": {"task_name": "daily_standup"}}
+{"ts": "2026-03-03T09:02:00+09:00", "type": "channel_post", "content": "Morning team. Today is release day for v0.2. Kai's on the release checklist. Let's make this a clean launch.", "summary": "Shared release day plan", "channel": "general"}
+{"ts": "2026-03-03T09:03:00+09:00", "type": "heartbeat_end", "summary": "Patrol complete"}
+{"ts": "2026-03-03T09:15:00+09:00", "type": "message_sent", "content": "Release day. Run through the checklist: all tests passing, version bump, CHANGELOG update, build verification. Flag anything that comes up immediately.", "summary": "Delegated release checklist to kai", "from": "alex", "to": "kai", "meta": {"intent": "delegation"}}
+{"ts": "2026-03-03T09:16:30+09:00", "type": "message_received", "content": "On it! Working through the checklist now.", "summary": "kai started release checklist", "from": "kai"}
+{"ts": "2026-03-03T10:30:00+09:00", "type": "heartbeat_start", "summary": "Release progress check"}
+{"ts": "2026-03-03T10:31:00+09:00", "type": "tool_use", "content": "docs/v02-schedule.md", "summary": "Checking release progress", "tool": "Read"}
+{"ts": "2026-03-03T10:33:00+09:00", "type": "heartbeat_end", "summary": "Release progress check complete"}

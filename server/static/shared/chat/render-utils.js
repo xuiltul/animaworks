@@ -4,6 +4,35 @@
 
 const DEFAULT_TOOL_RESULT_TRUNCATE = 500;
 
+const _RE_VOICE_MODE_SUFFIX = /\n*\[voice-mode:[^\]]*\]/g;
+
+function _stripVoiceSuffix(text) {
+  return text ? text.replace(_RE_VOICE_MODE_SUFFIX, "") : text;
+}
+
+const _USER_SVG = `<svg class="chat-msg-avatar-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>`;
+
+function _renderAvatar(name, avatarMap) {
+  if (!avatarMap) return "";
+  const url = avatarMap[name];
+  if (url) {
+    return `<div class="chat-msg-avatar"><img class="chat-msg-avatar-img" src="${url}" alt=""></div>`;
+  }
+  if (name) {
+    const ch = (name.charAt(0) || "?").toUpperCase();
+    return `<div class="chat-msg-avatar"><span class="chat-msg-avatar-initial">${ch}</span></div>`;
+  }
+  return `<div class="chat-msg-avatar">${_USER_SVG}</div>`;
+}
+
+function _wrapRow(role, bubbleHtml, avatarHtml) {
+  if (!avatarHtml) return bubbleHtml;
+  if (role === "user") {
+    return `<div class="chat-msg-row user">${bubbleHtml}${avatarHtml}</div>`;
+  }
+  return `<div class="chat-msg-row assistant">${avatarHtml}${bubbleHtml}</div>`;
+}
+
 /**
  * Render a history message (from conversation API) to HTML.
  * @param {object} msg - Message object with role, content, tool_calls, images, ts, from_person
@@ -19,6 +48,7 @@ export function renderHistoryMessage(msg, opts) {
   const { escapeHtml, renderMarkdown, smartTimestamp } = opts;
   const renderImages = opts.renderChatImages || (() => "");
   const truncLen = opts.truncateLen || DEFAULT_TOOL_RESULT_TRUNCATE;
+  const avatarMap = opts.avatarMap || null;
 
   const ts = msg.ts ? smartTimestamp(msg.ts) : "";
   const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
@@ -34,13 +64,18 @@ export function renderHistoryMessage(msg, opts) {
     const toLabel = msg.to_person
       ? `<div style="font-size:0.72rem; opacity:0.7; margin-bottom:2px;">→ ${escapeHtml(msg.to_person)}</div>`
       : "";
-    return `<div class="chat-bubble assistant">${toLabel}${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
+    const bubble = `<div class="chat-bubble assistant">${toLabel}${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
+    return _wrapRow("assistant", bubble, _renderAvatar(opts.animaName, avatarMap));
   }
 
   const fromLabel = msg.from_person && msg.from_person !== "human"
     ? `<div style="font-size:0.72rem; opacity:0.7; margin-bottom:2px;">${escapeHtml(msg.from_person)}</div>`
     : "";
-  return `<div class="chat-bubble user">${fromLabel}<div class="chat-text">${escapeHtml(msg.content || "")}</div>${tsHtml}</div>`;
+  const userContent = _stripVoiceSuffix(msg.content || "");
+  const bubble = `<div class="chat-bubble user">${fromLabel}<div class="chat-text">${escapeHtml(userContent)}</div>${tsHtml}</div>`;
+  const isAnima = msg.from_person && msg.from_person !== "human";
+  const avatarHtml = _renderAvatar(isAnima ? msg.from_person : null, avatarMap);
+  return _wrapRow("user", bubble, avatarHtml);
 }
 
 /**
@@ -199,13 +234,15 @@ export function renderLiveBubble(msg, opts) {
   const { escapeHtml, renderMarkdown, smartTimestamp } = opts;
   const renderImages = opts.renderChatImages || (() => "");
   const labels = opts.labels || {};
+  const avatarMap = opts.avatarMap || null;
 
   const ts = msg.timestamp ? smartTimestamp(msg.timestamp) : "";
   const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
 
   if (msg.role === "thinking") {
     const thinkLabel = labels.thinking || "考え中...";
-    return `<div class="chat-bubble thinking"><span class="thinking-animation">${thinkLabel}</span></div>`;
+    const bubble = `<div class="chat-bubble thinking"><span class="thinking-animation">${thinkLabel}</span></div>`;
+    return _wrapRow("assistant", bubble, _renderAvatar(opts.animaName, avatarMap));
   }
 
   if (msg.role === "system") {
@@ -214,8 +251,10 @@ export function renderLiveBubble(msg, opts) {
 
   if (msg.role === "user") {
     const imagesHtml = renderImages(msg.images, { animaName: opts.animaName });
-    const textHtml = msg.text ? `<div class="chat-text">${escapeHtml(msg.text)}</div>` : "";
-    return `<div class="chat-bubble user">${imagesHtml}${textHtml}${tsHtml}</div>`;
+    const userText = _stripVoiceSuffix(msg.text || "");
+    const textHtml = userText ? `<div class="chat-text">${escapeHtml(userText)}</div>` : "";
+    const bubble = `<div class="chat-bubble user">${imagesHtml}${textHtml}${tsHtml}</div>`;
+    return _wrapRow("user", bubble, _renderAvatar(null, avatarMap));
   }
 
   // assistant
@@ -241,54 +280,221 @@ export function renderLiveBubble(msg, opts) {
   const compressionHtml = msg.compressing
     ? `<div class="compression-indicator"><span class="tool-spinner"></span>${compLabel}</div>`
     : "";
-  const toolLabel = labels.toolRunning || ((tool) => `${tool} を実行中...`);
-  const toolHtml = msg.activeTool
-    ? `<div class="tool-indicator"><span class="tool-spinner"></span>${typeof toolLabel === "function" ? toolLabel(msg.activeTool) : toolLabel}</div>`
-    : "";
+  let toolHtml = "";
+  const history = msg.toolHistory;
+  if (history && history.length > 0) {
+    toolHtml = renderToolActivityTimeline(history, msg.activeTool, { escapeHtml, labels });
+  } else if (msg.activeTool) {
+    const toolLabel = labels.toolRunning || ((tool) => `${tool} を実行中...`);
+    toolHtml = `<div class="tool-indicator"><span class="tool-spinner"></span>${typeof toolLabel === "function" ? toolLabel(msg.activeTool) : toolLabel}</div>`;
+  }
   const imagesHtml = renderImages(msg.images, { animaName: opts.animaName });
 
-  return `<div class="chat-bubble assistant${streamClass}"${streamIdAttr}>${content}${imagesHtml}${compressionHtml}${toolHtml}${thinkingHtml}${tsHtml}</div>`;
+  const bubble = `<div class="chat-bubble assistant${streamClass}"${streamIdAttr}>${content}${imagesHtml}${compressionHtml}${toolHtml}${thinkingHtml}${tsHtml}</div>`;
+  return _wrapRow("assistant", bubble, _renderAvatar(opts.animaName, avatarMap));
 }
 
 /**
- * Generate HTML for the streaming bubble's inner content (for incremental updates).
+ * Generate the full zoned HTML for a streaming bubble (initial render).
  * @param {object} msg - Streaming message state
  * @param {object} opts - Same as renderLiveBubble opts
  */
 export function renderStreamingBubbleInner(msg, opts) {
+  return `<div class="streaming-zone-text">${_renderTextZoneContent(msg, opts)}</div>`
+    + `<div class="streaming-zone-tools">${_renderToolZoneContent(msg, opts)}</div>`
+    + `<div class="streaming-zone-subordinate">${_renderSubordinateZoneContent(msg, opts)}</div>`
+    + `<div class="streaming-zone-thinking">${_renderThinkingZoneContent(msg, opts)}</div>`;
+}
+
+/**
+ * Update only the specified zone(s) inside an existing streaming bubble DOM element.
+ * @param {HTMLElement} bubble - The .chat-bubble.assistant.streaming element
+ * @param {object} msg - Streaming message state
+ * @param {object} opts - Same as renderLiveBubble opts
+ * @param {string} zone - Which zone to update: "text" | "tools" | "subordinate" | "thinking" | "all"
+ */
+export function updateStreamingZone(bubble, msg, opts, zone = "all") {
+  if (!bubble) return;
+  if (zone === "all") {
+    bubble.innerHTML = renderStreamingBubbleInner(msg, opts);
+    return;
+  }
+  const sel = `.streaming-zone-${zone}`;
+  const el = bubble.querySelector(sel);
+  if (!el) {
+    bubble.innerHTML = renderStreamingBubbleInner(msg, opts);
+    return;
+  }
+  if (zone === "subordinate") {
+    _patchSubordinateZone(el, msg, opts);
+    return;
+  }
+  const renderers = {
+    text: _renderTextZoneContent,
+    tools: _renderToolZoneContent,
+    thinking: _renderThinkingZoneContent,
+  };
+  const fn = renderers[zone];
+  if (fn) el.innerHTML = fn(msg, opts);
+}
+
+function _renderTextZoneContent(msg, opts) {
   const { escapeHtml, renderMarkdown } = opts;
   const labels = opts.labels || {};
 
-  const thinkingHtml = (msg.thinking && msg.thinkingText)
-    ? `<div class="thinking-inline-preview">${escapeHtml(msg.thinkingText)}</div>`
-    : "";
-
-  let mainHtml = "";
   if (msg.heartbeatRelay) {
     const relayLabel = labels.heartbeatRelay || "ハートビート処理中...";
-    mainHtml = `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${relayLabel}</div>`;
-    if (msg.heartbeatText) {
-      mainHtml += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
-    }
-  } else if (msg.afterHeartbeatRelay && !msg.text) {
-    const doneLabel = labels.heartbeatRelayDone || "応答を準備中...";
-    mainHtml = `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${doneLabel}</div>`;
-  } else if (msg.text) {
-    mainHtml = renderMarkdown(msg.text, opts.animaName);
-    mainHtml += '<span class="streaming-cursor">▌</span>';
-  } else {
-    mainHtml = '<span class="streaming-cursor">▌</span>';
+    let html = `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${relayLabel}</div>`;
+    if (msg.heartbeatText) html += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
+    return html;
   }
-
-  let html = mainHtml;
+  if (msg.afterHeartbeatRelay && !msg.text) {
+    const doneLabel = labels.heartbeatRelayDone || "応答を準備中...";
+    return `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${doneLabel}</div>`;
+  }
+  if (msg.text) {
+    let html = renderMarkdown(msg.text, opts.animaName);
+    html += '<span class="streaming-cursor">▌</span>';
+    if (msg.compressing) {
+      const compLabel = labels.compressing || "会話履歴を圧縮中...";
+      html += `<div class="compression-indicator"><span class="tool-spinner"></span>${compLabel}</div>`;
+    }
+    return html;
+  }
+  let html = '<span class="streaming-cursor">▌</span>';
   if (msg.compressing) {
     const compLabel = labels.compressing || "会話履歴を圧縮中...";
     html += `<div class="compression-indicator"><span class="tool-spinner"></span>${compLabel}</div>`;
   }
+  return html;
+}
+
+function _renderToolZoneContent(msg, opts) {
+  const { escapeHtml } = opts;
+  const labels = opts.labels || {};
+  const history = msg.toolHistory;
+  if (history && history.length > 0) {
+    return renderToolActivityTimeline(history, msg.activeTool, { escapeHtml, labels });
+  }
   if (msg.activeTool) {
     const toolLabel = labels.toolRunning || ((tool) => `${tool} を実行中...`);
-    html += `<div class="tool-indicator"><span class="tool-spinner"></span>${typeof toolLabel === "function" ? toolLabel(msg.activeTool) : toolLabel}</div>`;
+    return `<div class="tool-indicator"><span class="tool-spinner"></span>${typeof toolLabel === "function" ? toolLabel(msg.activeTool) : toolLabel}</div>`;
   }
-  html += thinkingHtml;
+  return "";
+}
+
+function _renderSubordinateZoneContent(msg, opts) {
+  const { escapeHtml } = opts;
+  const subActivity = msg.subordinateActivity;
+  if (!subActivity || Object.keys(subActivity).length === 0) return "";
+  let html = "";
+  for (const [subName, act] of Object.entries(subActivity)) {
+    if (act.type === "inbox_processing_end") continue;
+    const icon = act.type === "inbox_processing_start"
+      ? "⏳" : (act.type === "tool_end" || act.type === "tool_use") ? "✓" : "🔧";
+    const label = act.summary || act.tool || act.type;
+    html += `<div class="subordinate-activity subordinate-activity--animate" data-sub-name="${escapeHtml(subName)}">
+      <img class="subordinate-avatar" src="/api/animas/${encodeURIComponent(subName)}/avatar" alt="" onerror="this.style.display='none'">
+      <span class="subordinate-name">${escapeHtml(subName)}</span>
+      <span class="subordinate-tool">${icon} ${escapeHtml(label)}</span>
+    </div>`;
+  }
   return html;
+}
+
+/**
+ * Patch the subordinate zone with minimal DOM ops — reuse existing elements
+ * if the same anima name is already present, avoiding img re-fetch.
+ */
+function _patchSubordinateZone(container, msg, opts) {
+  const { escapeHtml } = opts;
+  const subActivity = msg.subordinateActivity;
+  if (!subActivity || Object.keys(subActivity).length === 0) {
+    if (container.innerHTML) container.innerHTML = "";
+    return;
+  }
+
+  const existingByName = new Map();
+  for (const el of container.querySelectorAll(".subordinate-activity[data-sub-name]")) {
+    existingByName.set(el.dataset.subName, el);
+  }
+
+  const desiredNames = new Set();
+  for (const [subName, act] of Object.entries(subActivity)) {
+    if (act.type === "inbox_processing_end") continue;
+    desiredNames.add(subName);
+
+    const icon = act.type === "inbox_processing_start"
+      ? "⏳" : (act.type === "tool_end" || act.type === "tool_use") ? "✓" : "🔧";
+    const label = act.summary || act.tool || act.type;
+
+    const existing = existingByName.get(subName);
+    if (existing) {
+      const toolSpan = existing.querySelector(".subordinate-tool");
+      if (toolSpan) toolSpan.textContent = `${icon} ${label}`;
+    } else {
+      const div = document.createElement("div");
+      div.className = "subordinate-activity subordinate-activity--animate";
+      div.dataset.subName = subName;
+      div.innerHTML = `<img class="subordinate-avatar" src="/api/animas/${encodeURIComponent(subName)}/avatar" alt="" onerror="this.style.display='none'">` +
+        `<span class="subordinate-name">${escapeHtml(subName)}</span>` +
+        `<span class="subordinate-tool">${icon} ${escapeHtml(label)}</span>`;
+      container.appendChild(div);
+    }
+  }
+
+  for (const [name, el] of existingByName) {
+    if (!desiredNames.has(name)) el.remove();
+  }
+}
+
+function _renderThinkingZoneContent(msg, opts) {
+  const { escapeHtml } = opts;
+  if (msg.thinking && msg.thinkingText) {
+    return `<div class="thinking-inline-preview">${escapeHtml(msg.thinkingText)}</div>`;
+  }
+  return "";
+}
+
+/**
+ * Render a collapsible tool activity timeline.
+ */
+function renderToolActivityTimeline(history, activeTool, { escapeHtml, labels }) {
+  const completedCount = history.filter(e => e.completed).length;
+  const totalCount = history.length;
+
+  let items = "";
+  for (const entry of history) {
+    if (entry.completed) {
+      const icon = entry.is_error
+        ? '<span class="tool-activity-icon tool-activity-error">✗</span>'
+        : '<span class="tool-activity-icon tool-activity-ok">✓</span>';
+      const dur = entry.duration_ms != null ? `<span class="tool-activity-dur">${_formatDuration(entry.duration_ms)}</span>` : "";
+      const summary = entry.result_summary
+        ? `<span class="tool-activity-summary">${escapeHtml(entry.result_summary.slice(0, 120))}</span>`
+        : "";
+      items += `<div class="tool-activity-item${entry.is_error ? " tool-activity-item--error" : ""}">${icon}<span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${dur}${summary}</div>`;
+    } else {
+      const detailSpan = entry.detail
+        ? `<span class="tool-activity-detail">${escapeHtml(entry.detail.slice(0, 120))}</span>`
+        : "";
+      items += `<div class="tool-activity-item tool-activity-item--running"><span class="tool-spinner"></span><span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${detailSpan}<span class="tool-activity-dur">実行中</span></div>`;
+    }
+  }
+
+  const summaryLabel = activeTool
+    ? `${escapeHtml(activeTool)} を実行中... (${completedCount}/${totalCount})`
+    : `${completedCount} ツール完了`;
+
+  return `<div class="tool-activity-timeline">
+    <details${activeTool ? " open" : ""}>
+      <summary class="tool-activity-header"><span class="tool-spinner"${activeTool ? "" : ' style="display:none"'}></span>${summaryLabel}</summary>
+      <div class="tool-activity-list">${items}</div>
+    </details>
+  </div>`;
+}
+
+function _formatDuration(ms) {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }

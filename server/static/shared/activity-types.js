@@ -28,6 +28,7 @@ export const TYPE_ICONS = {
   board:        { emoji: "📋", lucide: "clipboard-list" },
   notification: { emoji: "🔔", lucide: "bell" },
   status:       { emoji: "🔵", lucide: "circle" },
+  tool:         { emoji: "🔧", lucide: "wrench" },
   system:       { emoji: "⚙️", lucide: "settings" },
   session:      { emoji: "📄", lucide: "file-text" },
 };

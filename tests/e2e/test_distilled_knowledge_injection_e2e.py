@@ -207,19 +207,22 @@ class TestDistilledKnowledgeInjectionE2E:
         result_empty = await engine._channel_c_related_knowledge(
             ["test"], restrict_to=[],
         )
-        assert result_empty == "", "Channel C should be empty when restrict_to=[]"
+        # Returns (medium_text, untrusted_text) tuple
+        assert result_empty == ("", ""), "Channel C should be empty when restrict_to=[]"
 
         # With restrict_to having entries -> Channel C should NOT short-circuit
         result_overflow = await engine._channel_c_related_knowledge(
             ["test"], restrict_to=["knowledge-00"],
         )
-        assert isinstance(result_overflow, str)
+        assert isinstance(result_overflow, tuple)
+        assert len(result_overflow) == 2
 
         # restrict_to=None -> legacy path, should not short-circuit
         result_none = await engine._channel_c_related_knowledge(
             ["test"], restrict_to=None,
         )
-        assert isinstance(result_none, str)
+        assert isinstance(result_none, tuple)
+        assert len(result_none) == 2
 
     def test_procedures_keyword_and_vector_search_scope(
         self, data_dir: Path, make_anima: object,

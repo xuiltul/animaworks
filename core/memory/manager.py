@@ -164,7 +164,13 @@ class MemoryManager:
         return self._read(self.anima_dir / "identity.md")
 
     def read_injection(self) -> str:
-        return self._read(self.anima_dir / "injection.md")
+        """Read injection.md, stripping YAML frontmatter if present."""
+        from core.memory.frontmatter import strip_frontmatter
+
+        raw = self._read(self.anima_dir / "injection.md")
+        if raw and raw.lstrip().startswith("---"):
+            return strip_frontmatter(raw)
+        return raw
 
     def read_specialty_prompt(self) -> str:
         """Read the role-specific specialty prompt."""

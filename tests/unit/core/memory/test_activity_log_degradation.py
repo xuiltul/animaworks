@@ -346,6 +346,13 @@ class TestMessengerSendDmLogs:
 class TestFanoutBoardMentionsStoppedAnimas:
     """Tests for ToolHandler._fanout_board_mentions() including stopped Animas."""
 
+    @pytest.fixture(autouse=True)
+    def _bypass_acl(self):
+        """Bypass channel ACL checks — these tests use MagicMock messenger."""
+        from unittest.mock import patch
+        with patch("core.messenger.is_channel_member", return_value=True):
+            yield
+
     def test_mentions_sent_to_stopped_animas(self, tmp_path: Path):
         """Verify mentions are delivered to both running and stopped Animas."""
         from core.tooling.handler import ToolHandler

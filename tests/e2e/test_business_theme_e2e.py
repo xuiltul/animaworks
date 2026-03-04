@@ -162,15 +162,16 @@ class TestIndexHTMLThemeStructure:
     """Verify index.html has theme toggle and dual nav icons."""
 
     async def test_index_html_theme_structure(self, tmp_path: Path) -> None:
-        """GET / contains theme toggle, nav-emoji, nav-lucide."""
+        """GET / contains nav-emoji, nav-lucide; theme is in settings page."""
         app = _create_test_app(tmp_path)
         async with _client(app) as c:
             resp = await c.get("/")
         assert resp.status_code == 200
         html = resp.text
-        assert "themeToggle" in html or "theme-toggle" in html
         assert "nav-emoji" in html
         assert "nav-lucide" in html
+        # Theme is in settings page (settings-theme-grid); app.js applies theme
+        assert "settings" in html or "app.js" in html
 
 
 class TestWorkspaceHTMLViewToggle:

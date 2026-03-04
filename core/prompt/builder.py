@@ -736,6 +736,9 @@ def build_system_prompt(
         for m in common_skill_metas:
             desc = f": {m.description}" if m.description else ""
             skill_lines.append(f"- {m.name}{_common}{desc}")
+        for m in procedure_metas:
+            desc = f": {m.description}" if m.description else ""
+            skill_lines.append(f"- {m.name} (手順){desc}")
         skill_names = "\n".join(skill_lines) or _none
         shared_users_list = ", ".join(memory.list_shared_users()) or _none
 
@@ -830,8 +833,8 @@ def build_system_prompt(
             parts.append(load_prompt("builder/heartbeat_tool_instruction"))
         except FileNotFoundError:
             parts.append(
-                "Heartbeatでは**観察・報告・計画**にツールを使ってください。\n"
-                "- OK: チャネル読み取り、記憶検索、メッセージ送信、タスク更新、pending作成\n"
+                "Heartbeatでは**観察・報告・計画・フォローアップ**にツールを使ってください。\n"
+                "- OK: チャネル読み取り、記憶検索、メッセージ送信、タスク更新、pending作成、外部ツール確認\n"
                 "- NG: コード変更、ファイル大量編集、長時間の分析・調査\n"
                 "重い作業が必要な場合は state/pending/ にタスクファイルを書き出してください。"
             )
@@ -854,9 +857,9 @@ def build_system_prompt(
             if _non_s:
                 parts.append(_non_s)
 
-    # External tools guide (skip for heartbeat)
+    # External tools guide (include for heartbeat too for observation)
     _EXTERNAL_TOOLS_KEYWORDS = {"外部ツール", "External Tools", "external tools"}
-    if not is_heartbeat and permissions and any(kw in permissions for kw in _EXTERNAL_TOOLS_KEYWORDS) and (tool_registry or personal_tools):
+    if permissions and any(kw in permissions for kw in _EXTERNAL_TOOLS_KEYWORDS) and (tool_registry or personal_tools):
         if execution_mode == "a":
             categories = ", ".join(sorted(tool_registry or []))
             if personal_tools:

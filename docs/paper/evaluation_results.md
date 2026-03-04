@@ -1,6 +1,6 @@
 # Memory System Ablation Study Results
 
-> Generated: 2026-03-01 16:13 UTC
+> Generated: 2026-03-04 09:38 UTC
 > Dataset: Synthetic business domain (30 knowledge + 15 episodes + 100 noise)
 > Mode: mock
 
@@ -21,7 +21,7 @@ Automatic priming improves search precision by pre-activating relevant memories 
 
 ### Interpretation
 
-Precision@3 showed negligible change (+0.00). Precision@5 showed negligible change (+0.00). Recall@5 showed negligible change (+0.00). Priming injected an average of 0 tokens per query. The priming effect was marginal in this preliminary study. Larger sample sizes may be needed to detect a statistically significant difference.
+Precision@3 showed negligible change (+0.00). Precision@5 showed negligible change (+0.00). Recall@5 showed negligible change (+0.00). The priming effect was marginal in this preliminary study. Larger sample sizes may be needed to detect a statistically significant difference.
 
 ![Priming Comparison](figures/priming_comparison.png)
 

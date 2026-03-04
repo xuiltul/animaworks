@@ -32,7 +32,7 @@ export function createActivityController(ctx) {
   async function loadActivity() {
     if (!state.selectedAnima) return;
     try {
-      const data = await api(`/api/activity/recent?hours=6&anima=${encodeURIComponent(state.selectedAnima)}`);
+      const data = await api(`/api/activity/recent?hours=6&limit=50&anima=${encodeURIComponent(state.selectedAnima)}`);
       const events = data.events || [];
       const feed = $root("chatActivityFeed");
       if (!feed) return;

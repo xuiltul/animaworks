@@ -70,6 +70,12 @@ def sockets_dir(tmp_path: Path) -> Path:
 class TestBoardMentionFanout:
     """Tests for _handle_post_channel() and _fanout_board_mentions()."""
 
+    @pytest.fixture(autouse=True)
+    def _bypass_acl(self):
+        """Bypass channel ACL checks — these tests use MagicMock messenger."""
+        with patch("core.messenger.is_channel_member", return_value=True):
+            yield
+
     def test_fanout_at_all_sends_to_running_animas(
         self,
         handler_with_messenger: ToolHandler,

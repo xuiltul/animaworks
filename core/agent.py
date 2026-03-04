@@ -116,7 +116,13 @@ class AgentCore(
         )
 
     def set_interrupt_event(self, event: asyncio.Event) -> None:
-        """Set interrupt event for execution cancellation."""
+        """Set interrupt event for execution cancellation.
+
+        Sets both the per-task ContextVar (thread-safe for parallel streams)
+        and the legacy instance attribute (backward compat for single-thread).
+        """
+        from core.execution.base import _active_interrupt_event
+        _active_interrupt_event.set(event)
         self._interrupt_event = event
         if hasattr(self._executor, "_interrupt_event"):
             self._executor._interrupt_event = event

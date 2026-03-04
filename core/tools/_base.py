@@ -80,29 +80,47 @@ def get_credential(
             _log_resolved(credential_name, key_name, "config.json", val)
             return val
 
-    # 2. shared/credentials.json
+    # 2. vault.json (encrypted credential store)
+    if env_var:
+        val = _lookup_vault_credential(env_var)
+        if val:
+            _log_resolved(credential_name, key_name, "vault.json", val)
+            return val
+
+    # 3. shared/credentials.json (legacy, pre-migration)
     if env_var:
         val = _lookup_shared_credentials(env_var)
         if val:
             _log_resolved(credential_name, key_name, "shared/credentials.json", val)
             return val
 
-    # 3. Environment variable fallback
+    # 4. Environment variable fallback
     if env_var:
         val = os.environ.get(env_var)
         if val:
             _log_resolved(credential_name, key_name, f"env:{env_var}", val)
             return val
 
-    # 4. Error with guidance
+    # 5. Error with guidance
     sources = [f"config.json credentials.{credential_name}.{key_name}"]
     if env_var:
-        sources.append("shared/credentials.json")
+        sources.append("vault.json")
         sources.append(f"environment variable {env_var}")
     raise ToolConfigError(
         f"Tool '{tool_name}' requires credential '{credential_name}'. "
         f"Set it in: {' or '.join(sources)}"
     )
+
+
+def _lookup_vault_credential(key: str) -> str | None:
+    """Look up a key in the vault's ``shared`` section."""
+    try:
+        from core.config.vault import get_vault_manager
+
+        vm = get_vault_manager()
+        return vm.get("shared", key)
+    except Exception:
+        return None
 
 
 def _lookup_shared_credentials(key: str) -> str | None:

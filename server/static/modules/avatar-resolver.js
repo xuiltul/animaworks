@@ -5,6 +5,11 @@
  * If the asset doesn't exist, callers should show the initial placeholder.
  */
 
+import { getCachedImage, invalidateCache } from "./image-cache.js";
+
+/** @type {Map<string, string|null>} animaName -> resolved URL (or null) */
+const _headProbeCache = new Map();
+
 export function isRealisticMode() {
   return document.body.classList.contains("mode-realistic");
 }
@@ -48,19 +53,56 @@ export function assetUrl(animaName, filename) {
 
 /**
  * Probe candidates via HEAD and return the first available URL (or null).
+ * Results are cached per animaName to avoid repeated HEAD requests.
  * @param {string} animaName
  * @param {string[]} candidates - list of filenames to try
  * @returns {Promise<string|null>}
  */
 export async function resolveAvatar(animaName, candidates) {
+  if (_headProbeCache.has(animaName)) return _headProbeCache.get(animaName);
+
   for (const filename of candidates) {
     const url = assetUrl(animaName, filename);
     try {
       const resp = await fetch(url, { method: "HEAD" });
-      if (resp.ok) return url;
+      if (resp.ok) {
+        _headProbeCache.set(animaName, url);
+        return url;
+      }
     } catch {
       /* network error — try next */
     }
   }
+  _headProbeCache.set(animaName, null);
   return null;
+}
+
+/**
+ * Resolve avatar URL and return a cached/resized version via image-cache.
+ * @param {string} animaName
+ * @param {string[]} candidates
+ * @param {"S"|"M"|"L"} size
+ * @returns {Promise<string|null>}
+ */
+export async function resolveCachedAvatar(animaName, candidates, size = "S") {
+  const url = await resolveAvatar(animaName, candidates);
+  if (!url) return null;
+  try {
+    return await getCachedImage(url, size);
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Invalidate HEAD probe cache and image cache for a given anima.
+ * Call when assets are regenerated.
+ * @param {string} animaName
+ */
+export async function invalidateAvatarCache(animaName) {
+  const oldUrl = _headProbeCache.get(animaName);
+  _headProbeCache.delete(animaName);
+  if (oldUrl) {
+    await invalidateCache(oldUrl);
+  }
 }

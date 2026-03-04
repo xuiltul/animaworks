@@ -43,24 +43,19 @@ class TestSkeletonCloneE2E:
         app = _create_static_app()
         client = TestClient(app)
 
-        resp = client.get("/workspace/modules/character.js")
+        resp = client.get("/workspace/modules/character-loader.js")
         assert resp.status_code == 200, (
-            f"Expected 200 for character.js, got {resp.status_code}"
+            f"Expected 200 for character-loader.js, got {resp.status_code}"
         )
 
         content = resp.text
 
-        # The served file must use SkeletonUtils.clone() for proper
-        # skeleton cloning of skinned meshes.
         assert "SkeletonUtils.clone(" in content, (
-            "character.js must use SkeletonUtils.clone() for skeleton cloning"
+            "character-loader.js must use SkeletonUtils.clone() for skeleton cloning"
         )
 
-        # The old broken pattern scene.clone(true) must NOT be present
-        # in the _loadGLTFCached function.  We check the whole file to
-        # be safe — there should be no remaining scene.clone(true) calls.
         assert "scene.clone(true)" not in content, (
-            "character.js must NOT contain scene.clone(true); "
+            "character-loader.js must NOT contain scene.clone(true); "
             "use SkeletonUtils.clone() instead"
         )
 
@@ -113,13 +108,13 @@ class TestSkeletonCloneE2E:
         - Cached models go through SkeletonUtils.clone() before being
           returned (models from cache are never returned raw)
         """
-        character_js = (
+        loader_js = (
             _PROJECT_ROOT
             / "server"
             / "static"
             / "workspace"
             / "modules"
-            / "character.js"
+            / "character-loader.js"
         )
         model_cache_js = (
             _PROJECT_ROOT
@@ -130,34 +125,29 @@ class TestSkeletonCloneE2E:
             / "model-cache.js"
         )
 
-        assert character_js.exists(), f"character.js not found at {character_js}"
+        assert loader_js.exists(), f"character-loader.js not found at {loader_js}"
         assert model_cache_js.exists(), (
             f"model-cache.js not found at {model_cache_js}"
         )
 
-        char_content = character_js.read_text(encoding="utf-8")
+        char_content = loader_js.read_text(encoding="utf-8")
         cache_content = model_cache_js.read_text(encoding="utf-8")
 
-        # model-cache.js must export modelCache
         assert "export const modelCache" in cache_content or (
             "export { modelCache" in cache_content
             or "export {modelCache" in cache_content
         ), "model-cache.js must export modelCache"
 
-        # character.js must import modelCache from ./model-cache.js
         assert "modelCache" in char_content, (
-            "character.js must reference modelCache"
+            "character-loader.js must reference modelCache"
         )
-        assert "model-cache.js" in char_content, (
-            "character.js must import from ./model-cache.js"
+        assert "model-cache" in char_content, (
+            "character-loader.js must import from model-cache"
         )
 
-        # Every code path in _loadGLTFCached must clone via SkeletonUtils.
-        # Extract the _loadGLTFCached function body and verify that all
-        # return statements use SkeletonUtils.clone().
         func_start = char_content.find("async function _loadGLTFCached")
         assert func_start != -1, (
-            "character.js must contain _loadGLTFCached function"
+            "character-loader.js must contain _loadGLTFCached function"
         )
 
         # Find the function body by counting braces

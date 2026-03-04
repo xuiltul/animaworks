@@ -19,6 +19,7 @@ let state = {
   activeThreadId: "default",
   threads: {},                  // { [animaName]: [{ id, label, unread }] }
   chatMessagesByThread: {},     // { [animaName]: { [threadId]: Message[] } }
+  chatAvatarMap: {},            // { [animaName]: url | null }
 };
 
 const listeners = new Set();

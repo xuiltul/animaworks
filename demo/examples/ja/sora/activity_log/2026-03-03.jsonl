@@ -1,0 +1,10 @@
+{"ts": "2026-03-03T09:10:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-03T09:11:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-03T09:12:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-03T09:15:00+09:00", "type": "message_received", "content": "リリース日だ。チェックリストに沿って最終確認をお願いしたい。テスト全通過、バージョンバンプ、CHANGELOG更新、ビルド確認。問題あったらすぐ報告して。", "summary": "kaitoからリリースチェックリストの委譲", "from": "kaito", "meta": {"intent": "delegation"}}
+{"ts": "2026-03-03T09:16:30+09:00", "type": "message_sent", "content": "了解っす！チェックリスト順にやっていきます！", "summary": "リリースチェックリスト着手", "from": "sora", "to": "kaito"}
+{"ts": "2026-03-03T09:30:00+09:00", "type": "tool_use", "content": "npm test -- --ci", "summary": "全テスト実行", "tool": "Bash"}
+{"ts": "2026-03-03T09:45:00+09:00", "type": "tool_use", "content": "npm run build", "summary": "プロダクションビルド", "tool": "Bash"}
+{"ts": "2026-03-03T10:00:00+09:00", "type": "tool_use", "content": "CHANGELOG.md", "summary": "CHANGELOG更新", "tool": "Write"}
+{"ts": "2026-03-03T10:15:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-03T10:17:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}

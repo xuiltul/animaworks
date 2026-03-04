@@ -185,6 +185,40 @@ class MemoryToolsMixin:
                 }
                 self._memory.write_procedure_with_meta(path, content, metadata)
                 auto_frontmatter_applied = True
+            elif (rel.startswith("knowledge/") and rel.endswith(".md")
+                    and mode == "overwrite"
+                    and not content.lstrip().startswith("---")):
+                import yaml as _yaml_km
+                from core.schemas import now_jst
+                from core.memory.frontmatter import strip_content_frontmatter
+                ts = now_jst().isoformat()
+                metadata: dict[str, Any] = {
+                    "confidence": 0.5,
+                    "created_at": ts,
+                    "updated_at": ts,
+                    "source_episodes": 0,
+                    "auto_consolidated": False,
+                    "version": 1,
+                }
+                _trust_rank_map_pre = {0: "external_web", 1: "mixed"}
+                _min_trust_pre = getattr(self, "_min_trust_seen", 2)
+                if _min_trust_pre >= 2:
+                    _trust_file_pre = self._anima_dir / "run" / "min_trust_seen"
+                    try:
+                        if _trust_file_pre.exists():
+                            _min_trust_pre = min(
+                                _min_trust_pre,
+                                int(_trust_file_pre.read_text(encoding="utf-8").strip()),
+                            )
+                    except (ValueError, OSError):
+                        pass
+                _origin_pre = _trust_rank_map_pre.get(_min_trust_pre, "")
+                if _origin_pre:
+                    metadata["origin"] = _origin_pre
+                _clean = strip_content_frontmatter(content)
+                _fm = _yaml_km.dump(metadata, default_flow_style=False, allow_unicode=True)
+                path.write_text(f"---\n{_fm}---\n\n{_clean}", encoding="utf-8")
+                auto_frontmatter_applied = True
             elif mode == "append":
                 with open(path, "a", encoding="utf-8") as f:
                     f.write(content)
@@ -244,6 +278,7 @@ class MemoryToolsMixin:
                     logger.warning("Failed to update RAG index for %s: %s", rel, e)
 
         # Auto-update RAG index for knowledge writes + origin frontmatter
+        # (skip origin injection when auto-frontmatter already handled it)
         if rel.startswith("knowledge/") and rel.endswith(".md"):
             _trust_rank_map = {0: "external_web", 1: "mixed"}
             min_trust = getattr(self, "_min_trust_seen", 2)
@@ -260,7 +295,7 @@ class MemoryToolsMixin:
 
             origin = _trust_rank_map.get(min_trust, "")
 
-            if origin and mode != "append":
+            if origin and mode != "append" and not auto_frontmatter_applied:
                 current = path.read_text(encoding="utf-8")
                 if not current.startswith("---\norigin:"):
                     path.write_text(

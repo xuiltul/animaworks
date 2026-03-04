@@ -33,6 +33,7 @@ from core.execution.base import (
     BaseExecutor,
     ExecutionResult,
     StreamDisconnectedError,
+    TokenUsage,
     ToolCallRecord,
     _truncate_for_record,
 )
@@ -500,10 +501,16 @@ class CodexSDKExecutor(BaseExecutor):
         if not response_text and tool_records:
             response_text = _synthesise_fallback(tool_records)
 
-        if tracker:
-            usage = getattr(turn, "usage", None)
-            if usage:
-                tracker.update(_usage_to_dict(usage), include_output_in_ratio=True)
+        usage_acc: TokenUsage | None = None
+        raw_usage = getattr(turn, "usage", None)
+        if raw_usage:
+            ud = _usage_to_dict(raw_usage)
+            usage_acc = TokenUsage(
+                input_tokens=ud.get("input_tokens", 0) or ud.get("prompt_tokens", 0) or 0,
+                output_tokens=ud.get("output_tokens", 0) or ud.get("completion_tokens", 0) or 0,
+            )
+            if tracker:
+                tracker.update(ud, include_output_in_ratio=True)
 
         replied_to = self._read_replied_to_file()
         return ExecutionResult(
@@ -511,6 +518,7 @@ class CodexSDKExecutor(BaseExecutor):
             result_message=_wrap_result_message(turn, thread),
             replied_to_from_transcript=replied_to,
             tool_call_records=tool_records,
+            usage=usage_acc,
         )
 
     # ── Streaming execution ──────────────────────────────────
@@ -557,6 +565,7 @@ class CodexSDKExecutor(BaseExecutor):
         all_tool_records: list[ToolCallRecord] = []
         turn_result: Any = None
         active_thread: Any = None
+        usage_acc = TokenUsage()
 
         async def _stream_turn(tid: str | None) -> AsyncGenerator[dict[str, Any], None]:
             nonlocal turn_result, active_thread
@@ -616,12 +625,12 @@ class CodexSDKExecutor(BaseExecutor):
                             )
                 elif etype == "turn.completed":
                     turn_result = _wrap_result_message(event, thread)
-                    usage = getattr(event, "usage", None)
-                    if usage:
-                        tracker.update(
-                            _usage_to_dict(usage),
-                            include_output_in_ratio=True,
-                        )
+                    raw_usage = getattr(event, "usage", None)
+                    if raw_usage:
+                        ud = _usage_to_dict(raw_usage)
+                        usage_acc.input_tokens = ud.get("input_tokens", 0) or ud.get("prompt_tokens", 0) or 0
+                        usage_acc.output_tokens = ud.get("output_tokens", 0) or ud.get("completion_tokens", 0) or 0
+                        tracker.update(ud, include_output_in_ratio=True)
                     saved_tid = _get_thread_id(thread)
                     if saved_tid:
                         _save_thread_id(self._anima_dir, saved_tid, session_type)
@@ -709,4 +718,5 @@ class CodexSDKExecutor(BaseExecutor):
             "result_message": turn_result,
             "replied_to_from_transcript": replied_to,
             "tool_call_records": [asdict(r) for r in all_tool_records],
+            "usage": usage_acc.to_dict(),
         }

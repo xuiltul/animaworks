@@ -57,13 +57,14 @@ class TestTokensCSS:
         assert "--aw-emoji-display" in content
         assert "--aw-icon-display" in content
 
-    def test_realistic_mode_pauses_animations(self):
+    def test_realistic_mode_hides_emoji_and_shows_icons(self):
         content = TOKENS_CSS.read_text()
         mode_start = content.index(".mode-realistic {")
         mode_block = content[
             mode_start : content.index("}", mode_start) + 1
         ]
-        assert "paused" in mode_block
+        assert "--aw-emoji-display: none" in mode_block
+        assert "--aw-icon-display: inline-flex" in mode_block
 
     def test_realistic_mode_hides_emoji(self):
         content = TOKENS_CSS.read_text()

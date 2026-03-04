@@ -330,6 +330,7 @@ export class ChatSessionManager extends EventTarget {
       const streamingMsg = {
         role: "assistant", text: progress.full_text || "", streaming: true,
         activeTool: progress.active_tool || null,
+        toolHistory: progress.tool_history || [],
         timestamp: new Date().toISOString(),
         thinkingText: "", thinking: false, streamId,
       };

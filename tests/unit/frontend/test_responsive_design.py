@@ -165,6 +165,9 @@ _PASSIVE_HOVER_SELECTORS = {
     ".assets-expression-regen-btn",
     ".org-tree-card",
     ".settings-theme-card",
+    ".chat-split-pane-btn",
+    ".chat-anima-tabs-header .anima-tab-wrap",
+    ".chat-close-pane-btn",
 }
 
 

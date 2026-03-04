@@ -242,7 +242,7 @@ class AnimaRunner:
         Checks both ``chat`` and ``heartbeat`` session types, including
         thread-specific subdirectories.
         """
-        for session_type in ("chat", "heartbeat"):
+        for session_type in ("chat", "heartbeat", "task_exec"):
             # Collect all thread_ids with orphaned journals
             thread_ids = StreamingJournal.list_orphan_thread_ids(self._anima_dir, session_type)
 
@@ -261,8 +261,10 @@ class AnimaRunner:
                     recovery.trigger,
                 )
 
-                # Record recovered text in conversation memory
-                if recovery.recovered_text and self.anima:
+                # task_exec has no conversation history — just confirm and log
+                if session_type == "task_exec":
+                    StreamingJournal.confirm_recovery(self._anima_dir, session_type, thread_id=thread_id)
+                elif recovery.recovered_text and self.anima:
                     try:
                         from core.memory.conversation import ConversationMemory
                         conv_memory = ConversationMemory(

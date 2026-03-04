@@ -410,9 +410,15 @@
 
 .org-tree-status {
   flex-shrink: 0;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
+}
+
+.org-tree-status.status-thinking {
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 6px 2px var(--aw-color-warning);
 }
 
 .org-tree-meta {

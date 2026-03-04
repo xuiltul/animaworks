@@ -169,6 +169,12 @@ class TestBoardMentionDepthCheck:
 class TestSuppressBoardFanout:
     """Verify that _suppress_board_fanout flag controls fanout in _handle_post_channel."""
 
+    @pytest.fixture(autouse=True)
+    def _bypass_acl(self):
+        """Bypass channel ACL checks — these tests use MagicMock messenger."""
+        with patch("core.messenger.is_channel_member", return_value=True):
+            yield
+
     @pytest.fixture
     def anima_dir(self, tmp_path: Path) -> Path:
         d = tmp_path / "animas" / "test-anima"

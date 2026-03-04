@@ -239,6 +239,7 @@ body {
   background: var(--aw-color-warning);
   animation: pulse-amber 1.2s ease-in-out infinite;
   animation-play-state: var(--aw-animation-play-state);
+  box-shadow: 0 0 6px 2px color-mix(in srgb, var(--aw-color-warning) 50%, transparent 50%);
 }
 
 .status-error {
@@ -250,8 +251,8 @@ body {
 }
 
 @keyframes pulse-amber {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.3); }
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 6px 2px color-mix(in srgb, var(--aw-color-warning) 50%, transparent 50%); }
+  50% { opacity: 0.5; transform: scale(1.3); box-shadow: 0 0 10px 4px color-mix(in srgb, var(--aw-color-warning) 70%, transparent 30%); }
 }
 
 /* ── Anima Visual States ──────────────────── */

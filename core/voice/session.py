@@ -15,7 +15,7 @@ from typing import Any
 from core.i18n import t
 from core.voice.sentence_splitter import StreamingSentenceSplitter
 from core.voice.stt import VoiceSTT
-from core.voice.tts_base import BaseTTSProvider, TTSConfig
+from core.voice.tts_base import BaseTTSProvider, TTSConfig, TTSSynthesisError
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ VOICE_MODE_SUFFIX = (
 
 # ── TTS output sanitization ──────────────────────────────────
 
-_RE_EMOTION_TAG = re.compile(r"<!--\s*emotion:\s*\{.*?\}\s*-->", re.DOTALL)
+_RE_HTML_COMMENT = re.compile(r"<!--[\s\S]*?-->")
 _RE_MD_CODE_BLOCK = re.compile(r"```[\s\S]*?```")
 _RE_MD_HEADING = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 _RE_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
@@ -45,13 +45,11 @@ _RE_MD_LIST_BULLET = re.compile(r"^[\s]*[-*+]\s+", re.MULTILINE)
 _RE_MD_LIST_NUMBERED = re.compile(r"^[\s]*\d+\.\s+", re.MULTILINE)
 _RE_MD_TABLE_PIPE = re.compile(r"\|")
 _RE_MD_HR = re.compile(r"^-{3,}$", re.MULTILINE)
-_RE_TRAILING_HTML_COMMENT = re.compile(r"\s*<!--[\s\S]*?-->\s*$", re.DOTALL)
 
 
 def sanitize_for_tts(text: str) -> str:
-    """Strip Markdown formatting and emotion metadata for TTS consumption."""
-    text = _RE_EMOTION_TAG.sub("", text)
-    text = _RE_TRAILING_HTML_COMMENT.sub("", text)
+    """Strip Markdown formatting and HTML comments for TTS consumption."""
+    text = _RE_HTML_COMMENT.sub("", text)
     text = _RE_MD_CODE_BLOCK.sub("", text)
     text = _RE_MD_HEADING.sub("", text)
     text = _RE_MD_BOLD.sub(r"\1", text)
@@ -126,6 +124,7 @@ class VoiceSession:
         self._processing = False
         self._tts_available: bool | None = None
         self._splitter = StreamingSentenceSplitter()
+        self._consecutive_tts_failures: int = 0
 
     async def handle_audio_chunk(self, data: bytes) -> None:
         """Receive audio chunk from browser, accumulate in buffer."""
@@ -236,6 +235,7 @@ class VoiceSession:
         except (TypeError, AttributeError):
             pass
 
+        response_done_sent = False
         try:
             async for ipc_response in self._supervisor.send_request_stream(
                 anima_name=self._anima_name,
@@ -264,6 +264,7 @@ class VoiceSession:
                         "type": "response_done",
                         "emotion": emotion,
                     })
+                    response_done_sent = True
                     break
 
                 if ipc_response.chunk:
@@ -312,12 +313,21 @@ class VoiceSession:
                             "type": "response_done",
                             "emotion": emotion,
                         })
+                        response_done_sent = True
                         break
 
         except Exception as e:
             logger.exception("Voice session IPC error: %s", e)
             await self._send_error(str(e))
         finally:
+            if not response_done_sent:
+                try:
+                    await self._ws.send_json({
+                        "type": "response_done",
+                        "emotion": "neutral",
+                    })
+                except Exception:
+                    pass
             self._tts_playing = False
             self._interrupted = False
             self._splitter.flush()
@@ -334,9 +344,23 @@ class VoiceSession:
                     break
                 await self._ws.send_bytes(audio_chunk)
             await self._ws.send_json({"type": "tts_done"})
+            self._consecutive_tts_failures = 0
+        except TTSSynthesisError as e:
+            self._consecutive_tts_failures += 1
+            logger.warning("TTS synthesis failed (%d consecutive): %s", self._consecutive_tts_failures, e)
+            if self._consecutive_tts_failures >= 3:
+                self.invalidate_tts_health()
+            try:
+                await self._ws.send_json({"type": "tts_error", "message": "TTS synthesis failed"})
+                await self._ws.send_json({"type": "tts_done"})
+            except Exception:
+                pass
         except Exception as e:
-            logger.warning("TTS failed: %s", e)
-            await self._ws.send_json({"type": "tts_done"})
+            logger.warning("TTS send error: %s", e)
+            try:
+                await self._ws.send_json({"type": "tts_done"})
+            except Exception:
+                pass
 
     async def handle_interrupt(self) -> None:
         """Handle barge-in: stop TTS, prepare for new STT."""

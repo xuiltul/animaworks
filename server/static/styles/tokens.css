@@ -143,8 +143,6 @@
 
 /* ── Realistic Display Mode ─────────────────────────── */
 .mode-realistic {
-  --aw-animation-play-state: paused;
-  --aw-animation-duration-multiplier: 0;
   --aw-emoji-display: none;
   --aw-icon-display: inline-flex;
 }

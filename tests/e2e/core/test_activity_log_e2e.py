@@ -130,9 +130,12 @@ async def test_activity_log_priming_integration(
 
     # Verify each event type appears in the formatted output.
     # DM entries are grouped under a "DM" header (not shown as "dm_sent").
+    # channel_post entries are grouped under "#channel_name" header.
     for etype in event_types:
         if etype == "dm_sent":
             assert "DM" in result, "DM group header not found in priming output"
+        elif etype == "channel_post":
+            assert "#general" in result, "Channel group header not found in priming output"
         else:
             assert etype in result, f"Event type '{etype}' not found in priming output"
 

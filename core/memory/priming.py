@@ -48,9 +48,10 @@ _BUDGET_HEARTBEAT = 200
 # Channel-specific token budgets (default distribution)
 _BUDGET_SENDER_PROFILE = 500
 _BUDGET_RECENT_ACTIVITY = 1300  # Unified: old B(600) + E(700)
-_BUDGET_RELATED_KNOWLEDGE = 700
+_BUDGET_RELATED_KNOWLEDGE = 1200
 _BUDGET_SKILL_MATCH = 200
 _BUDGET_PENDING_TASKS = 300
+_BUDGET_RELATED_EPISODES = 500
 
 # Rough characters-per-token for Japanese/English mixed text
 _CHARS_PER_TOKEN = 4
@@ -76,6 +77,7 @@ class PrimingResult:
     matched_skills: list[str] = field(default_factory=list)
     pending_tasks: str = ""
     recent_outbound: str = ""
+    episodes: str = ""
 
     def is_empty(self) -> bool:
         """Return True if no memories were primed."""
@@ -87,6 +89,7 @@ class PrimingResult:
             and not self.matched_skills
             and not self.pending_tasks
             and not self.recent_outbound
+            and not self.episodes
         )
 
     def total_chars(self) -> int:
@@ -99,6 +102,7 @@ class PrimingResult:
             + sum(len(s) for s in self.matched_skills)
             + len(self.pending_tasks)
             + len(self.recent_outbound)
+            + len(self.episodes)
         )
 
     def estimated_tokens(self) -> int:
@@ -112,12 +116,13 @@ class PrimingResult:
 class PrimingEngine:
     """Automatic memory priming engine.
 
-    Executes 5-channel parallel memory retrieval:
+    Executes 6-channel parallel memory retrieval:
       A. Sender profile (direct file read)
       B. Recent activity (unified activity log, replaces old episodes + channels)
       C. Related knowledge (dense vector search)
       D. Skill matching (description-based 3-tier match with vector search)
       E. Pending tasks (persistent task queue summary)
+      F. Episodes (dense vector search over episode memory)
     """
 
     def __init__(
@@ -189,11 +194,13 @@ class PrimingEngine:
         # Channel C: conditional based on distilled knowledge injection
         if overflow_files is None:
             # Legacy path: no full injection, run full Channel C
-            channel_c_coro = self._channel_c_related_knowledge(keywords)
+            channel_c_coro = self._channel_c_related_knowledge(
+                keywords, message=message,
+            )
         elif overflow_files:
             # Overflow path: search only among non-injected files
             channel_c_coro = self._channel_c_related_knowledge(
-                keywords, restrict_to=overflow_files,
+                keywords, restrict_to=overflow_files, message=message,
             )
         else:
             # All files injected: skip Channel C entirely
@@ -203,14 +210,15 @@ class PrimingEngine:
 
             channel_c_coro = _noop()
 
-        # Execute 5 channels + outbound collection in parallel
+        # Execute 6 channels + outbound collection in parallel
         results = await asyncio.gather(
             self._channel_a_sender_profile(sender_name),
-            self._channel_b_recent_activity(sender_name, keywords),  # Unified channel
+            self._channel_b_recent_activity(sender_name, keywords, channel=channel),
             channel_c_coro,
             self._channel_d_skill_match(message, keywords, channel=channel),
             self._channel_e_pending_tasks(),
             self._collect_recent_outbound(),
+            self._channel_f_episodes(keywords, message=message),
             return_exceptions=True,
         )
 
@@ -228,6 +236,7 @@ class PrimingEngine:
         matched_skills = results[3] if isinstance(results[3], list) else []
         pending_tasks = results[4] if isinstance(results[4], str) else ""
         recent_outbound = results[5] if isinstance(results[5], str) else ""
+        episodes = results[6] if isinstance(results[6], str) else ""
 
         # Log exceptions if any
         for i, r in enumerate(results):
@@ -235,11 +244,13 @@ class PrimingEngine:
                 logger.warning("Priming channel %d failed: %s", i, r)
 
         # Apply token budget limits (distribute based on budget)
-        budget_profile = int(_BUDGET_SENDER_PROFILE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
-        budget_activity = max(400, int(_BUDGET_RECENT_ACTIVITY * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS)))
-        budget_knowledge = int(_BUDGET_RELATED_KNOWLEDGE * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
-        budget_skills = int(_BUDGET_SKILL_MATCH * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
-        budget_tasks = int(_BUDGET_PENDING_TASKS * (token_budget / _DEFAULT_MAX_PRIMING_TOKENS))
+        budget_ratio = token_budget / _DEFAULT_MAX_PRIMING_TOKENS
+        budget_profile = int(_BUDGET_SENDER_PROFILE * budget_ratio)
+        budget_activity = max(400, int(_BUDGET_RECENT_ACTIVITY * budget_ratio))
+        budget_knowledge = int(_BUDGET_RELATED_KNOWLEDGE * budget_ratio)
+        budget_skills = int(_BUDGET_SKILL_MATCH * budget_ratio)
+        budget_tasks = int(_BUDGET_PENDING_TASKS * budget_ratio)
+        budget_episodes = int(_BUDGET_RELATED_EPISODES * budget_ratio)
 
         # Split knowledge budget: trusted/medium gets priority, untrusted gets remainder
         truncated_knowledge = self._truncate_head(related_knowledge, budget_knowledge)
@@ -257,17 +268,19 @@ class PrimingEngine:
             matched_skills=matched_skills[:max(1, budget_skills // 50)],  # ~50 tokens per skill name
             pending_tasks=self._truncate_head(pending_tasks, budget_tasks),
             recent_outbound=recent_outbound,
+            episodes=self._truncate_tail(episodes, budget_episodes),
         )
 
         logger.info(
             "Priming complete: %d chars (~%d tokens), sender_prof=%d, activity=%d, "
-            "knowledge=%d, skills=%d, outbound=%d",
+            "knowledge=%d, skills=%d, episodes=%d, outbound=%d",
             result.total_chars(),
             result.estimated_tokens(),
             len(result.sender_profile),
             len(result.recent_activity),
             len(result.related_knowledge),
             len(result.matched_skills),
+            len(result.episodes),
             len(result.recent_outbound),
         )
 
@@ -343,27 +356,48 @@ class PrimingEngine:
             logger.warning("Channel A: Failed to read profile for %s: %s", sender_name, e)
             return ""
 
-    async def _channel_b_recent_activity(self, sender_name: str, keywords: list[str]) -> str:
+    # Event types that are noise for heartbeat/cron priming — tool invocations
+    # and heartbeat lifecycle events crowd out actionable messages.
+    _HEARTBEAT_NOISE_TYPES = frozenset({
+        "tool_use", "tool_result",
+        "heartbeat_start", "heartbeat_end", "heartbeat_reflection",
+        "inbox_processing_start", "inbox_processing_end",
+    })
+
+    async def _channel_b_recent_activity(
+        self, sender_name: str, keywords: list[str], *, channel: str = "",
+    ) -> str:
         """Channel B: Recent activity from unified activity log.
 
         Replaces old Channel B (episodes) and Channel E (shared channels).
         Reads from activity_log/{date}.jsonl for a unified timeline,
         plus shared/channels/*.jsonl for cross-Anima visibility.
         Falls back to episodes/ if activity_log is empty (migration period).
+
+        When *channel* is ``"heartbeat"`` or starts with ``"cron:"``,
+        tool_use / tool_result / heartbeat lifecycle events are filtered
+        out so that the limited priming budget contains only actionable
+        communication events (messages, channel posts, errors, etc.).
         """
         from core.memory.activity import ActivityLogger
 
         activity = ActivityLogger(self.anima_dir)
-        entries = activity.recent(days=2, limit=100)  # Top-50 selected after scoring below
+        entries = activity.recent(days=2, limit=100)
+
+        is_background = channel in ("heartbeat",) or channel.startswith("cron:")
+
+        if is_background and entries:
+            entries = [
+                e for e in entries
+                if e.type not in self._HEARTBEAT_NOISE_TYPES
+            ]
 
         # Always read shared channels for cross-Anima visibility
         channel_entries = self._read_shared_channels(limit_per_channel=5)
         entries.extend(channel_entries)
 
         if entries:
-            # Prioritize: sender-related entries first, then by recency
             prioritized = self._prioritize_entries(entries, sender_name, keywords)
-            # Apply limit after scoring
             prioritized = prioritized[:50]
             return activity.format_for_priming(prioritized, budget_tokens=1300)
 
@@ -401,8 +435,15 @@ class PrimingEngine:
         result: list[ActivityEntry] = []
 
         try:
+            from core.messenger import is_channel_member
+
             for channel_file in sorted(channels_dir.glob("*.jsonl")):
                 channel_name = channel_file.stem
+
+                # ── ACL check: skip channels this Anima cannot access ──
+                if not is_channel_member(self.shared_dir, channel_name, anima_name):
+                    continue
+
                 try:
                     content = channel_file.read_text(encoding="utf-8")
                 except OSError:
@@ -514,6 +555,10 @@ class PrimingEngine:
                     from_type = (entry.meta or {}).get("from_type", "")
                     if from_type != "anima":
                         score += 15.0
+                    else:
+                        origin_chain = (entry.meta or {}).get("origin_chain") or []
+                        if "human" in origin_chain:
+                            score += 15.0
                 else:
                     score += 15.0
 
@@ -685,6 +730,7 @@ class PrimingEngine:
         self,
         keywords: list[str],
         restrict_to: list[str] | None = None,
+        message: str = "",
     ) -> tuple[str, str]:
         """Channel C: Related knowledge search (vector search).
 
@@ -700,6 +746,8 @@ class PrimingEngine:
             restrict_to: If provided, only return results whose source file
                 stem is in this list (used for overflow-only search when
                 distilled knowledge injection handles the rest).
+            message: Original message text. Prepended (truncated to 200 chars)
+                to the keyword query to preserve phrase-level semantics.
         """
         if not self.knowledge_dir.is_dir() or not keywords:
             logger.debug("Channel C: No knowledge dir or no keywords")
@@ -711,8 +759,8 @@ class PrimingEngine:
                 logger.debug("Channel C: Retriever unavailable")
                 return ("", "")
 
-            # Build query from keywords
-            query = " ".join(keywords[:5])
+            kw_part = " ".join(keywords[:5])
+            query = f"{message[:200]} {kw_part}" if message else kw_part
             anima_name = self.anima_dir.name
 
             # Vector search (personal + shared common_knowledge)
@@ -720,7 +768,7 @@ class PrimingEngine:
                 query=query,
                 anima_name=anima_name,
                 memory_type="knowledge",
-                top_k=3,
+                top_k=5,
                 include_shared=True,
             )
 
@@ -795,12 +843,8 @@ class PrimingEngine:
 
         Returns list of skill/procedure names (not full content, max 5).
         Searches personal skills/, common_skills/, and procedures/.
-        Skipped for heartbeat/cron triggers to avoid false positives.
         """
         _MAX_SKILL_MATCHES = 5
-
-        if channel in ("heartbeat", "cron"):
-            return []
 
         if not message and not keywords:
             return []
@@ -904,6 +948,62 @@ class PrimingEngine:
             except Exception as e2:
                 logger.warning("Channel D: Tier 1/2 fallback also failed: %s", e2)
                 return []
+
+    async def _channel_f_episodes(
+        self,
+        keywords: list[str],
+        *,
+        message: str = "",
+    ) -> str:
+        """Channel F: Episode memory search (vector search).
+
+        Searches episodes/ via dense vector retrieval to surface
+        semantically relevant past experiences.  Complements Channel B
+        (recent activity timeline) by looking further back in time and
+        ranking by semantic similarity rather than recency alone.
+        """
+        if not self.episodes_dir.is_dir() or not keywords:
+            return ""
+
+        try:
+            retriever = self._get_or_create_retriever()
+            if retriever is None:
+                return ""
+
+            kw_part = " ".join(keywords[:5])
+            query = f"{message[:200]} {kw_part}" if message else kw_part
+            anima_name = self.anima_dir.name
+
+            results = retriever.search(
+                query=query,
+                anima_name=anima_name,
+                memory_type="episodes",
+                top_k=3,
+            )
+
+            if not results:
+                return ""
+
+            retriever.record_access(results, anima_name)
+
+            parts: list[str] = []
+            for i, result in enumerate(results):
+                source = result.metadata.get("source_file", result.doc_id)
+                parts.append(
+                    f"--- Episode {i + 1} (score: {result.score:.3f}, "
+                    f"source: {source}) ---\n"
+                    f"{result.content}\n"
+                )
+
+            logger.debug(
+                "Channel F: Episode search returned %d results",
+                len(results),
+            )
+            return "\n".join(parts)
+
+        except Exception as e:
+            logger.warning("Channel F: Episode search failed: %s", e)
+            return ""
 
     async def _channel_e_pending_tasks(self) -> str:
         """Channel E: Pending task queue summary + active parallel tasks.
@@ -1172,7 +1272,7 @@ class PrimingEngine:
         # Filter stopwords and short words
         general_keywords = [
             w for w in words
-            if len(w) >= 2 and w.lower() not in stopwords
+            if len(w) >= 1 and w.lower() not in stopwords
         ]
 
         # Entity matches from general keywords
@@ -1292,6 +1392,12 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
                 trust="untrusted", origin=ORIGIN_EXTERNAL_PLATFORM,
             ))
             parts.append("")
+
+    if result.episodes:
+        parts.append(t("priming.episodes_header"))
+        parts.append("")
+        parts.append(wrap_priming("episodes", result.episodes, trust="medium"))
+        parts.append("")
 
     if result.matched_skills:
         parts.append(t("priming.matched_skills_header"))

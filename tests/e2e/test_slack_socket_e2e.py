@@ -250,6 +250,13 @@ class TestSlackSocketModeE2E:
     ):
         """Socket Mode messages can be read back via Messenger.receive()."""
         make_anima("sakura")
+        # Messenger.receive() filters messages when from_person not in config.animas.
+        # Slack messages have from_person='slack:U_R'. Clear animas so filter is skipped.
+        from core.config.models import load_config, save_config, invalidate_cache
+        cfg = load_config()
+        cfg.animas.clear()
+        save_config(cfg, data_dir / "config.json")
+        invalidate_cache()
 
         mgr, handlers = _make_socket_manager(
             data_dir,

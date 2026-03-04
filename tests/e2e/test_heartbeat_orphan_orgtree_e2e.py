@@ -33,8 +33,8 @@ class TestOrgTreeE2E:
         prompt = build_system_prompt(memory=memory)
 
         assert "組織全体" in prompt
-        assert "rin (開発)" in prompt
-        assert "kotoha (広報)" in prompt
+        assert "rin (開発" in prompt
+        assert "kotoha (広報" in prompt
         assert "aoi" in prompt
         assert "← あなた" in prompt
 

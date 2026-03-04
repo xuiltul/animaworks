@@ -466,9 +466,11 @@ class TestActivityEndpoint:
         data = resp.json()
 
         assert len(data["events"]) == 4
-        assert data["total"] == 10
+        # total reflects loaded entries (per-Anima cap = offset+limit = 7)
+        assert data["total"] == 7
         assert data["offset"] == 3
         assert data["limit"] == 4
+        # has_more is True because the Anima had more entries than the cap
         assert data["has_more"] is True
 
     async def test_empty_activity_log_no_errors(self, tmp_path):
@@ -540,7 +542,8 @@ class TestActivityEndpoint:
             resp = await client.get("/api/activity/recent?hours=48")
         data = resp.json()
         assert len(data["events"]) <= 200
-        assert data["total"] == 250
+        # total reflects per-Anima cap (offset+limit = 200), not absolute count
+        assert data["total"] == 200
         assert data["has_more"] is True
 
     async def test_multiple_animas_merged(self, tmp_path):

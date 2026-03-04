@@ -1,4 +1,30 @@
-## Task Delegation Rules
+## How Task Execution Works
+
+### Task Tool Auto-Routing (S-mode)
+
+When you use the Task tool, the framework automatically routes based on your org structure.
+
+**With subordinates** → Immediately delegated to a subordinate
+- Include a subordinate's name in the description to assign them directly
+  Example: "Have alice run the API tests"
+  Example: "bob handles the code review"
+- If no name is given, the least-loaded subordinate with the best role match is auto-selected
+- Falls back to state/pending/ if all subordinates are disabled
+
+**Without subordinates** → Runs immediately as a parallel sub-agent
+- The sub-agent shares your identity, tools, and MCP servers
+- It cannot access your conversation history or short-term memory
+
+### Task Tool vs delegate_task
+
+| Method | Use case | Subordinate selection |
+|--------|----------|----------------------|
+| Task tool | Quick delegation (auto-routed) | Include name in description |
+| delegate_task | Explicit delegation (with deadline and detailed instructions) | Specify via name parameter |
+
+Use delegate_task for delegation from paths that don't have the Task tool (Heartbeat, Inbox, etc.).
+
+### Writing to state/pending/ (for later self-execution)
 
 When writing tasks to state/pending/, follow these principles.
 The executor (TaskExec) runs as a sub-agent. It shares your identity, behavior guidelines, memory directories, and organization info, but **cannot access your conversation history, short-term memory, or Priming results**.

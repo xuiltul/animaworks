@@ -187,20 +187,12 @@ def _list_available_names(
 
 
 def _strip_frontmatter(text: str) -> tuple[str, dict[str, Any]]:
-    """Strip YAML frontmatter and return (content, parsed_frontmatter)."""
-    if not text.startswith("---"):
-        return text, {}
+    """Strip YAML frontmatter and return (content, parsed_frontmatter).
 
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return text, {}
+    Delegates to the canonical line-based parser to avoid false splits
+    when YAML values contain ``---``.
+    """
+    from core.memory.frontmatter import parse_frontmatter
 
-    import yaml
-    try:
-        fm = yaml.safe_load(parts[1])
-        if not isinstance(fm, dict):
-            fm = {}
-    except Exception:
-        fm = {}
-
-    return parts[2].lstrip("\n"), fm
+    meta, body = parse_frontmatter(text)
+    return body, meta

@@ -266,7 +266,8 @@ class TestKnowledgeOriginFrontmatter:
         )
 
         written = (knowledge_dir / "test-topic.md").read_text(encoding="utf-8")
-        assert written.startswith("---\norigin: external_web\n---\n")
+        assert written.startswith("---")
+        assert "origin: external_web" in written
         assert "# Test" in written
 
     def test_mixed_session_adds_mixed_origin(self, tmp_path):
@@ -283,7 +284,8 @@ class TestKnowledgeOriginFrontmatter:
         )
 
         written = (knowledge_dir / "mixed-topic.md").read_text(encoding="utf-8")
-        assert written.startswith("---\norigin: mixed\n---\n")
+        assert written.startswith("---")
+        assert "origin: mixed" in written
 
     def test_trusted_session_no_origin_added(self, tmp_path):
         handler = _make_handler(tmp_path)
@@ -299,8 +301,10 @@ class TestKnowledgeOriginFrontmatter:
         )
 
         written = (knowledge_dir / "trusted-topic.md").read_text(encoding="utf-8")
-        assert not written.startswith("---\norigin:")
-        assert written == "# Trusted\nClean data"
+        assert written.startswith("---")
+        assert "origin:" not in written.split("---")[1]  # no origin in frontmatter
+        assert "# Trusted" in written
+        assert "Clean data" in written
 
     def test_append_mode_does_not_add_frontmatter(self, tmp_path):
         handler = _make_handler(tmp_path)
@@ -357,7 +361,8 @@ class TestKnowledgeOriginFrontmatter:
         )
 
         written = (knowledge_dir / "from-sdk.md").read_text(encoding="utf-8")
-        assert written.startswith("---\norigin: external_web\n---\n")
+        assert written.startswith("---")
+        assert "origin: external_web" in written
 
 
 # ── Phase 3: consolidation origin chain ───────────────────────

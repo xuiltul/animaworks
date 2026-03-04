@@ -121,9 +121,28 @@ def cli_main(argv: list[str] | None = None) -> None:
     # ── Execute ────────────────────────────────────────────
 
     if args.command == "pipeline":
-        pipe = ImageGenPipeline(Path(args.anima_dir))
+        from core.config.models import ImageGenConfig, load_config
+
+        try:
+            image_config = load_config().image_gen
+        except Exception:
+            image_config = ImageGenConfig()
+
+        prompt = args.prompt
+
+        # Auto-convert anime prompt when realistic style is configured
+        if image_config.image_style == "realistic":
+            from core.tools.image_gen import _looks_like_anime_prompt
+
+            if _looks_like_anime_prompt(prompt):
+                from core.tools._image_clients import _convert_anime_to_realistic
+
+                prompt = _convert_anime_to_realistic(prompt)
+                print(f"[info] Auto-converted anime prompt to realistic", file=sys.stderr)
+
+        pipe = ImageGenPipeline(Path(args.anima_dir), config=image_config)
         result = pipe.generate_all(
-            prompt=args.prompt,
+            prompt=prompt,
             negative_prompt=args.negative,
             skip_existing=not args.no_skip,
             steps=args.steps,

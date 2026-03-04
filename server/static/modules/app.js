@@ -189,9 +189,12 @@ async function init() {
   setInterval(loadSystemStatus, 60000);
 }
 
-// Start when DOM is ready
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
-} else {
-  init();
+// Start when DOM is ready (guarded against double-init from duplicate module URLs)
+if (!window.__awAppInitialized) {
+  window.__awAppInitialized = true;
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 }

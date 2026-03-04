@@ -189,7 +189,9 @@ class TestHandleRouting:
             {"path": "knowledge/new.md", "content": "new content"},
         )
         assert "Written to" in result
-        assert (anima_dir / "knowledge" / "new.md").read_text(encoding="utf-8") == "new content"
+        written = (anima_dir / "knowledge" / "new.md").read_text(encoding="utf-8")
+        assert "new content" in written
+        assert written.startswith("---")  # auto-frontmatter
 
     def test_write_memory_file_append(self, handler: ToolHandler, anima_dir: Path):
         (anima_dir / "knowledge").mkdir(exist_ok=True)
@@ -1049,7 +1051,9 @@ class TestMemoryWriteSecurity:
             {"path": "knowledge/safe.md", "content": "safe content"},
         )
         assert "Written to" in result
-        assert (anima_dir / "knowledge" / "safe.md").read_text(encoding="utf-8") == "safe content"
+        written = (anima_dir / "knowledge" / "safe.md").read_text(encoding="utf-8")
+        assert "safe content" in written
+        assert written.startswith("---")  # auto-frontmatter
 
     def test_write_memory_file_path_traversal_blocked(
         self, handler: ToolHandler, tmp_path: Path,
@@ -1372,7 +1376,9 @@ class TestWriteMemoryFileToolCreation:
             {"path": "knowledge/note.md", "content": "just a note"},
         )
         assert "Written to" in result
-        assert (anima_dir / "knowledge" / "note.md").read_text(encoding="utf-8") == "just a note"
+        written = (anima_dir / "knowledge" / "note.md").read_text(encoding="utf-8")
+        assert "just a note" in written
+        assert written.startswith("---")  # auto-frontmatter
 
     def test_writing_tools_readme_not_py_skips_permission(
         self, handler: ToolHandler, memory: MagicMock, anima_dir: Path,

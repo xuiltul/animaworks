@@ -31,6 +31,82 @@ def _validate_name(name: str, kind: str = "name") -> None:
         raise RecipientNotFoundError(f"Invalid {kind}: {name!r}")
 
 
+# ── Channel ACL helpers ──────────────────────────────────
+
+
+@dataclass
+class ChannelMeta:
+    """Channel metadata including ACL membership list.
+
+    If ``members`` is empty, the channel is open (all Animas can access).
+    """
+    members: list[str]
+    created_by: str = ""
+    created_at: str = ""
+    description: str = ""
+
+
+def load_channel_meta(shared_dir: Path, channel: str) -> ChannelMeta | None:
+    """Load channel metadata from ``shared/channels/{channel}.meta.json``.
+
+    Returns ``None`` when no meta file exists (channel is open / legacy).
+    """
+    meta_path = shared_dir / "channels" / f"{channel}.meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+        return ChannelMeta(
+            members=data.get("members", []),
+            created_by=data.get("created_by", ""),
+            created_at=data.get("created_at", ""),
+            description=data.get("description", ""),
+        )
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to load channel meta for %s: %s", channel, exc)
+        return None
+
+
+def save_channel_meta(shared_dir: Path, channel: str, meta: ChannelMeta) -> None:
+    """Persist channel metadata to ``shared/channels/{channel}.meta.json``."""
+    channels_dir = shared_dir / "channels"
+    channels_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = channels_dir / f"{channel}.meta.json"
+    data = {
+        "members": meta.members,
+        "created_by": meta.created_by,
+        "created_at": meta.created_at,
+        "description": meta.description,
+    }
+    meta_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def is_channel_member(
+    shared_dir: Path,
+    channel: str,
+    anima_name: str,
+    *,
+    source: str = "anima",
+) -> bool:
+    """Check whether *anima_name* may access *channel*.
+
+    Rules:
+    - ``human`` source always has access (Web UI bypass).
+    - If no ``.meta.json`` exists the channel is open — everyone has access.
+    - If ``members`` list is empty the channel is open.
+    - Otherwise the anima must appear in the ``members`` list.
+    """
+    if source == "human":
+        return True
+    meta = load_channel_meta(shared_dir, channel)
+    if meta is None or not meta.members:
+        return True
+    return anima_name in meta.members
+
+
 @dataclass
 class InboxItem:
     """Message paired with its file path for selective archiving."""
@@ -167,6 +243,13 @@ class Messenger:
 
         poster = from_name or self.anima_name
 
+        # ── ACL check ──
+        if not is_channel_member(self.shared_dir, channel, self.anima_name, source=source):
+            logger.warning(
+                "ACL denied: %s cannot post to #%s", self.anima_name, channel,
+            )
+            return
+
         # Validate from_name: must be a known anima or "human"
         if poster != "human":
             try:
@@ -222,9 +305,18 @@ class Messenger:
 
     def read_channel(
         self, channel: str, limit: int = 20, human_only: bool = False,
+        *, source: str = "anima",
     ) -> list[dict]:
         """Read recent messages from a shared channel."""
         _validate_name(channel, "channel name")
+
+        # ── ACL check ──
+        if not is_channel_member(self.shared_dir, channel, self.anima_name, source=source):
+            logger.warning(
+                "ACL denied: %s cannot read #%s", self.anima_name, channel,
+            )
+            return []
+
         filepath = self.shared_dir / "channels" / f"{channel}.jsonl"
         if not filepath.exists():
             return []
@@ -251,12 +343,13 @@ class Messenger:
 
     def read_channel_mentions(
         self, channel: str, name: str | None = None, limit: int = 10,
+        *, source: str = "anima",
     ) -> list[dict]:
         """Read messages mentioning @name from a shared channel."""
         _validate_name(channel, "channel name")
         target = name or self.anima_name
         mention_tag = f"@{target}"
-        all_msgs = self.read_channel(channel, limit=1000)
+        all_msgs = self.read_channel(channel, limit=1000, source=source)
         mentions = [m for m in all_msgs if mention_tag in m.get("text", "")]
         return mentions[-limit:]
 

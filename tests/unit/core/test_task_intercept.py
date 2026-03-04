@@ -116,7 +116,7 @@ class TestPreToolHookTaskBranch:
 
     @pytest.fixture()
     def hook(self, tmp_path: Path):
-        """Build a pre-tool hook for testing."""
+        """Build a pre-tool hook for testing (supervisor mode)."""
         try:
             import claude_agent_sdk.types  # noqa: F401
         except ImportError:
@@ -129,11 +129,11 @@ class TestPreToolHookTaskBranch:
         (anima_dir / "state" / "pending").mkdir(parents=True)
 
         with patch("core.execution._sdk_hooks._cache_subordinate_paths", return_value=(set(), set(), set())):
-            return _build_pre_tool_hook(anima_dir)
+            return _build_pre_tool_hook(anima_dir, has_subordinates=True)
 
     @pytest.fixture()
     def hook_with_callback(self, tmp_path: Path):
-        """Build a pre-tool hook with on_task_intercepted callback."""
+        """Build a pre-tool hook with on_task_intercepted callback (supervisor mode)."""
         try:
             import claude_agent_sdk.types  # noqa: F401
         except ImportError:
@@ -148,7 +148,7 @@ class TestPreToolHookTaskBranch:
         callback = MagicMock()
 
         with patch("core.execution._sdk_hooks._cache_subordinate_paths", return_value=(set(), set(), set())):
-            hook_fn = _build_pre_tool_hook(anima_dir, on_task_intercepted=callback)
+            hook_fn = _build_pre_tool_hook(anima_dir, on_task_intercepted=callback, has_subordinates=True)
 
         return hook_fn, callback, anima_dir
 

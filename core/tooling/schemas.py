@@ -239,6 +239,43 @@ CHANNEL_TOOLS: list[dict[str, Any]] = [
             "required": ["peer"],
         },
     },
+    {
+        "name": "manage_channel",
+        "description": (
+            "Boardチャネルのアクセス制御(ACL)を管理する。"
+            "チャネルの作成、メンバーの追加・削除、チャネル情報の確認ができる。"
+            "メンバーリストが空のチャネル（general, ops等）は全員アクセス可能。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "add_member", "remove_member", "info"],
+                    "description": (
+                        "操作種別。create=チャネル作成, "
+                        "add_member=メンバー追加, "
+                        "remove_member=メンバー削除, "
+                        "info=チャネル情報表示"
+                    ),
+                },
+                "channel": {
+                    "type": "string",
+                    "description": "チャネル名（小文字英数字・ハイフン・アンダースコア）",
+                },
+                "members": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "対象メンバー名リスト（create時は初期メンバー、add/remove時は操作対象）",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "チャネルの説明（create時のみ）",
+                },
+            },
+            "required": ["action", "channel"],
+        },
+    },
 ]
 
 FILE_TOOLS: list[dict[str, Any]] = [
@@ -727,6 +764,29 @@ SUPERVISOR_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "audit_subordinate",
+        "description": (
+            "配下のAnimaの直近活動を包括的に監査する。"
+            "活動サマリー・タスク状況・エラー頻度・ツール使用統計・通信パターンを"
+            "構造化レポートとして返す。定期的なパフォーマンスレビューに使う。"
+            "直属部下だけでなく孫以下の配下も指定可能。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "監査対象の配下Anima名",
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "監査期間（日数、デフォルト: 1）",
+                },
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 CHECK_PERMISSIONS_TOOLS: list[dict[str, Any]] = [
@@ -888,6 +948,45 @@ SKILL_TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": ["skill_name", "description", "body"],
+        },
+    },
+]
+
+BACKGROUND_TASK_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "check_background_task",
+        "description": (
+            "バックグラウンドタスクの状態を確認する。"
+            "task_idを指定して、実行中・完了・失敗の状態と結果を取得する。"
+            "ツール呼び出しが background ステータスで返された場合に使用する。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "確認するタスクのID（submit時に返されたID）",
+                },
+            },
+            "required": ["task_id"],
+        },
+    },
+    {
+        "name": "list_background_tasks",
+        "description": (
+            "バックグラウンドタスクの一覧を取得する。"
+            "ステータスでフィルタリング可能（running/completed/failed）。"
+            "省略時は全件を返す。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["running", "completed", "failed", "pending"],
+                    "description": "フィルタするステータス（省略時は全件）",
+                },
+            },
         },
     },
 ]
@@ -1198,6 +1297,7 @@ def build_tool_list(
     include_tool_management: bool = False,
     include_task_tools: bool = False,
     include_plan_tasks: bool = False,
+    include_background_task_tools: bool = False,
     include_skill_tools: bool = False,
     skill_metas: list[Any] | None = None,
     common_skill_metas: list[Any] | None = None,
@@ -1216,6 +1316,7 @@ def build_tool_list(
         include_tool_management: Include refresh_tools/share_tool tools.
         include_task_tools: Include task queue tools (add_task, update_task, list_tasks).
         include_plan_tasks: Include plan_tasks DAG batch submission tool.
+        include_background_task_tools: Include background task check/list tools.
         include_skill_tools: Include skill on-demand loading tool.
         skill_metas: Personal skill metadata for dynamic description generation.
         common_skill_metas: Common skill metadata for dynamic description generation.
@@ -1252,6 +1353,8 @@ def build_tool_list(
         tools.extend(TASK_TOOLS)
     if include_plan_tasks:
         tools.extend(PLAN_TASKS_TOOLS)
+    if include_background_task_tools:
+        tools.extend(BACKGROUND_TASK_TOOLS)
     if external_schemas:
         tools.extend(external_schemas)
     tools = apply_db_descriptions(tools)

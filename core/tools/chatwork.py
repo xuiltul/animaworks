@@ -50,6 +50,7 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
     "stats":    {"expected_seconds": 5,  "background_eligible": False},
     "files":    {"expected_seconds": 10, "background_eligible": False},
     "download": {"expected_seconds": 60, "background_eligible": True},
+    "delete":   {"expected_seconds": 10, "background_eligible": False},
 }
 
 requests = None
@@ -192,12 +193,20 @@ class ChatworkClient:
     def contacts(self) -> list[dict]:
         return self.get("/contacts")
 
+    def get_message(self, room_id: str, message_id: str) -> dict:
+        """Get a single message by ID."""
+        return self.get(f"/rooms/{room_id}/messages/{message_id}")
+
     def get_messages(self, room_id: str, force: bool = False) -> list[dict] | None:
         """Get messages. force=True to include already-read messages."""
         return self.get(
             f"/rooms/{room_id}/messages",
             params={"force": 1 if force else 0},
         )
+
+    def delete_message(self, room_id: str, message_id: str) -> dict | None:
+        """Delete a message by ID."""
+        return self.delete(f"/rooms/{room_id}/messages/{message_id}")
 
     def post_message(self, room_id: str, body: str) -> dict:
         if len(body) > 10000:
@@ -665,6 +674,28 @@ def get_tool_schemas() -> list[dict]:
             },
         },
         {
+            "name": "chatwork_delete",
+            "description": (
+                "Delete a Chatwork message. Only messages sent by the authenticated "
+                "user (i.e. your own posts) can be deleted. "
+                "Specify the room and message_id to delete."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "room": {
+                        "type": "string",
+                        "description": "Room name or numeric room ID.",
+                    },
+                    "message_id": {
+                        "type": "string",
+                        "description": "The message ID to delete.",
+                    },
+                },
+                "required": ["room", "message_id"],
+            },
+        },
+        {
             "name": "chatwork_mentions",
             "description": (
                 "Find Chatwork messages addressed to me (both replied and unreplied). "
@@ -704,6 +735,7 @@ animaworks-tool chatwork sync [--limit N]
 animaworks-tool chatwork rooms
 animaworks-tool chatwork messages <ルーム名またはID> [-n 20]
 animaworks-tool chatwork send <ルーム名またはID> "メッセージ本文"
+animaworks-tool chatwork delete <ルーム名またはID> <message_id>  # 自分の投稿のみ削除可
 animaworks-tool chatwork search "キーワード" [-r ルーム] [-n 50]
 animaworks-tool chatwork unreplied [--sync] [--sync-limit 50] [--json]
 animaworks-tool chatwork mentions [--sync] [--sync-limit 50] [-n 200] [--json]
@@ -731,6 +763,11 @@ def cli_main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("send", help="Send a message")
     p.add_argument("room", help="Room name or ID")
     p.add_argument("message", nargs="+", help="Message body")
+
+    # delete
+    p = sub.add_parser("delete", help="Delete your own message")
+    p.add_argument("room", help="Room name or ID")
+    p.add_argument("message_id", help="Message ID to delete")
 
     # messages
     p = sub.add_parser("messages", help="Get recent messages")
@@ -851,6 +888,30 @@ def cli_main(argv: list[str] | None = None) -> None:
             print(f"Sent (message_id: {result['message_id']})")
         else:
             print(f"Result: {result}")
+
+    elif args.command == "delete":
+        write_token = get_credential(
+            "chatwork_write", "chatwork", env_var="CHATWORK_API_TOKEN_WRITE"
+        )
+        write_client = ChatworkClient(api_token=write_token)
+        room_id = client.resolve_room_id(args.room)
+        message_id = args.message_id
+        # Ownership check
+        my_info = write_client.me()
+        my_account_id = str(my_info["account_id"])
+        msg = client.get_message(room_id, message_id)
+        msg_account_id = str(msg["account"]["account_id"])
+        if msg_account_id != my_account_id:
+            print(
+                f"Error: Cannot delete message {message_id}. "
+                f"It was posted by '{msg['account']['name']}' "
+                f"(account_id={msg_account_id}), not by you "
+                f"(account_id={my_account_id}).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        write_client.delete_message(room_id, message_id)
+        print(f"Deleted message {message_id} from room {room_id}")
 
     elif args.command == "messages":
         room_id = client.resolve_room_id(args.room)
@@ -1215,14 +1276,39 @@ def cli_main(argv: list[str] | None = None) -> None:
             cache.close()
 
 
+# ── Per-Anima credential resolution ──────────────────
+
+def _resolve_write_token(args: dict[str, Any]) -> str:
+    """Resolve the Chatwork write token for the calling Anima.
+
+    Uses ``CHATWORK_API_TOKEN_WRITE__<anima_name>`` if available in
+    shared/credentials.json, otherwise falls back to the default
+    ``CHATWORK_API_TOKEN_WRITE``.
+    """
+    from core.tools._base import _lookup_shared_credentials
+
+    anima_dir = args.get("anima_dir")
+    if anima_dir:
+        anima_name = Path(anima_dir).name
+        per_anima_key = f"CHATWORK_API_TOKEN_WRITE__{anima_name}"
+        token = _lookup_shared_credentials(per_anima_key)
+        if token:
+            logger.debug(
+                "Using per-Anima Chatwork write token for '%s'", anima_name,
+            )
+            return token
+
+    return get_credential(
+        "chatwork_write", "chatwork", env_var="CHATWORK_API_TOKEN_WRITE",
+    )
+
+
 # ── Dispatch ──────────────────────────────────────────
 
 def dispatch(name: str, args: dict[str, Any]) -> Any:
     """Dispatch a tool call by schema name."""
     if name == "chatwork_send":
-        write_token = get_credential(
-            "chatwork_write", "chatwork", env_var="CHATWORK_API_TOKEN_WRITE"
-        )
+        write_token = _resolve_write_token(args)
         write_client = ChatworkClient(api_token=write_token)
         read_client = ChatworkClient()
         room_id = read_client.resolve_room_id(args["room"])
@@ -1264,6 +1350,26 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
             )
         finally:
             cache.close()
+    if name == "chatwork_delete":
+        write_token = _resolve_write_token(args)
+        write_client = ChatworkClient(api_token=write_token)
+        read_client = ChatworkClient()
+        room_id = read_client.resolve_room_id(args["room"])
+        message_id = args["message_id"]
+        # Ownership check: only allow deleting own messages
+        my_info = write_client.me()
+        my_account_id = str(my_info["account_id"])
+        msg = read_client.get_message(room_id, message_id)
+        msg_account_id = str(msg["account"]["account_id"])
+        if msg_account_id != my_account_id:
+            raise ToolConfigError(
+                f"Cannot delete message {message_id}: it was posted by "
+                f"'{msg['account']['name']}' (account_id={msg_account_id}), "
+                f"not by you (account_id={my_account_id}). "
+                f"You can only delete your own messages."
+            )
+        result = write_client.delete_message(room_id, message_id)
+        return {"deleted": True, "message_id": message_id, "room_id": room_id}
     if name == "chatwork_rooms":
         client = ChatworkClient()
         return client.rooms()

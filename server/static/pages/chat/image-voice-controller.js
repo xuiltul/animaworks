@@ -17,6 +17,8 @@ export function createImageVoiceController(ctx) {
         const tid = state.selectedThreadId;
         const msg = { role: "assistant", text: "", streaming: true, activeTool: null, timestamp: new Date().toISOString() };
         mgr.addMessage(animaName, tid, msg);
+        const session = mgr.getSession(animaName, tid);
+        session._streamingMsg = msg;
         ctx.controllers.renderer.renderChat();
         return msg;
       },
@@ -24,6 +26,10 @@ export function createImageVoiceController(ctx) {
         ctx.controllers.renderer.renderStreamingBubble(msg);
       },
       finalizeStreamingBubble() {
+        const tid = state.selectedThreadId;
+        const session = mgr.getSession(animaName, tid);
+        session._streamingMsg = null;
+        // Do NOT call keepOnlyStreaming - it would clear completed messages before API has them
         ctx.controllers.renderer.renderChat();
       },
     };

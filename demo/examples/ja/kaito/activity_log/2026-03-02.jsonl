@@ -1,0 +1,19 @@
+{"ts": "2026-03-02T09:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-02T09:01:00+09:00", "type": "cron_executed", "content": "デイリースタンダップ実行。昨日の進捗確認とAPIエンドポイント実装計画を共有。", "summary": "daily_standup cron実行", "meta": {"task_name": "daily_standup"}}
+{"ts": "2026-03-02T09:02:00+09:00", "type": "channel_post", "content": "おはよう。昨日UIコンポーネントが完成した、soraくんナイス。今日はAPIエンドポイントの実装とドキュメント整備を進めよう。", "summary": "Day 2の計画共有", "channel": "general"}
+{"ts": "2026-03-02T09:03:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-02T09:30:00+09:00", "type": "message_sent", "content": "次はAPIエンドポイントの実装をお願いしたい。/api/v2/dashboardと/api/v2/widgetsの2つ。認証周りは既存のミドルウェアを流用してくれ。", "summary": "soraにAPIエンドポイント実装を委譲", "from": "kaito", "to": "sora", "meta": {"intent": "delegation"}}
+{"ts": "2026-03-02T09:31:30+09:00", "type": "message_received", "content": "了解っす！既存のミドルウェア確認してから着手しますね。", "summary": "soraがAPI実装タスクを承諾", "from": "sora"}
+{"ts": "2026-03-02T11:00:00+09:00", "type": "message_received", "content": "kaitoさん、ちょっと相談なんすけど。既存の認証ミドルウェア、v2のレート制限に対応してなくて。先にミドルウェア改修した方がいいっすか？それともv2側で個別対応するっすか？", "summary": "soraからレート制限対応の相談", "from": "sora"}
+{"ts": "2026-03-02T11:05:00+09:00", "type": "message_sent", "content": "いい質問だね。ミドルウェア側で対応した方が後々楽だと思う。ただ今回のスコープだと、v2側で薄くラップする形で十分かな。本格的なレート制限はv0.3で考えよう。", "summary": "レート制限はv2側ラップで対応する方針を伝達", "from": "kaito", "to": "sora"}
+{"ts": "2026-03-02T11:06:30+09:00", "type": "message_received", "content": "なるほど、了解っす！v2側でラップする方向で進めます。", "summary": "soraが方針了承", "from": "sora"}
+{"ts": "2026-03-02T12:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-02T12:02:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-02T14:00:00+09:00", "type": "message_received", "content": "APIエンドポイント実装完了っす！/api/v2/dashboardと/api/v2/widgets、テストもカバレッジ92%出てます。PR #43です！", "summary": "soraがAPI実装完了を報告", "from": "sora"}
+{"ts": "2026-03-02T14:05:00+09:00", "type": "message_sent", "content": "いいペースだね。レビューするよ。", "summary": "soraのPR確認開始", "from": "kaito", "to": "sora"}
+{"ts": "2026-03-02T15:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-02T15:01:00+09:00", "type": "tool_use", "content": "gh pr review 43 --approve", "summary": "PR #43のレビュー・承認", "tool": "Bash"}
+{"ts": "2026-03-02T15:03:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-02T16:05:00+09:00", "type": "message_received", "content": "kaitoさん、進捗まとめをgeneralに投稿しましたよ〜！", "summary": "hinaが進捗まとめ投稿を報告", "from": "hina"}
+{"ts": "2026-03-02T17:00:00+09:00", "type": "heartbeat_start", "summary": "最終巡回"}
+{"ts": "2026-03-02T17:02:00+09:00", "type": "heartbeat_end", "summary": "Day 2完了。API実装完了、PR承認済み。明日のリリースに備える。"}

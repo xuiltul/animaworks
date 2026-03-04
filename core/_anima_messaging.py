@@ -139,15 +139,27 @@ class MessagingMixin:
         include_cycle_result: bool = False,
     ) -> str | dict[str, Any]:
         self._validate_thread_id(thread_id)
-        self._get_interrupt_event(thread_id).clear()
-        self.agent.set_interrupt_event(self._get_interrupt_event(thread_id))
+        # Auto-interrupt: if a session is already running on this thread,
+        # signal it to wrap up so the new message can be processed.
+        lock = self._get_thread_lock(thread_id)
+        if lock.locked():
+            evt = self._interrupt_events.get(thread_id)
+            if evt:
+                evt.set()
+                logger.info(
+                    "[%s] Auto-interrupting running session for new message from=%s",
+                    self.name, from_person,
+                )
         logger.info(
             "[%s] process_message WAITING from=%s content_len=%d images=%d",
             self.name, from_person, len(content), len(images or []),
         )
         from core.tooling.handler import active_session_type
         try:
-            async with self._get_thread_lock(thread_id):
+            async with lock:
+                # Clear interrupt event for OUR session (after lock acquired)
+                self._get_interrupt_event(thread_id).clear()
+                self.agent.set_interrupt_event(self._get_interrupt_event(thread_id))
                 logger.info(
                     "[%s] process_message START (lock acquired) from=%s",
                     self.name, from_person,
@@ -289,10 +301,10 @@ class MessagingMixin:
         an immediate "initializing" message instead of waiting.
         """
         self._validate_thread_id(thread_id)
-        self._get_interrupt_event(thread_id).clear()
-        self.agent.set_interrupt_event(self._get_interrupt_event(thread_id))
+        lock = self._get_thread_lock(thread_id)
+
         # ── Bootstrap guard: return immediately if bootstrap is running ──
-        if self.needs_bootstrap and self._get_thread_lock(thread_id).locked():
+        if self.needs_bootstrap and lock.locked():
             logger.info(
                 "[%s] process_message_stream REJECTED (bootstrapping) from=%s",
                 self.name, from_person,
@@ -303,13 +315,27 @@ class MessagingMixin:
             }
             return
 
+        # Auto-interrupt: if a session is already running on this thread,
+        # signal it to wrap up so the new message can be processed.
+        if lock.locked():
+            evt = self._interrupt_events.get(thread_id)
+            if evt:
+                evt.set()
+                logger.info(
+                    "[%s] Auto-interrupting running session for new message from=%s",
+                    self.name, from_person,
+                )
+
         logger.info(
             "[%s] process_message_stream WAITING from=%s content_len=%d images=%d",
             self.name, from_person, len(content), len(images or []),
         )
         from core.tooling.handler import active_session_type
         try:
-            async with self._get_thread_lock(thread_id):
+            async with lock:
+                # Clear interrupt event for OUR session (after lock acquired)
+                self._get_interrupt_event(thread_id).clear()
+                self.agent.set_interrupt_event(self._get_interrupt_event(thread_id))
                 logger.info(
                     "[%s] process_message_stream START (lock acquired) from=%s",
                     self.name, from_person,
@@ -475,6 +501,11 @@ class MessagingMixin:
                         "message": "Internal error",
                     }
                 finally:
+                    if not cycle_done:
+                        logger.warning(
+                            "[%s] process_message_stream END (cycle_done not received)",
+                            self.name,
+                        )
                     # Save partial response if cycle_done was never received
                     if not cycle_done:
                         if partial_response:

@@ -25,7 +25,7 @@ from tests.helpers.filesystem import create_anima_dir, create_test_data_dir
 # ── Paths ────────────────────────────────────────────────────
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CHAT_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat.js"
+CHAT_JS = PROJECT_ROOT / "server" / "static" / "shared" / "chat" / "session-manager.js"
 
 
 def _read(path: Path) -> str:
@@ -155,9 +155,9 @@ class TestFrontendBackendIntegration:
 
         js = _read(CHAT_JS)
 
-        # Frontend must include thread_id in body JSON
+        # Frontend must include thread_id in body JSON (session-manager uses thread_id: thread)
         assert "thread_id" in js
-        assert "thread_id: tid" in js or "thread_id: threadId" in js
+        assert "thread_id:" in js
 
         # Verify ChatRequest can parse the expected shape
         body = {

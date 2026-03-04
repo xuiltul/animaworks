@@ -23,6 +23,7 @@ import pytest
 
 from core.memory.conversation import ConversationMemory, ConversationTurn, ToolRecord
 from core.memory.consolidation import ConsolidationEngine
+from core.schemas import now_jst
 
 
 # =====================================================================
@@ -454,11 +455,10 @@ class TestActivityLogConsolidation:
         """_collect_activity_entries returns formatted activity entries."""
         anima_dir = make_anima(name="test-act")
 
-        # Write activity log entries
         log_dir = anima_dir / "activity_log"
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        now = datetime.now(timezone.utc)
+        now = now_jst()
         today_str = now.strftime("%Y-%m-%d")
         log_file = log_dir / f"{today_str}.jsonl"
 
@@ -507,7 +507,7 @@ class TestActivityLogConsolidation:
         log_dir = anima_dir / "activity_log"
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        now = datetime.now(timezone.utc)
+        now = now_jst()
         today_str = now.strftime("%Y-%m-%d")
         log_file = log_dir / f"{today_str}.jsonl"
 
@@ -573,7 +573,7 @@ class TestActivityLogConsolidation:
         log_dir = anima_dir / "activity_log"
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        now = datetime.now(timezone.utc)
+        now = now_jst()
         today_str = now.strftime("%Y-%m-%d")
         log_file = log_dir / f"{today_str}.jsonl"
 

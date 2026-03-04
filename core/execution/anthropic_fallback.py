@@ -27,7 +27,7 @@ from core.prompt.context import ContextTracker, resolve_context_window
 from core.execution._sanitize import TOOL_TRUST_LEVELS, wrap_tool_result
 from core.execution._session import build_continuation_prompt, handle_session_chaining
 from core.execution._streaming import stream_error_boundary
-from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
+from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, TokenUsage, ToolCallRecord, _truncate_for_record, tool_input_save_budget, tool_result_save_budget
 from core.execution.reminder import MSG_CONTEXT_THRESHOLD, MSG_FINAL_ITERATION, MSG_OUTPUT_TRUNCATED, SystemReminderQueue
 from core.memory import MemoryManager
 from core.prompt.builder import build_system_prompt
@@ -40,6 +40,8 @@ from core.tooling.schemas import (
     to_anthropic_format,
 )
 import httpx
+
+from core.execution._tool_summary import make_tool_detail_chunk
 
 logger = logging.getLogger("animaworks.execution.anthropic_fallback")
 
@@ -112,6 +114,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
             include_tool_management=True,
             include_task_tools=True,
             include_plan_tasks=True,
+            include_background_task_tools=getattr(self._tool_handler, "_background_manager", None) is not None,
             include_skill_tools=True,
             skill_metas=self._memory.list_skill_metas(),
             common_skill_metas=self._memory.list_common_skill_metas(),
@@ -176,6 +179,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         all_tool_records: list[ToolCallRecord] = []
         chain_count = 0
         max_iterations = max_turns_override or self._model_config.max_turns
+        usage_acc = TokenUsage()
 
         from core.config.models import resolve_max_tokens
         from core.execution.base import is_adaptive_model, is_anthropic_claude, resolve_thinking_effort
@@ -240,11 +244,12 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 raise LLMAPIError(f"Anthropic API error: {e}") from e
 
             # ── Context tracking + session chaining ───────────
+            _inp_af = getattr(response.usage, "input_tokens", 0) or 0
+            _out_af = getattr(response.usage, "output_tokens", 0) or 0
+            usage_acc.input_tokens += _inp_af
+            usage_acc.output_tokens += _out_af
             if tracker:
-                usage_dict = {
-                    "input_tokens": response.usage.input_tokens,
-                    "output_tokens": response.usage.output_tokens,
-                }
+                usage_dict = {"input_tokens": _inp_af, "output_tokens": _out_af}
                 tracker.update_from_usage(usage_dict)
 
                 # P1-1: context threshold reminder
@@ -308,6 +313,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 return ExecutionResult(
                     text="\n".join(all_response_text),
                     tool_call_records=all_tool_records,
+                    usage=usage_acc,
                 )
 
             # ── Process tool calls ────────────────────────────
@@ -358,6 +364,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         return ExecutionResult(
             text="\n".join(all_response_text) or "(max iterations reached)",
             tool_call_records=all_tool_records,
+            usage=usage_acc,
         )
 
     # ── Streaming execution ───────────────────────────────────
@@ -394,6 +401,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         all_response_text: list[str] = []
         all_tool_records: list[ToolCallRecord] = []
         _MAX_ITERATIONS = max_turns_override or self._model_config.max_turns
+        _usage_acc_s = TokenUsage()
 
         from core.config.models import resolve_max_tokens
         from core.execution.base import is_adaptive_model, is_anthropic_claude, resolve_thinking_effort
@@ -492,11 +500,13 @@ class AnthropicFallbackExecutor(BaseExecutor):
                     final_message = await stream.get_final_message()
 
                 # ── Context tracking ──────────────────────────
+                if final_message:
+                    _inp_s = getattr(final_message.usage, "input_tokens", 0) or 0
+                    _out_s = getattr(final_message.usage, "output_tokens", 0) or 0
+                    _usage_acc_s.input_tokens += _inp_s
+                    _usage_acc_s.output_tokens += _out_s
                 if tracker and final_message:
-                    usage_dict = {
-                        "input_tokens": final_message.usage.input_tokens,
-                        "output_tokens": final_message.usage.output_tokens,
-                    }
+                    usage_dict = {"input_tokens": _inp_s, "output_tokens": _out_s}
                     tracker.update_from_usage(usage_dict)
 
                     # P1-1: context threshold reminder
@@ -545,6 +555,12 @@ class AnthropicFallbackExecutor(BaseExecutor):
                 _trust_order_s = {"trusted": 2, "medium": 1, "untrusted": 0}
                 tool_results = []
                 for tu in tool_uses:
+                    detail_chunk = make_tool_detail_chunk(
+                        tu.name, tu.id, tu.input or {},
+                    )
+                    if detail_chunk:
+                        yield detail_chunk
+
                     try:
                         result = await loop.run_in_executor(
                             None,
@@ -608,4 +624,5 @@ class AnthropicFallbackExecutor(BaseExecutor):
             "full_text": full_text,
             "result_message": None,
             "tool_call_records": [asdict(r) for r in all_tool_records],
+            "usage": _usage_acc_s.to_dict(),
         }

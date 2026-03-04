@@ -269,6 +269,85 @@ class TestTruncateToolOutput:
         assert "12" in result  # original size
 
 
+# ── _build_tool_schemas (tool permission parity) ─────────────
+
+
+class TestBuildToolSchemas:
+    """Verify Mode B includes the same tool categories as Mode A."""
+
+    @pytest.fixture
+    def _anima_dir(self, tmp_path: Path):
+        anima_dir = tmp_path / "animas" / "test-tools"
+        for sub in ("state", "episodes", "knowledge", "procedures", "skills",
+                    "shortterm", "transcripts", "activity_log"):
+            (anima_dir / sub).mkdir(parents=True)
+        (anima_dir / "identity.md").write_text("# Test", encoding="utf-8")
+        (anima_dir / "injection.md").write_text("", encoding="utf-8")
+        (anima_dir / "permissions.md").write_text("", encoding="utf-8")
+        return anima_dir
+
+    def _make_executor(self, anima_dir: Path, *, has_subs: bool = False, has_newstaff: bool = False):
+        from core.execution.assisted import AssistedExecutor
+        from core.memory import MemoryManager
+        from core.schemas import ModelConfig
+        from core.tooling.handler import ToolHandler
+
+        if has_newstaff:
+            (anima_dir / "skills" / "newstaff.md").write_text("---\ndescription: hire\n---\n", encoding="utf-8")
+
+        model_config = ModelConfig(model="ollama/gemma3:27b", max_tokens=4096, max_turns=5)
+        memory = MemoryManager(anima_dir)
+        tool_handler = ToolHandler(anima_dir=anima_dir, memory=memory)
+        with patch.object(AssistedExecutor, "_has_subordinates", return_value=has_subs):
+            executor = AssistedExecutor(
+                model_config=model_config,
+                anima_dir=anima_dir,
+                tool_handler=tool_handler,
+                memory=memory,
+            )
+        return executor
+
+    def test_task_tools_included(self, _anima_dir):
+        executor = self._make_executor(_anima_dir)
+        names = executor._known_tools
+        assert "add_task" in names
+        assert "update_task" in names
+        assert "list_tasks" in names
+
+    def test_plan_tasks_included(self, _anima_dir):
+        executor = self._make_executor(_anima_dir)
+        assert "plan_tasks" in executor._known_tools
+
+    def test_supervisor_tools_when_has_subordinates(self, _anima_dir):
+        executor = self._make_executor(_anima_dir, has_subs=True)
+        names = executor._known_tools
+        assert "disable_subordinate" in names
+        assert "enable_subordinate" in names
+        assert "delegate_task" in names
+        assert "org_dashboard" in names
+
+    def test_supervisor_tools_absent_without_subordinates(self, _anima_dir):
+        executor = self._make_executor(_anima_dir, has_subs=False)
+        names = executor._known_tools
+        assert "disable_subordinate" not in names
+        assert "delegate_task" not in names
+
+    def test_admin_tools_when_newstaff(self, _anima_dir):
+        executor = self._make_executor(_anima_dir, has_newstaff=True)
+        assert "create_anima" in executor._known_tools
+
+    def test_admin_tools_absent_without_newstaff(self, _anima_dir):
+        executor = self._make_executor(_anima_dir, has_newstaff=False)
+        assert "create_anima" not in executor._known_tools
+
+    def test_core_tools_always_present(self, _anima_dir):
+        executor = self._make_executor(_anima_dir)
+        names = executor._known_tools
+        for tool in ("search_memory", "read_file", "write_file", "execute_command",
+                     "send_message", "check_permissions", "skill"):
+            assert tool in names, f"{tool} missing from Mode B known_tools"
+
+
 # ── _preflight_check ─────────────────────────────────────────
 
 

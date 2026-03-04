@@ -26,7 +26,7 @@ def _create_anima_with_assets(
     complete: bool = True,
 ) -> Path:
     """Create an anima directory, optionally with all required assets."""
-    from core.asset_reconciler import REQUIRED_ASSETS
+    from core.asset_reconciler import REQUIRED_ASSETS, REALISTIC_REQUIRED_ASSETS
 
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True)
@@ -37,6 +37,9 @@ def _create_anima_with_assets(
         assets_dir = anima_dir / "assets"
         assets_dir.mkdir()
         for filename in REQUIRED_ASSETS.values():
+            (assets_dir / filename).write_bytes(b"fake-data")
+        # reconciler defaults to image_style=realistic
+        for filename in REALISTIC_REQUIRED_ASSETS.values():
             (assets_dir / filename).write_bytes(b"fake-data")
     return anima_dir
 
@@ -146,13 +149,14 @@ class TestPeriodicReconciliation:
         assert len(incomplete) == 0
 
         # Simulate asset deletion (e.g., corrupted file removed)
-        (anima_dir / "assets" / "avatar_bustup.png").unlink()
+        # reconciler defaults to image_style=realistic
+        (anima_dir / "assets" / "avatar_bustup_realistic.png").unlink()
 
         # Now should detect as incomplete
         incomplete = find_animas_with_missing_assets(animas_dir)
         assert len(incomplete) == 1
         assert incomplete[0][0] == "aoi"
-        assert "avatar_bustup" in incomplete[0][1]["missing"]
+        assert "avatar_bustup_realistic" in incomplete[0][1]["missing"]
 
     @pytest.mark.asyncio
     async def test_reconcile_skips_on_error_and_continues(

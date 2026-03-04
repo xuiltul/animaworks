@@ -122,7 +122,8 @@ class TestE2EChannelFlow:
         assert event["data"]["channel"] == "general"
         assert event["data"]["text"] == "WS test message"
         assert event["data"]["source"] == "human"
-        assert event["data"]["from"] == "taka"
+        # Unauthenticated requests get from_name overridden to "human"
+        assert event["data"]["from"] == "human"
 
     async def test_human_source_verification(self, tmp_path: Path):
         """Posts via API always have source=human."""

@@ -208,10 +208,10 @@ class TestSharedCredentialsJson:
         with pytest.raises(ToolConfigError):
             get_credential("chatwork", "chatwork")  # no env_var
 
-    def test_error_message_mentions_shared(self, config_dir):
+    def test_error_message_mentions_vault(self, config_dir):
         _write_config(config_dir, {})
-        # No shared/credentials.json, no env var
-        with pytest.raises(ToolConfigError, match="shared/credentials.json"):
+        # No vault.json, no env var — error message should mention vault.json
+        with pytest.raises(ToolConfigError, match="vault.json"):
             get_credential("chatwork", "chatwork", env_var="CHATWORK_API_TOKEN")
 
 

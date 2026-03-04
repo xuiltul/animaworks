@@ -11,7 +11,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-from core.voice.tts_base import BaseTTSProvider, TTSConfig
+from core.voice.tts_base import BaseTTSProvider, TTSConfig, TTSSynthesisError
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,7 @@ class VoicevoxTTS(BaseTTSProvider):
     ) -> AsyncIterator[bytes]:
         """Stream TTS audio chunks. VOICEVOX does not support streaming; yields full WAV."""
         audio = await self.synthesize_full(text, config)
-        if audio:
-            yield audio
+        yield audio
 
     async def synthesize_full(self, text: str, config: TTSConfig) -> bytes:
         """Generate complete WAV audio for given text."""
@@ -64,10 +63,12 @@ class VoicevoxTTS(BaseTTSProvider):
                     json=audio_query,
                 )
                 r2.raise_for_status()
+                if not r2.content:
+                    raise TTSSynthesisError("VOICEVOX: empty audio response")
                 return r2.content
             except httpx.HTTPError as e:
                 logger.warning("VOICEVOX synthesis failed: %s", e)
-                return b""
+                raise TTSSynthesisError(f"VOICEVOX synthesis failed: {e}") from e
 
     async def list_voices(self) -> list[dict]:
         """List available VOICEVOX speakers."""

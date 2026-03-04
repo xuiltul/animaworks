@@ -37,15 +37,10 @@ class TestAppJsScrollFix:
         assert "function updateStreamingBubble" in streaming_source
 
     def test_update_streaming_bubble_updates_inner_html(self, streaming_source: str):
-        """updateStreamingBubble should update bubble.innerHTML."""
-        idx = streaming_source.index("function updateStreamingBubble")
-        end_marker = streaming_source.find("\n// ──", idx + 1)
-        if end_marker == -1:
-            end_marker = streaming_source.find("\nfunction ", idx + 100)
-            if end_marker == -1:
-                end_marker = streaming_source.find("\nexport function ", idx + 100)
-        func_body = streaming_source[idx:end_marker]
-        assert "bubble.innerHTML" in func_body
+        """updateStreamingBubble delegates to updateStreamingZone which updates bubble.innerHTML."""
+        # bubble.innerHTML is in render-utils.js updateStreamingZone (imported by chat-streaming)
+        render_utils = (PROJECT_ROOT / "server/static/shared/chat/render-utils.js").read_text()
+        assert "bubble.innerHTML" in render_utils
 
     def test_schedule_streaming_update_exists(self, streaming_source: str):
         """scheduleStreamingUpdate function with rAF throttle guard must exist."""

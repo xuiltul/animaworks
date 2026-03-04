@@ -522,9 +522,9 @@ class TestBModeConversationRegression:
         main_resp = make_litellm_response(
             content="B mode response: 了解しました。タスクを実行します。",
         )
-        extract_resp = make_litellm_response(content="なし")
 
-        with patch_litellm(main_resp, extract_resp):
+        # Multiple components may call litellm; provide enough main responses
+        with patch_litellm(main_resp, main_resp, main_resp, main_resp, main_resp):
             await dp.process_message(
                 "テストメッセージ",
                 from_person="human",
@@ -563,9 +563,8 @@ class TestBModeConversationRegression:
             main_resp = make_litellm_response(
                 content=f"Response {i}: 回答します。",
             )
-            extract_resp = make_litellm_response(content="なし")
 
-            with patch_litellm(main_resp, extract_resp):
+            with patch_litellm(main_resp):
                 await dp.process_message(
                     f"Message {i}",
                     from_person="human",

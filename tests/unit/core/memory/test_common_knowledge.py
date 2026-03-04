@@ -619,7 +619,9 @@ class TestToolHandlerCommonKnowledgeWrite:
             "write_memory_file",
             {"path": "knowledge/local.md", "content": "local"},
         )
-        assert (anima_dir / "knowledge" / "local.md").read_text(encoding="utf-8") == "local"
+        written = (anima_dir / "knowledge" / "local.md").read_text(encoding="utf-8")
+        assert "local" in written
+        assert written.startswith("---")  # auto-frontmatter
 
 
 # ── MemoryManager._vector_search_memory ──────────────────────

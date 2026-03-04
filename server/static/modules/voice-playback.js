@@ -15,16 +15,27 @@ export class VoicePlayback {
   }
 
   _ensureContext() {
-    if (this._ctx) return;
-    this._ctx = new AudioContext();
-    this._gainNode = this._ctx.createGain();
-    this._gainNode.gain.value = this._volume;
-    this._gainNode.connect(this._ctx.destination);
+    if (this._ctx && this._ctx.state === 'closed') {
+      this._ctx = null;
+      this._gainNode = null;
+    }
+    if (!this._ctx) {
+      this._ctx = new AudioContext();
+      this._gainNode = this._ctx.createGain();
+      this._gainNode.gain.value = this._volume;
+      this._gainNode.connect(this._ctx.destination);
+    }
+    if (this._ctx.state === 'suspended') {
+      this._ctx.resume();
+    }
   }
 
   async enqueue(audioData) {
     // audioData is ArrayBuffer (wav or mp3)
     this._ensureContext();
+    if (this._ctx.state === 'suspended') {
+      await this._ctx.resume();
+    }
     try {
       const buffer = await this._ctx.decodeAudioData(audioData.slice(0));
       this._queue.push(buffer);

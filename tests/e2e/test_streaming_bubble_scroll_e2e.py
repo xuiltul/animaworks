@@ -178,7 +178,7 @@ class TestAppJsScrollPattern:
 
     @pytest.fixture()
     def source(self) -> str:
-        return _read_source("server/static/workspace/modules/app.js")
+        return _read_source("server/static/workspace/modules/chat-streaming.js")
 
     def test_update_streaming_bubble_exists(self, source):
         assert "function updateStreamingBubble" in source
@@ -235,8 +235,9 @@ class TestMarkdownLineBreakRendering:
         assert "<br>" in _read_source("server/static/workspace/modules/utils.js")
 
     def test_app_js_uses_render_simple_markdown(self):
+        # renderSimpleMarkdown is in utils.js; used by chat-history.js, session.js, timeline-dom.js
         assert "renderSimpleMarkdown" in _read_source(
-            "server/static/workspace/modules/app.js"
+            "server/static/workspace/modules/chat-history.js"
         )
 
 

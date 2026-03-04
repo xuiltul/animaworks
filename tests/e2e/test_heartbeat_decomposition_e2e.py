@@ -139,6 +139,8 @@ class TestInboxProcessing:
     async def test_inbox_messages_processed_and_archived(self, data_dir, make_anima):
         """Messages in inbox are consumed and archived during inbox processing."""
         alice_dir = make_anima("alice")
+        make_anima("mio")  # Must be in config for Messenger to accept
+        make_anima("bob")  # Must be in config for Messenger to accept
         shared_dir = data_dir / "shared"
 
         from core.schemas import Message
@@ -182,6 +184,7 @@ class TestInboxProcessing:
     async def test_inbox_messages_recorded_to_episodes(self, data_dir, make_anima):
         """Inbox messages are recorded to episode files during inbox processing."""
         alice_dir = make_anima("alice")
+        make_anima("episode_sender")  # Must be in config for Messenger to accept
         shared_dir = data_dir / "shared"
 
         from core.schemas import Message
@@ -324,6 +327,7 @@ class TestHeartbeatFailureWritesRecoveryNote:
     ):
         """On inbox processing failure, messages are crash-archived to prevent re-processing."""
         alice_dir = make_anima("alice")
+        make_anima("mio")  # Must be in config for Messenger to accept
         shared_dir = data_dir / "shared"
 
         from core.schemas import Message

@@ -43,7 +43,7 @@ class TestUvicornConfigE2E:
         from cli.commands.server import cmd_start
 
         mock_create.return_value = MagicMock()
-        args = argparse.Namespace(host="0.0.0.0", port=18500)
+        args = argparse.Namespace(host="0.0.0.0", port=18500, foreground=True)
         cmd_start(args)
 
         call_kwargs = mock_uvicorn.call_args.kwargs

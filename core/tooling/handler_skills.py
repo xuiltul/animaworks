@@ -449,3 +449,48 @@ class SkillsToolsMixin:
                 f"Tasks with depends_on will wait for dependencies."
             ),
         }, ensure_ascii=False)
+
+    # ── Background task handlers ─────────────────────────────
+
+    def _handle_check_background_task(self, args: dict[str, Any]) -> str:
+        task_id = args.get("task_id", "")
+        if not task_id:
+            return _error_result("ValidationError", t("handler.bg_task_id_required"))
+
+        mgr = self._background_manager
+        if mgr is None:
+            return _error_result("NotEnabled", t("handler.bg_not_enabled"))
+
+        task = mgr.get_task(task_id)
+        if task is None:
+            return _error_result(
+                "NotFound",
+                t("handler.bg_task_not_found", task_id=task_id),
+            )
+
+        return _json.dumps(task.to_dict(), ensure_ascii=False, indent=2)
+
+    def _handle_list_background_tasks(self, args: dict[str, Any]) -> str:
+        mgr = self._background_manager
+        if mgr is None:
+            return _error_result("NotEnabled", t("handler.bg_not_enabled"))
+
+        from core.background import TaskStatus
+
+        status_filter: TaskStatus | None = None
+        raw_status = args.get("status")
+        if raw_status:
+            try:
+                status_filter = TaskStatus(raw_status)
+            except ValueError:
+                return _error_result(
+                    "ValidationError",
+                    t("handler.bg_invalid_status", status=raw_status),
+                )
+
+        tasks = mgr.list_tasks(status=status_filter)
+        return _json.dumps(
+            [t_item.to_dict() for t_item in tasks],
+            ensure_ascii=False,
+            indent=2,
+        )

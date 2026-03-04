@@ -1,0 +1,19 @@
+{"ts": "2026-03-02T09:00:00+09:00", "type": "heartbeat_start", "summary": "Routine patrol started"}
+{"ts": "2026-03-02T09:01:00+09:00", "type": "cron_executed", "content": "Ran daily standup. Reviewed yesterday's progress and planned API implementation.", "summary": "daily_standup cron executed", "meta": {"task_name": "daily_standup"}}
+{"ts": "2026-03-02T09:02:00+09:00", "type": "channel_post", "content": "Morning all. UI components landed yesterday — nice one, Kai. Today we're tackling the API endpoints and docs.", "summary": "Shared Day 2 plan", "channel": "general"}
+{"ts": "2026-03-02T09:03:00+09:00", "type": "heartbeat_end", "summary": "Patrol complete"}
+{"ts": "2026-03-02T09:30:00+09:00", "type": "message_sent", "content": "Next up: API endpoints. Need /api/v2/dashboard and /api/v2/widgets. Use the existing auth middleware — should be straightforward.", "summary": "Delegated API endpoint implementation to kai", "from": "alex", "to": "kai", "meta": {"intent": "delegation"}}
+{"ts": "2026-03-02T09:31:30+09:00", "type": "message_received", "content": "Got it! Let me check the existing middleware first, then I'll get started.", "summary": "kai accepted API task", "from": "kai"}
+{"ts": "2026-03-02T11:00:00+09:00", "type": "message_received", "content": "Hey Alex, quick question. The existing auth middleware doesn't handle v2 rate limiting. Should I update the middleware first, or just handle it on the v2 side?", "summary": "kai raised rate limiting question", "from": "kai"}
+{"ts": "2026-03-02T11:05:00+09:00", "type": "message_sent", "content": "Good catch. Long term, middleware-level would be cleaner. But for this release, a thin wrapper on the v2 side is fine. We'll do it properly in v0.3.", "summary": "Advised v2-side rate limit wrapper approach", "from": "alex", "to": "kai"}
+{"ts": "2026-03-02T11:06:30+09:00", "type": "message_received", "content": "Makes sense! Going with the v2 wrapper approach.", "summary": "kai acknowledged approach", "from": "kai"}
+{"ts": "2026-03-02T12:00:00+09:00", "type": "heartbeat_start", "summary": "Midday check"}
+{"ts": "2026-03-02T12:02:00+09:00", "type": "heartbeat_end", "summary": "Midday check complete"}
+{"ts": "2026-03-02T14:00:00+09:00", "type": "message_received", "content": "API endpoints done! /api/v2/dashboard and /api/v2/widgets with 92% test coverage. PR #43 is ready!", "summary": "kai reported API completion", "from": "kai"}
+{"ts": "2026-03-02T14:05:00+09:00", "type": "message_sent", "content": "Great pace. I'll review it now.", "summary": "Started reviewing kai's PR", "from": "alex", "to": "kai"}
+{"ts": "2026-03-02T15:00:00+09:00", "type": "heartbeat_start", "summary": "Afternoon check"}
+{"ts": "2026-03-02T15:01:00+09:00", "type": "tool_use", "content": "gh pr review 43 --approve", "summary": "Approved PR #43", "tool": "Bash"}
+{"ts": "2026-03-02T15:03:00+09:00", "type": "heartbeat_end", "summary": "Afternoon check complete"}
+{"ts": "2026-03-02T16:05:00+09:00", "type": "message_received", "content": "Alex, posted a progress summary on general!", "summary": "nova reported progress summary", "from": "nova"}
+{"ts": "2026-03-02T17:00:00+09:00", "type": "heartbeat_start", "summary": "End of day patrol"}
+{"ts": "2026-03-02T17:02:00+09:00", "type": "heartbeat_end", "summary": "Day 2 done. API complete, PR approved. Ready for release tomorrow."}

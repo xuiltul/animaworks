@@ -48,31 +48,23 @@ class TestOrgContextE2E:
         prompt = self._build_prompt_for(org_team, "sakura")
 
         assert "あなたはトップレベルです" in prompt
-        assert "rin (development)" in prompt
-        assert "kotoha (communication)" in prompt
-        # Top has no peers
+        assert "rin (development" in prompt
+        assert "kotoha (communication" in prompt
         assert "コミュニケーションルール" in prompt
 
     def test_leader_sees_hierarchy(self, org_team: Path):
         prompt = self._build_prompt_for(org_team, "rin")
 
-        # Supervisor
         assert "sakura" in prompt
-        # Subordinates
-        assert "alice (frontend)" in prompt
-        assert "bob (backend)" in prompt
-        # Peer leader
-        assert "kotoha (communication)" in prompt
+        assert "alice (frontend" in prompt
+        assert "bob (backend" in prompt
+        assert "kotoha (communication" in prompt
 
     def test_worker_sees_supervisor_and_peers(self, org_team: Path):
         prompt = self._build_prompt_for(org_team, "alice")
 
-        # Supervisor
-        assert "rin (development)" in prompt
-        # Peer
-        assert "bob (backend)" in prompt
-        # Should not list sakura as peer (different supervisor)
-        # alice's peers are only those with supervisor=rin
+        assert "rin (development" in prompt
+        assert "bob (backend" in prompt
 
     def test_communication_rules_present(self, org_team: Path):
         prompt = self._build_prompt_for(org_team, "rin")

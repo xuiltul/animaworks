@@ -86,6 +86,8 @@ def dispatch(name, args):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "permissions.md").write_text("", encoding="utf-8")
+        # Isolate data_dir so discover_common_tools finds no tools from ~/.animaworks/
+        (tmp_path / "common_tools").mkdir(exist_ok=True)
 
         memory = MagicMock()
         memory.read_permissions.return_value = ""
@@ -98,8 +100,10 @@ def dispatch(name, args):
             tool_registry=[],
         )
 
-        # Initially no personal tools
-        result = handler.handle("refresh_tools", {})
+        # Initially no personal tools (patch get_data_dir to isolate from real ~/.animaworks/)
+        from unittest.mock import patch
+        with patch("core.paths.get_data_dir", return_value=tmp_path):
+            result = handler.handle("refresh_tools", {})
         assert "No personal or common tools found" in result
 
         # Now create a tool file
@@ -116,7 +120,8 @@ def dispatch(name, args):
         )
 
         # Refresh should find it
-        result = handler.handle("refresh_tools", {})
+        with patch("core.paths.get_data_dir", return_value=tmp_path):
+            result = handler.handle("refresh_tools", {})
         assert "calc" in result
         assert "Refreshed tools" in result
 

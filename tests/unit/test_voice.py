@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from core.config.models import AnimaWorksConfig, VoiceConfig
@@ -461,16 +462,17 @@ class TestVoiceSession:
 
 class TestElevenLabsApiKeyCheck:
     @pytest.mark.asyncio
-    async def test_synthesize_no_api_key_yields_nothing(self) -> None:
-        """M2: synthesize() returns immediately when API key is not set."""
+    async def test_synthesize_no_api_key_raises(self) -> None:
+        """synthesize() raises TTSSynthesisError when API key is not set."""
+        from core.voice.tts_base import TTSSynthesisError
+
         vc = VoiceConfig()
         provider = ElevenLabsTTS(vc)
         config = TTSConfig(provider="elevenlabs", voice_id="test-id")
 
-        chunks: list[bytes] = []
-        async for chunk in provider.synthesize("hello", config):
-            chunks.append(chunk)
-        assert chunks == []
+        with pytest.raises(TTSSynthesisError, match="API key not configured"):
+            async for _ in provider.synthesize("hello", config):
+                pass
 
 
 # ── TestVoiceConfig ──────────────────────────────────────────────
@@ -543,3 +545,274 @@ class TestPerAnimaVoice:
             animas_dir, "nonexistent", VoiceConfig()
         )
         assert tts_config.provider == "voicevox"
+
+
+# ── TestTTSSynthesisError ────────────────────────────────────────
+
+
+class TestTTSSynthesisError:
+    """RC-1: TTSSynthesisError is raised from all providers on failure."""
+
+    def test_error_class_in_tts_base(self) -> None:
+        from core.voice.tts_base import TTSSynthesisError
+
+        err = TTSSynthesisError("test error")
+        assert isinstance(err, Exception)
+        assert str(err) == "test error"
+
+    @pytest.mark.asyncio
+    async def test_voicevox_raises_on_http_error(self) -> None:
+        provider = VoicevoxTTS(VoiceConfig())
+        config = TTSConfig(provider="voicevox", voice_id="0")
+
+        from core.voice.tts_base import TTSSynthesisError
+
+        with patch("core.voice.tts_voicevox.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.post = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+            mock_cls.return_value = mock_client
+
+            with pytest.raises(TTSSynthesisError, match="VOICEVOX synthesis failed"):
+                await provider.synthesize_full("hello", config)
+
+    @pytest.mark.asyncio
+    async def test_sbv2_raises_on_http_error(self) -> None:
+        provider = StyleBertVits2TTS(VoiceConfig())
+        config = TTSConfig(provider="style_bert_vits2", voice_id="0:0")
+
+        from core.voice.tts_base import TTSSynthesisError
+
+        with patch("core.voice.tts_sbv2.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+            mock_cls.return_value = mock_client
+
+            with pytest.raises(TTSSynthesisError, match="Style-BERT-VITS2 synthesis failed"):
+                await provider.synthesize_full("hello", config)
+
+    @pytest.mark.asyncio
+    async def test_elevenlabs_raises_on_no_api_key(self) -> None:
+        from core.voice.tts_base import TTSSynthesisError
+
+        provider = ElevenLabsTTS(VoiceConfig())
+        config = TTSConfig(provider="elevenlabs", voice_id="test-id")
+
+        with pytest.raises(TTSSynthesisError, match="API key not configured"):
+            chunks = []
+            async for chunk in provider.synthesize("hello", config):
+                chunks.append(chunk)
+
+
+# ── TestConsecutiveTTSFailures ───────────────────────────────────
+
+
+class TestConsecutiveTTSFailures:
+    """RC-1: Consecutive failure counter + health invalidation."""
+
+    @pytest.mark.asyncio
+    async def test_success_resets_counter(self) -> None:
+        from core.voice.session import VoiceSession
+        from core.voice.tts_base import TTSSynthesisError
+
+        ws = AsyncMock()
+        stt = MagicMock()
+        tts = AsyncMock()
+        tts_config = TTSConfig(provider="voicevox")
+        supervisor = MagicMock()
+        voice_config = MagicMock(stt_refine_enabled=False)
+
+        async def mock_synthesize(text, config):
+            yield b"\x00\x01\x02\x03"
+
+        tts.synthesize = mock_synthesize
+
+        session = VoiceSession("test", ws, stt, tts, tts_config, supervisor, voice_config)
+        session._consecutive_tts_failures = 2
+        await session._synthesize_and_send("hello")
+        assert session._consecutive_tts_failures == 0
+
+    @pytest.mark.asyncio
+    async def test_tts_error_increments_counter(self) -> None:
+        from core.voice.session import VoiceSession
+        from core.voice.tts_base import TTSSynthesisError
+
+        ws = AsyncMock()
+        stt = MagicMock()
+        tts = AsyncMock()
+        tts_config = TTSConfig(provider="voicevox")
+        supervisor = MagicMock()
+        voice_config = MagicMock(stt_refine_enabled=False)
+
+        async def mock_synthesize_fail(text, config):
+            raise TTSSynthesisError("test error")
+            yield  # noqa: unreachable — makes this an async generator
+
+        tts.synthesize = mock_synthesize_fail
+
+        session = VoiceSession("test", ws, stt, tts, tts_config, supervisor, voice_config)
+        await session._synthesize_and_send("hello")
+        assert session._consecutive_tts_failures == 1
+
+        await session._synthesize_and_send("hello again")
+        assert session._consecutive_tts_failures == 2
+
+    @pytest.mark.asyncio
+    async def test_three_failures_invalidates_health(self) -> None:
+        from core.voice.session import VoiceSession
+        from core.voice.tts_base import TTSSynthesisError
+
+        ws = AsyncMock()
+        stt = MagicMock()
+        tts = AsyncMock()
+        tts_config = TTSConfig(provider="voicevox")
+        supervisor = MagicMock()
+        voice_config = MagicMock(stt_refine_enabled=False)
+
+        async def mock_synthesize_fail(text, config):
+            raise TTSSynthesisError("provider down")
+            yield  # noqa: unreachable
+
+        tts.synthesize = mock_synthesize_fail
+
+        session = VoiceSession("test", ws, stt, tts, tts_config, supervisor, voice_config)
+        session._tts_available = True
+
+        for _ in range(3):
+            await session._synthesize_and_send("test")
+
+        assert session._consecutive_tts_failures == 3
+        assert session._tts_available is None
+
+    @pytest.mark.asyncio
+    async def test_tts_error_sends_sanitized_message(self) -> None:
+        """tts_error message must not leak internal URLs."""
+        from core.voice.session import VoiceSession
+        from core.voice.tts_base import TTSSynthesisError
+
+        ws = AsyncMock()
+        stt = MagicMock()
+        tts = AsyncMock()
+        tts_config = TTSConfig(provider="voicevox")
+        supervisor = MagicMock()
+        voice_config = MagicMock(stt_refine_enabled=False)
+
+        async def mock_synthesize_fail(text, config):
+            raise TTSSynthesisError("VOICEVOX synthesis failed: http://localhost:50021/synthesis 500")
+            yield  # noqa: unreachable
+
+        tts.synthesize = mock_synthesize_fail
+
+        session = VoiceSession("test", ws, stt, tts, tts_config, supervisor, voice_config)
+        await session._synthesize_and_send("hello")
+
+        tts_error_calls = [
+            c for c in ws.send_json.call_args_list
+            if c.args and isinstance(c.args[0], dict) and c.args[0].get("type") == "tts_error"
+        ]
+        assert len(tts_error_calls) == 1
+        msg = tts_error_calls[0].args[0]["message"]
+        assert "localhost" not in msg
+        assert msg == "TTS synthesis failed"
+
+    @pytest.mark.asyncio
+    async def test_ws_error_does_not_increment_tts_counter(self) -> None:
+        """WebSocket send errors should not count as TTS failures."""
+        from core.voice.session import VoiceSession
+
+        ws = AsyncMock()
+        ws.send_json = AsyncMock(side_effect=ConnectionResetError("ws closed"))
+        stt = MagicMock()
+        tts = AsyncMock()
+        tts_config = TTSConfig(provider="voicevox")
+        supervisor = MagicMock()
+        voice_config = MagicMock(stt_refine_enabled=False)
+
+        async def mock_synthesize(text, config):
+            yield b"\x00\x01"
+
+        tts.synthesize = mock_synthesize
+
+        session = VoiceSession("test", ws, stt, tts, tts_config, supervisor, voice_config)
+        await session._synthesize_and_send("hello")
+        assert session._consecutive_tts_failures == 0
+
+
+# ── TestResponseDoneGuarantee ────────────────────────────────────
+
+
+class TestResponseDoneGuarantee:
+    """RC-6: response_done is always sent, even on interrupt or exception."""
+
+    @pytest.mark.asyncio
+    async def test_response_done_on_ipc_exception(self) -> None:
+        from core.voice.session import VoiceSession
+
+        ws = AsyncMock()
+        stt = MagicMock()
+        stt.transcribe_buffer_async = AsyncMock(return_value={
+            "raw_text": "test",
+            "language": "en",
+        })
+        tts = AsyncMock()
+        tts.health_check = AsyncMock(return_value=True)
+        tts_config = TTSConfig(provider="voicevox")
+        supervisor = MagicMock()
+        voice_config = MagicMock(stt_refine_enabled=False)
+
+        async def mock_stream_error(*args, **kwargs):
+            raise RuntimeError("IPC connection lost")
+            yield  # noqa: unreachable
+
+        supervisor.send_request_stream = mock_stream_error
+
+        session = VoiceSession("test", ws, stt, tts, tts_config, supervisor, voice_config)
+        import numpy as np
+        pcm = np.random.randint(-1000, 1000, 16000, dtype=np.int16).tobytes()
+        session._audio_buffer.extend(pcm)
+        await session._do_speech_end("human")
+
+        response_done_calls = [
+            c for c in ws.send_json.call_args_list
+            if c.args and isinstance(c.args[0], dict) and c.args[0].get("type") == "response_done"
+        ]
+        assert len(response_done_calls) >= 1
+
+    @pytest.mark.asyncio
+    async def test_response_done_on_interrupt(self) -> None:
+        from core.supervisor.ipc import IPCResponse
+        from core.voice.session import VoiceSession
+
+        ws = AsyncMock()
+        stt = MagicMock()
+        stt.transcribe_buffer_async = AsyncMock(return_value={
+            "raw_text": "test speech",
+            "language": "en",
+        })
+        tts = AsyncMock()
+        tts.health_check = AsyncMock(return_value=True)
+        tts_config = TTSConfig(provider="voicevox")
+        supervisor = MagicMock()
+        voice_config = MagicMock(stt_refine_enabled=False)
+
+        async def mock_stream(*args, **kwargs):
+            yield IPCResponse(id="m1", done=False, chunk='{"type":"text_delta","text":"hello"}', result=None)
+            yield IPCResponse(id="m2", done=False, chunk='{"type":"text_delta","text":" world."}', result=None)
+
+        supervisor.send_request_stream = mock_stream
+
+        session = VoiceSession("test", ws, stt, tts, tts_config, supervisor, voice_config)
+        session._interrupted = True
+        import numpy as np
+        pcm = np.random.randint(-1000, 1000, 16000, dtype=np.int16).tobytes()
+        session._audio_buffer.extend(pcm)
+        await session._do_speech_end("human")
+
+        response_done_calls = [
+            c for c in ws.send_json.call_args_list
+            if c.args and isinstance(c.args[0], dict) and c.args[0].get("type") == "response_done"
+        ]
+        assert len(response_done_calls) == 1

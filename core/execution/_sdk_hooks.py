@@ -157,6 +157,221 @@ def _intercept_task_to_pending(
     return task_id
 
 
+# ── Delegation helpers ────────────────────────────────────────
+
+def _read_status_json(anima_dir: Path) -> dict[str, Any]:
+    """Read and parse status.json for an anima. Returns empty dict on failure."""
+    status_path = anima_dir / "status.json"
+    if not status_path.exists():
+        return {}
+    try:
+        return json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _count_active_tasks(anima_dir: Path) -> int:
+    """Count in-progress/pending tasks in an anima's task_queue.jsonl."""
+    queue_path = anima_dir / "state" / "task_queue.jsonl"
+    if not queue_path.exists():
+        return 0
+    count = 0
+    try:
+        tasks: dict[str, str] = {}
+        for line in queue_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                raw = json.loads(line)
+                task_id = raw.get("task_id", "")
+                if not task_id:
+                    continue
+                if raw.get("_event") == "update" and "status" in raw:
+                    tasks[task_id] = raw["status"]
+                elif "_event" not in raw:
+                    tasks[task_id] = raw.get("status", "pending")
+            except (json.JSONDecodeError, KeyError):
+                continue
+        count = sum(1 for s in tasks.values() if s in ("pending", "in_progress"))
+    except Exception:
+        logger.debug("Failed to count active tasks for %s", anima_dir.name, exc_info=True)
+    return count
+
+
+def _role_matches(status: dict[str, Any], description: str) -> bool:
+    """Check if an anima's role/specialty loosely matches a task description."""
+    desc_lower = description.lower()
+    for field_name in ("role", "specialty", "speciality"):
+        val = status.get(field_name, "")
+        if val and val.lower() in desc_lower:
+            return True
+    return False
+
+
+def _select_subordinate(
+    anima_dir: Path,
+    description: str,
+) -> str | None:
+    """Select the best subordinate for a task.
+
+    Strategy:
+      1. If the description explicitly names a subordinate, use it.
+      2. Otherwise, pick the enabled subordinate with the fewest active tasks
+         (prefer role-matching subordinates).
+      3. Return None if no enabled subordinate is available.
+    """
+    from core.config.models import load_config
+    from core.paths import get_animas_dir
+
+    try:
+        cfg = load_config()
+    except Exception:
+        return None
+
+    my_name = anima_dir.name
+    animas_dir = get_animas_dir()
+    direct_subs: list[str] = [
+        name for name, acfg in cfg.animas.items()
+        if acfg.supervisor == my_name
+    ]
+    if not direct_subs:
+        return None
+
+    # Check for explicit naming in description
+    desc_lower = description.lower()
+    for sub_name in direct_subs:
+        if sub_name.lower() in desc_lower:
+            sub_status = _read_status_json(animas_dir / sub_name)
+            if sub_status.get("enabled", True):
+                return sub_name
+
+    # Score-based selection: (role_match_bonus, -active_count)
+    candidates: list[tuple[int, int, str]] = []
+    for sub_name in direct_subs:
+        sub_dir = animas_dir / sub_name
+        sub_status = _read_status_json(sub_dir)
+        if not sub_status.get("enabled", True):
+            continue
+        active = _count_active_tasks(sub_dir)
+        role_bonus = 1 if _role_matches(sub_status, description) else 0
+        candidates.append((role_bonus, -active, sub_name))
+
+    if not candidates:
+        return None
+
+    candidates.sort(reverse=True)
+    return candidates[0][2]
+
+
+def _intercept_task_to_delegation(
+    anima_dir: Path,
+    tool_input: dict[str, Any],
+    tool_use_id: str | None,
+) -> dict[str, Any] | None:
+    """Delegate a Task tool call to a subordinate.
+
+    Returns a dict with ``task_id`` and ``reason`` keys on success,
+    or ``None`` if no suitable subordinate is available (caller should
+    fall back to pending-task path).
+    """
+    import uuid as _uuid
+    from datetime import timezone as _tz
+    from core.paths import get_animas_dir, get_shared_dir, get_data_dir
+
+    description = tool_input.get("description", "Background task")
+    prompt = tool_input.get("prompt", description)
+
+    target_name = _select_subordinate(anima_dir, description)
+    if target_name is None:
+        return None
+
+    my_name = anima_dir.name
+    animas_dir = get_animas_dir()
+    target_dir = animas_dir / target_name
+
+    # Add task to subordinate's queue
+    from core.memory.task_queue import TaskQueueManager
+
+    sub_tqm = TaskQueueManager(target_dir)
+    try:
+        sub_entry = sub_tqm.add_task(
+            source="anima",
+            original_instruction=prompt,
+            assignee=target_name,
+            summary=description[:100],
+            deadline="2h",
+            relay_chain=[my_name],
+        )
+    except Exception:
+        logger.warning("Failed to add task to subordinate queue", exc_info=True)
+        return None
+
+    # Send DM via Messenger
+    dm_result = ""
+    try:
+        from core.messenger import Messenger
+        messenger = Messenger(get_shared_dir(), my_name)
+        messenger.send(
+            to=target_name,
+            content=(
+                f"タスクを委譲します。\n\n"
+                f"指示: {prompt[:500]}\n"
+                f"期限: 2h\n"
+                f"task_id: {sub_entry.task_id}"
+            ),
+            intent="delegation",
+        )
+        dm_result = "DM sent"
+    except Exception as e:
+        dm_result = f"DM failed: {e}"
+        logger.warning("Delegation DM failed: %s -> %s: %s", my_name, target_name, e)
+
+    # Add tracking entry to own queue
+    own_tqm = TaskQueueManager(anima_dir)
+    own_entry = own_tqm.add_delegated_task(
+        original_instruction=prompt,
+        assignee=target_name,
+        summary=f"[delegated→{target_name}] {description[:80]}",
+        deadline="2h",
+        relay_chain=[my_name, target_name],
+        meta={
+            "delegated_to": target_name,
+            "delegated_task_id": sub_entry.task_id,
+        },
+    )
+
+    # Write wake file so inbox_wake_dispatcher triggers process_inbox
+    try:
+        wake_dir = get_data_dir() / "run" / "inbox_wake"
+        wake_dir.mkdir(parents=True, exist_ok=True)
+        wake_file = wake_dir / target_name
+        wake_file.write_text(target_name, encoding="utf-8")
+    except Exception:
+        logger.debug("Failed to write inbox wake file for %s", target_name, exc_info=True)
+
+    _log_tool_use(
+        anima_dir, "Task", tool_input, tool_use_id=tool_use_id,
+        blocked=False,
+    )
+
+    logger.info(
+        "Task tool intercepted → delegated to %s: sub_task=%s own_task=%s",
+        target_name, sub_entry.task_id, own_entry.task_id,
+    )
+
+    return {
+        "task_id": own_entry.task_id,
+        "reason": (
+            f"DELEGATION_OK: Task delegated to {target_name} "
+            f"(sub_task_id: {sub_entry.task_id}, own_tracking_id: {own_entry.task_id}). "
+            f"{dm_result}. "
+            f"Do NOT call Task or TaskOutput for this task again. "
+            f"Proceed with your current conversation."
+        ),
+    }
+
+
 # ── Hook factories ───────────────────────────────────────────
 
 def _build_pre_tool_hook(
@@ -167,6 +382,7 @@ def _build_pre_tool_hook(
     session_stats: dict[str, Any] | None = None,
     superuser: bool = False,
     on_task_intercepted: Callable[[], None] | None = None,
+    has_subordinates: bool = False,
 ) -> Callable:
     """Build a PreToolUse hook with security checks, output guards, and tool logging.
 
@@ -260,34 +476,65 @@ def _build_pre_tool_hook(
             except Exception:
                 logger.debug("Failed to persist min_trust_seen", exc_info=True)
 
-        # Task tool intercept → pending LLM task
+        # Task tool intercept
         if tool_name == "Task":
-            task_id = _intercept_task_to_pending(
-                anima_dir, tool_input, tool_use_id,
-            )
-            intercepted_task_ids.add(task_id)
-            if on_task_intercepted is not None:
+            if has_subordinates:
+                # Supervisor path: delegate to subordinate, fallback to pending
                 try:
-                    on_task_intercepted()
+                    delegation_result = _intercept_task_to_delegation(
+                        anima_dir, tool_input, tool_use_id,
+                    )
+                    if delegation_result is not None:
+                        intercepted_task_ids.add(delegation_result["task_id"])
+                        if on_task_intercepted is not None:
+                            try:
+                                on_task_intercepted()
+                            except Exception:
+                                logger.debug("on_task_intercepted callback failed", exc_info=True)
+                        return SyncHookJSONOutput(
+                            hookSpecificOutput=PreToolUseHookSpecificOutput(
+                                hookEventName="PreToolUse",
+                                permissionDecision="deny",
+                                permissionDecisionReason=delegation_result["reason"],
+                            )
+                        )
                 except Exception:
-                    logger.debug("on_task_intercepted callback failed", exc_info=True)
-            return SyncHookJSONOutput(
-                hookSpecificOutput=PreToolUseHookSpecificOutput(
-                    hookEventName="PreToolUse",
-                    permissionDecision="deny",
-                    permissionDecisionReason=(
-                        f"INTERCEPT_OK: Task accepted (task_id: {task_id}). "
-                        f"Written to state/pending/ for background execution. "
-                        f"The executor has your identity, injection, behavior rules, "
-                        f"memory guide, and org context. "
-                        f"Do NOT call Task or TaskOutput for this task_id again. "
-                        f"Proceed with your current conversation."
-                    ),
+                    logger.warning("Delegation failed, falling back to pending", exc_info=True)
+
+                # Fallback: all subordinates disabled or delegation error
+                task_id = _intercept_task_to_pending(
+                    anima_dir, tool_input, tool_use_id,
                 )
-            )
+                intercepted_task_ids.add(task_id)
+                if on_task_intercepted is not None:
+                    try:
+                        on_task_intercepted()
+                    except Exception:
+                        logger.debug("on_task_intercepted callback failed", exc_info=True)
+                return SyncHookJSONOutput(
+                    hookSpecificOutput=PreToolUseHookSpecificOutput(
+                        hookEventName="PreToolUse",
+                        permissionDecision="deny",
+                        permissionDecisionReason=(
+                            f"INTERCEPT_OK: Task accepted (task_id: {task_id}). "
+                            f"Written to state/pending/ for background execution. "
+                            f"The executor has your identity, injection, behavior rules, "
+                            f"memory guide, and org context. "
+                            f"Do NOT call Task or TaskOutput for this task_id again. "
+                            f"Proceed with your current conversation."
+                        ),
+                    )
+                )
+            else:
+                # Non-supervisor: let SDK run the Task tool natively (subagent)
+                _log_tool_use(
+                    anima_dir, "Task", tool_input, tool_use_id=tool_use_id,
+                    blocked=False,
+                )
+                return SyncHookJSONOutput()
 
         # plan_tasks intercept → DAG batch to pending
-        if tool_name == "plan_tasks":
+        if tool_name in ("plan_tasks", "mcp__aw__plan_tasks"):
             from core.tooling.handler_skills import SkillsToolsMixin
             from core.tooling.handler_base import _error_result
 

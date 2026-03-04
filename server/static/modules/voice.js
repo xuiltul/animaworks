@@ -101,7 +101,14 @@ export class VoiceManager {
       clearTimeout(this._reconnectTimer);
       this._reconnectTimer = null;
     }
-    this._playback.stop();
+    this._playback.destroy();
+    this._playback = new VoicePlayback();
+    this._playback.onPlaybackEnd = () => {
+      if (this._ttsPlaying) {
+        this._ttsPlaying = false;
+        this._emit('playbackEnd');
+      }
+    };
     if (this._vad) {
       this._vad.destroy();
       this._vad = null;

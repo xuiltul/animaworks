@@ -93,16 +93,19 @@ Managers have access to these dedicated tools. Use them before asking individual
 - `ping_subordinate` — Subordinate liveness check. Omit name for all, specify for single Anima. Check for unresponsive subordinates
 - `read_subordinate_state` — Read subordinates' current_task.md and pending.md. Can specify descendants
 - `check_permissions` — List your allowed tools and file access. Avoid trial-and-error failures
+- `audit_subordinate` — Comprehensive audit of a subordinate's recent activity. Reports activity summary, task status, error frequency, tool usage statistics, and communication patterns. Parameters: name (required), days (optional, default 1). **Proactively use this when you sense anomalies in subordinate behavior (frequent errors, prolonged idle, unprocessed tasks, unusual communication patterns, etc.).** Early detection and early response is a manager's most critical responsibility
 
 ### Task Delegation
 - `delegate_task` — Delegate to direct subordinate. Adds to subordinate task queue + sends DM + creates tracking entry. deadline ('30m', '2h', '1d', etc.) is required
 - `task_tracker` — Track progress of delegated tasks. Shows latest status against subordinate queue. Filter by status='active' (default), 'completed', 'all'
+- `plan_tasks` — Plan tasks during Heartbeat and write them to state/pending/. Use this instead of manually creating JSON files (recommended)
 
 ### Recommended Workflow
 1. At Heartbeat start, use `org_dashboard` for overall status
 2. Use `ping_subordinate` if anyone is unresponsive or idle for long
-3. Use `delegate_task` when assigning; leave records in queue as well as DM
-4. Periodically use `task_tracker` to check delegated task progress and follow up on delays
+3. If subordinate behavior seems off, use `audit_subordinate` to investigate in detail and identify issues
+4. Use `delegate_task` when assigning; leave records in queue as well as DM
+5. Periodically use `task_tracker` to check delegated task progress and follow up on delays
 
 ## Progress Management
 

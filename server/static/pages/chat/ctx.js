@@ -61,6 +61,7 @@ export function createChatContext() {
     animaTabAvatarLoading: {},
     chatPollingInFlight: false,
     rightPaneVisible: true,
+    paneIdx: 0,
     /** @type {ChatSessionManager} */
     manager: mgr,
   };

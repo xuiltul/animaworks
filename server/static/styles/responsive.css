@@ -709,6 +709,11 @@ body.sidebar-collapsed .sidebar-collapse-btn {
     height: 32px;
   }
 
+  .voice-controls-slot {
+    width: 32px;
+    height: 32px;
+  }
+
   .chat-input-actions .voice-controls {
     width: 32px;
     height: 32px;
@@ -874,8 +879,6 @@ body.sidebar-collapsed .sidebar-collapse-btn {
 
 .chat-page-main {
   flex: 1;
-  display: flex;
-  flex-direction: column;
   min-width: 0;
 }
 
@@ -934,18 +937,22 @@ body.sidebar-collapsed .sidebar-collapse-btn {
 
   .chat-page-main {
     flex: 1;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Sidebar as full overlay on mobile */
   .chat-page-sidebar {
     position: absolute;
-    top: 0;
+    top: 44px;
     left: 0;
     right: 0;
     bottom: 0;
+    width: auto;
     z-index: 10;
     background: var(--aw-color-bg-primary);
     border-left: none;
+    overflow-y: auto;
   }
 
   /* sidebar-hidden controls visibility on mobile */
@@ -956,6 +963,11 @@ body.sidebar-collapsed .sidebar-collapse-btn {
   .chat-page-layout:not(.sidebar-hidden) .chat-page-sidebar {
     display: flex !important;
     flex-direction: column;
+  }
+
+  .chat-page-layout:not(.sidebar-hidden) .chat-unified-info-btn {
+    color: var(--aw-color-accent);
+    background: var(--aw-color-bg-hover);
   }
 
   .chat-page-main.mobile-hidden {

@@ -63,6 +63,8 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "o3": 200_000,
     # GLM (THUDM)
     "glm-4": 131_072,
+    # Qwen 3.5 (GDN hybrid — native 262K but 64K practical for 9B)
+    "qwen3.5": 64_000,
     # Ollama / local (conservative defaults)
     "gemma3": 128_000,
     "llama3": 128_000,

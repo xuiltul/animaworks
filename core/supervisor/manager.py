@@ -98,6 +98,7 @@ class ProcessSupervisor(HealthMixin, ReconcileMixin, SchedulerMixin):
         self.processes: dict[str, ProcessHandle] = {}
         self._health_check_task: asyncio.Task | None = None
         self._reconciliation_task: asyncio.Task | None = None
+        self._inbox_wake_task: asyncio.Task | None = None
         self._shutdown = False
         self.scheduler: AsyncIOScheduler | None = None
         self._scheduler_running: bool = False
@@ -168,6 +169,11 @@ class ProcessSupervisor(HealthMixin, ReconcileMixin, SchedulerMixin):
         # Start reconciliation loop
         self._reconciliation_task = asyncio.create_task(
             self._reconciliation_loop()
+        )
+
+        # Start inbox wake dispatcher
+        self._inbox_wake_task = asyncio.create_task(
+            self._inbox_wake_dispatcher()
         )
 
         # Start system scheduler (daily/weekly consolidation)
@@ -449,6 +455,14 @@ class ProcessSupervisor(HealthMixin, ReconcileMixin, SchedulerMixin):
             except asyncio.CancelledError:
                 pass
 
+        # Stop inbox wake dispatcher
+        if self._inbox_wake_task:
+            self._inbox_wake_task.cancel()
+            try:
+                await self._inbox_wake_task
+            except asyncio.CancelledError:
+                pass
+
         # Stop all processes
         tasks = [
             self.stop_anima(name)
@@ -511,6 +525,55 @@ class ProcessSupervisor(HealthMixin, ReconcileMixin, SchedulerMixin):
                     f"Stream error: {response.error.get('message', 'Unknown error')}"
                 )
             yield response
+
+    async def _inbox_wake_dispatcher(self) -> None:
+        """Watch ``run/inbox_wake/`` for wake files and trigger process_inbox.
+
+        Files are named after the target anima (e.g. ``run/inbox_wake/sakura``).
+        When detected, sends a ``process_inbox`` IPC request to the target and
+        deletes the file.  Polls at 0.5s intervals.
+        """
+        wake_dir = self.run_dir / "inbox_wake"
+        wake_dir.mkdir(parents=True, exist_ok=True)
+
+        while not self._shutdown:
+            try:
+                await asyncio.sleep(0.5)
+                if not wake_dir.exists():
+                    continue
+                for wake_file in wake_dir.iterdir():
+                    if wake_file.name.startswith("."):
+                        continue
+                    target_name = wake_file.name
+                    try:
+                        wake_file.unlink()
+                    except FileNotFoundError:
+                        continue
+                    except OSError:
+                        logger.debug("Failed to remove wake file %s", wake_file, exc_info=True)
+                        continue
+
+                    if target_name not in self.processes:
+                        logger.debug(
+                            "Inbox wake for unknown anima: %s", target_name,
+                        )
+                        continue
+
+                    try:
+                        await self.send_request(
+                            target_name, "process_inbox", {}, timeout=30.0,
+                        )
+                        logger.debug("Inbox wake dispatched: %s", target_name)
+                    except Exception:
+                        logger.debug(
+                            "Failed to dispatch inbox wake for %s",
+                            target_name, exc_info=True,
+                        )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.debug("Inbox wake dispatcher error", exc_info=True)
+                await asyncio.sleep(1.0)
 
     async def _poll_anima_events(self) -> None:
         """Read and broadcast event files from child processes."""

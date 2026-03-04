@@ -22,6 +22,7 @@ from core.tooling.handler_base import (
     _READ_MAX_LINES,
     _READ_MIN_LINES,
     _error_result,
+    _extract_first_heading,
 )
 
 logger = logging.getLogger("animaworks.tool_handler")
@@ -158,17 +159,74 @@ class FileToolsMixin:
         if err:
             return err
         path = Path(path_str)
+        content = args.get("content", "")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            if self._state_file_lock and self._is_state_file(path):
-                with self._state_file_lock:
-                    path.write_text(args.get("content", ""), encoding="utf-8")
-            else:
-                path.write_text(args.get("content", ""), encoding="utf-8")
+
+            written = self._try_write_with_frontmatter(path, content)
+            if not written:
+                if self._state_file_lock and self._is_state_file(path):
+                    with self._state_file_lock:
+                        path.write_text(content, encoding="utf-8")
+                else:
+                    path.write_text(content, encoding="utf-8")
             logger.info("write_file path=%s", path_str)
             return f"Written to {path_str}"
         except Exception as e:
             return _error_result("WriteError", f"Error writing {path_str}: {e}")
+
+    def _try_write_with_frontmatter(self, path: Path, content: str) -> bool:
+        """Auto-inject frontmatter when writing to knowledge/ or procedures/.
+
+        Returns True if the write was handled, False to fall back to plain write.
+        """
+        if path.suffix != ".md" or content.lstrip().startswith("---"):
+            return False
+
+        anima_dir: Path | None = getattr(self, "_anima_dir", None)
+        memory = getattr(self, "_memory", None)
+        if anima_dir is None or memory is None:
+            return False
+
+        try:
+            rel = path.resolve().relative_to(anima_dir.resolve())
+        except ValueError:
+            return False
+
+        parts = rel.parts
+        if len(parts) < 2:
+            return False
+
+        try:
+            if parts[0] == "procedures":
+                desc = _extract_first_heading(content)
+                metadata = {
+                    "description": desc,
+                    "success_count": 0,
+                    "failure_count": 0,
+                    "confidence": 0.5,
+                }
+                memory.write_procedure_with_meta(path, content, metadata)
+                return True
+            if parts[0] == "knowledge":
+                from core.schemas import now_jst
+                ts = now_jst().isoformat()
+                metadata = {
+                    "confidence": 0.5,
+                    "created_at": ts,
+                    "updated_at": ts,
+                    "source_episodes": 0,
+                    "auto_consolidated": False,
+                    "version": 1,
+                }
+                memory.write_knowledge_with_meta(path, content, metadata)
+                return True
+        except Exception:
+            logger.debug(
+                "Frontmatter auto-inject failed for %s, falling back", path,
+                exc_info=True,
+            )
+        return False
 
     def _handle_edit_file(self, args: dict[str, Any]) -> str:
         path_str = args.get("path", "")

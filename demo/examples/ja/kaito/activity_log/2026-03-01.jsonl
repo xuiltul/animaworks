@@ -1,0 +1,22 @@
+{"ts": "2026-03-01T09:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-01T09:01:00+09:00", "type": "cron_executed", "content": "デイリースタンダップを実行。今週のv0.2リリースに向けた計画をgeneralに投稿。", "summary": "daily_standup cron実行", "meta": {"task_name": "daily_standup"}}
+{"ts": "2026-03-01T09:02:00+09:00", "type": "channel_post", "content": "おはよう。今週はPixelForge v0.2のリリース週だ。今日はUIコンポーネントの仕上げとスケジュール整理を進めよう。", "summary": "v0.2リリース週の計画共有", "channel": "general"}
+{"ts": "2026-03-01T09:03:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-01T09:05:00+09:00", "type": "message_sent", "content": "soraくん、UIコンポーネントの実装頼みたいんだけど。ダッシュボード用のチャートウィジェットとフィルタパネル、今日中にお願いできる？仕様はdocs/ui-spec.mdにまとめてある。", "summary": "soraにUIコンポーネント実装を委譲", "from": "kaito", "to": "sora", "meta": {"intent": "delegation"}}
+{"ts": "2026-03-01T09:06:30+09:00", "type": "message_received", "content": "了解っす！仕様確認してすぐ取り掛かります！", "summary": "soraがUIコンポーネント実装を承諾", "from": "sora"}
+{"ts": "2026-03-01T09:10:00+09:00", "type": "message_sent", "content": "ひなちゃん、v0.2リリースまでのスケジュール整理お願いしていい？マイルストーンとタスクの依存関係をまとめてほしいんだ。", "summary": "hinaにスケジュール整理を依頼", "from": "kaito", "to": "hina", "meta": {"intent": "delegation"}}
+{"ts": "2026-03-01T09:11:30+09:00", "type": "message_received", "content": "了解です！すぐ整理しますね♪", "summary": "hinaがスケジュール整理を承諾", "from": "hina"}
+{"ts": "2026-03-01T12:00:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-01T12:01:00+09:00", "type": "channel_read", "summary": "#generalを確認", "channel": "general"}
+{"ts": "2026-03-01T12:02:00+09:00", "type": "tool_use", "content": "git log --oneline feature/ui-widgets", "summary": "soraのブランチ進捗確認", "tool": "Bash"}
+{"ts": "2026-03-01T12:05:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-01T14:02:00+09:00", "type": "message_received", "content": "できたっす！ダッシュボードのチャートウィジェットとフィルタパネル、テスト付きで実装完了しました。PR #42出してます、レビューお願いしまーす！", "summary": "soraがUIコンポーネント実装完了を報告", "from": "sora"}
+{"ts": "2026-03-01T14:05:00+09:00", "type": "message_sent", "content": "早いね、さすが。PR見てみるよ。ありがとう。", "summary": "soraのPR完了を確認", "from": "kaito", "to": "sora"}
+{"ts": "2026-03-01T14:30:00+09:00", "type": "tool_use", "content": "gh pr view 42", "summary": "PR #42の内容確認", "tool": "Bash"}
+{"ts": "2026-03-01T15:00:00+09:00", "type": "message_received", "content": "kaitoさん、v0.2リリースまでのスケジュール整理しましたよ〜！docs/v02-schedule.mdに置いてあります。3/3のリリースまでのクリティカルパスも可視化しておきました♪", "summary": "hinaがスケジュール整理完了を報告", "from": "hina"}
+{"ts": "2026-03-01T15:05:00+09:00", "type": "message_sent", "content": "ありがとう、助かるよ。クリティカルパスの可視化もいいね。", "summary": "hinaのスケジュール整理を確認", "from": "kaito", "to": "hina"}
+{"ts": "2026-03-01T15:30:00+09:00", "type": "heartbeat_start", "summary": "定期巡回開始"}
+{"ts": "2026-03-01T15:31:00+09:00", "type": "tool_use", "content": "docs/v02-schedule.md", "summary": "スケジュール確認", "tool": "Read"}
+{"ts": "2026-03-01T15:33:00+09:00", "type": "heartbeat_end", "summary": "定期巡回完了"}
+{"ts": "2026-03-01T17:00:00+09:00", "type": "heartbeat_start", "summary": "最終巡回"}
+{"ts": "2026-03-01T17:02:00+09:00", "type": "heartbeat_end", "summary": "Day 1完了。UIコンポーネント完成、スケジュール整理完了。順調。"}

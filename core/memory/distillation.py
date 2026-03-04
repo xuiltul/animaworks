@@ -643,23 +643,20 @@ class ProceduralDistiller:
     def _read_metadata(path: Path) -> dict:
         """Read YAML frontmatter metadata from a procedure file.
 
+        Delegates to the canonical line-based parser to avoid false
+        splits when YAML values contain ``---``.
+
         Args:
             path: Absolute path to the procedure Markdown file.
 
         Returns:
             Parsed metadata dict, or empty dict on failure.
         """
-        text = path.read_text(encoding="utf-8")
-        if text.startswith("---"):
-            parts = text.split("---", 2)
-            if len(parts) >= 3:
-                import yaml
+        from core.memory.frontmatter import parse_frontmatter
 
-                try:
-                    return yaml.safe_load(parts[1]) or {}
-                except Exception:
-                    return {}
-        return {}
+        text = path.read_text(encoding="utf-8")
+        meta, _ = parse_frontmatter(text)
+        return meta
 
     def _check_rag_duplicate(
         self, content: str, threshold: float = RAG_DUPLICATE_THRESHOLD,

@@ -95,36 +95,28 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, wor
 
 ### 生成手順
 
-システムプロンプトの「外部ツール」セクションに記載された **image_gen**（`generate_character_assets`）の使用方法に従って呼び出す。
+> **重要**: 生成前に必ず `assets/prompt_realistic.txt`（リアリスティック用）または `assets/prompt.txt`（アニメ用）の有無を確認すること。キャッシュ済みプロンプトが存在する場合はそちらを使用する。
 
-引数:
-- `prompt`: 上記ルールで変換したアニメタグ
-- `negative_prompt`: 推奨ネガティブプロンプト
-- `anima_dir`: 対象 Anima のディレクトリ（自分自身なら自分の、他者なら他者の）
-- `steps` は**指定しない**（デフォルトで全6ステップが実行される）
+**ステップ 1: スタイル判定**
 
-生成結果は `assets/` ディレクトリに保存される:
-   - `avatar_fullbody.png` — 全身立ち絵（NovelAI V4.5）
-   - `avatar_bustup.png` — バストアップ（Flux Kontext）
-   - `avatar_chibi.png` — ちびキャラ（Flux Kontext）
-   - `avatar_chibi.glb` — 3Dモデル（Meshy Image-to-3D）
-   - `avatar_chibi_rigged.glb` — リグ付き3Dモデル（Meshy Rigging）
-   - `anim_walking.glb`, `anim_running.glb` — 基本アニメーション（リギング同梱）
-   - `anim_idle.glb`, `anim_sitting.glb`, `anim_waving.glb`, `anim_talking.glb` — 追加アニメーション（Meshy Animations）
-3. 生成に失敗したステップがあればエラーを記録し、成功したものだけ使用する
+システムの画像スタイルを確認する。`image_style` は通常 `realistic`（フォトリアリスティック）または `anime` のいずれか。
+フレームワークが `generate_character_assets` に渡されたプロンプトのスタイルを自動検出・変換するが、最初から正しいスタイルのプロンプトを使用するのが望ましい。
 
-### リアリスティック（写実）スタイルのプロンプト
+- `assets/prompt_realistic.txt` が存在する → **そのまま使用**（最優先）
+- `assets/prompt.txt` が存在する → アニメスタイルの場合そのまま使用。リアリスティックが必要な場合は下記のルールで変換
+- いずれも存在しない → identity.md の外見設定から新規作成
 
-`image_style: realistic` が設定されている場合、Fal.ai Flux Pro でフォトリアリスティック画像を生成する。
-プロンプトは Danbooru タグではなく自然言語の写真的記述を使用する。
+**ステップ 2: プロンプト作成**
 
-**基本構造:**
+**リアリスティック（写実）スタイルの場合:**
+
+Fal.ai Flux Pro でフォトリアリスティック画像を生成する。プロンプトは Danbooru タグではなく自然言語の写真的記述を使用する。
 
 ```
 professional photograph, studio lighting, high resolution, realistic, photorealistic, a young woman/man with {hair_description}, {eye_description}, {outfit_description}, full body, standing, plain white background, looking at viewer
 ```
 
-**変換ルール（アニメ→リアリスティック）:**
+変換ルール（アニメ→リアリスティック）:
 
 | アニメタグ | リアリスティック記述 |
 |---|---|
@@ -135,13 +127,33 @@ professional photograph, studio lighting, high resolution, realistic, photoreali
 | `black hair, long hair, low ponytail` | `long black hair in a low ponytail` |
 | `red eyes, narrow eyes` | `sharp red eyes` |
 
-**品質・スタイルタグ（先頭に付与）:**
+品質・スタイルタグ（先頭に付与）: `professional photograph, studio lighting, high resolution, realistic, photorealistic`
 
-- スタイル: `professional photograph, studio lighting, high resolution, realistic, photorealistic`
+**アニメスタイルの場合:**
 
-> 注: `assets/prompt_realistic.txt` が存在する場合はそちらが優先される。存在しない場合は `assets/prompt.txt`（アニメ用）から自動変換される。
+上記「NovelAI プロンプトへの変換」セクションのルールでアニメタグを作成する。
 
-**生成結果:**
+**ステップ 3: 生成実行**
+
+システムプロンプトの「外部ツール」セクションに記載された **image_gen**（`generate_character_assets`）の使用方法に従って呼び出す。
+
+引数:
+- `prompt`: ステップ2で作成したプロンプト
+- `negative_prompt`: 推奨ネガティブプロンプト
+- `anima_dir`: 対象 Anima のディレクトリ（自分自身なら自分の、他者なら他者の）
+- `steps` は**指定しない**（デフォルトで全ステップが実行される）
+
+**リアリスティック時の生成結果:**
    - `avatar_fullbody_realistic.png` — 全身写真（Fal Flux Pro）
    - `avatar_bustup_realistic.png` — バストアップ写真（Flux Kontext）
    - 表情バリエーション: `avatar_bustup_{emotion}_realistic.png`
+
+**アニメ時の生成結果:**
+   - `avatar_fullbody.png` — 全身立ち絵（NovelAI V4.5）
+   - `avatar_bustup.png` — バストアップ（Flux Kontext）
+   - `avatar_chibi.png` — ちびキャラ（Flux Kontext）
+   - `avatar_chibi.glb` — 3Dモデル（Meshy Image-to-3D）
+   - `avatar_chibi_rigged.glb` — リグ付き3Dモデル（Meshy Rigging）
+   - アニメーション（Meshy Animations）
+
+生成に失敗したステップがあればエラーを記録し、成功したものだけ使用する。

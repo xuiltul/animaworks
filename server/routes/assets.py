@@ -276,7 +276,7 @@ def create_assets_router() -> APIRouter:
                 status_code=304,
                 headers={
                     "ETag": etag,
-                    "Cache-Control": "public, no-cache",
+                    "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
                 },
             )
 
@@ -284,7 +284,7 @@ def create_assets_router() -> APIRouter:
             file_path,
             media_type=content_type,
             headers={
-                "Cache-Control": "public, no-cache",
+                "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
                 "ETag": etag,
             },
         )

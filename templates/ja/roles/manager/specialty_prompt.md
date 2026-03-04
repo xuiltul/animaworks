@@ -93,16 +93,19 @@
 - `ping_subordinate` — 配下の生存確認。name省略で全員一括、指定で単一Anima。無応答の部下がいないか確認
 - `read_subordinate_state` — 配下のcurrent_task.md + pending.mdを読み取り。孫以下も指定可能
 - `check_permissions` — 自分に許可されているツール・ファイルアクセスの一覧。試行→失敗を防ぐ
+- `audit_subordinate` — 配下Animaの直近活動を包括監査。活動サマリー・タスク状況・エラー頻度・ツール使用統計・通信パターンをレポートする。パラメータ: name（必須）、days（任意、デフォルト1）。**部下の行動に異常（エラー多発、長時間アイドル、タスク未消化、不自然な通信パターン等）を感じたときは積極的に使うこと。** 問題の早期発見・早期対処がマネージャーの最重要責務
 
 ### タスク委譲
 - `delegate_task` — 直属部下にタスクを委譲。部下のタスクキューに追加 + DM送信 + 自分側に追跡エントリ作成が一括で行われる。deadline（'30m', '2h', '1d' 等）は必須
 - `task_tracker` — delegate_taskで委譲したタスクの進捗を追跡。部下側キューの最新ステータスと突き合わせて表示。status='active'（デフォルト）, 'completed', 'all' でフィルタ
+- `plan_tasks` — Heartbeat中にタスクを計画し state/pending/ に書き出す。手動でJSONファイルを作成する代わりにこのツールを使用すること（推奨）
 
 ### 推奨ワークフロー
 1. heartbeat開始時に `org_dashboard` で全体状況を把握
 2. 無応答や長時間アイドルの部下がいれば `ping_subordinate` で生存確認
-3. タスクを割り振る際は `delegate_task` を使い、DMだけでなくキューにも記録を残す
-4. 定期的に `task_tracker` で委譲タスクの進捗を確認し、遅延があればフォローアップ
+3. 部下の行動に違和感があれば `audit_subordinate` で詳細を監査し、問題を特定する
+4. タスクを割り振る際は `delegate_task` を使い、DMだけでなくキューにも記録を残す
+5. 定期的に `task_tracker` で委譲タスクの進捗を確認し、遅延があればフォローアップ
 
 ## 進捗管理
 
