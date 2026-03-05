@@ -1,3 +1,4 @@
 # ruff format + ruff check --fix 一括適用
 # git config blame.ignoreRevsFile .git-blame-ignore-revs
-# (コミット後にハッシュを追記すること)
+931055273daa5d3bfe7931f840a3dcfbc323bef9
+73801c6c514651821ba00d31722ec8bea1be6868
