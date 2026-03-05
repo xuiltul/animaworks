@@ -222,6 +222,7 @@ class ServerConfig(BaseModel):
     ipc_stream_timeout: int = 60  # per-chunk timeout in seconds
     keepalive_interval: int = 30  # keep-alive emission interval in seconds
     max_streaming_duration: int = 1800  # max streaming duration before hang (seconds)
+    busy_hang_threshold: int = 900  # no-progress timeout for busy processes (seconds)
     stream_checkpoint_enabled: bool = True  # save tool results during streaming
     stream_retry_max: int = 3  # max automatic retries on stream disconnect
     stream_retry_delay_s: float = 5.0  # delay between retries (seconds)

@@ -370,12 +370,21 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
     log_dir = get_data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    from core.supervisor.manager import HealthConfig
+
+    health_cfg = HealthConfig()
+    try:
+        health_cfg.busy_hang_threshold_sec = float(config.server.busy_hang_threshold)
+    except Exception:
+        pass
+
     supervisor = ProcessSupervisor(
         animas_dir=animas_dir,
         shared_dir=shared_dir,
         run_dir=run_dir,
         log_dir=log_dir,
         ws_manager=ws_manager,
+        health_config=health_cfg,
     )
 
     # Auto-migrate old Japanese cron.md format to standard cron expressions

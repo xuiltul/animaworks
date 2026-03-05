@@ -59,6 +59,7 @@ class HealthConfig:
     ping_timeout_sec: float = 5.0  # Ping timeout
     max_missed_pings: int = 6  # Consecutive misses before hang
     startup_grace_sec: float = 30.0  # Grace period after startup
+    busy_hang_threshold_sec: float = 900.0  # 15 min: no-progress timeout for busy processes
 
 
 @dataclass
@@ -636,7 +637,9 @@ class ProcessSupervisor(HealthMixin, ReconcileMixin, SchedulerMixin):
             "uptime_sec": uptime,
             "restart_count": self._restart_counts.get(anima_name, 0),
             "missed_pings": handle.stats.missed_pings,
-            "busy_pings": handle.stats.busy_pings,
+            "last_busy_since": (
+                handle.stats.last_busy_since.isoformat() if handle.stats.last_busy_since else None
+            ),
             "bootstrapping": self.is_bootstrapping(anima_name),
             "last_ping_at": (handle.stats.last_ping_at.isoformat() if handle.stats.last_ping_at else None),
         }

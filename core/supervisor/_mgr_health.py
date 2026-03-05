@@ -165,26 +165,42 @@ class HealthMixin:
 
         if success:
             if is_busy:
-                handle.stats.busy_pings += 1
                 handle.stats.missed_pings = 0
-                busy_limit = self.health_config.max_missed_pings * 3
-                if handle.stats.busy_pings >= busy_limit:
+                last_progress_iso = ping_result.get("last_progress_at")
+                if last_progress_iso:
+                    from datetime import datetime as _dt
+
+                    last_progress = ensure_aware(_dt.fromisoformat(last_progress_iso))
+                    idle_sec = (now_jst() - last_progress).total_seconds()
+                    if idle_sec > self.health_config.busy_hang_threshold_sec:
+                        logger.error(
+                            "Process busy hang (no progress): %s (idle=%.0fs > %ds)",
+                            anima_name,
+                            idle_sec,
+                            int(self.health_config.busy_hang_threshold_sec),
+                        )
+                        asyncio.create_task(self._handle_process_hang(anima_name, handle))
+                    return
+                if handle.stats.last_busy_since is None:
+                    handle.stats.last_busy_since = now_jst()
+                busy_duration = (now_jst() - handle.stats.last_busy_since).total_seconds()
+                if busy_duration > self.health_config.busy_hang_threshold_sec:
                     logger.error(
-                        "Process busy too long (busy hang): %s (busy=%d/%d)",
+                        "Process busy hang (no progress info, fallback): %s (busy=%.0fs > %ds)",
                         anima_name,
-                        handle.stats.busy_pings,
-                        busy_limit,
+                        busy_duration,
+                        int(self.health_config.busy_hang_threshold_sec),
                     )
                     asyncio.create_task(self._handle_process_hang(anima_name, handle))
                 return
 
-            if handle.stats.missed_pings > 0 or handle.stats.busy_pings > 0:
+            if handle.stats.missed_pings > 0 or handle.stats.last_busy_since is not None:
                 logger.info("Process recovered: %s", anima_name)
-            handle.stats.busy_pings = 0
+            handle.stats.last_busy_since = None
             return
 
         # Ping failed
-        handle.stats.busy_pings = 0
+        handle.stats.last_busy_since = None
         logger.warning(
             "Health check failed: %s (missed=%d/%d)",
             anima_name,

@@ -52,7 +52,7 @@ class ProcessStats:
     restart_count: int = 0
     last_ping_at: datetime | None = None
     missed_pings: int = 0
-    busy_pings: int = 0
+    last_busy_since: datetime | None = None
     exit_code: int | None = None
 
 

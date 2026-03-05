@@ -83,6 +83,7 @@ class AgentCore(
         self._personal_tools = self._discover_personal_tools()
         self._sdk_available = self._check_sdk()
         self._agent_locks: dict[str, asyncio.Lock] = {}
+        self._progress_callback: Callable[[], None] | None = None
 
         # Build human notifier for top-level animas
         human_notifier = self._build_human_notifier()
