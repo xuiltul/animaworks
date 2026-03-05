@@ -92,7 +92,18 @@ class DigitalAnima(
         self.messenger = Messenger(shared_dir, self.name)
         self._interrupt_events: dict[str, asyncio.Event] = {}
         self.agent = AgentCore(anima_dir, self.memory, self.model_config, self.messenger)
-        self.agent._progress_callback = lambda: setattr(self, "_last_progress_at", now_jst())
+        self._progress_min_interval = 0.5  # seconds
+        self._progress_last_mono: float = 0.0
+
+        def _throttled_progress() -> None:
+            import time
+
+            mono = time.monotonic()
+            if mono - self._progress_last_mono >= self._progress_min_interval:
+                self._last_progress_at = now_jst()
+                self._progress_last_mono = mono
+
+        self.agent._progress_callback = _throttled_progress
 
         # 3-lock structure: conversation (human chat) / inbox (Anima-to-Anima MSG) / background (HB/cron/TaskExec)
         self._conversation_locks: dict[str, asyncio.Lock] = {}

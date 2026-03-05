@@ -383,7 +383,11 @@ class ProcessHandle:
             self.stats.missed_pings = 0
             is_busy = bool(result.get("is_busy", False))
             if return_details:
-                return {"success": True, "is_busy": is_busy}
+                return {
+                    "success": True,
+                    "is_busy": is_busy,
+                    "last_progress_at": result.get("last_progress_at"),
+                }
             return True
 
         except TimeoutError:
