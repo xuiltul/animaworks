@@ -191,6 +191,7 @@ def create_tool_prompts_router() -> APIRouter:
 
             # Determine execution mode from config
             execution_mode = "s"  # default
+            anima_config = None
             try:
                 from core.config.models import load_config, resolve_execution_mode
 
@@ -220,11 +221,19 @@ def create_tool_prompts_router() -> APIRouter:
             except Exception:
                 pass
 
+            from core.prompt.context import resolve_context_window
+
+            context_window = 200_000
+            if anima_config and anima_config.model:
+                context_window = resolve_context_window(anima_config.model)
+
             result = build_system_prompt(
                 memory,
                 tool_registry=tool_registry,
                 personal_tools=personal_tools,
                 execution_mode=execution_mode,
+                trigger="chat",
+                context_window=context_window,
             )
 
             prompt_text = str(result)

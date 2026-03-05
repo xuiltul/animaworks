@@ -58,7 +58,7 @@ class TestBoardMentionDepthCheck:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             messenger.send(to="target-anima", content="Great job!", msg_type="board_mention")
 
@@ -76,7 +76,7 @@ class TestBoardMentionDepthCheck:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send(
                 to="target-anima", content="Great job!", msg_type="board_mention",
@@ -98,7 +98,7 @@ class TestBoardMentionDepthCheck:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send(to="target-anima", content="ok", msg_type="ack")
 
@@ -116,7 +116,7 @@ class TestBoardMentionDepthCheck:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send(to="target-anima", content="err", msg_type="error")
 
@@ -134,7 +134,7 @@ class TestBoardMentionDepthCheck:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send(
                 to="target-anima", content="alert", msg_type="system_alert",
@@ -153,7 +153,7 @@ class TestBoardMentionDepthCheck:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             messenger.send(to="target-anima", content="hello", msg_type="message")
 

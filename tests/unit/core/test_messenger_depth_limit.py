@@ -55,7 +55,7 @@ class TestDepthLimitBlocking:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "hello")
 
@@ -72,7 +72,7 @@ class TestDepthLimitBlocking:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             messenger.send("bob", "hello")
 
@@ -92,7 +92,7 @@ class TestDepthLimitAllowed:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "hello")
 
@@ -112,7 +112,7 @@ class TestDepthLimitBypass:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "ok", msg_type="ack")
 
@@ -126,7 +126,7 @@ class TestDepthLimitBypass:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "fail", msg_type="error")
 
@@ -140,7 +140,7 @@ class TestDepthLimitBypass:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "alert content", msg_type="system_alert")
 
@@ -156,7 +156,7 @@ class TestDepthLimitBypass:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "mentioned you", msg_type="board_mention")
 
@@ -175,7 +175,7 @@ class TestExternalRecipientSkip:
         # "external-user" directory does not exist in animas_dir
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("external-user", "hello")
 
@@ -197,7 +197,7 @@ class TestGlobalOutboundLimitBlocking:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "hello")
 
@@ -216,7 +216,7 @@ class TestGlobalOutboundLimitBlocking:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             messenger.send("bob", "hello")
 
@@ -232,7 +232,7 @@ class TestGlobalOutboundLimitBlocking:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "ok", msg_type="ack")
 
@@ -247,7 +247,7 @@ class TestGlobalOutboundLimitBlocking:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "fail", msg_type="error")
 
@@ -262,7 +262,7 @@ class TestGlobalOutboundLimitBlocking:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "alert content", msg_type="system_alert")
 
@@ -278,7 +278,7 @@ class TestGlobalOutboundLimitBlocking:
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
-            patch("core.cascade_limiter.depth_limiter", mock_limiter),
+            patch("core.cascade_limiter.get_depth_limiter", return_value=mock_limiter),
         ):
             result = messenger.send("bob", "hello")
 

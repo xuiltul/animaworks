@@ -134,8 +134,8 @@ class KnowledgeValidator:
             field populated
         """
         if not model:
-            from core.config.models import ConsolidationConfig
-            model = ConsolidationConfig().llm_model
+            from core.config.models import load_config
+            model = load_config().consolidation.llm_model
         if self._nli_pipeline is None and self._nli_available:
             self._load_nli_model()
 

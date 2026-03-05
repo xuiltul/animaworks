@@ -254,15 +254,23 @@ class TestLegacyCheckAndRecord:
     def test_always_returns_true(self, _patch_config):
         """後方互換性スタブは常にTrueを返す。"""
         limiter = ConversationDepthLimiter(max_depth=1)
-        assert limiter.check_and_record("alice", "bob") is True
-        assert limiter.check_and_record("alice", "bob") is True
-        assert limiter.check_and_record("alice", "bob") is True
+        with pytest.warns(DeprecationWarning, match="check_and_record is deprecated"):
+            assert limiter.check_and_record("alice", "bob") is True
+        with pytest.warns(DeprecationWarning):
+            assert limiter.check_and_record("alice", "bob") is True
+            assert limiter.check_and_record("alice", "bob") is True
 
 
 class TestModuleSingleton:
-    """Test the module-level singleton is shared."""
+    """Test the factory function returns correct type."""
 
-    def test_singleton_exists(self):
-        """シングルトンが存在する。"""
+    def test_get_depth_limiter_returns_instance(self):
+        """get_depth_limiter() returns a ConversationDepthLimiter."""
+        from core.cascade_limiter import get_depth_limiter
+        limiter = get_depth_limiter()
+        assert isinstance(limiter, ConversationDepthLimiter)
+
+    def test_backward_compat_alias_exists(self):
+        """Module-level depth_limiter alias still exists."""
         from core.cascade_limiter import depth_limiter
         assert isinstance(depth_limiter, ConversationDepthLimiter)

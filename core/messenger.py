@@ -151,9 +151,10 @@ class Messenger:
             animas_dir = get_animas_dir()
             is_internal = (animas_dir / to).is_dir() if animas_dir.exists() else False
             if is_internal:
-                from core.cascade_limiter import depth_limiter
+                from core.cascade_limiter import get_depth_limiter
                 sender_dir = animas_dir / self.anima_name
-                outbound_check = depth_limiter.check_global_outbound(self.anima_name, sender_dir)
+                limiter = get_depth_limiter()
+                outbound_check = limiter.check_global_outbound(self.anima_name, sender_dir)
                 if outbound_check is not True:
                     logger.warning(
                         "Global outbound limit exceeded: %s. Message not sent.",
@@ -165,7 +166,7 @@ class Messenger:
                         type="error",
                         content=str(outbound_check),
                     )
-                if not depth_limiter.check_depth(self.anima_name, to, sender_dir):
+                if not limiter.check_depth(self.anima_name, to, sender_dir):
                     logger.warning(
                         "Depth limit exceeded: %s -> %s. Message not sent.",
                         self.anima_name, to,

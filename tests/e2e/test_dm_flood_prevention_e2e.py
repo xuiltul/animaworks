@@ -93,7 +93,7 @@ def test_global_hourly_limit_blocks_excess_messages(workspace: Path) -> None:
 
     with (
         patch("core.paths.get_animas_dir", return_value=animas_dir),
-        patch("core.cascade_limiter.depth_limiter", limiter),
+        patch("core.cascade_limiter.get_depth_limiter", return_value=limiter),
     ):
         result = messenger.send("bob", "should be blocked")
 
@@ -131,7 +131,7 @@ def test_global_daily_limit_blocks_excess_messages(workspace: Path) -> None:
 
     with (
         patch("core.paths.get_animas_dir", return_value=animas_dir),
-        patch("core.cascade_limiter.depth_limiter", limiter),
+        patch("core.cascade_limiter.get_depth_limiter", return_value=limiter),
     ):
         result = messenger.send("bob", "should be blocked by daily limit")
 
@@ -232,7 +232,7 @@ def test_ack_messages_bypass_all_limits(workspace: Path) -> None:
 
     with (
         patch("core.paths.get_animas_dir", return_value=animas_dir),
-        patch("core.cascade_limiter.depth_limiter", limiter),
+        patch("core.cascade_limiter.get_depth_limiter", return_value=limiter),
     ):
         result = messenger.send(
             "bob",

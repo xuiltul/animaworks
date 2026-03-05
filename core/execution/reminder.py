@@ -16,6 +16,7 @@ each iteration and injects ``<system-reminder>`` blocks into the conversation.
 
 import asyncio
 import logging
+import threading
 from collections import deque
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class SystemReminderQueue:
     def __init__(self, max_size: int = _MAX_QUEUE_SIZE) -> None:
         self._items: deque[str] = deque(maxlen=max_size)
         self._lock = asyncio.Lock()
+        self._sync_lock = threading.Lock()
 
     async def push(self, content: str) -> None:
         """Enqueue a reminder.  Oldest entry is dropped if queue is full."""
@@ -55,11 +57,12 @@ class SystemReminderQueue:
 
     def push_sync(self, content: str) -> None:
         """Synchronous push (for use from sync code paths)."""
-        maxlen = self._items.maxlen or _MAX_QUEUE_SIZE
-        if len(self._items) >= maxlen:
-            dropped = self._items.popleft()
-            logger.debug("SystemReminderQueue overflow; dropped: %s", dropped[:80])
-        self._items.append(content)
+        with self._sync_lock:
+            maxlen = self._items.maxlen or _MAX_QUEUE_SIZE
+            if len(self._items) >= maxlen:
+                dropped = self._items.popleft()
+                logger.debug("SystemReminderQueue overflow; dropped: %s", dropped[:80])
+            self._items.append(content)
 
     async def drain(self) -> str | None:
         """Drain all queued items, returning combined content or None."""
@@ -72,11 +75,12 @@ class SystemReminderQueue:
 
     def drain_sync(self) -> str | None:
         """Synchronous drain (for use from sync code paths)."""
-        if not self._items:
-            return None
-        items = list(self._items)
-        self._items.clear()
-        return "\n\n".join(items)
+        with self._sync_lock:
+            if not self._items:
+                return None
+            items = list(self._items)
+            self._items.clear()
+            return "\n\n".join(items)
 
     @staticmethod
     def format_reminder(content: str) -> str:
