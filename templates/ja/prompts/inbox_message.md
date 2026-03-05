@@ -10,9 +10,10 @@ Inboxにメッセージが届いています。以下の内容を確認し、適
   - 自分で後でやる → `plan_tasks` で投入（state/pending/ に書き出され TaskExec が別セッションで実行）
 - 返信は簡潔に（長文は不要）
 
-### 外部プラットフォーム（Slack/Chatwork）からのメッセージへの返信
-メッセージに `[platform=slack channel=CHANNEL_ID ts=TS]` が付いている場合:
-- **必ずスレッド返信**する: `animaworks-tool slack send '#チャネル名またはCHANNEL_ID' 'メッセージ' --thread TS`
-- tsの値をそのまま `--thread` に渡すこと
+### 外部プラットフォームからのメッセージへの返信
+メッセージに `[reply_instruction: ...]` が付いている場合:
+- **必ずその指示に従って返信**すること（`execute_command` で実行）
+- `{返信内容}` を実際の返信文に置き換えること
+- `send_message` は使わないこと（DMになり、スレッド返信にならない）
 
 {task_delegation_rules}

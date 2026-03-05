@@ -40,6 +40,26 @@ _SOURCE_TO_ORIGIN: dict[str, str] = {
 }
 
 
+def _build_reply_instruction(m: Any) -> str:
+    """Build platform-specific reply instruction metadata for external messages.
+
+    Returns a formatted ``[reply_instruction: ...]`` line that the LLM can
+    copy-paste to reply via the correct platform, channel, and thread.
+    """
+    if m.source == "slack":
+        mention = f"<@{m.external_user_id}> " if m.external_user_id else ""
+        cmd = f"animaworks-tool slack send '{m.external_channel_id}' '{mention}{{返信内容}}'"
+        if m.source_message_id:
+            cmd += f" --thread {m.source_message_id}"
+        return f"  [reply_instruction: {cmd}]"
+
+    if m.source == "chatwork":
+        cmd = f"animaworks-tool chatwork send {m.external_channel_id} '{{返信内容}}'"
+        return f"  [reply_instruction: {cmd}]"
+
+    return ""
+
+
 @dataclass
 class InboxResult:
     """Result of inbox message processing."""
@@ -381,22 +401,18 @@ class InboxMixin:
                 prefix = f"- {m.from_person}: "
             line = f"{prefix}{m.content[:800]}"
             if m.source in ("slack", "chatwork") and m.external_channel_id:
-                line += (
-                    f"\n  [platform={m.source}"
-                    f" channel={m.external_channel_id}"
-                    f" ts={m.source_message_id}]"
-                )
+                reply_instr = _build_reply_instruction(m)
+                if reply_instr:
+                    line += f"\n{reply_instr}"
             lines.append(line)
         # Deferred messages (no InboxItem) are appended without counter
         for m in messages:
             if not any(item.msg is m for item in inbox_items):
                 line = f"- {m.from_person}: {m.content[:800]}"
                 if m.source in ("slack", "chatwork") and m.external_channel_id:
-                    line += (
-                        f"\n  [platform={m.source}"
-                        f" channel={m.external_channel_id}"
-                        f" ts={m.source_message_id}]"
-                    )
+                    reply_instr = _build_reply_instruction(m)
+                    if reply_instr:
+                        line += f"\n{reply_instr}"
                 lines.append(line)
         summary = "\n".join(lines)
         prompt_parts.append(load_prompt("unread_messages", summary=summary))
