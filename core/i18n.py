@@ -318,6 +318,11 @@ _STRINGS: dict[str, dict[str, str]] = {
     "contradiction.knowledge_resolution": {"ja": "knowledge矛盾解決({strategy})", "en": "Knowledge contradiction resolved ({strategy})"},
     # ── voice/session.py ──
     "voice.stt_failed": {"ja": "音声認識に失敗しました", "en": "Speech recognition failed"},
+    # ── pending_executor.py ──
+    "pending_executor.task_fail_notify": {
+        "ja": "[タスク失敗通知]\nタスクID: {task_id}\nタスク: {title}\nエラー: {error}",
+        "en": "[Task Failure]\nTask ID: {task_id}\nTask: {title}\nError: {error}",
+    },
 }
 
 

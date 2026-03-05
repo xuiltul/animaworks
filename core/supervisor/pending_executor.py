@@ -129,6 +129,18 @@ class PendingTaskExecutor:
 
     # ── Watcher loop ─────────────────────────────────────────
 
+    @staticmethod
+    def _recover_processing(processing_dir: Path, failed_dir: Path) -> None:
+        """Move orphaned files from processing/ to failed/ on startup."""
+        if not processing_dir.exists():
+            return
+        for orphan in processing_dir.glob("*.json"):
+            try:
+                orphan.rename(failed_dir / orphan.name)
+                logger.warning("Recovered orphaned processing task: %s", orphan.name)
+            except OSError:
+                logger.exception("Failed to recover orphaned task: %s", orphan.name)
+
     async def watcher_loop(self) -> None:
         """Watch state/background_tasks/pending/ for submitted tasks.
 
@@ -136,11 +148,25 @@ class PendingTaskExecutor:
         and executed through BackgroundTaskManager, outside the Anima lock.
         Batch tasks (with ``batch_id``) are grouped and dispatched via the
         DAG scheduler for parallel execution.
+
+        File lifecycle: pending/ → processing/ → success: delete | fail: failed/
         """
         pending_dir = self._anima_dir / "state" / "background_tasks" / "pending"
         pending_dir.mkdir(parents=True, exist_ok=True)
+        cmd_processing_dir = pending_dir / "processing"
+        cmd_processing_dir.mkdir(exist_ok=True)
+        cmd_failed_dir = pending_dir / "failed"
+        cmd_failed_dir.mkdir(exist_ok=True)
+
         llm_pending_dir = self._anima_dir / "state" / "pending"
         llm_pending_dir.mkdir(parents=True, exist_ok=True)
+        llm_processing_dir = llm_pending_dir / "processing"
+        llm_processing_dir.mkdir(exist_ok=True)
+        llm_failed_dir = llm_pending_dir / "failed"
+        llm_failed_dir.mkdir(exist_ok=True)
+
+        self._recover_processing(cmd_processing_dir, cmd_failed_dir)
+        self._recover_processing(llm_processing_dir, llm_failed_dir)
 
         logger.info("Pending task watcher started for %s", self._anima_name)
 
@@ -150,7 +176,23 @@ class PendingTaskExecutor:
                 for path in sorted(pending_dir.glob("*.json")):
                     try:
                         task_desc = json.loads(path.read_text(encoding="utf-8"))
-                        path.unlink()
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            "Invalid JSON in pending task file: %s", path.name,
+                        )
+                        path.unlink(missing_ok=True)
+                        continue
+
+                    try:
+                        processing_path = cmd_processing_dir / path.name
+                        path.rename(processing_path)
+                    except OSError:
+                        logger.exception(
+                            "Failed to move task to processing: %s", path.name,
+                        )
+                        continue
+
+                    try:
                         logger.info(
                             "Picked up pending task: id=%s tool=%s subcmd=%s anima=%s",
                             task_desc.get("task_id", "?"),
@@ -159,21 +201,39 @@ class PendingTaskExecutor:
                             self._anima_name,
                         )
                         await self.execute_pending_task(task_desc)
-                    except json.JSONDecodeError:
-                        logger.warning(
-                            "Invalid JSON in pending task file: %s", path.name,
-                        )
-                        path.unlink(missing_ok=True)
+                        processing_path.unlink(missing_ok=True)
                     except Exception:
                         logger.exception(
                             "Error processing pending task file: %s", path.name,
                         )
+                        try:
+                            processing_path.rename(cmd_failed_dir / path.name)
+                        except OSError:
+                            logger.exception(
+                                "Failed to move task to failed: %s", path.name,
+                            )
 
                 # Scan LLM pending tasks — group batch tasks, execute serial ones
                 for path in sorted(llm_pending_dir.glob("*.json")):
                     try:
                         task_desc = json.loads(path.read_text(encoding="utf-8"))
-                        path.unlink()
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            "Invalid JSON in LLM pending task file: %s", path.name,
+                        )
+                        path.unlink(missing_ok=True)
+                        continue
+
+                    try:
+                        processing_path = llm_processing_dir / path.name
+                        path.rename(processing_path)
+                    except OSError:
+                        logger.exception(
+                            "Failed to move LLM task to processing: %s", path.name,
+                        )
+                        continue
+
+                    try:
                         batch_id = task_desc.get("batch_id")
                         if batch_id:
                             self._batch_tasks.setdefault(batch_id, []).append(task_desc)
@@ -190,15 +250,17 @@ class PendingTaskExecutor:
                                 self._anima_name,
                             )
                             await self.execute_pending_task(task_desc)
-                    except json.JSONDecodeError:
-                        logger.warning(
-                            "Invalid JSON in LLM pending task file: %s", path.name,
-                        )
-                        path.unlink(missing_ok=True)
+                        processing_path.unlink(missing_ok=True)
                     except Exception:
                         logger.exception(
                             "Error processing LLM pending task file: %s", path.name,
                         )
+                        try:
+                            processing_path.rename(llm_failed_dir / path.name)
+                        except OSError:
+                            logger.exception(
+                                "Failed to move LLM task to failed: %s", path.name,
+                            )
 
                 # Dispatch accumulated batch tasks
                 for batch_id, tasks in list(self._batch_tasks.items()):
@@ -598,9 +660,37 @@ class PendingTaskExecutor:
                 finally:
                     self._anima._status_slots["background"] = "idle"
                     self._anima._task_slots["background"] = ""
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 "[%s] LLM task failed: id=%s", self._anima_name, task_id,
             )
             self._anima._status_slots["background"] = "idle"
             self._anima._task_slots["background"] = ""
+            self._write_failed_result(
+                task_id, f"{type(exc).__name__}: {str(exc)[:200]}",
+            )
+            reply_to = task_desc.get("reply_to")
+            if isinstance(reply_to, dict):
+                reply_to = reply_to.get("name")
+            elif not isinstance(reply_to, str):
+                reply_to = None
+            if reply_to:
+                try:
+                    from core.i18n import t
+                    from core.execution._sanitize import ORIGIN_ANIMA
+                    notify_text = t(
+                        "pending_executor.task_fail_notify",
+                        task_id=task_id,
+                        title=task_desc.get("description", "unknown"),
+                        error=f"{type(exc).__name__}: {str(exc)[:200]}",
+                    )
+                    self._anima.messenger.send(
+                        to=reply_to,
+                        content=notify_text,
+                        origin_chain=[ORIGIN_ANIMA],
+                    )
+                except Exception:
+                    logger.warning(
+                        "[%s] Failed to notify task failure to %s",
+                        self._anima_name, reply_to,
+                    )
