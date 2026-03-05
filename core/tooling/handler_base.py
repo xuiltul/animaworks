@@ -174,6 +174,9 @@ def _validate_episode_path(rel_path: str) -> str | None:
 def _validate_skill_format(content: str) -> str:
     """Validate skill file content format (soft validation).
 
+    Required frontmatter fields: ``name``, ``description``.
+    Optional fields such as ``allowed_tools`` and ``tags`` are permitted.
+
     Returns an empty string if everything is fine, or a newline-joined
     string of warnings/errors otherwise.
     """

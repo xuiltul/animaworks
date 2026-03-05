@@ -12,7 +12,8 @@ description: >-
 ## スキルファイルの構造
 
 スキルファイルはYAMLフロントマターとMarkdown本文で構成される。
-フロントマターには `name` と `description` の2フィールドのみを記載する。
+フロントマターには `name` と `description` を必須フィールドとして記載する。
+任意フィールドとして `allowed_tools`（許可ツールリスト）、`tags`（分類タグ）も使用可能。
 
 ```yaml
 ---
@@ -63,17 +64,20 @@ Level 3 は長大な参照資料やコード例を外部ファイルに分離す
 
 ### Step 3: 作成
 
-スキルファイルを保存する:
+`create_skill` ツールでスキルを作成する:
 
 ```
-write_memory_file("skills/{name}.md", content)
+create_skill(skill_name="{name}", description="{description}", body="{body}")
 ```
 
 共通スキルの場合:
 
 ```
-write_memory_file("common_skills/{name}.md", content)
+create_skill(skill_name="{name}", description="{description}", body="{body}", location="common")
 ```
+
+※ `write_memory_file` でもスキルの編集は可能だが、新規作成には `create_skill` を使うこと
+（`write_memory_file` でフラット形式 `skills/foo.md` を作ると skill ツールで参照できない）
 
 テンプレートは `templates/skill_template.md` を参照。
 
@@ -96,6 +100,7 @@ read_memory_file("skills/{name}.md")
 - [ ] **descriptionがドメイン固有で具体的**（「管理を行う」「確認する」のような汎用表現を避け、ツール名・操作名・対象を明記）
 - [ ] bodyに具体的な手順が記載されている
 - [ ] `## 概要` / `## 発動条件` の旧形式を使っていない
+- [ ] `create_skill` ツールで作成している（`write_memory_file` のフラット形式は skill ツールで参照不可）
 
 ## テンプレート
 
@@ -125,6 +130,7 @@ description: >-
 ## 注意事項
 
 - スキルはMarkdown手順書であり、Pythonコード（ツール）とは異なる
-- フロントマターに `name` と `description` 以外のフィールドを入れない
+- フロントマターの必須フィールドは `name` と `description`
+- 任意フィールド: `allowed_tools`（許可ツールリスト）、`tags`（分類タグ）も使用可能
 - bodyが長くなりすぎるとコンテキストを圧迫するため、150行以内を目安にする
 - 外部リソース参照（Level 3）を活用して本文を簡潔に保つ

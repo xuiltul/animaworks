@@ -3,7 +3,7 @@ name: skill-creator
 description: >-
   Meta-skill for creating Markdown Skill files (.md) with correct YAML frontmatter format.
   Provides description rules for personal skills (skills/) and common skills (common_skills/),
-  keyword design with 「」, Progressive Disclosure structure, and save procedure via write_memory_file.
+  keyword design with 「」, Progressive Disclosure structure, and creation via create_skill tool.
   Use for: "create skill", "create a skill", "new skill", "create procedure", "skill file".
 ---
 
@@ -12,7 +12,8 @@ description: >-
 ## Skill File Structure
 
 A Skill file consists of YAML frontmatter and Markdown body.
-Include only `name` and `description` in the frontmatter.
+Required frontmatter fields are `name` and `description`.
+Optional fields: `allowed_tools` (permitted tool list), `tags` (classification tags).
 
 ```yaml
 ---
@@ -126,17 +127,20 @@ Decide:
 
 ### Step 3: Create
 
-Save the Skill file:
+Use the `create_skill` tool to create the skill:
 
 ```
-write_memory_file("skills/{name}.md", content)
+create_skill(skill_name="{name}", description="{description}", body="{body}")
 ```
 
 For common Skills:
 
 ```
-write_memory_file("common_skills/{name}.md", content)
+create_skill(skill_name="{name}", description="{description}", body="{body}", location="common")
 ```
+
+Note: `write_memory_file` can still edit existing skills, but use `create_skill` for new skills.
+(`write_memory_file` with flat format `skills/foo.md` creates files that the skill tool cannot resolve.)
 
 ### Step 4: Verify
 
@@ -157,6 +161,7 @@ Before saving, verify:
 - [ ] **description is domain-specific and concrete** (avoid generic phrases like "perform management", "perform check"; include tool names, operation names, targets)
 - [ ] body contains concrete procedure steps
 - [ ] Old format `## Overview` / `## Trigger Conditions` is not used
+- [ ] Created via `create_skill` tool (flat format via `write_memory_file` cannot be resolved by the skill tool)
 
 ## Template
 
@@ -186,6 +191,7 @@ description: >-
 ## Notes
 
 - Skills are Markdown procedure documents, distinct from Python code (tools)
-- Do not add fields other than `name` and `description` to the frontmatter
+- Required frontmatter fields: `name` and `description`
+- Optional fields: `allowed_tools` (permitted tool list), `tags` (classification tags)
 - Keep body under about 150 lines to avoid context pressure
 - Use external resource references (Level 3) to keep the body concise

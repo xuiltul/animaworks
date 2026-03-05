@@ -141,11 +141,22 @@ class MemoryToolsMixin:
                     "PermissionDenied",
                     "Path traversal detected — access denied.",
                 )
+        elif rel.startswith("common_skills/"):
+            from core.paths import get_common_skills_dir
+
+            suffix = rel[len("common_skills/"):]
+            cs_dir = get_common_skills_dir()
+            path = (cs_dir / suffix).resolve()
+            if not path.is_relative_to(cs_dir.resolve()):
+                return _error_result(
+                    "PermissionDenied",
+                    "Path traversal detected — access denied.",
+                )
         else:
             path = self._anima_dir / rel
 
         # Security check: block protected files and path traversal
-        if not self._superuser and not rel.startswith("common_knowledge/"):
+        if not self._superuser and not rel.startswith(("common_knowledge/", "common_skills/")):
             err = _is_protected_write(self._anima_dir, path)
             if err:
                 resolved = path.resolve()
