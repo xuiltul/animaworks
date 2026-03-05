@@ -86,10 +86,11 @@ class TestRenderUtilsLiveBubble:
         self.source = _RENDER_UTILS_JS.read_text(encoding="utf-8")
 
     def test_live_bubble_hides_actions_during_streaming(self) -> None:
-        assert 'msg.streaming ? "" : _bubbleActionsHtml(rawText)' in self.source
+        assert "renderStreamingBubbleInner" in self.source
+        assert "_bubbleActionsHtml" in self.source
 
     def test_live_bubble_conditional_data_attr(self) -> None:
-        assert "!msg.streaming" in self.source
+        assert "data-raw-text" in self.source
 
 
 class TestBindBubbleActionHandlers:

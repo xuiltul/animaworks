@@ -77,6 +77,7 @@ Follow this flow to find the right document:
 | `communication/instruction-patterns.md` | Instruction patterns (how to write clear instructions, delegation patterns, progress checks) |
 | `communication/reporting-guide.md` | How to report and escalate (timing, format, urgent vs routine) |
 | `communication/sending-limits.md` | Sending limits in detail (3-layer rate limit, 30/h and 100/day caps, cascade detection, how to handle) |
+| `communication/slack-bot-token-guide.md` | Slack bot token configuration (shared vs per-Anima tokens, naming convention, critical rules) |
 
 ### operations/ — Operations & Task Management
 
@@ -148,6 +149,7 @@ Find the right document from relevant keywords.
 | skill, skill tool, procedure fetch, procedures | `operations/tool-usage-overview.md` |
 | execution mode, S-mode, A-mode, B-mode | `operations/tool-usage-overview.md` |
 | rate limit, sending limit, 30/hour, 100/day, outbound limit | `communication/sending-limits.md` |
+| Slack, bot token, SLACK_BOT_TOKEN, per-Anima, not_in_channel | `communication/slack-bot-token-guide.md` |
 | one-round rule, round-trip, loop, cascade | `communication/messaging-guide.md`, `communication/sending-limits.md` |
 | prompt injection, trust, untrusted, boundary tag | `security/prompt-injection-awareness.md` |
 | delegate_task, task delegation, task_tracker | `operations/task-management.md`, `organization/hierarchy-rules.md` |

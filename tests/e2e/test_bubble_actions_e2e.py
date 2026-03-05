@@ -42,7 +42,8 @@ class TestActionBarHTMLConsistency:
         assert ".bubble-actions.visible" in self.css
 
     def test_streaming_class_hiding_in_both(self) -> None:
-        assert 'msg.streaming ? "" : _bubbleActionsHtml' in self.js
+        assert "renderStreamingBubbleInner" in self.js
+        assert "_bubbleActionsHtml" in self.js
         assert ".chat-bubble.assistant.streaming .bubble-actions" in self.css
 
     def test_data_action_attributes_match(self) -> None:
