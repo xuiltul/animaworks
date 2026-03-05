@@ -160,6 +160,63 @@ class TestRepairKnowledgeFrontmatter:
         assert "created_at" in meta2
         assert "confidence" in meta2
 
+    def test_repairs_unparseable_frontmatter(self, tmp_path: Path) -> None:
+        knowledge_dir = tmp_path / "knowledge"
+        procedures_dir = tmp_path / "procedures"
+        knowledge_dir.mkdir()
+        procedures_dir.mkdir()
+
+        (knowledge_dir / "broken.md").write_text(
+            "---\n{invalid yaml: [unclosed\n---\n\nActual body content.\n",
+            encoding="utf-8",
+        )
+
+        svc = FrontmatterService(tmp_path, knowledge_dir, procedures_dir)
+        count = svc.repair_knowledge_frontmatter()
+
+        assert count == 1
+        text = (knowledge_dir / "broken.md").read_text(encoding="utf-8")
+        meta, body = parse_frontmatter(text)
+        assert meta, "Repaired file must have parseable frontmatter"
+        assert meta["confidence"] == 0.5
+        assert "created_at" in meta
+        assert "Actual body content" in body
+
+    def test_unparseable_without_dash_prefix_not_touched(self, tmp_path: Path) -> None:
+        knowledge_dir = tmp_path / "knowledge"
+        procedures_dir = tmp_path / "procedures"
+        knowledge_dir.mkdir()
+        procedures_dir.mkdir()
+
+        (knowledge_dir / "plain.md").write_text(
+            "Plain text without any frontmatter.\n",
+            encoding="utf-8",
+        )
+
+        svc = FrontmatterService(tmp_path, knowledge_dir, procedures_dir)
+        count = svc.repair_knowledge_frontmatter()
+        assert count == 0
+
+    def test_unparseable_body_preserved(self, tmp_path: Path) -> None:
+        knowledge_dir = tmp_path / "knowledge"
+        procedures_dir = tmp_path / "procedures"
+        knowledge_dir.mkdir()
+        procedures_dir.mkdir()
+
+        (knowledge_dir / "garbled.md").write_text(
+            "---\n!!!not-yaml!!!\n---\n\n# Important Knowledge\n\nThis must be preserved.\n",
+            encoding="utf-8",
+        )
+
+        svc = FrontmatterService(tmp_path, knowledge_dir, procedures_dir)
+        count = svc.repair_knowledge_frontmatter()
+        assert count == 1
+
+        text = (knowledge_dir / "garbled.md").read_text(encoding="utf-8")
+        meta, body = parse_frontmatter(text)
+        assert "Important Knowledge" in body
+        assert "This must be preserved" in body
+
     def test_empty_directory(self, tmp_path: Path) -> None:
         knowledge_dir = tmp_path / "knowledge"
         procedures_dir = tmp_path / "procedures"

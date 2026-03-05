@@ -349,6 +349,13 @@ class FrontmatterService:
                 if meta != before:
                     self.write_knowledge_with_meta(f, body.strip(), meta)
                     changed = True
+            elif text.lstrip().startswith("---"):
+                clean_body = strip_content_frontmatter(text.lstrip())
+                fallback_meta: dict[str, Any] = {"confidence": 0.5}
+                validate_and_complete_frontmatter(fallback_meta, f)
+                self.write_knowledge_with_meta(f, clean_body.strip(), fallback_meta)
+                changed = True
+                logger.warning("Repaired unparseable frontmatter: %s", f.name)
 
             if changed:
                 repaired += 1

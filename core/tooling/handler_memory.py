@@ -215,8 +215,37 @@ class MemoryToolsMixin:
                     path.write_text(f"---\n{_fm_hw}---\n\n{_body_hw.lstrip()}", encoding="utf-8")
                     auto_frontmatter_applied = True
                 else:
-                    # Parse failed — write as-is, let normal path handle it
-                    path.write_text(content, encoding="utf-8")
+                    # Parse failed — strip broken FM, apply framework-generated metadata
+                    from core.memory.frontmatter import strip_content_frontmatter as _strip_fm_hw
+                    _clean_body_hw = _strip_fm_hw(content.lstrip())
+                    _ts_fb = _now_jst_hw().isoformat()
+                    _fallback_meta: dict[str, Any] = {
+                        "confidence": 0.5,
+                        "created_at": _ts_fb,
+                        "updated_at": _ts_fb,
+                        "source_episodes": 0,
+                        "auto_consolidated": False,
+                        "version": 1,
+                    }
+                    if path.exists():
+                        try:
+                            _existing_text_fb = path.read_text(encoding="utf-8")
+                            _existing_meta_fb, _ = _parse_fm_hw(_existing_text_fb)
+                            if _existing_meta_fb.get("created_at"):
+                                _fallback_meta["created_at"] = _existing_meta_fb["created_at"]
+                        except OSError:
+                            pass
+                    _fm_fb = _yaml_km_fm.dump(
+                        _fallback_meta, default_flow_style=False, allow_unicode=True,
+                    )
+                    path.write_text(
+                        f"---\n{_fm_fb}---\n\n{_clean_body_hw.lstrip()}",
+                        encoding="utf-8",
+                    )
+                    auto_frontmatter_applied = True
+                    logger.info(
+                        "Frontmatter parse failed for %s — applied fallback metadata", rel,
+                    )
             elif (rel.startswith("knowledge/") and rel.endswith(".md")
                     and mode == "overwrite"
                     and not content.lstrip().startswith("---")):
