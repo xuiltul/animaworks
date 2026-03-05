@@ -212,7 +212,7 @@ class ConversationMemory:
             from core.config.models import load_config
             config = load_config()
             return config.model_context_windows or None
-        except ConfigError:
+        except (ConfigError, OSError):
             return None
 
     # ── Load / Save ──────────────────────────────────────────
@@ -738,7 +738,7 @@ class ConversationMemory:
 
         try:
             summary = await self._call_compression_llm(old_summary, turn_text)
-        except (LLMAPIError, ExecutionError):
+        except Exception:
             logger.exception("Conversation compression failed; keeping raw turns")
             return
 
@@ -878,7 +878,7 @@ class ConversationMemory:
             raw_summary = await self._summarize_session_with_state(
                 new_turns, activity_context,
             )
-        except (LLMAPIError, ExecutionError):
+        except Exception:
             logger.exception("Failed to summarize session; skipping episode write")
             return False
 
@@ -915,7 +915,7 @@ class ConversationMemory:
         try:
             compressed = await self._call_compression_llm(old_summary, turn_text)
             state.compressed_summary = compressed
-        except (LLMAPIError, ExecutionError):
+        except Exception:
             logger.warning("Compression failed during finalization; keeping raw turns")
 
         # 5. Update tracking index

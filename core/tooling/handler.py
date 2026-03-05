@@ -178,7 +178,7 @@ class ToolHandler(
                 self._descendant_state_files.append(_desc_dir / "injection.md")
                 self._descendant_state_files.append(_desc_dir / "state" / "task_queue.jsonl")
                 self._descendant_state_dirs.append(_desc_dir / "state" / "pending")
-        except (OSError, PermissionError):
+        except (OSError, PermissionError, KeyError, AttributeError):
             logger.debug("Failed to cache subordinate paths for %s", self._anima_name, exc_info=True)
 
         # ── Dispatch table: tool name → handler method ──

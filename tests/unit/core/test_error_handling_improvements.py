@@ -202,8 +202,18 @@ class TestConfigModelsErrorHandling:
             assert result is None
         invalidate_cache()
 
+    def test_resolve_context_window_returns_none_on_os_error(self):
+        """resolve_context_window should return None when file I/O fails."""
+        from core.config import invalidate_cache
+        invalidate_cache()
+        with patch("core.config.models.load_config", side_effect=OSError("perm denied")):
+            from core.config.models import resolve_context_window
+            result = resolve_context_window("test-model")
+            assert result is None
+        invalidate_cache()
+
     def test_resolve_context_window_does_not_catch_non_config_error(self):
-        """Non-ConfigError exceptions should propagate."""
+        """Non-ConfigError/OSError exceptions should propagate."""
         from core.config import invalidate_cache
         invalidate_cache()
         with patch("core.config.models.load_config", side_effect=RuntimeError("unexpected")):
@@ -270,8 +280,19 @@ class TestConversationMemoryErrorHandling:
             assert result is None
         invalidate_cache()
 
+    def test_load_context_window_overrides_catches_os_error(self, tmp_path):
+        """OSError in _load_context_window_overrides should return None."""
+        from core.config import invalidate_cache
+        from core.memory.conversation import ConversationMemory
+        invalidate_cache()
+        cm = ConversationMemory.__new__(ConversationMemory)
+        with patch("core.config.models.load_config", side_effect=OSError("perm denied")):
+            result = cm._load_context_window_overrides()
+            assert result is None
+        invalidate_cache()
+
     def test_load_context_window_overrides_does_not_catch_runtime_error(self, tmp_path):
-        """Non-ConfigError should propagate."""
+        """Non-ConfigError/OSError should propagate."""
         from core.config import invalidate_cache
         from core.memory.conversation import ConversationMemory
         invalidate_cache()

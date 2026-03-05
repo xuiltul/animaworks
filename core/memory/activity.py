@@ -157,7 +157,7 @@ class ActivityLogger(
         except OSError as exc:
             logger.exception("Failed to append activity log")
             raise MemoryWriteError(f"Activity log write failed: {exc}") from exc
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, AttributeError, KeyError) as exc:
             logger.exception("Failed to append activity log")
             raise MemoryWriteError(f"Activity log write failed: {exc}") from exc
 
@@ -256,7 +256,7 @@ class ActivityLogger(
                     })
                     entry._line_number = line_num
                     entries.append(entry)
-            except (OSError, json.JSONDecodeError, KeyError, ValueError):
+            except (OSError, json.JSONDecodeError, KeyError, ValueError, TypeError):
                 logger.exception("Failed to read activity log %s", path)
 
         entries.sort(key=lambda e: e.ts)
