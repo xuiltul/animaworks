@@ -4,6 +4,22 @@
 
 const DEFAULT_TOOL_RESULT_TRUNCATE = 500;
 
+// ── Bubble Action Helpers ──────────────────────
+
+function _escapeAttr(str) {
+  if (!str) return "";
+  return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+            .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function _bubbleActionsHtml(rawText) {
+  if (!rawText) return "";
+  return `<div class="bubble-actions">`
+    + `<button class="bubble-action-btn" data-action="copy" title="Copy"><i data-lucide="copy"></i></button>`
+    + `<button class="bubble-action-btn" data-action="download" title="Download"><i data-lucide="download"></i></button>`
+    + `</div>`;
+}
+
 const _RE_VOICE_MODE_SUFFIX = /\n*\[voice-mode:[^\]]*\]/g;
 
 function _stripVoiceSuffix(text) {
@@ -58,13 +74,16 @@ export function renderHistoryMessage(msg, opts) {
   }
 
   if (msg.role === "assistant") {
-    const content = msg.content ? renderMarkdown(msg.content, opts.animaName) : "";
+    const rawText = msg.content || "";
+    const content = rawText ? renderMarkdown(rawText, opts.animaName) : "";
     const toolHtml = renderToolCalls(msg.tool_calls, { escapeHtml, truncateLen: truncLen });
     const imagesHtml = renderImages(msg.images, { animaName: opts.animaName });
     const toLabel = msg.to_person
       ? `<div style="font-size:0.72rem; opacity:0.7; margin-bottom:2px;">→ ${escapeHtml(msg.to_person)}</div>`
       : "";
-    const bubble = `<div class="chat-bubble assistant">${toLabel}${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
+    const actionsHtml = _bubbleActionsHtml(rawText);
+    const dataAttr = rawText ? ` data-raw-text="${_escapeAttr(rawText)}"` : "";
+    const bubble = `<div class="chat-bubble assistant"${dataAttr}>${actionsHtml}${toLabel}${content}${imagesHtml}${toolHtml}${tsHtml}</div>`;
     return _wrapRow("assistant", bubble, _renderAvatar(opts.animaName, avatarMap));
   }
 
@@ -290,7 +309,10 @@ export function renderLiveBubble(msg, opts) {
   }
   const imagesHtml = renderImages(msg.images, { animaName: opts.animaName });
 
-  const bubble = `<div class="chat-bubble assistant${streamClass}"${streamIdAttr}>${content}${imagesHtml}${compressionHtml}${toolHtml}${thinkingHtml}${tsHtml}</div>`;
+  const rawText = msg.text || "";
+  const actionsHtml = msg.streaming ? "" : _bubbleActionsHtml(rawText);
+  const dataRawAttr = rawText && !msg.streaming ? ` data-raw-text="${_escapeAttr(rawText)}"` : "";
+  const bubble = `<div class="chat-bubble assistant${streamClass}"${streamIdAttr}${dataRawAttr}>${actionsHtml}${content}${imagesHtml}${compressionHtml}${toolHtml}${thinkingHtml}${tsHtml}</div>`;
   return _wrapRow("assistant", bubble, _renderAvatar(opts.animaName, avatarMap));
 }
 
@@ -497,4 +519,96 @@ function renderToolActivityTimeline(history, activeTool, { escapeHtml, labels })
 function _formatDuration(ms) {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+// ── Bubble Action Handlers ──────────────────────
+
+/**
+ * Bind copy/download action handlers for assistant bubble action bars.
+ * Uses event delegation on the container (single listener).
+ * @param {HTMLElement|null} container
+ */
+export function bindBubbleActionHandlers(container) {
+  if (!container || container.dataset.bubbleActionsBound) return;
+  container.dataset.bubbleActionsBound = "1";
+
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest(".bubble-action-btn");
+    if (btn) {
+      const bubble = btn.closest(".chat-bubble.assistant");
+      if (!bubble) return;
+      const rawText = bubble.dataset.rawText || bubble.textContent || "";
+      const action = btn.dataset.action;
+      if (action === "copy") _copyToClipboard(rawText, btn);
+      else if (action === "download") _downloadAsText(rawText, bubble);
+      return;
+    }
+
+    // Mobile: tap on bubble toggles action bar visibility
+    const bubble = e.target.closest(".chat-bubble.assistant");
+    if (bubble && !e.target.closest(".tool-call-row") && !e.target.closest(".tool-call-group-header") && !e.target.closest("a") && !e.target.closest(".text-artifact-card")) {
+      const actions = bubble.querySelector(".bubble-actions");
+      if (actions) {
+        container.querySelectorAll(".bubble-actions.visible").forEach(a => {
+          if (a !== actions) a.classList.remove("visible");
+        });
+        actions.classList.toggle("visible");
+      }
+    }
+  });
+}
+
+async function _copyToClipboard(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;opacity:0;";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  const icon = btn.querySelector("[data-lucide]");
+  if (icon) {
+    const orig = icon.getAttribute("data-lucide");
+    icon.setAttribute("data-lucide", "check");
+    if (window.lucide) lucide.createIcons({ nodes: [icon] });
+    setTimeout(() => {
+      icon.setAttribute("data-lucide", orig);
+      if (window.lucide) lucide.createIcons({ nodes: [icon] });
+    }, 1500);
+  }
+}
+
+function _downloadAsText(text, bubble) {
+  const ts = _extractBubbleTimestamp(bubble);
+  const filename = `response_${ts}.txt`;
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+
+function _extractBubbleTimestamp(bubble) {
+  const tsEl = bubble.querySelector(".chat-ts");
+  if (tsEl) {
+    const tsText = tsEl.textContent.trim();
+    if (tsText) {
+      const d = new Date(tsText);
+      if (!isNaN(d.getTime())) return _formatTimestamp(d);
+    }
+  }
+  return _formatTimestamp(new Date());
+}
+
+function _formatTimestamp(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }

@@ -7,6 +7,7 @@ import { escapeHtml, renderSimpleMarkdown, smartTimestamp } from "./utils.js";
 import { renderChatImages } from "../../shared/image-input.js";
 import {
   renderHistoryMessage, renderSessionDivider, bindToolCallHandlers,
+  bindBubbleActionHandlers,
   renderLiveBubble, renderStreamingBubbleInner,
 } from "../../shared/chat/render-utils.js";
 import { createScrollObserver } from "../../shared/chat/scroll-observer.js";
@@ -105,6 +106,8 @@ export function renderConvMessages() {
 
   dom.convMessages.innerHTML = html;
   bindToolCallHandlers(dom.convMessages);
+  bindBubbleActionHandlers(dom.convMessages);
+  if (window.lucide) lucide.createIcons({ nodes: [dom.convMessages] });
   refreshSentinel();
   dom.convMessages.scrollTop = dom.convMessages.scrollHeight;
 }

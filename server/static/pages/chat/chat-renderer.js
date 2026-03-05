@@ -7,6 +7,7 @@ import {
   renderHistoryMessage as _sharedRenderHistoryMessage,
   renderSessionDivider as _sharedRenderSessionDivider,
   bindToolCallHandlers as _sharedBindToolCallHandlers,
+  bindBubbleActionHandlers as _sharedBindBubbleActionHandlers,
   renderLiveBubble,
   renderStreamingBubbleInner,
   updateStreamingZone,
@@ -136,6 +137,8 @@ export function createChatRenderer(ctx) {
 
     messagesEl.innerHTML = topHtml + sessionsHtml + liveHtml;
     bindToolCallHandlers(messagesEl);
+    _sharedBindBubbleActionHandlers(messagesEl);
+    if (window.lucide) lucide.createIcons({ nodes: [messagesEl] });
     initTextArtifactHandlers();
 
     if (scrollToBottom) {

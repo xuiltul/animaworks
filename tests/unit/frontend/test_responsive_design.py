@@ -168,6 +168,7 @@ _PASSIVE_HOVER_SELECTORS = {
     ".chat-split-pane-btn",
     ".chat-anima-tabs-header .anima-tab-wrap",
     ".chat-close-pane-btn",
+    ".chat-bubble.assistant",
 }
 
 
