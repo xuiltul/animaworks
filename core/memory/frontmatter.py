@@ -10,6 +10,7 @@ from typing import Any
 
 from core.memory._io import atomic_write_text
 from core.schemas import SkillMeta
+from core.time_utils import now_iso
 
 logger = logging.getLogger("animaworks.memory")
 
@@ -84,6 +85,93 @@ def strip_frontmatter(text: str) -> str:
     """Return *text* with YAML frontmatter removed (body only)."""
     _, body = split_frontmatter(text)
     return body
+
+
+def validate_and_complete_frontmatter(yaml_dict: dict[str, Any], path: Path | None = None) -> dict[str, Any]:
+    """Auto-complete missing required frontmatter fields.
+
+    Fills in ``created_at`` (current ISO timestamp) and ``confidence``
+    (0.5) when absent.  Never overwrites existing values.
+
+    Args:
+        yaml_dict: Parsed YAML frontmatter dictionary.
+        path: Optional file path (used for deriving ``created_at``
+            from mtime when the file exists).
+
+    Returns:
+        The same dict with missing fields filled in.
+    """
+    if "created_at" not in yaml_dict:
+        if path is not None and path.exists():
+            from datetime import datetime, timedelta, timezone
+            _JST = timezone(timedelta(hours=9))
+            yaml_dict["created_at"] = datetime.fromtimestamp(
+                path.stat().st_mtime, tz=_JST,
+            ).isoformat()
+        else:
+            yaml_dict["created_at"] = now_iso()
+    if "confidence" not in yaml_dict:
+        yaml_dict["confidence"] = 0.5
+    return yaml_dict
+
+
+_DOUBLE_FM_PATTERN = re.compile(
+    r"^---\s*\n(.*?\n)---\s*\n\s*---\s*\n(.*?\n)---\s*\n",
+    re.DOTALL,
+)
+
+
+def repair_double_frontmatter(path: Path) -> bool:
+    """Detect and repair double ``---`` frontmatter blocks in *path*.
+
+    When LLM output accidentally wraps content in a second frontmatter
+    block, this function merges the two blocks, keeping the outer one
+    as canonical.  Inner keys that are absent from the outer block are
+    preserved.
+
+    Returns:
+        ``True`` if the file was repaired, ``False`` if no repair needed.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    if not text.startswith("---"):
+        return False
+
+    # Try parsing: if the first frontmatter block is immediately followed
+    # by another, we have a double frontmatter situation.
+    yaml_str, body = split_frontmatter(text)
+    if not yaml_str:
+        return False
+
+    stripped_body = body.lstrip("\n")
+    if not stripped_body.startswith("---"):
+        return False
+
+    # Parse the inner frontmatter
+    inner_yaml_str, real_body = split_frontmatter(stripped_body)
+    if not inner_yaml_str:
+        return False
+
+    import yaml
+
+    try:
+        outer_meta = yaml.safe_load(yaml_str) or {}
+        inner_meta = yaml.safe_load(inner_yaml_str) or {}
+    except Exception:
+        return False
+
+    if not isinstance(outer_meta, dict) or not isinstance(inner_meta, dict):
+        return False
+
+    # Merge: outer is canonical, inner fills missing keys
+    merged = {**inner_meta, **outer_meta}
+    fm_str = yaml.dump(merged, default_flow_style=False, allow_unicode=True)
+    atomic_write_text(path, f"---\n{fm_str}---\n\n{real_body.lstrip()}")
+    logger.info("Repaired double frontmatter: %s", path.name)
+    return True
 
 
 def strip_content_frontmatter(content: str) -> str:
@@ -243,6 +331,68 @@ class FrontmatterService:
         if migrated:
             logger.info("Added frontmatter to %d procedures", migrated)
         return migrated
+
+    def repair_knowledge_frontmatter(self) -> int:
+        """Walk all knowledge files, repair double frontmatter and fill missing fields.
+
+        Returns:
+            Number of files repaired.
+        """
+        if not self._knowledge_dir.exists():
+            return 0
+
+        repaired = 0
+        for f in sorted(self._knowledge_dir.glob("*.md")):
+            changed = False
+            if repair_double_frontmatter(f):
+                changed = True
+
+            text = f.read_text(encoding="utf-8")
+            meta, body = parse_frontmatter(text)
+            if meta:
+                before = dict(meta)
+                validate_and_complete_frontmatter(meta, f)
+                if meta != before:
+                    self.write_knowledge_with_meta(f, body.strip(), meta)
+                    changed = True
+
+            if changed:
+                repaired += 1
+
+        if repaired:
+            logger.info("Repaired frontmatter in %d knowledge files", repaired)
+        return repaired
+
+    def repair_procedure_frontmatter(self) -> int:
+        """Walk all procedure files, repair double frontmatter and fill missing fields.
+
+        Returns:
+            Number of files repaired.
+        """
+        if not self._procedures_dir.exists():
+            return 0
+
+        repaired = 0
+        for f in sorted(self._procedures_dir.glob("*.md")):
+            changed = False
+            if repair_double_frontmatter(f):
+                changed = True
+
+            text = f.read_text(encoding="utf-8")
+            meta, body = parse_frontmatter(text)
+            if meta:
+                before = dict(meta)
+                validate_and_complete_frontmatter(meta, f)
+                if meta != before:
+                    self.write_procedure_with_meta(f, body.strip(), meta)
+                    changed = True
+
+            if changed:
+                repaired += 1
+
+        if repaired:
+            logger.info("Repaired frontmatter in %d procedure files", repaired)
+        return repaired
 
     def ensure_knowledge_frontmatter(self) -> int:
         """Ensure all knowledge files have YAML frontmatter.

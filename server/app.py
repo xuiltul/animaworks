@@ -134,6 +134,7 @@ async def _startup_animas_background(app: FastAPI) -> None:
             from core.memory.frontmatter import FrontmatterService
 
             _migrated_total = 0
+            _repaired_total = 0
             for _aname in app.state.anima_names:
                 _adir = app.state.animas_dir / _aname
                 _fm_svc = FrontmatterService(
@@ -141,10 +142,17 @@ async def _startup_animas_background(app: FastAPI) -> None:
                 )
                 _migrated_total += _fm_svc.ensure_procedure_frontmatter()
                 _migrated_total += _fm_svc.ensure_knowledge_frontmatter()
+                _repaired_total += _fm_svc.repair_knowledge_frontmatter()
+                _repaired_total += _fm_svc.repair_procedure_frontmatter()
             if _migrated_total:
                 logger.info(
                     "Frontmatter migration: added metadata to %d files",
                     _migrated_total,
+                )
+            if _repaired_total:
+                logger.info(
+                    "Frontmatter repair: fixed %d files",
+                    _repaired_total,
                 )
         except Exception:
             logger.exception("Frontmatter migration failed (non-fatal)")

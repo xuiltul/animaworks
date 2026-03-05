@@ -83,11 +83,12 @@ class LifecycleMixin:
 
     # ── Consolidation helpers ──────────────────────────────────
 
-    def _collect_episodes_summary(self) -> tuple[str, str, str]:
-        """Collect recent episodes, resolved events, and activity log as formatted text.
+    def _collect_episodes_summary(self) -> tuple[str, str, str, str]:
+        """Collect recent episodes, resolved events, activity log, and reflections.
 
         Returns:
-            Tuple of (episodes_summary, resolved_events_summary, activity_log_summary).
+            Tuple of (episodes_summary, resolved_events_summary,
+            activity_log_summary, reflections_summary).
             If no episodes are found, returns a placeholder message for episodes
             with empty strings for the other summaries.
         """
@@ -105,7 +106,10 @@ class LifecycleMixin:
                 for e in episodes
             )
         else:
-            return (t("anima.no_episodes_today"), "", activity_log_summary)
+            return (t("anima.no_episodes_today"), "", activity_log_summary, "")
+
+        # Extract reflections from episodes
+        reflections_summary = engine._extract_reflections_from_episodes(episodes_summary)
 
         # Format resolved events
         if resolved:
@@ -115,7 +119,7 @@ class LifecycleMixin:
         else:
             resolved_events_summary = ""
 
-        return (episodes_summary, resolved_events_summary, activity_log_summary)
+        return (episodes_summary, resolved_events_summary, activity_log_summary, reflections_summary)
 
     def count_recent_episodes(self, hours: int = 24) -> int:
         """Count recent episode entries within the given time window.
@@ -166,15 +170,23 @@ class LifecycleMixin:
                 try:
                     # Build consolidation prompt
                     if consolidation_type == "daily":
-                        episodes_summary, resolved_events_summary, activity_log_summary = (
+                        episodes_summary, resolved_events_summary, activity_log_summary, reflections_summary = (
                             self._collect_episodes_summary()
                         )
+                        reflections_section = ""
+                        if reflections_summary:
+                            reflections_section = (
+                                "## " + t("anima.reflections_header") + "\n\n"
+                                + t("anima.reflections_intro") + "\n\n"
+                                + reflections_summary
+                            )
                         prompt = load_prompt(
                             "memory/consolidation_instruction",
                             anima_name=self.name,
                             episodes_summary=episodes_summary,
                             resolved_events_summary=resolved_events_summary,
                             activity_log_summary=activity_log_summary or t("anima.no_activity_log"),
+                            reflections_summary=reflections_section,
                         )
                     else:
                         prompt = load_prompt(

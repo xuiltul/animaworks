@@ -252,14 +252,54 @@ class ConsolidationEngine:
             logger.debug("Failed to collect resolved events", exc_info=True)
             return []
 
+    # ── Reflection Extraction ──────────────────────────────────
+
+    @staticmethod
+    def _extract_reflections_from_episodes(episodes_text: str) -> str:
+        """Extract [REFLECTION] tagged entries from episode text.
+
+        Scans for ``[REFLECTION] ... [/REFLECTION]`` blocks and returns
+        them as a bullet list.  Entries shorter than 50 characters are
+        filtered out (too short to be meaningful).
+
+        Args:
+            episodes_text: Raw episodes summary text.
+
+        Returns:
+            Bullet-list string of reflections, or empty string if none found.
+        """
+        if not episodes_text:
+            return ""
+
+        matches = re.findall(
+            r"\[REFLECTION\]\s*\n?(.*?)\n?\s*\[/REFLECTION\]",
+            episodes_text,
+            re.DOTALL,
+        )
+
+        reflections = [m.strip() for m in matches if len(m.strip()) >= 50]
+
+        if not reflections:
+            return ""
+
+        return "\n".join(f"- {r}" for r in reflections)
+
     # ── Activity Log Collection ──────────────────────────────────
+
+    # Communication event types — these carry the most signal for consolidation.
+    _COMM_TYPES = frozenset({
+        "message_received", "response_sent", "heartbeat_reflection",
+        "channel_post", "error",
+    })
 
     def _collect_activity_entries(self, hours: int = 24) -> str:
         """Collect recent activity log entries for consolidation input.
 
-        Retrieves response_sent, tool_use, and message_received events
-        from the unified activity log and formats them as readable text
-        for the consolidation prompt.
+        Uses a two-phase budget allocation:
+          1. Communication events first (messages, responses, errors, etc.)
+          2. Remaining budget for ``tool_result`` only — fail entries get
+             100-char content, ok entries are meta-only.
+             ``tool_use`` events are excluded (redundant with tool_result).
 
         Args:
             hours: Number of hours to look back (default 24).
@@ -275,7 +315,10 @@ class ConsolidationEngine:
             from core.memory.activity import ActivityLogger
 
             activity = ActivityLogger(self.anima_dir)
-            target_types = ["response_sent", "tool_use", "tool_result", "message_received"]
+            target_types = [
+                "message_received", "response_sent", "heartbeat_reflection",
+                "channel_post", "error", "tool_result",
+            ]
             entries = activity.recent(
                 days=max(1, (hours + 23) // 24),
                 limit=200,
@@ -299,36 +342,103 @@ class ConsolidationEngine:
             if not filtered:
                 return ""
 
-            # Format entries as readable lines
+            # Phase 1: Communication events
+            comm_entries = [e for e in filtered if e.type in self._COMM_TYPES]
+            tool_result_entries = [e for e in filtered if e.type == "tool_result"]
+
             lines: list[str] = []
             total_chars = 0
-            for entry in filtered:
-                ts_short = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
-                text = entry.summary or entry.content
-                if len(text) > 300:
-                    text = text[:300] + "..."
 
-                # Build context parts
-                parts: list[str] = []
-                if entry.from_person:
-                    parts.append(f"from:{entry.from_person}")
-                if entry.to_person:
-                    parts.append(f"to:{entry.to_person}")
-                if entry.tool:
-                    parts.append(f"tool:{entry.tool}")
-                ctx = f" ({', '.join(parts)})" if parts else ""
-
-                line = f"[{ts_short}] {entry.type}{ctx}: {text}"
+            for entry in comm_entries:
+                line = self._format_comm_entry(entry)
                 if total_chars + len(line) + 1 > _CHAR_BUDGET:
                     break
                 lines.append(line)
                 total_chars += len(line) + 1
+
+            # Phase 2: tool_result with remaining budget
+            remaining = _CHAR_BUDGET - total_chars
+            if remaining > 0 and tool_result_entries:
+                tool_lines = self._format_tool_entries(tool_result_entries, remaining)
+                lines.extend(tool_lines)
 
             return "\n".join(lines)
 
         except Exception:
             logger.debug("Failed to collect activity entries", exc_info=True)
             return ""
+
+    @staticmethod
+    def _format_comm_entry(entry: Any) -> str:
+        """Format a communication entry as a readable line."""
+        ts_short = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
+        text = entry.summary or entry.content
+        if len(text) > 300:
+            text = text[:300] + "..."
+
+        parts: list[str] = []
+        if entry.from_person:
+            parts.append(f"from:{entry.from_person}")
+        if entry.to_person:
+            parts.append(f"to:{entry.to_person}")
+        if entry.channel:
+            parts.append(f"#{entry.channel}")
+        ctx = f" ({', '.join(parts)})" if parts else ""
+
+        type_map: dict[str, str] = {
+            "message_received": "MSG<",
+            "response_sent": "RESP>",
+            "heartbeat_reflection": "HB",
+            "channel_post": "CH.W",
+            "error": "ERR",
+        }
+        icon = type_map.get(entry.type, "•")
+
+        return f"[{ts_short}] {icon} {entry.type}{ctx}: {text}"
+
+    @staticmethod
+    def _format_tool_entries(entries: list, budget_chars: int) -> list[str]:
+        """Format tool_result entries with budget-aware rendering.
+
+        Fail entries include up to 100 chars of content for debugging.
+        Ok entries are rendered as compact meta-only lines matching the
+        Priming format: ``[HH:MM] TRES tool → ok (N件, XKB)``.
+        """
+        lines: list[str] = []
+        total = 0
+
+        for entry in entries:
+            ts = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
+            tool = entry.tool or "unknown"
+            meta = entry.meta or {}
+            status = meta.get("result_status", "ok")
+
+            if status == "fail":
+                err_hint = (entry.content or "")[:100]
+                line = f"[{ts}] TRES {tool} → fail: {err_hint}"
+            else:
+                result_bytes = meta.get("result_bytes", 0)
+                result_count = meta.get("result_count")
+
+                if result_bytes >= 1024:
+                    size_str = f"{result_bytes / 1024:.1f}KB"
+                else:
+                    size_str = f"{result_bytes}B"
+
+                detail_parts: list[str] = []
+                if result_count is not None:
+                    detail_parts.append(f"{result_count}件")
+                detail_parts.append(size_str)
+
+                detail = f" ({', '.join(detail_parts)})" if detail_parts else ""
+                line = f"[{ts}] TRES {tool} → ok{detail}"
+
+            if total + len(line) + 1 > budget_chars:
+                break
+            lines.append(line)
+            total += len(line) + 1
+
+        return lines
 
     # ── Utilities ────────────────────────────────────────────────
 

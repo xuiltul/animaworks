@@ -172,6 +172,8 @@ _STRINGS: dict[str, dict[str, str]] = {
     "anima.heartbeat_start": {"ja": "定期巡回開始", "en": "Periodic check started"},
     "anima.no_episodes_today": {"ja": "(本日のエピソードはありません)", "en": "(No episodes today)"},
     "anima.no_activity_log": {"ja": "(アクティビティログなし)", "en": "(No activity log)"},
+    "anima.reflections_header": {"ja": "振り返り（REFLECTION）", "en": "Reflections"},
+    "anima.reflections_intro": {"ja": "エピソード中の [REFLECTION] タグから抽出された意識的な洞察です。優先的に知識化を検討してください。", "en": "Conscious insights extracted from [REFLECTION] tags in episodes. Prioritize these for knowledge extraction."},
     "anima.consolidation_start": {"ja": "{type}記憶統合開始", "en": "{type} consolidation started"},
     "anima.consolidation_end": {"ja": "{type}記憶統合完了", "en": "{type} consolidation completed"},
     "anima.consolidation_error": {"ja": "記憶統合エラー: {exc}", "en": "Consolidation error: {exc}"},

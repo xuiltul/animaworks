@@ -187,14 +187,54 @@ class MemoryToolsMixin:
                 auto_frontmatter_applied = True
             elif (rel.startswith("knowledge/") and rel.endswith(".md")
                     and mode == "overwrite"
+                    and content.lstrip().startswith("---")):
+                # LLM wrote frontmatter — parse, validate, and complete
+                import yaml as _yaml_km_fm
+                from core.memory.frontmatter import (
+                    parse_frontmatter as _parse_fm_hw,
+                    strip_content_frontmatter as _strip_fm_hw,
+                    validate_and_complete_frontmatter as _validate_fm_hw,
+                )
+                from core.schemas import now_jst as _now_jst_hw
+                _meta_hw, _body_hw = _parse_fm_hw(content.lstrip())
+                if _meta_hw:
+                    # Preserve original created_at on overwrite; update updated_at
+                    if path.exists():
+                        try:
+                            _existing_text = path.read_text(encoding="utf-8")
+                            _existing_meta, _ = _parse_fm_hw(_existing_text)
+                            if _existing_meta.get("created_at"):
+                                _meta_hw.setdefault("created_at", _existing_meta["created_at"])
+                        except OSError:
+                            pass
+                    _validate_fm_hw(_meta_hw, path)
+                    _meta_hw["updated_at"] = _now_jst_hw().isoformat()
+                    _fm_hw = _yaml_km_fm.dump(_meta_hw, default_flow_style=False, allow_unicode=True)
+                    path.write_text(f"---\n{_fm_hw}---\n\n{_body_hw.lstrip()}", encoding="utf-8")
+                    auto_frontmatter_applied = True
+                else:
+                    path.write_text(content, encoding="utf-8")
+                    auto_frontmatter_applied = True
+            elif (rel.startswith("knowledge/") and rel.endswith(".md")
+                    and mode == "overwrite"
                     and not content.lstrip().startswith("---")):
                 import yaml as _yaml_km
                 from core.schemas import now_jst
                 from core.memory.frontmatter import strip_content_frontmatter
+                # Preserve original created_at on overwrite
+                _original_created_at = None
+                if path.exists():
+                    try:
+                        from core.memory.frontmatter import parse_frontmatter as _parse_fm_ow
+                        _existing_text_ow = path.read_text(encoding="utf-8")
+                        _existing_meta_ow, _ = _parse_fm_ow(_existing_text_ow)
+                        _original_created_at = _existing_meta_ow.get("created_at")
+                    except OSError:
+                        pass
                 ts = now_jst().isoformat()
                 metadata: dict[str, Any] = {
                     "confidence": 0.5,
-                    "created_at": ts,
+                    "created_at": _original_created_at or ts,
                     "updated_at": ts,
                     "source_episodes": 0,
                     "auto_consolidated": False,

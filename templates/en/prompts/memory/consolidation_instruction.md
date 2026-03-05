@@ -19,6 +19,8 @@ When extracting knowledge from it, note the following:
 - Record items requiring inference or interpretation with confidence: 0.5
 - Add `source: "activity_log"` to frontmatter
 
+{reflections_summary}
+
 ## Workflow
 
 ### 1. Review episodes
@@ -52,7 +54,7 @@ If relevant files are found, use `read_memory_file` to review their content.
 
 ## Notes
 - Do not convert greetings-only or substantively empty exchanges into knowledge
-- [REFLECTION] tagged entries are conscious insights recorded by the agent; prioritize these for knowledge extraction
+- [REFLECTION] tagged entries are conscious insights recorded by the agent; when extracted in the "Reflections" section above, prioritize these for knowledge extraction
 - When creating new knowledge/ files, add YAML frontmatter:
   ```
   ---
