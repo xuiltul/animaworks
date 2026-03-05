@@ -30,7 +30,7 @@ class TestResolveContextWindow:
         assert _resolve_context_window("claude-sonnet-4-20250514") == 200_000
 
     def test_claude_opus(self):
-        assert _resolve_context_window("claude-opus-4-20250514") == 200_000
+        assert _resolve_context_window("claude-opus-4-6") == 128_000
 
     def test_gpt4o(self):
         assert _resolve_context_window("gpt-4o") == 128_000

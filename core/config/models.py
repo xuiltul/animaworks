@@ -687,7 +687,6 @@ KNOWN_MODELS: list[dict[str, str]] = [
     {"name": "claude-opus-4-1-20250805",     "mode": "S", "note": "旧Opus"},
     {"name": "claude-sonnet-4-5-20250929",   "mode": "S", "note": "旧Sonnet"},
     {"name": "claude-sonnet-4-20250514",     "mode": "S", "note": "旧Sonnet4"},
-    {"name": "claude-opus-4-20250514",       "mode": "S", "note": "旧Opus4"},
     # ── OpenAI (Mode A) ──────────────────────────────────────────────────────
     {"name": "openai/gpt-4.1",               "mode": "A", "note": "最新・コーディング強"},
     {"name": "openai/gpt-4.1-mini",          "mode": "A", "note": "高速・低コスト"},

@@ -486,7 +486,7 @@ class TestMatchPatternTable:
 
     def test_case_normalization(self):
         table = {"claude-*": "a1"}
-        assert _match_pattern_table("claude-opus-4-20250514", table) == "A1"
+        assert _match_pattern_table("claude-opus-4-6", table) == "A1"
 
 
 # ── resolve_execution_mode (wildcard) ─────────────────────
@@ -530,7 +530,7 @@ class TestResolveExecutionModeWildcard:
     def test_claude_wildcard_s(self):
         config = AnimaWorksConfig()
         assert resolve_execution_mode(config, "claude-sonnet-4-6") == "S"
-        assert resolve_execution_mode(config, "claude-opus-4-20250514") == "S"
+        assert resolve_execution_mode(config, "claude-opus-4-6") == "S"
         # Future Claude model also matches
         assert resolve_execution_mode(config, "claude-haiku-5-20260101") == "S"
 
