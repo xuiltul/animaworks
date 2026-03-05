@@ -37,7 +37,7 @@ def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
-        os.rename(tmp_path, path)
+        os.replace(tmp_path, path)
     except OSError as exc:
         try:
             os.unlink(tmp_path)

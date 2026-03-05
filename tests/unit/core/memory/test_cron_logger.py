@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -79,6 +81,44 @@ class TestAppendCronLog:
         assert not log_dir.exists()
         cl.append_cron_log("task", summary="ok", duration_ms=0)
         assert log_dir.is_dir()
+
+    def test_truncation_uses_atomic_write(self, cl: CronLogger, anima_dir: Path) -> None:
+        """Truncation beyond MAX_LINES uses atomic_write_text, not path.write_text."""
+        for i in range(50):
+            cl.append_cron_log(f"task-{i}", summary=f"entry {i}", duration_ms=i)
+
+        with patch("core.memory._io.atomic_write_text") as mock_atomic:
+            cl.append_cron_log("overflow-task", summary="triggers truncate", duration_ms=0)
+
+        mock_atomic.assert_called_once()
+
+    def test_concurrent_appends_no_data_loss(self, anima_dir: Path) -> None:
+        """Concurrent appends from multiple threads preserve all entries."""
+        n_threads = 8
+        entries_per_thread = 10
+
+        def append_batch(thread_id: int) -> None:
+            logger = CronLogger(anima_dir)
+            for i in range(entries_per_thread):
+                logger.append_cron_log(
+                    f"thread-{thread_id}-task-{i}",
+                    summary=f"entry {i} from thread {thread_id}",
+                    duration_ms=thread_id * 100 + i,
+                )
+
+        with ThreadPoolExecutor(max_workers=n_threads) as executor:
+            futures = [executor.submit(append_batch, tid) for tid in range(n_threads)]
+            for f in futures:
+                f.result()
+
+        path = anima_dir / "state" / "cron_logs" / f"{date.today().isoformat()}.jsonl"
+        lines = path.read_text(encoding="utf-8").strip().splitlines()
+        total_expected = n_threads * entries_per_thread
+        assert len(lines) <= CronLogger._MAX_LINES
+        for line in lines:
+            entry = json.loads(line)
+            assert "task" in entry
+            assert "summary" in entry
 
 
 # ── append_cron_command_log ──────────────────────────────
@@ -175,6 +215,22 @@ class TestAppendCronCommandLog:
         path = anima_dir / "state" / "cron_logs" / f"{date.today().isoformat()}.jsonl"
         lines = path.read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 50
+
+    def test_command_truncation_uses_atomic_write(
+        self, cl: CronLogger, anima_dir: Path,
+    ) -> None:
+        """Command log truncation uses atomic_write_text."""
+        for i in range(50):
+            cl.append_cron_command_log(
+                f"task-{i}", exit_code=0, stdout="ok", stderr="", duration_ms=i,
+            )
+
+        with patch("core.memory._io.atomic_write_text") as mock_atomic:
+            cl.append_cron_command_log(
+                "overflow-cmd", exit_code=0, stdout="ok", stderr="", duration_ms=0,
+            )
+
+        mock_atomic.assert_called_once()
 
 
 # ── read_cron_log ────────────────────────────────────────

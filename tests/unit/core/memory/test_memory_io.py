@@ -15,6 +15,7 @@ Tests cover:
 - cleanup_tmp_files removal, non-existent dir, non-tmp file safety
 """
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -87,6 +88,18 @@ class TestAtomicWriteText:
 
         tmp_files = list(tmp_path.glob("*.tmp"))
         assert tmp_files == [], f"Temp files found after success: {tmp_files}"
+
+
+    def test_uses_os_replace_not_rename(self, tmp_path: Path):
+        """Verify os.replace is called (cross-platform atomic overwrite)."""
+        target = tmp_path / "replace_test.txt"
+        target.write_text("existing", encoding="utf-8")
+
+        with patch("core.memory._io.os.replace", wraps=os.replace) as mock_replace:
+            atomic_write_text(target, "new content")
+
+        mock_replace.assert_called_once()
+        assert target.read_text(encoding="utf-8") == "new content"
 
 
 # ── TestCleanupTmpFiles ───────────────────────────────────────────

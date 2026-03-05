@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -46,14 +47,14 @@ class CronLogger:
         }, ensure_ascii=False)
         with open(path, "a", encoding="utf-8") as f:
             f.write(entry + "\n")
+            f.flush()
+            os.fsync(f.fileno())
 
-        # Keep file bounded
+        # Keep file bounded — use atomic write for truncation
         lines = path.read_text(encoding="utf-8").strip().splitlines()
         if len(lines) > self._MAX_LINES:
-            path.write_text(
-                "\n".join(lines[-self._MAX_LINES:]) + "\n",
-                encoding="utf-8",
-            )
+            from core.memory._io import atomic_write_text
+            atomic_write_text(path, "\n".join(lines[-self._MAX_LINES:]) + "\n")
 
     def append_cron_command_log(
         self,
@@ -106,14 +107,14 @@ class CronLogger:
         )
         with open(path, "a", encoding="utf-8") as f:
             f.write(entry + "\n")
+            f.flush()
+            os.fsync(f.fileno())
 
-        # Keep file bounded
+        # Keep file bounded — use atomic write for truncation
         lines = path.read_text(encoding="utf-8").strip().splitlines()
         if len(lines) > self._MAX_LINES:
-            path.write_text(
-                "\n".join(lines[-self._MAX_LINES:]) + "\n",
-                encoding="utf-8",
-            )
+            from core.memory._io import atomic_write_text
+            atomic_write_text(path, "\n".join(lines[-self._MAX_LINES:]) + "\n")
 
     def read_cron_log(self, days: int = 1) -> str:
         """Read cron logs for the last *days* days."""
