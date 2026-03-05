@@ -53,8 +53,10 @@ class NtfyChannel(NotificationChannel):
             "Priority": _PRIORITY_MAP.get(priority, "3"),
         }
 
-        # Optional auth token
-        token = self._resolve_env("token_env")
+        # Optional auth token (env → vault/shared)
+        token = self._resolve_credential_with_vault(
+            "token_env", anima_name=anima_name, fallback_env="NTFY_TOKEN",
+        )
         if token:
             headers["Authorization"] = f"Bearer {token}"
 

@@ -29,7 +29,7 @@ def _load_config() -> dict:
 
 
 def _get_bot_token(channel_cfg: dict) -> str:
-    """Resolve bot token from channel config (direct or env-var reference)."""
+    """Resolve bot token from channel config (direct, env, vault/shared, credentials)."""
     import os
 
     token = channel_cfg.get("bot_token", "")
@@ -42,7 +42,18 @@ def _get_bot_token(channel_cfg: dict) -> str:
         if token:
             return token
 
-    # Fall back to credentials.json
+    # Per-anima vault/shared (Mode S subprocess sets ANIMAWORKS_ANIMA_DIR)
+    anima_dir = os.environ.get("ANIMAWORKS_ANIMA_DIR")
+    if anima_dir:
+        from core.tools._base import _lookup_vault_credential, _lookup_shared_credentials
+
+        anima_name = Path(anima_dir).name
+        per_key = f"SLACK_BOT_TOKEN__{anima_name}"
+        token = _lookup_vault_credential(per_key) or _lookup_shared_credentials(per_key) or ""
+        if token:
+            return token
+
+    # Fall back to credentials.json / vault / env
     from core.tools._base import get_credential
     try:
         return get_credential("slack", "call_human", env_var="SLACK_BOT_TOKEN")

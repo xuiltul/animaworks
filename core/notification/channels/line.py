@@ -33,7 +33,11 @@ class LineChannel(NotificationChannel):
         *,
         anima_name: str = "",
     ) -> str:
-        token = self._resolve_env("channel_access_token_env")
+        token = self._resolve_credential_with_vault(
+            "channel_access_token_env",
+            anima_name=anima_name,
+            fallback_env="LINE_CHANNEL_ACCESS_TOKEN",
+        )
         if not token:
             return "line: ERROR - channel_access_token_env not configured or env var not set"
 

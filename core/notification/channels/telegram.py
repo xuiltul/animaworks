@@ -34,7 +34,9 @@ class TelegramChannel(NotificationChannel):
         *,
         anima_name: str = "",
     ) -> str:
-        token = self._resolve_env("bot_token_env")
+        token = self._resolve_credential_with_vault(
+            "bot_token_env", anima_name=anima_name, fallback_env="TELEGRAM_BOT_TOKEN",
+        )
         if not token:
             return "telegram: ERROR - bot_token_env not configured or env var not set"
 
@@ -44,8 +46,15 @@ class TelegramChannel(NotificationChannel):
 
         prefix = f"[{priority.upper()}] " if priority in ("high", "urgent") else ""
         sender = f" (from {anima_name})" if anima_name else ""
-        safe_subject = html.escape(subject)
-        safe_body = html.escape(body)
+        # Truncate BEFORE escaping to avoid splitting HTML entities like &amp;
+        overhead = len(prefix) + len(sender) + len("<b></b>\n\n") + 10
+        max_content = 4096 - overhead
+        subj_limit = min(len(subject), max_content // 3)
+        body_limit = max_content - subj_limit
+        subject_trunc = subject[:subj_limit]
+        body_trunc = body[:body_limit]
+        safe_subject = html.escape(subject_trunc)
+        safe_body = html.escape(body_trunc)
         text = f"{prefix}<b>{safe_subject}</b>{sender}\n\n{safe_body}"
 
         url = f"{_TELEGRAM_API_BASE}/bot{token}/sendMessage"

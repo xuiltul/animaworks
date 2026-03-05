@@ -33,13 +33,16 @@ class ChatworkChannel(NotificationChannel):
         *,
         anima_name: str = "",
     ) -> str:
-        token = self._resolve_env("api_token_env")
+        token = self._resolve_credential_with_vault(
+            "api_token_env", anima_name=anima_name, fallback_env="CHATWORK_API_TOKEN",
+        )
         if not token:
             return "chatwork: ERROR - api_token_env not configured or env var not set"
 
         room_id = self._config.get("room_id", "")
         if not room_id:
             return "chatwork: ERROR - room_id not configured"
+        room_id = str(room_id)
         if not room_id.isdigit():
             return "chatwork: ERROR - room_id must be numeric"
 

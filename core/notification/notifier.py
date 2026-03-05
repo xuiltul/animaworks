@@ -56,6 +56,35 @@ class NotificationChannel(ABC):
             return ""
         return os.environ.get(env_key, "")
 
+    def _resolve_credential_with_vault(
+        self,
+        config_key: str,
+        anima_name: str = "",
+        fallback_env: str = "",
+    ) -> str:
+        """Resolve credential from env → per-anima vault/shared → generic vault/shared.
+
+        Follows the same resolution cascade as
+        ``core.notification.channels.slack``.
+        """
+        token = self._resolve_env(config_key)
+        if token:
+            return token
+
+        env_key = self._config.get(config_key, fallback_env)
+        if not env_key:
+            return ""
+
+        from core.tools._base import _lookup_vault_credential, _lookup_shared_credentials
+
+        if anima_name:
+            per_key = f"{env_key}__{anima_name}"
+            val = _lookup_vault_credential(per_key) or _lookup_shared_credentials(per_key) or ""
+            if val:
+                return val
+
+        return _lookup_vault_credential(env_key) or _lookup_shared_credentials(env_key) or ""
+
 
 # ── Factory ─────────────────────────────────────────────────
 
@@ -146,12 +175,24 @@ class HumanNotifier:
             else:
                 status.append(str(result))
 
-        logger.info(
-            "Human notification sent: subject=%s priority=%s channels=%d",
-            subject[:50],
-            priority,
-            len(self._channels),
-        )
+        failed_count = sum(1 for s in status if "ERROR" in s)
+        if failed_count > 0:
+            logger.warning(
+                "Human notification partial failure: subject=%s priority=%s "
+                "channels=%d failed=%d success=%d",
+                subject[:50],
+                priority,
+                len(self._channels),
+                failed_count,
+                len(self._channels) - failed_count,
+            )
+        else:
+            logger.info(
+                "Human notification sent: subject=%s priority=%s channels=%d",
+                subject[:50],
+                priority,
+                len(self._channels),
+            )
         return status
 
 
