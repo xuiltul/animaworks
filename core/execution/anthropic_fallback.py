@@ -245,6 +245,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         images: list[ImageData] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
+        thread_id: str = "default",
     ) -> ExecutionResult:
         """Run Anthropic SDK with tool_use loop."""
         client = self._build_client()
@@ -474,6 +475,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
         trigger: str = "",
+        thread_id: str = "default",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events using the Anthropic SDK messages.stream().
 

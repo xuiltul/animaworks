@@ -411,6 +411,7 @@ class AgentSDKExecutor(BaseExecutor):
         session_type: str = "chat",
         images: list[ImageData] | None = None,
         usage_acc: TokenUsage | None = None,
+        thread_id: str = "default",
     ) -> ResultMessage | None:
         """Run query + message loop for blocking (non-streaming) execution.
 
@@ -441,7 +442,7 @@ class AgentSDKExecutor(BaseExecutor):
             if isinstance(message, ResultMessage):
                 result_message = message
                 if message.session_id:
-                    _save_session_id(self._anima_dir, message.session_id, session_type)
+                    _save_session_id(self._anima_dir, message.session_id, session_type, thread_id=thread_id)
                 if tracker:
                     tracker.update_from_result_message(message.usage)
                 if usage_acc and message.usage:
@@ -506,6 +507,7 @@ class AgentSDKExecutor(BaseExecutor):
         # and the current user message.
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
+        thread_id: str = "default",
     ) -> ExecutionResult:
         """Run a session via Claude Agent SDK with context monitoring hook.
 
@@ -534,7 +536,7 @@ class AgentSDKExecutor(BaseExecutor):
         }
 
         session_type = "heartbeat" if trigger in ("heartbeat",) or (trigger and trigger.startswith("cron:")) else "chat"
-        session_id_to_resume = _load_session_id(self._anima_dir, session_type)
+        session_id_to_resume = _load_session_id(self._anima_dir, session_type, thread_id=thread_id)
 
         options, prompt_file = self._build_sdk_options(
             system_prompt,
@@ -570,6 +572,7 @@ class AgentSDKExecutor(BaseExecutor):
                     session_type,
                     images=images,
                     usage_acc=usage_acc,
+                    thread_id=thread_id,
                 )
             logger.debug("ClaudeSDKClient disconnected")
         except (ProcessError, ClaudeSDKError) as e:
@@ -579,7 +582,7 @@ class AgentSDKExecutor(BaseExecutor):
                     session_id_to_resume,
                     e,
                 )
-                _sdk_session._clear_session_id(self._anima_dir, session_type)
+                _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
                 # Retry without resume
                 options, pf = self._build_sdk_options(
                     system_prompt,
@@ -603,6 +606,7 @@ class AgentSDKExecutor(BaseExecutor):
                             session_type,
                             images=images,
                             usage_acc=usage_acc,
+                            thread_id=thread_id,
                         )
                 except Exception as retry_exc:
                     logger.exception("Agent SDK execution error (fresh session retry)")
@@ -661,6 +665,7 @@ class AgentSDKExecutor(BaseExecutor):
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
         trigger: str = "",
+        thread_id: str = "default",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream events from Claude Agent SDK.
 
@@ -700,7 +705,7 @@ class AgentSDKExecutor(BaseExecutor):
         # SDK session (current_session_heartbeat.json) rather than the chat
         # session (current_session_chat.json).  Mirrors the logic in execute().
         session_type = "heartbeat" if trigger in ("heartbeat",) or (trigger and trigger.startswith("cron:")) else "chat"
-        session_id_to_resume = _load_session_id(self._anima_dir, session_type)
+        session_id_to_resume = _load_session_id(self._anima_dir, session_type, thread_id=thread_id)
 
         options, prompt_file = self._build_sdk_options(
             system_prompt,
@@ -832,7 +837,7 @@ class AgentSDKExecutor(BaseExecutor):
                 elif isinstance(message, ResultMessage):
                     result_message = message
                     if message.session_id:
-                        _save_session_id(self._anima_dir, message.session_id, session_type)
+                        _save_session_id(self._anima_dir, message.session_id, session_type, thread_id=thread_id)
                     # Do NOT call tracker.update_from_result_message() here.
                     # ResultMessage.usage.input_tokens is a cumulative sum across
                     # all turns (not the current context size) and would
@@ -930,14 +935,14 @@ class AgentSDKExecutor(BaseExecutor):
                                 session_id_to_resume,
                             )
                             await stream_gen.aclose()
-                            _sdk_session._clear_session_id(self._anima_dir, session_type)
+                            _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
                             fell_back = True
                         except StopAsyncIteration:
                             logger.warning(
                                 "Resume stream empty (session_id=%s), falling back to fresh session.",
                                 session_id_to_resume,
                             )
-                            _sdk_session._clear_session_id(self._anima_dir, session_type)
+                            _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
                             fell_back = True
                         else:
                             yield first_event
@@ -949,7 +954,7 @@ class AgentSDKExecutor(BaseExecutor):
                         session_id_to_resume,
                         e,
                     )
-                    _sdk_session._clear_session_id(self._anima_dir, session_type)
+                    _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
                     fell_back = True
 
                 if fell_back:

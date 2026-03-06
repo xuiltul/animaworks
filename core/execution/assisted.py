@@ -399,6 +399,7 @@ class AssistedExecutor(BaseExecutor):
         images: list[ImageData] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
+        thread_id: str = "default",
     ) -> ExecutionResult:
         """Run the text-based tool-call loop.
 
@@ -601,6 +602,7 @@ class AssistedExecutor(BaseExecutor):
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
         trigger: str = "",
+        thread_id: str = "default",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the text-based tool-call loop.
 

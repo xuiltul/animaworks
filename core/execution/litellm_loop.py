@@ -118,6 +118,7 @@ class LiteLLMExecutor(
         images: list[ImageData] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
+        thread_id: str = "default",
     ) -> ExecutionResult:
         """Run the LiteLLM tool-use loop.
 
@@ -318,6 +319,7 @@ class LiteLLMExecutor(
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
         trigger: str = "",
+        thread_id: str = "default",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the LiteLLM tool-use loop.
 

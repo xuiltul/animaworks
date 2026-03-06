@@ -477,6 +477,7 @@ class BaseExecutor(ABC):
         images: list[ImageData] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
+        thread_id: str = "default",
     ) -> ExecutionResult:
         """Run the execution engine and return the response.
 
@@ -510,6 +511,7 @@ class BaseExecutor(ABC):
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
         trigger: str = "",
+        thread_id: str = "default",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream execution events from the engine.
 
@@ -543,6 +545,7 @@ class BaseExecutor(ABC):
             images=images,
             prior_messages=prior_messages,
             max_turns_override=max_turns_override,
+            thread_id=thread_id,
         )
         yield {"type": "text_delta", "text": result.text}
         yield {

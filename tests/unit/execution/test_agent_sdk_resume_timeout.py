@@ -412,10 +412,10 @@ class TestResumeTimeoutGuard:
         clear_calls: list[str] = []
         original_clear = None
 
-        def _spy_clear(anima_dir_arg, session_type):
+        def _spy_clear(anima_dir_arg, session_type, **kwargs):
             clear_calls.append(session_type)
             if original_clear:
-                original_clear(anima_dir_arg, session_type)
+                original_clear(anima_dir_arg, session_type, **kwargs)
 
         call_count = [0]
 
