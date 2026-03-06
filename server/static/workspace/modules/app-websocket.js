@@ -2,6 +2,7 @@
 // All WS event subscriptions for the workspace dashboard.
 
 import { getState, setState, subscribe } from "./state.js";
+import { t } from "../../shared/i18n.js";
 import { connect, onEvent } from "./websocket.js";
 import { renderAnimaSelector, renderStatus } from "./anima.js";
 import { updateCharacterState, removeCharacter, createCharacter } from "./character.js";
@@ -145,12 +146,12 @@ export function setupWebSocket(deps) {
     const evtType = data.event || data.type || "";
     const toolName = data.tool_name || data.tool || "tool";
     if (evtType === "tool_start") {
-      addActivity("tool", data.name, `${toolName} 実行中...`);
+      addActivity("tool", data.name, t("chat.tool_running", { tool: toolName }));
     } else if (evtType === "tool_detail") {
       addActivity("tool", data.name, `${toolName}: ${data.detail || ""}`);
     } else if (evtType === "tool_end" || evtType === "tool_use") {
       const suffix = data.is_error ? " (error)" : "";
-      addActivity("tool", data.name, `${toolName} 完了${suffix}`);
+      addActivity("tool", data.name, suffix ? t("chat.tool_done_suffix", { tool: toolName, suffix }) : t("chat.tool_done", { tool: toolName }));
     } else if (evtType) {
       addActivity("tool", data.name, `${data.summary || evtType}`);
     }
@@ -238,7 +239,7 @@ export function setupWebSocket(deps) {
       if (getState().officeInitialized) {
         updateCharacterState(name, "thinking");
       }
-      addActivity("system", name, "ブートストラップ開始");
+      addActivity("system", name, t("ws.bootstrap_start"));
     } else if (bsStatus === "completed") {
       const { animas } = getState();
       const idx = animas.findIndex((p) => p.name === name);
@@ -250,7 +251,7 @@ export function setupWebSocket(deps) {
       if (getState().officeInitialized) {
         updateCharacterState(name, "idle");
       }
-      addActivity("system", name, "ブートストラップ完了");
+      addActivity("system", name, t("ws.bootstrap_done"));
     } else if (bsStatus === "failed") {
       const { animas } = getState();
       const idx = animas.findIndex((p) => p.name === name);
@@ -262,14 +263,14 @@ export function setupWebSocket(deps) {
       if (getState().officeInitialized) {
         updateCharacterState(name, "error");
       }
-      addActivity("system", name, "ブートストラップ失敗");
+      addActivity("system", name, t("ws.bootstrap_failed"));
     }
   }));
 
   wsUnsubscribers.push(onEvent("anima.assets_updated", async (data) => {
     const animaName = data.name;
     invalidateAvatarCache(animaName).catch(() => {});
-    addActivity("system", animaName, `アセット更新: ${(data.assets || []).join(", ")}`);
+    addActivity("system", animaName, t("ws.asset_update_msg", { types: (data.assets || []).join(", ") }));
 
     // ── Reveal animation (Anima birth) ──
     const assets = data.assets || [];
@@ -306,9 +307,9 @@ export function setupWebSocket(deps) {
   // Track connection state for status indicator
   wsUnsubscribers.push(subscribe((state) => {
     if (state.wsConnected) {
-      updateStatusDisplay(true, `接続済 (${state.animas.length}名)`);
+      updateStatusDisplay(true, t("status.connected", { count: state.animas.length }));
     } else {
-      updateStatusDisplay(false, "再接続中...");
+      updateStatusDisplay(false, t("ws.reconnect"));
     }
   }));
 }

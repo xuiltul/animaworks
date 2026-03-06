@@ -44,7 +44,7 @@ export function render(container) {
       <div class="card-header">${t("home.recent_activity")}</div>
       <div class="card-body">
         <div id="homeActivityTimeline">
-          <div class="loading-placeholder">読み込み中...</div>
+          <div class="loading-placeholder">${t("common.loading")}</div>
         </div>
       </div>
     </div>

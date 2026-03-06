@@ -250,7 +250,7 @@ async function _handleAction(btn, action, opts) {
       btn.disabled = false;
     }, 2000);
   } catch {
-    btn.textContent = "失敗";
+    btn.textContent = t("animas.failed");
     setTimeout(() => {
       btn.textContent = opts.label;
       btn.disabled = false;

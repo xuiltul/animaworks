@@ -214,7 +214,7 @@ export function createStreamingController(ctx) {
     }
     const threadList = state.threads[name] || [];
     const threadEntry = threadList.find(th => th.id === tid);
-    if (threadEntry && threadEntry.label === "新しいスレッド" && message.trim()) {
+    if (threadEntry && threadEntry.label === t("thread.new") && message.trim()) {
       threadEntry.label = message.trim().slice(0, 20) + (message.trim().length > 20 ? "..." : "");
       ctx.controllers.thread.renderThreadTabs();
       scheduleSaveChatUiState(ctx);
@@ -306,11 +306,11 @@ export function createStreamingController(ctx) {
       if (!_SUB_ACTIVITY_TYPES.has(evtType)) return;
       if (!streamingMsg.subordinateActivity) streamingMsg.subordinateActivity = {};
       if (evtType === "tool_start") {
-        streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 実行中...` };
+        streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: t("chat.tool_running", { tool: toolName }) };
       } else if (evtType === "tool_detail") {
         streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName}: ${toolDetail || ""}` };
       } else if (evtType === "tool_end") {
-        streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 完了` };
+        streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: t("chat.tool_done", { tool: toolName }) };
       } else {
         streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName || "", summary: evtType };
       }

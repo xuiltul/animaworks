@@ -3,6 +3,7 @@
 // Now delegates stream/queue state to ChatSessionManager; keeps Live2D hooks.
 
 import { getState, setState } from "./state.js";
+import { t } from "../../shared/i18n.js";
 import { getCurrentUser } from "./login.js";
 import { escapeHtml } from "./utils.js";
 import { getDescendants } from "../../shared/chat/org-utils.js";
@@ -210,11 +211,11 @@ async function _sendConversation(text, overrideImages = null) {
     if (!_SUB_ACTIVITY_TYPES.has(evtType)) return;
     if (!streamingMsg.subordinateActivity) streamingMsg.subordinateActivity = {};
     if (evtType === "tool_start") {
-      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 実行中...` };
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: t("chat.tool_running", { tool: toolName }) };
     } else if (evtType === "tool_detail") {
       streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName}: ${toolDetail || ""}` };
     } else if (evtType === "tool_end") {
-      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: `${toolName} 完了` };
+      streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName, summary: t("chat.tool_done", { tool: toolName }) };
     } else {
       streamingMsg.subordinateActivity[subName] = { type: evtType, tool: toolName || "", summary: evtType };
     }
@@ -254,12 +255,12 @@ async function _sendConversation(text, overrideImages = null) {
       },
       onError: ({ message: m }) => {
         setExpression("troubled");
-        if (streamingMsg) { streamingMsg.text += `\n[エラー: ${m}]`; updateStreamingBubble(streamingMsg); }
+        if (streamingMsg) { streamingMsg.text += `\n${t("chat.error_prefix")} ${m}`; updateStreamingBubble(streamingMsg); }
       },
       onAbort: () => {
         if (streamingMsg) {
           streamingMsg.streaming = false; streamingMsg.activeTool = null;
-          if (!streamingMsg.text) streamingMsg.text = "(中断されました)";
+          if (!streamingMsg.text) streamingMsg.text = t("chat.interrupted");
         }
       },
     },
@@ -272,7 +273,7 @@ async function _sendConversation(text, overrideImages = null) {
         setTalking(false);
         if (streamingMsg?.streaming) {
           streamingMsg.streaming = false;
-          if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
+          if (!streamingMsg.text) streamingMsg.text = t("chat.empty_response");
         }
         renderConvMessages();
         renderWsThreadTabs();
@@ -282,7 +283,7 @@ async function _sendConversation(text, overrideImages = null) {
         const st = getState();
         const threadList = st.threads[anima] || [];
         const entry = threadList.find(t => t.id === thread);
-        if (entry && entry.label === "新しいスレッド" && (text || "").trim()) {
+        if (entry && entry.label === t("thread.new") && (text || "").trim()) {
           const lbl = (text || "").trim().slice(0, 20) + ((text || "").trim().length > 20 ? "..." : "");
           setState({ threads: { ...st.threads, [anima]: threadList.map(t => t.id === thread ? { ...t, label: lbl } : t) } });
           renderWsThreadTabs();
@@ -331,7 +332,7 @@ export async function resumeConversationStream(animaName) {
         setExpression(emotion); setTimeout(() => setExpression("neutral"), 3000);
       },
       onError: ({ message: m }) => {
-        if (streamingMsg) { streamingMsg.text += `\n[エラー: ${m}]`; streamingMsg.streaming = false; }
+        if (streamingMsg) { streamingMsg.text += `\n${t("chat.error_prefix")} ${m}`; streamingMsg.streaming = false; }
         setExpression("troubled");
       },
     },
@@ -340,7 +341,7 @@ export async function resumeConversationStream(animaName) {
         setTalking(false);
         if (streamingMsg?.streaming) {
           streamingMsg.streaming = false;
-          if (!streamingMsg.text) streamingMsg.text = "(空の応答)";
+          if (!streamingMsg.text) streamingMsg.text = t("chat.empty_response");
         }
         renderConvMessages();
         renderWsThreadTabs();
@@ -386,11 +387,11 @@ export function wsShowPendingIndicator() {
   const q = mgr.getPendingQueue(anima, thread);
   if (!dom.convPending || !dom.convPendingList) return;
   if (q.length === 0) { dom.convPending.style.display = "none"; return; }
-  if (dom.convPendingLabel) dom.convPendingLabel.textContent = `キュー (${q.length})`;
+  if (dom.convPendingLabel) dom.convPendingLabel.textContent = t("chat.queue_count", { count: q.length });
   dom.convPendingList.innerHTML = q.map((p, i) => {
     const txt = escapeHtml(p.text.length > 50 ? p.text.slice(0, 50) + "…" : p.text);
-    const img = p.images?.length ? ` <span style="opacity:0.6">(+${p.images.length}画像)</span>` : "";
-    return `<div class="pending-queue-item" data-idx="${i}"><span class="pending-queue-item-num">${i + 1}.</span><span class="pending-queue-item-text">${txt || "(画像のみ)"}${img}</span><button class="pending-queue-item-del" data-idx="${i}" type="button">✕</button></div>`;
+    const img = p.images?.length ? ` <span style="opacity:0.6">${t("chat.image_count", { count: p.images.length })}</span>` : "";
+    return `<div class="pending-queue-item" data-idx="${i}"><span class="pending-queue-item-num">${i + 1}.</span><span class="pending-queue-item-text">${txt || t("chat.image_only")}${img}</span><button class="pending-queue-item-del" data-idx="${i}" type="button">✕</button></div>`;
   }).join("");
   dom.convPending.style.display = "";
   dom.convPendingList.onclick = (e) => {

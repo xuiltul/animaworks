@@ -98,7 +98,7 @@ export function createAnimaController(ctx) {
     let html = "";
     for (const p of sorted) {
       const statusLabel = p.status ? ` (${p.status})` : "";
-      const openLabel = isTabOpen(ctx, p.name) ? " · 表示中" : "";
+      const openLabel = isTabOpen(ctx, p.name) ? t("animas.tab_viewing") : "";
       const disabled = p.status === "bootstrapping" || p.bootstrapping;
       const sleepBadge = p.status === "not_found" || p.status === "stopped" ? "\uD83D\uDCA4 " : "";
       const avatar = buildAddConversationAvatar(p.name);
@@ -134,7 +134,7 @@ export function createAnimaController(ctx) {
       const completedClass = tab.unreadStar ? " has-unread-complete" : "";
       const avatar = buildAnimaTabAvatar(tab.name);
       const closeBtn = state.animaTabs.length > 1
-        ? ` <button type="button" class="anima-tab-close" data-anima="${escapeHtml(tab.name)}" title="タブを閉じる" aria-label="閉じる">&times;</button>`
+        ? ` <button type="button" class="anima-tab-close" data-anima="${escapeHtml(tab.name)}" title="${escapeHtml(t("animas.tab_close"))}" aria-label="${escapeHtml(t("common.aria_close"))}">&times;</button>`
         : "";
       return `<span class="anima-tab-wrap"><button type="button" class="anima-tab${activeClass}${streamingClass}${completedClass}" data-anima="${escapeHtml(tab.name)}" title="${escapeHtml(tab.name)}" aria-label="${escapeHtml(tab.name)}">${avatar}<span class="anima-tab-name">${escapeHtml(tab.name)}</span></button>${closeBtn}</span>`;
     }).join("");
@@ -186,7 +186,7 @@ export function createAnimaController(ctx) {
     ctx.controllers.imageVoice.updateVoiceAnima(name);
 
     if (!state.threads[name]) {
-      state.threads[name] = [{ id: "default", label: "メイン", unread: false }];
+      state.threads[name] = [{ id: "default", label: t("thread.default_label"), unread: false }];
     }
     if (!state.threads[name].some(th => th.id === state.selectedThreadId)) {
       state.selectedThreadId = "default";
@@ -273,7 +273,7 @@ export function createAnimaController(ctx) {
     if (!isTabOpen(ctx, name)) {
       state.animaTabs.push({ name, unreadStar: false });
       if (!state.threads[name]) {
-        state.threads[name] = [{ id: "default", label: "メイン", unread: false }];
+        state.threads[name] = [{ id: "default", label: t("thread.default_label"), unread: false }];
       }
       state.activeThreadByAnima[name] = state.activeThreadByAnima[name] || "default";
     }
@@ -326,14 +326,14 @@ export function createAnimaController(ctx) {
         .map(th => {
           const o = {
             id: th.id,
-            label: typeof th.label === "string" && th.label ? th.label : "新しいスレッド",
+            label: typeof th.label === "string" && th.label ? th.label : t("thread.new"),
             unread: Boolean(th.unread),
           };
           if (th.archived) o.archived = true;
           return o;
         });
       if (!normalized.some(th => th.id === "default")) {
-        normalized.unshift({ id: "default", label: "メイン", unread: false });
+        normalized.unshift({ id: "default", label: t("thread.default_label"), unread: false });
       }
       state.threads[name] = normalized;
       state.activeThreadByAnima[name] = persisted.active_thread_id || "default";

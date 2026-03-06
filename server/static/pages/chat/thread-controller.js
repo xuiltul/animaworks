@@ -15,7 +15,7 @@ import {
 export function createThreadController(ctx) {
   const $ = ctx.$;
   const { state, deps } = ctx;
-  const { escapeHtml } = deps;
+  const { escapeHtml, t } = deps;
 
   function renderThreadTabs() {
     const container = $("chatThreadTabs");
@@ -23,7 +23,7 @@ export function createThreadController(ctx) {
 
     _updateThreadDropdownLabel();
 
-    const list = state.threads[state.selectedAnima] || [{ id: "default", label: "メイン", unread: false }];
+    const list = state.threads[state.selectedAnima] || [{ id: "default", label: t("thread.default_label"), unread: false }];
     const streamCtx = state.manager.getStreamingContext(state.selectedAnima);
     container.innerHTML = renderThreadTabsHtml(list, state.selectedThreadId, {
       escapeHtml,
@@ -128,7 +128,7 @@ export function createThreadController(ctx) {
 
   function createNewThread() {
     if (!state.selectedAnima) return;
-    const list = state.threads[state.selectedAnima] || [{ id: "default", label: "メイン", unread: false }];
+    const list = state.threads[state.selectedAnima] || [{ id: "default", label: t("thread.default_label"), unread: false }];
     const { updatedList, newThreadId } = sharedCreateThread(list, state.selectedAnima);
     state.threads[state.selectedAnima] = updatedList;
 
@@ -175,9 +175,9 @@ export function createThreadController(ctx) {
     const label = $("chatThreadDropdownLabel");
     if (!menu || !state.selectedAnima) return;
 
-    const list = state.threads[state.selectedAnima] || [{ id: "default", label: "メイン", unread: false }];
+    const list = state.threads[state.selectedAnima] || [{ id: "default", label: t("thread.default_label"), unread: false }];
     const active = list.find(th => th.id === state.selectedThreadId);
-    if (label) label.textContent = active?.label || "メイン";
+    if (label) label.textContent = active?.label || t("thread.default_label");
 
     const visible = list.filter(th => !th.archived);
     const archived = list.filter(th => th.archived);
@@ -190,8 +190,8 @@ export function createThreadController(ctx) {
       if (isCurrent) cls += " active";
       if (streaming) cls += " is-streaming";
       if (th.unread) cls += " has-unread";
-      const closeBtn = th.id !== "default"
-        ? ` <button class="chat-thread-dd-close" data-thread="${escapeHtml(th.id)}" aria-label="閉じる">&times;</button>`
+        const closeBtn = th.id !== "default"
+        ? ` <button class="chat-thread-dd-close" data-thread="${escapeHtml(th.id)}" aria-label="${escapeHtml(t("thread.close_short"))}">&times;</button>`
         : "";
       return `<div class="${cls}" data-thread="${escapeHtml(th.id)}">`
         + `<span class="chat-thread-dd-label">${escapeHtml(th.label || th.id)}</span>`
@@ -208,7 +208,7 @@ export function createThreadController(ctx) {
     }
 
     html += `<div class="chat-thread-dd-sep"></div>`;
-    html += `<div class="chat-thread-dd-new" data-chat-id="chatThreadDdNew">＋ 新しいスレッド</div>`;
+    html += `<div class="chat-thread-dd-new" data-chat-id="chatThreadDdNew">${t("thread.new_button")}</div>`;
     menu.innerHTML = html;
 
     menu.querySelectorAll(".chat-thread-dd-item:not(.archived)").forEach(el => {
@@ -246,9 +246,9 @@ export function createThreadController(ctx) {
   function _updateThreadDropdownLabel() {
     const label = $("chatThreadDropdownLabel");
     if (!label || !state.selectedAnima) return;
-    const list = state.threads[state.selectedAnima] || [{ id: "default", label: "メイン" }];
+    const list = state.threads[state.selectedAnima] || [{ id: "default", label: t("thread.default_label") }];
     const active = list.find(th => th.id === state.selectedThreadId);
-    label.textContent = active?.label || "メイン";
+    label.textContent = active?.label || t("thread.default_label");
   }
 
   return { renderThreadTabs, selectThread, createNewThread, closeThread, restoreThread, renderThreadDropdownMenu };

@@ -2,6 +2,7 @@
 // Office scene bootstrap, system status polling, and status display updates.
 
 import { getState, setState } from "./state.js";
+import { t } from "../../shared/i18n.js";
 import { fetchSystemStatus } from "./api.js";
 import { initOffice, getScene, getDesks, setCharacterUpdateHook, setCharacterClickHandler, registerClickTarget, highlightDesk, getFloorDimensions, getObstacles } from "./office3d.js";
 import { initCharacters, createCharacter, updateAllCharacters, getCharacterGroup, getCharacterHome, setAppearance, updateCharacterState } from "./character.js";
@@ -108,10 +109,10 @@ export async function loadSystemStatus(dom) {
     updateStatusDisplay(
       dom,
       data.scheduler_running,
-      `${data.scheduler_running ? "稼働中" : "停止"} (${data.animas}名)`
+      `${t(data.scheduler_running ? "home.scheduler_running" : "home.scheduler_stopped")} (${data.animas}${t("ws.count_suffix")})`
     );
   } catch {
-    updateStatusDisplay(dom, false, "接続失敗");
+    updateStatusDisplay(dom, false, t("status.connection_failed"));
   }
 }
 

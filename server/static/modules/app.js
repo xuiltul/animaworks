@@ -104,7 +104,7 @@ function _applySidebarCollapsed(collapsed) {
   const btn = document.getElementById("sidebarCollapseBtn");
   if (!btn) return;
   btn.setAttribute("aria-pressed", collapsed ? "true" : "false");
-  btn.setAttribute("title", collapsed ? "サイドバーを開く" : "サイドバーを閉じる");
+  btn.setAttribute("title", collapsed ? t("nav.sidebar_open") : t("nav.sidebar_close"));
 }
 
 function initDesktopSidebarCollapse() {

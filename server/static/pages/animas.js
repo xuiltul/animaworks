@@ -58,11 +58,11 @@ async function _renderList() {
       <table class="data-table">
         <thead>
           <tr>
-            <th>名前</th>
-            <th>ステータス</th>
-            <th>PID</th>
-            <th>稼働時間</th>
-            <th>操作</th>
+            <th>${t("animas.table_name")}</th>
+            <th>${t("animas.table_status")}</th>
+            <th>${t("animas.table_pid")}</th>
+            <th>${t("animas.table_uptime")}</th>
+            <th>${t("animas.table_actions")}</th>
           </tr>
         </thead>
         <tbody id="animasTableBody"></tbody>
@@ -99,7 +99,7 @@ async function _renderList() {
         <td>${escapeHtml(String(pid))}</td>
         <td>${escapeHtml(uptime)}</td>
         <td>
-          <button class="btn-secondary anima-detail-btn" data-name="${escapeHtml(p.name)}" style="font-size:0.8rem; padding:0.25rem 0.5rem;">詳細</button>
+          <button class="btn-secondary anima-detail-btn" data-name="${escapeHtml(p.name)}" style="font-size:0.8rem; padding:0.25rem 0.5rem;">${t("animas.detail")}</button>
           <button class="btn-primary anima-trigger-btn" data-name="${escapeHtml(p.name)}" style="font-size:0.8rem; padding:0.25rem 0.5rem;">Heartbeat</button>
         </td>
       `;
@@ -118,13 +118,13 @@ async function _renderList() {
         e.stopPropagation();
         const name = btn.dataset.name;
         btn.disabled = true;
-        btn.textContent = "実行中...";
+        btn.textContent = t("animas.running");
         try {
           await fetch(`/api/animas/${encodeURIComponent(name)}/trigger`, { method: "POST" });
-          btn.textContent = "完了";
+          btn.textContent = t("animas.success");
           setTimeout(() => { btn.textContent = "Heartbeat"; btn.disabled = false; }, 2000);
         } catch {
-          btn.textContent = "失敗";
+          btn.textContent = t("animas.failed");
           setTimeout(() => { btn.textContent = "Heartbeat"; btn.disabled = false; }, 2000);
         }
       });

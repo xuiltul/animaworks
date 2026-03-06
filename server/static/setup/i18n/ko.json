@@ -4,6 +4,7 @@
   "step.language": "언어",
   "step.environment": "환경",
   "step.character": "캐릭터",
+  "step.leader": "캐릭터",
   "step.confirm": "확인",
   "step.userinfo": "사용자 정보",
   "btn.next": "다음",

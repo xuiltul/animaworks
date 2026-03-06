@@ -1,4 +1,6 @@
 // ── Sidebar / Tab Switching Controller ─────────
+import { t } from "../../shared/i18n.js";
+
 const RIGHT_PANE_VISIBLE_KEY = "aw-chat-right-pane-visible";
 
 export function createSidebarController(ctx) {
@@ -10,8 +12,8 @@ export function createSidebarController(ctx) {
     if (!btn) return;
     btn.classList.toggle("is-collapsed", !visible);
     btn.setAttribute("aria-pressed", visible ? "true" : "false");
-    btn.setAttribute("aria-label", visible ? "右ペインを隠す" : "右ペインを表示");
-    btn.setAttribute("title", visible ? "右ペインを隠す" : "右ペインを表示");
+    btn.setAttribute("aria-label", visible ? t("pane.sidebar_hide") : t("pane.sidebar_show"));
+    btn.setAttribute("title", visible ? t("pane.sidebar_hide") : t("pane.sidebar_show"));
   }
 
   function setRightPaneVisible(visible, { persist = true } = {}) {

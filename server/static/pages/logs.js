@@ -17,19 +17,19 @@ export function render(container) {
 
   container.innerHTML = `
     <div class="page-header">
-      <h2>ログビューア</h2>
+      <h2>${t("logs.page_title")}</h2>
     </div>
 
     <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
-      <label style="font-weight:500;">ログファイル:</label>
+      <label style="font-weight:500;">${t("logs.file_label")}</label>
       <select id="logFileSelect" style="flex:1; max-width:400px; padding:0.4rem; border:1px solid var(--border-color, #ddd); border-radius:0.375rem;">
-        <option value="">ファイルを選択...</option>
+        <option value="">${t("logs.file_select")}</option>
       </select>
-      <button class="btn-secondary" id="logStreamToggle">ストリーミング開始</button>
+      <button class="btn-secondary" id="logStreamToggle">${t("logs.stream_start")}</button>
     </div>
 
     <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
-      <span style="font-weight:500; margin-right:0.5rem;">レベル:</span>
+      <span style="font-weight:500; margin-right:0.5rem;">${t("logs.level_label")}</span>
       <label style="display:flex; align-items:center; gap:0.25rem;">
         <input type="checkbox" class="log-level-filter" data-level="DEBUG" checked> DEBUG
       </label>

@@ -190,7 +190,7 @@ async function _loadAuthSettings() {
     // Auth mode info
     const modeLabel = { local_trust: t("setup.auth_local_trust"), password: t("setup.auth_password"), multi_user: t("setup.auth_multi_user") };
     html += `<div style="margin-bottom: 1rem;">
-      <strong>認証モード:</strong> <code>${escapeHtml(modeLabel[me.auth_mode] || me.auth_mode || "不明")}</code>
+      <strong>${t("setup.auth_mode")}:</strong> <code>${escapeHtml(modeLabel[me.auth_mode] || me.auth_mode || t("common.unknown"))}</code>
     </div>`;
 
     // Password change / initial setup form

@@ -2,6 +2,7 @@
 // Extracted from app.js: Board channel/DM read + post
 
 import { escapeHtml, smartTimestamp } from "./utils.js";
+import { t } from "../../shared/i18n.js";
 import { getCurrentUser } from "./login.js";
 import { createLogger } from "../../shared/logger.js";
 
@@ -31,15 +32,15 @@ export async function initBoardTab() {
       <div class="ws-board-tab">
         <div class="ws-board-dropdown">
           <select class="ws-board-select" id="wsBoardSelect">
-            <option value="">読み込み中...</option>
+            <option value="">${t("board.loading")}</option>
           </select>
         </div>
         <div class="ws-board-messages" id="wsBoardMessages">
-          <div class="loading-placeholder">チャンネルを選択してください</div>
+          <div class="loading-placeholder">${t("board.select_channel_prompt")}</div>
         </div>
         <div class="ws-board-input" id="wsBoardInputArea">
-          <textarea class="ws-board-input-field" id="wsBoardInput" placeholder="メッセージを入力..." rows="1"></textarea>
-          <button class="ws-board-send-btn" id="wsBoardSend">送信</button>
+          <textarea class="ws-board-input-field" id="wsBoardInput" placeholder="${t("board.message_placeholder")}" rows="1"></textarea>
+          <button class="ws-board-send-btn" id="wsBoardSend">${t("board.send")}</button>
         </div>
       </div>`;
 
@@ -81,7 +82,7 @@ async function loadBoardChannelList() {
     _boardChannels = chRes.ok ? await chRes.json() : [];
     _boardDMs = dmRes.ok ? await dmRes.json() : [];
 
-    let html = '<option value="">-- チャンネルを選択 --</option>';
+    let html = `<option value="">${t("board.select_channel")}</option>`;
 
     if (_boardChannels.length > 0) {
       html += '<optgroup label="Channels">';
@@ -103,7 +104,7 @@ async function loadBoardChannelList() {
     }
 
     if (_boardChannels.length === 0 && _boardDMs.length === 0) {
-      html = '<option value="">チャンネルがありません</option>';
+      html = `<option value="">${t("board.no_channels")}</option>`;
     }
 
     select.innerHTML = html;
@@ -113,7 +114,7 @@ async function loadBoardChannelList() {
     }
   } catch (err) {
     logger.error("Failed to load board channels", { error: err.message });
-    select.innerHTML = '<option value="">読み込み失敗</option>';
+    select.innerHTML = `<option value="">${t("board.load_failed")}</option>`;
   }
 }
 
@@ -121,7 +122,7 @@ async function loadBoardMessages() {
   const messagesEl = document.getElementById("wsBoardMessages");
   if (!messagesEl || !_boardSelectedChannel) return;
 
-  messagesEl.innerHTML = '<div class="loading-placeholder">読み込み中...</div>';
+  messagesEl.innerHTML = `<div class="loading-placeholder">${t("board.loading")}</div>`;
 
   try {
     let url;
@@ -133,7 +134,7 @@ async function loadBoardMessages() {
 
     const res = await fetch(url);
     if (!res.ok) {
-      messagesEl.innerHTML = '<div class="loading-placeholder">読み込み失敗</div>';
+      messagesEl.innerHTML = `<div class="loading-placeholder">${t("board.load_failed")}</div>`;
       return;
     }
 
@@ -141,7 +142,7 @@ async function loadBoardMessages() {
     const messages = data.messages || [];
 
     if (messages.length === 0) {
-      messagesEl.innerHTML = '<div class="loading-placeholder">メッセージはまだありません</div>';
+      messagesEl.innerHTML = `<div class="loading-placeholder">${t("board.messages_empty")}</div>`;
       return;
     }
 
@@ -149,7 +150,7 @@ async function loadBoardMessages() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   } catch (err) {
     logger.error("Failed to load board messages", { error: err.message });
-    messagesEl.innerHTML = '<div class="loading-placeholder">読み込み失敗</div>';
+    messagesEl.innerHTML = `<div class="loading-placeholder">${t("board.load_failed")}</div>`;
   }
 }
 

@@ -141,7 +141,7 @@ function handleWsMessage(raw) {
             role: "assistant", text: response, timestamp: new Date().toISOString(),
           });
         }
-        addActivity("chat", animaName, `応答: ${response.slice(0, 100)}`);
+        addActivity("chat", animaName, `${t("chat.response_prefix")} ${response.slice(0, 100)}`);
       }
       break;
     }
@@ -252,12 +252,12 @@ function handleWsMessage(raw) {
       const evtType = data.event || data.type || "";
       const toolName = data.tool_name || data.tool || "tool";
       if (animaName && evtType === "tool_start") {
-        addActivity("tool", animaName, `${toolName} ${t("websocket.tool_running") || "実行中..."}`);
+        addActivity("tool", animaName, t("chat.tool_running", { tool: toolName }));
       } else if (animaName && evtType === "tool_detail") {
         addActivity("tool", animaName, `${toolName}: ${data.detail || ""}`);
       } else if (animaName && (evtType === "tool_end" || evtType === "tool_use")) {
-        const suffix = data.is_error ? ` (${t("common.error") || "error"})` : "";
-        addActivity("tool", animaName, `${toolName} ${t("websocket.tool_done") || "完了"}${suffix}`);
+        const suffix = data.is_error ? ` (${t("common.error")})` : "";
+        addActivity("tool", animaName, `${t("chat.tool_done", { tool: toolName })}${suffix}`);
       } else if (animaName && evtType) {
         addActivity("tool", animaName, `${data.summary || evtType}`);
       }
