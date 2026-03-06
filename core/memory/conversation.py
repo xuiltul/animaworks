@@ -774,6 +774,11 @@ class ConversationMemory:
         import litellm
 
         model = self.model_config.fallback_model or self.model_config.model
+        # Mode C (Codex) models use a subprocess executor, not LiteLLM.
+        # Fall back to the consolidation model for internal LLM calls.
+        if model.startswith("codex/"):
+            from core.config.models import DEFAULT_CONSOLIDATION_MODEL
+            model = DEFAULT_CONSOLIDATION_MODEL
         kwargs: dict[str, Any] = {}
         self._apply_provider_kwargs(model, kwargs)
         response = cast(Any, await litellm.acompletion(

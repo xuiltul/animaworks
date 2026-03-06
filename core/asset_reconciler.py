@@ -508,8 +508,14 @@ async def _synthesize_prompt_via_llm(
         user_prompt_key = "asset_reconciler.llm_user_prompt"
 
     api_key = model_config.api_key or os.environ.get(model_config.api_key_env)
+    # Mode C (Codex) models use a subprocess executor, not LiteLLM.
+    # Fall back to the consolidation model for internal LLM calls.
+    llm_model = model_config.model
+    if llm_model.startswith("codex/"):
+        from core.config.models import DEFAULT_CONSOLIDATION_MODEL
+        llm_model = DEFAULT_CONSOLIDATION_MODEL
     kwargs: dict[str, Any] = {
-        "model": model_config.model,
+        "model": llm_model,
         "messages": [
             {"role": "system", "content": load_prompt(system_prompt_name)},
             {

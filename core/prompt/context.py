@@ -46,6 +46,8 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "claude-haiku-3.5": 200_000,
     "claude-haiku-4": 200_000,
     # OpenAI
+    "gpt-5.4": 272_000,
+    "gpt-5.3": 128_000,
     "gpt-4.1": 1_000_000,
     "gpt-4.1-mini": 1_000_000,
     "gpt-4.1-nano": 1_000_000,
