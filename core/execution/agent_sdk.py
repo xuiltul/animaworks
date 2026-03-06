@@ -999,3 +999,80 @@ class AgentSDKExecutor(BaseExecutor):
             "force_chain": session_stats.get("force_chain", False),
             "usage": usage_acc.to_dict(),
         }
+
+    async def compact_session(
+        self,
+        anima_dir: Path,
+        session_type: str = "chat",
+        thread_id: str = "default",
+    ) -> bool:
+        """Send /compact to an idle SDK session to trigger compaction.
+
+        Resumes the session with ``skip_timeout_check=True`` and sends
+        ``/compact`` as the query.  The SDK compresses the transcript and
+        the same session_id is preserved for future resume.
+
+        Returns:
+            True if compaction succeeded, False otherwise.
+        """
+        session_id = _load_session_id(
+            anima_dir,
+            session_type,
+            thread_id,
+            skip_timeout_check=True,
+        )
+        if not session_id:
+            logger.info("No session to compact for %s/%s", session_type, thread_id)
+            return False
+
+        try:
+            from claude_code_sdk import ClaudeAgentOptions
+            from claude_code_sdk import ClaudeCodeSDKClient as ClaudeSDKClient
+
+            options = ClaudeAgentOptions(
+                system_prompt=f"{anima_dir.name} session compaction",
+                max_turns=1,
+                resume=session_id,
+            )
+
+            async with asyncio.timeout(RESUME_TIMEOUT_SEC):
+                async with ClaudeSDKClient(options=options) as client:
+                    await client.query("/compact")
+                    async for message in client.receive_messages():
+                        if hasattr(message, "session_id") and message.session_id:
+                            _save_session_id(
+                                anima_dir,
+                                message.session_id,
+                                session_type,
+                                thread_id,
+                            )
+                            logger.info(
+                                "Idle compaction completed (session=%s, type=%s)",
+                                message.session_id,
+                                session_type,
+                            )
+                            return True
+                        if hasattr(message, "content"):
+                            break
+
+            return False
+        except ImportError:
+            logger.debug("claude_code_sdk not available; skipping /compact")
+            return False
+        except TimeoutError:
+            logger.warning(
+                "Idle compaction timed out for %s/%s; clearing session",
+                session_type,
+                thread_id,
+            )
+            _clear_session_id(anima_dir, session_type, thread_id)
+            return False
+        except Exception:
+            logger.warning(
+                "Idle compaction failed for %s/%s; clearing session",
+                session_type,
+                thread_id,
+                exc_info=True,
+            )
+            _clear_session_id(anima_dir, session_type, thread_id)
+            return False

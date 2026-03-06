@@ -429,6 +429,20 @@ class CodexSDKExecutor(BaseExecutor):
         logger.info("Started fresh Codex thread")
         return thread
 
+    def discard_thread(
+        self,
+        session_type: str = "chat",
+        chat_thread_id: str = "default",
+    ) -> None:
+        """Discard Codex thread ID so next session starts fresh."""
+        _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
+        logger.info(
+            "Discarded Codex thread for %s (session=%s, thread=%s)",
+            self._anima_dir.name,
+            session_type,
+            chat_thread_id,
+        )
+
     # ── Blocking execution ───────────────────────────────────
 
     async def execute(

@@ -93,7 +93,13 @@ def _session_file(session_type: str, thread_id: str = "default") -> str:
     return f"current_session_{session_type}.json"
 
 
-def _load_session_id(anima_dir: Path, session_type: str = "chat", thread_id: str = "default") -> str | None:
+def _load_session_id(
+    anima_dir: Path,
+    session_type: str = "chat",
+    thread_id: str = "default",
+    *,
+    skip_timeout_check: bool = False,
+) -> str | None:
     """Load persisted session ID for SDK session resume.
 
     Returns ``None`` when the saved session is older than
@@ -115,7 +121,7 @@ def _load_session_id(anima_dir: Path, session_type: str = "chat", thread_id: str
             if saved.tzinfo is None:
                 saved = saved.replace(tzinfo=UTC)
             elapsed_min = (datetime.now(UTC) - saved).total_seconds() / 60
-            if elapsed_min > SESSION_RESUME_TIMEOUT_MIN:
+            if not skip_timeout_check and elapsed_min > SESSION_RESUME_TIMEOUT_MIN:
                 logger.info(
                     "Session resume skipped (%s/%s): idle %.1f min > %d min threshold",
                     session_type,

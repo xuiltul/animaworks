@@ -38,6 +38,7 @@ from core.memory import MemoryManager
 from core.memory.activity import ActivityLogger
 from core.messenger import Messenger
 from core.schemas import AnimaStatus, ModelConfig
+from core.session_compactor import SessionCompactor
 from core.time_utils import now_jst
 
 logger = logging.getLogger("animaworks.anima")
@@ -126,6 +127,12 @@ class DigitalAnima(
         self._last_progress_at: datetime | None = None
         self._on_lock_released: Callable[[], None] | None = None
         self._pending_executor: Any | None = None  # set by runner after PendingTaskExecutor init
+
+        # Idle compaction timer (per-thread)
+        from core.config.models import load_config
+
+        _idle_min = load_config().heartbeat.idle_compaction_minutes
+        self._session_compactor = SessionCompactor(idle_minutes=_idle_min)
 
         # Greet cache (1-hour cooldown)
         self._last_greet_at: float | None = None

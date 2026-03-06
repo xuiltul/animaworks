@@ -70,7 +70,9 @@ class LifecycleManager:
 
     def unregister_anima(self, name: str) -> None:
         """Remove an anima and all their scheduled jobs."""
-        self.animas.pop(name, None)
+        anima = self.animas.pop(name, None)
+        if anima:
+            anima._session_compactor.cancel_all_for_anima(name)
         self._schedule_mtimes.pop(name, None)
         self._pending_triggers.discard(name)
         timer = self._deferred_timers.pop(name, None)
@@ -1043,6 +1045,8 @@ class LifecycleManager:
         for timer in self._deferred_timers.values():
             timer.cancel()
         self._deferred_timers.clear()
+        for anima in self.animas.values():
+            anima._session_compactor.shutdown()
         self.scheduler.shutdown(wait=False)
         logger.info("Lifecycle manager stopped")
 

@@ -150,6 +150,9 @@ class MessagingMixin:
                     self.name,
                     from_person,
                 )
+        # Cancel any pending idle-compaction timer for this thread
+        self._session_compactor.cancel(self.name, thread_id)
+
         logger.info(
             "[%s] process_message WAITING from=%s content_len=%d images=%d",
             self.name,
@@ -292,6 +295,24 @@ class MessagingMixin:
                     active_session_type.reset(_session_token)
                     self._status_slots[_conv_key] = "idle"
                     self._task_slots[_conv_key] = ""
+
+                    # Schedule idle compaction timer
+                    _sched_thread_b = thread_id
+
+                    def _fire_compaction_b(_anima=self, _tid=_sched_thread_b):
+                        import asyncio as _aio
+
+                        from core.session_compactor import (
+                            run_idle_compaction,
+                        )
+
+                        _aio.create_task(run_idle_compaction(_anima, _tid))
+
+                    self._session_compactor.schedule(
+                        self.name,
+                        _sched_thread_b,
+                        _fire_compaction_b,
+                    )
         finally:
             self._notify_lock_released()
 
@@ -337,6 +358,9 @@ class MessagingMixin:
                     self.name,
                     from_person,
                 )
+
+        # Cancel any pending idle-compaction timer for this thread
+        self._session_compactor.cancel(self.name, thread_id)
 
         logger.info(
             "[%s] process_message_stream WAITING from=%s content_len=%d images=%d",
@@ -501,6 +525,24 @@ class MessagingMixin:
                             logger.info(
                                 "[%s] process_message_stream END",
                                 self.name,
+                            )
+
+                            # Schedule idle compaction timer for this thread
+                            _sched_thread = thread_id
+
+                            def _fire_compaction(_anima=self, _tid=_sched_thread):
+                                import asyncio as _aio
+
+                                from core.session_compactor import (
+                                    run_idle_compaction,
+                                )
+
+                                _aio.create_task(run_idle_compaction(_anima, _tid))
+
+                            self._session_compactor.schedule(
+                                self.name,
+                                _sched_thread,
+                                _fire_compaction,
                             )
                         yield chunk
                 except Exception as exc:

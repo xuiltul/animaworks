@@ -308,6 +308,12 @@ class HeartbeatConfig(BaseModel):
     channel_post_cooldown_s: int = 300  # Min seconds between board posts per Anima (0 = no limit)
     max_messages_per_hour: int = 30  # Global outbound DM limit per Anima per hour
     max_messages_per_day: int = 100  # Global outbound DM limit per Anima per day
+    idle_compaction_minutes: float = Field(
+        default=10.0,
+        ge=1.0,
+        le=120.0,
+        description="Minutes after last stream end to trigger idle auto-compaction",
+    )
 
 
 # ── Voice Chat Config ───────────────────────────────────────────────────────
