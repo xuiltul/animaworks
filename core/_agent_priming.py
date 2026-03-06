@@ -193,7 +193,17 @@ class PrimingMixin:
     # ── Context-window-aware tier downgrade ─────────────────
 
     _BYTES_PER_TOKEN_ESTIMATE = 4
-    _TOOL_OVERHEAD_TOKENS = 5000
+    _TOKENS_PER_MCP_SCHEMA = 200
+    _TOKENS_PER_TOOL_SCHEMA = 150
+    _MIN_TOOL_OVERHEAD = 5000
+    _MAX_TOOL_OVERHEAD = 20000
+
+    def _estimate_tool_overhead(self) -> int:
+        """Estimate tool definition overhead in tokens based on schema count."""
+        registry = getattr(self, "_tool_registry", None) or []
+        mode = getattr(self, "_execution_mode", "a")
+        per_schema = self._TOKENS_PER_MCP_SCHEMA if mode in ("s", "c") else self._TOKENS_PER_TOOL_SCHEMA
+        return min(max(len(registry) * per_schema, self._MIN_TOOL_OVERHEAD), self._MAX_TOOL_OVERHEAD)
 
     def _fit_prompt_to_context_window(
         self,
@@ -205,76 +215,60 @@ class PrimingMixin:
         mode: str,
         trigger: str,
     ) -> str:
-        """Ensure system prompt fits context window, downgrading tier if needed.
+        """Ensure system prompt fits context window, shrinking budget if needed.
 
         Estimates total token consumption and rebuilds the system prompt
-        with progressively lower tiers until it fits within 80% of the
-        context window (leaving room for output and tool schemas).
+        with progressively smaller system_budget until it fits within 80%
+        of the context window.
 
         Returns the (possibly rebuilt) system prompt.
         """
-        from core.prompt.builder import (
-            TIER_FULL,
-            TIER_LIGHT,
-            TIER_MINIMAL,
-            TIER_STANDARD,
-            resolve_prompt_tier,
-        )
+        from core.prompt.builder import _compute_system_budget
 
+        tool_overhead = self._estimate_tool_overhead()
         sys_bytes = len(system_prompt.encode("utf-8"))
         prompt_bytes = len(prompt.encode("utf-8"))
-        estimated_tokens = (sys_bytes + prompt_bytes) // self._BYTES_PER_TOKEN_ESTIMATE + self._TOOL_OVERHEAD_TOKENS
+        estimated_tokens = (sys_bytes + prompt_bytes) // self._BYTES_PER_TOKEN_ESTIMATE + tool_overhead
         max_input_tokens = int(context_window * 0.80)
 
         if estimated_tokens <= max_input_tokens:
             return system_prompt
 
-        current_tier = resolve_prompt_tier(context_window)
+        original_budget = _compute_system_budget(context_window)
         logger.warning(
             "Estimated prompt %d tokens exceeds context limit %d "
-            "(tier=%s, context_window=%d); attempting tier downgrade",
+            "(budget=%d, context_window=%d); attempting budget shrink",
             estimated_tokens,
             max_input_tokens,
-            current_tier,
+            original_budget,
             context_window,
         )
 
-        tier_order = [TIER_FULL, TIER_STANDARD, TIER_LIGHT, TIER_MINIMAL]
-        current_idx = tier_order.index(current_tier)
-
-        tier_force_cw = {
-            TIER_STANDARD: 64_000,
-            TIER_LIGHT: 16_000,
-            TIER_MINIMAL: 8_000,
-        }
-
         best_prompt = system_prompt
-        for target_tier in tier_order[current_idx + 1 :]:
-            force_cw = tier_force_cw.get(target_tier)
-            if force_cw is None:
-                continue
-            _priming = "" if target_tier == TIER_MINIMAL else priming_section
+        for shrink in (0.75, 0.50, 0.25):
+            reduced_budget = int(original_budget * shrink)
             build_result = build_system_prompt(
                 self.memory,
                 tool_registry=self._tool_registry,
                 personal_tools=self._personal_tools,
-                priming_section=_priming,
+                priming_section="" if shrink <= 0.25 else priming_section,
                 execution_mode=mode,
                 message=prompt,
                 retriever=self._get_retriever(),
                 trigger=trigger,
-                context_window=force_cw,
+                context_window=context_window,
+                system_budget=reduced_budget,
             )
             best_prompt = build_result.system_prompt
             new_sys_bytes = len(best_prompt.encode("utf-8"))
             new_estimated = (
                 new_sys_bytes + prompt_bytes
-            ) // self._BYTES_PER_TOKEN_ESTIMATE + self._TOOL_OVERHEAD_TOKENS
+            ) // self._BYTES_PER_TOKEN_ESTIMATE + tool_overhead
             if new_estimated <= max_input_tokens:
                 logger.warning(
-                    "Prompt tier downgraded: %s -> %s (estimated %d -> %d tokens, limit %d)",
-                    current_tier,
-                    target_tier,
+                    "Prompt budget shrunk: %d -> %d chars (estimated %d -> %d tokens, limit %d)",
+                    original_budget,
+                    reduced_budget,
                     estimated_tokens,
                     new_estimated,
                     max_input_tokens,
@@ -282,7 +276,7 @@ class PrimingMixin:
                 return best_prompt
 
         max_sys_bytes = max(
-            (max_input_tokens - self._TOOL_OVERHEAD_TOKENS) * self._BYTES_PER_TOKEN_ESTIMATE - prompt_bytes,
+            (max_input_tokens - tool_overhead) * self._BYTES_PER_TOKEN_ESTIMATE - prompt_bytes,
             2000,
         )
         if len(best_prompt.encode("utf-8")) > max_sys_bytes:

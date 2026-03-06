@@ -199,13 +199,16 @@ class ContextMixin:
                 sys_content = messages[0]["content"]
                 excess_tokens = est_input - ctx_window + 512
                 excess_chars = excess_tokens * 4
-                if len(sys_content) > excess_chars + 2000:
-                    messages[0]["content"] = sys_content[: len(sys_content) - excess_chars]
+                _min_sys_chars = 2000
+                available_for_trim = len(sys_content) - _min_sys_chars
+                if available_for_trim > 0:
+                    trim_amount = min(excess_chars, available_for_trim)
+                    messages[0]["content"] = sys_content[: len(sys_content) - trim_amount]
                     logger.warning(
                         "Hard-truncated system prompt by %d chars "
                         "to fit context window %d "
                         "(est_input ~%d, excess ~%d tokens)",
-                        excess_chars,
+                        trim_amount,
                         ctx_window,
                         est_input,
                         excess_tokens,
