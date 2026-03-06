@@ -13,6 +13,7 @@ import { createSidebarController } from "./sidebar-controller.js";
 import { createEventsController } from "./events-controller.js";
 import { createImageVoiceController } from "./image-voice-controller.js";
 import { initSplitter } from "./splitter.js";
+import { onEvent } from "../../modules/websocket.js";
 
 const LAYOUT_KEY = "aw-chat-pane-layout";
 
@@ -179,6 +180,43 @@ export function createPaneHost(rootContainer) {
     );
     pane.intervals.push(chatInterval);
 
+    const unsubBootstrap = onEvent("anima.bootstrap", (data) => {
+      const { name, status: bsStatus } = data;
+      const anima = ctx.state.animas.find(a => a.name === name);
+      if (!anima) return;
+
+      if (bsStatus === "started") {
+        anima.status = "bootstrapping";
+        anima.bootstrapping = true;
+        anima._bootstrapStartedAt = Date.now();
+        anima._bootstrapFailed = null;
+      } else if (bsStatus === "completed") {
+        anima.status = "idle";
+        anima.bootstrapping = false;
+        anima._bootstrapFailed = null;
+        if (name === ctx.state.selectedAnima) {
+          ctx.controllers.renderer.showBootstrapComplete(
+            ctx.$("chatPageMessages"), anima
+          );
+          setTimeout(() => ctx.controllers.renderer.renderChat(), 1000);
+        }
+      } else if (bsStatus === "failed") {
+        anima.status = "error";
+        anima.bootstrapping = false;
+        anima._bootstrapFailed = "failed";
+      } else if (bsStatus === "max_retries_exceeded") {
+        anima.status = "error";
+        anima.bootstrapping = false;
+        anima._bootstrapFailed = "max_retries";
+      }
+
+      if (name === ctx.state.selectedAnima && bsStatus !== "completed") {
+        ctx.controllers.renderer.renderChat();
+      }
+      ctx.controllers.anima.renderAnimaTabs();
+    });
+    pane.intervals.push(unsubBootstrap);
+
     if (panes.length === 1) {
       focusedIdx = 0;
       _startFocusedIntervals();
@@ -344,8 +382,12 @@ export function createPaneHost(rootContainer) {
 
   function _destroyPane(pane) {
     const { ctx } = pane;
-    for (const id of pane.intervals) clearInterval(id);
+    for (const entry of pane.intervals) {
+      if (typeof entry === "function") entry();
+      else clearInterval(entry);
+    }
     pane.intervals = [];
+    ctx.controllers.renderer.clearBootstrapInterval();
 
     if (ctx.state.chatUiStateSaveTimer) {
       clearTimeout(ctx.state.chatUiStateSaveTimer);

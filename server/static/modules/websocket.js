@@ -11,6 +11,8 @@ import { createLogger } from "../shared/logger.js";
 
 const logger = createLogger("websocket");
 
+const _eventHandlers = new Map();
+
 let ws = null;
 let wsReconnectTimer = null;
 const WS_INITIAL_DELAY = 1000;
@@ -66,6 +68,15 @@ export function connectWebSocket() {
   ws.addEventListener("message", (evt) => {
     handleWsMessage(evt.data);
   });
+}
+
+/**
+ * Register handler for a WebSocket event type. Returns unsubscribe function.
+ */
+export function onEvent(type, fn) {
+  if (!_eventHandlers.has(type)) _eventHandlers.set(type, new Set());
+  _eventHandlers.get(type).add(fn);
+  return () => _eventHandlers.get(type)?.delete(fn);
 }
 
 function scheduleReconnect() {
@@ -185,6 +196,14 @@ function handleWsMessage(raw) {
           }
           renderAnimaDropdown();
           addActivity("system", animaName, t("websocket.bootstrap_failed"));
+        } else if (bsStatus === "max_retries_exceeded") {
+          const existing = state.animas.find((p) => p.name === animaName);
+          if (existing) {
+            existing.status = "error";
+            existing.bootstrapping = false;
+          }
+          renderAnimaDropdown();
+          addActivity("system", animaName, t("websocket.bootstrap_max_retries"));
         }
       }
       break;
@@ -303,6 +322,10 @@ function handleWsMessage(raw) {
       }
       break;
   }
+
+  // Dispatch to registered handlers
+  const handlers = _eventHandlers.get(eventType);
+  if (handlers) for (const fn of handlers) { try { fn(data); } catch (e) { logger.error("Event handler error", { type: eventType, error: e.message }); } }
 }
 
 // ── Toast Notifications ─────────────────────

@@ -70,6 +70,99 @@ export function createChatRenderer(ctx) {
     },
   });
 
+  // ── Bootstrap Progress ──
+
+  const BOOTSTRAP_STEPS = [
+    { key: "chat.bootstrap_step_identity",  delayMs: 0 },
+    { key: "chat.bootstrap_step_workspace", delayMs: 8000 },
+    { key: "chat.bootstrap_step_avatar",    delayMs: 20000 },
+    { key: "chat.bootstrap_step_intro",     delayMs: 45000 },
+    { key: "chat.bootstrap_step_team",      delayMs: 70000 },
+    { key: "chat.bootstrap_step_finish",    delayMs: 90000 },
+  ];
+
+  let _bootstrapInterval = null;
+
+  function _clearBootstrapInterval() {
+    if (_bootstrapInterval) {
+      clearInterval(_bootstrapInterval);
+      _bootstrapInterval = null;
+    }
+  }
+
+  function renderBootstrapProgress(container, anima) {
+    const status = anima?.status;
+
+    if (status === "starting" || status === "not_found") {
+      container.innerHTML = `
+        <div class="bootstrap-progress">
+          <div class="bootstrap-progress-avatar">${_avatarHtml(anima)}</div>
+          <div class="bootstrap-progress-spinner"><span class="tool-spinner"></span></div>
+          <div class="bootstrap-progress-step">${t("chat.anima_starting")}</div>
+        </div>`;
+      _clearBootstrapInterval();
+      return;
+    }
+
+    if (status === "error" && anima?._bootstrapFailed === "max_retries") {
+      container.innerHTML = `
+        <div class="bootstrap-progress bootstrap-progress--error">
+          <div class="bootstrap-progress-avatar">${_avatarHtml(anima)}</div>
+          <div class="bootstrap-progress-step">${t("chat.bootstrap_max_retries")}</div>
+        </div>`;
+      _clearBootstrapInterval();
+      return;
+    }
+
+    if (status === "error" && anima?._bootstrapFailed) {
+      container.innerHTML = `
+        <div class="bootstrap-progress bootstrap-progress--error">
+          <div class="bootstrap-progress-avatar">${_avatarHtml(anima)}</div>
+          <div class="bootstrap-progress-spinner"><span class="tool-spinner"></span></div>
+          <div class="bootstrap-progress-step">${t("chat.bootstrap_failed")}</div>
+        </div>`;
+      _clearBootstrapInterval();
+      return;
+    }
+
+    const startedAt = anima?._bootstrapStartedAt || (Date.now() - 30000);
+    const elapsed = Date.now() - startedAt;
+
+    let currentStep = BOOTSTRAP_STEPS[0];
+    for (const step of BOOTSTRAP_STEPS) {
+      if (elapsed >= step.delayMs) currentStep = step;
+    }
+
+    container.innerHTML = `
+      <div class="bootstrap-progress">
+        <div class="bootstrap-progress-avatar">${_avatarHtml(anima)}</div>
+        <div class="bootstrap-progress-spinner"><span class="tool-spinner"></span></div>
+        <div class="bootstrap-progress-step bootstrap-step-fade">${t(currentStep.key)}</div>
+      </div>`;
+
+    _clearBootstrapInterval();
+    _bootstrapInterval = setInterval(() => renderChat(true), 5000);
+  }
+
+  function _avatarHtml(anima) {
+    if (!anima) return "";
+    const avatarUrl = state.animaTabAvatarUrls?.[anima.name];
+    if (avatarUrl) {
+      return `<img class="bootstrap-progress-avatar-img" src="${avatarUrl}" alt="${escapeHtml(anima.name)}">`;
+    }
+    const initial = (anima.name || "?").charAt(0).toUpperCase();
+    return `<span class="bootstrap-progress-avatar-initial">${initial}</span>`;
+  }
+
+  function showBootstrapComplete(container, anima) {
+    container.innerHTML = `
+      <div class="bootstrap-progress bootstrap-progress--complete">
+        <div class="bootstrap-progress-avatar">${_avatarHtml(anima)}</div>
+        <div class="bootstrap-progress-step">${t("chat.bootstrap_complete")}</div>
+      </div>`;
+    _clearBootstrapInterval();
+  }
+
   function renderHistoryMessage(msg) {
     return _sharedRenderHistoryMessage(msg, _renderOpts());
   }
@@ -93,6 +186,17 @@ export function createChatRenderer(ctx) {
     const mgr = state.manager;
     const history = name ? mgr.getMessages(name, tid) : [];
     const hs = name ? mgr.getHistoryState(name, tid) : { sessions: [], hasMore: false, nextBefore: null, loading: false };
+
+    const currentAnima = state.animas.find(a => a.name === name);
+    const animaStatus = currentAnima?.status;
+
+    if (animaStatus === "bootstrapping" || animaStatus === "starting" || animaStatus === "not_found"
+        || (animaStatus === "error" && currentAnima?._bootstrapFailed)) {
+      renderBootstrapProgress(messagesEl, currentAnima);
+      return;
+    }
+
+    _clearBootstrapInterval();
 
     if (hs.sessions.length === 0 && history.length === 0) {
       messagesEl.innerHTML = hs.loading
@@ -277,6 +381,7 @@ export function createChatRenderer(ctx) {
     setupChatObserver, observeChatSentinel, fetchConversationHistory,
     pollSelectedChat, renderHistoryMessage, renderSessionDivider,
     bindToolCallHandlers, initScrollTracking, scrollToBottom,
+    showBootstrapComplete, clearBootstrapInterval: _clearBootstrapInterval,
     isUserDetached: () => _userDetached,
     reattach: () => { _userDetached = false; _updateScrollBtn(); },
   };

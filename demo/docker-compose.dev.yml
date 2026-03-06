@@ -1,0 +1,7 @@
+# Dev override: mount host static files for live-reload UI development.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+services:
+  animaworks-demo:
+    volumes:
+      - animaworks-demo-data:/root/.animaworks
+      - ../server/static:/app/server/static

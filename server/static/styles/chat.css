@@ -1788,6 +1788,91 @@
   color: var(--aw-color-info-text);
 }
 
+/* ── Bootstrap Progress (Chat) ─────────── */
+
+.bootstrap-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 24px;
+  text-align: center;
+  animation: bootstrap-fade-in 0.4s ease-out;
+}
+
+.bootstrap-progress-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.bootstrap-progress-avatar-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.bootstrap-progress-avatar-initial {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--aw-color-bg-primary);
+  background: var(--aw-color-accent);
+}
+
+.bootstrap-progress-spinner .tool-spinner {
+  width: 20px;
+  height: 20px;
+  border-width: 2.5px;
+  border-color: var(--aw-color-accent);
+  border-top-color: transparent;
+}
+
+.bootstrap-progress-step {
+  font-size: 0.92rem;
+  color: var(--aw-color-text-secondary);
+  min-height: 1.4em;
+}
+
+.bootstrap-step-fade {
+  animation: bootstrap-step-switch 0.3s ease-out;
+}
+
+.bootstrap-progress--complete .bootstrap-progress-step {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--aw-color-accent);
+}
+
+.bootstrap-progress--error .bootstrap-progress-step {
+  color: var(--aw-color-error, #ef4444);
+}
+
+.bootstrap-progress--error .bootstrap-progress-spinner .tool-spinner {
+  border-color: var(--aw-color-error, #ef4444);
+  border-top-color: transparent;
+}
+
+@keyframes bootstrap-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bootstrap-step-switch {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Notification Messages ─────────────────── */
 
 .chat-bubble.assistant.notification {
