@@ -437,6 +437,11 @@ def cli_main() -> None:
 
     register_task_command(sub)
 
+    # ── Profile (multi-instance) ──────────────────────────────
+    from cli.commands.profile import register_profile_command
+
+    register_profile_command(sub)
+
     args = parser.parse_args()
 
     # Apply --data-dir override before any command
