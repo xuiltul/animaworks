@@ -1,630 +1,274 @@
-# AnimaWorks Feature Index
+# AnimaWorks Features
 
 **[日本語版](features.ja.md)**
 
-> Last updated: 2026-03-05
-> Related: [spec.md](spec.md), [memory.md](memory.md), [vision.md](vision.md), [brain-mapping.md](brain-mapping.md)
+> Last updated: 2026-03-06
+> See also: [Spec](spec.md) · [Memory System](memory.md) · [Brain Mapping](brain-mapping.md) · [Security](security.md) · [Vision](vision.md)
 
-An index of implemented features in the AnimaWorks framework, organized across 21 categories. "Design" links point to design and implementation documents; "Review" links point to code review reports.
-
----
-
-## 1. Core Architecture
-
-Framework foundation changes including agent.py refactoring, hierarchy design, process isolation, and renaming.
-
-- **agent.py Refactoring Plan** (2026-02-14) — Separation of concerns and class design overhaul for the agent core
-  [Design](implemented/20260214_agent-refactoring_implementation.md)
-- **Design Document vs. Implementation Gap Notes** (2026-02-14) — Identifying and resolving divergences between original design docs and implemented code
-  [Design](implemented/20260214_design-implementation-gap_issue.md)
-- **Dynamic System Prompt Injection Architecture** (2026-02-14) — Dynamic construction of system prompts with an 18-section structure
-  [Design](implemented/20260214_dynamic-prompt-injection_implementation.md)
-- **Hierarchy, Async Communication, and Multi-Model Design** (2026-02-14) — Supervisor hierarchy, A1/A2/B modes, and multi-provider architecture
-  [Design](implemented/20260214_hierarchy-and-delegation_design.md)
-- **Design Conformance Fix Plan Notes** (2026-02-14) — Correction plan to bridge the gap between design docs and implementation
-  [Design](implemented/20260214_plan-gap-fix_implementation.md)
-- **API Critical Refactoring for Scaling** (2026-02-15) — FastAPI route splitting and scaling infrastructure
-  [Design](implemented/20260215_api-critical-refactoring-for-scaling_implemented-20260215.md) | [Review](implemented/20260215_review_api-critical-refactoring-for-scaling_approved-20260215.md)
-- **System Reference Document Creation** (2026-02-15) — Shared knowledge base for autonomous Anima reference
-  [Design](implemented/20260215_system-reference-documents_implemented-20260215.md)
-- **Person Lifecycle CLI Command Integration** (2026-02-16) — Reorganization of CLI command structure for Anima support
-  [Design](implemented/20260216_person-lifecycle-cli-commands-20260217.md) | [Review](implemented/20260217_review_person-lifecycle-cli-commands_approved-20260217.md)
-- **Full Rename: Person to Anima** (2026-02-16) — Codebase-wide rename from Person to Anima
-  [Design](implemented/20260216_rename-person-to-anima_implemented-20260216.md) | [Review](implemented/20260216_review_rename-person-to-anima_approved-20260216.md)
-- **Comprehensive Documentation Overhaul** (2026-02-17) — Synchronizing CLAUDE.md, README, and spec with the current codebase
-  [Design](implemented/20260217_documentation-overhaul-implemented-20260217.md) | [Review](implemented/20260217_review_documentation-overhaul_approved-20260217.md)
+AnimaWorks treats AI agents not as tools, but as **autonomous individuals**. Each agent (Anima) has its own identity, memory, and judgment. They take on roles within an organization and act on their own — without waiting for human instructions. Powerful models handle engineering; lightweight models handle routine work. Every model is placed where it fits best, and every one of them grows through accumulated experience.
 
 ---
 
-## 2. Execution Engine
+## Autonomous Agents
 
-Improvements to S/A/B/C modes, Agent SDK crash recovery, SSE enhancements, and more. Mode C (Codex) runs OpenAI models via Codex CLI.
+At the heart of AnimaWorks is the idea that agents should act on their own.
 
-- **A2 Agentic Loop Enhancement** (2026-02-15) — Reliability and feature improvements for the LiteLLM + tool_use loop
-  [Design](implemented/20260215_a2-agentic-loop-enhancement_implemented-20260215.md) | [Review](implemented/20260215_review_a2-agentic-loop-enhancement_approved-20260215.md)
-- **Conversation Data Loss on Error** (2026-02-15) — Context preservation when execution errors occur
-  [Design](implemented/20260215_error-conversation-data-loss_implemented-20260215.md) | [Review](implemented/20260215_review_error-conversation-data-loss_approved-20260215.md)
-- **Checkpoint Retry on Stream Disconnect** (2026-02-16) — Automatic recovery from SSE stream disconnections
-  [Design](implemented/20260216_checkpoint-retry-on-stream-disconnect-implemented-20260216.md) | [Review](implemented/20260216_review_checkpoint-retry-on-stream-disconnect_approved-20260216.md)
-- **create_anima Tool Unavailable in Mode A1** (2026-02-16) — Fix for Anima hiring chain failure in Agent SDK mode
-  [Design](implemented/20260216_mode-a1-create-anima-unavailable.md) | [Review](implemented/20260216_review_mode-a1-create-anima-unavailable_approved.md)
-- **SSE Stream Returns Empty Response After Anima Restart** (2026-02-16) — SSE stream recovery after process restart
-  [Design](implemented/20260216_sse-stream-empty-after-anima-restart_implemented-20260216.md) | [Review](implemented/20260216_review_sse-stream-empty-after-anima-restart_approved-20260216.md)
-- **Uvicorn Timeout Misconfiguration and Agent SDK Hook Race Condition** (2026-02-16) — Server initialization stability improvements
-  [Design](implemented/20260216_uvicorn-timeout-and-agent-sdk-hook-errors_implemented-20260216.md) | [Review](implemented/20260216_review_uvicorn-timeout-and-agent-sdk-hook-errors_approved-20260216.md)
-- **Automatic Process Recovery on Agent SDK Crash** (2026-02-17) — Crash detection and automatic restart mechanism
-  [Design](implemented/20260217_agent-sdk-crash-recovery_implemented-20260217.md) | [Review](implemented/20260217_review_agent-sdk-crash-recovery_approved-20260217.md)
-- **Mode B: Text-Based Pseudo Tool Call Loop** (2026-02-17) — Text-based tool execution for models without native tool_use support
-  [Design](implemented/20260217_mode-b-text-based-tool-loop_implemented-20260217.md) | [Review](implemented/20260217_review_mode-b-text-based-tool-loop_approved-20260217.md)
-- **SSE Chat Streaming: Consolidation of 3 Duplicate Code Paths** (2026-02-17) — DRY refactoring of SSE streaming code
-  [Design](implemented/20260217_sse-chat-code-deduplication_implemented-20260217.md) | [Review](implemented/20260217_review_sse-chat-code-deduplication_approved-20260217.md)
+Each Anima is defined by a personality (identity.md), a role with behavioral guidelines (injection.md), and domain expertise. These aren't just prompt templates — they form the immutable foundation of who the Anima *is*.
+
+### Heartbeat (Periodic Patrol)
+
+Every 30 minutes, each Anima wakes up and runs through three phases: **Observe → Plan → Reflect**. It surveys its surroundings, makes plans, and reviews its own actions. The heartbeat only plans — actual work is executed on a separate path. You can also set active hours so Animas rest outside business hours.
+
+### Cron (Scheduled Tasks)
+
+Define scheduled tasks in a Markdown file. Both LLM-type (requiring judgment) and Command-type (deterministic script execution) are supported. "Check Slack for unread messages every morning at 9" or "Run backups at 2 AM" — Animas handle these autonomously.
+
+### Bootstrap (First Launch)
+
+When a new Anima is created, it automatically introduces itself and surveys its environment on first boot. This runs asynchronously in the background, so it never blocks other Animas.
 
 ---
 
-## 3. Memory System
+## Brain-Inspired Memory System
 
-Priming, RAG, memory consolidation/forgetting, activity log, streaming journal, and more.
+Rather than cramming information into the context window, AnimaWorks handles memory the way the human brain does. For details, see [Memory System](memory.md) and [Brain Mapping](brain-mapping.md).
 
-- **Priming Layer Implementation Plan** (2026-02-14) — Overall plan including RAG design and consolidation architecture
-  [Design](implemented/20260214_priming-layer_design.md)
-- **Priming Layer Phase 1 Implementation** (2026-02-14) — Initial implementation of 4-channel parallel priming
-  [Design](implemented/20260214_priming-layer-phase1_implementation.md)
-- **Priming Layer Phase 2: Daily Consolidation** (2026-02-14) — NREM sleep-analog daily memory consolidation
-  [Design](implemented/20260214_priming-layer-phase2-consolidation_implementation.md)
-- **Memory Performance Evaluation Phase 2: Dataset Generation** (2026-02-14) — Automated generation of datasets for memory retrieval accuracy evaluation
-  [Design](implemented/20260214_memory-eval-phase2_dataset-generation.md)
-- **common_knowledge RAG Infrastructure** (2026-02-15) — Vector search support for the shared knowledge base
-  [Design](implemented/20260215_common-knowledge-rag-infrastructure-implemented-20260215.md) | [Review](implemented/20260215_common-knowledge-rag-infrastructure_review-approved-20260215.md)
-- **Memory Activation Strength and Active Forgetting Mechanism** (2026-02-15) — Hebbian LTP + 3-stage forgetting implementation
-  [Design](implemented/20260215_memory-access-frequency-and-forgetting-implemented-20260215.md) | [Review](implemented/20260215_review_memory-access-frequency-and-forgetting_approved-20260215.md)
-- **Neuroscience-Inspired Memory Retrieval Enhancements: 3 Proposals** (2026-02-15) — Spreading activation, temporal decay, and access frequency improvements
-  [Design](implemented/20260215_memory-retrieval-neuroscience-enhancements.md)
-- **Priming/hiring_context Conflict Fix** (2026-02-15) — Resolving conflicts between priming and hiring context
-  [Design](implemented/20260215_priming-hiring-context-fix.md) | [Review](implemented/20260215_review_priming-hiring-context-fix_approved.md)
-- **RAG: Performance Degradation from Multiple Embedding Model Initializations** (2026-02-15) — Startup time reduction via singleton pattern
-  [Design](implemented/20260215_rag-embedding-model-multi-init_implemented-20260215.md)
-- **Migration to Dense Vector Search + Full Knowledge Graph Implementation** (2026-02-15) — BM25 removal, dense vector search unification + NetworkX PageRank
-  [Design](implemented/20260215_simplify-rag-to-dense-vector-only_implemented-20260215.md) | [Review](implemented/20260215_review_simplify-rag-to-dense-vector-only_approved-20260215.md)
-- **Chunk ID Collision Bug in _chunk_by_markdown_headings** (2026-02-16) — Fix for duplicate IDs in preamble sections
-  [Design](implemented/20260216_chunk-id-preamble-collision-20260216.md) | [Review](implemented/20260216_review_chunk-id-preamble-collision_approved-20260216.md)
-- **Consolidation Prompt Improvements and LLM Response Logging** (2026-02-16) — Memory consolidation quality improvements and debugging support
-  [Design](implemented/20260216_consolidation-prompt-and-logging-improvement-20260216.md)
-- **RAG Indexer Chunk ID Duplication Bug & Missing shared_common_knowledge Initialization** (2026-02-16) — RAG index path bug fixes
-  [Design](implemented/20260216_rag-indexer-path-bug-and-shared-knowledge-init-20260216.md) | [Review](implemented/20260216_review_rag-indexer-path-bug-and-shared-knowledge-init_approved-20260216.md)
-- **Inter-Anima Messages Not Recorded in Episode Memory** (2026-02-17) — Fix for missing DM/channel message memory recording
-  [Design](implemented/20260217_anima-message-episode-recording_implemented-20260217.md) | [Review](implemented/20260217_review_anima-message-episode-recording_approved-20260217.md)
-- **Daily Consolidation Engine Ignores Episode Files with Suffixes** (2026-02-17) — Fix for filename pattern matching
-  [Design](implemented/20260217_consolidation-episode-filename-pattern_implemented-20260217.md)
-- **Consolidation Not Running for Stopped Animas** (2026-02-17) — Ensuring consolidation runs for all initialized Animas
-  [Design](implemented/20260217_consolidation-run-for-all-animas_implemented-20260217.md) | [Review](implemented/20260217_review_consolidation-run-for-all-animas_approved-20260217.md)
-- **Embedding Model Comparison Test Results** (2026-02-17) — Accuracy comparison of multilingual-e5-small vs. other models
-  [Design](implemented/20260217_embedding-model-comparison.md)
-- **Add episodes/ Path Validation to write_memory_file Tool** (2026-02-17) — Prevention of memory writes to invalid paths
-  [Design](implemented/20260217_write-memory-file-episode-path-validation_implemented-20260217.md)
-- **Unified Activity Log: Spec Compliance Fixes (6 Items)** (2026-02-18) — Improving activity log compliance with specification
-  [Design](implemented/20260218_activity-log-spec-compliance-fixes-implemented-20260218.md) | [Review](implemented/20260218_review_activity-log-spec-compliance_approved-20260218.md)
-- **Streaming Journal: Crash-Resilient Response Output Persistence** (2026-02-18) — Fault-tolerant streaming output via Write-Ahead Log
-  [Design](implemented/20260218_streaming-journal-implemented-20260218.md) | [Review](implemented/20260218_review_streaming-journal_approved-20260218.md)
-- **Unified Activity Log: Single Timeline Recording of All Interactions** (2026-02-18) — Consolidation of transcript/dm_log/heartbeat_history
-  [Design](implemented/20260218_unified-activity-log-implemented-20260218.md) | [Review](implemented/20260218_review_unified-activity-log_approved-20260218.md)
+### Automatic Recall (Priming)
+
+When an Anima receives a message, six channels search for relevant memories in parallel and inject them into the system prompt.
+
+| Channel | What it recalls |
+|---------|----------------|
+| Sender profile | Past interactions and preferences of the sender |
+| Recent activity | What the Anima itself has been doing lately |
+| Related knowledge | Learned knowledge relevant to the topic |
+| Skill match | Skills that might be useful |
+| Pending tasks | What needs to be done right now |
+| Episodes | Similar past experiences |
+
+Animas don't need to know what they remember and what they've forgotten. The right memories surface at the right time.
+
+### RAG (Retrieval-Augmented Generation)
+
+Vector search via ChromaDB with a multilingual embedding model, combined with spreading activation over a knowledge graph (Personalized PageRank). Instead of simple keyword matching, related concepts are activated in chains — the way association works in the brain.
+
+### Memory Consolidation
+
+General knowledge is automatically extracted from daily episodic memories. Failed experiences generate procedural memories — "here's how to do it right next time" runbooks. This is an implementation of what happens when humans organize memories during sleep.
+
+### Active Forgetting
+
+Unused memories fade in three stages: synaptic downscaling → neurogenesis reorganization → complete forgetting. Critical memories like procedures and skills are protected. The goal isn't to hoard every memory, but to maintain a clean mind that makes sharp decisions.
+
+### Shared Knowledge (common_knowledge)
+
+A shared knowledge base accessible to every Anima: organizational rules, messaging guides, troubleshooting procedures. The moment a new Anima joins the organization, it has access to institutional knowledge.
 
 ---
 
-## 4. Communication & Messaging
+## Multi-Model, Multi-Provider Execution
 
-Board/shared channels, external messaging, outbound routing, and more.
+AnimaWorks is model-agnostic. Claude, GPT, Gemini, Mistral, local LLMs — use whatever fits best.
 
-- **A1 Mode Inter-Anima Messaging Integration** (2026-02-15) — Internal messaging implementation for Agent SDK mode
-  [Design](implemented/20260215_a1-messaging-integration_implemented-20260215.md) | [Review](implemented/20260215_review_a1-messaging-integration_approved-20260215.md)
-- **Greet Duplicate Invocation and Orphaned Inbox Files** (2026-02-16) — Fix for messaging duplication and orphaned file issues
-  [Design](implemented/20260216_greet-duplicate-and-orphaned-inbox-files_implemented-20260216.md) | [Review](implemented/20260216_review_greet-duplicate-and-orphaned-inbox-files_approved-20260216.md)
-- **External Messaging Webhook Integration (Slack & Chatwork)** (2026-02-17) — Webhook message reception from external services
-  [Design](implemented/20260217_external-messaging-integration_implemented-20260217.md) | [Review](implemented/20260217_review_external-messaging-integration_approved-20260217.md)
-- **send_message Unified Outbound Routing** (2026-02-17) — Automatic routing to Slack/Chatwork/internal based on recipient
-  [Design](implemented/20260217_send-message-unified-outbound-routing.md)
-- **Slack Socket Mode for Real-Time Message Reception** (2026-02-17) — Real-time Slack integration via WebSocket
-  [Design](implemented/20260217_slack-socket-mode-integration_implemented-20260217.md) | [Review](implemented/20260217_review_slack-socket-mode-integration_approved-20260217.md)
-- **Board Web UI: Dashboard + Workspace** (2026-02-18) — Web UI frontend for shared channels
-  [Design](implemented/20260218_channel-webui-and-onboarding_implemented-20260218.md) | [Review](implemented/20260218_review_channel-webui-and-onboarding_approved-20260218.md)
-- **Slack-Style Shared Channels + Unified Message Log Architecture** (2026-02-18) — Shared channel infrastructure (#general, #ops, etc.)
-  [Design](implemented/20260218_shared-channel-messaging_implemented-20260218.md) | [Review](implemented/20260218_review_shared-channel-messaging_approved-20260218.md)
+### Four Execution Modes
 
----
+| Mode | Target | Characteristics |
+|------|--------|----------------|
+| **S** (SDK) | Claude | Richest tool integration via Agent SDK |
+| **A** (Autonomous) | GPT, Gemini, Mistral, local models, etc. | Generic tool_use loop via LiteLLM |
+| **B** (Basic) | Lightweight / models without tool_use | One-shot execution; the framework handles memory I/O |
+| **C** (Codex) | OpenAI Codex | Tool integration via OpenAI SDK |
 
-## 5. Scheduling & Lifecycle
+The mode is auto-detected from the model name using wildcard patterns. Just write a model name in the config and the right mode is selected.
 
-Heartbeat, cron, bootstrap, reconciliation, and more.
+### Background Models
 
-- **bootstrap.md Unconditionally Deployed to All Animas** (2026-02-14) — Conditional deployment of first-launch instructions
-  [Design](implemented/20260214_bootstrap-unconditional-placement_issue.md)
-- **Cron Command-Type Task Design** (2026-02-14) — Command-type execution for cron tasks
-  [Design](implemented/20260214_cron-command-type_issue.md)
-- **Heartbeat Cascade Issue: Fix Investigation Notes** (2026-02-14) — Prevention of cascading heartbeat runaway
-  [Design](implemented/20260214_heartbeat-cascade-fix_notes.md)
-- **Heartbeat Cascade Issue: Incident Report** (2026-02-14) — Analysis of the 2026-02-13 cascade failure
-  [Design](implemented/20260214_heartbeat-cascade_incident.md)
-- **Background Bootstrap Execution + Timeout Improvements** (2026-02-15) — Asynchronous first-launch execution and timeout control
-  [Design](implemented/20260215_bootstrap-background-execution-and-timeout_implemented-20260215.md) | [Review](implemented/20260215_review_bootstrap-background-execution_approved-20260215.md)
-- **Fix Heartbeat Interval to 30 Minutes** (2026-02-15) — Removal of interval parsing in favor of fixed interval
-  [Design](implemented/20260215_fix-heartbeat-interval-to-30min_implemented-20260215.md)
-- **Per-Anima Autonomous Scheduler** (2026-02-15) — In-process heartbeat/cron execution within child processes
-  [Design](implemented/20260215_person-autonomous-scheduler_implemented-20260215.md) | [Review](implemented/20260215_review_person-autonomous-scheduler_approved-20260215.md)
-- **Autonomous Task Management: Self-Updating Heartbeat/Cron** (2026-02-15) — Anima self-modification of their own schedules
-  [Design](implemented/20260215_self-modify-heartbeat-cron-implemented-20260215.md) | [Review](implemented/20260215_review_self-modify-heartbeat-cron_approved-20260215.md)
-- **Supervisor Periodic Reconciliation** (2026-02-15) — Automatic detection and startup of unrunning Animas
-  [Design](implemented/20260215_supervisor-person-reconciliation_implemented-20260215.md) | [Review](implemented/20260215_review_supervisor-person-reconciliation_approved-20260215.md)
-- **Heartbeat Collision Crash + Orphan Directory Detection + Org Tree Visualization** (2026-02-16) — Heartbeat mutual exclusion and orphan process detection
-  [Design](implemented/20260216_heartbeat-collision-orphan-detection-org-tree-implemented-20260216.md) | [Review](implemented/20260216_review_heartbeat-collision-orphan-detection-org-tree_approved-20260216.md)
-- **Scheduler Regression and Activity Tab Display Issues** (2026-02-16) — Fix for scheduler regression bug
-  [Design](implemented/20260216_scheduler-regression-and-activity-tab-20260216.md) | [Review](implemented/20260216_review_scheduler-regression-and-activity-tab_approved-20260216.md)
-- **cron.md Template Improvements + Mode B Skill Injection Fix** (2026-02-17) — Quality improvements for cron templates
-  [Design](implemented/20260217_cron-template-and-mode-b-skill-fix_implemented-20260217.md) | [Review](implemented/20260217_review_cron-template-and-mode-b-skill-fix_approved-20260217.md)
-- **Context Gap Between Heartbeat and Dialogue + Messaging Improvements** (2026-02-17) — Context sharing between heartbeat and conversations
-  [Design](implemented/20260217_heartbeat-dialogue-context-gap-and-messaging_implemented-20260217.md) | [Review](implemented/20260217_review_heartbeat-dialogue-context-gap-and-messaging_approved-20260217.md)
-- **SSE Relay of LLM Responses During Heartbeat Processing** (2026-02-17) — Real-time delivery of responses during heartbeat
-  [Design](implemented/20260217_heartbeat-sse-relay-implemented-20260217.md)
-- **Reconciliation Kills Bootstrapping Animas, Causing Infinite Loop** (2026-02-17) — Bootstrap protection
-  [Design](implemented/20260217_protect-bootstrapping-from-reconciliation-implemented-20260217.md) | [Review](implemented/20260217_review_protect-bootstrapping-from-reconciliation_approved-20260217.md)
-- **Reconciliation Kills Animas Missing status.json Every 30 Seconds** (2026-02-17) — Protection for Animas before status.json generation
-  [Design](implemented/20260217_reconciliation-kills-animas-missing-status-json_implemented-20260217.md) | [Review](implemented/20260217_review_reconciliation-kills-animas-missing-status-json_revision-20260217.md)
+Background tasks like heartbeats and cron can run on a lighter model than the main one. Claude Opus for conversations, Sonnet for patrols, GPT-4.1 mini or a local LLM for log monitoring — optimize the cost-quality balance across the whole organization.
+
+### Local LLM Support
+
+vLLM and Ollama are integrated as OpenAI-compatible APIs. If you have a GPU server, you can run Animas without any cloud API calls.
 
 ---
 
-## 6. Skills & Tools
+## Organization Structure and Hierarchy
 
-Trigger-based injection, auto-discovery, background task execution, and more.
+AnimaWorks doesn't just run agents as individuals — it makes them **function as an organization**.
 
-- **Tool Call Timeout Improvements and Background Execution** (2026-02-15) — Asynchronous execution of long-running tools
-  [Design](implemented/20260215_tool-call-timeout-background-execution_implemented-20260216.md) | [Review](implemented/20260216_review_tool-call-timeout-background-execution_approved-20260216.md)
-- **Long-Running Tool Execution Blocks Chat** (2026-02-16) — Non-blocking tool execution
-  [Design](implemented/20260216_long-running-tool-chat-blocking_implemented-20260216.md) | [Review](implemented/20260216_review_long-running-tool-chat-blocking_approved-20260216.md)
-- **Tool Auto-Discovery, Anima Creation, Hot Reload, and Unified Dispatch** (2026-02-16) — Tool plugin auto-detection and unified dispatching
-  [Design](implemented/20260216_tool-auto-discovery-creation-hotreload-implemented-20260216.md) | [Review](implemented/20260216_review_tool-auto-discovery-creation-hotreload_approved-20260216.md)
-- **Background Task Submission System (Mode A1 Long-Running Tool Solution)** (2026-02-17) — Introduction of async task queue
-  [Design](implemented/20260217_background-task-submission_implemented-20260217.md) | [Review](implemented/20260217_review_background-task-submission_approved-20260217.md)
-- **3-Stage Skill Matching + Skill Creator** (2026-02-17) — Description/trigger/keyword 3-stage skill matching
-  [Design](implemented/20260217_skill-matching-enhancement-and-skill-creator_implemented-20260218.md) | [Review](implemented/20260217_review_skill-matching-enhancement-and-skill-creator_approved-20260218.md)
-- **Switch External Tool Permissions to Default-Allow (Blocklist Mode)** (2026-02-17) — Transition from allowlist to blocklist approach
-  [Design](implemented/20260217_tool-permissions-default-all-implemented-20260217.md)
-- **Claude Code-Compliant Skill Format + Description-Based Auto-Injection** (2026-02-17) — Trigger-based skill injection architecture
-  [Design](implemented/20260217_trigger-based-skill-injection_implemented-20260217.md) | [Review](implemented/20260217_review_trigger-based-skill-injection_approved-20260217.md)
+### Hierarchy Definition
 
----
+A single `supervisor` field defines the org chart. Manager, subordinate, and peer relationships are computed automatically and injected into each Anima's system prompt.
 
-## 7. Configuration & Authentication
+### Task Delegation
 
-Credential centralization, role templates, embedding model selection, and more.
+Manager Animas assign tasks to subordinates via `delegate_task`. The task is added to the subordinate's queue, a DM notification is sent, and progress is tracked automatically. Managers can view the entire org tree with `org_dashboard` and audit activity with `audit_subordinate`.
 
-- **Unified Credential Management: config.json Priority Cascade and Generic Schema** (2026-02-15) — 3-layer merge management for authentication credentials
-  [Design](implemented/20260215_unified-credential-management_implemented-20260215.md) | [Review](implemented/20260215_review_unified-credential-management_approved-20260215.md)
-- **Organization Structure (supervisor) Not Synced to config.json** (2026-02-16) — Creation pipeline fix + periodic sync mechanism
-  [Design](implemented/20260216_org-structure-config-sync_implemented-20260216.md) | [Review](implemented/20260216_review_org-structure-config-sync_approved-20260216.md)
-- **Centralize Credentials to shared/credentials.json** (2026-02-17) — Consolidation of scattered authentication information
-  [Design](implemented/20260217_centralize-credentials-to-shared-file_implemented-20260217.md) | [Review](implemented/20260217_review_centralize-credentials-to-shared-file_approved-20260217.md)
-- **Make Embedding Model Selectable from config.json** (2026-02-17) — Dynamic RAG model switching
-  [Review](implemented/20260217_review_embedding-model-config_approved.md)
-- **load_config() mtime-based cache reload** (2026-02-17) — Automatic configuration file reload
-  [Review](implemented/20260217_review_config-mtime-reload_approved-20260217.md)
-- **Role Template Introduction: Anima "Job Title + Ability Score" System** (2026-02-17) — Templatization of 6 roles
-  [Design](implemented/20260217_role-templates-and-ability-scores-implemented-20260217.md) | [Review](implemented/20260217_review_role-templates-and-ability-scores_approved-20260217.md)
+### Communication Routing Rules
+
+Progress reports go to your manager. Task delegation goes to direct reports. Cross-department communication goes through your manager. Information flows with the same discipline as a human organization.
+
+### Subordinate Control
+
+Manager Animas can pause/resume subordinates, change their models, and restart their processes — all through tools. Permission checks are automatically verified based on the hierarchy.
 
 ---
 
-## 8. Web UI: Dashboard
+## Messaging and Communication
 
-SPA migration, activity timeline, scheduler tab, and more.
+All coordination between Animas happens through asynchronous messaging. No shared memory, no direct references.
 
-- **Dashboard GUI: Migration to SPA Architecture** (2026-02-15) — Transition from static HTML to Single Page Application
-  [Design](implemented/20260215_dashboard-gui-spa-migration_implemented-20260215.md) | [Review](implemented/20260215_review_dashboard-gui-spa-migration_approved-20260215.md)
-- **Visual Representation Improvements for Anima State** (2026-02-15) — State display for Sleeping/Bootstrapping/Active
-  [Design](implemented/20260215_bootstrap-ui-during-creation_implemented-20260215.md) | [Review](implemented/20260215_review_bootstrap-ui-during-creation_approved-20260215.md)
-- **Batch Fix for Dashboard UI Display Issues** (2026-02-15) — Comprehensive fix for multiple UI display problems
-  [Design](implemented/20260215_fix-dashboard-ui-display-issues_implemented-20260215.md) | [Review](implemented/20260215_review_fix-dashboard-ui-display-issues_approved-20260215.md)
-- **Web UI: Bootstrap Messages Not Displayed on Frontend** (2026-02-15) — Real-time display of bootstrap progress
-  [Design](implemented/20260215_webui-bootstrap-message-invisible_implemented-20260215.md)
-- **Web UI: System Status Display Broken** (2026-02-15) — Fix for missing scheduler_running field
-  [Design](implemented/20260215_webui-status-display-broken_implemented-20260215.md)
-- **Activity Timeline: Message Display Loss, Cron Reliability, and Format Consistency** (2026-02-16) — Timeline display quality improvements
-  [Design](implemented/20260216_activity-timeline-message-cron-reliability_implemented-20260216.md) | [Review](implemented/20260216_review_activity-timeline-message-cron-reliability_approved-20260216.md)
-- **Activity Timeline: Inter-Anima Message Display, Pagination, and Filter UI** (2026-02-16) — Feature enhancements for the timeline
-  [Design](implemented/20260216_activity-timeline-message-visibility-and-pagination-implemented-20260216.md) | [Review](implemented/20260216_review_activity-timeline-message-visibility-and-pagination_revision-20260216.md)
-- **crypto.randomUUID Crashes All Frontend Features in Non-Secure Context** (2026-02-17) — Fix for UUID generation in HTTP context
-  [Design](implemented/20260217_fix-crypto-randomuuid-crash_implemented-20260217.md)
-- **Activity Timeline Message Detail Popup** (2026-02-17) — Click-to-view detail display for timeline entries
-  [Design](implemented/20260217_timeline-message-detail-popup_implemented-20260217.md) | [Review](implemented/20260217_review_timeline-message-detail-popup_approved-20260217.md)
+### Internal Messaging
 
----
+DMs between Animas (`send_message`) require an explicit intent: report, delegation, or question. Greetings and thank-yous go to shared channels (Board) instead. One topic, one round-trip is the rule — if it gets longer, move it to the Board.
 
-## 9. Web UI: Workspace
+### Shared Channels (Board)
 
-3D office, character display, responsive design, iPad support, and more.
+Slack-style shared channels for announcements, FYIs, and acknowledgments across the organization.
 
-- **Frontend (Workspace) Design** (2026-02-14) — Initial design for Three.js + WebSocket workspace
-  [Design](implemented/20260214_frontend-viewer_implementation.md)
-- **3D Office Character Simulation: Detailed Implementation Spec** (2026-02-14) — Specification for Three.js-based 3D office
-  [Design](implemented/20260214_office-simulation_issue.md)
-- **Workspace Chat: Emotion Tag Display & Status Notification Duplication** (2026-02-15) — UI fixes for emotion expression and status notifications
-  [Design](implemented/20260215_fix-workspace-chat-emotion-tag-and-status-notifications_implemented-20260215.md) | [Review](implemented/20260215_review_fix-workspace-chat-emotion-tag-and-status-notifications_approved-20260215.md)
-- **Workspace: Anima Birth Reveal Animation** (2026-02-15) — Animation effects for new Anima creation
-  [Design](implemented/20260215_person-birth-reveal-animation_implemented-20260215.md) | [Review](implemented/20260215_review_person-birth-reveal-animation_approved-20260215.md)
-- **Remove Live2D Canvas Procedural Rendering: Simplification to Static Illustrations** (2026-02-15) — Migration from Live2D to static image display
-  [Design](implemented/20260215_remove-live2d-canvas-rendering_implemented-20260215.md) | [Review](implemented/20260215_review_remove-live2d-canvas-rendering_approved-20260215.md)
-- **Workspace Chat Bubble Text Cutoff** (2026-02-15) — Fix for chat bubble text display truncation
-  [Design](implemented/20260215_workspace-chat-bubble-cutoff_implemented-20260215.md) | [Review](implemented/20260215_review_workspace-chat-bubble-cutoff_approved-20260215.md)
-- **Workspace 3D Character Click-to-Greet** (2026-02-15) — Interaction with 3D characters
-  [Design](implemented/20260215_workspace_character_greeting_implemented-20260215.md) | [Review](implemented/20260215_review_workspace_character_greeting_approved-20260215.md)
-- **GLB Cache scene.clone(true) Breaks Skeleton Binding** (2026-02-16) — Fix for SkinnedMesh cloning 3D model issues
-  [Design](implemented/20260216_glb-skinnedmesh-clone-skeleton-binding-broken-20260216.md) | [Review](implemented/20260216_review_glb-skinnedmesh-clone-skeleton-binding-broken_approved-20260216.md)
-- **Responsive Design: Dashboard & Workspace Mobile UX** (2026-02-16) — Mobile and tablet support
-  [Design](implemented/20260216_responsive-design-mobile-ux_implemented-20260216.md) | [Review](implemented/20260216_review_responsive-design-mobile-ux_approved-20260216.md)
-- **Workspace 3D Office: Character Scale Anomaly + Org Hierarchy Tree Bug** (2026-02-16) — Fixes for 3D scaling and tree layout
-  [Design](implemented/20260216_workspace-character-scale-and-hierarchy-bug_implemented-20260216.md) | [Review](implemented/20260216_review_workspace-character-scale-and-hierarchy-bug_approved-20260216.md)
-- **Workspace iPad Display Fix** (2026-02-16) — Viewport, timeline placement, and responsive adjustments
-  [Design](implemented/20260216_workspace-ipad-viewport-fix_implemented-20260216.md) | [Review](implemented/20260216_review_workspace-ipad-viewport-fix_approved-20260216.md)
-- **Workspace 3D Office: Tree Layout Not Working, All Characters in a Row** (2026-02-16) — Layout fix based on organizational hierarchy
-  [Design](implemented/20260216_workspace-tree-layout-broken_implemented-20260216.md)
-- **Workspace 3D Character Scaling Fix** (2026-02-17) — Fix for character display size
-  [Design](implemented/20260217_workspace-character-scaling-fix_implemented-20260217.md)
+### External Service Integration
+
+Messages from Slack (Socket Mode) and Chatwork (Webhook) are automatically received and routed to the target Anima's inbox. @mentions and DMs are processed immediately; unmentioned messages wait for the next heartbeat. Replies are automatically routed back through the same channel.
+
+### Rate Limiting
+
+Three layers of protection against infinite message loops: duplicate send prevention per run, hourly/daily caps (30/hour, 100/day), and behavioral awareness through priming injection of recent outbound history.
+
+### Human Notification
+
+`call_human` sends notifications via Slack, Chatwork, LINE, Telegram, or ntfy. The top-level Anima serves as the point of contact with humans.
 
 ---
 
-## 10. Web UI: Chat
+## Task Management
 
-Infinite scroll, multimodal image input, SSE reconnection, and more.
+### Persistent Task Queue
 
-- **Chat Message Duplicate Display** (2026-02-15) — Fix for duplicate messages from WebSocket and SSE
-  [Design](implemented/20260215_chat-duplicate-message_implemented-20260215.md) | [Review](implemented/20260215_review_chat-duplicate-message_approved-20260215.md)
-- **Greeting Message Duplication and Prompt Improvement** (2026-02-15) — Deduplication of greeting messages
-  [Design](implemented/20260215_greeting-duplicate-and-prompt-improvement-20260216.md) | [Review](implemented/20260216_review_greeting-duplicate-and-prompt-improvement_approved.md)
-- **Loading Indicator Improvements During Streaming** (2026-02-15) — UI improvements during tool call execution
-  [Design](implemented/20260215_tool-call-loading-indicator-visibility-implemented-20260215.md) | [Review](implemented/20260215_review_tool-call-loading-indicator-visibility_approved-20260215.md)
-- **Chat History Infinite Scroll (Pagination)** (2026-02-17) — Dynamic loading of past chat history
-  [Design](implemented/20260217_chat-history-infinite-scroll_implemented-20260217.md) | [Review](implemented/20260217_review_chat-history-infinite-scroll_approved-20260217.md)
-- **Web UI Chat Multimodal Image Input** (2026-02-17) — Image attachment and sending in chat
-  [Design](implemented/20260217_multimodal-image-input-for-chat_implemented-20260217.md) | [Review](implemented/20260217_review_multimodal-image-input-for-chat_approved-20260217.md)
-- **SSE Stream Reconnection and Progress State Recovery** (2026-02-17) — Automatic reconnection and state restoration on SSE disconnect
-  [Design](implemented/20260217_sse-reconnection-and-progress-recovery_implemented-20260217.md) | [Review](implemented/20260217_review_sse-reconnection-and-progress-recovery_approved-20260217.md)
+Tasks are recorded in a persistent queue. Tasks from humans are always processed with highest priority.
+
+### Staleness Detection and Deadlines
+
+Tasks with no updates for 30 minutes are flagged as stale; overdue tasks are flagged as overdue. These flags surface through priming, prompting the Anima to take action.
+
+### Parallel Execution
+
+`plan_tasks` submits multiple tasks as a DAG. Dependencies are resolved and independent tasks run concurrently.
 
 ---
 
-## 11. Asset Generation
+## Skills and Tools
 
-Image generation pipeline, expression variants, 3D model caching, NovelAI V4, and more.
+### Built-in Tools
 
-- **Character Image Art Style Consistency** (2026-02-14) — Techniques for unifying art style across multiple Animas
-  [Design](implemented/20260214_avatar-style-consistency_issue.md) | [Review](implemented/20260214_review_avatar-style-consistency_revision.md)
-- **Bust-Up Expression Variant System** (2026-02-14) — Generating expression variations based on emotions
-  [Design](implemented/20260214_bustup-expression-system_implemented-20260215.md) | [Review](implemented/20260214_review_bustup-expression-system_approved-20260215.md)
-- **Character Image & 3D Model Generation Pipeline** (2026-02-14) — Unified pipeline integrating NovelAI/Flux/Meshy
-  [Design](implemented/20260214_image-gen-pipeline_issue.md)
-- **Auto-Apply Supervisor Image as Vibe Transfer Reference on Subordinate Creation** (2026-02-15) — Automation of art style inheritance
-  [Design](implemented/20260215_supervisor-image-as-vibe-reference_implemented-20260215.md) | [Review](implemented/20260215_review_supervisor-image-as-vibe-reference_approved-20260215.md)
-- **3-Layer Optimization for 3D Model Downloads: Caching, Compression, and Reduction** (2026-02-16) — GLB model performance improvements
-  [Design](implemented/20260216_3d-model-cache-and-optimization_implemented-20260216.md) | [Review](implemented/20260216_review_3d-model-cache-and-optimization_approved-20260216.md)
-- **Auto-Generation Fallback Pipeline for Missing Assets** (2026-02-16) — Automatic fallback when images are not generated
-  [Design](implemented/20260216_asset-generation-fallback-pipeline_implemented-20260216.md) | [Review](implemented/20260216_review_asset-generation-fallback-pipeline_approved-20260216.md)
-- **Asset Reconciler: LLM-Based Automatic Image Prompt Synthesis** (2026-02-16) — Image prompt generation from character information
-  [Design](implemented/20260216_asset-reconciler-llm-prompt-synthesis_implemented-20260216.md) | [Review](implemented/20260216_review_asset-reconciler-llm-prompt-synthesis_approved-20260216.md)
-- **Character Asset Remake (Vibe Transfer + Web UI Preview)** (2026-02-16) — Style transfer for existing images
-  [Design](implemented/20260216_character-asset-remake-with-style-transfer-implemented-20260216.md) | [Review](implemented/20260216_review_character-asset-remake-with-style-transfer_revision-20260216.md)
-- **NovelAI V4/V4.5 Vibe Transfer: 500 Error Due to Unused encode-vibe** (2026-02-16) — Vibe Transfer API fix
-  [Design](implemented/20260216_novelai-v4-vibe-transfer-encode-fix_implemented-20260216.md)
+Memory operations, messaging, task management, skill search — AnimaWorks-native tools available across all execution modes. In Mode S, Claude Code built-in tools (file operations, git, Bash, etc.) and MCP tools are also integrated.
+
+### External Tools
+
+Slack, Chatwork, Gmail, GitHub, AWS, web search, X search, image generation, and more. Per-Anima permissions are controlled through `permissions.md`. Long-running tools (like image generation) execute asynchronously; results are picked up at the next heartbeat.
+
+### Skill System
+
+Skills are managed through progressive disclosure. During priming, only skill names are surfaced. Full skill text is loaded on demand when the Anima decides it's needed. This keeps cognitive load low even with a large skill library. Animas can also create their own skills.
 
 ---
 
-## 12. Process Management & IPC
+## Web UI
 
-Zombie detection, keep-alive, buffer overflow fixes, and more.
+### Dashboard
 
-- **Process Isolation Architecture** (2026-02-14) — Anima isolation via Unix Domain Socket + child processes
-  [Design](implemented/20260214_process-isolation_issue.md) | [Review](implemented/20260214_review_process-isolation-design_revision.md)
-- **IPC Layer Fails to JSON-Serialize datetime Objects** (2026-02-15) — Fix for IPC communication serialization
-  [Design](implemented/20260215_fix-ipc-datetime-serialization_implemented-20260215.md) | [Review](implemented/20260215_review_fix-ipc-datetime-serialization_approved-20260215.md)
-- **Individual Anima Process Management API** (2026-02-16) — REST API-based process control
-  [Design](implemented/20260216_individual-anima-restart-api_implemented-20260216.md) | [Review](implemented/20260216_review_individual-anima-restart-api_approved-20260216.md)
-- **ping() Does Not Increment Counter in FAILED State, Causing Zombie Processes** (2026-02-16) — Fix for zombie process detection
-  [Design](implemented/20260216_ipc-ping-counter-zombie-state_implemented-20260216.md)
-- **IPC readline() Buffer Limit 64KB Causes Crash on Large Messages** (2026-02-16) — Buffer overflow mitigation
-  [Design](implemented/20260216_ipc-readline-buffer-overflow_implemented-20260216.md)
-- **Introduce Keep-Alive and Inter-Chunk Timeout for IPC/SSE Streams** (2026-02-16) — Connection maintenance and timeout control
-  [Design](implemented/20260216_ipc-stream-keepalive-and-chunk-timeout-20260216.md) | [Review](implemented/20260216_review_ipc-stream-keepalive-and-chunk-timeout_approved-20260216.md)
-- **is_alive() Cannot Detect IPC Connection Death** (2026-02-16) — Health check accuracy improvement
-  [Design](implemented/20260216_is-alive-ipc-death-detection_implemented-20260216.md)
-- **Server Stop/Start Resilience on PID File Loss** (2026-02-17) — PID file robustness improvement
-  [Review](implemented/20260217_review_pid-file-resilience_approved-20260217.md)
-- **Comprehensive WebSocket Connection Stability Improvements** (2026-02-16) — WebSocket communication reliability enhancement
-  [Review](implemented/20260216_review_websocket-stability-improvements_approved-20260216.md)
+Overview of all Animas and their states. An activity timeline tracks every Anima's actions in real time.
 
----
+### 3D Workspace
 
-## 13. Human Notification
+A Three.js-based 3D office space. Characters are arranged according to the org hierarchy. Click on one to start a conversation.
 
-call_human integration, org structure prompt injection, and more.
+### Chat
 
-- **Top-Level Anima Human Notification: A1 Messaging Integration** (2026-02-15) — Human notification from supervisor-less Animas
-  [Design](implemented/20260215_a1-messaging-integration_human-notification_implemented-20260215.md) | [Review](implemented/20260215_review_a1-messaging-integration_human-notification_approved-20260215.md)
-- **Notify Human Chat Window Integration Verification** (2026-02-15) — Chat UI integration for human notifications
-  [Design](implemented/20260215_notify-human-chat-window-integration-implemented-20260216.md) | [Review](implemented/20260216_review_notify-human-chat-window-integration_approved-20260216.md)
-- **Org Structure Information Injection into System Prompt** (2026-02-15) — Auto-injection of supervisor/subordinates/peers
-  [Design](implemented/20260215_org-structure-prompt-injection_implemented-20260215.md) | [Review](implemented/20260215_review_org-structure-prompt-injection_approved-20260215.md)
-- **Unified call_human: Consolidating Human Contact into a Single Function** (2026-02-17) — Integration of Slack/Chatwork/LINE/Telegram/ntfy
-  [Design](implemented/20260217_unify-call-human-notification_implemented-20260217.md) | [Review](implemented/20260217_review_unify-call-human-notification_approved-20260217.md)
+Real-time responses via SSE streaming. Scroll back through conversation history with infinite scroll. Supports image send/receive, multi-thread, and multi-tab. Live Tool Activity shows tool execution progress in real time.
+
+### Voice Chat
+
+Speak into the browser and have a voice conversation with an Anima. Speech is transcribed via STT (faster-whisper), processed through the same chat pipeline, and synthesized back via TTS (VOICEVOX / Style-BERT-VITS2 / ElevenLabs). Each Anima can have its own voice settings. Barge-in (interruption) is supported.
+
+### Setup Wizard
+
+Complete the initial setup through a web browser on first launch. Supports 17 languages.
+
+### Responsive Design
+
+Works on desktop, tablet, and smartphone.
 
 ---
 
-## 14. Setup & Onboarding
+## Character Asset Generation
 
-Setup wizard, i18n, auto-start, and more.
+Automatically generate each Anima's visual identity.
 
-- **Animas Fail to Start After Setup (RAG Initialization Timeout)** (2026-02-15) — Fix for initialization flow
-  [Design](implemented/20260215_person-startup-timeout-after-setup_implemented-20260215.md)
-- **Expand Setup Screen Language Selector to 17-Language Dropdown** (2026-02-15) — Enhanced multilingual support
-  [Design](implemented/20260215_setup-language-selector-expansion_implemented-20260215.md)
-- **Setup Wizard: Add User Info Step & Anima Auto-Start** (2026-02-15) — Expanded initial setup flow
-  [Design](implemented/20260215_setup-user-info-and-person-autostart-20260215.md) | [Review](implemented/20260215_review_setup-user-info-and-person-autostart_approved-20260215.md)
-- **Setup Wizard: i18n Not Applied & Browser Cache Issues** (2026-02-15) — Internationalization and display fixes
-  [Design](implemented/20260215_setup-wizard-i18n-and-cache-fix-20260215.md) | [Review](implemented/20260215_review_setup-wizard-i18n-and-cache-fix_approved-20260215.md)
-- **Setup Wizard: Simplify Character Creation Step** (2026-02-15) — Change to leader creation step
-  [Design](implemented/20260215_setup-wizard-simplify-character-step_implemented-20260215.md)
-- **GUI Setup Wizard: Web UI-Based Initial Configuration on First Launch** (2026-02-15) — Web UI initial setup flow
-  [Design](implemented/20260215_setup-wizard_implemented-20260215.md) | [Review](implemented/20260215_review_setup-wizard_approved-20260215.md)
+- **Image generation**: Integrated pipeline with NovelAI and fal.ai (Flux). The LLM auto-composes image prompts from character information. For realistic styles, only a fal.ai API key is needed.
+- **Vibe Transfer**: Automatically inherits the supervisor's art style to subordinates, maintaining visual consistency across the organization.
+- **Expression variants**: Automatically generates emotion-based variations.
+- **3D models**: 3D model generation via Meshy. GLB caching and compression optimize delivery.
 
 ---
 
-## 15. Logging & Observability
+## Security
 
-Logging enhancements, frontend log delivery, and more.
+Autonomous agents need safety mechanisms designed for autonomy. For details, see [Security Architecture](security.md).
 
-- **Comprehensive Logging Infrastructure Enhancement** (2026-02-17) — Frontend server logging + structlog + backend traceability
-  [Design](implemented/20260217_comprehensive-logging-enhancement_implemented-20260217.md) | [Review](implemented/20260217_review_comprehensive-logging-enhancement_approved-20260217.md)
-- **Fix Frontend Logs Not Reaching Server** (2026-02-17) — Fix for log delivery pipeline
-  [Design](implemented/20260217_fix-frontend-log-delivery_implemented-20260217.md) | [Review](implemented/20260217_review_fix-frontend-log-delivery_approved-20260217.md)
-- **Token Usage Tracking** (2026-03-03) — Input/output token measurement and recording for LLM calls
-  [Design](implemented/20260303_review_token-usage-tracking_approved-20260303.md)
+### Prompt Injection Defense
 
----
+Every piece of data is tagged with a trust level: trusted, medium, or untrusted. Data from external platforms is treated as untrusted even if relayed by a trusted Anima. Imperative text found in external data is treated as information only — never executed as instructions.
 
-## 16. Testing & Quality
+### Command Blocking
 
-Test fixes, 500 error root cause analysis, and more.
+Hardcoded blocks for destructive commands (`rm -rf /`, etc.) plus per-Anima `permissions.md` for fine-grained control. Each segment of a pipeline is checked individually.
 
-- **500 Server Error Root Cause and Comprehensive Error Handling Improvements** (2026-02-15) — Fix for app.state.animas KeyError
-  [Design](implemented/20260215_500-server-error-root-cause-implemented-20260216.md) | [Review](implemented/20260216_review_500-server-error-root-cause_approved-20260216.md)
-- **Test Fixes Following Phase 3 ProcessSupervisor Refactoring** (2026-02-15) — Test adaptation after Supervisor migration
-  [Design](implemented/20260215_fix-failing-unit-tests-after-supervisor-refactor_implemented-20260215.md) | [Review](implemented/20260215_review_fix-failing-unit-tests-after-supervisor-refactor_approved-20260215.md)
-- **Fix Remaining 23 Test Failures** (2026-02-15) — Test suite stabilization
-  [Design](implemented/20260215_fix-remaining-23-test-failures_implemented-20260215.md) | [Review](implemented/20260215_review_fix-remaining-23-test-failures_approved-20260215.md)
-- **Fix app.state.animas KeyError (500 Server Error)** (2026-02-15) — Server state initialization fix
-  [Review](implemented/20260215_review_fix-state-persons-keyerror_approved-20260215.md)
-- **Test Suite: Fix 135 Failures and Errors** (2026-02-17) — Large-scale test repair
-  [Design](implemented/20260217_test-suite-135-failures-cleanup.md)
+### Message Storm Defense
+
+Multi-layered protection against infinite messaging chains: conversation depth limiters, praise-loop detection, and rate limiting.
 
 ---
 
-## 17. Security
+## Process Management
 
-Defense-in-depth security model for autonomous agents. See **[Security Architecture](security.md)** for the full overview.
+Each Anima runs as an independent child process with its own Unix socket. If one crashes, the others are unaffected.
 
-- **Licensing Strategy Design** (2026-02-14) — Apache-2.0 licensing strategy
-  [Design](implemented/20260214_licensing-strategy_design.md)
-- **Memory Write Security: Protected Files and Path Traversal Prevention Across All Execution Modes** (2026-02-15) — Security hardening for memory writes
-  [Design](implemented/20260215_memory-write-security-20260216.md) | [Review](implemented/20260216_review_memory-write-security_approved-20260216.md)
-- **Command Injection Fix** (2026-02-28) — Pipe-to-interpreter and newline injection prevention
-  [Design](implemented/20260228_security-command-injection-fix.md)
-- **Path Traversal Fix** (2026-02-28) — common_knowledge and create_anima path validation
-  [Design](implemented/20260228_security-path-traversal-fix.md)
-- **Provenance & Trust Boundary System** (2026-02-28) — 5-phase trust labeling, origin chain propagation, RAG provenance tracking
-  [Phase 1](implemented/20260228_provenance-1-foundation.md) | [Phase 2](implemented/20260228_provenance-2-input-boundary.md) | [Phase 3](implemented/20260228_provenance-3-propagation.md) | [Phase 4](implemented/20260228_provenance-4-rag-provenance.md) | [Phase 5](implemented/20260228_provenance-5-mode-s-trust.md)
+- **Automatic crash recovery**: Crashes are detected and the process is restarted automatically. Recovery context is injected on the next boot.
+- **Reconciliation**: If an Anima that should be running isn't, it's detected and started automatically.
+- **IPC**: Inter-process communication over Unix sockets with keep-alive. Handles large messages and streaming.
 
 ---
 
-## 18. Anima Creation
+## CLI
 
-Hybrid creation, dynamic prompt injection, and more.
+```
+animaworks start / stop / restart          # Server control
+animaworks init                            # Initial setup
 
-- **Hybrid Anima Creation: Unified create_anima Tool + Character Sheet Specification** (2026-02-16) — Unified creation via tool invocation + MD character sheet
-  [Design](implemented/20260216_person-creation-hybrid-and-create-tool_implemented-20260216.md) | [Review](implemented/20260216_review_person-creation-hybrid-and-create-tool_approved-20260216.md)
+animaworks anima list                      # List all
+animaworks anima create --from-md FILE     # Create from character sheet
+animaworks anima info NAME                 # Show details
+animaworks anima enable / disable NAME     # Enable/disable
+animaworks anima set-model NAME MODEL      # Change model
+animaworks anima rename NAME NEWNAME       # Rename
 
----
-
-## 19. Post-v0.2 Enhancements (2026-02-18 — 2026-02-23)
-
-Execution mode redesign, task queue, resolution registry, dynamic Priming, refactoring, and operational resilience improvements.
-
-### Execution Engine
-
-- **Execution Mode Redesign: S/A/B 3-Mode Architecture** (2026-02-23) — Redesign execution modes as S (SDK) / A (Autonomous) / B (Basic). S mode delegates session management to Agent SDK. **Mode C (Codex)** was later added to run OpenAI models via Codex CLI
-  [Design](implemented/20260223_execution-mode-redesign-s-a-b-20260223.md) | [Review](implemented/20260223_review_execution-mode-redesign-s-a-b_approved-20260223.md)
-- **S Mode Memory Encoding Gap Fix** (2026-02-23) — Three-layer solution for conversation turn preservation, memory summary search, and behavior trace knowledge generation in S mode
-  [Design](implemented/20260223_s-mode-memory-encoding-gap_implemented-20260223.md) | [Review](implemented/20260223_review_s-mode-memory-encoding-gap_approved-20260223.md)
-- **A1 Mid-Session Context Auto-Compaction** (2026-02-22) — Context token tracking in A1 mode with auto-termination and chaining on overflow
-  [Design](implemented/20260222_a1-mid-session-context-autocompact-implemented-20260222.md) | [Review](implemented/20260222_review_a1-mid-session-context-autocompact_approved-20260222.md)
-- **A1 MCP Native Tools** (2026-02-20) — Stdio MCP server for A1 mode providing 12 AnimaWorks-specific tools as native tool calls
-  [Design](implemented/20260220_a1-mcp-native-tools_implemented-20260220.md) | [Review](implemented/20260220_review_a1-mcp-native-tools_approved-20260220.md)
-- **A1 Hook: Tool Call Logging & Bash Blocklist** (2026-02-20) — Complete tool call logging in PreToolUse hook and Bash command blocklist
-  [Design](implemented/20260220_a1-hook-tool-logging-and-bash-blocklist-20260220.md) | [Review](implemented/20260220_review_a1-hook-tool-logging-and-bash-blocklist_approved-20260220.md)
-- **Mode B Context Overflow Protection** (2026-02-19) — Preflight check, timeout, tool output limit, and auto-scaled history threshold for small-context models
-  [Design](implemented/20260219_mode-b-context-overflow-protection_implemented-20260220.md) | [Review](implemented/20260219_review2_mode-b-context-overflow-protection_approved-20260220.md)
-- **Context Over-Compression Comprehensive Improvement** (2026-02-21) — Tool result preservation, structured messages, session handoff, and debug payload storage
-  [Design](implemented/20260221_K_context-over-compression-implemented-20260222.md) | [Review](implemented/20260222_review_context-over-compression_approved-20260222.md)
-
-### Memory System
-
-- **Task Persistence and Heartbeat Resilience** (2026-02-19) — Persistent JSONL task queue, task checkpoints, recovery mechanisms, message deduplication, and Priming injection
-  [Design](implemented/20260219_task-persistence-and-heartbeat-resilience_implemented-20260219.md) | [Review](implemented/20260219_review_task-persistence-and-heartbeat-resilience_approved-20260219.md)
-- **Task Staleness Detection and Delegation** (2026-02-19) — Elapsed time visibility, staleness markers, deadline auto-enforcement, and delegation decision prompt injection
-  [Design](implemented/20260219_task-staleness-detection-and-delegation-implemented-20260219.md) | [Review](implemented/20260219_review_task-staleness-detection-and-delegation_approved-20260219.md)
-- **Distilled Knowledge Full System Prompt Injection** (2026-02-22) — Direct injection of full knowledge/ and procedures/ content into system prompt as always-active semantic memory
-  [Design](implemented/20260222_knowledge-procedures-full-injection_implemented-20260222.md) | [Review](implemented/20260222_review_knowledge-procedures-full-injection_approved-20260222.md)
-- **Issue Resolved → Procedure Auto-Generation Pipeline** (2026-02-22) — Consolidation pipeline converting resolved supervisor feedback into procedural memory
-  [Design](implemented/20260222_consolidation-resolved-to-procedure-pipeline-20260222.md) | [Review](implemented/20260222_review_consolidation-resolved-to-procedure-pipeline_approved-20260222.md)
-- **Priming Intent-Based Budget Allocation** (2026-02-19) — Link send_message intent field to Priming budget classification for intent-aware memory recall
-  [Design](implemented/20260219_priming-intent-budget-allocation_implemented-20260220.md) | [Review](implemented/20260220_review2_priming-intent-budget-allocation_revision-20260220.md)
-- **Memory System Symmetry and Skill Vector Search** (2026-02-19) — failure/success counts for knowledge, vector search for skill matching, contradiction history persistence
-  [Design](implemented/20260219_memory-system-symmetry-and-skill-vector-search_implemented-20260220.md) | [Review](implemented/20260220_review2_memory-system-symmetry-and-skill-vector-search_approved-20260220.md)
-
-### Communication & Resilience
-
-- **Message Storm Multi-Layer Defense** (2026-02-19) — Conversation depth limiter, reprocessing counter visibility, scheduled heartbeat cascade detection
-  [Design](implemented/20260219_message-storm-defense-in-depth_implemented-20260219.md) | [Review](implemented/20260219_review_message-storm-defense-in-depth_approved-20260219.md)
-- **Praise Loop Prevention** (2026-02-22) — Dual prompt and code defense against Anima-to-Anima infinite praise chains
-  [Design](implemented/20260222_praise-loop-prevention_implemented-20260222.md) | [Review](implemented/20260222_review_praise-loop-prevention_approved-20260222.md)
-- **Per-Run DM Limit** (2026-02-21) — Limit DMs per run to max 2 recipients, 1 message each, report/delegation intent only
-  [Design](implemented/20260221_A_per-anima-global-send-limit-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)
-
-### Scheduling & Lifecycle
-
-- **Heartbeat Interval Config.json Management** (2026-02-21) — Migrate heartbeat interval from free-form parsing to config.json with fixed hash-based offsets
-  [Design](implemented/20260221_H_schedule-parser-strict-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)
-- **CronTask trigger_heartbeat Flag** (2026-02-23) — Per-task flag to trigger a heartbeat after cron execution
-  [Design](implemented/20260223_activity-log-conversation-history-api_implemented-20260223.md)
-- **Heartbeat Reflection Stream** (2026-02-20) — Observe-Reflect-Plan-Act cognitive framework replacing checklist-based heartbeat
-  [Design](implemented/20260220_heartbeat-reflection-stream-20260220.md) | [Review](implemented/20260220_review_heartbeat-reflection-stream_approved-20260220.md)
-- **Heartbeat Constant Unification and Intent-Based Trigger** (2026-02-20) — Consolidate cascade constants and reverse message-triggered heartbeat to actionable-intent-only
-  [Design](implemented/20260220_unify-heartbeat-constants-and-intent-based-trigger.md) | [Review](implemented/20260220_review_unify-heartbeat-constants-and-intent-based-trigger_approved.md)
-- **Time Management and Timezone Unification** (2026-02-19) — Current time injection, naive datetime elimination, heartbeat 24-hour default, timezone config
-  [Design](implemented/20260219_time-management-and-timezone-implemented-20260220.md) | [Review](implemented/20260220_review_time-management-and-timezone_approved-20260220.md)
-
-### Skills & Tools
-
-- **Skill Tool: Progressive Disclosure** (2026-02-22) — On-demand full skill text injection via `skill` tool across all execution modes
-  [Design](implemented/20260222_skill-tool-progressive-disclosure_implemented-20260222.md) | [Review](implemented/20260222_review_skill-tool-progressive-disclosure_approved-20260222.md)
-- **Tool Prompt Externalization** (2026-02-22) — Tool descriptions migrated from hardcoded schemas.py to SQLite DB with WebUI editing
-  [Design](implemented/20260222_tool-prompt-externalization-implemented-20260222.md) | [Review](implemented/20260222_review_tool-prompt-externalization_approved-20260222.md)
-- **Supervisor Subordinate Disable/Enable Tools** (2026-02-22) — Process control tools for manager Animas to pause/resume subordinates
-  [Design](implemented/20260222_supervisor-subordinate-disable-enable_implemented-20260222.md) | [Review](implemented/20260222_review_supervisor-subordinate-disable-enable_approved-20260222.md)
-
-### Web UI
-
-- **Activity Log-Based Conversation History API** (2026-02-23) — Workspace chat with session segmentation, tool call expansion, and infinite scroll using activity_log as single data source
-  [Design](implemented/20260223_activity-log-conversation-history-api_implemented-20260223.md) | [Review](implemented/20260223_review_activity-log-conversation-history-api_approved-20260223.md)
-
-### Process Management
-
-- **ProcessSupervisor Process Isolation + Health Check Fix** (2026-02-22) — SIGTERM propagation prevention, log spam elimination, reconciliation-based auto-recovery
-  [Design](implemented/20260222_supervisor-process-isolation-and-healthcheck-fix-implemented-20260223.md) | [Review](implemented/20260223_review_supervisor-process-isolation-and-healthcheck-fix_approved-20260223.md)
-- **IPC Unary Request Dedicated Connection** (2026-02-22) — Per-request dedicated connection pattern to eliminate ID_MISMATCH errors
-  [Design](implemented/20260222_ipc-dedicated-connection-for-unary_implemented-20260222.md) | [Review](implemented/20260222_review_ipc-dedicated-connection-for-unary_approved-20260222.md)
-- **IPC Streaming Residual Issues** (2026-02-22) — Claude SDK hook deactivation and ChromaDB Anima-level separation
-  [Design](implemented/20260222_ipc-streaming-residual-issues_implemented-20260222.md) | [Review](implemented/20260222_review_ipc-streaming-residual-issues_approved-20260222.md)
-
-### Refactoring & Quality
-
-- **AnimaRunner Responsibility Decomposition** (2026-02-19) — Split 33-method monolith into 4 delegate classes
-  [Design](implemented/20260219_refactor-anima-runner-decomposition_implemented-20260220.md) | [Review](implemented/20260220_review_refactor-anima-runner-decomposition_approved-20260220.md)
-- **Custom Exception Hierarchy** (2026-02-20) — Unified exception hierarchy replacing 322 bare Exception catches with domain-specific types
-  [Design](implemented/20260220_custom-exception-hierarchy_implemented-20260220.md) | [Review](implemented/20260220_review_custom-exception-hierarchy_approved-20260220.md)
-- **Hardcoded Prompt Externalization** (2026-02-20) — Extract ~6,500 characters of LLM prompts to templates/prompts/
-  [Design](implemented/20260220_extract-hardcoded-prompts-to-templates_implemented-20260220.md) | [Review](implemented/20260220_review_extract-hardcoded-prompts-to-templates_approved-20260220.md)
-- **System Prompt Token Optimization** (2026-02-20) — Skill full-text removal, procedure YAML auto-structuring, history trim
-  [Design](implemented/20260220_system-prompt-token-optimization_implemented-20260220.md) | [Review](implemented/20260220_review_system-prompt-token-optimization_approved-20260220.md)
-- **Hardcoded Model Name Consolidation** (2026-02-20) — Centralize 18 hardcoded model names to 2 Pydantic defaults
-  [Design](implemented/20260220_consolidate-hardcoded-model-names_implemented-20260220.md) | [Review](implemented/20260220_review_consolidate-hardcoded-model-names_approved-20260220.md)
-- **Conversation History Turn Limit** (2026-02-20) — Prevention of tool call abandonment from inflated context
-  [Design](implemented/20260220_conversation-history-turn-limit_implemented-20260220.md) | [Review](implemented/20260220_review_conversation-history-turn-limit_approved-20260220.md)
-- **Cron Task Type Correctness** (2026-02-21) — Replace improper llm-typed cron tasks with command type and add validation
-  [Design](implemented/20260221_K_cron-type-correctness-20260222.md) | [Review](implemented/20260222_review_AHK_dm-heartbeat-cron_approved-20260222.md)
+animaworks models list                     # List supported models
+animaworks models info MODEL               # Model details
+```
 
 ---
 
-## 20. Voice Chat
+## Configuration
 
-Real-time voice conversation with Anima. Browser audio input → STT → existing chat pipeline → TTS → browser playback.
-
-- **Voice Chat System — STT + TTS + WebSocket Voice Conversation** (2026-02-26) — Dedicated voice WebSocket `/ws/voice/{name}` + faster-whisper STT + multi-provider TTS (VOICEVOX / Style-BERT-VITS2 / ElevenLabs). AudioWorklet PCM 16kHz direct streaming, sentence-split streaming TTS, VAD/PTT support, barge-in, per-Anima voice settings
-  [Design](implemented/20260226_voice-chat-system-implemented-20260226.md) | [Review](implemented/20260226_review_voice-chat-system_approved-20260226.md)
-- **TTS Stability Fixes** (2026-03-04) — Improved robustness for voice provider connection and playback errors
-  [Design](implemented/20260304_tts-instability-implemented-20260304.md) | [Review](implemented/20260304_review_tts-instability_approved-20260304.md)
+- **Two-layer merge**: Global settings (config.json) and per-Anima settings (status.json) are merged automatically. Per-Anima settings always take priority.
+- **models.json**: Define execution modes and context windows per model using wildcard patterns.
+- **Role templates**: Six built-in roles — engineer, manager, writer, researcher, ops, general — with preconfigured model, turn limits, and chain limits.
+- **Hot reload**: Config changes are detected automatically and applied on the next run. Most settings can be changed without a restart.
 
 ---
 
-## 21. Post-v0.2 Enhancements (2026-02-27 — 2026-03-05)
+## Operations
 
-Tool architecture unification, memory system improvements, housekeeping, Live Tool Activity, Mode C (Codex), and operational robustness.
-
-### Execution Engine
-
-- **Mode C (Codex) Added** — Run OpenAI models (o4-mini, o3, gpt-4.1, etc.) via Codex CLI. Sandbox mode + MCP integration for tool safety
-  [Design](core/execution/codex_sdk.py)
-- **LLM API Retry** (2026-03-05) — Automatic retry on API call failure
-  [Design](implemented/20260305_llm-api-retry_implemented-20260305.md) | [Review](implemented/20260305_review_llm-api-retry_approved-20260305.md)
-- **Background Model Override** (2026-03-05) — Model switching for heartbeat/cron/task execution
-  [Design](implemented/20260305_background-model-override-20260305.md) | [Review](implemented/20260305_review_background-model-override_approved-20260305.md)
-- **SDK Agent Tool Intercept & Heartbeat Monitoring** (2026-03-05) — Tool call monitoring and heartbeat response detection in Mode S
-  [Design](implemented/20260305_sdk-agent-tool-intercept-and-heartbeat-monitoring_implemented-20260305.md) | [Review](implemented/20260305_review_sdk-agent-tool-intercept-and-heartbeat-monitoring_approved-20260305.md)
-- **Agent Cycle Tool Summary** (2026-03-05) — Tool call argument summaries delivered via SSE `tool_detail`
-  [Design](implemented/20260305_agent-cycle-tool-summary_implemented-20260305.md) | [Review](implemented/20260305_review_agent-cycle-tool-summary_approved-20260305.md)
-- **Crash Recovery Note** (2026-03-05) — Documentation for Agent SDK crash recovery
-  [Design](implemented/20260305_crash-recovery-note-implemented-20260305.md) | [Review](implemented/20260305_review_crash-recovery-note_approved-20260305.md)
-
-### Tool & Skill Architecture
-
-- **Tool Architecture — External Tool MCP Removal, Skill + CLI Unification** (2026-03-04) — Remove 38 external tool schemas, unify to built-in internal tools + skill-based CLI. Mode B dedicated `use_tool` dispatcher
-  [Design](implemented/20260303_tool-architecture-skill-cli-migration_implemented-20260304.md) | [Review](implemented/20260304_review_tool-architecture-skill-cli-migration_r4_approved-20260304.md)
-- **Tool Visibility Unification** (2026-03-05) — Consistent tool listing across all execution modes
-  [Design](implemented/20260305_tool-visibility-unification_implemented-20260305.md) | [Review](implemented/20260305_review_tool-visibility-unification_approved-20260305.md)
-- **Skill Creator Spec Alignment & Path Fixes** (2026-03-05) — Spec consistency and path validation for skill creation flow
-  [Design](implemented/20260305_skill-creator-spec-alignment-and-path-fixes_implemented-20260305.md) | [Review](implemented/20260305_review_skill-creator-spec-alignment_approved-20260305.md)
-- **Live Tool Activity Streaming** (2026-03-04) — Real-time tool execution visibility. SSE `tool_detail` + ActivityLogger → WebSocket broadcast
-  [Design](implemented/20260303_live-tool-activity-streaming.md) | [Review](implemented/20260304_review_live-tool-activity-streaming_approved.md)
-
-### Memory System
-
-- **DK Phase-Out Phase 1: Channel C Full Knowledge Search** (2026-03-04) — Expand Priming Channel C search from "DK overflow files only" to "all knowledge/procedures"
-  [Design](implemented/20260304_dk-removal-phase1-channel-c-full-search.md)
-- **Priming Channel C Keyword & topk Fix** (2026-03-04) — Improved related knowledge search accuracy
-  [Design](implemented/20260304_priming-channel-c-keyword-and-topk-fix_implemented-20260304.md)
-- **DK Injection Frontmatter Repair** (2026-03-04) — Frontmatter validation and auto-repair for knowledge/procedures
-  [Design](implemented/20260303_dk-injection-frontmatter-repair-20260304.md) | [Review](implemented/20260304_review_dk-injection-frontmatter-repair_approved-20260304.md)
-- **Knowledge Frontmatter Validation & Repair** (2026-03-05) — Invalid frontmatter detection and auto-repair
-  [Design](implemented/20260305_knowledge-frontmatter-validation-repair-implemented-20260305.md)
-- **Spreading Activation Remaining Fixes** (2026-03-05) — Episodes support for spreading activation and search quality improvements
-  [Design](implemented/20260305_spreading-activation-remaining-fixes_implemented-20260305.md)
-- **Memory File I/O Protection** (2026-03-05) — Atomicity and consistency guarantees for memory writes
-  [Design](implemented/20260305_memory-file-io-protection_implemented-20260305.md)
-- **File Write Atomicity** (2026-03-05) — Crash-resilient file updates
-  [Design](implemented/20260305_file-write-atomicity-20260305.md) | [Review](implemented/20260305_review_file-write-atomicity_approved-20260305.md)
-
-### Housekeeping & Operations
-
-- **Disk Capacity Management — Unified Rotation via Housekeeping Job** (2026-03-05) — Unified cleanup for prompt_logs, server-daemon.log, shortterm, cron_logs, DM archives, etc.
-  [Design](implemented/20260305_housekeeping-disk-rotation_implemented-20260305.md) | [Review](implemented/20260305_review_housekeeping-disk-rotation_approved-20260305.md)
-- **Cron Logger Data Integrity** (2026-03-05) — Improved cron execution log reliability
-  [Design](implemented/20260305_cron-logger-data-integrity_implemented-20260305.md)
-- **Task Lifecycle Silent Failure** (2026-03-05) — Safe handling when pending task execution fails
-  [Design](implemented/20260305_task-lifecycle-silent-failure_implemented-20260305.md)
-- **Pending Task Failure Safety** (2026-03-05) — Recovery and retry on task execution error
-  [Design](implemented/20260305_pending-task-failure-safety-20260305.md) | [Review](implemented/20260305_review_pending-task-failure-safety_approved-20260305.md)
-
-### Communication & Notification
-
-- **Per-Anima Slack Bot** (2026-03-05) — Per-Anima Slack Bot Token support
-  [Design](implemented/20260305_per-anima-slack-bot_implemented-20260305.md) | [Review](implemented/20260305_per-anima-slack-bot_review-20260305.md)
-- **Slack Thread Reply Metadata Auto-Injection** (2026-03-05) — Automatic context attachment for thread replies
-  [Design](implemented/20260305_slack-reply-metadata-autoinjection_implemented-20260305.md) | [Review](implemented/20260305_review_slack-reply-metadata-autoinjection_approved-20260305.md)
-- **Notification Vault Robustness** (2026-03-05) — Secure storage and retrieval of credentials
-  [Design](implemented/20260305_notification-vault-robustness_implemented-20260305.md) | [Review](implemented/20260305_review_notification-vault-robustness_approved-20260305.md)
-
-### Configuration & CLI
-
-- **Config Thread Safety Cleanup** (2026-03-05) — Safe config loading in multi-threaded environments
-  [Design](implemented/20260305_config-thread-safety-cleanup_implemented-20260305.md)
-- **WebSocket Broadcast Race** (2026-03-05) — Resolve race conditions during broadcast
-  [Design](implemented/20260305_websocket-broadcast-race_implemented-20260305.md)
-- **animaworks anima rename Command** (2026-03-05) — CLI-based Anima name change
-  [Design](implemented/20260301_anima-rename-command_implemented-20260305.md) | [Review](implemented/20260305_review_anima-rename-command_approved-20260305.md)
-- **Opus 4 Reference Update** (2026-03-05) — Update model references to latest
-  [Design](implemented/20260305_update-opus-4-20250514-refs_implemented-20260305.md) | [Review](implemented/20260305_review_update-opus-4-20250514-refs_approved-20260305.md)
-
-### Miscellaneous (2026-02-27)
-
-- **Assistant Image Chat** (2026-02-27) — Image display in chat responses
-  [Design](implemented/20260227_assistant-images-in-chat_implemented-20260227.md)
-- **Multi-Thread Chat** (2026-02-27) — Parallel chat processing on backend and frontend
-  [Design](implemented/20260227_multi-thread-chat-backend-20260227.md) | [Review](implemented/20260227_review_multi-thread-chat_approved-20260227.md)
-- **Chat Multi-Tab Persistence** (2026-02-27) — Per-tab session state retention
-  [Design](implemented/20260227_review_chat_multi-tab_persistence_revision2_approved-20260227.md)
-- **Skill Directory Structure Migration** (2026-02-27) — Skill directory reorganization
-  [Design](implemented/20260227_review_skill-directory-structure-migration_approved-20260227.md)
-- **Open Domain Image Proxy Hardening** (2026-02-27) — Security hardening for image URLs
-  [Design](implemented/20260227_review_open-domain-image-proxy-hardening_approved-20260227.md)
+- **Disk management**: A housekeeping job automatically rotates logs, short-term memory, and temporary files.
+- **Token usage tracking**: Input/output tokens for every LLM call are measured and recorded.
+- **API fault tolerance**: Automatic retries on LLM API failures.
+- **Write safety**: File updates use temp-file-plus-rename for atomicity, preventing data corruption on crashes.
