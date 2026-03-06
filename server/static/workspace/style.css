@@ -543,6 +543,67 @@ html, body {
   margin-left: 6px;
 }
 
+/* ── Chat Message Row ────────────────── */
+
+.chat-msg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.chat-msg-row.user {
+  flex-direction: row-reverse;
+}
+
+.chat-msg-row.assistant .chat-bubble.assistant {
+  margin-right: 0;
+}
+
+.chat-msg-row.user .chat-bubble.user {
+  margin-left: 0;
+}
+
+/* ── Chat Message Avatar ─────────────── */
+
+.chat-msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.chat-msg-avatar-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-msg-avatar-initial {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--aw-color-bg-primary);
+  background: var(--aw-color-accent);
+}
+
+.chat-msg-avatar-user {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--aw-color-text-muted);
+  background: var(--aw-color-bg-tertiary);
+  padding: 4px;
+}
+
 /* ── Chat Bubbles ────────────────────── */
 
 .chat-bubble {
