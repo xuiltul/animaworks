@@ -343,6 +343,37 @@ def create_system_router() -> APIRouter:
             "anima_jobs": jobs,
         }
 
+    # ── Tasks ───────────────────────────────────────────
+
+    @router.get("/tasks/summary")
+    async def get_tasks_summary(request: Request):
+        """Aggregate pending task counts across all animas."""
+        animas_dir = request.app.state.animas_dir
+        anima_names = request.app.state.anima_names
+        pending = 0
+        in_progress = 0
+        for name in anima_names:
+            tq_path = animas_dir / name / "state" / "task_queue.jsonl"
+            if not tq_path.exists():
+                continue
+            try:
+                for raw_line in tq_path.read_text(encoding="utf-8").splitlines():
+                    raw_line = raw_line.strip()
+                    if not raw_line:
+                        continue
+                    try:
+                        entry = json.loads(raw_line)
+                    except json.JSONDecodeError:
+                        continue
+                    st = entry.get("status", "")
+                    if st in ("pending", "delegated"):
+                        pending += 1
+                    elif st == "in_progress":
+                        in_progress += 1
+            except OSError:
+                continue
+        return {"pending": pending, "in_progress": in_progress, "total_active": pending + in_progress}
+
     # ── Activity ───────────────────────────────────────────
 
     @router.get("/activity/recent")

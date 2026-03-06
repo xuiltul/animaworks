@@ -73,6 +73,7 @@ def create_animas_router() -> APIRouter:
                 "bootstrapping": proc_status.get("bootstrapping", False),
                 "pid": proc_status.get("pid"),
                 "uptime_sec": proc_status.get("uptime_sec"),
+                "last_busy_since": proc_status.get("last_busy_since"),
                 "appearance": appearance,
                 "supervisor": anima_supervisor,
                 "speciality": anima_speciality,

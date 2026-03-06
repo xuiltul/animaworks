@@ -107,7 +107,7 @@ function getStatusDotClass(status) {
   const s = typeof status === "object" ? (status.state || status.status || "") : String(status);
   const lower = s.toLowerCase();
   if (lower === "idle") return "dot-idle";
-  if (lower === "thinking" || lower === "working") return "dot-active";
+  if (lower === "thinking" || lower === "working" || lower === "running") return "dot-active";
   if (lower === "sleeping" || lower === "stopped" || lower === "not_found") return "dot-sleeping";
   if (lower.includes("error")) return "dot-error";
   if (lower.includes("bootstrap")) return "dot-bootstrap";
@@ -117,7 +117,9 @@ function getStatusDotClass(status) {
 function getStatusLabel(status) {
   if (!status) return "unknown";
   const s = typeof status === "object" ? (status.state || status.status || "unknown") : String(status);
-  return s.toLowerCase();
+  const lower = s.toLowerCase();
+  if (lower === "running") return "Running";
+  return lower;
 }
 
 function getStatusAttr(status) {
@@ -126,7 +128,7 @@ function getStatusAttr(status) {
   const lower = s.toLowerCase();
   if (lower.includes("error")) return "error";
   if (lower.includes("bootstrap")) return "bootstrapping";
-  if (lower === "thinking" || lower === "working") return "working";
+  if (lower === "thinking" || lower === "working" || lower === "running") return "working";
   if (lower.includes("chat") || lower.includes("talk")) return "chatting";
   return "idle";
 }
@@ -417,6 +419,7 @@ function _renderKpiBar() {
       <span class="org-kpi-label">Errors</span>
     </div>
   `;
+  _applyKpiValues();
 }
 
 // ── SVG Sizing ──────────────────────
@@ -569,16 +572,86 @@ function _applyAvatarExpression(name, status) {
 
 // ── KPI Live Updates ──────────────────────
 
+let _kpiTimerId = null;
+let _kpiEventsH = "-";
+let _kpiTasks = "-";
+
 async function _loadKpiStats() {
   try {
     const resp = await fetch("/api/activity/recent?hours=1&limit=200");
-    if (!resp.ok) return;
-    const data = await resp.json();
-    const items = Array.isArray(data) ? data : (data.events || []);
-    const eventsH = items.length;
-    const el = document.getElementById("orgKpiEventsH");
-    if (el) el.textContent = String(eventsH);
+    if (resp.ok) {
+      const data = await resp.json();
+      const items = Array.isArray(data) ? data : (data.events || []);
+      _kpiEventsH = String(items.length);
+    }
   } catch { /* ignore */ }
+  try {
+    const resp = await fetch("/api/tasks/summary");
+    if (resp.ok) {
+      const data = await resp.json();
+      _kpiTasks = String(data.pending || 0);
+    }
+  } catch { /* ignore */ }
+  _applyKpiValues();
+}
+
+function _applyKpiValues() {
+  const el1 = document.getElementById("orgKpiEventsH");
+  if (el1) el1.textContent = _kpiEventsH;
+  const el2 = document.getElementById("orgKpiTasks");
+  if (el2) el2.textContent = _kpiTasks;
+}
+
+function _startKpiPolling() {
+  _stopKpiPolling();
+  _loadKpiStats();
+  _kpiTimerId = setInterval(_loadKpiStats, 60_000);
+}
+
+function _stopKpiPolling() {
+  if (_kpiTimerId) { clearInterval(_kpiTimerId); _kpiTimerId = null; }
+}
+
+async function _loadInitialStreams(animas) {
+  for (const a of animas) {
+    try {
+      const resp = await fetch(`/api/activity/recent?hours=1&limit=5&anima=${encodeURIComponent(a.name)}`);
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const events = Array.isArray(data) ? data : (data.events || []);
+      if (!events.length) continue;
+      const entries = events.slice(0, MAX_STREAM_ENTRIES).reverse().map(ev => ({
+        id: ev.id || String(Date.now() + Math.random()),
+        type: _mapEventType(ev.type || ev.name),
+        text: _summarizeEvent(ev),
+        status: "done",
+        ts: ev.timestamp ? new Date(ev.timestamp).getTime() : Date.now(),
+      }));
+      _cardStreams.set(a.name, entries);
+      const streamEl = document.getElementById(`orgStream_${CSS.escape(a.name)}`);
+      if (streamEl) _renderStream(streamEl, entries.slice(-MAX_STREAM_ENTRIES));
+    } catch { /* ignore */ }
+  }
+}
+
+function _mapEventType(type) {
+  if (!type) return "tool";
+  const t = type.toLowerCase();
+  if (t.includes("heartbeat")) return "heartbeat";
+  if (t.includes("cron")) return "cron";
+  if (t.includes("channel") || t.includes("board")) return "board";
+  if (t.includes("tool")) return "tool";
+  return "tool";
+}
+
+function _summarizeEvent(ev) {
+  if (ev.summary) return ev.summary.slice(0, 80);
+  const type = ev.type || ev.name || "";
+  if (type.includes("tool_use")) return ev.tool || ev.tool_name || type;
+  if (type.includes("heartbeat")) return "heartbeat";
+  if (type.includes("cron")) return ev.task || "cron";
+  if (type.includes("message")) return ev.intent ? `${type} (${ev.intent})` : type;
+  return type.slice(0, 60) || "activity";
 }
 
 // ── Main API ──────────────────────
@@ -664,7 +737,8 @@ export async function initOrgDashboard(container, animas, { onNodeClick } = {}) 
   window.addEventListener("resize", _onResize);
 
   _loadOrgAvatars(animas);
-  _loadKpiStats();
+  _startKpiPolling();
+  _loadInitialStreams(animas);
 
   // Lazy-preload expression variants after neutral avatars are loaded
   requestIdleCallback(() => _preloadAvatarExpressions(animas), { timeout: 5000 });
@@ -683,6 +757,7 @@ function _onResize() {
 
 export function disposeOrgDashboard() {
   window.removeEventListener("resize", _onResize);
+  _stopKpiPolling();
   if (_staleTimerId) { clearInterval(_staleTimerId); _staleTimerId = null; }
   if (_container) {
     _container.innerHTML = "";
