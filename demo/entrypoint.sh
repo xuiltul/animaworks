@@ -83,6 +83,23 @@ with open(cfg_path, 'w') as f:
         echo "Config overlay applied."
     fi
 
+    # 4b. Create auth.json (local_trust mode, no password)
+    cat > "${DATA_DIR}/auth.json" <<AUTHEOF
+{
+  "auth_mode": "local_trust",
+  "trust_localhost": true,
+  "owner": {
+    "username": "demo",
+    "display_name": "Demo User",
+    "role": "owner"
+  },
+  "users": [],
+  "sessions": {},
+  "token_version": 1
+}
+AUTHEOF
+    echo "Auth config created (local_trust)."
+
     # 5. Copy pre-built character assets
     for char_dir in "${PRESET_DIR}/assets/"*/; do
         [ -d "$char_dir" ] || continue

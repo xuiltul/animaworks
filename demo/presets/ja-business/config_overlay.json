@@ -1,4 +1,6 @@
 {
+  "setup_complete": true,
+  "locale": "ja",
   "heartbeat": {
     "interval_minutes": 5
   },

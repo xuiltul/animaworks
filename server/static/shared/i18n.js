@@ -11,19 +11,15 @@ export async function initI18n() {
 }
 
 async function _doInit() {
-  const stored = localStorage.getItem('animaworks-locale');
-  if (stored) {
-    _locale = stored;
-  } else {
-    try {
-      const res = await fetch('/api/system/config');
-      const data = await res.json();
-      _locale = data.locale || 'ja';
-    } catch {
-      _locale = navigator.language?.startsWith('en') ? 'en' : 'ja';
-    }
-    localStorage.setItem('animaworks-locale', _locale);
+  try {
+    const res = await fetch('/api/system/config');
+    const data = await res.json();
+    _locale = data.locale || 'ja';
+  } catch {
+    const stored = localStorage.getItem('animaworks-locale');
+    _locale = stored || (navigator.language?.startsWith('en') ? 'en' : 'ja');
   }
+  localStorage.setItem('animaworks-locale', _locale);
   await loadTranslations(_locale);
 }
 
