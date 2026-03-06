@@ -4,6 +4,7 @@
   "step.language": "Dil",
   "step.environment": "Ortam",
   "step.character": "Karakter",
+  "step.leader": "Karakter",
   "step.confirm": "Onayla",
   "step.userinfo": "Kullanıcı Bilgisi",
   "btn.next": "İleri",

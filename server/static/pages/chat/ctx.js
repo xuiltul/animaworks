@@ -151,7 +151,7 @@ export function isBusinessTheme() {
 
 export function mergeThreadsFromSessions(ctx, animaName, sessionsData) {
   if (!animaName || !sessionsData) return;
-  const existing = ctx.state.threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
+  const existing = ctx.state.threads[animaName] || [{ id: "default", label: ctx.deps.t("thread.default_label"), unread: false }];
   ctx.state.threads[animaName] = _mergeThreads(existing, sessionsData, { timeStr });
 }
 
@@ -161,7 +161,7 @@ export function serializeChatUiState(ctx) {
   const threadState = {};
   for (const tab of animaTabs) {
     const name = tab.name;
-    const list = threads[name] || [{ id: "default", label: "メイン", unread: false }];
+    const list = threads[name] || [{ id: "default", label: ctx.deps.t("thread.default_label"), unread: false }];
     threadState[name] = {
       active_thread_id: activeThreadByAnima[name] || "default",
       threads: list.map(th => {

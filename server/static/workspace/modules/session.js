@@ -116,7 +116,7 @@ function renderItems(data) {
           <div class="session-item-title">${t("ws.conversation_active")}</div>
           <div class="session-item-meta">
             ${ac.total_turn_count || 0}${t("ws.turns")} ${ac.has_summary ? t("chat.session_summary") : ""}
-            | 最終: ${lastTime}
+            | ${t("ws.last_time_label")} ${lastTime}
           </div>
         </div>
       </div>`;
@@ -151,7 +151,7 @@ function renderItems(data) {
 
   // 4. Episodes
   if (data.episodes && data.episodes.length > 0) {
-    html += '<div class="session-section"><div class="section-header">エピソード</div>';
+    html += `<div class="session-section"><div class="section-header">${t("ws.episodes_label")}</div>`;
     for (const e of data.episodes) {
       html += `
         <div class="session-item" data-type="episode" data-date="${escapeHtml(e.date)}">

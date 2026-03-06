@@ -20,7 +20,7 @@ function paneHtml() {
   return `
     <div class="chat-page-main">
       <div class="chat-anima-tabs-header" data-chat-id="chatAnimaTabsHeader">
-        <button class="chat-unified-hamburger" data-chat-id="chatUnifiedHamburger" aria-label="メニュー">&#x2630;</button>
+        <button class="chat-unified-hamburger" data-chat-id="chatUnifiedHamburger" aria-label="${t("pane.menu")}">&#x2630;</button>
         <div class="anima-tabs" data-chat-id="chatAnimaTabs"></div>
         <div class="chat-header-actions">
           <div class="chat-add-conversation" data-chat-id="chatAddConversationArea">
@@ -29,22 +29,22 @@ function paneHtml() {
           </div>
         </div>
         <div class="chat-thread-dropdown" data-chat-id="chatThreadDropdown">
-          <button type="button" class="chat-thread-dropdown-btn" data-chat-id="chatThreadDropdownBtn" aria-label="スレッド">
-            <span class="chat-thread-dropdown-label" data-chat-id="chatThreadDropdownLabel">メイン</span>
+          <button type="button" class="chat-thread-dropdown-btn" data-chat-id="chatThreadDropdownBtn" aria-label="${t("pane.thread_label")}">
+            <span class="chat-thread-dropdown-label" data-chat-id="chatThreadDropdownLabel">${t("thread.default_label")}</span>
             <svg class="chat-thread-dropdown-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </button>
           <div class="chat-thread-dropdown-menu" data-chat-id="chatThreadDropdownMenu"></div>
         </div>
-        <button class="chat-split-pane-btn" data-chat-id="chatSplitPaneBtn" aria-label="ペインを分割" title="ペインを分割">
+        <button class="chat-split-pane-btn" data-chat-id="chatSplitPaneBtn" aria-label="${t("pane.split")}" title="${t("pane.split")}">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
         </button>
-        <button class="chat-close-pane-btn" data-chat-id="chatClosePaneBtn" aria-label="ペインを閉じる" title="ペインを閉じる" style="display:none">
+        <button class="chat-close-pane-btn" data-chat-id="chatClosePaneBtn" aria-label="${t("pane.close")}" title="${t("pane.close")}" style="display:none">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
-        <button class="chat-unified-info-btn" data-chat-id="chatUnifiedInfoBtn" aria-label="情報パネル" title="情報パネル">
+        <button class="chat-unified-info-btn" data-chat-id="chatUnifiedInfoBtn" aria-label="${t("pane.info_panel")}" title="${t("pane.info_panel")}">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
         </button>
-        <button class="chat-unified-user-btn" data-chat-id="chatUnifiedUserBtn" aria-label="ユーザー">
+        <button class="chat-unified-user-btn" data-chat-id="chatUnifiedUserBtn" aria-label="${t("pane.user")}">
           <span class="chat-unified-user-initial" data-chat-id="chatUnifiedUserInitial">?</span>
         </button>
         <div class="chat-unified-user-menu" data-chat-id="chatUnifiedUserMenu">
@@ -56,8 +56,8 @@ function paneHtml() {
       </div>
 
       <div class="thread-tabs" data-chat-id="chatThreadTabs">
-        <button class="thread-tab active" data-thread="default">メイン</button>
-        <button class="thread-tab-new" data-chat-id="chatNewThreadBtn" title="新しいスレッド">＋</button>
+        <button class="thread-tab active" data-thread="default">${t("thread.default_label")}</button>
+        <button class="thread-tab-new" data-chat-id="chatNewThreadBtn" title="${t("thread.new")}">＋</button>
       </div>
 
       <div class="chat-messages-area">

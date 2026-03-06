@@ -2,6 +2,7 @@
 // Mobile responsive helpers, voice chat callback builder, greeting trigger, draft save/load.
 
 import { getState, setState } from "./state.js";
+import { t } from "../../shared/i18n.js";
 import { greetAnima } from "./api.js";
 import { getCurrentUser } from "./login.js";
 import { setExpression } from "./live2d.js";
@@ -100,8 +101,8 @@ export function updateConvInputPlaceholder() {
   const animaName = getState().conversationAnima;
   if (!animaName) return;
   dom.convInput.placeholder = isMobileView()
-    ? `${animaName} にメッセージ... (Enter)`
-    : `メッセージを入力... (Ctrl+Enter)`;
+    ? t("chat.placeholder_enter", { name: animaName })
+    : t("ws.message_placeholder");
 }
 
 export function cleanupMobileResources() {
@@ -150,7 +151,7 @@ export async function triggerGreeting(animaName, { renderConvMessages }) {
     const { conversationAnima, activeThreadId } = getState();
     const threadId = activeThreadId || "default";
     const mgr = ChatSessionManager.getInstance();
-    mgr.addMessage(conversationAnima, threadId, { role: "system", text: "デスクを訪問しました", timestamp: now });
+    mgr.addMessage(conversationAnima, threadId, { role: "system", text: t("ws.desk_visit"), timestamp: now });
     mgr.addMessage(conversationAnima, threadId, { role: "assistant", text: data.response, timestamp: now });
     renderConvMessages();
 

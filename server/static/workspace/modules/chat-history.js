@@ -3,6 +3,7 @@
 // Now delegates data management to ChatSessionManager.
 
 import { getState, setState } from "./state.js";
+import { t } from "../../shared/i18n.js";
 import { escapeHtml, renderSimpleMarkdown, smartTimestamp } from "./utils.js";
 import { renderChatImages } from "../../shared/image-input.js";
 import {
@@ -40,10 +41,10 @@ export function renderOpts() {
     avatarMap: getState().chatAvatarMap || {},
     truncateLen: TOOL_RESULT_TRUNCATE,
     labels: {
-      thinking: "考え中...",
-      toolRunning: (tool) => `${escapeHtml(tool)} を実行中...`,
-      heartbeatRelay: "ハートビート処理中...",
-      heartbeatRelayDone: "応答を準備中...",
+      thinking: t("chat.thinking"),
+      toolRunning: (tool) => t("chat.tool_running", { tool: escapeHtml(tool) }),
+      heartbeatRelay: t("chat.heartbeat_relay"),
+      heartbeatRelayDone: t("chat.heartbeat_relay_done"),
     },
   };
 }
@@ -62,9 +63,9 @@ export function renderConvMessages() {
 
   if ((!hs || hs.sessions.length === 0) && threadMessages.length === 0) {
     if (hs && hs.loading) {
-      dom.convMessages.innerHTML = '<div class="chat-empty"><span class="tool-spinner"></span> 読み込み中...</div>';
+      dom.convMessages.innerHTML = `<div class="chat-empty"><span class="tool-spinner"></span> ${t("common.loading")}</div>`;
     } else {
-      dom.convMessages.innerHTML = '<div class="chat-empty">メッセージはまだありません</div>';
+      dom.convMessages.innerHTML = `<div class="chat-empty">${t("chat.messages_empty")}</div>`;
     }
     return;
   }
@@ -74,7 +75,7 @@ export function renderConvMessages() {
 
   if (hs && hs.hasMore) {
     if (hs.loading) {
-      html += '<div class="history-loading-more"><span class="tool-spinner"></span> 過去の会話を読み込み中...</div>';
+      html += `<div class="history-loading-more"><span class="tool-spinner"></span> ${t("chat.loading_history")}</div>`;
     }
     html += '<div class="chat-load-sentinel"></div>';
   }
@@ -98,7 +99,7 @@ export function renderConvMessages() {
       || new Date(lastLiveTs).getTime() > new Date(lastSessionLastTs).getTime();
     if (liveIsNewer) {
       if (hs && hs.sessions.length > 0) {
-        html += '<div class="session-divider"><span class="session-divider-label">現在のセッション</span></div>';
+        html += `<div class="session-divider"><span class="session-divider-label">${t("chat.current_session")}</span></div>`;
       }
       html += threadMessages.map(m => renderLiveBubble(m, opts)).join("");
     }
@@ -156,7 +157,7 @@ export async function loadMoreHistory() {
   if (!existingIndicator) {
     const indicator = document.createElement("div");
     indicator.className = "history-loading-more";
-    indicator.innerHTML = '<span class="tool-spinner"></span> 過去の会話を読み込み中...';
+    indicator.innerHTML = `<span class="tool-spinner"></span> ${t("chat.loading_history")}`;
     dom.convMessages.insertBefore(indicator, dom.convMessages.firstChild);
   }
 

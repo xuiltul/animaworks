@@ -21,8 +21,8 @@ export function render(container) {
           type="button"
           data-chat-id="chatRightPaneToggleBtn"
           class="chat-right-pane-toggle-btn"
-          aria-label="右ペインを表示・非表示"
-          title="右ペインを表示・非表示"
+          aria-label="${t("pane.sidebar_toggle")}"
+          title="${t("pane.sidebar_toggle")}"
         >
           <svg class="chat-right-pane-toggle-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <path d="M15 6l-6 6 6 6" />

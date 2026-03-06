@@ -324,7 +324,7 @@ class TestWorkspaceChatMobile:
         """chat-mobile.js should have mobile Enter-to-send logic (not just Ctrl+Enter)."""
         js = _read(WORKSPACE_DIR / "modules" / "chat-mobile.js")
         assert "matchMedia" in js, "Expected matchMedia for mobile detection"
-        assert "Enter" in js, "Expected Enter key handling"
+        assert "chat.placeholder_enter" in js, "Expected i18n key for Enter placeholder"
 
         assert "mobile" in js.lower() or "max-width: 768px" in js
 
@@ -334,9 +334,9 @@ class TestWorkspaceChatMobile:
         assert "visualViewport" in js
 
     def test_workspace_chat_mobile_placeholder(self) -> None:
-        """Chat placeholder should show mobile-appropriate shortcut hint."""
+        """Chat placeholder should show mobile-appropriate shortcut hint via i18n."""
         js = _read(WORKSPACE_DIR / "modules" / "chat-mobile.js")
-        assert "Ctrl+Enter" in js or "Ctrl\\+Enter" in js
+        assert "ws.message_placeholder" in js or "chat.placeholder_enter" in js
 
 
 # ── 8. Sidebar Drawer Styles ────────────────────────────────

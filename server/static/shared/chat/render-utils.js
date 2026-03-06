@@ -1,6 +1,7 @@
 // ── Shared Chat Render Utilities ──────────────────────
 // Pure HTML-generating functions used by both Dashboard and Workspace chat UIs.
 // All functions are DOM-independent (return HTML strings) except bindToolCallHandlers.
+import { t } from "../i18n.js";
 
 const DEFAULT_TOOL_RESULT_TRUNCATE = 500;
 
@@ -114,10 +115,10 @@ export function renderSessionDivider(session, isFirst, opts) {
   let extraClass = "";
 
   if (trigger === "heartbeat") {
-    label = "❤ ハートビート";
+    label = t("chat.heartbeat_activity");
     extraClass = " session-divider-heartbeat";
   } else if (trigger === "cron") {
-    label = "⏰ Cronタスク";
+    label = t("chat.cron_activity");
     extraClass = " session-divider-cron";
   } else {
     label = session.session_start ? smartTimestamp(session.session_start) : "";
@@ -141,7 +142,7 @@ export function renderToolCalls(toolCalls, opts) {
   const innerHtml = toolCalls.map((tc, idx) => {
     const errorClass = tc.is_error ? " tool-call-error" : "";
     const toolName = escapeHtml(tc.tool_name || "unknown");
-    const errorLabel = tc.is_error ? " [ERROR]" : "";
+    const errorLabel = tc.is_error ? ` ${t("chat.error_prefix")}` : "";
 
     return `<div class="tool-call-row${errorClass}" data-tool-idx="${idx}">` +
       `<span class="tool-call-row-icon">\u25B6</span>` +
@@ -174,17 +175,17 @@ export function renderToolCallDetail(tc, opts) {
   const input = tc.input || "";
   if (input) {
     const inputStr = typeof input === "string" ? input : JSON.stringify(input, null, 2);
-    html += `<div class="tool-call-label">入力</div><div class="tool-call-content">${escapeHtml(inputStr)}</div>`;
+    html += `<div class="tool-call-label">${t("ws.tool_input")}</div><div class="tool-call-content">${escapeHtml(inputStr)}</div>`;
   }
 
   const result = tc.result || "";
   if (result) {
     const resultStr = typeof result === "string" ? result : JSON.stringify(result, null, 2);
-    html += `<div class="tool-call-label">結果</div>`;
+    html += `<div class="tool-call-label">${t("ws.tool_result")}</div>`;
     if (resultStr.length > truncLen) {
       const truncated = resultStr.slice(0, truncLen);
       html += `<div class="tool-call-content" data-full-result="${escapeHtml(resultStr)}">${escapeHtml(truncated)}...</div>`;
-      html += `<button class="tool-call-show-more">もっと見る</button>`;
+      html += `<button class="tool-call-show-more">${t("chat.show_more")}</button>`;
     } else {
       html += `<div class="tool-call-content">${escapeHtml(resultStr)}</div>`;
     }
@@ -259,7 +260,7 @@ export function renderLiveBubble(msg, opts) {
   const tsHtml = ts ? `<span class="chat-ts">${escapeHtml(ts)}</span>` : "";
 
   if (msg.role === "thinking") {
-    const thinkLabel = labels.thinking || "考え中...";
+    const thinkLabel = labels.thinking || t("chat.thinking");
     const bubble = `<div class="chat-bubble thinking"><span class="thinking-animation">${thinkLabel}</span></div>`;
     return _wrapRow("assistant", bubble, _renderAvatar(opts.animaName, avatarMap));
   }
@@ -295,7 +296,7 @@ export function renderLiveBubble(msg, opts) {
     content = streamingCursor;
   }
 
-  const compLabel = labels.compressing || "会話履歴を圧縮中...";
+  const compLabel = labels.compressing || t("chat.compressing");
   const compressionHtml = msg.compressing
     ? `<div class="compression-indicator"><span class="tool-spinner"></span>${compLabel}</div>`
     : "";
@@ -304,7 +305,7 @@ export function renderLiveBubble(msg, opts) {
   if (history && history.length > 0) {
     toolHtml = renderToolActivityTimeline(history, msg.activeTool, { escapeHtml, labels });
   } else if (msg.activeTool) {
-    const toolLabel = labels.toolRunning || ((tool) => `${tool} を実行中...`);
+    const toolLabel = labels.toolRunning || ((tool) => t("chat.tool_running", { tool }));
     toolHtml = `<div class="tool-indicator"><span class="tool-spinner"></span>${typeof toolLabel === "function" ? toolLabel(msg.activeTool) : toolLabel}</div>`;
   }
   const imagesHtml = renderImages(msg.images, { animaName: opts.animaName });
@@ -382,13 +383,13 @@ function _renderTextZoneContent(msg, opts) {
   const labels = opts.labels || {};
 
   if (msg.heartbeatRelay) {
-    const relayLabel = labels.heartbeatRelay || "ハートビート処理中...";
+    const relayLabel = labels.heartbeatRelay || t("chat.heartbeat_relay");
     let html = `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${relayLabel}</div>`;
     if (msg.heartbeatText) html += `<div class="heartbeat-relay-text">${escapeHtml(msg.heartbeatText)}</div>`;
     return html;
   }
   if (msg.afterHeartbeatRelay && !msg.text) {
-    const doneLabel = labels.heartbeatRelayDone || "応答を準備中...";
+    const doneLabel = labels.heartbeatRelayDone || t("chat.heartbeat_relay_done");
     return `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${doneLabel}</div>`;
   }
   if (msg.text) {
@@ -401,14 +402,14 @@ function _renderTextZoneContent(msg, opts) {
     }
     html += '<span class="streaming-cursor">▌</span>';
     if (msg.compressing) {
-      const compLabel = labels.compressing || "会話履歴を圧縮中...";
+      const compLabel = labels.compressing || t("chat.compressing");
       html += `<div class="compression-indicator"><span class="tool-spinner"></span>${compLabel}</div>`;
     }
     return html;
   }
   let html = '<span class="streaming-cursor">▌</span>';
   if (msg.compressing) {
-    const compLabel = labels.compressing || "会話履歴を圧縮中...";
+    const compLabel = labels.compressing || t("chat.compressing");
     html += `<div class="compression-indicator"><span class="tool-spinner"></span>${compLabel}</div>`;
   }
   return html;
@@ -422,7 +423,7 @@ function _renderToolZoneContent(msg, opts) {
     return renderToolActivityTimeline(history, msg.activeTool, { escapeHtml, labels });
   }
   if (msg.activeTool) {
-    const toolLabel = labels.toolRunning || ((tool) => `${tool} を実行中...`);
+    const toolLabel = labels.toolRunning || ((tool) => t("chat.tool_running", { tool }));
     return `<div class="tool-indicator"><span class="tool-spinner"></span>${typeof toolLabel === "function" ? toolLabel(msg.activeTool) : toolLabel}</div>`;
   }
   return "";
@@ -523,13 +524,13 @@ function renderToolActivityTimeline(history, activeTool, { escapeHtml, labels })
       const detailSpan = entry.detail
         ? `<span class="tool-activity-detail">${escapeHtml(entry.detail.slice(0, 120))}</span>`
         : "";
-      items += `<div class="tool-activity-item tool-activity-item--running"><span class="tool-spinner"></span><span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${detailSpan}<span class="tool-activity-dur">実行中</span></div>`;
+      items += `<div class="tool-activity-item tool-activity-item--running"><span class="tool-spinner"></span><span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${detailSpan}<span class="tool-activity-dur">${t("chat.tool_running_label")}</span></div>`;
     }
   }
 
   const summaryLabel = activeTool
-    ? `${escapeHtml(activeTool)} を実行中... (${completedCount}/${totalCount})`
-    : `${completedCount} ツール完了`;
+    ? t("chat.tools_progress", { tool: activeTool, completed: completedCount, total: totalCount })
+    : t("chat.tools_completed", { count: completedCount });
 
   return `<div class="tool-activity-timeline">
     <details${activeTool ? " open" : ""}>

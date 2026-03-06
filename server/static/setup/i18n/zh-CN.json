@@ -4,6 +4,7 @@
   "step.language": "语言",
   "step.environment": "环境",
   "step.character": "角色",
+  "step.leader": "角色",
   "step.confirm": "确认",
   "step.userinfo": "用户信息",
   "btn.next": "下一步",

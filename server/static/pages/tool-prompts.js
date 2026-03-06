@@ -101,7 +101,7 @@ async function _renderDescriptions(container) {
                 </td>
                 <td style="text-align:center;">
                   <button class="btn-primary btn-save-desc" data-name="${_esc(d.name)}"
-                    style="font-size:0.8rem;padding:0.3rem 0.8rem;">保存</button>
+                    style="font-size:0.8rem;padding:0.3rem 0.8rem;">${t("tools.save")}</button>
                   <div class="save-status" style="font-size:0.75rem;margin-top:0.25rem;"></div>
                 </td>
               </tr>
@@ -122,13 +122,13 @@ async function _renderDescriptions(container) {
       const description = textarea.value.trim();
 
       if (!description) {
-        status.textContent = "空にできません";
+        status.textContent = t("tools.cannot_empty");
         status.style.color = "#dc2626";
         return;
       }
 
       btn.disabled = true;
-      status.textContent = "保存中...";
+      status.textContent = t("tools.saving");
       status.style.color = "#666";
 
       try {
@@ -137,10 +137,10 @@ async function _renderDescriptions(container) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ description }),
         });
-        status.textContent = "保存完了";
+        status.textContent = t("tools.saved");
         status.style.color = "#16a34a";
       } catch (err) {
-        status.textContent = "エラー";
+        status.textContent = t("tools.error");
         status.style.color = "#dc2626";
       } finally {
         btn.disabled = false;
@@ -158,7 +158,7 @@ async function _renderGuides(container) {
 
   if (guides.length === 0) {
     container.innerHTML = `<div class="card"><div class="card-body">
-      <div class="loading-placeholder">ガイドがありません。animaworks init を実行してください。</div>
+      <div class="loading-placeholder">${t("tools.no_guides")}</div>
     </div></div>`;
     return;
   }

@@ -2,6 +2,7 @@
 
 import { state, dom, escapeHtml } from "./state.js";
 import { api } from "./api.js";
+import { initI18n, t } from "/shared/i18n.js";
 
 let _startDashboard = null;
 
@@ -10,15 +11,16 @@ export function setStartDashboard(fn) {
 }
 
 export async function initLoginScreen() {
+  await initI18n();
   dom.loginScreen.innerHTML = `
     <div class="login-card">
       <h2 class="login-title">AnimaWorks</h2>
-      <p class="login-subtitle">ログイン</p>
+      <p class="login-subtitle">${t("login.subtitle")}</p>
       <form id="loginForm" class="login-form">
-        <input type="text" id="loginUsername" placeholder="ユーザー名" autocomplete="username" required>
-        <input type="password" id="loginPassword" placeholder="パスワード" autocomplete="current-password" required>
+        <input type="text" id="loginUsername" placeholder="${t("login.placeholder_username")}" autocomplete="username" required>
+        <input type="password" id="loginPassword" placeholder="${t("login.placeholder_password")}" autocomplete="current-password" required>
         <div id="loginError" class="login-error hidden"></div>
-        <button type="submit" class="btn-login">ログイン</button>
+        <button type="submit" class="btn-login">${t("login.button")}</button>
       </form>
     </div>
   `;
@@ -40,7 +42,7 @@ export async function initLoginScreen() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        errorEl.textContent = data.error || "ログインに失敗しました";
+        errorEl.textContent = data.error || t("login.error");
         errorEl.classList.remove("hidden");
         return;
       }
@@ -52,7 +54,7 @@ export async function initLoginScreen() {
       hideLoginScreen();
       if (_startDashboard) _startDashboard();
     } catch (err) {
-      errorEl.textContent = "通信エラーが発生しました";
+      errorEl.textContent = t("login.error_network");
       errorEl.classList.remove("hidden");
     }
   });

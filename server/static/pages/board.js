@@ -61,12 +61,12 @@ export function render(container) {
         <div class="board-sidebar-divider"></div>
         <div class="board-sidebar-section board-dm-section-header">
           <span>DMs</span>
-          <select id="boardDmFilter" class="board-dm-filter" title="Animaで絞り込み">
-            <option value="">すべて</option>
+          <select id="boardDmFilter" class="board-dm-filter" title="${t("board.dm_filter_title")}">
+            <option value="">${t("board.dm_filter_all")}</option>
           </select>
         </div>
         <div id="boardDmList">
-          <div class="loading-placeholder">読み込み中...</div>
+          <div class="loading-placeholder">${t("common.loading")}</div>
         </div>
       </div>
 
@@ -84,13 +84,13 @@ export function render(container) {
             <div class="board-header-meta" id="boardHeaderMeta"></div>
           </div>
           <div class="board-messages" id="boardMessages">
-            <div class="board-messages-empty">メッセージはまだありません</div>
+            <div class="board-messages-empty">${t("board.messages_empty")}</div>
           </div>
           <form class="board-input-bar" id="boardInputBar" style="display:none;">
             <textarea
               id="boardInput"
               class="board-input"
-              placeholder="メッセージを入力..."
+              placeholder="${t("board.message_placeholder")}"
               autocomplete="off"
               rows="1"
             ></textarea>

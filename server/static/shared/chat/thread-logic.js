@@ -1,5 +1,6 @@
 // ── Shared Thread Logic ──────────────────────
 // Pure functions for thread CRUD and tab HTML generation.
+import { t } from "../i18n.js";
 
 /**
  * Parse a timestamp string to a numeric value for sorting.
@@ -19,9 +20,9 @@ export function threadTimeValue(ts) {
  * @param {function} [timeStr] - Formatter for timestamp display
  */
 export function defaultThreadLabel(threadId, lastTs, timeStr) {
-  if (threadId === "default") return "メイン";
-  if (!lastTs || !timeStr) return "スレッド";
-  return `スレッド ${timeStr(lastTs)}`;
+  if (threadId === "default") return t("thread.default_label");
+  if (!lastTs || !timeStr) return t("pane.thread_label");
+  return t("thread.label_with_time", { time: timeStr(lastTs) });
 }
 
 /**
@@ -32,7 +33,7 @@ export function defaultThreadLabel(threadId, lastTs, timeStr) {
  */
 export function createThread(threadList, _animaName) {
   const threadId = crypto.randomUUID().slice(0, 8);
-  const newEntry = { id: threadId, label: "新しいスレッド", unread: false };
+  const newEntry = { id: threadId, label: t("thread.new"), unread: false };
   const updatedList = [...threadList, newEntry];
   return { updatedList, newThreadId: threadId, newEntry };
 }
@@ -87,8 +88,8 @@ export function renderThreadTabsHtml(threadList, activeThreadId, opts) {
   const newBtnId = opts.newBtnId || "chatNewThreadBtn";
   const moreSelectId = opts.moreSelectId || "chatThreadMoreSelect";
 
-  const list = threadList.length > 0 ? threadList : [{ id: "default", label: "メイン", unread: false }];
-  const defaultThread = list.find(th => th.id === "default") || { id: "default", label: "メイン", unread: false };
+  const list = threadList.length > 0 ? threadList : [{ id: "default", label: t("thread.default_label"), unread: false }];
+  const defaultThread = list.find(th => th.id === "default") || { id: "default", label: t("thread.default_label"), unread: false };
   const archived = list.filter(th => th.id !== "default" && th.archived);
   const nonDefault = list.filter(th => th.id !== "default" && !th.archived).sort((a, b) => {
     const diff = threadTimeValue(b.lastTs || "") - threadTimeValue(a.lastTs || "");
@@ -119,27 +120,27 @@ export function renderThreadTabsHtml(threadList, activeThreadId, opts) {
     const completeClass = th.unread && th.id !== activeThreadId ? " has-unread-complete" : "";
     const star = th.unread ? ' <span class="tab-star" aria-label="unread">★</span>' : "";
     const closeBtn = th.id !== "default"
-      ? ` <button type="button" class="thread-tab-close" data-thread="${escapeHtml(th.id)}" title="スレッドを閉じる" aria-label="閉じる">&times;</button>`
+      ? ` <button type="button" class="thread-tab-close" data-thread="${escapeHtml(th.id)}" title="${escapeHtml(t("thread.close"))}" aria-label="${escapeHtml(t("thread.close_short"))}">&times;</button>`
       : "";
     html += `<span class="thread-tab-wrap"><button type="button" class="thread-tab${activeClass}${streamClass}${completeClass}" data-thread="${escapeHtml(th.id)}">${escapeHtml(th.label)}${star}</button>${closeBtn}</span>`;
   }
 
   if (hiddenThreads.length > 0) {
     html += `<span class="thread-more-wrap">` +
-      `<label class="thread-more-label">他 ${hiddenThreads.length} 件</label>` +
+      `<label class="thread-more-label">${escapeHtml(t("thread.more_count", { count: hiddenThreads.length }))}</label>` +
       `<select data-chat-id="${moreSelectId}" class="thread-more-select">` +
-      `<option value="">スレッドを選択...</option>` +
+      `<option value="">${escapeHtml(t("thread.select"))}</option>` +
       hiddenThreads.map(th => `<option value="${escapeHtml(th.id)}">${escapeHtml(th.label)}${th.unread ? " ★" : ""}</option>`).join("") +
       `</select></span>`;
   }
 
-  html += `<button type="button" class="thread-tab-new" data-chat-id="${newBtnId}" title="新しいスレッド">＋</button>`;
+  html += `<button type="button" class="thread-tab-new" data-chat-id="${newBtnId}" title="${escapeHtml(t("thread.new"))}">＋</button>`;
 
   if (archived.length > 0) {
     const archiveBtnId = opts.archiveBtnId || "chatArchiveBtn";
     const archiveMenuId = opts.archiveMenuId || "chatArchiveMenu";
     html += `<span class="thread-archive-wrap">` +
-      `<button type="button" class="thread-archive-btn" data-chat-id="${archiveBtnId}" title="アーカイブ (${archived.length})">` +
+      `<button type="button" class="thread-archive-btn" data-chat-id="${archiveBtnId}" title="${escapeHtml(t("thread.archive_count", { count: archived.length }))}">` +
       `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
       `<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>` +
       `</svg>` +
@@ -169,11 +170,11 @@ export function mergeThreadsFromSessions(existingThreads, sessionsData, helpers)
 
   const existing = existingThreads.length > 0
     ? existingThreads
-    : [{ id: "default", label: "メイン", unread: false }];
+    : [{ id: "default", label: t("thread.default_label"), unread: false }];
   const byId = new Map(existing.map(th => [th.id, { ...th }]));
 
   if (!byId.has("default")) {
-    byId.set("default", { id: "default", label: "メイン", unread: false, lastTs: 0 });
+    byId.set("default", { id: "default", label: t("thread.default_label"), unread: false, lastTs: 0 });
   }
 
   for (const th of sessionsData.threads || []) {
@@ -190,7 +191,7 @@ export function mergeThreadsFromSessions(existingThreads, sessionsData, helpers)
     });
   }
 
-  const def = byId.get("default") || { id: "default", label: "メイン", unread: false, lastTs: 0 };
+  const def = byId.get("default") || { id: "default", label: t("thread.default_label"), unread: false, lastTs: 0 };
   byId.delete("default");
   const rest = Array.from(byId.values()).sort((a, b) => {
     const diff = threadTimeValue(b.lastTs || "") - threadTimeValue(a.lastTs || "");

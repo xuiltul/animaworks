@@ -66,7 +66,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
 
   const thinkingIndicator = document.createElement('span');
   thinkingIndicator.className = 'voice-thinking-indicator';
-  thinkingIndicator.textContent = '考え中...';
+  thinkingIndicator.textContent = t("chat.thinking");
   thinkingIndicator.style.display = 'none';
 
   tbStatus.append(recIndicator, ttsIndicator, thinkingIndicator);
@@ -284,7 +284,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
   _bindVoice('responseDone', ({ emotion }) => {
     if (!_voiceStreamingMsg || !_chatCallbacks) return;
     _voiceStreamingMsg.streaming = false;
-    if (!_voiceStreamingMsg.text) _voiceStreamingMsg.text = '(空の応答)';
+    if (!_voiceStreamingMsg.text) _voiceStreamingMsg.text = t("chat.empty_response");
     _chatCallbacks.finalizeStreamingBubble(_voiceStreamingMsg);
     _chatCallbacks.applyEmotion?.(emotion);
     _voiceStreamingMsg = null;

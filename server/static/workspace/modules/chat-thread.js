@@ -4,6 +4,7 @@
 
 import { getState, setState } from "./state.js";
 import { escapeHtml } from "./utils.js";
+import { t } from "../../shared/i18n.js";
 import {
   renderThreadTabsHtml, createThread as sharedCreateThread,
   closeThread as sharedCloseThread,
@@ -33,7 +34,7 @@ export function renderWsThreadTabs() {
   const animaName = getState().conversationAnima;
   if (!container || !animaName) return;
 
-  const list = getState().threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
+  const list = getState().threads[animaName] || [{ id: "default", label: t("thread.default_label"), unread: false }];
   const activeThreadId = getState().activeThreadId || "default";
   const mgr = ChatSessionManager.getInstance();
   const streamCtx = mgr.getStreamingContext(animaName);
@@ -99,7 +100,7 @@ export function createWsNewThread() {
   if (!animaName) return;
 
   const { threads } = getState();
-  const list = threads[animaName] || [{ id: "default", label: "メイン", unread: false }];
+  const list = threads[animaName] || [{ id: "default", label: t("thread.default_label"), unread: false }];
   const { updatedList, newThreadId } = sharedCreateThread(list, animaName);
 
   const nextThreads = { ...threads, [animaName]: updatedList };

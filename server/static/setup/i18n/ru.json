@@ -4,6 +4,7 @@
   "step.language": "Язык",
   "step.environment": "Окружение",
   "step.character": "Персонаж",
+  "step.leader": "Персонаж",
   "step.confirm": "Подтверждение",
   "step.userinfo": "Профиль",
   "btn.next": "Далее",
