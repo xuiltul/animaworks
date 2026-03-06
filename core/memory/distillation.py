@@ -84,8 +84,8 @@ class ProceduralDistiller:
               - ``raw_response``: raw LLM output string
         """
         if not model:
-            from core.config.models import ConsolidationConfig
-            model = ConsolidationConfig().llm_model
+            from core.memory._llm_utils import get_consolidation_llm_kwargs
+            model = get_consolidation_llm_kwargs()["model"]
 
         result = {
             "knowledge_items": [],
@@ -156,8 +156,8 @@ class ProceduralDistiller:
             ``tags``, and ``content``.
         """
         if not model:
-            from core.config.models import ConsolidationConfig
-            model = ConsolidationConfig().llm_model
+            from core.memory._llm_utils import get_consolidation_llm_kwargs
+            model = get_consolidation_llm_kwargs()["model"]
         if not procedural_episodes.strip():
             return []
 
@@ -222,8 +222,8 @@ class ProceduralDistiller:
             ``patterns_detected`` (int).
         """
         if not model:
-            from core.config.models import ConsolidationConfig
-            model = ConsolidationConfig().llm_model
+            from core.memory._llm_utils import get_consolidation_llm_kwargs
+            model = get_consolidation_llm_kwargs()["model"]
 
         # 1. Load activity entries
         entries = self._load_activity_entries(days=days)

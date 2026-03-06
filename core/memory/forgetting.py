@@ -305,8 +305,8 @@ class ForgettingEngine:
         Action: LLM merge -> delete originals -> insert merged chunk
         """
         if not model:
-            from core.config.models import ConsolidationConfig
-            model = ConsolidationConfig().llm_model
+            from core.memory._llm_utils import get_consolidation_llm_kwargs
+            model = get_consolidation_llm_kwargs()["model"]
         logger.info("Starting neurogenesis reorganization for anima=%s", self.anima_name)
         store = self._get_vector_store()
         total_merged = 0

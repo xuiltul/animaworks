@@ -773,8 +773,13 @@ class ConversationMemory:
         """Common LLM helper using litellm for provider-agnostic calls."""
         import litellm
 
-        model = self.model_config.fallback_model or self.model_config.model
-        kwargs: dict[str, Any] = {}
+        # Internal LLM calls (episode summarization, memory management) always
+        # use the consolidation model — it's cheap and doesn't require the
+        # agent's own API key (which may not exist for Mode S/C agents).
+        from core.memory._llm_utils import get_consolidation_llm_kwargs
+        llm_kw = get_consolidation_llm_kwargs()
+        model = llm_kw.pop("model")
+        kwargs: dict[str, Any] = llm_kw
         self._apply_provider_kwargs(model, kwargs)
         response = cast(Any, await litellm.acompletion(
             model=model,
