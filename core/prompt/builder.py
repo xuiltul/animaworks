@@ -995,7 +995,9 @@ def build_system_prompt(
                 logger.debug("Skipped human notification guidance injection", exc_info=True)
 
     # ── Group 6: メタ設定 ─────────────────────────────────────
-    _add(_ss.get("group6_header", "# 6. Meta Settings"), "group6_header", 1)
+    # task trigger uses Minimal tier (identity + task only) → skip entire group
+    if not is_task:
+        _add(_ss.get("group6_header", "# 6. Meta Settings"), "group6_header", 1)
 
     # emotion: skip for background-auto (heartbeat/cron) and task
     if not is_background_auto and not is_task:
