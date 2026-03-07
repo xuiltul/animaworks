@@ -361,11 +361,10 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
     config = load_config()
 
     # Create run directory for sockets and PID files
-    run_dir = Path.home() / ".animaworks" / "run"
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    # Initialize ProcessSupervisor
     from core.paths import get_data_dir
+
+    run_dir = get_data_dir() / "run"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     log_dir = get_data_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)

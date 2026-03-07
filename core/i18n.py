@@ -621,6 +621,54 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ja": "No migration needed — all cron.md files are already in standard format.",
         "en": "No migration needed — all cron.md files are already in standard format.",
     },
+    # ── profile.py ──
+    "cli.profile_no_profiles": {"ja": "プロファイルが登録されていません", "en": "No profiles registered"},
+    "cli.profile_add_hint": {
+        "ja": "'animaworks profile add <name>' で作成してください",
+        "en": "Use 'animaworks profile add <name>' to create one",
+    },
+    "cli.profile_registered": {"ja": "プロファイル '{name}' を登録しました", "en": "Profile '{name}' registered"},
+    "cli.profile_already_exists": {
+        "ja": "Error: プロファイル '{name}' は既に存在します",
+        "en": "Error: Profile '{name}' already exists",
+    },
+    "cli.profile_not_found": {"ja": "Error: プロファイル '{name}' が見つかりません", "en": "Error: Profile '{name}' not found"},
+    "cli.profile_removed": {
+        "ja": "プロファイル '{name}' を削除しました（登録のみ）",
+        "en": "Profile '{name}' removed (registration only)",
+    },
+    "cli.profile_data_preserved": {"ja": "データは保持されています: {path}", "en": "Data preserved at: {path}"},
+    "cli.profile_running": {"ja": "起動中 (pid={pid})", "en": "running (pid={pid})"},
+    "cli.profile_stopped": {"ja": "停止", "en": "stopped"},
+    "cli.profile_stopped_stale": {"ja": "停止 (古いPID)", "en": "stopped (stale pid)"},
+    "cli.profile_already_running": {
+        "ja": "プロファイル '{name}' は既に起動中です (pid={pid})",
+        "en": "Profile '{name}' is already running (pid={pid})",
+    },
+    "cli.profile_started": {"ja": "プロファイル '{name}' を起動しました", "en": "Profile '{name}' started"},
+    "cli.profile_stop_running": {
+        "ja": "プロファイル '{name}' は起動中です。先に停止してください",
+        "en": "Profile '{name}' is running. Stop it first",
+    },
+    "cli.profile_not_running": {"ja": "プロファイル '{name}' は起動していません", "en": "Profile '{name}' is not running"},
+    "cli.profile_stopping": {
+        "ja": "'{name}' を停止中 (pid={pid})...",
+        "en": "Stopping '{name}' (pid={pid})...",
+    },
+    "cli.profile_stopped_ok": {"ja": "プロファイル '{name}' を停止しました", "en": "Profile '{name}' stopped"},
+    "cli.profile_init_hint": {
+        "ja": "データディレクトリが未初期化です。以下で初期化してください:",
+        "en": "Data directory not initialized. Initialize with:",
+    },
+    "cli.profile_help": {
+        "ja": "複数のAnimaWorksインスタンスを管理（マルチテナント）",
+        "en": "Manage multiple AnimaWorks instances (multi-tenant)",
+    },
+    "cli.profile_corrupt_file": {
+        "ja": "警告: プロファイルファイルが破損しているか読み取れません。空のレジストリを使用します。",
+        "en": "Warning: Profiles file is corrupt or unreadable. Using empty registry.",
+    },
+    "cli.profile_starting": {"ja": "{name} を起動中...", "en": "Starting {name}..."},
     "cli.set_outbound_limit_success": {
         "ja": "{name} のアウトバウンド制限を更新しました: {details}",
         "en": "Updated outbound limits for {name}: {details}",
