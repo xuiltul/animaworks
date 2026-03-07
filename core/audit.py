@@ -15,14 +15,32 @@ import asyncio
 import json
 import logging
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 from core.paths import get_animas_dir
 
 logger = logging.getLogger(__name__)
 
 _AUDIT_ENTRY_LIMIT = 10_000
+
+# High-value event types for qualitative extraction (not tool_use)
+_QUALITATIVE_EVENT_TYPES = frozenset(
+    {
+        "heartbeat_end",
+        "heartbeat_reflection",
+        "response_sent",
+        "message_sent",
+        "cron_executed",
+        "task_exec_end",
+        "issue_resolved",
+        "error",
+    }
+)
+_MAX_KEY_ACTIVITIES = 15
+_KEY_ACTIVITY_TRUNCATE = 200
+_TOP_TOOLS_LIMIT = 10
 
 
 # ── Data models ──────────────────────────────────────────────
@@ -50,6 +68,12 @@ class AnimaAuditEntry:
     first_activity: str | None
     last_activity: str | None
 
+    # Qualitative fields for LLM narrative generation
+    key_activities: list[dict[str, str]] = field(default_factory=list)
+    # Each element: {"ts": "HH:MM", "type": "heartbeat_end", "summary": "...(max 200 chars)"}
+    top_tools: list[dict[str, Any]] = field(default_factory=list)
+    # [{"name": "Read", "count": 850}, {"name": "Write", "count": 420}, ...]
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -74,6 +98,54 @@ class OrgAuditReport:
 
 
 # ── Collection logic ─────────────────────────────────────────
+
+
+def _ts_to_hhmm(ts: str) -> str:
+    """Extract HH:MM from ISO timestamp (e.g. 2026-03-07T10:30:00+09:00)."""
+    if not ts:
+        return ""
+    if "T" in ts:
+        time_part = ts.split("T")[1]
+        # Strip timezone (+09:00 or Z)
+        for sep in ("+", "-", "Z"):
+            if sep in time_part:
+                time_part = time_part.split(sep)[0]
+        return time_part[:5] if len(time_part) >= 5 else time_part
+    return ts[:5] if len(ts) >= 5 else ts
+
+
+def _extract_summary_for_entry(e: dict) -> str:
+    """Extract summary text for a high-value activity entry."""
+    etype = e.get("type", "")
+    meta = e.get("meta") or {}
+    content = e.get("content", "") or ""
+    summary = e.get("summary", "") or ""
+
+    if etype == "heartbeat_end":
+        return (summary or content)[:_KEY_ACTIVITY_TRUNCATE]
+    if etype == "heartbeat_reflection":
+        return content[:_KEY_ACTIVITY_TRUNCATE]
+    if etype == "response_sent":
+        meta_copy = dict(meta)
+        meta_copy.pop("thinking_text", None)
+        return content[:_KEY_ACTIVITY_TRUNCATE]
+    if etype == "message_sent":
+        to_person = e.get("to_person", "") or "unknown"
+        full = f"→ {to_person}: {content or summary}"
+        return full[:_KEY_ACTIVITY_TRUNCATE]
+    if etype == "cron_executed":
+        return (content or summary)[:_KEY_ACTIVITY_TRUNCATE]
+    if etype == "task_exec_end":
+        return (summary or content)[:_KEY_ACTIVITY_TRUNCATE]
+    if etype == "issue_resolved":
+        return content[:_KEY_ACTIVITY_TRUNCATE]
+    if etype == "error":
+        base = (summary or content[:100])[:_KEY_ACTIVITY_TRUNCATE]
+        phase = meta.get("phase")
+        if phase:
+            return f"(phase: {phase}) {base}"
+        return base
+    return (summary or content)[:_KEY_ACTIVITY_TRUNCATE]
 
 
 def _load_entries_for_date(log_dir: Path, target_date: str) -> list[dict]:
@@ -161,6 +233,29 @@ def _collect_single_anima(anima_dir: Path, target_date: str) -> AnimaAuditEntry 
     first_activity = raw_entries[0].get("ts") if raw_entries else None
     last_activity = raw_entries[-1].get("ts") if raw_entries else None
 
+    # Extract qualitative data: key_activities and top_tools
+    key_activities: list[dict[str, str]] = []
+    for e in raw_entries:
+        if len(key_activities) >= _MAX_KEY_ACTIVITIES:
+            break
+        etype = e.get("type", "")
+        if etype not in _QUALITATIVE_EVENT_TYPES:
+            continue
+        ts = _ts_to_hhmm(e.get("ts", ""))
+        summary = _extract_summary_for_entry(e)
+        key_activities.append({"ts": ts, "type": etype, "summary": summary})
+
+    tool_counts: Counter[str] = Counter()
+    for e in raw_entries:
+        if e.get("type") != "tool_use":
+            continue
+        tool_name = e.get("tool") or (e.get("meta") or {}).get("tool") or "unknown"
+        tool_counts[tool_name] += 1
+    top_tools = [
+        {"name": name, "count": count}
+        for name, count in tool_counts.most_common(_TOP_TOOLS_LIMIT)
+    ]
+
     return AnimaAuditEntry(
         name=name,
         enabled=enabled,
@@ -179,6 +274,8 @@ def _collect_single_anima(anima_dir: Path, target_date: str) -> AnimaAuditEntry 
         peers_received=peer_recv,
         first_activity=first_activity,
         last_activity=last_activity,
+        key_activities=key_activities,
+        top_tools=top_tools,
     )
 
 
