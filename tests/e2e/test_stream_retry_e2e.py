@@ -147,7 +147,7 @@ class TestStreamRetryFullFlow:
         agent._executor = mock_exec
 
         # Mock priming to avoid real memory search
-        monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=""))
+        monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=("", "")))
 
         # Mock retry config: fast retry, max 2 retries
         monkeypatch.setattr(
@@ -225,7 +225,7 @@ class TestStreamRetryMaxExceeded:
         agent._executor = _make_always_failing_executor()
 
         # Mock priming
-        monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=""))
+        monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=("", "")))
 
         # Mock retry config: max 2 retries, fast delay
         monkeypatch.setattr(
@@ -295,7 +295,7 @@ class TestCheckpointClearedOnSuccess:
         mock_exec = _make_streaming_executor(fail_count=0)
         agent._executor = mock_exec
 
-        monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=""))
+        monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=("", "")))
         monkeypatch.setattr(
             agent,
             "_load_stream_retry_config",
@@ -385,7 +385,7 @@ class TestCheckpointClearedOnSuccess:
 
         agent._executor = _ToolExecutor()
 
-        monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=""))
+        monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=("", "")))
         monkeypatch.setattr(
             agent,
             "_load_stream_retry_config",
