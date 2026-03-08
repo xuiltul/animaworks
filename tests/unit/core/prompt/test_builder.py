@@ -14,23 +14,24 @@ from core.prompt.builder import (
     _build_org_context,
     _discover_other_animas,
     _format_anima_entry,
+    _normalize_headings,
     build_system_prompt,
     inject_shortterm,
 )
 from core.schemas import SkillMeta
 
 _MOCK_SECTIONS = (
-    "[group1_header]: # 1. 動作環境と行動ルール\n"
+    "[group1_header]: 1. 動作環境と行動ルール\n"
     "[current_time_label]: **現在時刻**:\n"
-    "[group2_header]: # 2. あなた自身\n"
-    "[group3_header]: # 3. 現在の状況\n"
+    "[group2_header]: 2. あなた自身\n"
+    "[group3_header]: 3. 現在の状況\n"
     "[current_state_header]: ## 現在の状態\n"
     "[pending_tasks_header]: ## 未完了タスク\n"
     "[procedures_header]: ## Procedures（手順書）\n"
     "[distilled_knowledge_header]: ## Distilled Knowledge\n"
-    "[group4_header]: # 4. 記憶と能力\n"
-    "[group5_header]: # 5. 組織とコミュニケーション\n"
-    "[group6_header]: # 6. メタ設定\n"
+    "[group4_header]: 4. 記憶と能力\n"
+    "[group5_header]: 5. 組織とコミュニケーション\n"
+    "[group6_header]: 6. メタ設定\n"
     "[you_marker]:   ← あなた\n"
     "[common_label]: (共通スキル)\n"
     "[recent_tool_results_header]: ## Recent Tool Results\n"
@@ -679,10 +680,10 @@ class TestHiringContextPlacement:
         result = build_system_prompt(memory)
 
         # behavior_rules is in Group 1 (動作環境と行動ルール)
-        assert "# 1. 動作環境と行動ルール" in result
+        assert '<group_1 title="1. 動作環境と行動ルール">' in result
         assert "## 行動ルール" in result
         # hiring_context is in Group 5 (組織とコミュニケーション)
-        assert "# 5. 組織とコミュニケーション" in result
+        assert '<group_5 title="5. 組織とコミュニケーション">' in result
         assert "チーム構成について" in result
         # behavior_rules section appears before hiring_context
         assert result.index("## 行動ルール") < result.index("チーム構成について")
@@ -753,3 +754,176 @@ class TestInjectShortterm:
         assert "base prompt" in result
         assert "Short-term memory" in result
         assert "---" in result
+
+
+# ── _normalize_headings ──────────────────────────────────
+
+
+class TestNormalizeHeadings:
+    def test_shifts_h1_to_h2(self):
+        content = "# Title\nSome text\n## Subtitle\nMore"
+        result = _normalize_headings(content)
+        assert result.startswith("## Title")
+        assert "## Subtitle" in result
+
+    def test_preserves_h2_and_below(self):
+        content = "## Already H2\n### H3\n#### H4"
+        assert _normalize_headings(content) == content
+
+    def test_no_headings(self):
+        content = "Just text\nMore text"
+        assert _normalize_headings(content) == content
+
+    def test_skips_code_blocks(self):
+        content = "## Intro\n```\n# this is a comment\n```\n# Real H1"
+        result = _normalize_headings(content)
+        assert "# this is a comment" in result
+        assert "## Real H1" in result
+
+    def test_no_space_after_hash_not_heading(self):
+        content = "#hashtag is not a heading"
+        assert _normalize_headings(content) == content
+
+    def test_multiple_h1(self):
+        content = "# First\ntext\n# Second\ntext"
+        result = _normalize_headings(content)
+        lines = result.split("\n")
+        assert lines[0] == "## First"
+        assert lines[2] == "## Second"
+
+
+# ── XML tag assembly ─────────────────────────────────────
+
+
+class TestAssemblyWithTags:
+    def test_prompt_has_group_tags(self, tmp_path, data_dir):
+        """Generated prompt must contain <group_N> tags."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+
+        memory = MagicMock()
+        memory.anima_dir = anima_dir
+        memory.read_company_vision.return_value = ""
+        memory.read_identity.return_value = "I am Alice"
+        memory.read_injection.return_value = ""
+        memory.read_permissions.return_value = ""
+        memory.read_specialty_prompt.return_value = ""
+        memory.read_current_state.return_value = ""
+        memory.read_pending.return_value = ""
+        memory.read_bootstrap.return_value = ""
+        memory.list_knowledge_files.return_value = []
+        memory.list_episode_files.return_value = []
+        memory.list_procedure_files.return_value = []
+        memory.list_skill_metas.return_value = []
+        memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
+        memory.common_skills_dir = data_dir / "common_skills"
+        memory.list_shared_users.return_value = []
+
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
+            result = build_system_prompt(memory)
+            prompt = result.system_prompt
+
+        assert "<group_1" in prompt
+        assert "</group_1>" in prompt
+        assert "<group_2" in prompt
+        assert "</group_2>" in prompt
+
+    def test_prompt_has_section_tags(self, tmp_path, data_dir):
+        """Non-header sections wrapped in <section> tags."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+
+        memory = MagicMock()
+        memory.anima_dir = anima_dir
+        memory.read_company_vision.return_value = ""
+        memory.read_identity.return_value = "I am Alice"
+        memory.read_injection.return_value = ""
+        memory.read_permissions.return_value = ""
+        memory.read_specialty_prompt.return_value = ""
+        memory.read_current_state.return_value = ""
+        memory.read_pending.return_value = ""
+        memory.read_bootstrap.return_value = ""
+        memory.list_knowledge_files.return_value = []
+        memory.list_episode_files.return_value = []
+        memory.list_procedure_files.return_value = []
+        memory.list_skill_metas.return_value = []
+        memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
+        memory.common_skills_dir = data_dir / "common_skills"
+        memory.list_shared_users.return_value = []
+
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
+            result = build_system_prompt(memory)
+            prompt = result.system_prompt
+
+        assert '<section name="identity">' in prompt
+        assert "</section>" in prompt
+
+    def test_no_h1_in_output(self, tmp_path, data_dir):
+        """No H1 headings should appear in the final prompt."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "identity.md").write_text("# Identity H1\nContent", encoding="utf-8")
+
+        memory = MagicMock()
+        memory.anima_dir = anima_dir
+        memory.read_company_vision.return_value = ""
+        memory.read_identity.return_value = "# Identity H1\nContent"
+        memory.read_injection.return_value = "# Injection H1\n## Sub"
+        memory.read_permissions.return_value = ""
+        memory.read_specialty_prompt.return_value = ""
+        memory.read_current_state.return_value = ""
+        memory.read_pending.return_value = ""
+        memory.read_bootstrap.return_value = ""
+        memory.list_knowledge_files.return_value = []
+        memory.list_episode_files.return_value = []
+        memory.list_procedure_files.return_value = []
+        memory.list_skill_metas.return_value = []
+        memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
+        memory.common_skills_dir = data_dir / "common_skills"
+        memory.list_shared_users.return_value = []
+
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
+            result = build_system_prompt(memory)
+            prompt = result.system_prompt
+
+        for line in prompt.split("\n"):
+            stripped = line.lstrip()
+            if stripped.startswith("```"):
+                continue
+            if stripped.startswith("# ") and not stripped.startswith("## "):
+                assert False, f"H1 heading found in output: {line!r}"
+
+    def test_no_triple_dash_separator(self, tmp_path, data_dir):
+        """Sections should not be joined by --- separators."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+
+        memory = MagicMock()
+        memory.anima_dir = anima_dir
+        memory.read_company_vision.return_value = ""
+        memory.read_identity.return_value = "I am Alice"
+        memory.read_injection.return_value = ""
+        memory.read_permissions.return_value = ""
+        memory.read_specialty_prompt.return_value = ""
+        memory.read_current_state.return_value = ""
+        memory.read_pending.return_value = ""
+        memory.read_bootstrap.return_value = ""
+        memory.list_knowledge_files.return_value = []
+        memory.list_episode_files.return_value = []
+        memory.list_procedure_files.return_value = []
+        memory.list_skill_metas.return_value = []
+        memory.list_common_skill_metas.return_value = []
+        memory.collect_distilled_knowledge_separated.return_value = ([], [])
+        memory.common_skills_dir = data_dir / "common_skills"
+        memory.list_shared_users.return_value = []
+
+        with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
+            result = build_system_prompt(memory)
+
+        assert "\n\n---\n\n" not in result.system_prompt

@@ -7,6 +7,7 @@ from __future__ import annotations
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,57 @@ _MCP_MODES = frozenset({"s", "c"})
 def _is_mcp_mode(execution_mode: str) -> bool:
     """Return True for modes using built-in tools + MCP (S and C)."""
     return execution_mode in _MCP_MODES
+
+
+_GROUP_HEADER_RE = re.compile(r"^group(\d+)_header$")
+
+
+def _normalize_headings(content: str) -> str:
+    """Shift H1 headings (``# text``) to H2 (``## text``).
+
+    Preserves headings inside fenced code blocks (````` ``).
+    Only H1 is shifted; H2+ remain unchanged.
+    """
+    lines = content.split("\n")
+    result: list[str] = []
+    in_code_block = False
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+        if not in_code_block and stripped.startswith("# ") and not stripped.startswith("## "):
+            leading = line[: len(line) - len(stripped)]
+            line = leading + "#" + stripped
+        result.append(line)
+    return "\n".join(result)
+
+
+def _assemble_with_tags(allocated: list[SectionEntry]) -> str:
+    """Join allocated sections using XML group/section boundary tags.
+
+    Group-header sections (id matching ``groupN_header``) open/close
+    ``<group_N>`` tags.  All other sections are wrapped in
+    ``<section name="...">`` tags with heading normalization applied.
+    """
+    parts: list[str] = []
+    current_group: str | None = None
+
+    for s in allocated:
+        m = _GROUP_HEADER_RE.match(s.id)
+        if m:
+            if current_group is not None:
+                parts.append(f"</group_{current_group}>")
+            current_group = m.group(1)
+            title = s.content.strip()
+            parts.append(f'<group_{current_group} title="{title}">')
+        else:
+            body = _normalize_headings(s.content)
+            parts.append(f'<section name="{s.id}">\n{body}\n</section>')
+
+    if current_group is not None:
+        parts.append(f"</group_{current_group}>")
+
+    return "\n\n".join(parts)
 
 
 def _parse_kv_template(raw: str) -> dict[str, str]:
@@ -1036,7 +1088,7 @@ def build_system_prompt(
 
     # ── Budget allocation + Final assembly ─────────────────────
     allocated = _allocate_sections(sections, budget)
-    prompt = "\n\n---\n\n".join(s.content for s in allocated)
+    prompt = _assemble_with_tags(allocated)
     logger.debug(
         "System prompt built: %d/%d sections, total_len=%d, budget=%d, tier=%s, cw=%d",
         len(allocated),
