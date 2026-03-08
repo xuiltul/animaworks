@@ -181,6 +181,8 @@ def match_skills_by_description(
         except Exception as e:
             logger.warning("Tier 3 vector search failed: %s", e)
 
+    # Prioritize personal skills over common tools
+    matched.sort(key=lambda s: s.is_common)
     return matched
 
 
@@ -190,9 +192,16 @@ def _match_tier3_vector(
     retriever: object,
     anima_name: str,
     top_k: int = 3,
-    min_score: float = 0.88,
+    min_score: float | None = None,
 ) -> list[SkillMeta]:
     """Tier 3: Use RAG vector search to find semantically matching skills."""
+    if min_score is None:
+        try:
+            from core.config import load_config
+
+            min_score = load_config().rag.min_retrieval_score
+        except Exception:
+            min_score = 0.5  # sensible fallback between 0.3 and 0.88
     from core.memory.rag.retriever import MemoryRetriever
 
     if not isinstance(retriever, MemoryRetriever):
