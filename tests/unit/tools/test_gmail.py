@@ -633,7 +633,7 @@ class TestDispatch:
 class TestExecutionProfile:
     def test_has_all_subcommands(self):
         gmail = _get_gmail()
-        expected = {"unread", "inbox", "sent", "search", "read", "draft"}
+        expected = {"unread", "inbox", "sent", "search", "read", "draft", "send"}
         assert set(gmail.EXECUTION_PROFILE.keys()) == expected
 
     def test_profile_values(self):
