@@ -143,9 +143,9 @@ class ChromaVectorStore(VectorStore):
         try:
             self.client.create_collection(
                 name=name,
-                metadata={"dimension": dimension},
+                metadata={"hnsw:space": "cosine", "dimension": dimension},
             )
-            logger.info("Created collection '%s' (dimension=%d)", name, dimension)
+            logger.info("Created collection '%s' (dimension=%d, space=cosine)", name, dimension)
         except Exception as e:
             # Collection already exists
             logger.debug("Collection '%s' already exists: %s", name, e)
@@ -168,8 +168,10 @@ class ChromaVectorStore(VectorStore):
         if not documents:
             return
 
-        # Get or create collection
-        coll = self.client.get_or_create_collection(name=collection)
+        coll = self.client.get_or_create_collection(
+            name=collection,
+            metadata={"hnsw:space": "cosine"},
+        )
 
         # Prepare batch data
         ids = [doc.id for doc in documents]
@@ -229,7 +231,8 @@ class ChromaVectorStore(VectorStore):
                     metadata=meta_dict,
                 )
                 distances = results["distances"]
-                score = 1.0 - distances[0][i] if distances else 0.0
+                raw = 1.0 - distances[0][i] if distances else 0.0
+                score = max(0.0, min(1.0, raw))
                 search_results.append(SearchResult(document=doc, score=score))
 
         logger.debug(
@@ -262,6 +265,19 @@ class ChromaVectorStore(VectorStore):
             logger.debug("Updated metadata for %d documents in '%s'", len(ids), collection)
         except Exception as e:
             logger.warning("Failed to update metadata in '%s': %s", collection, e)
+
+    def needs_cosine_migration(self) -> list[str]:
+        """Return collection names still using L2 (non-cosine) distance."""
+        l2_collections: list[str] = []
+        for name in self.list_collections():
+            try:
+                coll = self.client.get_collection(name=name)
+                space = (coll.metadata or {}).get("hnsw:space", "l2")
+                if space != "cosine":
+                    l2_collections.append(name)
+            except Exception:
+                pass
+        return l2_collections
 
     @staticmethod
     def _serialize_metadata(

@@ -228,9 +228,23 @@ def index_command(args: argparse.Namespace) -> None:
         # Per-anima vector store
         vector_store = ChromaVectorStore(persist_dir=get_anima_vectordb_dir(anima_name))
 
+        # Check for L2 collections that need cosine migration
+        if not args.full and not args.dry_run:
+            l2_colls = vector_store.needs_cosine_migration()
+            if l2_colls:
+                logger.warning(
+                    "%s: collections using L2 distance detected: %s. "
+                    "Run 'animaworks index --full' to migrate to cosine similarity.",
+                    anima_name,
+                    ", ".join(l2_colls),
+                )
+
         # Full rebuild: delete existing collections for this anima
         if args.full and not args.dry_run:
-            logger.info("Full rebuild: deleting collections for %s", anima_name)
+            logger.info(
+                "Full rebuild: deleting collections for %s (will recreate with cosine similarity)",
+                anima_name,
+            )
             for collection in vector_store.list_collections():
                 vector_store.delete_collection(collection)
 
