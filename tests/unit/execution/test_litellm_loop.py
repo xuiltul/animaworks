@@ -70,6 +70,7 @@ def model_config() -> ModelConfig:
 @pytest.fixture
 def memory(anima_dir: Path) -> MagicMock:
     from core.memory import MemoryManager
+
     m = MagicMock(spec=MemoryManager)
     m.read_permissions.return_value = ""
     m.search_memory_text.return_value = []
@@ -94,6 +95,7 @@ def executor(
     memory: MagicMock,
 ):
     from core.execution.litellm_loop import LiteLLMExecutor
+
     return LiteLLMExecutor(
         model_config=model_config,
         anima_dir=anima_dir,
@@ -130,6 +132,7 @@ class TestBuildBaseTools:
         """use_tool is NOT included in Mode A (LiteLLM) — Mode B only."""
         th = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=["chatwork"])
         from core.execution.litellm_loop import LiteLLMExecutor
+
         ex = LiteLLMExecutor(
             model_config=model_config,
             anima_dir=anima_dir,
@@ -152,7 +155,11 @@ class TestBuildBaseTools:
         names = [t["function"]["name"] for t in tools]
         # Should not have any external tools like chatwork_*, slack_*, etc.
         assert not any(n.startswith("chatwork_") for n in names)
-        assert not any(n.startswith("slack_") for n in names)
+        # slack_channel_post / slack_channel_update are built-in comms tools
+        slack_external = [
+            n for n in names if n.startswith("slack_") and n not in ("slack_channel_post", "slack_channel_update")
+        ]
+        assert not slack_external
 
 
 # ── _build_llm_kwargs ────────────────────────────────────────
@@ -172,6 +179,7 @@ class TestBuildLlmKwargs:
         model_config.api_base_url = "http://localhost:11434/v1"
         th = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
         from core.execution.litellm_loop import LiteLLMExecutor
+
         ex = LiteLLMExecutor(
             model_config=model_config,
             anima_dir=anima_dir,
@@ -268,12 +276,17 @@ class TestExecuteContextTracking:
 
         mock = AsyncMock(side_effect=[resp_threshold, resp_final])
         _install_litellm_mock(mock)
-        with patch("litellm.acompletion", mock), \
-             patch("core.execution.litellm_loop.build_system_prompt", return_value="sys"), \
-             patch("core.execution._session.inject_shortterm", return_value="sys+st"), \
-             patch("core.execution._session.load_prompt", return_value="continue"):
+        with (
+            patch("litellm.acompletion", mock),
+            patch("core.execution.litellm_loop.build_system_prompt", return_value="sys"),
+            patch("core.execution._session.inject_shortterm", return_value="sys+st"),
+            patch("core.execution._session.load_prompt", return_value="continue"),
+        ):
             result = await executor.execute(
-                "test", system_prompt="sys", tracker=tracker, shortterm=shortterm,
+                "test",
+                system_prompt="sys",
+                tracker=tracker,
+                shortterm=shortterm,
             )
         assert "Continued" in result.text or "Partial" in result.text
 
@@ -284,6 +297,7 @@ class TestExecuteContextTracking:
 class TestPartitionToolCalls:
     def test_all_reads_are_parallel(self):
         from core.execution.litellm_loop import _partition_tool_calls
+
         tc1 = make_tool_call("read_file", {"path": "/a"}, "call_1")
         tc2 = make_tool_call("search_memory", {"query": "x"}, "call_2")
         parallel, serial = _partition_tool_calls([tc1, tc2])
@@ -292,6 +306,7 @@ class TestPartitionToolCalls:
 
     def test_writes_to_different_paths_are_parallel(self):
         from core.execution.litellm_loop import _partition_tool_calls
+
         tc1 = make_tool_call("write_file", {"path": "/a"}, "call_1")
         tc2 = make_tool_call("write_file", {"path": "/b"}, "call_2")
         parallel, serial = _partition_tool_calls([tc1, tc2])
@@ -300,6 +315,7 @@ class TestPartitionToolCalls:
 
     def test_writes_to_same_path_serialised(self):
         from core.execution.litellm_loop import _partition_tool_calls
+
         tc1 = make_tool_call("write_file", {"path": "/a"}, "call_1")
         tc2 = make_tool_call("write_file", {"path": "/a"}, "call_2")
         parallel, serial = _partition_tool_calls([tc1, tc2])
@@ -335,6 +351,7 @@ class TestUseTool:
         """use_tool is callable in the loop and returns tool result to LLM."""
         th = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=["chatwork"])
         from core.execution.litellm_loop import LiteLLMExecutor
+
         ex = LiteLLMExecutor(
             model_config=model_config,
             anima_dir=anima_dir,
@@ -348,8 +365,10 @@ class TestUseTool:
 
         mock = AsyncMock(side_effect=[resp_with_tool, resp_final])
         _install_litellm_mock(mock)
-        with patch("litellm.acompletion", mock), \
-             patch.object(th, "handle", return_value='{"status": "ok", "rooms": []}'):
+        with (
+            patch("litellm.acompletion", mock),
+            patch.object(th, "handle", return_value='{"status": "ok", "rooms": []}'),
+        ):
             result = await ex.execute("test", system_prompt="sys")
         assert "Got rooms" in result.text
 
@@ -371,11 +390,14 @@ class TestToolExecutionErrorHandling:
         mock = AsyncMock(side_effect=[resp_with_tool, resp_final])
         _install_litellm_mock(mock)
 
-        with patch("litellm.acompletion", mock), \
-             patch.object(
-                 executor, "_execute_tool_call",
-                 side_effect=RuntimeError("disk failure"),
-             ):
+        with (
+            patch("litellm.acompletion", mock),
+            patch.object(
+                executor,
+                "_execute_tool_call",
+                side_effect=RuntimeError("disk failure"),
+            ),
+        ):
             result = await executor.execute("test", system_prompt="sys")
 
         # LLM should have received an error tool message and produced final text
@@ -419,8 +441,7 @@ class TestToolExecutionErrorHandling:
         mock = AsyncMock(side_effect=[resp_with_tools, resp_final])
         _install_litellm_mock(mock)
 
-        with patch("litellm.acompletion", mock), \
-             patch.object(executor, "_execute_tool_call", side_effect=mock_exec):
+        with patch("litellm.acompletion", mock), patch.object(executor, "_execute_tool_call", side_effect=mock_exec):
             result = await executor.execute("test", system_prompt="sys")
 
         assert "Done after error" in result.text
@@ -465,12 +486,17 @@ class TestSessionChainingExecutionMode:
 
         build_spy = MagicMock(return_value="new-system-prompt")
 
-        with patch("litellm.acompletion", mock), \
-             patch("core.execution.litellm_loop.build_system_prompt", build_spy), \
-             patch("core.execution._session.inject_shortterm", return_value="sys+st"), \
-             patch("core.execution._session.load_prompt", return_value="continue"):
+        with (
+            patch("litellm.acompletion", mock),
+            patch("core.execution.litellm_loop.build_system_prompt", build_spy),
+            patch("core.execution._session.inject_shortterm", return_value="sys+st"),
+            patch("core.execution._session.load_prompt", return_value="continue"),
+        ):
             await executor.execute(
-                "test", system_prompt="sys", tracker=tracker, shortterm=shortterm,
+                "test",
+                system_prompt="sys",
+                tracker=tracker,
+                shortterm=shortterm,
             )
 
         # Verify build_system_prompt was called with execution_mode="a"
@@ -488,10 +514,15 @@ class TestBgPoolTools:
     def test_contains_image_gen_schema_names(self):
         """_BG_POOL_TOOLS includes all image_gen tool schema names."""
         from core.execution.litellm_loop import LiteLLMExecutor
+
         expected_image_tools = {
             "generate_character_assets",
-            "generate_fullbody", "generate_bustup", "generate_chibi",
-            "generate_3d_model", "generate_rigged_model", "generate_animations",
+            "generate_fullbody",
+            "generate_bustup",
+            "generate_chibi",
+            "generate_3d_model",
+            "generate_rigged_model",
+            "generate_animations",
         }
         for tool in expected_image_tools:
             assert tool in LiteLLMExecutor._BG_POOL_TOOLS, f"{tool} missing from _BG_POOL_TOOLS"
@@ -499,12 +530,14 @@ class TestBgPoolTools:
     def test_contains_other_bg_tools(self):
         """_BG_POOL_TOOLS includes local_llm and run_command."""
         from core.execution.litellm_loop import LiteLLMExecutor
+
         assert "local_llm" in LiteLLMExecutor._BG_POOL_TOOLS
         assert "run_command" in LiteLLMExecutor._BG_POOL_TOOLS
 
     def test_does_not_contain_category_names(self):
         """_BG_POOL_TOOLS must NOT contain old category name 'image_generation'."""
         from core.execution.litellm_loop import LiteLLMExecutor
+
         assert "image_generation" not in LiteLLMExecutor._BG_POOL_TOOLS
 
 
@@ -522,7 +555,9 @@ class TestBuildLlmKwargsTimeoutAndNumCtx:
         assert kwargs["timeout"] > 0
 
     def test_num_ctx_for_ollama_model(
-        self, anima_dir: Path, memory: MagicMock,
+        self,
+        anima_dir: Path,
+        memory: MagicMock,
     ):
         """model='ollama/gemma3:27b' → kwargs must contain 'num_ctx'."""
         ollama_config = ModelConfig(
@@ -535,6 +570,7 @@ class TestBuildLlmKwargsTimeoutAndNumCtx:
         )
         th = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
         from core.execution.litellm_loop import LiteLLMExecutor
+
         ex = LiteLLMExecutor(
             model_config=ollama_config,
             anima_dir=anima_dir,
