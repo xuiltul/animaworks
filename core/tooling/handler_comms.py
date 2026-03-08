@@ -342,15 +342,15 @@ class CommsToolsMixin:
             token = get_credential("slack", "notification", env_var="SLACK_BOT_TOKEN")
             client = SlackClient(token=token)
             slack_text = md_to_slack_mrkdwn(text)
-            response = client.post_message(
-                channel_id, slack_text, username=self._anima_name
-            )
+            response = client.post_message(channel_id, slack_text, username=self._anima_name)
             ts = response.get("ts", "") if isinstance(response, dict) else ""
             if not ts and hasattr(response, "data"):
                 ts = response.data.get("ts", "")
             logger.info(
                 "slack_channel_post: channel=%s ts=%s anima=%s",
-                channel_id, ts, self._anima_name,
+                channel_id,
+                ts,
+                self._anima_name,
             )
             return _json.dumps(
                 {"status": "ok", "channel": channel_id, "ts": ts},
@@ -378,7 +378,9 @@ class CommsToolsMixin:
             client.update_message(channel_id, ts, slack_text)
             logger.info(
                 "slack_channel_update: channel=%s ts=%s anima=%s",
-                channel_id, ts, self._anima_name,
+                channel_id,
+                ts,
+                self._anima_name,
             )
             return _json.dumps(
                 {"status": "ok", "channel": channel_id, "ts": ts},
