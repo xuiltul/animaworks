@@ -171,7 +171,11 @@ class ForgettingEngine:
         return False
 
     def _get_vector_store(self):
-        """Get vector store singleton."""
+        """Get vector store singleton.
+
+        Returns:
+            ChromaVectorStore instance, or ``None`` if ChromaDB is unavailable.
+        """
         from core.memory.rag.singleton import get_vector_store
 
         return get_vector_store(self.anima_name)
@@ -212,6 +216,13 @@ class ForgettingEngine:
         total_scanned = 0
         total_marked = 0
         store = self._get_vector_store()
+
+        if store is None:
+            logger.warning(
+                "Skipping synaptic downscaling for anima=%s: RAG/ChromaDB unavailable",
+                self.anima_name,
+            )
+            return {"scanned": 0, "marked_low": 0, "skipped_reason": "rag_unavailable"}
 
         # Scan all relevant collections (including procedures)
         for memory_type in ("knowledge", "episodes", "procedures"):
@@ -323,6 +334,14 @@ class ForgettingEngine:
             model = get_consolidation_llm_kwargs()["model"]
         logger.info("Starting neurogenesis reorganization for anima=%s", self.anima_name)
         store = self._get_vector_store()
+
+        if store is None:
+            logger.warning(
+                "Skipping neurogenesis reorganization for anima=%s: RAG/ChromaDB unavailable",
+                self.anima_name,
+            )
+            return {"merged_count": 0, "merged_pairs": [], "skipped_reason": "rag_unavailable"}
+
         total_merged = 0
         merged_pairs: list[str] = []
 
@@ -608,6 +627,14 @@ class ForgettingEngine:
         logger.info("Starting complete forgetting for anima=%s", self.anima_name)
         now = now_local()
         store = self._get_vector_store()
+
+        if store is None:
+            logger.warning(
+                "Skipping complete forgetting for anima=%s: RAG/ChromaDB unavailable",
+                self.anima_name,
+            )
+            return {"forgotten_chunks": 0, "archived_files": [], "skipped_reason": "rag_unavailable"}
+
         total_forgotten = 0
         archived_files: list[str] = []
 

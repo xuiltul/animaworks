@@ -560,6 +560,9 @@ class ConsolidationEngine:
             from core.memory.rag.singleton import get_vector_store
 
             vector_store = self._rag_store or get_vector_store(self.anima_name)
+            if vector_store is None:
+                logger.debug("RAG vector store unavailable, skipping index update")
+                return
             indexer = MemoryIndexer(vector_store, self.anima_name, self.anima_dir)
 
             for filename in filenames:
@@ -580,6 +583,9 @@ class ConsolidationEngine:
             from core.memory.rag.singleton import get_vector_store
 
             vector_store = self._rag_store or get_vector_store(self.anima_name)
+            if vector_store is None:
+                logger.debug("RAG vector store unavailable, skipping index rebuild")
+                return
             indexer = MemoryIndexer(vector_store, self.anima_name, self.anima_dir)
 
             # Re-index all knowledge files, respecting per-file origin

@@ -23,31 +23,64 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-_vector_stores: dict[str | None, ChromaVectorStore] = {}
+_vector_stores: dict[str | None, ChromaVectorStore | None] = {}
 _embedding_model: SentenceTransformer | None = None
 _embedding_model_name: str | None = None
+_init_failed: bool = False
 
 
-def get_vector_store(anima_name: str | None = None) -> ChromaVectorStore:
+def get_vector_store(anima_name: str | None = None) -> ChromaVectorStore | None:
     """Return process-level singleton ChromaVectorStore per anima.
 
     Args:
         anima_name: Anima name for per-anima DB isolation.
             When ``None``, uses the legacy shared directory.
+
+    Returns:
+        ChromaVectorStore instance, or ``None`` if ChromaDB failed to
+        initialize (e.g., Python 3.14 + pydantic.v1 incompatibility).
     """
+    global _init_failed
+
+    # Fast path: already known to be broken — skip without locking
+    if _init_failed:
+        return None
+
     if anima_name not in _vector_stores:
         with _lock:
+            if _init_failed:
+                return None
             if anima_name not in _vector_stores:
-                from core.memory.rag.store import ChromaVectorStore
+                try:
+                    from core.memory.rag.store import ChromaVectorStore
 
-                if anima_name:
-                    from core.paths import get_anima_vectordb_dir
+                    if anima_name:
+                        from core.paths import get_anima_vectordb_dir
 
-                    persist_dir = get_anima_vectordb_dir(anima_name)
-                else:
-                    persist_dir = None  # ChromaVectorStore defaults to ~/.animaworks/vectordb
-                _vector_stores[anima_name] = ChromaVectorStore(persist_dir=persist_dir)
-    return _vector_stores[anima_name]
+                        persist_dir = get_anima_vectordb_dir(anima_name)
+                    else:
+                        persist_dir = None  # ChromaVectorStore defaults to ~/.animaworks/vectordb
+                    _vector_stores[anima_name] = ChromaVectorStore(persist_dir=persist_dir)
+                except Exception as exc:
+                    _init_failed = True
+                    import sys
+
+                    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+                    logger.warning(
+                        "ChromaDB initialization failed (Python %s). "
+                        "RAG features (semantic search, vector indexing) will be disabled. "
+                        "Other memory features continue to work normally. "
+                        "Error: %s",
+                        py_ver,
+                        exc,
+                    )
+                    if sys.version_info >= (3, 14):
+                        logger.warning(
+                            "This is likely caused by a known pydantic.v1 compatibility issue "
+                            "with Python 3.14+. See: https://github.com/chroma-core/chroma/issues/5996"
+                        )
+                    return None
+    return _vector_stores.get(anima_name)
 
 
 def _get_configured_model_name() -> str:
@@ -135,8 +168,9 @@ def get_embedding_model_name() -> str:
 
 def _reset_for_testing():
     """Reset singletons for test isolation."""
-    global _embedding_model, _embedding_model_name
+    global _embedding_model, _embedding_model_name, _init_failed
     with _lock:
         _vector_stores.clear()
         _embedding_model = None
         _embedding_model_name = None
+        _init_failed = False
