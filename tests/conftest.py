@@ -125,6 +125,7 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """
     from core.config import invalidate_cache
     from core.paths import _prompt_cache
+    from core.tooling.prompt_db import reset_prompt_store
 
     # Create the data directory structure
     d = create_test_data_dir(tmp_path)
@@ -135,6 +136,7 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Invalidate caches to pick up the new data dir
     invalidate_cache()
     _prompt_cache.clear()
+    reset_prompt_store()
 
     yield d
 
@@ -146,6 +148,7 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Cleanup: invalidate caches again to avoid leaking between tests
     invalidate_cache()
     _prompt_cache.clear()
+    reset_prompt_store()
 
 
 def _kill_orphan_runners(data_dir_str: str) -> None:

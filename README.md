@@ -125,7 +125,7 @@ Your command center. Every Anima's status, activity, and memory stats at a glanc
 - **Activity** — Real-time feed of everything happening across the organization
 - **Memory** — Peek into what each Anima remembers — episodes, knowledge, procedures
 - **Settings** — API keys, authentication, system configuration
-- **i18n** — 17 languages supported, full UI localization
+- **i18n** — 17 languages for UI; templates in Japanese + English with automatic fallback
 
 ### 3D Workspace
 
@@ -462,6 +462,33 @@ animaworks/
 </details>
 
 ---
+
+## Template Localization
+
+AnimaWorks templates (system prompts, shared knowledge, skills, role definitions) are organized by locale under `templates/`:
+
+```
+templates/
+├── _shared/         # Language-independent (defaults.json, etc.)
+├── ja/              # Japanese (complete)
+└── en/              # English (complete)
+```
+
+`load_prompt()` resolves templates with a fallback chain: **requested locale → en → ja**. If a file doesn't exist in your locale, it automatically falls back to English, then Japanese.
+
+Set your locale during setup or in `config.json`:
+
+```json
+{ "locale": "en" }
+```
+
+### Adding a New Language
+
+1. Copy `templates/en/` to `templates/{your-locale}/` (e.g. `templates/fr/`)
+2. Translate the Markdown files. Keep all `{variable}` placeholders intact
+3. The fallback chain means you can translate incrementally — untranslated files will fall back to English
+
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Documentation
 

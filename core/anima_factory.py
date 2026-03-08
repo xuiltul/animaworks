@@ -22,13 +22,14 @@ logger = logging.getLogger("animaworks.anima_factory")
 
 
 def _get_anima_templates_dir(locale: str | None = None) -> Path:
-    """Get locale-aware anima_templates directory."""
+    """Get locale-aware anima_templates directory (fallback: locale → en → ja)."""
     from core.paths import _get_locale
 
     loc = locale or _get_locale()
-    d = TEMPLATES_DIR / loc / "anima_templates"
-    if d.exists():
-        return d
+    for fallback in dict.fromkeys([loc, "en", "ja"]):
+        d = TEMPLATES_DIR / fallback / "anima_templates"
+        if d.exists():
+            return d
     return TEMPLATES_DIR / "ja" / "anima_templates"
 
 
@@ -37,23 +38,26 @@ def _get_blank_template_dir(locale: str | None = None) -> Path:
 
 
 def _get_bootstrap_template(locale: str | None = None) -> Path:
+    """Get locale-aware bootstrap template (fallback: locale → en → ja)."""
     from core.paths import _get_locale
 
     loc = locale or _get_locale()
-    p = TEMPLATES_DIR / loc / "bootstrap.md"
-    if p.exists():
-        return p
+    for fallback in dict.fromkeys([loc, "en", "ja"]):
+        p = TEMPLATES_DIR / fallback / "bootstrap.md"
+        if p.exists():
+            return p
     return TEMPLATES_DIR / "ja" / "bootstrap.md"
 
 
 def _get_roles_dir(locale: str | None = None) -> Path:
-    """Get locale-aware roles directory for .md files."""
+    """Get locale-aware roles directory for .md files (fallback: locale → en → ja)."""
     from core.paths import _get_locale
 
     loc = locale or _get_locale()
-    d = TEMPLATES_DIR / loc / "roles"
-    if d.exists():
-        return d
+    for fallback in dict.fromkeys([loc, "en", "ja"]):
+        d = TEMPLATES_DIR / fallback / "roles"
+        if d.exists():
+            return d
     return TEMPLATES_DIR / "ja" / "roles"
 
 

@@ -121,6 +121,73 @@ class TestCopyInfrastructure:
         content = (ck_dst / "00_index.md").read_text(encoding="utf-8")
         assert content == "# Index v1"
 
+    def test_copies_en_locale_templates(self, tmp_path: Path):
+        """_copy_infrastructure uses en templates when locale is en."""
+        from core.init import _copy_infrastructure
+
+        templates = tmp_path / "templates"
+        en_dir = templates / "en"
+        ck_src = en_dir / "common_knowledge"
+        ck_src.mkdir(parents=True)
+        (ck_src / "00_index.md").write_text("# English Index", encoding="utf-8")
+        ja_dir = templates / "ja"
+        ja_ck = ja_dir / "common_knowledge"
+        ja_ck.mkdir(parents=True)
+        (ja_ck / "00_index.md").write_text("# Japanese Index", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+
+        with patch("core.init.TEMPLATES_DIR", templates), patch(
+            "core.paths._get_locale", return_value="en"
+        ):
+            _copy_infrastructure(data_dir)
+
+        content = (data_dir / "common_knowledge" / "00_index.md").read_text(encoding="utf-8")
+        assert content == "# English Index"
+
+    def test_unknown_locale_falls_back_to_en(self, tmp_path: Path):
+        """_copy_infrastructure falls back to en when unknown locale (e.g. fr) is requested."""
+        from core.init import _copy_infrastructure
+
+        templates = tmp_path / "templates"
+        en_dir = templates / "en"
+        ck_src = en_dir / "common_knowledge"
+        ck_src.mkdir(parents=True)
+        (ck_src / "00_index.md").write_text("# English Fallback", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+
+        with patch("core.init.TEMPLATES_DIR", templates), patch(
+            "core.paths._get_locale", return_value="fr"
+        ):
+            _copy_infrastructure(data_dir)
+
+        content = (data_dir / "common_knowledge" / "00_index.md").read_text(encoding="utf-8")
+        assert content == "# English Fallback"
+
+    def test_unknown_locale_falls_back_to_ja_when_no_en(self, tmp_path: Path):
+        """Falls back to ja when neither requested locale nor en exists."""
+        from core.init import _copy_infrastructure
+
+        templates = tmp_path / "templates"
+        ja_dir = templates / "ja"
+        ck_src = ja_dir / "common_knowledge"
+        ck_src.mkdir(parents=True)
+        (ck_src / "00_index.md").write_text("# Japanese Fallback", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+
+        with patch("core.init.TEMPLATES_DIR", templates), patch(
+            "core.paths._get_locale", return_value="fr"
+        ):
+            _copy_infrastructure(data_dir)
+
+        content = (data_dir / "common_knowledge" / "00_index.md").read_text(encoding="utf-8")
+        assert content == "# Japanese Fallback"
+
 
 class TestMergeTemplates:
     """Verify merge_templates copies missing common_knowledge files."""
