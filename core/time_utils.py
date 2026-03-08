@@ -35,6 +35,8 @@ _app_tz: ZoneInfo | None = None
 def configure_timezone(tz_name: str = "") -> None:
     """Set application timezone.
 
+    Must be called once at startup before any concurrent access.
+
     Args:
         tz_name: IANA timezone name (e.g. ``"America/New_York"``).
                  Empty string triggers auto-detection from the system.
@@ -51,7 +53,8 @@ def configure_timezone(tz_name: str = "") -> None:
         try:
             from tzlocal import get_localzone
 
-            _app_tz = get_localzone()
+            detected = get_localzone()
+            _app_tz = ZoneInfo(detected.key)
             logger.info("Auto-detected system timezone: %s", _app_tz.key)
         except Exception:
             logger.warning(
@@ -67,6 +70,7 @@ def get_app_timezone() -> ZoneInfo:
     Falls back to ``Asia/Tokyo`` if ``configure_timezone`` has not been called.
     """
     if _app_tz is None:
+        logger.debug("Timezone not configured; using fallback %s", _FALLBACK_TZ.key)
         return _FALLBACK_TZ
     return _app_tz
 

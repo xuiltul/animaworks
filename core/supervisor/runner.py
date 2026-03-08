@@ -715,6 +715,15 @@ async def main() -> None:
 
     setup_logging(args.anima_name, args.log_dir)
 
+    from core.config import load_config
+    from core.time_utils import configure_timezone
+
+    try:
+        cfg = load_config()
+        configure_timezone(cfg.system.timezone)
+    except Exception:
+        configure_timezone("")
+
     _install_signal_diagnostics(args.anima_name)
 
     runner = AnimaRunner(
