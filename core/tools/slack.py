@@ -164,6 +164,90 @@ def md_to_slack_mrkdwn(text: str) -> str:
     return text
 
 
+def taskboard_md_to_slack(md_text: str) -> str:
+    """Convert task-board.md to Slack-optimised mrkdwn.
+
+    Markdown tables are converted to bullet-list format for readability
+    in Slack.  Sections after "✅ 今週完了" are replaced with a short
+    footer pointing readers to the source file.
+    """
+    lines = md_text.strip().split("\n")
+    out: list[str] = []
+    in_completed = False
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Detect "Completed" section → stop and add footer
+        if "✅ 今週完了" in line or "✅ Completed" in line:
+            in_completed = True
+            i += 1
+            continue
+        if in_completed:
+            i += 1
+            continue
+
+        # Skip table separator rows (|---|---|...)
+        if re.match(r"^\|[-|\s:]+\|$", line.strip()):
+            i += 1
+            continue
+
+        # Skip table header rows (| # | タスク | ...)
+        if re.match(r"^\|\s*#\s*\|", line.strip()) or re.match(r"^\|\s*(タスク|Task)\s*\|", line.strip()):
+            i += 1
+            continue
+        if re.match(r"^\|\s*(KR|#)\s*\|", line.strip()):
+            i += 1
+            continue
+
+        # Convert table data rows to bullet items
+        if line.strip().startswith("|") and line.strip().endswith("|"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            cells = [c for c in cells if c and c != "—"]
+            if cells:
+                tag = cells[0]  # B1, P5, T2, etc.
+                rest = cells[1:]
+                # Format: • TAG: task (owner) detail deadline
+                if len(rest) >= 2:
+                    task = rest[0]
+                    owner = rest[1]
+                    extras = [x for x in rest[2:] if x]
+                    suffix = ""
+                    if extras:
+                        suffix = " | " + " | ".join(extras)
+                    out.append(f"  • {tag}: {task}（{owner}）{suffix}")
+                else:
+                    out.append(f"  • {' | '.join(cells)}")
+            i += 1
+            continue
+
+        # Horizontal rules → thin divider
+        if re.match(r"^-{3,}\s*$", line.strip()):
+            out.append("")
+            i += 1
+            continue
+
+        # Section headers: ## emoji Title → emoji *Title*
+        m = re.match(r"^#{1,3}\s+(.+)$", line)
+        if m:
+            heading = m.group(1)
+            out.append(f"*{heading}*")
+            i += 1
+            continue
+
+        # Bold conversion: **text** → *text*
+        converted = re.sub(r"\*\*(.+?)\*\*", r"*\1*", line)
+        out.append(converted)
+        i += 1
+
+    # Footer
+    out.append("")
+    out.append("✅ _完了タスク・OKR進捗・運用ルールは_ `shared/task-board.md` _を参照_")
+
+    return "\n".join(out)
+
+
 def clean_slack_markup(text: str, cache: dict | None = None) -> str:
     """Convert Slack markup to readable plain text.
 
@@ -391,9 +475,7 @@ class SlackClient:
         response = self._call("chat_postMessage", **kwargs)
         return response
 
-    def add_reaction(
-        self, channel_id: str, emoji: str, ts: str
-    ) -> dict:
+    def add_reaction(self, channel_id: str, emoji: str, ts: str) -> dict:
         """Add an emoji reaction to a message via reactions.add."""
         return self._call(
             "reactions_add",
