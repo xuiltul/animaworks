@@ -37,6 +37,7 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
     "send": {"expected_seconds": 10, "background_eligible": False},
     "search": {"expected_seconds": 30, "background_eligible": False},
     "unreplied": {"expected_seconds": 30, "background_eligible": False},
+    "update": {"expected_seconds": 10, "background_eligible": False},
 }
 
 WebClient: Any = None
@@ -400,6 +401,22 @@ class SlackClient:
             name=emoji,
             timestamp=ts,
         )
+
+    def update_message(
+        self,
+        channel_id: str,
+        ts: str,
+        text: str,
+    ) -> dict:
+        """Update an existing message via chat.update."""
+        kwargs = {"channel": channel_id, "ts": ts, "text": text}
+        response = self._call("chat_update", **kwargs)
+        return response
+
+    def pins_add(self, channel_id: str, ts: str) -> dict:
+        """Pin a message via pins.add."""
+        response = self._call("pins_add", channel=channel_id, timestamp=ts)
+        return response
 
     def users_list(self) -> list[dict]:
         """Get all workspace users."""

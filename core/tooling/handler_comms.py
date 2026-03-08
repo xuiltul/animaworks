@@ -326,6 +326,68 @@ class CommsToolsMixin:
                     exc_info=True,
                 )
 
+    # ── Slack external channel handlers ──────────────────────
+
+    def _handle_slack_channel_post(self, args: dict[str, Any]) -> str:
+        """Post a message to an actual Slack channel via Bot Token API."""
+        channel_id = args.get("channel_id", "")
+        text = args.get("text", "")
+        if not channel_id or not text:
+            return _error_result("InvalidArguments", "channel_id and text are required")
+
+        try:
+            from core.tools._base import get_credential
+            from core.tools.slack import SlackClient, md_to_slack_mrkdwn
+
+            token = get_credential("slack", "notification", env_var="SLACK_BOT_TOKEN")
+            client = SlackClient(token=token)
+            slack_text = md_to_slack_mrkdwn(text)
+            response = client.post_message(
+                channel_id, slack_text, username=self._anima_name
+            )
+            ts = response.get("ts", "") if isinstance(response, dict) else ""
+            if not ts and hasattr(response, "data"):
+                ts = response.data.get("ts", "")
+            logger.info(
+                "slack_channel_post: channel=%s ts=%s anima=%s",
+                channel_id, ts, self._anima_name,
+            )
+            return _json.dumps(
+                {"status": "ok", "channel": channel_id, "ts": ts},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            logger.exception("slack_channel_post failed")
+            return _error_result("SlackError", f"Failed to post: {e}")
+
+    def _handle_slack_channel_update(self, args: dict[str, Any]) -> str:
+        """Update an existing Slack message (silent, no notification)."""
+        channel_id = args.get("channel_id", "")
+        ts = args.get("ts", "")
+        text = args.get("text", "")
+        if not channel_id or not ts or not text:
+            return _error_result("InvalidArguments", "channel_id, ts, and text are required")
+
+        try:
+            from core.tools._base import get_credential
+            from core.tools.slack import SlackClient, md_to_slack_mrkdwn
+
+            token = get_credential("slack", "notification", env_var="SLACK_BOT_TOKEN")
+            client = SlackClient(token=token)
+            slack_text = md_to_slack_mrkdwn(text)
+            client.update_message(channel_id, ts, slack_text)
+            logger.info(
+                "slack_channel_update: channel=%s ts=%s anima=%s",
+                channel_id, ts, self._anima_name,
+            )
+            return _json.dumps(
+                {"status": "ok", "channel": channel_id, "ts": ts},
+                ensure_ascii=False,
+            )
+        except Exception as e:
+            logger.exception("slack_channel_update failed")
+            return _error_result("SlackError", f"Failed to update: {e}")
+
     def _handle_read_channel(self, args: dict[str, Any]) -> str:
         if not self._messenger:
             return "Error: messenger not configured"
