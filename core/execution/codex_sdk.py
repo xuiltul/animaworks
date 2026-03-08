@@ -53,6 +53,12 @@ RESUME_TIMEOUT_SEC = 15.0
 # resume, triggering LimitOverrunError.  Skip resume when close to this limit.
 _RESUME_PROMPT_SIZE_LIMIT = 50_000
 
+# Increase the asyncio.StreamReader buffer limit for Codex subprocess pipes.
+# The default 64 KB (2**16) is too small for large prompts that produce JSONL
+# lines exceeding 64 KB on stdout (e.g., thread resume with full context echo).
+# 16 MB provides ample headroom for realistic prompt sizes.
+_SUBPROCESS_STREAM_LIMIT = 16 * 1024 * 1024  # 16 MB
+
 
 # ── Model name helpers ───────────────────────────────────────
 
@@ -250,6 +256,95 @@ def _wrap_result_message(
     )
 
 
+# ── Stream limit patch ────────────────────────────────────────
+
+
+def _patch_codex_exec_stream_limit(exec_: Any) -> None:
+    """Monkey-patch ``CodexExec.run()`` to raise the StreamReader limit.
+
+    The upstream ``openai-codex-sdk`` uses ``asyncio.create_subprocess_exec``
+    with the default ``limit=2**16`` (64 KB).  When the Codex CLI outputs a
+    single JSONL line larger than 64 KB (common during thread resume with
+    large system prompts), ``readline()`` raises ``LimitOverrunError``.
+
+    This patch wraps the original ``run()`` to inject
+    ``limit=_SUBPROCESS_STREAM_LIMIT`` (16 MB) into the subprocess creation.
+    """
+    from openai_codex_sdk.exec import CodexExecArgs
+    from openai_codex_sdk.errors import CodexExecError
+
+    async def _patched_run(args: CodexExecArgs):  # type: ignore[override]
+        command_args = exec_._build_command_args(args)
+        env = exec_._build_env(args)
+
+        proc = await asyncio.create_subprocess_exec(
+            exec_.executable_path,
+            *command_args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+            limit=_SUBPROCESS_STREAM_LIMIT,
+        )
+
+        if proc.stdin is None or proc.stdout is None:
+            try:
+                proc.kill()
+            finally:
+                raise CodexExecError("Child process missing stdin/stdout")
+
+        async def _read_all(stream):  # type: ignore[no-untyped-def]
+            if stream is None:
+                return b""
+            chunks: list[bytes] = []
+            while True:
+                chunk = await stream.read(4096)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        stderr_task = asyncio.create_task(_read_all(proc.stderr))
+
+        try:
+            proc.stdin.write(args.input.encode("utf-8"))
+            await proc.stdin.drain()
+            proc.stdin.close()
+
+            while True:
+                line = await proc.stdout.readline()
+                if not line:
+                    break
+                yield line.decode("utf-8").rstrip("\n")
+
+            returncode = await proc.wait()
+            stderr_bytes = await stderr_task
+
+            if returncode != 0:
+                raise CodexExecError(
+                    f"Codex Exec exited with code {returncode}: "
+                    f"{stderr_bytes.decode('utf-8', errors='replace')}"
+                )
+        finally:
+            if proc.returncode is None:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                try:
+                    await proc.wait()
+                except Exception:  # noqa: BLE001
+                    pass
+            stderr_task.cancel()
+            await asyncio.gather(stderr_task, return_exceptions=True)
+
+    exec_.run = _patched_run
+    logger.info(
+        "Patched CodexExec.run() with stream limit=%d bytes",
+        _SUBPROCESS_STREAM_LIMIT,
+    )
+
+
 # ── Executor ─────────────────────────────────────────────────
 
 
@@ -393,13 +488,21 @@ class CodexSDKExecutor(BaseExecutor):
         (self._codex_home / "config.toml").write_text(config_toml, encoding="utf-8")
 
     def _create_codex_client(self) -> Any:
-        """Create a ``Codex`` SDK client instance."""
+        """Create a ``Codex`` SDK client instance.
+
+        Patches the underlying ``CodexExec.run()`` to use a larger
+        ``asyncio.StreamReader`` buffer (16 MB instead of the default 64 KB).
+        This prevents ``LimitOverrunError`` when the Codex CLI emits JSONL
+        lines exceeding 64 KB (e.g., during thread resume with large prompts).
+        """
         try:
             from openai_codex_sdk import Codex
         except ModuleNotFoundError as e:
             raise ImportError("openai_codex_sdk is required for Mode C (install openai-codex-sdk).") from e
 
-        return Codex({"env": self._build_env()})
+        client = Codex({"env": self._build_env()})
+        _patch_codex_exec_stream_limit(client._exec)
+        return client
 
     def _start_or_resume_thread(
         self,
