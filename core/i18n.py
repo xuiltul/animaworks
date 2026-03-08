@@ -394,6 +394,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ja": "─── 統計: 全{count}名 | 活動{total}件 | ツール{tools} | HB{hb} | 応答{resp} | DM{dm} | エラー{err} ───",
         "en": "─── Stats: {count} animas | {total} events | Tools {tools} | HB {hb} | Responses {resp} | DM {dm} | Errors {err} ───",
     },
+    "audit.org_timeline_thinned_notice": {
+        "ja": "(HB/Cron {hb_original}件中{hb_kept}件を表示 — 等間隔サンプリング | コマンドCron {cmd_cron}件省略)",
+        "en": "(Showing {hb_kept} of {hb_original} HB/Cron — evenly sampled | {cmd_cron} command crons omitted)",
+    },
     "handler.tool_creation_keyword": {"ja": "ツール作成", "en": "Tool Creation"},
     # ── anima.py ──
     "anima.bg_task_done": {"ja": "バックグラウンドタスク完了: {tool}", "en": "Background task completed: {tool}"},

@@ -245,18 +245,27 @@ async def _try_agent_sdk(
         system_prompt=system_prompt or "",
         allowed_tools=[],
         max_turns=1,
-        max_tokens=max_tokens,
     )
 
     chunks: list[str] = []
     try:
-        async with ClaudeSDKClient(options=options, env=env) as client:
-            await client.query(prompt)
-            async for message in client.receive_response():
-                if hasattr(message, "content"):
-                    for block in message.content:
-                        if hasattr(block, "text"):
-                            chunks.append(block.text)
+        sdk_kwargs: dict[str, Any] = {"options": options}
+        try:
+            async with ClaudeSDKClient(**sdk_kwargs, env=env) as client:
+                await client.query(prompt)
+                async for message in client.receive_response():
+                    if hasattr(message, "content"):
+                        for block in message.content:
+                            if hasattr(block, "text"):
+                                chunks.append(block.text)
+        except TypeError:
+            async with ClaudeSDKClient(**sdk_kwargs) as client:
+                await client.query(prompt)
+                async for message in client.receive_response():
+                    if hasattr(message, "content"):
+                        for block in message.content:
+                            if hasattr(block, "text"):
+                                chunks.append(block.text)
     except Exception as e:
         logger.warning("Agent SDK one-shot failed: %s", e)
         return None
@@ -302,7 +311,7 @@ async def one_shot_completion(
         if result:
             return result
     except Exception as e:
-        logger.debug("LiteLLM one-shot failed (%s), trying Agent SDK fallback", e)
+        logger.warning("LiteLLM one-shot failed (%s), trying Agent SDK fallback", e)
 
     # 2. Try Agent SDK (Anthropic models only)
     if _is_anthropic_model(resolved_model):

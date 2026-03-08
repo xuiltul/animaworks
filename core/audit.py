@@ -44,6 +44,10 @@ _KEY_ACTIVITY_TRUNCATE = 200
 _TOP_TOOLS_LIMIT = 10
 _TIMELINE_CONTENT_TRUNCATE = 300
 
+_THINNABLE_EVENT_TYPES = frozenset({"heartbeat_end", "heartbeat_reflection"})
+_PROTECTED_EVENT_TYPES = _QUALITATIVE_EVENT_TYPES - _THINNABLE_EVENT_TYPES - {"cron_executed"}
+_COMMAND_CRON_PREFIX = "コマンド:"
+
 _TIMELINE_ICONS: dict[str, str] = {
     "heartbeat_end": "🔄",
     "heartbeat_reflection": "🪞",
@@ -380,10 +384,82 @@ def _extract_timeline_content(e: dict) -> str:
     return (summary or content)[:_TIMELINE_CONTENT_TRUNCATE]
 
 
-def generate_org_timeline(target_date: str) -> str:
+def _is_command_cron(e: dict) -> bool:
+    """True if the event is a command-type cron (no narrative value)."""
+    if e.get("type") != "cron_executed":
+        return False
+    content = (e.get("content", "") or "").strip()
+    summary = (e.get("summary", "") or "").strip()
+    return content.startswith(_COMMAND_CRON_PREFIX) or summary.startswith(_COMMAND_CRON_PREFIX)
+
+
+def _render_event_lines(name: str, e: dict) -> list[str]:
+    """Render a single timeline event to lines (without trailing blank)."""
+    ts = _ts_to_hhmm(e.get("ts", ""))
+    etype = e.get("type", "")
+    icon = _TIMELINE_ICONS.get(etype, "📝")
+    label = _get_timeline_label(etype)
+    content = _extract_timeline_content(e)
+    out = [f"[{ts}] {name} {icon} {label}"]
+    if content:
+        for cl in content.split("\n")[:3]:
+            out.append(f"  {cl}")
+    return out
+
+
+def _estimate_rendered_size(items: list[tuple[str, dict]]) -> int:
+    """Estimate total character count for rendered timeline events."""
+    total = 0
+    for name, e in items:
+        for line in _render_event_lines(name, e):
+            total += len(line) + 1  # +1 for newline
+        total += 1  # blank separator
+    return total
+
+
+def _thin_to_budget(
+    protected: list[tuple[str, dict]],
+    thinnable: list[tuple[str, dict]],
+    remaining_budget: int,
+) -> tuple[list[tuple[str, dict]], int]:
+    """Select evenly-spaced thinnable events to fit within remaining_budget.
+
+    Returns (kept_events, original_count).
+    """
+    original_count = len(thinnable)
+    if not thinnable or remaining_budget <= 0:
+        return [], original_count
+
+    total_thin_size = _estimate_rendered_size(thinnable)
+    if total_thin_size <= remaining_budget:
+        return thinnable, original_count
+
+    avg_size = total_thin_size / len(thinnable)
+    keep_count = max(1, int(remaining_budget / avg_size))
+    if keep_count >= len(thinnable):
+        return thinnable, original_count
+
+    if keep_count == 1:
+        indices = [0]
+    else:
+        step = (len(thinnable) - 1) / (keep_count - 1)
+        indices = [round(i * step) for i in range(keep_count)]
+    kept = [thinnable[i] for i in indices]
+    return kept, original_count
+
+
+def generate_org_timeline(target_date: str, *, max_chars: int | None = None) -> str:
     """Generate a unified cross-anima timeline for a specific date.
 
-    Returns plain text suitable for direct LLM consumption or CLI display.
+    Args:
+        target_date: Date string in YYYY-MM-DD format.
+        max_chars: Character budget for LLM consumption.  ``None`` (default)
+            returns the full timeline for CLI display.  When set, command-type
+            cron events are removed and heartbeat/reflection events are
+            evenly thinned to fit within the budget.
+
+    Returns:
+        Plain text suitable for direct LLM consumption or CLI display.
     """
     animas_dir = get_animas_dir()
     if not animas_dir.exists():
@@ -391,10 +467,12 @@ def generate_org_timeline(target_date: str) -> str:
 
     anima_dirs = sorted([d for d in animas_dir.iterdir() if d.is_dir() and (d / "status.json").exists()])
 
-    tagged: list[tuple[str, dict]] = []
+    protected: list[tuple[str, dict]] = []
+    thinnable: list[tuple[str, dict]] = []
     per_anima_tool_counts: dict[str, Counter[str]] = {}
     per_anima_total_tools: Counter[str] = Counter()
     global_type_counts: Counter[str] = Counter()
+    command_cron_count = 0
 
     for anima_dir in anima_dirs:
         name = anima_dir.name
@@ -409,9 +487,16 @@ def generate_org_timeline(target_date: str) -> str:
                 per_anima_tool_counts[name][tool_name] += 1
                 per_anima_total_tools[name] += 1
             elif etype in _QUALITATIVE_EVENT_TYPES:
-                tagged.append((name, e))
+                if max_chars is not None and _is_command_cron(e):
+                    command_cron_count += 1
+                    continue
+                if max_chars is not None and (etype in _THINNABLE_EVENT_TYPES or etype == "cron_executed"):
+                    thinnable.append((name, e))
+                else:
+                    protected.append((name, e))
 
-    tagged.sort(key=lambda x: x[1].get("ts", ""))
+    all_tagged = protected + thinnable
+    all_tagged.sort(key=lambda x: x[1].get("ts", ""))
 
     active_names = [d.name for d in anima_dirs]
     lines: list[str] = [
@@ -419,20 +504,27 @@ def generate_org_timeline(target_date: str) -> str:
         "",
     ]
 
-    if not tagged and not any(per_anima_total_tools.values()):
+    if not all_tagged and not any(per_anima_total_tools.values()):
         lines.append(t("audit.org_timeline_no_activity"))
         return "\n".join(lines)
 
-    for name, e in tagged:
-        ts = _ts_to_hhmm(e.get("ts", ""))
-        etype = e.get("type", "")
-        icon = _TIMELINE_ICONS.get(etype, "📝")
-        label = _get_timeline_label(etype)
-        content = _extract_timeline_content(e)
-        lines.append(f"[{ts}] {name} {icon} {label}")
-        if content:
-            for cl in content.split("\n")[:3]:
-                lines.append(f"  {cl}")
+    # Budget-aware thinning when max_chars is set
+    thinned_original = 0
+    thinned_kept = 0
+    if max_chars is not None and thinnable:
+        overhead = 500  # header + footer + tool summary
+        protected_size = _estimate_rendered_size(protected)
+        remaining = max_chars - protected_size - overhead
+        kept, thinned_original = _thin_to_budget(protected, thinnable, remaining)
+        thinned_kept = len(kept)
+        display_items = protected + kept
+        display_items.sort(key=lambda x: x[1].get("ts", ""))
+    else:
+        display_items = all_tagged
+
+    for name, e in display_items:
+        for line in _render_event_lines(name, e):
+            lines.append(line)
         lines.append("")
 
     has_tools = any(c for c in per_anima_tool_counts.values() if c)
@@ -447,6 +539,16 @@ def generate_org_timeline(target_date: str) -> str:
             parts = [f"{tn}: {cnt}" for tn, cnt in top]
             lines.append("  " + t("audit.org_timeline_tool_line", name=name, total=total) + " | ".join(parts))
         lines.append("")
+
+    if max_chars is not None and (thinned_original > thinned_kept or command_cron_count > 0):
+        lines.append(
+            t(
+                "audit.org_timeline_thinned_notice",
+                hb_original=thinned_original,
+                hb_kept=thinned_kept,
+                cmd_cron=command_cron_count,
+            )
+        )
 
     total = sum(global_type_counts.values())
     tool_total = sum(per_anima_total_tools.values())

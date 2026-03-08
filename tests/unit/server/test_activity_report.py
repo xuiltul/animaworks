@@ -119,6 +119,7 @@ class TestGenerateEndpoint:
             patch("server.routes.activity_report._read_cache", return_value=None),
             patch("server.routes.activity_report._write_cache"),
             patch("core.audit.collect_org_audit", new_callable=AsyncMock, return_value=report),
+            patch("core.audit.generate_org_timeline", return_value="[09:00] alice HB\n  checking"),
             patch(
                 "server.routes.activity_report._generate_narrative",
                 new_callable=AsyncMock,
@@ -168,6 +169,7 @@ class TestGenerateEndpoint:
             patch("server.routes.activity_report._read_cache") as mock_cache,
             patch("server.routes.activity_report._write_cache"),
             patch("core.audit.collect_org_audit", new_callable=AsyncMock, return_value=report),
+            patch("core.audit.generate_org_timeline", return_value=""),
             patch("server.routes.activity_report._generate_narrative", new_callable=AsyncMock, return_value=None),
             patch("server.routes.activity_report.now_jst") as mock_now,
         ):
@@ -190,6 +192,7 @@ class TestGenerateEndpoint:
             patch("server.routes.activity_report._read_cache", return_value=None),
             patch("server.routes.activity_report._write_cache"),
             patch("core.audit.collect_org_audit", new_callable=AsyncMock, return_value=empty_report),
+            patch("core.audit.generate_org_timeline", return_value=""),
             patch("server.routes.activity_report.now_jst") as mock_now,
         ):
             jst = timezone(timedelta(hours=9))
