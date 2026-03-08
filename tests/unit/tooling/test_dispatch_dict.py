@@ -6,6 +6,7 @@ Verifies:
 3. Unknown tools fall through to external dispatch
 4. _ACTIVITY_TYPE_MAP covers the expected tools
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +15,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from core.tooling.handler import ToolHandler
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -44,54 +44,58 @@ def handler(anima_dir: Path) -> ToolHandler:
 
 
 # All built-in tool names that must be in the dispatch dict
-EXPECTED_BUILTIN_TOOLS = frozenset({
-    "use_tool",
-    "search_memory",
-    "read_memory_file",
-    "write_memory_file",
-    "archive_memory_file",
-    "send_message",
-    "post_channel",
-    "read_channel",
-    "read_dm_history",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "execute_command",
-    "web_fetch",
-    "search_code",
-    "list_directory",
-    "call_human",
-    "create_anima",
-    "disable_subordinate",
-    "enable_subordinate",
-    "set_subordinate_model",
-    "set_subordinate_background_model",
-    "restart_subordinate",
-    "org_dashboard",
-    "ping_subordinate",
-    "read_subordinate_state",
-    "check_permissions",
-    "delegate_task",
-    "task_tracker",
-    "refresh_tools",
-    "share_tool",
-    "report_procedure_outcome",
-    "report_knowledge_outcome",
-    "add_task",
-    "update_task",
-    "list_tasks",
-    "skill",
-    "create_skill",
-    "plan_tasks",
-    "manage_channel",
-    "audit_subordinate",
-    "check_background_task",
-    "list_background_tasks",
-    "vault_get",
-    "vault_store",
-    "vault_list",
-})
+EXPECTED_BUILTIN_TOOLS = frozenset(
+    {
+        "use_tool",
+        "search_memory",
+        "read_memory_file",
+        "write_memory_file",
+        "archive_memory_file",
+        "send_message",
+        "post_channel",
+        "read_channel",
+        "read_dm_history",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "execute_command",
+        "web_fetch",
+        "search_code",
+        "list_directory",
+        "call_human",
+        "create_anima",
+        "disable_subordinate",
+        "enable_subordinate",
+        "set_subordinate_model",
+        "set_subordinate_background_model",
+        "restart_subordinate",
+        "org_dashboard",
+        "ping_subordinate",
+        "read_subordinate_state",
+        "check_permissions",
+        "delegate_task",
+        "task_tracker",
+        "refresh_tools",
+        "share_tool",
+        "report_procedure_outcome",
+        "report_knowledge_outcome",
+        "add_task",
+        "update_task",
+        "list_tasks",
+        "skill",
+        "create_skill",
+        "plan_tasks",
+        "manage_channel",
+        "audit_subordinate",
+        "check_background_task",
+        "list_background_tasks",
+        "vault_get",
+        "vault_store",
+        "vault_list",
+        "slack_channel_post",
+        "slack_channel_update",
+    }
+)
 
 
 class TestDispatchDictCompleteness:
@@ -111,7 +115,7 @@ class TestDispatchDictCompleteness:
 
     def test_dispatch_count(self, handler: ToolHandler):
         """Dispatch dict should have exactly 46 entries."""
-        assert len(handler._dispatch) == 46
+        assert len(handler._dispatch) == 48
 
     def test_all_dispatch_values_are_callable(self, handler: ToolHandler):
         """Every value in the dispatch dict must be callable."""
@@ -146,7 +150,8 @@ class TestDispatchRouting:
         assert result == "external result"
 
     def test_unknown_tool_returns_unknown_when_external_returns_none(
-        self, handler: ToolHandler,
+        self,
+        handler: ToolHandler,
     ):
         """When external dispatch returns None, should return 'Unknown tool'."""
         handler._external = MagicMock()
@@ -189,7 +194,14 @@ class TestActivityTypeMap:
 
     def test_expected_entries(self):
         """_ACTIVITY_TYPE_MAP should contain the 4 special-case tools."""
-        expected = {"post_channel", "read_channel", "read_dm_history", "call_human"}
+        expected = {
+            "post_channel",
+            "read_channel",
+            "read_dm_history",
+            "call_human",
+            "slack_channel_post",
+            "slack_channel_update",
+        }
         assert set(ToolHandler._ACTIVITY_TYPE_MAP.keys()) == expected
 
     def test_post_channel_maps_to_channel_post(self):
