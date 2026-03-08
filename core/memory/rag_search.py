@@ -193,12 +193,12 @@ class RAGMemorySearch:
         Skips re-indexing when the directory hash matches the stored value.
         """
         cs_dir = self._common_skills_dir
-        if not cs_dir.is_dir() or not any(cs_dir.glob("*/SKILL.md")):
+        if not cs_dir.is_dir() or not any(cs_dir.rglob("SKILL.md")):
             logger.debug("No common_skills files found, skipping shared skills indexing")
             return
 
         meta_path = self._anima_dir / "index_meta.json"
-        current_hash = _compute_dir_hash(cs_dir, "*.md")
+        current_hash = _compute_dir_hash(cs_dir, "SKILL.md")
         stored_hash = _read_shared_hash(meta_path, "shared_common_skills_hash")
         if current_hash == stored_hash:
             logger.debug("common_skills unchanged (hash match), skipping")

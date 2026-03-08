@@ -138,8 +138,8 @@ def _index_shared_collections(
     shared_dirs: list[tuple[str, Path, str, str]] = []
     if ck_dir.is_dir() and any(ck_dir.rglob("*.md")):
         shared_dirs.append(("common_knowledge", ck_dir, "*.md", "shared_common_knowledge_hash"))
-    if cs_dir.is_dir() and (any(cs_dir.glob("*/SKILL.md")) or any(cs_dir.rglob("*.md"))):
-        shared_dirs.append(("common_skills", cs_dir, "*.md", "shared_common_skills_hash"))
+    if cs_dir.is_dir() and any(cs_dir.rglob("SKILL.md")):
+        shared_dirs.append(("common_skills", cs_dir, "SKILL.md", "shared_common_skills_hash"))
 
     if not shared_dirs:
         logger.info("No shared knowledge/skills files found, skipping")
@@ -267,11 +267,10 @@ def index_command(args: argparse.Namespace) -> None:
             logger.info("Indexing %s...", memory_type)
 
             if args.dry_run:
-                # Just count files
                 if memory_type in ("skills", "common_skills"):
-                    md_files = list(memory_dir.glob("*/SKILL.md"))
+                    md_files = list(memory_dir.rglob("SKILL.md"))
                 else:
-                    md_files = list(memory_dir.glob("*.md"))
+                    md_files = list(memory_dir.rglob("*.md"))
                 logger.info("  Would index %d files in %s/", len(md_files), memory_type)
                 continue
 

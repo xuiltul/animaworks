@@ -145,7 +145,7 @@ class ContradictionDetector:
         if target_file is not None:
             files = [target_file] if target_file.exists() else []
         else:
-            files = sorted(self.knowledge_dir.glob("*.md"))
+            files = sorted(self.knowledge_dir.rglob("*.md"))
 
         if len(files) == 0:
             return []
@@ -160,7 +160,7 @@ class ContradictionDetector:
         if target_file is not None:
             # Compare target against all other knowledge files
             other_files = [
-                f for f in sorted(self.knowledge_dir.glob("*.md")) if f != target_file and f not in file_contents
+                f for f in sorted(self.knowledge_dir.rglob("*.md")) if f != target_file and f not in file_contents
             ]
             for f in other_files:
                 content = mm.read_knowledge_content(f)
@@ -228,8 +228,8 @@ class ContradictionDetector:
                 if not source_file:
                     continue
 
-                # Resolve to a Path
-                match_path = self.knowledge_dir / Path(source_file).name
+                # Resolve to a Path (supports subdirectory source_file values)
+                match_path = self.anima_dir / source_file
                 if not match_path.exists() or match_path == query_path:
                     continue
 

@@ -137,8 +137,7 @@ class FileWatcher:
 
         for watch_dir in watch_dirs:
             if watch_dir.is_dir():
-                is_skills_dir = watch_dir.name == "skills"
-                self.observer.schedule(handler, str(watch_dir), recursive=is_skills_dir)
+                self.observer.schedule(handler, str(watch_dir), recursive=True)
                 logger.debug("Watching directory: %s", watch_dir)
 
         # Start observer

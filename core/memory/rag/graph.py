@@ -118,16 +118,18 @@ class KnowledgeGraph:
             self.graph = graph
             return graph
 
-        # Add nodes from each source directory
+        # Add nodes from each source directory (recursive)
         for memory_type, src_dir in sources.items():
-            md_files = sorted(src_dir.glob("*.md"))
+            md_files = sorted(src_dir.rglob("*.md"))
             for md_file in md_files:
-                node_id = self._make_node_id(md_file.stem, memory_type)
+                rel_key = str(md_file.relative_to(src_dir).with_suffix(""))
+                node_id = self._make_node_id(rel_key, memory_type)
                 graph.add_node(
                     node_id,
                     path=str(md_file),
                     memory_type=memory_type,
                     stem=md_file.stem,
+                    rel_key=rel_key,
                 )
 
         if graph.number_of_nodes() == 0:
@@ -175,15 +177,18 @@ class KnowledgeGraph:
         return graph
 
     @staticmethod
-    def _make_node_id(stem: str, memory_type: str) -> str:
-        """Create a unique node ID combining memory type and filename stem.
+    def _make_node_id(rel_key: str, memory_type: str) -> str:
+        """Create a unique node ID combining memory type and relative path key.
 
-        Knowledge nodes use bare stem for backward compatibility;
+        ``rel_key`` is the relative path from the source directory with the
+        ``.md`` suffix removed (e.g. ``"structure"`` or ``"organization/structure"``).
+
+        Knowledge nodes use bare rel_key for backward compatibility;
         other types are prefixed (e.g. ``episodes:2026-03-01``).
         """
         if memory_type == "knowledge":
-            return stem
-        return f"{memory_type}:{stem}"
+            return rel_key
+        return f"{memory_type}:{rel_key}"
 
     @staticmethod
     def _resolve_link_target(graph: nx.DiGraph, target_stem: str) -> str | None:
@@ -284,21 +289,23 @@ class KnowledgeGraph:
     ) -> str | None:
         """Map a vector-store doc_id back to a graph node.
 
-        doc_id format: ``{anima}/{memory_type}/{filename}#{chunk_index}``
+        doc_id format: ``{prefix}/{memory_type}/{rel_path}.md#{chunk_index}``
+        where ``rel_path`` may include subdirectories.
         """
         parts = doc_id.split("/")
         if len(parts) < 3:
             return None
         memory_type = parts[1]
-        filename_with_chunk = parts[2]
-        stem = Path(filename_with_chunk.split("#")[0]).stem
+        tail = "/".join(parts[2:])
+        rel_path_md = tail.split("#")[0]
+        rel_key = str(Path(rel_path_md).with_suffix(""))
 
-        # Try the canonical node id
-        candidate = stem if memory_type == "knowledge" else f"{memory_type}:{stem}"
+        candidate = KnowledgeGraph._make_node_id(rel_key, memory_type)
         if candidate in graph:
             return candidate
 
-        # Fallback: search by stem
+        # Fallback: match by stem for flat files
+        stem = Path(rel_path_md).stem
         for nid, attrs in graph.nodes(data=True):
             if attrs.get("stem") == stem and attrs.get("memory_type") == memory_type:
                 return nid
@@ -437,10 +444,26 @@ class KnowledgeGraph:
 
         changed_node_ids: set[str] = set()
         file_types: dict[Path, str] = {}
+        file_rel_keys: dict[Path, str] = {}
         for f in changed_files:
             mt = _resolve_type(f)
             file_types[f] = mt
-            nid = self._make_node_id(f.stem, mt)
+            # Compute rel_key: try existing node attrs first, then anima_dir inference
+            rel_key = f.stem
+            f_str = str(f)
+            for _nid, attrs in self.graph.nodes(data=True):
+                if attrs.get("path") == f_str:
+                    rel_key = attrs.get("rel_key", f.stem)
+                    break
+            else:
+                if anima_dir is not None:
+                    mt_dir = anima_dir / mt
+                    try:
+                        rel_key = str(f.relative_to(mt_dir).with_suffix(""))
+                    except ValueError:
+                        rel_key = f.stem
+            file_rel_keys[f] = rel_key
+            nid = self._make_node_id(rel_key, mt)
             changed_node_ids.add(nid)
 
         logger.info(
@@ -459,12 +482,14 @@ class KnowledgeGraph:
         for file_path in changed_files:
             if file_path.exists():
                 mt = file_types[file_path]
-                nid = self._make_node_id(file_path.stem, mt)
+                rel_key = file_rel_keys[file_path]
+                nid = self._make_node_id(rel_key, mt)
                 self.graph.add_node(
                     nid,
                     path=str(file_path),
                     memory_type=mt,
                     stem=file_path.stem,
+                    rel_key=rel_key,
                 )
                 logger.debug("Re-added node: %s", nid)
 
@@ -474,7 +499,7 @@ class KnowledgeGraph:
                 continue
 
             mt = file_types[file_path]
-            source_id = self._make_node_id(file_path.stem, mt)
+            source_id = self._make_node_id(file_rel_keys[file_path], mt)
             try:
                 content = file_path.read_text(encoding="utf-8")
                 explicit_links = self._extract_markdown_links(content)
@@ -531,7 +556,7 @@ class KnowledgeGraph:
 
             mt = file_types[file_path]
             collection_name = f"{anima_name}_{mt}"
-            node_id = self._make_node_id(file_path.stem, mt)
+            node_id = self._make_node_id(file_rel_keys[file_path], mt)
             try:
                 content = file_path.read_text(encoding="utf-8")
                 embedding = self.indexer._generate_embeddings([content])[0]
@@ -710,13 +735,15 @@ class KnowledgeGraph:
 
             content = self._fetch_node_content(node_id, node_path, memory_type)
 
+            rel_key = attrs.get("rel_key", stem)
+            rel_md = f"{rel_key}.md"
             expanded_results.append(
                 RetrievalResult(
-                    doc_id=f"{self.indexer.anima_name}/{memory_type}/{stem}.md#0",
+                    doc_id=f"{self.indexer.anima_name}/{memory_type}/{rel_md}#0",
                     content=content,
                     score=score * 0.5,
                     metadata={
-                        "source_file": f"{memory_type}/{stem}.md",
+                        "source_file": f"{memory_type}/{rel_md}",
                         "memory_type": memory_type,
                         "activation": "spreading",
                         "pagerank_score": score,
@@ -764,8 +791,11 @@ class KnowledgeGraph:
             collection_name = f"{self.indexer.anima_name}_{memory_type}"
             stem = node_path.stem if node_path.stem else (node_id.split(":", 1)[-1] if ":" in node_id else node_id)
 
-            # 1st attempt: filter by source_file metadata
-            source_file_value = f"{memory_type}/{stem}.md"
+            # 1st attempt: filter by source_file metadata (supports subdirectories)
+            try:
+                source_file_value = str(node_path.relative_to(self.indexer.anima_dir))
+            except ValueError:
+                source_file_value = f"{memory_type}/{stem}.md"
             query_text = stem.replace("-", " ").replace("_", " ")
             embedding = self.indexer._generate_embeddings([f"{memory_type} {query_text}"])[0]
             results = self.vector_store.query(

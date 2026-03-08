@@ -272,11 +272,11 @@ class MemoryIndexer:
             return 0
 
         if memory_type in ("skills", "common_skills"):
-            pattern = "*/SKILL.md"
+            md_files = sorted(directory.rglob("SKILL.md"))
         else:
-            pattern = "*.md"
+            md_files = sorted(directory.rglob("*.md"))
         total_chunks = 0
-        for md_file in sorted(directory.glob(pattern)):
+        for md_file in md_files:
             total_chunks += self.index_file(md_file, memory_type, force=force)
 
         logger.info(

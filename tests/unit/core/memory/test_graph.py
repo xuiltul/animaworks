@@ -75,8 +75,9 @@ class MockVectorStoreMatchingNodes:
 class MockIndexer:
     """Mock indexer for testing."""
 
-    def __init__(self):
+    def __init__(self, anima_dir: Path | None = None):
         self.anima_name = "test_anima"
+        self.anima_dir = anima_dir or Path("/tmp/nonexistent")
 
     def _generate_embeddings(self, texts):
         """Mock embedding generation."""
