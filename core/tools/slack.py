@@ -390,6 +390,17 @@ class SlackClient:
         response = self._call("chat_postMessage", **kwargs)
         return response
 
+    def add_reaction(
+        self, channel_id: str, emoji: str, ts: str
+    ) -> dict:
+        """Add an emoji reaction to a message via reactions.add."""
+        return self._call(
+            "reactions_add",
+            channel=channel_id,
+            name=emoji,
+            timestamp=ts,
+        )
+
     def users_list(self) -> list[dict]:
         """Get all workspace users."""
         all_users = self._paginate("users_list", "members", limit=200)
@@ -1265,6 +1276,14 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
     if name == "slack_channels":
         client = SlackClient(token=_resolve_slack_token(args))
         return client.channels()
+    if name == "slack_react":
+        client = SlackClient(token=_resolve_slack_token(args))
+        channel_id = client.resolve_channel(args["channel"])
+        return client.add_reaction(
+            channel_id,
+            args["emoji"],
+            args["message_ts"],
+        )
     raise ValueError(f"Unknown tool: {name}")
 
 
