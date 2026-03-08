@@ -13,13 +13,13 @@ one execution cycle (chat, heartbeat, cron, inbox, task).
 import json
 import logging
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("animaworks.token_usage")
+from core.time_utils import now_local, today_local
 
-JST = timezone(timedelta(hours=9))
+logger = logging.getLogger("animaworks.token_usage")
 
 # ── Default pricing (USD per 1M tokens, as of 2026-03) ─────
 # Override via ~/.animaworks/pricing.json
@@ -132,7 +132,7 @@ class TokenUsageLogger:
         duration_ms: int = 0,
     ) -> None:
         """Log a single session's token usage."""
-        now = datetime.now(JST)
+        now = now_local()
         cost = self.estimate_cost(
             model,
             input_tokens=input_tokens,
@@ -227,7 +227,7 @@ class TokenUsageLogger:
     ) -> list[dict[str, Any]]:
         """Read log entries for a date range."""
         entries: list[dict[str, Any]] = []
-        end = target_date or date.today()
+        end = target_date or today_local()
         for i in range(days):
             d = end - timedelta(days=i)
             path = self._dir / f"{d.isoformat()}.jsonl"

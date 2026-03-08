@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from core.i18n import t
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.skill_tool")
 
@@ -21,7 +21,7 @@ logger = logging.getLogger("animaworks.skill_tool")
 def _resolve_builtins(anima_dir: Path) -> dict[str, str]:
     """Return builtin placeholder values."""
     return {
-        "now_jst": now_jst().isoformat(),
+        "now_local": now_local().isoformat(),
         "anima_name": anima_dir.name,
         "anima_dir": str(anima_dir),
     }

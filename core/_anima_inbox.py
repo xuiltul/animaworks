@@ -27,7 +27,7 @@ from core.memory.streaming_journal import StreamingJournal
 from core.messenger import InboxItem
 from core.paths import load_prompt
 from core.schemas import CycleResult
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.anima")
 
@@ -204,7 +204,7 @@ class InboxMixin:
                             suppress_board_fanout.reset(_fanout_token)
                         active_session_type.reset(_session_token)
 
-                    self._last_activity = now_jst()
+                    self._last_activity = now_local()
 
                     # Record inbox response as response_sent so it appears
                     # in the conversation view alongside message_received.
@@ -411,7 +411,7 @@ class InboxMixin:
 
         # Record received message content to episodes so that
         # inter-Anima communications survive in episodic memory.
-        _msg_ts = now_jst().strftime("%H:%M")
+        _msg_ts = now_local().strftime("%H:%M")
         _recordable = [m for m in messages if m.type != "ack"]
         if len(_recordable) > 50:
             logger.warning(

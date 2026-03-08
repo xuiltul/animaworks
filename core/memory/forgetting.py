@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import load_prompt
-from core.time_utils import ensure_aware, now_jst
+from core.time_utils import ensure_aware, now_local
 
 logger = logging.getLogger("animaworks.forgetting")
 
@@ -207,7 +207,7 @@ class ForgettingEngine:
         Skip: Protected memory types, important chunks, already low
         """
         logger.info("Starting synaptic downscaling for anima=%s", self.anima_name)
-        now = now_jst()
+        now = now_local()
         now_iso_str = now.isoformat()
         total_scanned = 0
         total_marked = 0
@@ -496,11 +496,11 @@ class ForgettingEngine:
             indexer = MemoryIndexer(store, self.anima_name, self.anima_dir)
 
             # Generate new ID
-            merged_id = f"{self.anima_name}/{memory_type}/merged_{now_jst().strftime('%Y%m%d_%H%M%S')}#0"
+            merged_id = f"{self.anima_name}/{memory_type}/merged_{now_local().strftime('%Y%m%d_%H%M%S')}#0"
 
             embedding = indexer._generate_embeddings([content])[0]
 
-            now_iso_str = now_jst().isoformat()
+            now_iso_str = now_local().isoformat()
             metadata = {
                 "anima": self.anima_name,
                 "memory_type": memory_type,
@@ -561,7 +561,7 @@ class ForgettingEngine:
         # Archive directory for merged originals
         archive_dir = self.anima_dir / "archive" / "merged"
         archive_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = now_jst().strftime("%Y%m%d_%H%M%S")
+        timestamp = now_local().strftime("%Y%m%d_%H%M%S")
 
         # Archive primary original
         if primary_path.exists():
@@ -606,7 +606,7 @@ class ForgettingEngine:
         Action: Move source file to archive/forgotten/, delete from vector index
         """
         logger.info("Starting complete forgetting for anima=%s", self.anima_name)
-        now = now_jst()
+        now = now_local()
         store = self._get_vector_store()
         total_forgotten = 0
         archived_files: list[str] = []
@@ -695,7 +695,7 @@ class ForgettingEngine:
 
         # Add timestamp suffix if destination exists
         if dest_path.exists():
-            timestamp = now_jst().strftime("%Y%m%d_%H%M%S")
+            timestamp = now_local().strftime("%Y%m%d_%H%M%S")
             dest_path = self.archive_dir / f"{source_path.stem}_{timestamp}{source_path.suffix}"
 
         try:

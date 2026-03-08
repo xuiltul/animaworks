@@ -14,7 +14,7 @@ from typing import Any, Literal, TypedDict
 from pydantic import BaseModel, Field
 
 from core.config.models import DEFAULT_ANIMA_MODEL
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 # ── Skill Metadata ────────────────────────────────────────
 
@@ -112,7 +112,7 @@ EXTERNAL_PLATFORM_SOURCES: frozenset[str] = frozenset({"slack", "chatwork"})
 
 
 class Message(BaseModel):
-    id: str = Field(default_factory=lambda: now_jst().strftime("%Y%m%d_%H%M%S_%f"))
+    id: str = Field(default_factory=lambda: now_local().strftime("%Y%m%d_%H%M%S_%f"))
     thread_id: str = ""  # conversation thread (empty = new thread)
     reply_to: str = ""  # id of message being replied to
     from_person: str
@@ -121,7 +121,7 @@ class Message(BaseModel):
     content: str
     attachments: list[str] = []
     intent: str = ""  # sender-declared intent: "delegation" | "report" | "question" | ""
-    timestamp: datetime = Field(default_factory=now_jst)
+    timestamp: datetime = Field(default_factory=now_local)
 
     # External messaging integration
     source: str = "anima"  # "anima" | "human" | "slack" | "chatwork"
@@ -160,7 +160,7 @@ class CycleResult(BaseModel):
     summary: str = ""
     thinking_text: str = ""
     duration_ms: int = 0
-    timestamp: datetime = Field(default_factory=now_jst)
+    timestamp: datetime = Field(default_factory=now_local)
     context_usage_ratio: float = 0.0
     session_chained: bool = False
     total_turns: int = 0

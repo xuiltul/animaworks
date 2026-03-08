@@ -17,6 +17,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.time_utils import today_local
+
 logger = logging.getLogger("animaworks.activity")
 
 
@@ -44,7 +46,7 @@ class RotationMixin:
         if not self._log_dir.exists():  # type: ignore[attr-defined]
             return {"deleted_files": 0, "freed_bytes": 0}
 
-        today_str = date.today().isoformat()
+        today_str = today_local().isoformat()
         files = sorted(self._log_dir.glob("*.jsonl"))  # type: ignore[attr-defined]
 
         deleted_count = 0
@@ -52,7 +54,7 @@ class RotationMixin:
 
         # Phase 1: time-based deletion
         if mode in ("time", "both"):
-            cutoff = date.today() - timedelta(days=max_age_days)
+            cutoff = today_local() - timedelta(days=max_age_days)
             remaining: list[Path] = []
             for f in files:
                 file_date_str = f.stem

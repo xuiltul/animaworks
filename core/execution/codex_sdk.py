@@ -270,8 +270,8 @@ def _patch_codex_exec_stream_limit(exec_: Any) -> None:
     This patch wraps the original ``run()`` to inject
     ``limit=_SUBPROCESS_STREAM_LIMIT`` (16 MB) into the subprocess creation.
     """
-    from openai_codex_sdk.exec import CodexExecArgs
     from openai_codex_sdk.errors import CodexExecError
+    from openai_codex_sdk.exec import CodexExecArgs
 
     async def _patched_run(args: CodexExecArgs):  # type: ignore[override]
         command_args = exec_._build_command_args(args)
@@ -322,8 +322,7 @@ def _patch_codex_exec_stream_limit(exec_: Any) -> None:
 
             if returncode != 0:
                 raise CodexExecError(
-                    f"Codex Exec exited with code {returncode}: "
-                    f"{stderr_bytes.decode('utf-8', errors='replace')}"
+                    f"Codex Exec exited with code {returncode}: {stderr_bytes.decode('utf-8', errors='replace')}"
                 )
         finally:
             if proc.returncode is None:

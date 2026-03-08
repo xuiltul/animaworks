@@ -23,7 +23,7 @@ from core.memory._activity_models import (
     find_tool_result_fallback,
     time_diff,
 )
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.activity")
 
@@ -117,7 +117,7 @@ class ConversationMixin:
         """
         target_raw = limit * 3 + 50
         entries: list[ActivityEntry] = []
-        today = now_jst().date()
+        today = now_local().date()
         max_scan_days = 365
 
         for day_offset in range(max_scan_days):

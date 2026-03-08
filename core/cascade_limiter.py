@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.config.models import load_config
-from core.time_utils import ensure_aware, now_jst
+from core.time_utils import ensure_aware, now_local
 
 logger = logging.getLogger("animaworks.cascade_limiter")
 
@@ -97,7 +97,7 @@ class ConversationDepthLimiter:
             )
             return "GlobalOutboundLimitExceeded: アクティビティログ読み取り失敗のため送信をブロックしました"
 
-        now = now_jst()
+        now = now_local()
         hourly_cutoff = now - timedelta(hours=1)
         daily_cutoff = now - timedelta(hours=24)
         hourly_count = 0
@@ -189,7 +189,7 @@ class ConversationDepthLimiter:
             )
             return False  # fail-closed: block if we can't verify
 
-        cutoff = now_jst() - timedelta(seconds=self._window_s)
+        cutoff = now_local() - timedelta(seconds=self._window_s)
         count = 0
         for e in entries:
             try:
@@ -236,7 +236,7 @@ class ConversationDepthLimiter:
         except Exception:
             return 0
 
-        cutoff = now_jst() - timedelta(seconds=self._window_s)
+        cutoff = now_local() - timedelta(seconds=self._window_s)
         count = 0
         for e in entries:
             try:

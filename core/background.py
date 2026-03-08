@@ -461,13 +461,13 @@ def _rotate_dm_logs_sync(
     """Synchronous implementation of dm_log rotation."""
     from datetime import datetime, timedelta
 
-    from core.time_utils import ensure_aware, now_jst
+    from core.time_utils import ensure_aware, now_local
 
     dm_logs_dir = shared_dir / "dm_logs"
     if not dm_logs_dir.exists():
         return {}
 
-    cutoff = now_jst() - timedelta(days=max_age_days)
+    cutoff = now_local() - timedelta(days=max_age_days)
     results: dict[str, Any] = {}
 
     for path in sorted(dm_logs_dir.glob("*.jsonl")):
@@ -499,7 +499,7 @@ def _rotate_dm_logs_sync(
         if not archive_lines:
             continue
 
-        date_str = now_jst().strftime("%Y%m%d")
+        date_str = now_local().strftime("%Y%m%d")
         archive_name = path.stem + f".{date_str}.archive.jsonl"
         archive_path = dm_logs_dir / archive_name
         try:

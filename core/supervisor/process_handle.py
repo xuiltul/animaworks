@@ -24,7 +24,7 @@ from typing import Any
 
 from core.exceptions import IPCConnectionError as IPCConnectionErr  # noqa: F401
 from core.supervisor.ipc import IPCClient, IPCRequest, IPCResponse
-from core.time_utils import ensure_aware, now_jst
+from core.time_utils import ensure_aware, now_local
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class ProcessHandle:
         self.state = ProcessState.STOPPED
         self.process: subprocess.Popen | None = None
         self.ipc_client: IPCClient | None = None
-        self.stats = ProcessStats(started_at=now_jst())
+        self.stats = ProcessStats(started_at=now_local())
         self._streaming_lock = asyncio.Lock()
         self._streaming = False
         self._streaming_started_at: datetime | None = None
@@ -106,7 +106,7 @@ class ProcessHandle:
             raise RuntimeError(f"Cannot start process in state {self.state}")
 
         self.state = ProcessState.STARTING
-        self.stats = ProcessStats(started_at=now_jst())
+        self.stats = ProcessStats(started_at=now_local())
 
         # Spawn child process
         cmd = [
@@ -314,7 +314,7 @@ class ProcessHandle:
 
         async with self._streaming_lock:
             self._streaming = True
-            self._streaming_started_at = now_jst()
+            self._streaming_started_at = now_local()
         logger.info(
             "[PH-STREAM] start anima=%s method=%s req_id=%s state=%s pid=%s",
             self.anima_name,
@@ -341,7 +341,7 @@ class ProcessHandle:
         finally:
             async with self._streaming_lock:
                 elapsed = (
-                    (now_jst() - ensure_aware(self._streaming_started_at)).total_seconds()
+                    (now_local() - ensure_aware(self._streaming_started_at)).total_seconds()
                     if self._streaming_started_at
                     else 0
                 )
@@ -379,7 +379,7 @@ class ProcessHandle:
                 return {"success": False, "is_busy": False} if return_details else False
 
             result = response.result or {}
-            self.stats.last_ping_at = now_jst()
+            self.stats.last_ping_at = now_local()
             self.stats.missed_pings = 0
             is_busy = bool(result.get("is_busy", False))
             if return_details:
@@ -441,7 +441,7 @@ class ProcessHandle:
                 logger.warning("Shutdown request failed for %s: %s", self.anima_name, e)
 
         self.state = ProcessState.STOPPING
-        self.stopping_since = now_jst()
+        self.stopping_since = now_local()
 
         # Step 2: Wait for graceful exit
         try:
@@ -474,7 +474,7 @@ class ProcessHandle:
                 await self.kill()
 
         self.state = ProcessState.STOPPED
-        self.stats.stopped_at = now_jst()
+        self.stats.stopped_at = now_local()
         await self._cleanup()
 
     async def kill(self) -> None:

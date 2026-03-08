@@ -19,7 +19,7 @@ from core.execution._sanitize import ORIGIN_SYSTEM
 from core.i18n import t
 from core.paths import load_prompt
 from core.schemas import CycleResult
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.anima")
 
@@ -38,7 +38,7 @@ class LifecycleMixin:
             async with self._background_lock:
                 self._mark_busy_start()
                 self._status_slots["background"] = "checking"
-                self._last_heartbeat = now_jst()
+                self._last_heartbeat = now_local()
 
                 # Activity log: heartbeat start
                 self._activity.log("heartbeat_start", summary=t("anima.heartbeat_start"))
@@ -217,7 +217,7 @@ class LifecycleMixin:
                         message_intent="request",
                         max_turns_override=max_turns,
                     )
-                    self._last_activity = now_jst()
+                    self._last_activity = now_local()
 
                     # Activity log: completion
                     self._activity.log(
@@ -300,7 +300,7 @@ class LifecycleMixin:
 
                 try:
                     result = await self.agent.run_cycle(prompt, trigger=f"cron:{task_name}")
-                    self._last_activity = now_jst()
+                    self._last_activity = now_local()
 
                     # Record cron execution result
                     self.memory.append_cron_log(
@@ -414,7 +414,7 @@ class LifecycleMixin:
                         stderr = "Neither command nor tool specified"
                         exit_code = 1
 
-                    self._last_activity = now_jst()
+                    self._last_activity = now_local()
 
                 except Exception as exc:
                     stderr = f"{type(exc).__name__}: {exc}"

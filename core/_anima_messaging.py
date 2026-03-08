@@ -15,7 +15,6 @@ import logging
 import re
 import time
 from collections.abc import AsyncGenerator
-from datetime import date
 from typing import Any
 
 from core.exceptions import (
@@ -31,7 +30,7 @@ from core.memory.conversation import ConversationMemory, ToolRecord
 from core.memory.streaming_journal import StreamingJournal
 from core.paths import load_prompt
 from core.schemas import VALID_EMOTIONS, CycleResult, ImageData
-from core.time_utils import now_jst
+from core.time_utils import now_local, today_local
 
 logger = logging.getLogger("animaworks.anima")
 
@@ -56,11 +55,11 @@ class MessagingMixin:
             shared_dir = self.anima_dir.parent.parent / "shared" / "users" / from_person / "conversations"
             shared_dir.mkdir(parents=True, exist_ok=True)
 
-            today = date.today().isoformat()
+            today = today_local().isoformat()
             log_file = shared_dir / f"{today}.jsonl"
 
             record = {
-                "ts": now_jst().isoformat(),
+                "ts": now_local().isoformat(),
                 "anima": self.name,
                 "content": content,
                 "thread_id": thread_id,
@@ -110,7 +109,7 @@ class MessagingMixin:
 
                 try:
                     result = await self.agent.run_cycle(prompt, trigger="bootstrap")
-                    self._last_activity = now_jst()
+                    self._last_activity = now_local()
 
                     logger.info(
                         "[%s] run_bootstrap END duration_ms=%d",
@@ -241,7 +240,7 @@ class MessagingMixin:
                         prior_messages=prior_messages,
                         thread_id=thread_id,
                     )
-                    self._last_activity = now_jst()
+                    self._last_activity = now_local()
 
                     # Record assistant response with tool records
                     tool_records = [ToolRecord.from_dict(r) for r in result.tool_call_records]
@@ -482,7 +481,7 @@ class MessagingMixin:
 
                         if chunk.get("type") == "cycle_done":
                             cycle_done = True
-                            self._last_activity = now_jst()
+                            self._last_activity = now_local()
                             # Record assistant response with tool records
                             cycle_result = chunk.get("cycle_result", {})
                             summary = cycle_result.get("summary", "")
@@ -659,7 +658,7 @@ class MessagingMixin:
                     prompt,
                     trigger="greet:user",
                 )
-                self._last_activity = now_jst()
+                self._last_activity = now_local()
 
                 # Extract emotion from response
                 _em_pat = re.compile(r"<!--\s*emotion:\s*(\{.*?\})\s*-->", re.DOTALL)

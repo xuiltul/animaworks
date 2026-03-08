@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from core.i18n import t
 from core.paths import get_data_dir
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.routes.activity_report")
 
@@ -183,7 +183,7 @@ def create_activity_report_router() -> APIRouter:
                 status_code=400,
             )
 
-        today = now_jst().date()
+        today = now_local().date()
         if report_date > today:
             return JSONResponse(
                 {"error": t("activity_report.future_date")},
@@ -228,7 +228,7 @@ def create_activity_report_router() -> APIRouter:
             "narrative_md": narrative_md,
             "model_used": model,
             "cached": False,
-            "generated_at": now_jst().isoformat(),
+            "generated_at": now_local().isoformat(),
         }
 
         _write_cache(req.date, model, result)

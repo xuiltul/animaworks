@@ -22,7 +22,7 @@ from typing import Any
 
 from core.exceptions import MemoryWriteError
 from core.i18n import t
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.shortterm_memory")
 
@@ -261,7 +261,7 @@ class ShortTermMemory:
     def _archive_existing(self) -> None:
         """Move existing session_state files to archive/."""
         self._archive_dir.mkdir(parents=True, exist_ok=True)
-        ts = now_jst().strftime("%Y%m%d_%H%M%S")
+        ts = now_local().strftime("%Y%m%d_%H%M%S")
         for suffix in (".json", ".md"):
             src = self.shortterm_dir / f"session_state{suffix}"
             if src.exists():

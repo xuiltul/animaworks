@@ -22,7 +22,7 @@ from core.memory.streaming_journal import StreamingJournal
 from core.messenger import InboxItem
 from core.paths import load_prompt
 from core.schemas import CycleResult
-from core.time_utils import now_iso, now_jst
+from core.time_utils import now_iso, now_local
 
 logger = logging.getLogger("animaworks.anima")
 
@@ -402,7 +402,7 @@ class HeartbeatMixin:
                     summary=accumulated_text or "(no result)",
                 )
 
-            self._last_activity = now_jst()
+            self._last_activity = now_local()
 
             # Activity log: heartbeat end
             self._activity.log("heartbeat_end", summary=result.summary)
@@ -416,7 +416,7 @@ class HeartbeatMixin:
 
             # A-3: Record important heartbeat actions to episodes
             if result.summary and "HEARTBEAT_OK" not in result.summary:
-                ts = now_jst().strftime("%H:%M")
+                ts = now_local().strftime("%H:%M")
                 episode_entry = t(
                     "anima.heartbeat_episode",
                     ts=ts,

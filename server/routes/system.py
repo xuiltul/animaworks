@@ -13,7 +13,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from core.schedule_parser import parse_cron_md, parse_schedule
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.routes.system")
 
@@ -112,7 +112,7 @@ def _parse_cron_jobs(animas_dir: Path, anima_names: list[str]) -> list[dict]:
         parsed_tasks = parse_cron_md(content)
         task_names = {task.name for task in parsed_tasks if task.name}
         last_runs = _collect_cron_last_runs(animas_dir / name, task_names)
-        now = now_jst()
+        now = now_local()
         for idx, task in enumerate(parsed_tasks):
             trigger = parse_schedule(task.schedule)
             next_run_dt = trigger.get_next_fire_time(None, now) if trigger is not None else None
@@ -589,8 +589,8 @@ def create_system_router() -> APIRouter:
         from core.paths import get_data_dir
 
         limit = max(1, min(limit, 1000))
-        target_date = date or now_jst().strftime("%Y%m%d")
-        today = now_jst().strftime("%Y%m%d")
+        target_date = date or now_local().strftime("%Y%m%d")
+        today = now_local().strftime("%Y%m%d")
         log_dir = get_data_dir() / "logs" / "frontend"
 
         # Determine which file to read:
@@ -737,7 +737,7 @@ def create_system_router() -> APIRouter:
         if config.activity_schedule:
             from core.supervisor.scheduler_manager import _time_in_range
 
-            now_hhmm = now_jst().strftime("%H:%M")
+            now_hhmm = now_local().strftime("%H:%M")
             for entry in config.activity_schedule:
                 if _time_in_range(entry.start, entry.end, now_hhmm):
                     entry.level = level
@@ -807,7 +807,7 @@ def create_system_router() -> APIRouter:
         if entries:
             from core.supervisor.scheduler_manager import SchedulerManager
 
-            now_hhmm = now_jst().strftime("%H:%M")
+            now_hhmm = now_local().strftime("%H:%M")
             target: int | None = SchedulerManager.resolve_scheduled_level(entries, now_hhmm)
             if target is not None:
                 config.activity_level = target

@@ -31,7 +31,7 @@ from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
 
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.streaming_journal")
 
@@ -416,7 +416,7 @@ class StreamingJournal:
         """
         episodes_dir = self._anima_dir / "episodes"
         episodes_dir.mkdir(parents=True, exist_ok=True)
-        ts = now_jst().strftime("%Y-%m-%d_%H%M%S")
+        ts = now_local().strftime("%Y-%m-%d_%H%M%S")
         recovery_file = episodes_dir / f"recovered_{ts}.md"
         content_lines = [
             f"# Recovered Streaming Journal ({recovery.trigger})",
@@ -440,7 +440,7 @@ class StreamingJournal:
         """Write a single JSONL event line with timestamp."""
         if self._fd is None:
             return
-        event.setdefault("ts", now_jst().isoformat(timespec="seconds"))
+        event.setdefault("ts", now_local().isoformat(timespec="seconds"))
         line = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
         try:
             self._fd.write(line + "\n")

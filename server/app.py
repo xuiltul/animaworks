@@ -230,7 +230,9 @@ async def lifespan(app: FastAPI):
         # ── Periodic schedulers (don't depend on running animas) ──
         shared_dir = app.state.shared_dir
 
-        msg_log_scheduler = AsyncIOScheduler(timezone="Asia/Tokyo")
+        from core.time_utils import get_app_timezone
+
+        msg_log_scheduler = AsyncIOScheduler(timezone=get_app_timezone())
 
         # ── Orphan anima detection ───────────────────────
         from core.org_sync import detect_orphan_animas

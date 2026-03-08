@@ -56,6 +56,7 @@ class WorkerSystemConfig(BaseModel):
 class SystemConfig(BaseModel):
     mode: str = "server"
     log_level: str = "INFO"
+    timezone: str = ""  # IANA TZ name; empty = auto-detect from system
     gateway: GatewaySystemConfig = GatewaySystemConfig()
     worker: WorkerSystemConfig = WorkerSystemConfig()
 
@@ -328,7 +329,7 @@ class ActivityLogConfig(BaseModel):
     rotation_mode: Literal["size", "time", "both"] = "size"
     max_size_mb: int = Field(default=1024, ge=0)  # per-anima total, default 1GB
     max_age_days: int = Field(default=7, ge=0)  # mode="time"|"both" で使用
-    rotation_time: str = "05:00"  # 実行時刻 (JST)
+    rotation_time: str = "05:00"  # 実行時刻 (configured TZ)
 
 
 class HousekeepingConfig(BaseModel):

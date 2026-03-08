@@ -21,12 +21,12 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, date, timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from core.i18n import t
-from core.time_utils import ensure_aware, now_jst
+from core.time_utils import ensure_aware, now_local, today_local
 from core.tools._async_compat import run_sync
 
 if TYPE_CHECKING:
@@ -521,7 +521,7 @@ class PrimingEngine:
 
         anima_name = self.anima_dir.name
         mention_tag = f"@{anima_name}"
-        now = now_jst()
+        now = now_local()
         cutoff_24h = now - timedelta(hours=24)
 
         result: list[ActivityEntry] = []
@@ -712,7 +712,7 @@ class PrimingEngine:
             return ""
 
         parts: list[str] = []
-        today = date.today()
+        today = today_local()
 
         for offset in range(2):
             target_date = today - timedelta(days=offset)
@@ -748,7 +748,7 @@ class PrimingEngine:
 
         anima_name = self.anima_dir.name
         mention_tag = f"@{anima_name}"
-        now = now_jst()
+        now = now_local()
         cutoff_24h = now - timedelta(hours=24)
 
         parts: list[str] = []
@@ -1237,7 +1237,7 @@ class PrimingEngine:
 
         from datetime import datetime, timedelta
 
-        cutoff = now_jst() - timedelta(hours=2)
+        cutoff = now_local() - timedelta(hours=2)
 
         recent: list = []
         for e in reversed(entries):

@@ -793,9 +793,7 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
         from core.memory.audit import AuditAggregator
 
         if audit_all:
-            dirs = sorted(
-                [d for d in animas_dir.iterdir() if d.is_dir() and (d / "identity.md").exists()]
-            )
+            dirs = sorted([d for d in animas_dir.iterdir() if d.is_dir() and (d / "identity.md").exists()])
             if not dirs:
                 print("No animas found.")
                 sys.exit(1)
@@ -812,9 +810,7 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
     if audit_all:
         from core.memory.audit import AuditAggregator
 
-        dirs = sorted(
-            [d for d in animas_dir.iterdir() if d.is_dir() and (d / "identity.md").exists()]
-        )
+        dirs = sorted([d for d in animas_dir.iterdir() if d.is_dir() and (d / "identity.md").exists()])
         if not dirs:
             print("No animas found.")
             sys.exit(1)

@@ -10,17 +10,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from core.supervisor.process_handle import ProcessState
+from core.time_utils import get_app_timezone, now_local
 
 logger = logging.getLogger(__name__)
-
-_JST = timezone(timedelta(hours=9))
 
 # ── Marker helpers ──────────────────────────────────────────────────
 _MARKER_DIR_NAME = "run"
@@ -42,7 +41,7 @@ def _read_marker(marker_path: Path) -> datetime | None:
 
 
 def _write_marker(marker_path: Path, ts: datetime | None = None) -> None:
-    ts = ts or datetime.now(_JST)
+    ts = ts or now_local()
     marker_path.write_text(ts.isoformat())
 
 
@@ -52,7 +51,7 @@ class SchedulerMixin:
     def _start_system_scheduler(self) -> None:
         """Start the system-level scheduler for consolidation crons."""
         try:
-            self.scheduler = AsyncIOScheduler(timezone="Asia/Tokyo")
+            self.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
             self._setup_system_crons()
             self.scheduler.start()
             self._scheduler_running = True
@@ -94,7 +93,7 @@ class SchedulerMixin:
                 name="System: Daily Consolidation",
                 replace_existing=True,
             )
-            logger.info("System cron: Daily consolidation at %s JST", daily_time)
+            logger.info("System cron: Daily consolidation at %s", daily_time)
 
         # Weekly integration
         weekly_enabled = True
@@ -115,7 +114,7 @@ class SchedulerMixin:
                 name="System: Weekly Integration",
                 replace_existing=True,
             )
-            logger.info("System cron: Weekly integration on %s at %s:%s JST", day_of_week, time_parts[0], time_parts[1])
+            logger.info("System cron: Weekly integration on %s at %s:%s", day_of_week, time_parts[0], time_parts[1])
 
         # Monthly forgetting
         monthly_enabled = True
@@ -137,7 +136,7 @@ class SchedulerMixin:
                 replace_existing=True,
             )
             logger.info(
-                "System cron: Monthly forgetting on day %d at %02d:%02d JST",
+                "System cron: Monthly forgetting on day %d at %02d:%02d",
                 day_of_month,
                 hour,
                 minute,
@@ -158,7 +157,7 @@ class SchedulerMixin:
                 name="System: Daily RAG Indexing",
                 replace_existing=True,
             )
-            logger.info("System cron: Daily RAG indexing at %s JST", indexing_time)
+            logger.info("System cron: Daily RAG indexing at %s", indexing_time)
 
         # Activity log rotation
         try:
@@ -186,7 +185,7 @@ class SchedulerMixin:
                     name="System: Activity Log Rotation",
                     replace_existing=True,
                 )
-                logger.info("System cron: Activity log rotation at %s JST", activity_cfg.rotation_time)
+                logger.info("System cron: Activity log rotation at %s", activity_cfg.rotation_time)
         except Exception:
             logger.debug("Activity log rotation schedule setup failed", exc_info=True)
 
@@ -216,7 +215,7 @@ class SchedulerMixin:
                     name="System: Housekeeping",
                     replace_existing=True,
                 )
-                logger.info("System cron: Housekeeping at %s JST", hk_cfg.run_time)
+                logger.info("System cron: Housekeeping at %s", hk_cfg.run_time)
         except Exception:
             logger.debug("Housekeeping schedule setup failed", exc_info=True)
 
@@ -228,7 +227,7 @@ class SchedulerMixin:
             name="System: DM Log Rotation",
             replace_existing=True,
         )
-        logger.info("System cron: DM log rotation at 04:30 JST")
+        logger.info("System cron: DM log rotation at 04:30")
 
     def _iter_consolidation_targets(self) -> list[tuple[str, Path]]:
         """Return (anima_name, anima_dir) for all initialized and enabled animas.
@@ -490,8 +489,8 @@ class SchedulerMixin:
         Incrementally indexes all memory files (knowledge, episodes,
         procedures, skills) into each anima's per-anima vectordb.
         Also indexes shared collections (common_knowledge, common_skills).
-        Runs at 04:00 JST, after consolidation (02:00) and weekly/monthly
-        jobs (03:00) to capture all generated/modified files.
+        Runs at 04:00 (configured TZ), after consolidation (02:00) and
+        weekly/monthly jobs (03:00) to capture all generated/modified files.
         """
         logger.info("Starting system-wide daily RAG indexing")
 
@@ -744,7 +743,7 @@ class SchedulerMixin:
         except Exception:
             consolidation_cfg = None
 
-        now = datetime.now(_JST)
+        now = now_local()
         mdir = _marker_dir(self._get_data_dir())
 
         daily_enabled = getattr(consolidation_cfg, "daily_enabled", True) if consolidation_cfg else True

@@ -62,7 +62,7 @@ class TestRotateDmLogs:
         """7日超のエントリがアーカイブファイルに移動される。"""
         dm_logs = tmp_path / "dm_logs"
         base = now_jst()
-        with patch("core.time_utils.now_jst", return_value=base):
+        with patch("core.time_utils.now_local", return_value=base):
             old_ts = (base - timedelta(days=8)).isoformat()
             recent_ts = (base - timedelta(days=3)).isoformat()
             _write_dm_entries(

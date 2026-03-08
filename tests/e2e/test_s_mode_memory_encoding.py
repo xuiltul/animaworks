@@ -23,7 +23,7 @@ import pytest
 
 from core.memory.conversation import ConversationMemory, ConversationTurn, ToolRecord
 from core.memory.consolidation import ConsolidationEngine
-from core.schemas import now_jst
+from core.time_utils import now_local as now_jst
 
 
 # =====================================================================

@@ -479,7 +479,7 @@ def create_assets_router() -> APIRouter:
         import asyncio
         import shutil
 
-        from core.time_utils import now_jst
+        from core.time_utils import now_local
 
         animas_dir = request.app.state.animas_dir
         anima_dir = animas_dir / name
@@ -538,7 +538,7 @@ def create_assets_router() -> APIRouter:
                     detail=f"Backup not found: {backup_id}",
                 )
         else:
-            ts = now_jst().strftime("%Y%m%d_%H%M%S")
+            ts = now_local().strftime("%Y%m%d_%H%M%S")
             backup_id = f"assets_backup_{ts}"
             backup_dir = anima_dir / backup_id
             if assets_dir.exists():

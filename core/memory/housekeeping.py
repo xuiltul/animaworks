@@ -12,11 +12,11 @@ all data types that lack their own rotation mechanisms.
 
 import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from core.time_utils import now_jst
+from core.time_utils import now_local, today_local
 
 logger = logging.getLogger("animaworks.housekeeping")
 
@@ -188,7 +188,7 @@ def _cleanup_dm_archives(
     if not dm_logs_dir.exists():
         return {"skipped": True}
 
-    cutoff = now_jst() - timedelta(days=retention_days)
+    cutoff = now_local() - timedelta(days=retention_days)
     cutoff_ts = cutoff.timestamp()
     deleted = 0
 
@@ -213,7 +213,7 @@ def _cleanup_cron_logs(
     if not animas_dir.exists():
         return {"skipped": True}
 
-    cutoff = (date.today() - timedelta(days=retention_days)).isoformat()
+    cutoff = (today_local() - timedelta(days=retention_days)).isoformat()
     total_deleted = 0
 
     for anima_dir in sorted(animas_dir.iterdir()):
@@ -248,7 +248,7 @@ def _cleanup_shortterm(
     if not animas_dir.exists():
         return {"skipped": True}
 
-    cutoff = now_jst() - timedelta(days=retention_days)
+    cutoff = now_local() - timedelta(days=retention_days)
     cutoff_ts = cutoff.timestamp()
     total_deleted = 0
 

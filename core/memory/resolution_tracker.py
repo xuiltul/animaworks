@@ -9,7 +9,7 @@ from collections import deque
 from datetime import timedelta
 
 from core.paths import get_shared_dir
-from core.time_utils import now_iso, now_jst
+from core.time_utils import now_iso, now_local
 
 logger = logging.getLogger("animaworks.memory")
 
@@ -38,7 +38,7 @@ class ResolutionTracker:
         path = shared_dir / "resolutions.jsonl"
         if not path.exists():
             return []
-        cutoff = (now_jst() - timedelta(days=days)).isoformat()
+        cutoff = (now_local() - timedelta(days=days)).isoformat()
         entries: list[dict[str, str]] = []
 
         _MAX_LINES_TO_PARSE = 2000

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import structlog
 
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 # Re-export for backward compatibility with existing imports
 # (e.g. ``from core.logging_config import set_request_id``)
@@ -215,7 +215,7 @@ def setup_anima_logging(
     anima_log_dir.mkdir(parents=True, exist_ok=True)
 
     # Main log file with daily rotation
-    log_file = anima_log_dir / f"{now_jst().strftime('%Y%m%d')}.log"
+    log_file = anima_log_dir / f"{now_local().strftime('%Y%m%d')}.log"
 
     # Setup root logger
     root = logging.getLogger()

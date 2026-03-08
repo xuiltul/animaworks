@@ -632,10 +632,10 @@ class OrgToolsMixin:
                 recent = self._read_recent_activity(desc_dir, limit=1)
                 if recent:
                     result["last_activity"] = recent[-1].ts
-                    from core.time_utils import ensure_aware, now_jst
+                    from core.time_utils import ensure_aware, now_local
 
                     ts = ensure_aware(datetime.fromisoformat(recent[-1].ts))
-                    elapsed = (now_jst() - ts).total_seconds()
+                    elapsed = (now_local() - ts).total_seconds()
                     minutes = int(elapsed / 60)
                     if minutes < 60:
                         result["since"] = t("handler.since_minutes", minutes=minutes)
@@ -841,11 +841,7 @@ class OrgToolsMixin:
         from core.config.models import load_config
 
         config = load_config()
-        return [
-            name
-            for name, cfg in config.animas.items()
-            if cfg.supervisor == self._anima_name
-        ]
+        return [name for name, cfg in config.animas.items() if cfg.supervisor == self._anima_name]
 
     def _handle_audit_subordinate(self, args: dict[str, Any]) -> str:
         """Audit subordinate behavior from activity logs."""
@@ -880,9 +876,7 @@ class OrgToolsMixin:
         is_batch = len(targets) > 1
 
         if mode == "report" and is_batch:
-            result = AuditAggregator.generate_merged_timeline(
-                [animas_dir / n for n in targets], hours=hours
-            )
+            result = AuditAggregator.generate_merged_timeline([animas_dir / n for n in targets], hours=hours)
         else:
             results: list[str] = []
             for name in targets:

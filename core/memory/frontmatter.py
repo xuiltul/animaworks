@@ -10,7 +10,7 @@ from typing import Any
 
 from core.memory._io import atomic_write_text
 from core.schemas import SkillMeta
-from core.time_utils import now_iso
+from core.time_utils import get_app_timezone, now_iso
 
 logger = logging.getLogger("animaworks.memory")
 
@@ -104,12 +104,11 @@ def validate_and_complete_frontmatter(yaml_dict: dict[str, Any], path: Path | No
     """
     if "created_at" not in yaml_dict:
         if path is not None and path.exists():
-            from datetime import datetime, timedelta, timezone
+            from datetime import datetime
 
-            _JST = timezone(timedelta(hours=9))
             yaml_dict["created_at"] = datetime.fromtimestamp(
                 path.stat().st_mtime,
-                tz=_JST,
+                tz=get_app_timezone(),
             ).isoformat()
         else:
             yaml_dict["created_at"] = now_iso()
@@ -414,12 +413,11 @@ class FrontmatterService:
         Returns:
             Number of files that had frontmatter added.
         """
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime
 
         if not self._knowledge_dir.exists():
             return 0
 
-        _JST = timezone(timedelta(hours=9))
         md_files = sorted(self._knowledge_dir.glob("*.md"))
         migrated = 0
         for f in md_files:
@@ -427,7 +425,7 @@ class FrontmatterService:
             if text.lstrip().startswith("---"):
                 continue
 
-            ts = datetime.fromtimestamp(f.stat().st_mtime, tz=_JST).isoformat()
+            ts = datetime.fromtimestamp(f.stat().st_mtime, tz=get_app_timezone()).isoformat()
             metadata = {
                 "confidence": 0.5,
                 "created_at": ts,

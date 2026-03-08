@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from core.i18n import t
@@ -36,6 +36,7 @@ from core.memory.skill_metadata import (  # noqa: F401
 )
 from core.paths import get_common_knowledge_dir, get_common_skills_dir, get_company_dir, get_shared_dir
 from core.schemas import ModelConfig, SkillMeta
+from core.time_utils import today_local
 
 logger = logging.getLogger("animaworks.memory")
 
@@ -235,7 +236,7 @@ class MemoryManager:
         return self._read(self.anima_dir / "bootstrap.md")
 
     def read_today_episodes(self) -> str:
-        path = self.episodes_dir / f"{date.today().isoformat()}.md"
+        path = self.episodes_dir / f"{today_local().isoformat()}.md"
         return self._read(path)
 
     def read_file(self, relpath: str) -> str:
@@ -272,11 +273,11 @@ class MemoryManager:
     # ── Write helpers ─────────────────────────────────────
 
     def append_episode(self, entry: str, *, origin: str = "") -> None:
-        path = self.episodes_dir / f"{date.today().isoformat()}.md"
+        path = self.episodes_dir / f"{today_local().isoformat()}.md"
         try:
             if not path.exists():
                 path.write_text(
-                    t("manager.action_log_header", date=date.today().isoformat()),
+                    t("manager.action_log_header", date=today_local().isoformat()),
                     encoding="utf-8",
                 )
             with open(path, "a", encoding="utf-8") as f:
@@ -315,7 +316,7 @@ class MemoryManager:
     def read_recent_episodes(self, days: int = 7) -> str:
         """Return concatenated episode logs for the last *days* days."""
         parts: list[str] = []
-        today = date.today()
+        today = today_local()
         for offset in range(days):
             d = today - timedelta(days=offset)
             path = self.episodes_dir / f"{d.isoformat()}.md"
