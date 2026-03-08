@@ -7,6 +7,7 @@ Covers:
 - MemoryManager._extract_skill_meta()  (core/memory/manager.py)
 - match_skills_by_description()        (core/memory/manager.py)
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -70,15 +71,7 @@ class TestExtractSkillMeta:
         """Legacy format with ## 概要 extracts first line as description."""
         skill_file = tmp_path / "legacy.md"
         skill_file.write_text(
-            "# レガシースキル\n"
-            "\n"
-            "## 概要\n"
-            "\n"
-            "cronジョブの設定と管理を行うスキル\n"
-            "\n"
-            "## 手順\n"
-            "\n"
-            "1. 手順内容\n",
+            "# レガシースキル\n\n## 概要\n\ncronジョブの設定と管理を行うスキル\n\n## 手順\n\n1. 手順内容\n",
             encoding="utf-8",
         )
 
@@ -113,11 +106,7 @@ class TestExtractSkillMeta:
         """is_common flag is correctly set when specified."""
         skill_file = tmp_path / "shared.md"
         skill_file.write_text(
-            "---\n"
-            "name: shared-skill\n"
-            "description: 共有スキル\n"
-            "---\n"
-            "\nContent.\n",
+            "---\nname: shared-skill\ndescription: 共有スキル\n---\n\nContent.\n",
             encoding="utf-8",
         )
 
@@ -157,11 +146,13 @@ class TestMatchSkillsByDescription:
         )
 
     def test_extract_bracket_keywords(
-        self, skill_with_keywords: SkillMeta,
+        self,
+        skill_with_keywords: SkillMeta,
     ) -> None:
         """「」-delimited keywords in description trigger a match."""
         result = match_skills_by_description(
-            "cron設定を確認してください", [skill_with_keywords],
+            "cron設定を確認してください",
+            [skill_with_keywords],
         )
         assert len(result) == 1
         assert result[0].name == "cron_setup"
@@ -188,28 +179,33 @@ class TestMatchSkillsByDescription:
         # 'cron設定' is not a substring of 'cronに追加して' → no match
         # But '定期実行' or 'cron設定' needs to appear in the message
         result = match_skills_by_description(
-            "cron設定をしてください", [skill_with_keywords],
+            "cron設定をしてください",
+            [skill_with_keywords],
         )
         assert len(result) == 1
 
     def test_no_match(self, skill_with_keywords: SkillMeta) -> None:
         """Message with no keyword overlap returns empty list."""
         result = match_skills_by_description(
-            "おはよう", [skill_with_keywords],
+            "おはよう",
+            [skill_with_keywords],
         )
         assert result == []
 
     def test_skills_without_bracket_keywords_never_match(
-        self, skill_without_keywords: SkillMeta,
+        self,
+        skill_without_keywords: SkillMeta,
     ) -> None:
         """Skills whose description lacks 「」 keywords are never matched."""
         result = match_skills_by_description(
-            "汎用的なスキルを使って", [skill_without_keywords],
+            "汎用的なスキルを使って",
+            [skill_without_keywords],
         )
         assert result == []
 
     def test_empty_message_returns_empty(
-        self, skill_with_keywords: SkillMeta,
+        self,
+        skill_with_keywords: SkillMeta,
     ) -> None:
         """Empty message always returns an empty list."""
         result = match_skills_by_description("", [skill_with_keywords])
@@ -243,7 +239,9 @@ class TestMatchTier1CommaKeywords:
         """When both brackets and commas exist, brackets are used (not commas)."""
         p = tmp_path / "skill.md"
         p.write_text("dummy")
-        skill = SkillMeta(name="cron", description="「cron設定」「定期実行」、スケジュール管理", path=p, is_common=False)
+        skill = SkillMeta(
+            name="cron", description="「cron設定」「定期実行」、スケジュール管理", path=p, is_common=False
+        )
         # Match via bracket keyword
         result = match_skills_by_description("cron設定して", [skill])
         assert len(result) == 1
@@ -265,7 +263,8 @@ class TestMatchTier2VocabularyMatch:
         skill = SkillMeta(
             name="document-creator",
             description="Comprehensive document creation, editing, and analysis",
-            path=p, is_common=False,
+            path=p,
+            is_common=False,
         )
         # "document" and "creation" both appear
         result = match_skills_by_description("document creation needed", [skill])
@@ -278,7 +277,8 @@ class TestMatchTier2VocabularyMatch:
         skill = SkillMeta(
             name="document-creator",
             description="Comprehensive document creation, editing, and analysis",
-            path=p, is_common=False,
+            path=p,
+            is_common=False,
         )
         result = match_skills_by_description("give me a document", [skill])
         # Only "document" matches, not enough
@@ -297,7 +297,8 @@ class TestMatchTier2VocabularyMatch:
         skill = SkillMeta(
             name="data-analysis",
             description="データ分析 手順書作成 レポート出力",
-            path=p, is_common=False,
+            path=p,
+            is_common=False,
         )
         # "データ分析" and "手順書作成" both appear as substrings in the message
         result = match_skills_by_description("データ分析の手順書作成をお願いします", [skill])
@@ -317,7 +318,8 @@ class TestMatchDeduplication:
         skill = SkillMeta(
             name="deploy",
             description="デプロイ手順「deploy」「デプロイ」を提供する",
-            path=p, is_common=False,
+            path=p,
+            is_common=False,
         )
         result = match_skills_by_description("deployの手順を教えて", [skill])
         assert len(result) == 1  # Not duplicated
@@ -336,7 +338,8 @@ class TestMatchRetrieverParam:
         skill = SkillMeta(
             name="unknown",
             description="何かのスキル",
-            path=p, is_common=False,
+            path=p,
+            is_common=False,
         )
         # No brackets, no comma keywords long enough, single vocab word -> no match
         result = match_skills_by_description("全く関係ない話", [skill], retriever=None)
@@ -349,11 +352,10 @@ class TestMatchRetrieverParam:
         skill = SkillMeta(
             name="unknown",
             description="何かのスキル",
-            path=p, is_common=False,
+            path=p,
+            is_common=False,
         )
-        result = match_skills_by_description(
-            "全く関係ない話", [skill], retriever="not-a-retriever", anima_name="test"
-        )
+        result = match_skills_by_description("全く関係ない話", [skill], retriever="not-a-retriever", anima_name="test")
         assert result == []
 
 
@@ -472,7 +474,11 @@ class TestMatchTier3WithMockRetriever:
         mock_retriever.search.return_value = [mock_result]
 
         result = _match_tier3_vector(
-            "test message", [skill], mock_retriever, "test",
+            "test message",
+            [skill],
+            mock_retriever,
+            "test",
+            min_score=0.88,
         )
         assert result == []  # Filtered by score threshold
 
@@ -492,7 +498,10 @@ class TestMatchTier3WithMockRetriever:
         mock_retriever.search.return_value = [mock_result]
 
         result = _match_tier3_vector(
-            "deploy something", [skill], mock_retriever, "test",
+            "deploy something",
+            [skill],
+            mock_retriever,
+            "test",
         )
         assert len(result) == 1
         assert result[0].name == "deploy-guide"
@@ -519,7 +528,10 @@ class TestMatchTier3WithMockRetriever:
         # So this should return empty. Name lookup only works through the
         # path-based matching pipeline.
         result = _match_tier3_vector(
-            "deploy guide", [skill], mock_retriever, "test",
+            "deploy guide",
+            [skill],
+            mock_retriever,
+            "test",
         )
         # empty file_path doesn't match any lookup key
         assert len(result) == 0
@@ -544,7 +556,10 @@ class TestMatchTier3WithMockRetriever:
         mock_retriever.search.return_value = [r1, r2]
 
         result = _match_tier3_vector(
-            "deploy", [skill], mock_retriever, "test",
+            "deploy",
+            [skill],
+            mock_retriever,
+            "test",
         )
         assert len(result) == 1  # Deduplicated
 
