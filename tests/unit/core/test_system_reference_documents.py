@@ -905,6 +905,7 @@ _EXPECTED_FILES = [
     "operations/mode-s-auth-guide.md",
     "operations/model-guide.md",
     "operations/project-setup.md",
+    "operations/task-board-guide.md",
     "operations/task-management.md",
     "operations/tool-usage-overview.md",
     "operations/voice-chat-guide.md",
@@ -915,6 +916,14 @@ _EXPECTED_FILES = [
     "troubleshooting/common-issues.md",
     "troubleshooting/escalation-flowchart.md",
     "troubleshooting/gmail-credential-setup.md",
+    "usecases/usecase-communication.md",
+    "usecases/usecase-customer-support.md",
+    "usecases/usecase-development.md",
+    "usecases/usecase-knowledge.md",
+    "usecases/usecase-monitoring.md",
+    "usecases/usecase-overview.md",
+    "usecases/usecase-research.md",
+    "usecases/usecase-secretary.md",
 ]
 
 
@@ -943,6 +952,7 @@ class TestTemplateFilesExist:
             "operations",
             "troubleshooting",
             "security",
+            "usecases",
         ):
             assert (_TEMPLATES_CK_DIR / subdir).is_dir(), f"Missing subdir: {subdir}"
 
