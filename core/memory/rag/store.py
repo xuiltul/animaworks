@@ -276,7 +276,7 @@ class ChromaVectorStore(VectorStore):
                 if space != "cosine":
                     l2_collections.append(name)
             except Exception:
-                pass
+                logger.debug("Skipping collection '%s' during migration check", name)
         return l2_collections
 
     @staticmethod

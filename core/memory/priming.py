@@ -867,7 +867,7 @@ class PrimingEngine:
 
                 _min_score = _load_cfg().rag.min_retrieval_score
             except Exception:
-                pass
+                logger.debug("Failed to load rag.min_retrieval_score from config, using default")
 
             results = self._search_and_merge(
                 retriever,
@@ -1089,7 +1089,7 @@ class PrimingEngine:
 
                 _min_score = _load_cfg().rag.min_retrieval_score
             except Exception:
-                pass
+                logger.debug("Failed to load rag.min_retrieval_score from config, using default")
 
             results = self._search_and_merge(
                 retriever,
