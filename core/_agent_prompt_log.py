@@ -16,7 +16,7 @@ import logging
 from datetime import timedelta
 from pathlib import Path
 
-from core.time_utils import now_iso, now_jst
+from core.time_utils import now_iso, now_local
 
 logger = logging.getLogger("animaworks.agent")
 
@@ -41,12 +41,12 @@ def _rotate_prompt_logs(log_dir: Path) -> None:
     (module-level ``_last_rotation_date`` cache).
     """
     global _last_rotation_date
-    today = now_jst().strftime("%Y-%m-%d")
+    today = now_local().strftime("%Y-%m-%d")
     if _last_rotation_date == today:
         return  # already rotated today
     _last_rotation_date = today
 
-    cutoff = now_jst() - timedelta(days=_PROMPT_LOG_RETENTION_DAYS)
+    cutoff = now_local() - timedelta(days=_PROMPT_LOG_RETENTION_DAYS)
     cutoff_str = cutoff.strftime("%Y-%m-%d")
     for f in log_dir.glob("*.jsonl"):
         # Filename expected format: YYYY-MM-DD.jsonl
@@ -150,7 +150,7 @@ def rotate_all_prompt_logs(
     Returns:
         Dict mapping anima name to number of deleted files.
     """
-    cutoff = now_jst() - timedelta(days=retention_days)
+    cutoff = now_local() - timedelta(days=retention_days)
     cutoff_str = cutoff.strftime("%Y-%m-%d")
     results: dict[str, int] = {}
     for anima_dir in sorted(animas_dir.iterdir()):

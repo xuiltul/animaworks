@@ -231,11 +231,11 @@ class CommsToolsMixin:
             if last:
                 from datetime import datetime
 
-                from core.time_utils import ensure_aware, now_jst
+                from core.time_utils import ensure_aware, now_local
 
                 try:
                     ts = ensure_aware(datetime.fromisoformat(last["ts"]))
-                    elapsed = (now_jst() - ts).total_seconds()
+                    elapsed = (now_local() - ts).total_seconds()
                     if elapsed < cooldown:
                         return t(
                             "handler.post_cooldown",

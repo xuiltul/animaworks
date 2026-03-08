@@ -23,7 +23,7 @@ from typing import Any, Literal
 from core.exceptions import TaskPersistenceError as TaskPersistenceError  # noqa: F401
 from core.i18n import t
 from core.schemas import TaskEntry
-from core.time_utils import ensure_aware, now_iso, now_jst
+from core.time_utils import ensure_aware, now_iso, now_local
 
 logger = logging.getLogger("animaworks.task_queue")
 
@@ -61,7 +61,7 @@ def _parse_deadline(value: str) -> str:
             delta = timedelta(hours=amount)
         else:  # "d"
             delta = timedelta(days=amount)
-        return (now_jst() + delta).isoformat()
+        return (now_local() + delta).isoformat()
 
     # Try parsing as ISO8601
     try:
@@ -348,7 +348,7 @@ class TaskQueueManager:
         if not tasks:
             return ""
 
-        now = now_jst()
+        now = now_local()
         chars_per_token = 4
         max_chars = budget_tokens * chars_per_token
         lines: list[str] = []
@@ -389,7 +389,7 @@ class TaskQueueManager:
 
     def get_stale_tasks(self) -> list[TaskEntry]:
         """Return pending/in_progress tasks not updated for 30+ minutes."""
-        now = now_jst()
+        now = now_local()
         result: list[TaskEntry] = []
         for task in self.get_pending():
             elapsed = _elapsed_seconds(task.updated_at, now)

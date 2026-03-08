@@ -218,7 +218,7 @@ class MemoryToolsMixin:
                 from core.memory.frontmatter import (
                     validate_and_complete_frontmatter as _validate_fm_hw,
                 )
-                from core.schemas import now_jst as _now_jst_hw
+                from core.time_utils import now_local as _now_local_hw
 
                 _meta_hw, _body_hw = _parse_fm_hw(content.lstrip())
                 if _meta_hw:
@@ -232,7 +232,7 @@ class MemoryToolsMixin:
                         except OSError:
                             pass
                     _validate_fm_hw(_meta_hw, path)
-                    _meta_hw["updated_at"] = _now_jst_hw().isoformat()
+                    _meta_hw["updated_at"] = _now_local_hw().isoformat()
                     _fm_hw = _yaml_km_fm.dump(_meta_hw, default_flow_style=False, allow_unicode=True)
                     path.write_text(f"---\n{_fm_hw}---\n\n{_body_hw.lstrip()}", encoding="utf-8")
                     auto_frontmatter_applied = True
@@ -241,7 +241,7 @@ class MemoryToolsMixin:
                     from core.memory.frontmatter import strip_content_frontmatter as _strip_fm_hw
 
                     _clean_body_hw = _strip_fm_hw(content.lstrip())
-                    _ts_fb = _now_jst_hw().isoformat()
+                    _ts_fb = _now_local_hw().isoformat()
                     _fallback_meta: dict[str, Any] = {
                         "confidence": 0.5,
                         "created_at": _ts_fb,
@@ -281,7 +281,7 @@ class MemoryToolsMixin:
                 import yaml as _yaml_km
 
                 from core.memory.frontmatter import strip_content_frontmatter
-                from core.schemas import now_jst
+                from core.time_utils import now_local
 
                 # Preserve original created_at on overwrite
                 _original_created_at = None
@@ -294,7 +294,7 @@ class MemoryToolsMixin:
                         _original_created_at = _existing_meta_ow.get("created_at")
                     except OSError:
                         pass
-                ts = now_jst().isoformat()
+                ts = now_local().isoformat()
                 metadata: dict[str, Any] = {
                     "confidence": 0.5,
                     "created_at": _original_created_at or ts,

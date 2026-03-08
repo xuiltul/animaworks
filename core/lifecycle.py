@@ -22,6 +22,7 @@ from core.config.models import load_config
 from core.exceptions import AnimaWorksError  # noqa: F401
 from core.schedule_parser import parse_heartbeat_config
 from core.schemas import CronTask
+from core.time_utils import get_app_timezone
 
 logger = logging.getLogger("animaworks.lifecycle")
 
@@ -32,7 +33,7 @@ class LifecycleManager:
     """Manages heartbeat and cron for Digital Animas via APScheduler."""
 
     def __init__(self) -> None:
-        self.scheduler = AsyncIOScheduler(timezone="Asia/Tokyo")
+        self.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
         self.animas: dict[str, DigitalAnima] = {}
         self._ws_broadcast: BroadcastFn | None = None
         self._inbox_watcher_task: asyncio.Task | None = None
@@ -582,7 +583,7 @@ class LifecycleManager:
 
     def _setup_system_crons(self) -> None:
         """Set up system-wide cron tasks for memory consolidation."""
-        # Daily RAG indexing: Every day at 04:00 JST
+        # Daily RAG indexing: Every day at 04:00
         # Runs after consolidation (02:00) and weekly/monthly jobs (03:00)
         # to catch all generated/modified files as a final sweep
         self.scheduler.add_job(
@@ -592,9 +593,9 @@ class LifecycleManager:
             name="System: Daily RAG Indexing",
             replace_existing=True,
         )
-        logger.info("System cron: Daily RAG indexing at 04:00 JST")
+        logger.info("System cron: Daily RAG indexing at 04:00")
 
-        # Daily consolidation: Every day at 02:00 JST
+        # Daily consolidation: Every day at 02:00
         self.scheduler.add_job(
             self._handle_daily_consolidation,
             CronTrigger(hour=2, minute=0),
@@ -602,9 +603,9 @@ class LifecycleManager:
             name="System: Daily Consolidation",
             replace_existing=True,
         )
-        logger.info("System cron: Daily consolidation at 02:00 JST")
+        logger.info("System cron: Daily consolidation at 02:00")
 
-        # Weekly integration: Every Sunday at 03:00 JST
+        # Weekly integration: Every Sunday at 03:00
         self.scheduler.add_job(
             self._handle_weekly_integration,
             CronTrigger(day_of_week="sun", hour=3, minute=0),
@@ -612,9 +613,9 @@ class LifecycleManager:
             name="System: Weekly Integration",
             replace_existing=True,
         )
-        logger.info("System cron: Weekly integration on Sunday at 03:00 JST")
+        logger.info("System cron: Weekly integration on Sunday at 03:00")
 
-        # Monthly forgetting: 1st of each month at 03:00 JST
+        # Monthly forgetting: 1st of each month at 03:00
         self.scheduler.add_job(
             self._handle_monthly_forgetting,
             CronTrigger(day=1, hour=3, minute=0),
@@ -622,9 +623,9 @@ class LifecycleManager:
             name="System: Monthly Forgetting",
             replace_existing=True,
         )
-        logger.info("System cron: Monthly forgetting on 1st at 03:00 JST")
+        logger.info("System cron: Monthly forgetting on 1st at 03:00")
 
-        # Daily DM log rotation: Every day at 04:30 JST
+        # Daily DM log rotation: Every day at 04:30
         self.scheduler.add_job(
             self._handle_dm_log_rotation,
             CronTrigger(hour=4, minute=30),
@@ -632,7 +633,7 @@ class LifecycleManager:
             name="System: DM Log Rotation",
             replace_existing=True,
         )
-        logger.info("System cron: DM log rotation at 04:30 JST")
+        logger.info("System cron: DM log rotation at 04:30")
 
     async def _handle_daily_indexing(self) -> None:
         """Run daily RAG indexing for all animas.

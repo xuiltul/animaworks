@@ -142,11 +142,11 @@ def _migrate_memory_prompts_v1(
                 tool_store.set_section("behavior_rules", content, condition)
 
         # Record migration
-        from core.time_utils import now_jst
+        from core.time_utils import now_local
 
         conn.execute(
             "INSERT INTO migrations (key, applied_at) VALUES (?, ?)",
-            ("memory_prompt_v1", now_jst().isoformat()),
+            ("memory_prompt_v1", now_local().isoformat()),
         )
         conn.commit()
         logger.info("Applied migration: memory_prompt_v1")
@@ -194,11 +194,11 @@ def _migrate_praise_loop_prevention_v1(
                     condition = SECTION_CONDITIONS.get(key)
                     tool_store.set_section(key, content, condition)
 
-        from core.time_utils import now_jst
+        from core.time_utils import now_local
 
         conn.execute(
             "INSERT INTO migrations (key, applied_at) VALUES (?, ?)",
-            ("praise_loop_prevention_v1", now_jst().isoformat()),
+            ("praise_loop_prevention_v1", now_local().isoformat()),
         )
         conn.commit()
         logger.info("Applied migration: praise_loop_prevention_v1")
@@ -237,11 +237,11 @@ def _migrate_behavior_rules_must_v1(
                 condition = SECTION_CONDITIONS.get("behavior_rules")
                 tool_store.set_section("behavior_rules", content, condition)
 
-        from core.time_utils import now_jst
+        from core.time_utils import now_local
 
         conn.execute(
             "INSERT INTO migrations (key, applied_at) VALUES (?, ?)",
-            ("behavior_rules_must_v1", now_jst().isoformat()),
+            ("behavior_rules_must_v1", now_local().isoformat()),
         )
         conn.commit()
         logger.info("Applied migration: behavior_rules_must_v1")
@@ -298,11 +298,11 @@ def _migrate_resync_sections_v1(
             except Exception:
                 logger.warning("Failed to read section: %s", filepath)
 
-        from core.time_utils import now_jst
+        from core.time_utils import now_local
 
         conn.execute(
             "INSERT INTO migrations (key, applied_at) VALUES (?, ?)",
-            ("resync_sections_v1", now_jst().isoformat()),
+            ("resync_sections_v1", now_local().isoformat()),
         )
         conn.commit()
         logger.info(
@@ -345,11 +345,11 @@ def _migrate_comm_rules_compress_v1(
             except Exception:
                 logger.warning("Failed to read section: %s", filepath)
 
-        from core.time_utils import now_jst
+        from core.time_utils import now_local
 
         conn.execute(
             "INSERT INTO migrations (key, applied_at) VALUES (?, ?)",
-            ("comm_rules_compress_v1", now_jst().isoformat()),
+            ("comm_rules_compress_v1", now_local().isoformat()),
         )
         conn.commit()
         logger.info(

@@ -156,12 +156,12 @@ def _validate_episode_path(rel_path: str) -> str | None:
     if _EPISODE_FILENAME_RE.match(filename):
         return None
 
-    from datetime import date
+    from core.time_utils import today_local
 
     return t(
         "handler.episode_filename_warning",
         filename=filename,
-        date=date.today().isoformat(),
+        date=today_local().isoformat(),
     )
 
 

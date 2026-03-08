@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from core.i18n import t
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger(__name__)
 
@@ -802,7 +802,7 @@ class ToolPromptStore:
 
     def set_description(self, name: str, description: str) -> dict[str, Any]:
         """Insert or update a tool description.  Returns the saved record."""
-        ts = now_jst().isoformat()
+        ts = now_local().isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO tool_descriptions (name, description, updated_at) "
@@ -840,7 +840,7 @@ class ToolPromptStore:
 
     def set_guide(self, key: str, content: str) -> dict[str, Any]:
         """Insert or update a tool guide.  Returns the saved record."""
-        ts = now_jst().isoformat()
+        ts = now_local().isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO tool_guides (key, content, updated_at) "
@@ -886,7 +886,7 @@ class ToolPromptStore:
         condition: str | None = None,
     ) -> dict[str, Any]:
         """Insert or update a system section.  Returns the saved record."""
-        ts = now_jst().isoformat()
+        ts = now_local().isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO system_sections (key, content, condition, updated_at) "
@@ -924,7 +924,7 @@ class ToolPromptStore:
         Uses INSERT OR IGNORE so existing user edits are preserved.
         """
         loc = _get_locale()
-        ts = now_jst().isoformat()
+        ts = now_local().isoformat()
         with self._connect() as conn:
             if descriptions:
                 flat = {}

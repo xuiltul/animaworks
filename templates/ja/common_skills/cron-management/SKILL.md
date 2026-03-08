@@ -391,7 +391,7 @@ type: llm
 ## 注意事項
 
 - cron.mdの変更は、Animaが `write_memory_file` で保存した場合は即時反映される。外部編集（直接ファイル編集）の場合は、次回heartbeatまたはcron実行時にmtimeを検出して自動リロードされる
-- タイムゾーンは Asia/Tokyo（JST）固定
+- タイムゾーンは `config.json` の `system.timezone` で設定可能。未設定時はシステムタイムゾーンを自動検出
 - 同時刻に複数タスクが重なった場合は並列実行される
 - command型のタスクが失敗してもサーバーは停止しない（ログに記録される）
 - LLM型タスクの実行には現在のモデル設定（status.json）が使われる

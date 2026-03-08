@@ -449,9 +449,11 @@ def _start_foreground(args: argparse.Namespace) -> None:
     _start_pid_watchdog()
 
     from core.config import load_config
+    from core.time_utils import configure_timezone
 
     display_host = "localhost" if args.host == "0.0.0.0" else args.host
     config = load_config()
+    configure_timezone(config.system.timezone)
     if not config.setup_complete:
         print(f"Open http://{display_host}:{args.port}/setup/ to configure your animas and settings.")
     else:

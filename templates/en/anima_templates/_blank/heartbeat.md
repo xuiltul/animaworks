@@ -1,7 +1,7 @@
 # Heartbeat: {name}
 
 ## Active Hours
-24 hours (JST)
+24 hours (server timezone)
 
 ## Current Time
 Use the value from the current time field in the system prompt. Do not infer from history or schedule.

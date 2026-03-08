@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from core.time_utils import ensure_aware, now_iso, now_jst
+from core.time_utils import ensure_aware, now_iso, now_local
 
 logger = logging.getLogger("animaworks.rag.retriever")
 
@@ -268,7 +268,7 @@ class MemoryRetriever:
         - Temporal decay: exponential decay based on document age
         - Frequency boost: log-scaled boost based on access count (Hebbian LTP)
         """
-        now = now_jst()
+        now = now_local()
 
         for result in results:
             # --- Temporal decay (existing) ---

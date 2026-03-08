@@ -424,7 +424,7 @@ class TestDeadlineMandatory:
 class TestFormatForPrimingWithStaleness:
     """Tests for staleness and deadline markers in format_for_priming().
 
-    Uses unittest.mock.patch to control now_jst() in the task_queue module.
+    Uses unittest.mock.patch to control now_local() in the task_queue module.
     Tasks are written directly to JSONL with specific timestamps.
     """
 
@@ -457,7 +457,7 @@ class TestFormatForPrimingWithStaleness:
         updated_at = (now - timedelta(minutes=15)).isoformat()
         self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00+09:00")
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\u23f1\ufe0f 15\u5206\u7d4c\u904e" in output
@@ -468,7 +468,7 @@ class TestFormatForPrimingWithStaleness:
         updated_at = (now - timedelta(minutes=45)).isoformat()
         self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00+09:00")
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\u26a0\ufe0f STALE" in output
@@ -479,7 +479,7 @@ class TestFormatForPrimingWithStaleness:
         updated_at = (now - timedelta(minutes=5)).isoformat()
         self._write_task_entry(task_queue, updated_at=updated_at, deadline="2026-03-01T14:00:00+09:00")
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\u26a0\ufe0f STALE" not in output
@@ -493,7 +493,7 @@ class TestFormatForPrimingWithStaleness:
             deadline="2026-03-01T14:30:00+09:00",
         )
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\U0001f4c5 14:30\u307e\u3067" in output
@@ -507,7 +507,7 @@ class TestFormatForPrimingWithStaleness:
             deadline="2026-03-01T14:00:00+09:00",
         )
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             output = task_queue.format_for_priming()
 
         assert "\U0001f534 OVERDUE" in output
@@ -518,7 +518,7 @@ class TestFormatForPrimingWithStaleness:
         updated_at = (now - timedelta(minutes=5)).isoformat()
         self._write_task_entry(task_queue, updated_at=updated_at, deadline=None)
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             output = task_queue.format_for_priming()
 
         # Should produce output without crashing; no deadline markers
@@ -546,7 +546,7 @@ class TestFormatForPrimingWithStaleness:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
         now = datetime(2026, 3, 1, 12, 0, 0, tzinfo=JST)
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             # Should not raise
             output = task_queue.format_for_priming()
 
@@ -587,7 +587,7 @@ class TestGetStaleTasks:
         old_time = (now - timedelta(minutes=45)).isoformat()
         task_id = self._write_task_entry(task_queue, updated_at=old_time)
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             stale = task_queue.get_stale_tasks()
 
         assert len(stale) == 1
@@ -599,7 +599,7 @@ class TestGetStaleTasks:
         recent_time = (now - timedelta(minutes=10)).isoformat()
         self._write_task_entry(task_queue, updated_at=recent_time)
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             stale = task_queue.get_stale_tasks()
 
         assert len(stale) == 0
@@ -615,7 +615,7 @@ class TestGetStaleTasks:
         old_time = (now - timedelta(minutes=45)).isoformat()
         self._write_task_entry(task_queue, updated_at=old_time, status="done")
 
-        with patch("core.memory.task_queue.now_jst", return_value=now):
+        with patch("core.memory.task_queue.now_local", return_value=now):
             stale = task_queue.get_stale_tasks()
 
         assert len(stale) == 0

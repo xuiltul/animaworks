@@ -33,7 +33,7 @@ from core.supervisor._mgr_reconcile import ReconcileMixin
 from core.supervisor._mgr_scheduler import SchedulerMixin
 from core.supervisor.ipc import IPCResponse
 from core.supervisor.process_handle import ProcessHandle, ProcessState
-from core.time_utils import ensure_aware, now_jst
+from core.time_utils import ensure_aware, now_local
 
 logger = logging.getLogger(__name__)
 
@@ -670,7 +670,7 @@ class ProcessSupervisor(HealthMixin, ReconcileMixin, SchedulerMixin):
         if not handle:
             return {"status": "not_found"}
 
-        uptime = (now_jst() - ensure_aware(handle.stats.started_at)).total_seconds()
+        uptime = (now_local() - ensure_aware(handle.stats.started_at)).total_seconds()
 
         return {
             "status": "bootstrapping" if self.is_bootstrapping(anima_name) else handle.state.value,

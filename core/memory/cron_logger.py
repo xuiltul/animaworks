@@ -9,7 +9,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-from core.time_utils import now_iso, now_jst
+from core.time_utils import now_iso, now_local
 
 logger = logging.getLogger("animaworks.memory")
 
@@ -41,7 +41,7 @@ class CronLogger:
         """Append a cron execution result to the daily log."""
         log_dir = self._log_dir()
         log_dir.mkdir(parents=True, exist_ok=True)
-        path = log_dir / f"{now_jst().date().isoformat()}.jsonl"
+        path = log_dir / f"{now_local().date().isoformat()}.jsonl"
 
         entry = json.dumps(
             {
@@ -79,7 +79,7 @@ class CronLogger:
         """
         log_dir = self._log_dir()
         log_dir.mkdir(parents=True, exist_ok=True)
-        path = log_dir / f"{now_jst().date().isoformat()}.jsonl"
+        path = log_dir / f"{now_local().date().isoformat()}.jsonl"
 
         # Count lines
         stdout_lines_list = stdout.splitlines()
@@ -132,7 +132,7 @@ class CronLogger:
             return ""
 
         parts: list[str] = []
-        today = now_jst().date()
+        today = now_local().date()
         for i in range(days):
             target = today - timedelta(days=i)
             path = log_dir / f"{target.isoformat()}.jsonl"

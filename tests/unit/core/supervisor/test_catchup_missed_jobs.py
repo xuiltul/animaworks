@@ -13,15 +13,18 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from core.supervisor._mgr_scheduler import (
-    _JST,
     _marker_dir,
     _read_marker,
     _write_marker,
 )
+
+# Fixed TZ for deterministic tests (production uses get_app_timezone())
+_TEST_TZ = ZoneInfo("Asia/Tokyo")
 
 # ── Marker helpers ──────────────────────────────────────────────────
 
@@ -29,7 +32,7 @@ from core.supervisor._mgr_scheduler import (
 class TestMarkerHelpers:
     def test_write_and_read_marker(self, tmp_path: Path) -> None:
         marker = tmp_path / "test_marker"
-        ts = datetime(2026, 3, 4, 2, 0, tzinfo=_JST)
+        ts = datetime(2026, 3, 4, 2, 0, tzinfo=_TEST_TZ)
         _write_marker(marker, ts)
 
         result = _read_marker(marker)
@@ -50,7 +53,7 @@ class TestMarkerHelpers:
         _write_marker(marker)
         result = _read_marker(marker)
         assert result is not None
-        assert (datetime.now(_JST) - result).total_seconds() < 5
+        assert (datetime.now(_TEST_TZ) - result).total_seconds() < 5
 
     def test_marker_dir_creates_directory(self, tmp_path: Path) -> None:
         d = _marker_dir(tmp_path / "data")
@@ -66,31 +69,31 @@ class TestCatchupDetection:
 
     def test_daily_missed_when_marker_old(self, tmp_path: Path) -> None:
         marker = tmp_path / "last_daily_consolidation"
-        _write_marker(marker, datetime.now(_JST) - timedelta(hours=40))
+        _write_marker(marker, datetime.now(_TEST_TZ) - timedelta(hours=40))
         last = _read_marker(marker)
         assert last is not None
-        assert (datetime.now(_JST) - last) > timedelta(hours=36)
+        assert (datetime.now(_TEST_TZ) - last) > timedelta(hours=36)
 
     def test_daily_not_missed_when_recent(self, tmp_path: Path) -> None:
         marker = tmp_path / "last_daily_consolidation"
-        _write_marker(marker, datetime.now(_JST) - timedelta(hours=10))
+        _write_marker(marker, datetime.now(_TEST_TZ) - timedelta(hours=10))
         last = _read_marker(marker)
         assert last is not None
-        assert (datetime.now(_JST) - last) <= timedelta(hours=36)
+        assert (datetime.now(_TEST_TZ) - last) <= timedelta(hours=36)
 
     def test_weekly_missed_when_marker_old(self, tmp_path: Path) -> None:
         marker = tmp_path / "last_weekly_integration"
-        _write_marker(marker, datetime.now(_JST) - timedelta(days=10))
+        _write_marker(marker, datetime.now(_TEST_TZ) - timedelta(days=10))
         last = _read_marker(marker)
         assert last is not None
-        assert (datetime.now(_JST) - last) > timedelta(days=9)
+        assert (datetime.now(_TEST_TZ) - last) > timedelta(days=9)
 
     def test_weekly_not_missed_when_recent(self, tmp_path: Path) -> None:
         marker = tmp_path / "last_weekly_integration"
-        _write_marker(marker, datetime.now(_JST) - timedelta(days=5))
+        _write_marker(marker, datetime.now(_TEST_TZ) - timedelta(days=5))
         last = _read_marker(marker)
         assert last is not None
-        assert (datetime.now(_JST) - last) <= timedelta(days=9)
+        assert (datetime.now(_TEST_TZ) - last) <= timedelta(days=9)
 
     def test_monthly_missed_when_no_marker(self, tmp_path: Path) -> None:
         last = _read_marker(tmp_path / "last_monthly_forgetting")
@@ -98,10 +101,10 @@ class TestCatchupDetection:
 
     def test_monthly_not_missed_when_recent(self, tmp_path: Path) -> None:
         marker = tmp_path / "last_monthly_forgetting"
-        _write_marker(marker, datetime.now(_JST) - timedelta(days=20))
+        _write_marker(marker, datetime.now(_TEST_TZ) - timedelta(days=20))
         last = _read_marker(marker)
         assert last is not None
-        assert (datetime.now(_JST) - last) <= timedelta(days=35)
+        assert (datetime.now(_TEST_TZ) - last) <= timedelta(days=35)
 
 
 # ── Catch-up execution ──────────────────────────────────────────────
@@ -136,11 +139,11 @@ async def test_catchup_daily_indexing_when_missed(tmp_path: Path) -> None:
     _create_anima_dir(sup.animas_dir, "sakura")
 
     mdir = _marker_dir(sup._get_data_dir())
-    _write_marker(mdir / "last_daily_consolidation", datetime.now(_JST) - timedelta(hours=1))
-    _write_marker(mdir / "last_weekly_integration", datetime.now(_JST) - timedelta(days=1))
-    _write_marker(mdir / "last_monthly_forgetting", datetime.now(_JST) - timedelta(days=1))
-    _write_marker(mdir / "last_housekeeping", datetime.now(_JST) - timedelta(hours=1))
-    _write_marker(mdir / "last_daily_indexing", datetime.now(_JST) - timedelta(hours=40))
+    _write_marker(mdir / "last_daily_consolidation", datetime.now(_TEST_TZ) - timedelta(hours=1))
+    _write_marker(mdir / "last_weekly_integration", datetime.now(_TEST_TZ) - timedelta(days=1))
+    _write_marker(mdir / "last_monthly_forgetting", datetime.now(_TEST_TZ) - timedelta(days=1))
+    _write_marker(mdir / "last_housekeeping", datetime.now(_TEST_TZ) - timedelta(hours=1))
+    _write_marker(mdir / "last_daily_indexing", datetime.now(_TEST_TZ) - timedelta(hours=40))
 
     with (
         patch.object(sup, "_run_daily_indexing", new_callable=AsyncMock) as mock_indexing,

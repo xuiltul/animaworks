@@ -383,7 +383,7 @@ Save the report as knowledge/monthly_report_YYYY-MM.md.
 ## Notes
 
 - cron.md changes take effect on server restart or next Heartbeat (not immediate)
-- Timezone follows server config (usually JST)
+- Timezone is configurable via `config.json` `system.timezone`. Default: auto-detected from system
 - Multiple tasks at the same time run in parallel
 - Command-type task failures do not stop the server (logged)
 - LLM-type tasks use the current model config from status.json

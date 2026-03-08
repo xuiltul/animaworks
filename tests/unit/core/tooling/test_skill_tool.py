@@ -99,11 +99,11 @@ class TestApplyBuiltins:
         assert result == "No placeholders here."
 
     def test_multiple_placeholders_replaced(self):
-        content = "Name: {{anima_name}}, Dir: {{anima_dir}}, Time: {{now_jst}}"
+        content = "Name: {{anima_name}}, Dir: {{anima_dir}}, Time: {{now_local}}"
         builtins = {
             "anima_name": "bob",
             "anima_dir": "/data/animas/bob",
-            "now_jst": "2026-02-22T10:00:00+09:00",
+            "now_local": "2026-02-22T10:00:00+09:00",
         }
         result = apply_builtins(content, builtins)
         assert result == (
@@ -372,13 +372,13 @@ class TestStripFrontmatter:
 class TestResolveBuiltins:
     """Test _resolve_builtins() builtin variable resolution."""
 
-    def test_contains_now_jst(self, tmp_path: Path):
+    def test_contains_now_local(self, tmp_path: Path):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         builtins = _resolve_builtins(anima_dir)
-        assert "now_jst" in builtins
+        assert "now_local" in builtins
         # Should be a valid ISO8601 string with timezone info
-        assert "+" in builtins["now_jst"] or "T" in builtins["now_jst"]
+        assert "+" in builtins["now_local"] or "T" in builtins["now_local"]
 
     def test_contains_anima_name(self, tmp_path: Path):
         anima_dir = tmp_path / "animas" / "alice"
@@ -396,7 +396,7 @@ class TestResolveBuiltins:
         anima_dir = tmp_path / "animas" / "test"
         anima_dir.mkdir(parents=True)
         builtins = _resolve_builtins(anima_dir)
-        assert set(builtins.keys()) == {"now_jst", "anima_name", "anima_dir"}
+        assert set(builtins.keys()) == {"now_local", "anima_name", "anima_dir"}
 
 
 # ── load_and_render_skill ────────────────────────────────
@@ -537,16 +537,16 @@ class TestLoadAndRenderSkill:
         )
         assert "コンテキスト" not in result
 
-    def test_now_jst_placeholder_replaced(self, tmp_path: Path):
-        """The {{now_jst}} builtin is replaced with a timestamp."""
+    def test_now_local_placeholder_replaced(self, tmp_path: Path):
+        """The {{now_local}} builtin is replaced with a timestamp."""
         anima_dir, skills_dir, common, procs = self._setup_dirs(tmp_path)
         _make_skill_dir_file(
-            skills_dir, "timed", content="Current time: {{now_jst}}"
+            skills_dir, "timed", content="Current time: {{now_local}}"
         )
         result = load_and_render_skill(
             "timed", anima_dir, skills_dir, common, procs
         )
-        assert "{{now_jst}}" not in result
+        assert "{{now_local}}" not in result
         # Should contain an ISO8601-like timestamp with T separator
         assert "T" in result
 

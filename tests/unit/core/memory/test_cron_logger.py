@@ -395,10 +395,10 @@ class TestReadCronLog:
         assert "cmd-task" in result
         assert "exit=0" in result
 
-    def test_now_jst_used_for_date(self, cl: CronLogger, anima_dir: Path) -> None:
-        """Verify that now_jst() determines the log file date, not date.today()."""
+    def test_now_local_used_for_date(self, cl: CronLogger, anima_dir: Path) -> None:
+        """Verify that now_local() determines the log file date, not date.today()."""
         fake_jst = datetime(2026, 3, 6, 1, 30, 0, tzinfo=JST)
-        with patch("core.memory.cron_logger.now_jst", return_value=fake_jst):
+        with patch("core.memory.cron_logger.now_local", return_value=fake_jst):
             cl.append_cron_log("jst-task", summary="jst check", duration_ms=1)
 
         path = anima_dir / "state" / "cron_logs" / "2026-03-06.jsonl"

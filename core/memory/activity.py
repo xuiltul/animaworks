@@ -75,7 +75,7 @@ from core.memory._activity_priming import PrimingMixin
 from core.memory._activity_rotation import RotationMixin
 from core.memory._activity_timeline import TimelineMixin
 from core.paths import get_data_dir
-from core.time_utils import ensure_aware, now_iso, now_jst  # noqa: F401
+from core.time_utils import ensure_aware, now_iso, now_local  # noqa: F401
 
 logger = logging.getLogger("animaworks.activity")
 
@@ -239,7 +239,7 @@ class ActivityLogger(
             Chronologically sorted list of all matching entries.
         """
         entries: list[ActivityEntry] = []
-        now = now_jst()
+        now = now_local()
         today = now.date()
         type_set = _resolve_type_filter(types)
 

@@ -63,6 +63,19 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _reset_app_timezone():
+    """Reset the application timezone to the fallback after each test.
+
+    Prevents state leakage when tests call ``configure_timezone()``.
+    """
+    import core.time_utils as _tu
+
+    original = _tu._app_tz
+    yield
+    _tu._app_tz = original
+
+
+@pytest.fixture(autouse=True)
 def _restore_load_auth():
     """Restore server.app.load_auth after tests that monkey-patch it.
 

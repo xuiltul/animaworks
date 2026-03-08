@@ -16,7 +16,7 @@ from core.i18n import t
 from core.memory import MemoryManager
 from core.memory.shortterm import ShortTermMemory
 from core.paths import PROJECT_DIR, get_data_dir, load_prompt
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.prompt_builder")
 
@@ -766,7 +766,7 @@ def build_system_prompt(
     if injection:
         _add(injection, "injection", 1)
 
-    current_time = now_jst().strftime("%Y-%m-%d %H:%M (%Z)")
+    current_time = now_local().strftime("%Y-%m-%d %H:%M (%Z)")
     _add(f"{_ss.get('current_time_label', '**Current time**:')} {current_time}", "current_time", 1)
 
     _br = (_prompt_store.get_section("behavior_rules") if _prompt_store else None) or load_prompt("behavior_rules")

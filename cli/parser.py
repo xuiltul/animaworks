@@ -23,6 +23,16 @@ def cli_main() -> None:
         log_dir=get_data_dir() / "logs",
     )
 
+    from core.config import load_config
+    from core.time_utils import configure_timezone
+
+    config_path = get_data_dir() / "config.json"
+    if config_path.exists():
+        _cfg = load_config(config_path)
+        configure_timezone(_cfg.system.timezone)
+    else:
+        configure_timezone("")
+
     parser = argparse.ArgumentParser(description="AnimaWorks - Digital Anima Framework")
     parser.add_argument("--gateway-url", default=None, help="Gateway URL")
     parser.add_argument(

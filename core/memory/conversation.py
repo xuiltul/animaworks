@@ -23,7 +23,7 @@ import logging
 import os
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -31,7 +31,7 @@ from core.i18n import t
 from core.memory._io import atomic_write_text
 from core.paths import load_prompt
 from core.schemas import ModelConfig
-from core.time_utils import ensure_aware, now_iso, now_jst
+from core.time_utils import ensure_aware, now_iso, now_local, today_local
 
 if TYPE_CHECKING:
     from core.memory.manager import MemoryManager
@@ -371,7 +371,7 @@ class ConversationMemory:
         (not heartbeat/cron/inbox).
         """
         self._transcript_dir.mkdir(parents=True, exist_ok=True)
-        today = date.today().isoformat()
+        today = today_local().isoformat()
         path = self._transcript_dir / f"{today}.jsonl"
 
         entry: dict[str, Any] = {
@@ -879,7 +879,7 @@ class ConversationMemory:
         from core.memory.manager import MemoryManager
 
         memory_mgr = MemoryManager(self.anima_dir)
-        timestamp = now_jst()
+        timestamp = now_local()
         time_str = timestamp.strftime("%H:%M")
         episode_entry = f"## {time_str} — {parsed.title}\n\n{parsed.episode_body}\n"
         memory_mgr.append_episode(episode_entry)
@@ -918,7 +918,7 @@ class ConversationMemory:
         logger.info(
             "Session finalized: %d new turns summarized and written to episodes/%s.md",
             len(new_turns),
-            date.today().isoformat(),
+            today_local().isoformat(),
         )
 
         return True
@@ -949,7 +949,7 @@ class ConversationMemory:
 
             # Check idle: last turn must be older than SESSION_GAP_MINUTES
             last_turn_ts = datetime.fromisoformat(state.turns[-1].timestamp)
-            idle_seconds = (now_jst() - ensure_aware(last_turn_ts)).total_seconds()
+            idle_seconds = (now_local() - ensure_aware(last_turn_ts)).total_seconds()
             is_idle = idle_seconds >= SESSION_GAP_MINUTES * 60
 
             # Pre-compress idle conversations so next chat is not blocked
@@ -1132,14 +1132,14 @@ class ConversationMemory:
         # Append resolved items with checkmark
         for item in parsed.resolved_items:
             if item not in current:
-                marker = t("conversation.resolved_marker", item=item, ts=now_jst().strftime("%m/%d %H:%M"))
+                marker = t("conversation.resolved_marker", item=item, ts=now_local().strftime("%m/%d %H:%M"))
                 current += f"\n{marker}"
                 updated = True
 
         # Append new tasks
         for task in parsed.new_tasks:
             if task not in current:
-                current += "\n" + t("conversation.new_task_marker", task=task, ts=now_jst().strftime("%m/%d %H:%M"))
+                current += "\n" + t("conversation.new_task_marker", task=task, ts=now_local().strftime("%m/%d %H:%M"))
                 updated = True
 
         if updated:

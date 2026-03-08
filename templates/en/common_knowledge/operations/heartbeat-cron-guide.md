@@ -73,7 +73,7 @@ Path: `~/.animaworks/animas/{name}/heartbeat.md`
 # Heartbeat: {name}
 
 ## Active Hours
-24 hours (JST)
+24 hours (server timezone)
 
 ## Checklist
 - Unread messages in Inbox?
@@ -95,7 +95,7 @@ Path: `~/.animaworks/animas/{name}/heartbeat.md`
 - Use `HH:MM - HH:MM` (e.g. `9:00 - 22:00`)
 - Heartbeat does not run outside this range
 - Default when unset: 24 hours (all day)
-- Timezone: Asia/Tokyo (fixed)
+- Timezone: configurable via `config.json` `system.timezone`. Default: auto-detected from system
 
 **Checklist** (MUST):
 - Items the agent checks when Heartbeat runs
@@ -400,7 +400,7 @@ Examples:
 - `0 2 1 * *` — 2:00 on 1st of month
 - `0 17 * * 5` — Every Friday 17:00
 
-Timezone is always Asia/Tokyo (fixed).
+Timezone is configurable via `config.json` `system.timezone`. Default: auto-detected from system.
 
 ### Migration from Japanese Schedule Notation
 

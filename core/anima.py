@@ -39,7 +39,7 @@ from core.memory.activity import ActivityLogger
 from core.messenger import Messenger
 from core.schemas import AnimaStatus, ModelConfig
 from core.session_compactor import SessionCompactor
-from core.time_utils import now_jst
+from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.anima")
 
@@ -101,7 +101,7 @@ class DigitalAnima(
 
             mono = time.monotonic()
             if mono - self._progress_last_mono >= self._progress_min_interval:
-                self._last_progress_at = now_jst()
+                self._last_progress_at = now_local()
                 self._progress_last_mono = mono
 
         self.agent._progress_callback = _throttled_progress
@@ -156,7 +156,7 @@ class DigitalAnima(
         Prevents the health monitor from seeing a stale ``_last_progress_at``
         from the previous task and falsely killing a process that just started.
         """
-        now = now_jst()
+        now = now_local()
         self._last_progress_at = now
         self._busy_since = now
 

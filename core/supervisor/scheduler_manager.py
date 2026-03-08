@@ -24,6 +24,7 @@ from apscheduler.triggers.cron import CronTrigger
 from core.config.models import ActivityScheduleEntry, load_config, save_config
 from core.schedule_parser import parse_cron_md, parse_heartbeat_config, parse_schedule
 from core.schemas import CronTask
+from core.time_utils import get_app_timezone, now_local
 
 if TYPE_CHECKING:
     from core.anima import DigitalAnima
@@ -72,7 +73,7 @@ class SchedulerManager:
             return
 
         try:
-            self.scheduler = AsyncIOScheduler(timezone="Asia/Tokyo")
+            self.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
             self._setup_heartbeat()
             self._setup_cron_tasks()
             self._setup_activity_schedule()
@@ -169,13 +170,9 @@ class SchedulerManager:
             )
         else:
             # IntervalTrigger for intervals > 60 minutes
-            from datetime import datetime
-            from zoneinfo import ZoneInfo
-
             from apscheduler.triggers.interval import IntervalTrigger as APIntervalTrigger
 
-            tz = ZoneInfo("Asia/Tokyo")
-            now = datetime.now(tz)
+            now = now_local()
             start_minute = now.minute + offset
             start_time = now.replace(minute=start_minute % 60, second=0, microsecond=0)
 
@@ -251,14 +248,11 @@ class SchedulerManager:
 
     def _apply_current_schedule_level(self) -> None:
         """Apply the correct activity level for the current time at startup."""
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-
         app_config = load_config()
         if not app_config.activity_schedule:
             return
 
-        now_hhmm = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%H:%M")
+        now_hhmm = now_local().strftime("%H:%M")
         target = self.resolve_scheduled_level(app_config.activity_schedule, now_hhmm)
         if target is not None and target != app_config.activity_level:
             app_config.activity_level = target
@@ -276,14 +270,11 @@ class SchedulerManager:
 
     async def _activity_schedule_tick(self) -> None:
         """Check current time against activity_schedule and switch level if needed."""
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-
         app_config = load_config()
         if not app_config.activity_schedule:
             return
 
-        now_hhmm = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%H:%M")
+        now_hhmm = now_local().strftime("%H:%M")
         target = self.resolve_scheduled_level(app_config.activity_schedule, now_hhmm)
         if target is None:
             return

@@ -632,10 +632,10 @@ class OrgToolsMixin:
                 recent = self._read_recent_activity(desc_dir, limit=1)
                 if recent:
                     result["last_activity"] = recent[-1].ts
-                    from core.time_utils import ensure_aware, now_jst
+                    from core.time_utils import ensure_aware, now_local
 
                     ts = ensure_aware(datetime.fromisoformat(recent[-1].ts))
-                    elapsed = (now_jst() - ts).total_seconds()
+                    elapsed = (now_local() - ts).total_seconds()
                     minutes = int(elapsed / 60)
                     if minutes < 60:
                         result["since"] = t("handler.since_minutes", minutes=minutes)

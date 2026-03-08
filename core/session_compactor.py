@@ -143,7 +143,7 @@ async def _compact_mode_c(anima: DigitalAnima, thread_id: str) -> bool:
     from core.execution.codex_sdk import _clear_thread_id
     from core.memory.conversation import ConversationMemory
     from core.memory.shortterm import SessionState, ShortTermMemory
-    from core.time_utils import now_jst
+    from core.time_utils import now_local
 
     conv = ConversationMemory(anima.anima_dir, anima.agent.model_config, thread_id=thread_id)
     await conv.compress_if_needed()
@@ -160,7 +160,7 @@ async def _compact_mode_c(anima: DigitalAnima, thread_id: str) -> bool:
     shortterm.save(
         SessionState(
             accumulated_response="\n".join(summary_parts)[:4000],
-            timestamp=now_jst().isoformat(),
+            timestamp=now_local().isoformat(),
             trigger="idle_compaction",
             notes="Auto-saved before Codex thread discard",
         )

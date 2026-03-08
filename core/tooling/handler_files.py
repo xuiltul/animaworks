@@ -209,9 +209,9 @@ class FileToolsMixin:
                 memory.write_procedure_with_meta(path, content, metadata)
                 return True
             if parts[0] == "knowledge":
-                from core.schemas import now_jst
+                from core.time_utils import now_local
 
-                ts = now_jst().isoformat()
+                ts = now_local().isoformat()
                 metadata = {
                     "confidence": 0.5,
                     "created_at": ts,

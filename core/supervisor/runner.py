@@ -34,7 +34,7 @@ from core.supervisor.ipc import IPCRequest, IPCResponse, IPCServer
 from core.supervisor.pending_executor import PendingTaskExecutor
 from core.supervisor.scheduler_manager import SchedulerManager
 from core.supervisor.streaming_handler import StreamingIPCHandler
-from core.time_utils import ensure_aware, now_jst
+from core.time_utils import ensure_aware, now_local
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class AnimaRunner:
         self.pending_task_watcher_task: asyncio.Task | None = None
         self.shutdown_event = asyncio.Event()
         self._ready_event = asyncio.Event()
-        self._started_at = now_jst()
+        self._started_at = now_local()
         self._lock_file: Any | None = None
 
         # Delegate instances (created in run() after anima initialization)
@@ -554,7 +554,7 @@ class AnimaRunner:
         ``status: "ok"`` once ready.  The parent process polls this to
         confirm readiness.
         """
-        uptime = (now_jst() - ensure_aware(self._started_at)).total_seconds()
+        uptime = (now_local() - ensure_aware(self._started_at)).total_seconds()
         status = "ok" if self._ready_event.is_set() else "initializing"
         is_busy = False
         if self.anima is not None:
@@ -714,6 +714,15 @@ async def main() -> None:
     args = parse_args()
 
     setup_logging(args.anima_name, args.log_dir)
+
+    from core.config import load_config
+    from core.time_utils import configure_timezone
+
+    try:
+        cfg = load_config()
+        configure_timezone(cfg.system.timezone)
+    except Exception:
+        configure_timezone("")
 
     _install_signal_diagnostics(args.anima_name)
 
