@@ -105,6 +105,10 @@ class MemoryRetriever:
             include_superseded: If False (default), exclude knowledge that has
                 been superseded (``valid_until`` is non-empty). Set to True
                 to include all knowledge regardless of validity.
+            min_score: If set, filter out results whose raw vector similarity
+                score (before temporal decay / frequency boost) is below this
+                threshold.  ``None`` (default) disables filtering.  Spreading
+                activation results (no ``"vector"`` key) are never filtered.
 
         Returns:
             List of retrieval results sorted by combined score

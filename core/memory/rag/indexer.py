@@ -18,6 +18,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -116,6 +117,7 @@ class MemoryIndexer:
             return {}
 
     _ragignore_cache: ClassVar[tuple[float, list[str]] | None] = None
+    _ragignore_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
     def _load_ragignore(cls) -> list[str]:
@@ -127,14 +129,16 @@ class MemoryIndexer:
             return []
         try:
             mtime = ragignore_path.stat().st_mtime
-            if cls._ragignore_cache and cls._ragignore_cache[0] == mtime:
-                return cls._ragignore_cache[1]
+            with cls._ragignore_lock:
+                if cls._ragignore_cache and cls._ragignore_cache[0] == mtime:
+                    return cls._ragignore_cache[1]
             patterns = []
             for line in ragignore_path.read_text(encoding="utf-8").splitlines():
                 stripped = line.strip()
                 if stripped and not stripped.startswith("#"):
                     patterns.append(stripped)
-            cls._ragignore_cache = (mtime, patterns)
+            with cls._ragignore_lock:
+                cls._ragignore_cache = (mtime, patterns)
             return patterns
         except Exception as e:
             logger.warning("Failed to load .ragignore: %s", e)
