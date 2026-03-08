@@ -12,6 +12,9 @@ import pytest
 from core.anima_factory import (
     _detect_sheet_locale,
     _extract_name_from_md,
+    _get_anima_templates_dir,
+    _get_bootstrap_template,
+    _get_roles_dir,
     _parse_character_sheet_info,
     _validate_character_sheet,
 )
@@ -232,6 +235,101 @@ class TestToolDescriptionLocale:
         """get_default_guide returns English for en locale."""
         result = get_default_guide("s_mcp", locale="en")
         assert "MCP" in result or "task" in result.lower()
+
+
+# ── TestAnimaFactoryFallbackChain ──────────────────────────────
+
+
+class TestAnimaFactoryFallbackChain:
+    """Test that anima_factory locale helpers use locale → en → ja fallback."""
+
+    def test_get_anima_templates_dir_uses_en_fallback(self, tmp_path):
+        """Unknown locale falls back to en before ja."""
+        en_dir = tmp_path / "en" / "anima_templates"
+        en_dir.mkdir(parents=True)
+        ja_dir = tmp_path / "ja" / "anima_templates"
+        ja_dir.mkdir(parents=True)
+
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
+            "core.paths._get_locale", return_value="fr"
+        ):
+            result = _get_anima_templates_dir(locale="fr")
+        assert result == en_dir
+
+    def test_get_anima_templates_dir_falls_back_to_ja(self, tmp_path):
+        """When neither requested locale nor en exists, falls back to ja."""
+        ja_dir = tmp_path / "ja" / "anima_templates"
+        ja_dir.mkdir(parents=True)
+
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
+            "core.paths._get_locale", return_value="fr"
+        ):
+            result = _get_anima_templates_dir(locale="fr")
+        assert result == ja_dir
+
+    def test_get_bootstrap_template_uses_en_fallback(self, tmp_path):
+        """Unknown locale falls back to en bootstrap.md."""
+        en_file = tmp_path / "en" / "bootstrap.md"
+        en_file.parent.mkdir(parents=True)
+        en_file.write_text("English bootstrap", encoding="utf-8")
+        ja_file = tmp_path / "ja" / "bootstrap.md"
+        ja_file.parent.mkdir(parents=True)
+        ja_file.write_text("Japanese bootstrap", encoding="utf-8")
+
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
+            "core.paths._get_locale", return_value="fr"
+        ):
+            result = _get_bootstrap_template(locale="fr")
+        assert result == en_file
+
+    def test_get_bootstrap_template_falls_back_to_ja(self, tmp_path):
+        """When neither requested locale nor en exists, falls back to ja."""
+        ja_file = tmp_path / "ja" / "bootstrap.md"
+        ja_file.parent.mkdir(parents=True)
+        ja_file.write_text("Japanese bootstrap", encoding="utf-8")
+
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
+            "core.paths._get_locale", return_value="fr"
+        ):
+            result = _get_bootstrap_template(locale="fr")
+        assert result == ja_file
+
+    def test_get_roles_dir_uses_en_fallback(self, tmp_path):
+        """Unknown locale falls back to en roles dir."""
+        en_dir = tmp_path / "en" / "roles"
+        en_dir.mkdir(parents=True)
+        ja_dir = tmp_path / "ja" / "roles"
+        ja_dir.mkdir(parents=True)
+
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
+            "core.paths._get_locale", return_value="fr"
+        ):
+            result = _get_roles_dir(locale="fr")
+        assert result == en_dir
+
+    def test_get_roles_dir_falls_back_to_ja(self, tmp_path):
+        """When neither requested locale nor en exists, falls back to ja."""
+        ja_dir = tmp_path / "ja" / "roles"
+        ja_dir.mkdir(parents=True)
+
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
+            "core.paths._get_locale", return_value="fr"
+        ):
+            result = _get_roles_dir(locale="fr")
+        assert result == ja_dir
+
+    def test_get_anima_templates_dir_prefers_exact_locale(self, tmp_path):
+        """Exact locale match is preferred over en/ja."""
+        en_dir = tmp_path / "en" / "anima_templates"
+        en_dir.mkdir(parents=True)
+        ja_dir = tmp_path / "ja" / "anima_templates"
+        ja_dir.mkdir(parents=True)
+
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
+            "core.paths._get_locale", return_value="en"
+        ):
+            result = _get_anima_templates_dir(locale="en")
+        assert result == en_dir
 
 
 # ── TestCharacterSheetMultilingual ─────────────────────────────
