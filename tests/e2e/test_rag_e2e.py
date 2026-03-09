@@ -477,7 +477,7 @@ def test_e2e_priming_integration(anima_dir, vector_store, indexer):
     )
 
     # Create today's episode file
-        today = today_local()
+    today = today_local()
     (episodes_dir / f"{today.isoformat()}.md").write_text(
         f"# {today.isoformat()} 行動ログ\n\n"
         "## 09:00 — 朝会\n\nプロジェクトAlphaの進捗確認。フロントエンド80%完了。\n\n"
