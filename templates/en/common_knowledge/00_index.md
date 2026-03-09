@@ -53,15 +53,29 @@ Follow this flow to find the right document:
 9. **Concerned about external data reliability / prompt injection?**
    → Read `security/prompt-injection-awareness.md`
 
-10. **Want to know what AnimaWorks can do / looking for use-case examples?**
+10. **Want to understand what you're made of / confused about identity.md vs injection.md?**
+   → Read `anatomy/anima-anatomy.md`
+
+10.5. **Want to understand how memory works / unsure about memory types?**
+   → Read `anatomy/memory-system.md`
+
+11. **Want to know what AnimaWorks can do / looking for use-case examples?**
    → Read `usecases/usecase-overview.md`
 
-11. **None of the above applies**
+12. **None of the above applies**
    → Search with `search_memory(query="keyword", scope="common_knowledge")`
 
 ---
 
 ## Document Listing
+
+### anatomy/ — Anima Anatomy & Components
+
+| File | Description |
+|------|-------------|
+| `anatomy/what-is-anima.md` | What is an Anima (concept, design philosophy, lifecycle, execution paths) |
+| `anatomy/anima-anatomy.md` | Complete file reference (roles and differences of identity / injection / heartbeat / cron, modification rules) |
+| `anatomy/memory-system.md` | Memory system guide (memory types, Priming, Consolidation, Forgetting, tool usage) |
 
 ### organization/ — Organization & Structure
 
@@ -180,6 +194,16 @@ Find the right document from relevant keywords.
 | VOICEVOX, ElevenLabs, Style-BERT-VITS2, SBV2 | `operations/voice-chat-guide.md` |
 | voice_id, voice, speaker, voice settings | `operations/voice-chat-guide.md` |
 | WebSocket, /ws/voice, barge-in, VAD, PTT | `operations/voice-chat-guide.md` |
+| Anima, self, anatomy, composition, design | `anatomy/what-is-anima.md` |
+| identity, injection, personality, duties, character, guidelines | `anatomy/anima-anatomy.md` |
+| identity.md, injection.md, difference, immutable, mutable | `anatomy/anima-anatomy.md` |
+| heartbeat, cron, periodic patrol, scheduled task | `anatomy/anima-anatomy.md`, `operations/heartbeat-cron-guide.md` |
+| permissions.md, status.json, configuration, permissions | `anatomy/anima-anatomy.md` |
+| bootstrap, first boot, initialization | `anatomy/anima-anatomy.md` |
+| memory, episodes, knowledge, procedures, skills | `anatomy/memory-system.md` |
+| short-term memory, episodic, semantic, procedural | `anatomy/memory-system.md` |
+| Priming, RAG, Consolidation, Forgetting | `anatomy/memory-system.md` |
+| search_memory, write_memory_file, memory search, memory write | `anatomy/memory-system.md` |
 | use case, examples, what can it do, getting started | `usecases/usecase-overview.md` |
 | email automation, chat monitoring, notification | `usecases/usecase-communication.md` |
 | code review, PR, CI/CD, development | `usecases/usecase-development.md` |

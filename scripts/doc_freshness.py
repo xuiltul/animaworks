@@ -123,6 +123,25 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
         "core/voice/",
         "server/routes/voice.py",
     ],
+    # ── common_knowledge — anatomy ──
+    "common_knowledge/anatomy/what-is-anima.md": [
+        "core/anima.py",
+        "core/background.py",
+        "core/lifecycle.py",
+    ],
+    "common_knowledge/anatomy/anima-anatomy.md": [
+        "core/anima_factory.py",
+        "core/init.py",
+        "core/prompt/builder.py",
+        "core/schedule_parser.py",
+    ],
+    "common_knowledge/anatomy/memory-system.md": [
+        "core/memory/",
+        "core/memory/priming.py",
+        "core/memory/consolidation.py",
+        "core/memory/forgetting.py",
+        "core/memory/rag/",
+    ],
     # ── common_knowledge — organization ──
     "common_knowledge/organization/hierarchy-rules.md": [
         "core/tooling/handler_org.py",
