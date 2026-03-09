@@ -18,8 +18,10 @@ RUN pip install --no-cache-dir ".[rag]"
 ENV ANIMAWORKS_TEMPLATES_DIR=/app/templates
 
 COPY demo/presets/ /demo/presets/
+COPY demo/examples/ /demo/examples/
+COPY demo/adjust_dates.sh /demo/adjust_dates.sh
 COPY demo/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh /demo/adjust_dates.sh
 
 EXPOSE 18501
 
