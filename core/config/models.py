@@ -747,6 +747,7 @@ DEFAULT_MODEL_MODE_PATTERNS: dict[str, str] = {
     "codex/*": "C",
     # ── A: Cloud API providers (LiteLLM + tool_use) ──────
     "openai/*": "A",
+    "novita/*": "A",
     "azure/*": "A",
     "bedrock/*": "A",
     "google/*": "A",

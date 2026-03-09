@@ -96,6 +96,33 @@ class TestBaseExecutor:
         with patch.dict(os.environ, {"MY_TEST_KEY": "env-key"}):
             assert executor._resolve_api_key() == "config-key"
 
+    def test_resolve_api_key_uses_novita_env_for_novita_model(self, tmp_path: Path):
+        config = ModelConfig(
+            model="novita/deepseek/deepseek-v3",
+            api_key=None,
+            api_key_env="OPENAI_API_KEY",
+        )
+        executor = ConcreteExecutor(model_config=config, anima_dir=tmp_path)
+        with patch.dict(
+            os.environ,
+            {"NOVITA_API_KEY": "novita-key", "OPENAI_API_KEY": "openai-key"},
+            clear=False,
+        ):
+            assert executor._resolve_api_key() == "novita-key"
+
+    def test_resolve_api_base_url_uses_novita_default(self, tmp_path: Path):
+        config = ModelConfig(model="novita/deepseek/deepseek-v3")
+        executor = ConcreteExecutor(model_config=config, anima_dir=tmp_path)
+        assert executor._resolve_api_base_url() == "https://api.novita.ai/openai"
+
+    def test_resolve_api_base_url_prefers_explicit_config(self, tmp_path: Path):
+        config = ModelConfig(
+            model="novita/deepseek/deepseek-v3",
+            api_base_url="https://custom.novita.gateway/openai",
+        )
+        executor = ConcreteExecutor(model_config=config, anima_dir=tmp_path)
+        assert executor._resolve_api_base_url() == "https://custom.novita.gateway/openai"
+
     @pytest.mark.asyncio
     async def test_execute(self, executor: ConcreteExecutor):
         result = await executor.execute("hello")

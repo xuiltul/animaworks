@@ -182,6 +182,27 @@ class TestBuildLlmKwargs:
         kwargs = ex._build_llm_kwargs()
         assert kwargs["api_base"] == "http://localhost:11434/v1"
 
+    def test_uses_novita_default_api_base(self, anima_dir: Path, memory: MagicMock):
+        model_config = ModelConfig(
+            model="novita/deepseek/deepseek-v3",
+            api_key="sk-test",
+            max_tokens=1024,
+            max_turns=5,
+            context_threshold=0.50,
+            max_chains=2,
+        )
+        th = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
+        from core.execution.litellm_loop import LiteLLMExecutor
+        ex = LiteLLMExecutor(
+            model_config=model_config,
+            anima_dir=anima_dir,
+            tool_handler=th,
+            tool_registry=[],
+            memory=memory,
+        )
+        kwargs = ex._build_llm_kwargs()
+        assert kwargs["api_base"] == "https://api.novita.ai/openai"
+
 
 # ── execute() — simple response ──────────────────────────────
 

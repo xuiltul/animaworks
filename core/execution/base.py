@@ -41,6 +41,7 @@ _active_interrupt_event: ContextVar[asyncio.Event | None] = ContextVar(
 # ── Adaptive Thinking helpers ─────────────────────────────────
 
 _ADAPTIVE_MODELS = frozenset({"claude-opus-4-6", "claude-sonnet-4-6"})
+_NOVITA_API_BASE = "https://api.novita.ai/openai"
 
 _PROVIDER_PREFIX_RE = re.compile(
     r"^(?:anthropic|bedrock|vertex_ai)/"
@@ -360,7 +361,17 @@ class BaseExecutor(ABC):
         """Resolve the actual API key (direct value from config, then env var)."""
         if self._model_config.api_key:
             return self._model_config.api_key
+        if self._model_config.model.startswith("novita/"):
+            return os.environ.get("NOVITA_API_KEY") or os.environ.get(self._model_config.api_key_env)
         return os.environ.get(self._model_config.api_key_env)
+
+    def _resolve_api_base_url(self) -> str | None:
+        """Resolve API base URL with provider defaults when applicable."""
+        if self._model_config.api_base_url:
+            return self._model_config.api_base_url
+        if self._model_config.model.startswith("novita/"):
+            return _NOVITA_API_BASE
+        return None
 
     def _read_replied_to_file(self) -> set[str]:
         """Read replied_to entries from persistent file."""

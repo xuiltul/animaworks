@@ -563,6 +563,7 @@ class TestResolveExecutionModeWildcard:
     def test_cloud_api_providers_a(self):
         config = AnimaWorksConfig()
         assert resolve_execution_mode(config, "openai/gpt-4.1") == "A"
+        assert resolve_execution_mode(config, "novita/deepseek/deepseek-v3") == "A"
         assert resolve_execution_mode(config, "google/gemini-2.5-pro") == "A"
         assert resolve_execution_mode(config, "zai/zai-model") == "A"
         assert resolve_execution_mode(config, "minimax/some-model") == "A"

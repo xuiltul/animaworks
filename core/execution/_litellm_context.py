@@ -64,8 +64,9 @@ class ContextMixin:
         api_key = self._resolve_api_key()
         if api_key:
             kwargs["api_key"] = api_key
-        if self._model_config.api_base_url:
-            kwargs["api_base"] = self._model_config.api_base_url
+        api_base = self._resolve_api_base_url()
+        if api_base:
+            kwargs["api_base"] = api_base
         self._apply_provider_kwargs(kwargs)
         # Extended thinking / reasoning control
         if self._model_config.thinking is not None:
