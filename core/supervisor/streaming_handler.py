@@ -101,6 +101,7 @@ class StreamingIPCHandler:
         images = request.params.get("images") or None
         attachment_paths = request.params.get("attachment_paths") or None
         thread_id = request.params.get("thread_id", "default")
+        source = request.params.get("source", "")
         full_response = ""
 
         # Track bootstrap state to detect completion
@@ -141,6 +142,7 @@ class StreamingIPCHandler:
                     images=images,
                     attachment_paths=attachment_paths,
                     thread_id=thread_id,
+                    source=source,
                 ):
                     event_type = chunk.get("type", "unknown")
 
