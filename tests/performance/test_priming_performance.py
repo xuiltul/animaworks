@@ -30,13 +30,13 @@ from core.memory.priming import PrimingEngine
 
 # Try to import optional dependencies
 try:
-    import psutil
+    import psutil  # noqa: F401
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
 
 try:
-    from core.memory.rag import MemoryIndexer, MemoryRetriever
+    from core.memory.rag import MemoryIndexer, MemoryRetriever  # noqa: F401
     import chromadb as _chromadb  # noqa: F401 — verify native dep is available
     RAG_AVAILABLE = True
 except ImportError:
