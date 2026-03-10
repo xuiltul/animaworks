@@ -13,6 +13,7 @@
 .chat-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px 20px;
   min-height: 0;
 }
@@ -33,6 +34,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  min-width: 0;
 }
 
 .chat-msg-row.user {
@@ -919,11 +921,13 @@
 
 .chat-bubble {
   width: 100%;
+  min-width: 0;
   padding: 10px 14px;
   border-radius: 0;
   font-size: 0.92rem;
   line-height: 1.55;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
@@ -942,6 +946,7 @@
   background: transparent;
   color: var(--aw-color-text-primary);
   white-space: normal;
+  overflow: hidden;
 }
 
 /* ── Bubble Action Bar ──────────────────── */
@@ -1054,6 +1059,7 @@
   margin: 0.4em 0;
   font-size: 0.82em;
   line-height: 1.5;
+  max-width: 100%;
 }
 .chat-bubble.assistant pre code {
   background: none;
@@ -1071,6 +1077,9 @@
   border-collapse: collapse;
   margin: 0.4em 0;
   font-size: 0.85em;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
 }
 .chat-bubble.assistant th,
 .chat-bubble.assistant td {
@@ -1682,6 +1691,38 @@
 
 .tool-activity-item--error:not(.tool-activity-item--running) {
   animation: aw-slide-in 0.2s ease-out, aw-flash-error 0.6s ease-out;
+}
+
+/* Suppress animations during streaming to prevent flicker */
+.chat-bubble.streaming .tool-activity-item {
+  animation: none;
+}
+.chat-bubble.streaming .tool-activity-item--running::before {
+  animation: aw-progress-dots 1.2s ease-in-out infinite;
+}
+
+/* Completed tools collapsible section */
+.tool-activity-completed {
+  font-size: 0.75rem;
+}
+.tool-activity-completed-summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  color: var(--aw-color-text-muted);
+  user-select: none;
+  list-style: none;
+}
+.tool-activity-completed-summary::-webkit-details-marker { display: none; }
+.tool-activity-completed-summary::before {
+  content: "\25B6";
+  font-size: 0.6rem;
+  transition: transform 0.15s;
+}
+.tool-activity-completed[open] > .tool-activity-completed-summary::before {
+  transform: rotate(90deg);
 }
 
 /* details smooth open/close */
@@ -2610,7 +2651,17 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-style: italic;
+  max-height: calc(1.5em * 5);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--aw-color-border-medium) transparent;
 }
+.thinking-inline-preview::-webkit-scrollbar { width: 4px; }
+.thinking-inline-preview::-webkit-scrollbar-thumb {
+  background: var(--aw-color-border-medium);
+  border-radius: 2px;
+}
+.thinking-inline-preview::-webkit-scrollbar-track { background: transparent; }
 
 /* Dark mode overrides */
 @media (prefers-color-scheme: dark) {

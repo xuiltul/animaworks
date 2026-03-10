@@ -872,30 +872,63 @@ scripts/publish.sh --release --push    # 推奨: 一括実行
 
 ### publicリポジトリPR取り込み
 
-**原則: PRブランチ上でリファクタしてマージする。main直接実装は避ける。**
+**鉄則: PRは必ず GitHub 上で「Merged」にする。「Closed」にしない。**
 
-コントリビューターのPRをクローズばかりしているとモチベーションを損なう。
-機能を取り込む場合は、PRブランチをチェックアウトしてリファクタし、マージする形にする。
+- `git merge` + `git push` ではPRは「Closed」になる（GitHub API経由のマージでないため）
+- 必ず `gh pr merge` を使い、紫色の「Merged」バッジを付ける
+- コントリビューターのモチベーションに直結するため例外なく守る
+
+#### 標準フロー
 
 ```bash
 # 1. PRブランチを取得
-git remote add public git@github.com:xuiltul/animaworks.git  # 初回のみ
-gh pr checkout 33 --repo xuiltul/animaworks
+gh pr checkout 36 --repo xuiltul/animaworks
 
-# 2. PRブランチ上でリファクタ（設計方針に合わせて修正）
+# 2. mainにリベース（最新に追従）
+git rebase main
+
+# 3. PRブランチ上でリファクタ（設計方針に合わせて修正）
 #    - コミットを追加してリファクタする
 #    - コントリビューターの元コミットは履歴に残る
+git add . && git commit -m "refactor: improve ..."
 
-# 3. マージ（squashでもOK）
-gh pr merge 33 --repo xuiltul/animaworks --merge
+# 4. リファクタ済みブランチをコントリビューターのforkにpush
+git remote add contributor https://github.com/<user>/<repo>.git
+git push contributor HEAD:<pr-branch-name> --force
 
-# または既にマージ済みのmainを取り込む場合
+# 5. GitHub API経由でマージ（Mergedバッジが付く）
+gh pr merge 36 --repo xuiltul/animaworks --merge --admin
+
+# 6. ローカル同期 & クリーンアップ
+git checkout main && git pull origin main
+git branch -D <local-pr-branch>
+git remote remove contributor
+```
+
+#### 復旧: 同じ修正が既にmainに入ってしまった場合
+
+Animaの自律行動等で同じ修正が先にmainに入った場合、標準フローの前にmainの先行コミットをrevertする:
+
+```bash
+git checkout main
+git revert <commit1> <commit2> --no-edit
+git push origin main
+# → その後、標準フローのステップ1から実行
+```
+
+#### 注意事項
+
+- `gh pr merge` にはブランチ保護ルールがあるため `--admin` が必要な場合がある
+- コントリビューターのforkへのpushは「Allow edits from maintainers」が有効な場合のみ可能
+- mainへの `--force-with-lease` が必要になった場合は、push直後（他者がpull前）に限り許容
+- ユーザーと相談する際も「PRブランチ上で修正 → `gh pr merge`」前提で進める
+
+#### 既にマージ済みのpublic/mainを取り込む場合
+
+```bash
 git fetch public
 git merge public/main -m "chore: incorporate public PR #N"
 ```
-
-ユーザーと相談する際も「PRブランチ上で修正する」前提で進める。
-mainで実装してPRをクローズするパターンに陥らないこと。
 
 ## 経緯
 

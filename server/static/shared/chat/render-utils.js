@@ -214,12 +214,15 @@ export function renderHistoryMessage(msg, opts) {
     return _wrapRow("assistant", bubble, _renderAvatar(opts.animaName, avatarMap));
   }
 
-  const fromLabel = msg.from_person && msg.from_person !== "human"
+  const isAnima = msg.from_person && msg.from_person !== "human";
+  const fromLabel = isAnima
     ? `<div style="font-size:0.72rem; opacity:0.7; margin-bottom:2px;">${escapeHtml(msg.from_person)}</div>`
     : "";
   const userContent = _stripVoiceSuffix(msg.content || "");
-  const bubble = `<div class="chat-bubble user">${fromLabel}<div class="chat-text">${escapeHtml(userContent)}</div>${tsHtml}</div>`;
-  const isAnima = msg.from_person && msg.from_person !== "human";
+  const contentHtml = isAnima
+    ? renderMarkdown(userContent)
+    : `<div class="chat-text">${escapeHtml(userContent)}</div>`;
+  const bubble = `<div class="chat-bubble user">${fromLabel}${contentHtml}${tsHtml}</div>`;
   const avatarHtml = _renderAvatar(isAnima ? msg.from_person : null, avatarMap);
   return _wrapRow("user", bubble, avatarHtml);
 }
@@ -581,7 +584,13 @@ export function updateStreamingZone(bubble, msg, opts, zone = "all") {
     thinking: _renderThinkingZoneContent,
   };
   const fn = renderers[zone];
-  if (fn) el.innerHTML = fn(msg, opts);
+  if (fn) {
+    el.innerHTML = fn(msg, opts);
+    if (zone === "thinking") {
+      const preview = el.querySelector(".thinking-inline-preview");
+      if (preview) preview.scrollTop = preview.scrollHeight;
+    }
+  }
 }
 
 function _renderTextZoneContent(msg, opts) {
@@ -711,41 +720,44 @@ function _renderThinkingZoneContent(msg, opts) {
 }
 
 /**
- * Render a collapsible tool activity timeline.
+ * Render a compact tool activity timeline.
+ * Running tools are always visible; completed tools are collapsed behind a count.
  */
 function renderToolActivityTimeline(history, activeTool, { escapeHtml, labels }) {
-  const completedCount = history.filter(e => e.completed).length;
-  const totalCount = history.length;
+  const completedEntries = history.filter(e => e.completed);
+  const runningEntries = history.filter(e => !e.completed);
+  const completedCount = completedEntries.length;
 
-  let items = "";
-  for (const entry of history) {
-    if (entry.completed) {
+  let runningHtml = "";
+  for (const entry of runningEntries) {
+    const detailSpan = entry.detail
+      ? `<span class="tool-activity-detail">${escapeHtml(entry.detail.slice(0, 120))}</span>`
+      : "";
+    runningHtml += `<div class="tool-activity-item tool-activity-item--running"><span class="tool-spinner"></span><span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${detailSpan}<span class="tool-activity-dur">${t("chat.tool_running_label")}</span></div>`;
+  }
+
+  const summaryLabel = activeTool
+    ? t("chat.tools_progress", { tool: activeTool, completed: completedCount, total: history.length })
+    : t("chat.tools_completed", { count: completedCount });
+
+  let completedHtml = "";
+  if (completedCount > 0) {
+    let completedItems = "";
+    for (const entry of completedEntries) {
       const icon = entry.is_error
-        ? '<span class="tool-activity-icon tool-activity-error">✗</span>'
-        : '<span class="tool-activity-icon tool-activity-ok">✓</span>';
+        ? '<span class="tool-activity-icon tool-activity-error">\u2717</span>'
+        : '<span class="tool-activity-icon tool-activity-ok">\u2713</span>';
       const dur = entry.duration_ms != null ? `<span class="tool-activity-dur">${_formatDuration(entry.duration_ms)}</span>` : "";
       const summary = entry.result_summary
         ? `<span class="tool-activity-summary">${escapeHtml(entry.result_summary.slice(0, 120))}</span>`
         : "";
-      items += `<div class="tool-activity-item${entry.is_error ? " tool-activity-item--error" : ""}">${icon}<span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${dur}${summary}</div>`;
-    } else {
-      const detailSpan = entry.detail
-        ? `<span class="tool-activity-detail">${escapeHtml(entry.detail.slice(0, 120))}</span>`
-        : "";
-      items += `<div class="tool-activity-item tool-activity-item--running"><span class="tool-spinner"></span><span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${detailSpan}<span class="tool-activity-dur">${t("chat.tool_running_label")}</span></div>`;
+      completedItems += `<div class="tool-activity-item${entry.is_error ? " tool-activity-item--error" : ""}">${icon}<span class="tool-activity-name">${escapeHtml(entry.tool_name)}</span>${dur}${summary}</div>`;
     }
+    const completedLabel = t("chat.tools_completed_details", { count: completedCount });
+    completedHtml = `<details class="tool-activity-completed"><summary class="tool-activity-completed-summary">${completedLabel}</summary><div class="tool-activity-list">${completedItems}</div></details>`;
   }
 
-  const summaryLabel = activeTool
-    ? t("chat.tools_progress", { tool: activeTool, completed: completedCount, total: totalCount })
-    : t("chat.tools_completed", { count: completedCount });
-
-  return `<div class="tool-activity-timeline">
-    <details${activeTool ? " open" : ""}>
-      <summary class="tool-activity-header"><span class="tool-spinner"${activeTool ? "" : ' style="display:none"'}></span>${summaryLabel}</summary>
-      <div class="tool-activity-list">${items}</div>
-    </details>
-  </div>`;
+  return `<div class="tool-activity-timeline"><div class="tool-activity-header"><span class="tool-spinner"${activeTool ? "" : ' style="display:none"'}></span>${summaryLabel}</div>${runningHtml}${completedHtml}</div>`;
 }
 
 function _formatDuration(ms) {
