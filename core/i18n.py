@@ -435,6 +435,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "process_message_stream error: {exc}",
     },
     "anima.inbox_error": {"ja": "inbox処理エラー: {exc}", "en": "inbox processing error: {exc}"},
+    "anima.platform_context": {
+        "ja": "[platform_context: このメッセージは {source} 経由で受信しました。あなたのテキスト応答は自動的に {source} 経由で送信者に返されます。send_message ツールで別チャネルへの送信を試みないでください。]",
+        "en": "[platform_context: This message was received via {source}. Your text response will be automatically sent back to the sender via {source}. Do NOT attempt to send via another channel using the send_message tool.]",
+    },
     "anima.unread_prefix": {
         "ja": "- {from_person} [⚠️ 未返信{count}回目]: ",
         "en": "- {from_person} [⚠️ Unreplied #{count}]: ",

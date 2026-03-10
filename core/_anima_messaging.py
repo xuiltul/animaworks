@@ -29,7 +29,7 @@ from core.image_artifacts import extract_image_artifacts_from_tool_records
 from core.memory.conversation import ConversationMemory, ToolRecord
 from core.memory.streaming_journal import StreamingJournal
 from core.paths import load_prompt
-from core.schemas import VALID_EMOTIONS, CycleResult, ImageData
+from core.schemas import EXTERNAL_PLATFORM_SOURCES, VALID_EMOTIONS, CycleResult, ImageData
 from core.time_utils import now_local, today_local
 
 logger = logging.getLogger("animaworks.anima")
@@ -148,6 +148,7 @@ class MessagingMixin:
         intent: str = "",
         thread_id: str = "default",
         include_cycle_result: bool = False,
+        source: str = "",
     ) -> str | dict[str, Any]:
         self._validate_thread_id(thread_id)
         # Auto-interrupt: if a session is already running on this thread,
@@ -243,6 +244,10 @@ class MessagingMixin:
                     origin=ORIGIN_HUMAN,
                 )
 
+                if source and source in EXTERNAL_PLATFORM_SOURCES:
+                    _ctx = t("anima.platform_context", source=source)
+                    prompt = f"{_ctx}\n\n{prompt}"
+
                 try:
                     result = await self.agent.run_cycle(
                         prompt,
@@ -337,6 +342,7 @@ class MessagingMixin:
         attachment_paths: list[str] | None = None,
         intent: str = "",
         thread_id: str = "default",
+        source: str = "",
     ) -> AsyncGenerator[dict, None]:
         """Streaming version of process_message.
 
@@ -455,6 +461,10 @@ class MessagingMixin:
                     meta={"from_type": "human", "thread_id": thread_id},
                     origin=ORIGIN_HUMAN,
                 )
+
+                if source and source in EXTERNAL_PLATFORM_SOURCES:
+                    _ctx = t("anima.platform_context", source=source)
+                    prompt = f"{_ctx}\n\n{prompt}"
 
                 # Streaming journal: write-ahead log for crash recovery
                 journal = StreamingJournal(self.anima_dir, thread_id=thread_id)

@@ -435,6 +435,7 @@ class AnimaRunner:
         images = params.get("images") or None
         attachment_paths = params.get("attachment_paths") or None
         thread_id = params.get("thread_id", "default")
+        source = params.get("source", "")
 
         result = await self.anima.process_message(
             message,
@@ -444,6 +445,7 @@ class AnimaRunner:
             attachment_paths=attachment_paths,
             thread_id=thread_id,
             include_cycle_result=True,
+            source=source,
         )
         cycle_result: dict[str, Any] = {}
         response_text = result
