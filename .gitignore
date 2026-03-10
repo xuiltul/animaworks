@@ -17,6 +17,7 @@ build/
 site/
 site-docs/
 .env
+demo/.env
 tmp/
 
 # Coverage
