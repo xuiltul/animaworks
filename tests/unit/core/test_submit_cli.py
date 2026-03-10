@@ -10,6 +10,7 @@ Validates ``_handle_submit()`` in ``core/tools/__init__.py``:
 - Subcommand detection logic (first non-flag argument)
 - All required fields present in the pending task descriptor
 """
+
 from __future__ import annotations
 
 import io
@@ -49,7 +50,9 @@ class TestHandleSubmit:
         assert data["status"] == "pending"
 
     def test_pending_file_named_with_task_id(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The pending JSON filename matches the task_id inside."""
         anima_dir = tmp_path / "animas" / "test-anima"
@@ -91,7 +94,9 @@ class TestHandleSubmit:
         assert len(output["task_id"]) == 12
 
     def test_output_contains_message(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Output JSON contains a human-readable message field."""
         anima_dir = tmp_path / "animas" / "test-anima"
@@ -129,7 +134,9 @@ class TestHandleSubmit:
         assert exc_info.value.code == 1
 
     def test_pending_json_contains_all_required_fields(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Pending JSON contains all required fields per the design spec."""
         anima_dir = tmp_path / "animas" / "sakura"
@@ -146,12 +153,16 @@ class TestHandleSubmit:
         data = json.loads(list(pending_dir.glob("*.json"))[0].read_text(encoding="utf-8"))
 
         required_fields = {
-            "task_id", "tool_name", "subcommand", "raw_args",
-            "anima_name", "anima_dir", "submitted_at", "status",
+            "task_id",
+            "tool_name",
+            "subcommand",
+            "raw_args",
+            "anima_name",
+            "anima_dir",
+            "submitted_at",
+            "status",
         }
-        assert required_fields.issubset(data.keys()), (
-            f"Missing fields: {required_fields - set(data.keys())}"
-        )
+        assert required_fields.issubset(data.keys()), f"Missing fields: {required_fields - set(data.keys())}"
         # Validate types
         assert isinstance(data["task_id"], str) and len(data["task_id"]) == 12
         assert isinstance(data["tool_name"], str)
@@ -163,7 +174,9 @@ class TestHandleSubmit:
         assert data["status"] == "pending"
 
     def test_anima_name_from_dir_path(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """anima_name is derived from the last component of ANIMAWORKS_ANIMA_DIR."""
         anima_dir = tmp_path / "animas" / "hana-chan"
@@ -182,7 +195,9 @@ class TestHandleSubmit:
         assert data["anima_dir"] == str(anima_dir)
 
     def test_subcommand_detection_skips_flags(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Subcommand is the first non-flag argument after tool_name."""
         anima_dir = tmp_path / "animas" / "test-anima"
@@ -202,7 +217,9 @@ class TestHandleSubmit:
         assert data["raw_args"] == ["--language", "ja", "/path/to/audio.wav"]
 
     def test_subcommand_empty_when_only_flags(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """When all args are flags, subcommand should be empty string."""
         anima_dir = tmp_path / "animas" / "test-anima"
@@ -220,7 +237,9 @@ class TestHandleSubmit:
         assert data["subcommand"] == ""
 
     def test_tool_name_only_no_additional_args(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """submit with only tool_name (no subcommand or extra args) works."""
         anima_dir = tmp_path / "animas" / "test-anima"
@@ -247,7 +266,9 @@ class TestHandleSubmit:
         assert output["tool"] == "transcribe"
 
     def test_unique_task_ids(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Each submit generates a unique task_id."""
         anima_dir = tmp_path / "animas" / "test-anima"
@@ -259,7 +280,7 @@ class TestHandleSubmit:
         task_ids = []
         for _ in range(5):
             captured = io.StringIO()
-            with patch("builtins.print", side_effect=lambda *a, **kw: captured.write(str(a[0]) + "\n")):
+            with patch("builtins.print", side_effect=lambda *a, _cap=captured, **kw: _cap.write(str(a[0]) + "\n")):
                 _handle_submit(["image_gen", "3d", "test.png"])
             output = json.loads(captured.getvalue())
             task_ids.append(output["task_id"])
