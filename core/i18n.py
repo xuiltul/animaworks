@@ -563,6 +563,8 @@ _STRINGS: dict[str, dict[str, str]] = {
     "activity.heartbeat_start": {"ja": "定期巡回開始", "en": "Periodic check started"},
     "activity.heartbeat_end": {"ja": "定期巡回完了", "en": "Periodic check completed"},
     "activity.cron_task_exec": {"ja": "cronタスク実行", "en": "Cron task executed"},
+    "activity.task_exec_start_label": {"ja": "タスク実行開始", "en": "Task execution started"},
+    "activity.task_exec_end_label": {"ja": "タスク実行完了", "en": "Task execution completed"},
     "activity.error_prefix": {"ja": "[エラー] ", "en": "[Error] "},
     "activity.items_count": {"ja": "{count}件", "en": "{count} items"},
     # ── task_queue.py ──

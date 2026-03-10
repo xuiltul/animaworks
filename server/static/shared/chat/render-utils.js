@@ -366,6 +366,86 @@ export function bindToolCallHandlers(container) {
 }
 
 /**
+ * Render a collapsible background session group (heartbeat/cron/task).
+ * @param {Array} sessions - Array of session objects (1 for heartbeat/task, possibly multiple for grouped cron)
+ * @param {string} type - "heartbeat" | "cron" | "task"
+ * @param {object} opts - Same opts as renderHistoryMessage (escapeHtml, renderMarkdown, smartTimestamp)
+ * @returns {string} HTML string
+ */
+export function renderCollapsibleSession(sessions, type, opts) {
+  const { escapeHtml, renderMarkdown, smartTimestamp } = opts;
+
+  const allMessages = sessions.flatMap((s) => s.messages || []);
+  if (allMessages.length === 0) return "";
+
+  const icons = { heartbeat: "❤", cron: "⏰", task: "🔨" };
+  const icon = icons[type] || "⚙️";
+
+  const startTs = sessions[0]?.session_start;
+  const endTs = sessions[sessions.length - 1]?.session_end;
+  const timeLabel = startTs ? smartTimestamp(startTs) : "";
+  const timeRange =
+    startTs && endTs && startTs !== endTs
+      ? `${smartTimestamp(startTs)} 〜 ${smartTimestamp(endTs)}`
+      : timeLabel;
+
+  let headerLabel = "";
+  if (type === "heartbeat") {
+    headerLabel = t("chat.heartbeat_activity");
+  } else if (type === "cron") {
+    headerLabel = t("chat.bg_tasks_count", { count: allMessages.length });
+  } else if (type === "task") {
+    headerLabel = t("chat.task_exec_activity");
+  }
+
+  let bodyHtml = "";
+  if (type === "heartbeat") {
+    for (const msg of allMessages) {
+      const content = msg.content || "";
+      if (content) {
+        bodyHtml += `<div class="bg-session-message">${renderMarkdown(escapeHtml(content))}</div>`;
+      }
+    }
+  } else {
+    for (const msg of allMessages) {
+      const ts = msg.ts ? smartTimestamp(msg.ts) : "";
+      const tsHtml = ts ? `<span class="bg-session-item-ts">${escapeHtml(ts)}</span>` : "";
+      bodyHtml += `<div class="bg-session-item">${escapeHtml(msg.content || "")}${tsHtml}</div>`;
+    }
+  }
+
+  return (
+    `<div class="bg-session-group bg-session-group--${type}">` +
+    `<div class="bg-session-header bg-session-header--${type}">` +
+    `<span class="bg-session-chevron">\u25B6</span>` +
+    `<span class="bg-session-label">${icon} ${escapeHtml(headerLabel)}</span>` +
+    `<span class="bg-session-time">${escapeHtml(timeRange)}</span>` +
+    `</div>` +
+    `<div class="bg-session-body" style="display:none;">${bodyHtml}</div>` +
+    `</div>`
+  );
+}
+
+/**
+ * Bind expand/collapse handlers for collapsible background session groups.
+ * @param {HTMLElement|null} container
+ */
+export function bindCollapsibleSessionHandlers(container) {
+  if (!container) return;
+  container.querySelectorAll(".bg-session-header").forEach((header) => {
+    header.addEventListener("click", () => {
+      const group = header.parentElement;
+      if (!group) return;
+      const body = group.querySelector(".bg-session-body");
+      if (!body) return;
+      const isExpanded = group.classList.contains("expanded");
+      group.classList.toggle("expanded", !isExpanded);
+      body.style.display = isExpanded ? "none" : "";
+    });
+  });
+}
+
+/**
  * Render a live (current session) chat bubble to HTML.
  * @param {object} msg - Live message with role, text, streaming, activeTool, images, etc.
  * @param {object} opts

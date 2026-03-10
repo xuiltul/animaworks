@@ -2412,6 +2412,111 @@
   font-size: 0.7rem;
 }
 
+/* ── Background Session Groups (collapsible) ── */
+
+.bg-session-group {
+  margin: 8px 0;
+}
+
+.bg-session-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  user-select: none;
+  transition: filter 0.1s ease;
+}
+
+.bg-session-header:hover,
+.bg-session-header:active {
+  filter: brightness(0.92);
+}
+
+.bg-session-chevron {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  transition: transform 0.15s ease;
+  opacity: 0.7;
+}
+
+.bg-session-group.expanded .bg-session-chevron {
+  transform: rotate(90deg);
+}
+
+.bg-session-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bg-session-time {
+  margin-left: auto;
+  opacity: 0.6;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bg-session-body {
+  padding: 6px 12px 6px 22px;
+  margin-top: 2px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+/* Heartbeat body - markdown content */
+.bg-session-group--heartbeat .bg-session-body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.bg-session-message {
+  margin-bottom: 8px;
+}
+
+.bg-session-message:last-child {
+  margin-bottom: 0;
+}
+
+/* Cron/Task body - compact item list */
+.bg-session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  opacity: 0.85;
+}
+
+.bg-session-item-ts {
+  margin-left: auto;
+  font-size: 0.68rem;
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Type-specific header colors ── */
+
+.bg-session-header--heartbeat {
+  background: var(--aw-color-success-bg-alt);
+  border: 1px solid var(--aw-color-success-border);
+  color: var(--aw-color-success-text, #68d391);
+}
+
+.bg-session-header--cron {
+  background: var(--aw-color-info-bg-alt);
+  border: 1px solid var(--aw-color-info-border);
+  color: var(--aw-color-info-text, #63b3ed);
+}
+
+.bg-session-header--task {
+  background: color-mix(in srgb, var(--aw-color-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--aw-color-accent) 40%, transparent);
+  color: var(--aw-color-accent, #b794f4);
+}
+
 /* ── History Loading More (Infinite Scroll) ── */
 
 .history-loading-more {

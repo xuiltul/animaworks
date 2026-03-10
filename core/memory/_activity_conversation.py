@@ -58,6 +58,8 @@ class ConversationMixin:
         "heartbeat_start",
         "heartbeat_end",
         "cron_executed",
+        "task_exec_start",
+        "task_exec_end",
         "error",
     }
 
@@ -321,6 +323,32 @@ class ConversationMixin:
                         "from_person": "",
                         "tool_calls": [],
                         "_trigger": "cron",
+                    }
+                )
+
+            elif e.type == "task_exec_start":
+                self._flush_tool_calls(messages, pending_tool_calls)
+                messages.append(
+                    {
+                        "ts": e.ts,
+                        "role": "system",
+                        "content": e.summary or t("activity.task_exec_start_label"),
+                        "from_person": "",
+                        "tool_calls": [],
+                        "_trigger": "task",
+                    }
+                )
+
+            elif e.type == "task_exec_end":
+                self._flush_tool_calls(messages, pending_tool_calls)
+                messages.append(
+                    {
+                        "ts": e.ts,
+                        "role": "system",
+                        "content": e.summary or e.content or t("activity.task_exec_end_label"),
+                        "from_person": "",
+                        "tool_calls": [],
+                        "_trigger": "task",
                     }
                 )
 
