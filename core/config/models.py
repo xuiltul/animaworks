@@ -593,9 +593,11 @@ def save_config(config: AnimaWorksConfig, path: Path | None = None) -> None:
     payload = config.model_dump(mode="json")
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
-    # Atomic write: write to a sibling temp file then rename so that
-    # concurrent readers never see a partially-written (empty) file.
-    tmp_path = path.with_suffix(".tmp")
+    # Atomic write: write to a PID-unique sibling temp file then rename so
+    # that concurrent writers (multiple anima workers) never clobber each
+    # other's temp file.  Each process writes to .config.json.<PID>.tmp,
+    # then renames it to config.json atomically.
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp_path.write_text(text, encoding="utf-8")
     os.chmod(tmp_path, 0o600)
     tmp_path.rename(path)
