@@ -24,6 +24,10 @@ tmp/
 .coverage
 htmlcov/
 
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
 # Evaluation framework - generated data (excluded from repo)
 tests/evaluation/datasets/
 tests/evaluation/scenarios/
