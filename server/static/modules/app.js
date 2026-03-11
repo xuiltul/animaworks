@@ -31,11 +31,18 @@ const ALL_THEMES = [
   "rose", "lavender", "nord", "monokai", "midnight", "solarized"
 ];
 
+const DARK_THEMES = ["monokai", "midnight"];
+
 export function applyTheme(theme) {
   state.uiTheme = theme;
   ALL_THEMES.forEach(t => document.body.classList.remove(`theme-${t}`));
   if (theme !== "default") {
     document.body.classList.add(`theme-${theme}`);
+  }
+  if (DARK_THEMES.includes(theme)) {
+    document.body.setAttribute("data-theme", "dark");
+  } else {
+    document.body.removeAttribute("data-theme");
   }
   localStorage.setItem("aw-theme", theme);
 }
