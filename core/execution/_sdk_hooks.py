@@ -222,56 +222,17 @@ def _read_status_json(anima_dir: Path) -> dict[str, Any]:
         return {}
 
 
-def _count_active_tasks(anima_dir: Path) -> int:
-    """Count in-progress/pending tasks in an anima's task_queue.jsonl."""
-    queue_path = anima_dir / "state" / "task_queue.jsonl"
-    if not queue_path.exists():
-        return 0
-    count = 0
-    try:
-        tasks: dict[str, str] = {}
-        for line in queue_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                raw = json.loads(line)
-                task_id = raw.get("task_id", "")
-                if not task_id:
-                    continue
-                if raw.get("_event") == "update" and "status" in raw:
-                    tasks[task_id] = raw["status"]
-                elif "_event" not in raw:
-                    tasks[task_id] = raw.get("status", "pending")
-            except (json.JSONDecodeError, KeyError):
-                continue
-        count = sum(1 for s in tasks.values() if s in ("pending", "in_progress"))
-    except Exception:
-        logger.debug("Failed to count active tasks for %s", anima_dir.name, exc_info=True)
-    return count
-
-
-def _role_matches(status: dict[str, Any], description: str) -> bool:
-    """Check if an anima's role/specialty loosely matches a task description."""
-    desc_lower = description.lower()
-    for field_name in ("role", "specialty", "speciality"):
-        val = status.get(field_name, "")
-        if val and val.lower() in desc_lower:
-            return True
-    return False
-
-
 def _select_subordinate(
     anima_dir: Path,
     description: str,
 ) -> str | None:
-    """Select the best subordinate for a task.
+    """Select a subordinate for a task only when explicitly named.
 
-    Strategy:
-      1. If the description explicitly names a subordinate, use it.
-      2. Otherwise, pick the enabled subordinate with the fewest active tasks
-         (prefer role-matching subordinates).
-      3. Return None if no enabled subordinate is available.
+    Only delegates when the task description explicitly mentions a
+    subordinate by name.  Auto-selection (role matching + load
+    balancing) has been removed — the LLM decides who executes.
+    Returns None if no subordinate is named (caller falls back to
+    self-pending).
     """
     from core.config.models import load_config
     from core.paths import get_animas_dir
@@ -287,7 +248,6 @@ def _select_subordinate(
     if not direct_subs:
         return None
 
-    # Check for explicit naming in description
     desc_lower = description.lower()
     for sub_name in direct_subs:
         if sub_name.lower() in desc_lower:
@@ -295,22 +255,7 @@ def _select_subordinate(
             if sub_status.get("enabled", True):
                 return sub_name
 
-    # Score-based selection: (role_match_bonus, -active_count)
-    candidates: list[tuple[int, int, str]] = []
-    for sub_name in direct_subs:
-        sub_dir = animas_dir / sub_name
-        sub_status = _read_status_json(sub_dir)
-        if not sub_status.get("enabled", True):
-            continue
-        active = _count_active_tasks(sub_dir)
-        role_bonus = 1 if _role_matches(sub_status, description) else 0
-        candidates.append((role_bonus, -active, sub_name))
-
-    if not candidates:
-        return None
-
-    candidates.sort(reverse=True)
-    return candidates[0][2]
+    return None
 
 
 def _intercept_task_to_delegation(
@@ -356,6 +301,28 @@ def _intercept_task_to_delegation(
             "task_id": "persist_failed",
             "reason": f"DELEGATION_FAILED: Failed to persist task to subordinate queue: {e}. Please retry.",
         }
+
+    # Write pending task JSON so PendingTaskExecutor picks it up for immediate execution
+    task_desc = {
+        "task_type": "llm",
+        "task_id": sub_entry.task_id,
+        "title": description[:100],
+        "description": prompt,
+        "context": "",
+        "acceptance_criteria": [],
+        "constraints": [],
+        "file_paths": [],
+        "submitted_by": my_name,
+        "submitted_at": datetime.now(UTC).isoformat(),
+        "reply_to": my_name,
+        "source": "delegation",
+    }
+    pending_dir = target_dir / "state" / "pending"
+    pending_dir.mkdir(parents=True, exist_ok=True)
+    (pending_dir / f"{sub_entry.task_id}.json").write_text(
+        json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     # Send DM via Messenger
     dm_result = ""

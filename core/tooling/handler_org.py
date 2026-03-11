@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json as _json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -754,6 +754,28 @@ class OrgToolsMixin:
         except Exception as e:
             logger.error("Task persistence failed in delegate_task (subordinate queue): %s", e)
             return _error_result("PersistenceFailed", f"Failed to persist task to subordinate queue: {e}")
+
+        # Write pending task JSON so PendingTaskExecutor picks it up for immediate execution
+        task_desc = {
+            "task_type": "llm",
+            "task_id": sub_entry.task_id,
+            "title": summary,
+            "description": instruction,
+            "context": "",
+            "acceptance_criteria": [],
+            "constraints": [],
+            "file_paths": [],
+            "submitted_by": self._anima_name,
+            "submitted_at": datetime.now(UTC).isoformat(),
+            "reply_to": self._anima_name,
+            "source": "delegation",
+        }
+        pending_dir = target_dir / "state" / "pending"
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        (pending_dir / f"{sub_entry.task_id}.json").write_text(
+            _json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
         # Build outgoing origin_chain (provenance Phase 3)
         outgoing_chain = build_outgoing_origin_chain(

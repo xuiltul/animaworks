@@ -253,9 +253,35 @@ class PendingTaskExecutor:
                                 self._anima_name,
                             )
                         else:
+                            task_id = task_desc.get("task_id", "")
+                            # Skip if task was cancelled in task_queue
+                            try:
+                                from core.memory.task_queue import TaskQueueManager
+
+                                entry = TaskQueueManager(self._anima_dir).get_task_by_id(task_id)
+                                if entry and entry.status == "cancelled":
+                                    logger.info(
+                                        "[%s] Skipping cancelled LLM task: id=%s",
+                                        self._anima_name,
+                                        task_id,
+                                    )
+                                    try:
+                                        processing_path.rename(llm_failed_dir / path.name)
+                                    except OSError:
+                                        logger.exception(
+                                            "Failed to move cancelled task to failed: %s",
+                                            path.name,
+                                        )
+                                    continue
+                            except Exception:
+                                logger.debug(
+                                    "Could not check task_queue for cancellation: %s",
+                                    task_id,
+                                    exc_info=True,
+                                )
                             logger.info(
                                 "Picked up LLM pending task: id=%s anima=%s",
-                                task_desc.get("task_id", "?"),
+                                task_id,
                                 self._anima_name,
                             )
                             await self.execute_pending_task(task_desc)
@@ -526,6 +552,25 @@ class PendingTaskExecutor:
         reply_to = task_desc.get("reply_to")
         submitted_by = task_desc.get("submitted_by", "unknown")
         submitted_at = task_desc.get("submitted_at", "")
+
+        # Skip if task was cancelled in task_queue (batch path; single path checks in watcher)
+        try:
+            from core.memory.task_queue import TaskQueueManager
+
+            entry = TaskQueueManager(self._anima_dir).get_task_by_id(task_id)
+            if entry and entry.status == "cancelled":
+                logger.info(
+                    "[%s] Skipping cancelled LLM task: id=%s",
+                    self._anima_name,
+                    task_id,
+                )
+                return "(cancelled)"
+        except Exception:
+            logger.debug(
+                "Could not check task_queue for cancellation: %s",
+                task_id,
+                exc_info=True,
+            )
 
         # TTL check
         if submitted_at:
