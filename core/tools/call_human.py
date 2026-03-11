@@ -16,8 +16,11 @@ Usage:
 import argparse
 import asyncio
 import json
+import logging
 import sys
 from pathlib import Path
+
+logger = logging.getLogger("animaworks.tools.call_human")
 
 
 def _load_config() -> dict:
@@ -124,7 +127,7 @@ async def _send_slack(
                         notification_text=notification_text[:2000],
                     )
                 except Exception:
-                    pass  # Non-critical: routing fails gracefully
+                    logger.debug("Failed to save notification mapping", exc_info=True)
 
             return "OK"
     except Exception as e:
