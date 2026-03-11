@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -10,6 +11,8 @@ Covers:
 - write_memory_file: common_knowledge/ path traversal blocked
 - read_memory_file: valid common_knowledge/ paths still work
 - write_memory_file: valid common_knowledge/ paths still work
+- read_memory_file: reference/ path traversal blocked, valid paths work
+- write_memory_file: reference/ prefix rejected (read-only)
 - create_anima: character_sheet_path traversal blocked
 - create_anima: valid character_sheet_path still works
 """
@@ -18,8 +21,6 @@ import json
 import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -54,9 +55,11 @@ def _make_handler(tmp_path: Path, anima_name: str = "test_anima"):
     handler._process_supervisor = None
 
     from core.memory.activity import ActivityLogger
+
     handler._activity = MagicMock(spec=ActivityLogger)
 
     from core.tooling.dispatch import ExternalToolDispatcher
+
     handler._external = MagicMock(spec=ExternalToolDispatcher)
 
     return handler
@@ -164,6 +167,73 @@ class TestCommonKnowledgeWriteTraversal:
 
         assert "Written to" in result
         assert (ck_dir / "valid_file.md").read_text(encoding="utf-8") == "content"
+
+
+# ── reference/ read traversal and valid paths ─────────────
+
+
+class TestReferenceReadTraversal:
+    """Path traversal prevention and valid reads for reference/ (read-only)."""
+
+    def test_rejects_traversal_with_dotdot(self, tmp_path: Path):
+        handler = _make_handler(tmp_path)
+        ref_dir = tmp_path / "reference"
+        ref_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch("core.paths.get_reference_dir", return_value=ref_dir):
+            result = handler._handle_read_memory_file(
+                {"path": "reference/../../etc/passwd"},
+            )
+
+        assert "PermissionDenied" in result
+        assert "traversal" in result.lower()
+
+    def test_allows_valid_path(self, tmp_path: Path):
+        handler = _make_handler(tmp_path)
+        ref_dir = tmp_path / "reference"
+        ref_dir.mkdir(parents=True, exist_ok=True)
+        (ref_dir / "tech_spec.md").write_text("reference content", encoding="utf-8")
+
+        with patch("core.paths.get_reference_dir", return_value=ref_dir):
+            result = handler._handle_read_memory_file(
+                {"path": "reference/tech_spec.md"},
+            )
+
+        assert result == "reference content"
+
+    def test_allows_nested_valid_path(self, tmp_path: Path):
+        handler = _make_handler(tmp_path)
+        ref_dir = tmp_path / "reference"
+        sub = ref_dir / "api"
+        sub.mkdir(parents=True, exist_ok=True)
+        (sub / "endpoints.md").write_text("API docs", encoding="utf-8")
+
+        with patch("core.paths.get_reference_dir", return_value=ref_dir):
+            result = handler._handle_read_memory_file(
+                {"path": "reference/api/endpoints.md"},
+            )
+
+        assert result == "API docs"
+
+
+# ── reference/ write rejected ─────────────────────────────
+
+
+class TestReferenceWriteRejected:
+    """write_memory_file rejects reference/ prefix (read-only)."""
+
+    def test_rejects_reference_prefix(self, tmp_path: Path):
+        handler = _make_handler(tmp_path)
+        ref_dir = tmp_path / "reference"
+        ref_dir.mkdir(parents=True, exist_ok=True)
+
+        result = handler._handle_write_memory_file(
+            {"path": "reference/tech_spec.md", "content": "attempted write"},
+        )
+
+        assert "PermissionDenied" in result
+        assert "read-only" in result.lower()
+        assert not (ref_dir / "tech_spec.md").exists()
 
 
 # ── create_anima path traversal ──────────────────────────

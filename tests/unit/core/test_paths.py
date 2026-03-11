@@ -14,17 +14,17 @@ from core.paths import (
     PROJECT_DIR,
     TEMPLATES_DIR,
     _prompt_cache,
+    get_animas_dir,
     get_common_knowledge_dir,
     get_common_skills_dir,
     get_company_dir,
     get_data_dir,
-    get_animas_dir,
+    get_reference_dir,
     get_shared_dir,
     get_tmp_dir,
     load_prompt,
     resolve_template_path,
 )
-
 
 # ── Constants ─────────────────────────────────────────────
 
@@ -66,6 +66,7 @@ class TestGetDataDir:
         with patch.dict("os.environ", {}, clear=False):
             # Remove ANIMAWORKS_DATA_DIR if set
             import os
+
             old = os.environ.pop("ANIMAWORKS_DATA_DIR", None)
             try:
                 result = get_data_dir()
@@ -110,6 +111,10 @@ class TestSubdirHelpers:
         with patch.dict("os.environ", {"ANIMAWORKS_DATA_DIR": str(tmp_path)}):
             assert get_common_knowledge_dir() == tmp_path.resolve() / "common_knowledge"
 
+    def test_get_reference_dir(self, tmp_path):
+        with patch.dict("os.environ", {"ANIMAWORKS_DATA_DIR": str(tmp_path)}):
+            assert get_reference_dir() == tmp_path.resolve() / "reference"
+
     def test_get_tmp_dir(self, tmp_path):
         with patch.dict("os.environ", {"ANIMAWORKS_DATA_DIR": str(tmp_path)}):
             assert get_tmp_dir() == tmp_path.resolve() / "tmp"
@@ -128,9 +133,7 @@ class TestLoadPrompt:
     def test_load_simple_template(self, tmp_path):
         prompts_dir = tmp_path / "ja" / "prompts"
         prompts_dir.mkdir(parents=True)
-        (prompts_dir / "test_tpl.md").write_text(
-            "Hello {anima_name}!", encoding="utf-8"
-        )
+        (prompts_dir / "test_tpl.md").write_text("Hello {anima_name}!", encoding="utf-8")
         with patch("core.paths.resolve_template_path") as mock_resolve:
             mock_resolve.return_value = prompts_dir / "test_tpl.md"
             result = load_prompt("test_tpl", anima_name="World", locale="ja")
@@ -140,9 +143,7 @@ class TestLoadPrompt:
     def test_load_without_kwargs(self, tmp_path):
         prompts_dir = tmp_path / "ja" / "prompts"
         prompts_dir.mkdir(parents=True)
-        (prompts_dir / "plain.md").write_text(
-            "No placeholders here.", encoding="utf-8"
-        )
+        (prompts_dir / "plain.md").write_text("No placeholders here.", encoding="utf-8")
         with patch("core.paths.resolve_template_path") as mock_resolve:
             mock_resolve.return_value = prompts_dir / "plain.md"
             result = load_prompt("plain", locale="ja")
@@ -163,18 +164,14 @@ class TestLoadPrompt:
 
     def test_missing_template_raises(self, tmp_path):
         with patch("core.paths.resolve_template_path") as mock_resolve:
-            mock_resolve.side_effect = FileNotFoundError(
-                "Template not found: prompts/nonexistent.md"
-            )
+            mock_resolve.side_effect = FileNotFoundError("Template not found: prompts/nonexistent.md")
             with pytest.raises(FileNotFoundError):
                 load_prompt("nonexistent", locale="ja")
 
     def test_format_map_with_multiple_kwargs(self, tmp_path):
         prompts_dir = tmp_path / "ja" / "prompts"
         prompts_dir.mkdir(parents=True)
-        (prompts_dir / "multi.md").write_text(
-            "{a} and {b}", encoding="utf-8"
-        )
+        (prompts_dir / "multi.md").write_text("{a} and {b}", encoding="utf-8")
         with patch("core.paths.resolve_template_path") as mock_resolve:
             mock_resolve.return_value = prompts_dir / "multi.md"
             result = load_prompt("multi", a="X", b="Y", locale="ja")

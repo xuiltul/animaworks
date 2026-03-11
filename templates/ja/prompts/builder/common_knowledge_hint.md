@@ -8,3 +8,4 @@
 - 読む: `read_memory_file(path="common_knowledge/...")`
 - 書く: `write_memory_file(path="common_knowledge/...", content="...")`
 - 目次: `common_knowledge/00_index.md`
+- 詳細な技術リファレンス: `read_memory_file(path="reference/...")`（読み取り専用）

@@ -8,3 +8,4 @@ Actively write findings that would benefit other Animas to common_knowledge.
 - Read: `read_memory_file(path="common_knowledge/...")`
 - Write: `write_memory_file(path="common_knowledge/...", content="...")`
 - Index: `common_knowledge/00_index.md`
+- Detailed technical references: `read_memory_file(path="reference/...")` (read-only)
