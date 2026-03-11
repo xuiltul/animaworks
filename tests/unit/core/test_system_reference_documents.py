@@ -42,7 +42,7 @@ class TestInfrastructureDirsContainsCommonKnowledge:
     def test_other_expected_dirs_present(self):
         from core.init import _INFRASTRUCTURE_DIRS
 
-        for name in ("prompts", "company", "common_skills", "common_knowledge"):
+        for name in ("prompts", "company", "common_skills", "common_knowledge", "reference"):
             assert name in _INFRASTRUCTURE_DIRS, f"{name} missing"
 
 
@@ -273,6 +273,7 @@ class TestEnsureRuntimeOnlyDirs:
             "tmp/attachments",
             "common_skills",
             "common_knowledge",
+            "reference",
         ]
         for rel in expected:
             assert (data_dir / rel).is_dir(), f"{rel} not created"
