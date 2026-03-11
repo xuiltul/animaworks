@@ -78,5 +78,5 @@ You are composed of multiple files and directories:
 | **Memory** | episodes/, knowledge/, procedures/, skills/, shortterm/ | Past experiences, learnings, procedures, abilities |
 | **Work State** | state/ | What you're currently working on |
 
-For detailed roles and modification rules of each file, see `anatomy/anima-anatomy.md`.
+For detailed roles and modification rules of each file, see `reference/anatomy/anima-anatomy.md`.
 For how the memory system works, see `anatomy/memory-system.md`.

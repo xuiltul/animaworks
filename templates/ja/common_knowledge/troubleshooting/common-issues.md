@@ -34,7 +34,7 @@
      ```
      search_memory(query="組織", scope="common_knowledge")
      ```
-     または `read_memory_file(path="common_knowledge/organization/structure.md")` で組織の全Anima名を確認
+     または `read_memory_file(path="reference/organization/structure.md")` で組織の全Anima名を確認
    - **注意**: チャット中に人間宛ての場合は `send_message` は使えない。直接テキストで返答すれば人間に届く。チャット以外（heartbeat等）で人間に連絡する場合は `call_human` を使用
 
 2. **サーバーの稼働状況を確認する**
@@ -449,7 +449,7 @@ send_message(
 
 - **原因**: パスの指定ミス、ファイルが存在しない
 - **対処**: `list_directory` でディレクトリ内容を確認してからパスを指定する
-- **注意**: `read_memory_file` は Anima ディレクトリからの相対パス（例: `knowledge/xxx.md`, `common_knowledge/organization/structure.md`）。`read_file` は絶対パスを使用する
+- **注意**: `read_memory_file` は Anima ディレクトリからの相対パス（例: `knowledge/xxx.md`, `reference/organization/structure.md`）。`read_file` は絶対パスを使用する
 
 ### read_channel で inbox を指定できない
 
@@ -465,4 +465,4 @@ send_message(
 ### 相手のAnimaが存在しない
 
 - **原因**: Anima名の間違い、またはそのAnimaがまだ作成されていない
-- **対処**: 上司に確認する。組織構造は `common_knowledge/organization/structure.md` を参照
+- **対処**: 上司に確認する。組織構造は `reference/organization/structure.md` を参照

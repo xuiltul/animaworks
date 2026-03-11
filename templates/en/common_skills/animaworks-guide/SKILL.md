@@ -24,8 +24,8 @@ For operational concepts and rules, see `common_knowledge/`:
 - Messaging rules → `communication/messaging-guide.md`
 - Task management → `operations/task-management.md`
 - Tool system → `operations/tool-usage-overview.md`
-- Organization structure → `organization/structure.md`
-- Model selection and config → `operations/model-guide.md`
+- Organization structure → `reference/organization/structure.md`
+- Model selection and config → `reference/operations/model-guide.md`
 
 ---
 
@@ -140,7 +140,7 @@ animaworks models show                   # Show current models.json contents
 animaworks models show --json            # Raw JSON output
 ```
 
-Details → `common_knowledge/operations/model-guide.md`
+Details → `reference/operations/model-guide.md`
 
 ---
 

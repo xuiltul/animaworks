@@ -79,5 +79,5 @@ Chat と Heartbeat は **別ロック** で動くため、Heartbeat 実行中で
 | **記憶** | episodes/, knowledge/, procedures/, skills/, shortterm/ | 過去の経験・学び・手順・能力 |
 | **作業状態** | state/ | 今取り組んでいること |
 
-各ファイルの詳細な役割と変更ルールは `anatomy/anima-anatomy.md` を参照。
+各ファイルの詳細な役割と変更ルールは `reference/anatomy/anima-anatomy.md` を参照。
 記憶システムの仕組みは `anatomy/memory-system.md` を参照。

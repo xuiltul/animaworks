@@ -139,7 +139,7 @@ When `background_model` is configured, Heartbeat / Inbox / Cron run on that mode
 Chat (human interaction) and TaskExec (actual work) continue using the main model.
 
 Setup: `animaworks anima set-background-model {name} claude-sonnet-4-6`
-See the "Background Model" section in `operations/model-guide.md` for details.
+See the "Background Model" section in `reference/operations/model-guide.md` for details.
 
 ### Heartbeat Internal Behavior
 

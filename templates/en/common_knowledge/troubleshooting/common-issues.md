@@ -34,7 +34,7 @@ If it doesn't help, see `troubleshooting/escalation-flowchart.md` and escalate a
      ```
      search_memory(query="organization", scope="common_knowledge")
      ```
-     Or `read_memory_file(path="common_knowledge/organization/structure.md")` to see all Anima names in the org
+     Or `read_memory_file(path="reference/organization/structure.md")` to see all Anima names in the org
    - **Note**: When chatting with a human, do not use `send_message`; reply directly in text (humans receive it). Use `call_human` to contact humans outside of chat (e.g. during heartbeat)
 
 2. **Check server status**
@@ -449,7 +449,7 @@ Context window is inferred from model name in `status.json`; can be overridden i
 
 - **Cause**: Wrong path or file does not exist
 - **Fix**: Use `list_directory` to verify directory contents before specifying path
-- **Note**: `read_memory_file` uses paths relative to Anima dir (e.g. `knowledge/xxx.md`, `common_knowledge/organization/structure.md`). `read_file` uses absolute paths
+- **Note**: `read_memory_file` uses paths relative to Anima dir (e.g. `knowledge/xxx.md`, `reference/organization/structure.md`). `read_file` uses absolute paths
 
 ### Cannot Specify Inbox in read_channel
 
@@ -465,4 +465,4 @@ Context window is inferred from model name in `status.json`; can be overridden i
 ### Recipient Anima Does Not Exist
 
 - **Cause**: Wrong Anima name, or that Anima has not been created yet
-- **Fix**: Check with supervisor. See `common_knowledge/organization/structure.md` for org structure
+- **Fix**: Check with supervisor. See `reference/organization/structure.md` for org structure
