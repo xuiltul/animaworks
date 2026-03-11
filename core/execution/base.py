@@ -77,6 +77,11 @@ def is_bedrock_qwen(model: str) -> bool:
     return model.startswith("bedrock/") and "qwen" in model.lower()
 
 
+def is_bedrock_glm(model: str) -> bool:
+    """Return True if *model* is a ZhipuAI GLM model on AWS Bedrock."""
+    return model.startswith("bedrock/") and "glm" in model.lower()
+
+
 def is_bedrock_kimi(model: str) -> bool:
     """Return True if *model* is a Moonshot Kimi model on AWS Bedrock."""
     return model.startswith("bedrock/") and ("kimi" in model.lower() or "moonshot" in model.lower())
@@ -115,7 +120,6 @@ def resolve_thinking_effort(model: str, effort: str | None) -> str:
 
 _THINK_TAG_RE = re.compile(r"^(.*?)</think>\s*", re.DOTALL)
 _MAX_THINK_BUFFER = 50_000
-_THINK_PROBE_LIMIT = 512
 
 
 def strip_thinking_tags(text: str) -> tuple[str, str]:
@@ -144,31 +148,29 @@ class StreamingThinkFilter:
     """Streaming filter that routes ``<think>`` content to thinking deltas.
 
     Feed each streamed chunk via :meth:`feed`; it returns a
-    ``(thinking_delta, text_delta)`` tuple.
+    ``(thinking_delta, text_delta)`` tuple.  Content is only buffered
+    when the stream begins with ``<think>``; otherwise chunks pass
+    through immediately as *text*.
 
-    Handles three content patterns:
-
-    1. ``<think>thinking</think>response`` — standard Qwen/DeepSeek output.
-    2. ``thinking</think>response`` — vLLM reasoning parser strips the
-       opening ``<think>`` tag but leaves ``</think>`` in *content*.
-    3. No ``<think>`` tags at all — content passes through as *text*.
-
-    For patterns 1 and 2, the filter buffers content until ``</think>``
-    is found.  For pattern 3, content is released as text after
-    ``_THINK_PROBE_LIMIT`` bytes without seeing ``</think>``.
+    The ``</think>`` check runs **before** the early-exit so that a
+    single chunk like ``"thinking</think>response"`` (vLLM reasoning
+    parser may strip the opening tag) is still split correctly.
 
     A safety valve flushes the buffer as plain text if it exceeds
     ``_MAX_THINK_BUFFER`` characters without encountering ``</think>``.
+
+    For models that emit thinking without proper ``<think>`` tags, the
+    post-stream ``strip_thinking_tags`` safety net in the streaming
+    executor catches any residual leaks in the final ``full_text``.
     """
 
     _THINK_OPEN = "<think>"
 
-    __slots__ = ("_buffer", "_done", "_has_think_prefix")
+    __slots__ = ("_buffer", "_done")
 
     def __init__(self) -> None:
         self._buffer = ""
         self._done = False
-        self._has_think_prefix = False
 
     def feed(self, delta: str) -> tuple[str, str]:
         """Process *delta* and return ``(thinking_text, response_text)``."""
@@ -176,7 +178,8 @@ class StreamingThinkFilter:
             return ("", delta)
         self._buffer += delta
 
-        # Always check for </think> first — handles both patterns 1 and 2
+        # Check for </think> FIRST — handles both normal <think>...</think>
+        # and the edge case where <think> is absent (vLLM reasoning parser).
         if "</think>" in self._buffer:
             self._done = True
             parts = self._buffer.split("</think>", 1)
@@ -188,29 +191,21 @@ class StreamingThinkFilter:
                 thinking_raw = stripped_t[len("<think>") :]
             return (thinking_raw, response)
 
+        # Early exit: if accumulated text clearly doesn't start with <think>,
+        # pass through immediately so non-think streams aren't buffered.
         stripped = self._buffer.lstrip()
+        if stripped and not stripped.startswith(self._THINK_OPEN) and not self._THINK_OPEN.startswith(stripped):
+            self._done = True
+            text = self._buffer
+            self._buffer = ""
+            return ("", text)
 
-        # Content starts with <think> (or a prefix thereof) — keep buffering
-        if not stripped or stripped.startswith(self._THINK_OPEN) or self._THINK_OPEN.startswith(stripped):
-            self._has_think_prefix = bool(stripped) and stripped.startswith(self._THINK_OPEN)
-            if len(self._buffer) > _MAX_THINK_BUFFER:
-                self._done = True
-                text = self._buffer
-                self._buffer = ""
-                return ("", text)
-            return ("", "")
-
-        # Content does NOT start with <think>.  It could be pattern 2
-        # (thinking without opening tag) or pattern 3 (no thinking at all).
-        # Probe up to _THINK_PROBE_LIMIT to check for </think>.
-        if len(self._buffer) <= _THINK_PROBE_LIMIT:
-            return ("", "")
-
-        # Probing exceeded limit — no </think> found, treat as plain text
-        self._done = True
-        text = self._buffer
-        self._buffer = ""
-        return ("", text)
+        if len(self._buffer) > _MAX_THINK_BUFFER:
+            text = self._buffer
+            self._buffer = ""
+            self._done = True
+            return ("", text)
+        return ("", "")
 
     def flush(self) -> str:
         """Return any remaining buffered text at end-of-stream."""

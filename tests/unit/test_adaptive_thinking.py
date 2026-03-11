@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -9,15 +10,21 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.execution.base import is_adaptive_model, is_anthropic_claude, is_bedrock_kimi, is_bedrock_qwen, resolve_thinking_effort
 from core.config.models import (
     DEFAULT_MAX_TOKENS,
     AnimaDefaults,
     AnimaWorksConfig,
     resolve_max_tokens,
 )
+from core.execution.base import (
+    is_adaptive_model,
+    is_anthropic_claude,
+    is_bedrock_glm,
+    is_bedrock_kimi,
+    is_bedrock_qwen,
+    resolve_thinking_effort,
+)
 from core.schemas import ModelConfig
-
 
 # ── is_adaptive_model ─────────────────────────────────────────
 
@@ -98,6 +105,32 @@ class TestIsBedrockQwen:
 
     def test_openai_not_bedrock(self):
         assert is_bedrock_qwen("openai/gpt-4o") is False
+
+
+# ── is_bedrock_glm ────────────────────────────────────────────
+
+
+class TestIsBedrockGlm:
+    def test_bedrock_glm_47(self):
+        assert is_bedrock_glm("bedrock/zhipuai.glm-4.7-250414") is True
+
+    def test_bedrock_glm_generic(self):
+        assert is_bedrock_glm("bedrock/glm-4.7") is True
+
+    def test_bedrock_glm_upper(self):
+        assert is_bedrock_glm("bedrock/zhipuai.GLM-4.7-Chat") is True
+
+    def test_bedrock_claude_not_glm(self):
+        assert is_bedrock_glm("bedrock/claude-opus-4-6") is False
+
+    def test_bedrock_qwen_not_glm(self):
+        assert is_bedrock_glm("bedrock/qwen.qwen3-next-80b-a3b") is False
+
+    def test_non_bedrock_glm(self):
+        assert is_bedrock_glm("ollama/glm-4.7") is False
+
+    def test_openai_glm_not_bedrock(self):
+        assert is_bedrock_glm("openai/glm-4.7-flash") is False
 
 
 # ── is_bedrock_kimi ───────────────────────────────────────────
@@ -234,6 +267,7 @@ class TestStatusJsonThinkingEffort:
     def test_thinking_effort_loaded_from_status(self, tmp_path):
         """Verify _load_status_json includes thinking_effort."""
         import json
+
         from core.config.models import _load_status_json
 
         anima_dir = tmp_path / "animas" / "test"
@@ -247,6 +281,7 @@ class TestStatusJsonThinkingEffort:
     def test_thinking_effort_absent_is_omitted(self, tmp_path):
         """When thinking_effort is absent from status.json, key is absent from result."""
         import json
+
         from core.config.models import _load_status_json
 
         anima_dir = tmp_path / "animas" / "test"
@@ -275,6 +310,7 @@ class TestLiteLLMAdaptiveThinking:
     @pytest.fixture
     def memory(self, anima_dir: Path) -> MagicMock:
         from core.memory import MemoryManager
+
         m = MagicMock(spec=MemoryManager)
         m.read_permissions.return_value = ""
         m.search_memory_text.return_value = []
@@ -284,17 +320,24 @@ class TestLiteLLMAdaptiveThinking:
     @pytest.fixture
     def tool_handler(self) -> MagicMock:
         from core.tooling.handler import ToolHandler
+
         return MagicMock(spec=ToolHandler)
 
     def test_claude_46_gets_adaptive_thinking(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="claude-sonnet-4-6", thinking=True,
-            thinking_effort="medium", api_key="k",
+            model="claude-sonnet-4-6",
+            thinking=True,
+            thinking_effort="medium",
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["thinking"] == {"type": "adaptive"}
@@ -303,12 +346,18 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_old_claude_gets_manual_thinking(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="claude-sonnet-4-5-20250929", thinking=True, api_key="k",
+            model="claude-sonnet-4-5-20250929",
+            thinking=True,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 10000}
@@ -316,12 +365,18 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_ollama_gets_think_param(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="ollama/qwen3:14b", thinking=True, api_key="k",
+            model="ollama/qwen3:14b",
+            thinking=True,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs.get("think") is True
@@ -330,13 +385,19 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_bedrock_gets_reasoning_effort(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="bedrock/claude-opus-4-6", thinking=True,
-            thinking_effort="medium", api_key="k",
+            model="bedrock/claude-opus-4-6",
+            thinking=True,
+            thinking_effort="medium",
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["reasoning_effort"] == "medium"
@@ -344,12 +405,18 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_bedrock_kimi_gets_reasoning_config(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="bedrock/moonshotai.kimi-k2.5", thinking=True, api_key="k",
+            model="bedrock/moonshotai.kimi-k2.5",
+            thinking=True,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["reasoning_config"] == "high"
@@ -359,12 +426,18 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_bedrock_kimi_thinking_false_no_reasoning_config(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="bedrock/moonshotai.kimi-k2.5", thinking=False, api_key="k",
+            model="bedrock/moonshotai.kimi-k2.5",
+            thinking=False,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert "reasoning_config" not in kwargs
@@ -372,12 +445,18 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_bedrock_qwen_gets_enable_thinking_true(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="bedrock/qwen.qwen3-next-80b-a3b", thinking=True, api_key="k",
+            model="bedrock/qwen.qwen3-next-80b-a3b",
+            thinking=True,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["enable_thinking"] is True
@@ -387,12 +466,18 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_bedrock_qwen_gets_enable_thinking_false(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="bedrock/qwen.qwen3-next-80b-a3b", thinking=False, api_key="k",
+            model="bedrock/qwen.qwen3-next-80b-a3b",
+            thinking=False,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["enable_thinking"] is False
@@ -400,12 +485,18 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_openai_gets_extra_body_enable_thinking_true(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="openai/qwen3.5-9b", thinking=True, api_key="k",
+            model="openai/qwen3.5-9b",
+            thinking=True,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["extra_body"]["enable_thinking"] is True
@@ -415,12 +506,18 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_openai_gets_extra_body_enable_thinking_false(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="openai/qwen3.5-9b", thinking=False, api_key="k",
+            model="openai/qwen3.5-9b",
+            thinking=False,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["extra_body"]["enable_thinking"] is False
@@ -428,26 +525,77 @@ class TestLiteLLMAdaptiveThinking:
 
     def test_openai_thinking_none_no_extra_body(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="openai/qwen3.5-9b", api_key="k",
+            model="openai/qwen3.5-9b",
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert "extra_body" not in kwargs
         assert "think" not in kwargs
 
+    def test_bedrock_glm_gets_enable_thinking_true(self, anima_dir, tool_handler, memory):
+        from core.execution.litellm_loop import LiteLLMExecutor
+
+        cfg = ModelConfig(
+            model="bedrock/zhipuai.glm-4.7-250414",
+            thinking=True,
+            api_key="k",
+        )
+        ex = LiteLLMExecutor(
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
+        )
+        kwargs = ex._build_llm_kwargs()
+        assert kwargs["enable_thinking"] is True
+        assert "reasoning_effort" not in kwargs
+        assert "thinking" not in kwargs
+        assert "think" not in kwargs
+
+    def test_bedrock_glm_gets_enable_thinking_false(self, anima_dir, tool_handler, memory):
+        from core.execution.litellm_loop import LiteLLMExecutor
+
+        cfg = ModelConfig(
+            model="bedrock/zhipuai.glm-4.7-250414",
+            thinking=False,
+            api_key="k",
+        )
+        ex = LiteLLMExecutor(
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
+        )
+        kwargs = ex._build_llm_kwargs()
+        assert kwargs["enable_thinking"] is False
+        assert "reasoning_effort" not in kwargs
+
     def test_openai_gpt_with_thinking_uses_extra_body(self, anima_dir, tool_handler, memory):
         """Non-Qwen openai/* models also use extra_body when thinking is set."""
         from core.execution.litellm_loop import LiteLLMExecutor
+
         cfg = ModelConfig(
-            model="openai/gpt-4o", thinking=True, api_key="k",
+            model="openai/gpt-4o",
+            thinking=True,
+            api_key="k",
         )
         ex = LiteLLMExecutor(
-            model_config=cfg, anima_dir=anima_dir,
-            tool_handler=tool_handler, tool_registry=[], memory=memory,
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["extra_body"]["enable_thinking"] is True

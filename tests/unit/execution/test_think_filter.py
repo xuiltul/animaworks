@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from core.execution.base import StreamingThinkFilter, strip_thinking_tags
 
-
 # ── strip_thinking_tags ──────────────────────────────────────
 
 
@@ -65,14 +64,11 @@ class TestStripThinkingTags:
 
 class TestStreamingThinkFilter:
     def test_no_think_tags_passthrough(self):
+        """Non-think content passes through immediately."""
         f = StreamingThinkFilter()
         thinking, text = f.feed("Hello world")
-        # Short non-think content is buffered during probe phase
         assert thinking == ""
-        assert text == ""
-        # Flush releases the buffered text
-        flushed = f.flush()
-        assert flushed == "Hello world"
+        assert text == "Hello world"
 
     def test_think_tag_in_single_chunk(self):
         f = StreamingThinkFilter()
@@ -112,9 +108,11 @@ class TestStreamingThinkFilter:
         assert flushed == ""
 
     def test_non_think_content_immediate_passthrough(self):
+        """Content not starting with <think> passes through at once."""
         f = StreamingThinkFilter()
         t1, r1 = f.feed("regular content")
-        assert t1 == "" and r1 == "regular content"
+        assert t1 == ""
+        assert r1 == "regular content"
         t2, r2 = f.feed(" more content")
         assert t2 == "" and r2 == " more content"
 
@@ -139,58 +137,34 @@ class TestStreamingThinkFilter:
         f = StreamingThinkFilter()
         huge = "<think>" + "x" * 60_000
         t, r = f.feed(huge)
-        assert r != ""
+        assert r == huge
         assert t == ""
 
     # ── Pattern 2: missing <think> but </think> present ──────
 
     def test_missing_open_tag_single_chunk(self):
-        """vLLM reasoning parser may strip <think> but leave </think>."""
+        """vLLM reasoning parser may strip <think> but leave </think>.
+
+        When both thinking and </think> arrive in a single chunk, the
+        filter correctly splits them because </think> is checked FIRST.
+        """
         f = StreamingThinkFilter()
         t, r = f.feed("reasoning content here</think>\n\nactual response")
         assert "reasoning content here" in t
         assert r == "actual response"
 
-    def test_missing_open_tag_across_chunks(self):
-        """Thinking without <think> spread across multiple chunks."""
+    def test_missing_open_tag_across_chunks_falls_through(self):
+        """Across-chunk missing-<think> is NOT caught by the streaming filter.
+
+        The first chunk triggers early-exit (no <think> prefix).
+        The post-stream strip_thinking_tags safety net handles this.
+        """
         f = StreamingThinkFilter()
         t1, r1 = f.feed("I need to ")
-        assert t1 == "" and r1 == ""
+        assert t1 == "" and r1 == "I need to "
 
         t2, r2 = f.feed("analyze this carefully")
-        assert t2 == "" and r2 == ""
+        assert t2 == "" and r2 == "analyze this carefully"
 
         t3, r3 = f.feed("</think>\n\nHere is my response")
-        assert "I need to analyze this carefully" in t3
-        assert r3 == "Here is my response"
-
-    def test_missing_open_tag_probe_limit(self):
-        """Content without any think tags should pass through after probe limit."""
-        f = StreamingThinkFilter()
-        # Feed content well beyond probe limit without any </think>
-        long_text = "x" * 600
-        t, r = f.feed(long_text)
-        assert t == ""
-        assert r == long_text
-
-    def test_missing_open_tag_gradual_probe(self):
-        """Content without think tags, fed in small chunks."""
-        f = StreamingThinkFilter()
-        results = []
-        for i in range(100):
-            t, r = f.feed(f"chunk{i} ")
-            results.append((t, r))
-
-        # Eventually the probe limit is hit and text is released
-        all_text = "".join(r for _, r in results)
-        all_think = "".join(t for t, _ in results)
-        assert all_think == ""
-        assert "chunk0" in all_text
-
-    def test_missing_open_tag_flush(self):
-        """Flush with content still probing (no </think> found)."""
-        f = StreamingThinkFilter()
-        t, r = f.feed("short content")
-        assert t == "" and r == ""
-        flushed = f.flush()
-        assert flushed == "short content"
+        assert t3 == "" and r3 == "</think>\n\nHere is my response"
