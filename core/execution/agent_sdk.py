@@ -50,11 +50,9 @@ from core.execution._sdk_hooks import (  # noqa: F401
     _build_pre_tool_hook,
     _cache_subordinate_paths,
     _collect_all_subordinates,
-    _count_active_tasks,
     _intercept_task_to_delegation,
     _intercept_task_to_pending,
     _read_status_json,
-    _role_matches,
     _select_subordinate,
 )
 
