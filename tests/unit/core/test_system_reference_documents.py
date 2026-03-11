@@ -20,7 +20,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ════════════════════════════════════════════════════════════════════
 # 1. Init tests (core/init.py)
 # ════════════════════════════════════════════════════════════════════
@@ -65,9 +64,7 @@ class TestCopyInfrastructure:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
 
-        with patch("core.init.TEMPLATES_DIR", templates), patch(
-            "core.paths._get_locale", return_value="ja"
-        ):
+        with patch("core.init.TEMPLATES_DIR", templates), patch("core.paths._get_locale", return_value="ja"):
             _copy_infrastructure(data_dir)
 
         assert (data_dir / "common_knowledge" / "00_index.md").exists()
@@ -79,9 +76,7 @@ class TestCopyInfrastructure:
         templates = tmp_path / "templates"
         ja_dir = templates / "ja"
         (ja_dir / "anima_templates").mkdir(parents=True)
-        (ja_dir / "anima_templates" / "identity.md").write_text(
-            "# Identity", encoding="utf-8"
-        )
+        (ja_dir / "anima_templates" / "identity.md").write_text("# Identity", encoding="utf-8")
         # Also add common_knowledge so there's something valid
         (ja_dir / "common_knowledge").mkdir()
         (ja_dir / "common_knowledge" / "test.md").write_text("test", encoding="utf-8")
@@ -89,9 +84,7 @@ class TestCopyInfrastructure:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
 
-        with patch("core.init.TEMPLATES_DIR", templates), patch(
-            "core.paths._get_locale", return_value="ja"
-        ):
+        with patch("core.init.TEMPLATES_DIR", templates), patch("core.paths._get_locale", return_value="ja"):
             _copy_infrastructure(data_dir)
 
         assert not (data_dir / "anima_templates").exists()
@@ -112,9 +105,7 @@ class TestCopyInfrastructure:
         ck_dst.mkdir(parents=True)
         (ck_dst / "00_index.md").write_text("# Old Index", encoding="utf-8")
 
-        with patch("core.init.TEMPLATES_DIR", templates), patch(
-            "core.paths._get_locale", return_value="ja"
-        ):
+        with patch("core.init.TEMPLATES_DIR", templates), patch("core.paths._get_locale", return_value="ja"):
             _copy_infrastructure(data_dir)
 
         content = (ck_dst / "00_index.md").read_text(encoding="utf-8")
@@ -137,9 +128,7 @@ class TestCopyInfrastructure:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
 
-        with patch("core.init.TEMPLATES_DIR", templates), patch(
-            "core.paths._get_locale", return_value="en"
-        ):
+        with patch("core.init.TEMPLATES_DIR", templates), patch("core.paths._get_locale", return_value="en"):
             _copy_infrastructure(data_dir)
 
         content = (data_dir / "common_knowledge" / "00_index.md").read_text(encoding="utf-8")
@@ -158,9 +147,7 @@ class TestCopyInfrastructure:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
 
-        with patch("core.init.TEMPLATES_DIR", templates), patch(
-            "core.paths._get_locale", return_value="fr"
-        ):
+        with patch("core.init.TEMPLATES_DIR", templates), patch("core.paths._get_locale", return_value="fr"):
             _copy_infrastructure(data_dir)
 
         content = (data_dir / "common_knowledge" / "00_index.md").read_text(encoding="utf-8")
@@ -179,9 +166,7 @@ class TestCopyInfrastructure:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
 
-        with patch("core.init.TEMPLATES_DIR", templates), patch(
-            "core.paths._get_locale", return_value="fr"
-        ):
+        with patch("core.init.TEMPLATES_DIR", templates), patch("core.paths._get_locale", return_value="fr"):
             _copy_infrastructure(data_dir)
 
         content = (data_dir / "common_knowledge" / "00_index.md").read_text(encoding="utf-8")
@@ -208,9 +193,7 @@ class TestMergeTemplates:
         # Create common_knowledge dir but leave it empty
         (data_dir / "common_knowledge").mkdir(parents=True)
 
-        with patch("core.init.TEMPLATES_DIR", templates), patch(
-            "core.paths._get_locale", return_value="ja"
-        ):
+        with patch("core.init.TEMPLATES_DIR", templates), patch("core.paths._get_locale", return_value="ja"):
             added = merge_templates(data_dir)
 
         assert "common_knowledge/00_index.md" in added
@@ -228,20 +211,14 @@ class TestMergeTemplates:
 
         data_dir = tmp_path / "data"
         (data_dir / "common_knowledge").mkdir(parents=True)
-        (data_dir / "common_knowledge" / "00_index.md").write_text(
-            "# User-customized version", encoding="utf-8"
-        )
+        (data_dir / "common_knowledge" / "00_index.md").write_text("# User-customized version", encoding="utf-8")
 
-        with patch("core.init.TEMPLATES_DIR", templates), patch(
-            "core.paths._get_locale", return_value="ja"
-        ):
+        with patch("core.init.TEMPLATES_DIR", templates), patch("core.paths._get_locale", return_value="ja"):
             added = merge_templates(data_dir)
 
         # File already existed, should not be overwritten or listed
         assert "common_knowledge/00_index.md" not in added
-        content = (data_dir / "common_knowledge" / "00_index.md").read_text(
-            encoding="utf-8"
-        )
+        content = (data_dir / "common_knowledge" / "00_index.md").read_text(encoding="utf-8")
         assert content == "# User-customized version"
 
 
@@ -323,9 +300,7 @@ def _make_mock_memory(anima_dir: Path) -> MagicMock:
 class TestBuildSystemPromptCommonKnowledge:
     """Test that the common_knowledge hint section appears/disappears correctly."""
 
-    def test_includes_section_when_common_knowledge_has_md_files(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_includes_section_when_common_knowledge_has_md_files(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         from core.prompt.builder import build_system_prompt
 
         data_dir = tmp_path / "data"
@@ -360,9 +335,7 @@ class TestBuildSystemPromptCommonKnowledge:
         assert "read_memory_file" in prompt
         assert "common_knowledge/00_index.md" in prompt
 
-    def test_excludes_section_when_common_knowledge_is_empty(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_excludes_section_when_common_knowledge_is_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         from core.prompt.builder import build_system_prompt
 
         data_dir = tmp_path / "data"
@@ -386,9 +359,7 @@ class TestBuildSystemPromptCommonKnowledge:
 
         assert "共有リファレンス" not in prompt
 
-    def test_excludes_section_when_common_knowledge_dir_missing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_excludes_section_when_common_knowledge_dir_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         from core.prompt.builder import build_system_prompt
 
         data_dir = tmp_path / "data"
@@ -411,9 +382,7 @@ class TestBuildSystemPromptCommonKnowledge:
 
         assert "共有リファレンス" not in prompt
 
-    def test_section_includes_subdirectory_md_files(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_section_includes_subdirectory_md_files(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """rglob('*.md') should detect .md files in subdirectories too."""
         from core.prompt.builder import build_system_prompt
 
@@ -443,9 +412,7 @@ class TestBuildSystemPromptCommonKnowledge:
 
         assert "共有リファレンス" in prompt
 
-    def test_non_md_files_do_not_trigger_section(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_non_md_files_do_not_trigger_section(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """Only .md files should count; .txt or other files should not."""
         from core.prompt.builder import build_system_prompt
 
@@ -520,8 +487,8 @@ class TestGenerateConfigFields:
     """Test _generate_config_fields() produces valid markdown."""
 
     def test_output_contains_anima_model_config_fields(self):
-        from scripts.generate_reference import _generate_config_fields
         from core.config.models import AnimaModelConfig
+        from scripts.generate_reference import _generate_config_fields
 
         result = _generate_config_fields()
 
@@ -557,8 +524,8 @@ class TestGenerateCronFields:
     """Test _generate_cron_fields() produces valid markdown."""
 
     def test_output_contains_cron_task_fields(self):
-        from scripts.generate_reference import _generate_cron_fields
         from core.schemas import CronTask
+        from scripts.generate_reference import _generate_cron_fields
 
         result = _generate_cron_fields()
 
@@ -633,10 +600,7 @@ class TestInjectAutoGenerated:
 
         md_file = tmp_path / "unknown.md"
         original = (
-            "# Doc\n\n"
-            "<!-- AUTO-GENERATED:START nonexistent_section -->\n"
-            "placeholder\n"
-            "<!-- AUTO-GENERATED:END -->\n"
+            "# Doc\n\n<!-- AUTO-GENERATED:START nonexistent_section -->\nplaceholder\n<!-- AUTO-GENERATED:END -->\n"
         )
         md_file.write_text(original, encoding="utf-8")
 
@@ -650,11 +614,7 @@ class TestInjectAutoGenerated:
         from scripts.generate_reference import inject_auto_generated
 
         md_file = tmp_path / "dryrun.md"
-        original = (
-            "<!-- AUTO-GENERATED:START cron_fields -->\n"
-            "old\n"
-            "<!-- AUTO-GENERATED:END -->\n"
-        )
+        original = "<!-- AUTO-GENERATED:START cron_fields -->\nold\n<!-- AUTO-GENERATED:END -->\n"
         md_file.write_text(original, encoding="utf-8")
 
         modified = inject_auto_generated(md_file, dry_run=True)
@@ -694,9 +654,7 @@ class TestInjectAutoGenerated:
 
         md_file = tmp_path / "markers.md"
         md_file.write_text(
-            "<!-- AUTO-GENERATED:START cron_fields -->\n"
-            "old\n"
-            "<!-- AUTO-GENERATED:END -->\n",
+            "<!-- AUTO-GENERATED:START cron_fields -->\nold\n<!-- AUTO-GENERATED:END -->\n",
             encoding="utf-8",
         )
 
@@ -719,10 +677,7 @@ class TestProcessDirectory:
         sub.mkdir()
 
         (sub / "with_marker.md").write_text(
-            "# Guide\n\n"
-            "<!-- AUTO-GENERATED:START cron_fields -->\n"
-            "old\n"
-            "<!-- AUTO-GENERATED:END -->\n",
+            "# Guide\n\n<!-- AUTO-GENERATED:START cron_fields -->\nold\n<!-- AUTO-GENERATED:END -->\n",
             encoding="utf-8",
         )
         (ck_dir / "no_marker.md").write_text(
@@ -752,11 +707,7 @@ class TestProcessDirectory:
         ck_dir = tmp_path / "common_knowledge"
         ck_dir.mkdir()
         md_file = ck_dir / "test.md"
-        original = (
-            "<!-- AUTO-GENERATED:START cron_fields -->\n"
-            "old\n"
-            "<!-- AUTO-GENERATED:END -->\n"
-        )
+        original = "<!-- AUTO-GENERATED:START cron_fields -->\nold\n<!-- AUTO-GENERATED:END -->\n"
         md_file.write_text(original, encoding="utf-8")
 
         modified = process_directory(ck_dir, dry_run=True)
@@ -803,11 +754,7 @@ class TestMarkerRegex:
     def test_matches_valid_marker_block(self):
         from scripts.generate_reference import _MARKER_RE
 
-        text = (
-            "<!-- AUTO-GENERATED:START tool_parameters -->\n"
-            "some content\n"
-            "<!-- AUTO-GENERATED:END -->"
-        )
+        text = "<!-- AUTO-GENERATED:START tool_parameters -->\nsome content\n<!-- AUTO-GENERATED:END -->"
         match = _MARKER_RE.search(text)
 
         assert match is not None
@@ -816,13 +763,7 @@ class TestMarkerRegex:
     def test_matches_multiline_content(self):
         from scripts.generate_reference import _MARKER_RE
 
-        text = (
-            "<!-- AUTO-GENERATED:START config_fields -->\n"
-            "line 1\n"
-            "line 2\n"
-            "line 3\n"
-            "<!-- AUTO-GENERATED:END -->"
-        )
+        text = "<!-- AUTO-GENERATED:START config_fields -->\nline 1\nline 2\nline 3\n<!-- AUTO-GENERATED:END -->"
         match = _MARKER_RE.search(text)
 
         assert match is not None
@@ -839,11 +780,7 @@ class TestMarkerRegex:
     def test_captures_section_name(self):
         from scripts.generate_reference import _MARKER_RE
 
-        text = (
-            "<!-- AUTO-GENERATED:START cron_fields -->\n"
-            "x\n"
-            "<!-- AUTO-GENERATED:END -->"
-        )
+        text = "<!-- AUTO-GENERATED:START cron_fields -->\nx\n<!-- AUTO-GENERATED:END -->"
         match = _MARKER_RE.search(text)
 
         assert match is not None
@@ -883,17 +820,11 @@ class TestGeneratorsRegistry:
 
 
 # Path to the real templates in the project (ja locale after i18n restructuring)
-_TEMPLATES_CK_DIR = (
-    Path(__file__).resolve().parent.parent.parent.parent
-    / "templates"
-    / "ja"
-    / "common_knowledge"
-)
+_TEMPLATES_CK_DIR = Path(__file__).resolve().parent.parent.parent.parent / "templates" / "ja" / "common_knowledge"
 
 # All expected markdown files in templates/ja/common_knowledge
 _EXPECTED_FILES = [
     "00_index.md",
-    "anatomy/anima-anatomy.md",
     "anatomy/memory-system.md",
     "anatomy/what-is-anima.md",
     "communication/board-guide.md",
@@ -902,23 +833,16 @@ _EXPECTED_FILES = [
     "communication/messaging-guide.md",
     "communication/reporting-guide.md",
     "communication/sending-limits.md",
-    "communication/slack-bot-token-guide.md",
     "operations/background-tasks.md",
     "operations/heartbeat-cron-guide.md",
-    "operations/mode-s-auth-guide.md",
-    "operations/model-guide.md",
-    "operations/project-setup.md",
     "operations/task-board-guide.md",
     "operations/task-management.md",
     "operations/tool-usage-overview.md",
-    "operations/voice-chat-guide.md",
     "organization/hierarchy-rules.md",
     "organization/roles.md",
-    "organization/structure.md",
     "security/prompt-injection-awareness.md",
     "troubleshooting/common-issues.md",
     "troubleshooting/escalation-flowchart.md",
-    "troubleshooting/gmail-credential-setup.md",
     "usecases/usecase-communication.md",
     "usecases/usecase-customer-support.md",
     "usecases/usecase-development.md",
@@ -927,6 +851,22 @@ _EXPECTED_FILES = [
     "usecases/usecase-overview.md",
     "usecases/usecase-research.md",
     "usecases/usecase-secretary.md",
+]
+
+_TEMPLATES_REF_DIR = Path(__file__).resolve().parent.parent.parent.parent / "templates" / "ja" / "reference"
+
+# All expected markdown files in templates/ja/reference
+_EXPECTED_REFERENCE_FILES = [
+    "00_index.md",
+    "anatomy/anima-anatomy.md",
+    "communication/slack-bot-token-guide.md",
+    "internals/common-knowledge-access-paths.md",
+    "operations/model-guide.md",
+    "operations/mode-s-auth-guide.md",
+    "operations/project-setup.md",
+    "operations/voice-chat-guide.md",
+    "organization/structure.md",
+    "troubleshooting/gmail-credential-setup.md",
 ]
 
 
@@ -960,6 +900,24 @@ class TestTemplateFilesExist:
             assert (_TEMPLATES_CK_DIR / subdir).is_dir(), f"Missing subdir: {subdir}"
 
 
+class TestReferenceTemplateFilesExist:
+    """Verify all expected reference template markdown files are present."""
+
+    @pytest.mark.parametrize("rel_path", _EXPECTED_REFERENCE_FILES)
+    def test_expected_file_exists(self, rel_path: str):
+        full_path = _TEMPLATES_REF_DIR / rel_path
+        assert full_path.exists(), f"Missing reference template: {rel_path}"
+
+    def test_total_file_count(self):
+        """Markdown file count should match _EXPECTED_REFERENCE_FILES."""
+        md_files = list(_TEMPLATES_REF_DIR.rglob("*.md"))
+        expected_count = len(_EXPECTED_REFERENCE_FILES)
+        assert len(md_files) == expected_count, (
+            f"Expected {expected_count} .md files in reference/, found {len(md_files)}: "
+            f"{[str(f.relative_to(_TEMPLATES_REF_DIR)) for f in md_files]}"
+        )
+
+
 class TestTemplateHeadings:
     """Each template file should have ## level headings for RAG chunking."""
 
@@ -986,16 +944,14 @@ class TestTemplateAutoGeneratedMarkers:
     def test_start_end_markers_match(self, rel_path: str):
         import re
 
-        full_path = _TEMPLATES_CK_DIR / rel_path
+        full_path = _TEMPLATES_REF_DIR / rel_path
         content = full_path.read_text(encoding="utf-8")
 
         starts = re.findall(r"<!-- AUTO-GENERATED:START (\w+) -->", content)
         ends = re.findall(r"<!-- AUTO-GENERATED:END -->", content)
 
         assert len(starts) > 0, f"{rel_path} should have AUTO-GENERATED markers"
-        assert len(starts) == len(ends), (
-            f"{rel_path} has {len(starts)} START markers but {len(ends)} END markers"
-        )
+        assert len(starts) == len(ends), f"{rel_path} has {len(starts)} START markers but {len(ends)} END markers"
 
     @pytest.mark.parametrize("rel_path", _FILES_WITH_MARKERS)
     def test_marker_section_names_are_valid(self, rel_path: str):
@@ -1003,33 +959,31 @@ class TestTemplateAutoGeneratedMarkers:
 
         from scripts.generate_reference import _GENERATORS
 
-        full_path = _TEMPLATES_CK_DIR / rel_path
+        full_path = _TEMPLATES_REF_DIR / rel_path
         content = full_path.read_text(encoding="utf-8")
 
         starts = re.findall(r"<!-- AUTO-GENERATED:START (\w+) -->", content)
         for section_name in starts:
-            assert section_name in _GENERATORS, (
-                f"{rel_path} references unknown section '{section_name}'"
-            )
+            assert section_name in _GENERATORS, f"{rel_path} references unknown section '{section_name}'"
 
     def test_no_markers_in_other_files(self):
         """Files not in the markers list should not have AUTO-GENERATED markers."""
         files_with_markers = set(self._FILES_WITH_MARKERS)
-        for md_file in _TEMPLATES_CK_DIR.rglob("*.md"):
-            rel = str(md_file.relative_to(_TEMPLATES_CK_DIR))
-            if rel in files_with_markers:
+        for base_dir in (_TEMPLATES_CK_DIR, _TEMPLATES_REF_DIR):
+            if not base_dir.is_dir():
                 continue
-            content = md_file.read_text(encoding="utf-8")
-            assert "AUTO-GENERATED:START" not in content, (
-                f"Unexpected AUTO-GENERATED marker in {rel}"
-            )
+            for md_file in base_dir.rglob("*.md"):
+                rel = str(md_file.relative_to(base_dir))
+                if rel in files_with_markers:
+                    continue
+                content = md_file.read_text(encoding="utf-8")
+                assert "AUTO-GENERATED:START" not in content, f"Unexpected AUTO-GENERATED marker in {rel}"
 
 
 class TestIndexFileReferences:
     """00_index.md should reference all expected subdirectory files."""
 
     _EXPECTED_REFERENCED_FILES = [
-        "organization/structure.md",
         "organization/roles.md",
         "organization/hierarchy-rules.md",
         "communication/messaging-guide.md",
@@ -1037,24 +991,34 @@ class TestIndexFileReferences:
         "communication/reporting-guide.md",
         "communication/board-guide.md",
         "communication/sending-limits.md",
-        "operations/project-setup.md",
         "operations/task-management.md",
         "operations/heartbeat-cron-guide.md",
         "operations/tool-usage-overview.md",
         "operations/background-tasks.md",
-        "operations/voice-chat-guide.md",
         "troubleshooting/common-issues.md",
         "troubleshooting/escalation-flowchart.md",
         "security/prompt-injection-awareness.md",
+    ]
+
+    _EXPECTED_REFERENCE_LINKS = [
+        "reference/organization/structure.md",
+        "reference/operations/project-setup.md",
+        "reference/operations/voice-chat-guide.md",
+        "reference/communication/slack-bot-token-guide.md",
+        "reference/troubleshooting/gmail-credential-setup.md",
     ]
 
     @pytest.mark.parametrize("rel_path", _EXPECTED_REFERENCED_FILES)
     def test_index_references_file(self, rel_path: str):
         index_path = _TEMPLATES_CK_DIR / "00_index.md"
         content = index_path.read_text(encoding="utf-8")
-        assert rel_path in content, (
-            f"00_index.md does not reference {rel_path}"
-        )
+        assert rel_path in content, f"00_index.md does not reference {rel_path}"
+
+    @pytest.mark.parametrize("rel_path", _EXPECTED_REFERENCE_LINKS)
+    def test_index_references_moved_file(self, rel_path: str):
+        index_path = _TEMPLATES_CK_DIR / "00_index.md"
+        content = index_path.read_text(encoding="utf-8")
+        assert rel_path in content, f"00_index.md does not reference moved file {rel_path}"
 
     def test_index_has_keyword_section(self):
         index_path = _TEMPLATES_CK_DIR / "00_index.md"
