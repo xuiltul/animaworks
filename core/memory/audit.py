@@ -130,7 +130,11 @@ class AuditAggregator:
     # ── Summary mode ─────────────────────────────────────────
 
     def generate_summary(
-        self, hours: int = 24, *, compact: bool = False, since: datetime | None = None,
+        self,
+        hours: int = 24,
+        *,
+        compact: bool = False,
+        since: datetime | None = None,
     ) -> str:
         """Generate a statistics summary for the audit period."""
         entries = self._load_entries(hours, since=since)
@@ -302,7 +306,10 @@ class AuditAggregator:
 
     @classmethod
     def generate_merged_timeline(
-        cls, anima_dirs: list[Path], hours: int = 24, since: datetime | None = None,
+        cls,
+        anima_dirs: list[Path],
+        hours: int = 24,
+        since: datetime | None = None,
     ) -> str:
         """Generate a unified cross-anima timeline sorted chronologically.
 

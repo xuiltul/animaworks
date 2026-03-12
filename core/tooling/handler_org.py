@@ -918,7 +918,9 @@ class OrgToolsMixin:
 
         if mode == "report" and is_batch:
             result = AuditAggregator.generate_merged_timeline(
-                [animas_dir / n for n in targets], hours=hours, since=since,
+                [animas_dir / n for n in targets],
+                hours=hours,
+                since=since,
             )
         else:
             results: list[str] = []

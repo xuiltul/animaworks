@@ -181,8 +181,8 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
     from core.tooling.schemas import (
         KNOWLEDGE_TOOLS,
         MEMORY_TOOLS,
-        SUBMIT_TASKS_TOOLS,
         PROCEDURE_TOOLS,
+        SUBMIT_TASKS_TOOLS,
         _background_task_tools,
         _channel_tools,
         _check_permissions_tools,
