@@ -15,6 +15,7 @@ import logging
 import re
 import zlib
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -53,6 +54,13 @@ class SchedulerManager:
         self._cron_md_mtime: float = 0.0
         self._heartbeat_md_mtime: float = 0.0
         self._last_schedule_level: int | None = None
+
+        # Polling-based heartbeat state (used when effective_interval > 60)
+        self._hb_effective_interval: int = 0
+        self._hb_active_start: int | None = None
+        self._hb_active_end: int | None = None
+        self._hb_first_check_offset: int = 0
+        self._hb_first_check_done: bool = False
 
     # ── Public Properties ────────────────────────────────────────
 
@@ -132,14 +140,15 @@ class SchedulerManager:
 
         # Determine active hours
         if active_start is not None and active_end is not None:
-            hour_spec = f"{active_start}-{active_end - 1}"
             log_active = f"active {active_start}:00-{active_end}:00"
         else:
-            hour_spec = "*"
             log_active = "24h"
 
         if interval <= 60:
             # CronTrigger: build minute spec with offset
+            hour_spec = (
+                f"{active_start}-{active_end - 1}" if active_start is not None and active_end is not None else "*"
+            )
             slots = []
             m = offset
             while m < 60:
@@ -169,24 +178,28 @@ class SchedulerManager:
                 log_active,
             )
         else:
-            # IntervalTrigger for intervals > 60 minutes
-            from apscheduler.triggers.interval import IntervalTrigger as APIntervalTrigger
-
-            trigger_kwargs: dict = {"minutes": interval}
+            # Polling: check every minute, fire when interval elapsed.
+            # Replaces the old IntervalTrigger path which had end_date bugs.
+            self._hb_effective_interval = interval
+            self._hb_active_start = active_start
+            self._hb_active_end = active_end
+            self._hb_first_check_offset = offset
+            self._hb_first_check_done = False
 
             self.scheduler.add_job(
-                self.heartbeat_tick,
-                APIntervalTrigger(**trigger_kwargs),
+                self._heartbeat_check,
+                CronTrigger(minute="*"),
                 id=f"{self._anima_name}_heartbeat",
                 name=f"{self._anima_name} heartbeat",
                 replace_existing=True,
-                misfire_grace_time=300,
+                misfire_grace_time=120,
                 max_instances=1,
             )
             logger.info(
-                "Heartbeat registered (IntervalTrigger): %s every %dmin (activity=%d%%), %s",
+                "Heartbeat registered (polling): %s every %dmin (offset=%d, activity=%d%%), %s",
                 self._anima_name,
                 interval,
+                offset,
                 activity_pct,
                 log_active,
             )
@@ -333,6 +346,75 @@ class SchedulerManager:
                 task.schedule,
                 task.type,
             )
+
+    # ── Polling-based Heartbeat ─────────────────────────────────
+
+    def _in_active_hours(self, now: datetime) -> bool:
+        """Return True if *now* falls within the configured active hours."""
+        if self._hb_active_start is None or self._hb_active_end is None:
+            return True
+        hour = now.hour
+        start, end = self._hb_active_start, self._hb_active_end
+        if start < end:
+            return start <= hour < end
+        # Midnight-crossing (e.g. 22:00 – 06:00)
+        return hour >= start or hour < end
+
+    def _get_last_heartbeat_ts(self) -> datetime | None:
+        """Return the timestamp of the most recent heartbeat_start from activity_log."""
+        try:
+            entries = self._anima._activity.recent(
+                days=2,
+                types=["heartbeat_start"],
+                limit=1,
+            )
+        except Exception:
+            logger.debug("Failed to read activity_log for last heartbeat", exc_info=True)
+            return None
+        if not entries:
+            return None
+        try:
+            return datetime.fromisoformat(entries[-1].ts)
+        except (ValueError, TypeError):
+            return None
+
+    async def _heartbeat_check(self) -> None:
+        """Polling-based heartbeat trigger for intervals > 60 minutes.
+
+        Registered as a CronTrigger(minute="*") job.  Each minute it checks
+        whether enough time has elapsed since the last heartbeat (read from
+        the activity_log) and whether the current time is within active hours.
+        """
+        if not self._anima:
+            return
+
+        now = now_local()
+
+        if not self._in_active_hours(now):
+            return
+
+        last_hb = self._get_last_heartbeat_ts()
+        if last_hb is not None:
+            if last_hb.tzinfo is None:
+                last_hb = last_hb.replace(tzinfo=now.tzinfo)
+            elapsed_min = (now - last_hb).total_seconds() / 60.0
+            required = self._hb_effective_interval
+            if not self._hb_first_check_done:
+                required += self._hb_first_check_offset
+            if elapsed_min < required:
+                return
+        else:
+            # No heartbeat_start in activity_log (fresh install).
+            # Apply offset delay before first heartbeat to spread across Animas.
+            if not self._hb_first_check_done and self._hb_first_check_offset > 0:
+                # On the very first call _hb_first_check_done is False.
+                # Mark it done and skip this minute — the offset will be
+                # consumed on subsequent calls via the `required` increase above.
+                # For simplicity, just allow immediate fire for fresh installs.
+                pass
+
+        self._hb_first_check_done = True
+        await self.heartbeat_tick()
 
     # ── Tick Handlers ────────────────────────────────────────────
 

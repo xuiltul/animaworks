@@ -34,8 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     try:
-        from claude_code_sdk import ClaudeAgentOptions, ResultMessage
-        from claude_code_sdk import ClaudeCodeSDKClient as ClaudeSDKClient
+        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, ResultMessage
     except ImportError:
         pass
 
@@ -1062,8 +1061,7 @@ class AgentSDKExecutor(BaseExecutor):
         )
 
         try:
-            from claude_code_sdk import ClaudeAgentOptions
-            from claude_code_sdk import ClaudeCodeSDKClient as ClaudeSDKClient
+            from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
             options = ClaudeAgentOptions(
                 system_prompt=f"{anima_dir.name} session compaction",
@@ -1100,7 +1098,7 @@ class AgentSDKExecutor(BaseExecutor):
                 )
             return found_session_id
         except ImportError:
-            logger.info("claude_code_sdk not available; skipping /compact")
+            logger.info("Agent SDK not available; skipping /compact")
             return False
         except TimeoutError:
             logger.warning(

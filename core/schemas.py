@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from core.config.models import DEFAULT_ANIMA_MODEL
 from core.time_utils import now_local
@@ -134,6 +134,27 @@ class Message(BaseModel):
 
     # Provenance tracking (Phase 2)
     origin_chain: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_keys(cls, data: Any) -> Any:
+        """Accept legacy ``from``/``to`` keys as aliases for from_person/to_person.
+
+        Early versions of the message schema used ``from`` and ``to`` as field
+        names.  If a JSON file still uses the old names, transparently map them
+        to the current ``from_person`` / ``to_person`` fields so that the
+        message can be parsed without error.
+        """
+        if isinstance(data, dict):
+            if "from" in data and "from_person" not in data:
+                data["from_person"] = data.pop("from")
+            if "to" in data and "to_person" not in data:
+                data["to_person"] = data.pop("to")
+            # Legacy files may use ``ts`` instead of ``timestamp``; discard it
+            # because ``timestamp`` has a default factory.
+            if "ts" in data and "timestamp" not in data:
+                data.pop("ts", None)
+        return data
 
 
 # ── Shared TypedDicts ────────────────────────────────────────

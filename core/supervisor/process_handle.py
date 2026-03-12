@@ -277,7 +277,8 @@ class ProcessHandle:
         try:
             return await self.ipc_client.send_request(request, timeout=timeout)
         except RuntimeError:
-            self.state = ProcessState.FAILED
+            if self.process and self.process.poll() is not None:
+                self.state = ProcessState.FAILED
             raise
 
     async def send_request_stream(
@@ -329,14 +330,23 @@ class ProcessHandle:
                 chunk_count += 1
                 yield response
         except RuntimeError as e:
-            logger.info(
-                "[PH-STREAM] FAILED anima=%s method=%s chunks=%d error=%s",
-                self.anima_name,
-                method,
-                chunk_count,
-                e,
-            )
-            self.state = ProcessState.FAILED
+            if self.process and self.process.poll() is not None:
+                self.state = ProcessState.FAILED
+                logger.error(
+                    "[PH-STREAM] FAILED (process dead) anima=%s method=%s chunks=%d error=%s",
+                    self.anima_name,
+                    method,
+                    chunk_count,
+                    e,
+                )
+            else:
+                logger.warning(
+                    "[PH-STREAM] IPC error (process alive) anima=%s method=%s chunks=%d error=%s",
+                    self.anima_name,
+                    method,
+                    chunk_count,
+                    e,
+                )
             raise
         finally:
             async with self._streaming_lock:

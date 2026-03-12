@@ -7,14 +7,16 @@ Tests cover:
   - Per-anima heartbeat_interval_minutes reading from status.json
   - SchedulerManager._setup_heartbeat() with activity_level
   - SchedulerManager.reschedule_heartbeat()
+  - Polling-based heartbeat for interval > 60 (active hours, activity_log scan)
 """
 
 from __future__ import annotations
 
 import json
 import math
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -301,8 +303,8 @@ class TestSchedulerActivityLevel:
 
     @pytest.mark.asyncio
     @patch("core.supervisor.scheduler_manager.load_config")
-    async def test_low_activity_uses_interval_trigger(self, mock_load_config, tmp_path):
-        """Activity 10% with base 30min -> effective 300min (>60) -> IntervalTrigger."""
+    async def test_low_activity_uses_polling(self, mock_load_config, tmp_path):
+        """Activity 10% with base 30min -> effective 300min (>60) -> polling mode."""
         config = AnimaWorksConfig(activity_level=10)
         mock_load_config.return_value = config
 
@@ -312,6 +314,7 @@ class TestSchedulerActivityLevel:
         jobs = mgr.scheduler.get_jobs()
         heartbeat_jobs = [j for j in jobs if "heartbeat" in j.id]
         assert len(heartbeat_jobs) == 1
+        assert mgr._hb_effective_interval == 300
         mgr.shutdown()
 
     @pytest.mark.asyncio
@@ -365,3 +368,215 @@ class TestEffectiveIntervalCalc:
     def test_clamp_minimum_5(self):
         result = self._calc(10, 400)
         assert result == 5  # 10/4 = 2.5 → round → 2 → clamp → 5
+
+
+# ── Polling-based heartbeat (interval > 60) ───────────────────
+
+
+JST = timezone(timedelta(hours=9))
+
+
+class TestHeartbeatPolling:
+    """Tests for the polling-based heartbeat check (_heartbeat_check)."""
+
+    def _make_mgr(self, tmp_path: Path, anima_name: str = "test-anima"):
+        from core.supervisor.scheduler_manager import SchedulerManager
+
+        mock_anima = MagicMock()
+        mock_anima.memory.read_heartbeat_config.return_value = "30分ごと"
+        mock_anima.memory.read_cron_config.return_value = ""
+        mock_anima.set_on_schedule_changed = MagicMock()
+        mock_anima._activity = MagicMock()
+        anima_dir = tmp_path / "animas" / anima_name
+        anima_dir.mkdir(parents=True, exist_ok=True)
+        return SchedulerManager(
+            anima=mock_anima,
+            anima_name=anima_name,
+            anima_dir=anima_dir,
+            emit_event=MagicMock(),
+        )
+
+    def _setup_polling_mgr(self, tmp_path, *, interval=120, active_start=9, active_end=22):
+        """Create a SchedulerManager in polling mode with given parameters."""
+        mgr = self._make_mgr(tmp_path)
+        mgr._hb_effective_interval = interval
+        mgr._hb_active_start = active_start
+        mgr._hb_active_end = active_end
+        mgr._hb_first_check_offset = 5
+        mgr._hb_first_check_done = True
+        mgr.heartbeat_tick = AsyncMock()
+        return mgr
+
+    # ── _in_active_hours ──
+
+    def test_in_active_hours_normal(self, tmp_path):
+        mgr = self._setup_polling_mgr(tmp_path, active_start=9, active_end=22)
+        now_14 = datetime(2026, 3, 12, 14, 0, tzinfo=JST)
+        assert mgr._in_active_hours(now_14) is True
+
+    def test_outside_active_hours(self, tmp_path):
+        mgr = self._setup_polling_mgr(tmp_path, active_start=9, active_end=22)
+        now_23 = datetime(2026, 3, 12, 23, 0, tzinfo=JST)
+        assert mgr._in_active_hours(now_23) is False
+
+    def test_active_hours_midnight_crossing(self, tmp_path):
+        mgr = self._setup_polling_mgr(tmp_path, active_start=22, active_end=6)
+        now_23 = datetime(2026, 3, 12, 23, 0, tzinfo=JST)
+        now_3 = datetime(2026, 3, 13, 3, 0, tzinfo=JST)
+        now_12 = datetime(2026, 3, 13, 12, 0, tzinfo=JST)
+        assert mgr._in_active_hours(now_23) is True
+        assert mgr._in_active_hours(now_3) is True
+        assert mgr._in_active_hours(now_12) is False
+
+    def test_active_hours_none_means_24h(self, tmp_path):
+        mgr = self._setup_polling_mgr(tmp_path, active_start=9, active_end=22)
+        mgr._hb_active_start = None
+        mgr._hb_active_end = None
+        now_3am = datetime(2026, 3, 13, 3, 0, tzinfo=JST)
+        assert mgr._in_active_hours(now_3am) is True
+
+    # ── _get_last_heartbeat_ts ──
+
+    def test_get_last_heartbeat_ts_found(self, tmp_path):
+        mgr = self._make_mgr(tmp_path)
+        entry = MagicMock()
+        entry.ts = "2026-03-12T14:00:00+09:00"
+        mgr._anima._activity.recent.return_value = [entry]
+
+        result = mgr._get_last_heartbeat_ts()
+        assert result == datetime(2026, 3, 12, 14, 0, tzinfo=JST)
+        mgr._anima._activity.recent.assert_called_once_with(
+            days=2,
+            types=["heartbeat_start"],
+            limit=1,
+        )
+
+    def test_get_last_heartbeat_ts_empty(self, tmp_path):
+        mgr = self._make_mgr(tmp_path)
+        mgr._anima._activity.recent.return_value = []
+
+        result = mgr._get_last_heartbeat_ts()
+        assert result is None
+
+    def test_get_last_heartbeat_ts_exception(self, tmp_path):
+        mgr = self._make_mgr(tmp_path)
+        mgr._anima._activity.recent.side_effect = OSError("disk error")
+
+        result = mgr._get_last_heartbeat_ts()
+        assert result is None
+
+    # ── _heartbeat_check ──
+
+    @pytest.mark.asyncio
+    @patch("core.supervisor.scheduler_manager.now_local")
+    async def test_heartbeat_check_fires_when_interval_elapsed(self, mock_now, tmp_path):
+        mgr = self._setup_polling_mgr(tmp_path, interval=120, active_start=9, active_end=22)
+        now = datetime(2026, 3, 12, 16, 30, tzinfo=JST)
+        mock_now.return_value = now
+
+        entry = MagicMock()
+        entry.ts = (now - timedelta(minutes=130)).isoformat()
+        mgr._anima._activity.recent.return_value = [entry]
+
+        await mgr._heartbeat_check()
+        mgr.heartbeat_tick.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @patch("core.supervisor.scheduler_manager.now_local")
+    async def test_heartbeat_check_skips_when_interval_not_elapsed(self, mock_now, tmp_path):
+        mgr = self._setup_polling_mgr(tmp_path, interval=120, active_start=9, active_end=22)
+        now = datetime(2026, 3, 12, 16, 30, tzinfo=JST)
+        mock_now.return_value = now
+
+        entry = MagicMock()
+        entry.ts = (now - timedelta(minutes=60)).isoformat()
+        mgr._anima._activity.recent.return_value = [entry]
+
+        await mgr._heartbeat_check()
+        mgr.heartbeat_tick.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("core.supervisor.scheduler_manager.now_local")
+    async def test_heartbeat_check_skips_outside_active_hours(self, mock_now, tmp_path):
+        mgr = self._setup_polling_mgr(tmp_path, interval=120, active_start=9, active_end=22)
+        mock_now.return_value = datetime(2026, 3, 12, 23, 0, tzinfo=JST)
+
+        await mgr._heartbeat_check()
+        mgr.heartbeat_tick.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("core.supervisor.scheduler_manager.now_local")
+    async def test_heartbeat_check_fires_on_fresh_install(self, mock_now, tmp_path):
+        """No heartbeat_start in activity_log → fire immediately."""
+        mgr = self._setup_polling_mgr(tmp_path, interval=120, active_start=9, active_end=22)
+        mock_now.return_value = datetime(2026, 3, 12, 14, 0, tzinfo=JST)
+        mgr._anima._activity.recent.return_value = []
+
+        await mgr._heartbeat_check()
+        mgr.heartbeat_tick.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @patch("core.supervisor.scheduler_manager.now_local")
+    async def test_heartbeat_check_first_check_adds_offset(self, mock_now, tmp_path):
+        """First check after setup adds offset to required interval."""
+        mgr = self._setup_polling_mgr(tmp_path, interval=120, active_start=9, active_end=22)
+        mgr._hb_first_check_done = False
+        mgr._hb_first_check_offset = 5
+        now = datetime(2026, 3, 12, 16, 30, tzinfo=JST)
+        mock_now.return_value = now
+
+        # 122 min elapsed < 120 + 5 = 125 min required
+        entry = MagicMock()
+        entry.ts = (now - timedelta(minutes=122)).isoformat()
+        mgr._anima._activity.recent.return_value = [entry]
+
+        await mgr._heartbeat_check()
+        mgr.heartbeat_tick.assert_not_awaited()
+
+        # 126 min elapsed >= 125 min required
+        entry.ts = (now - timedelta(minutes=126)).isoformat()
+        await mgr._heartbeat_check()
+        mgr.heartbeat_tick.assert_awaited_once()
+        assert mgr._hb_first_check_done is True
+
+    @pytest.mark.asyncio
+    @patch("core.supervisor.scheduler_manager.load_config")
+    async def test_setup_polling_mode_registers_job(self, mock_load_config, tmp_path):
+        """interval > 60 registers a CronTrigger(minute='*') polling job."""
+        config = AnimaWorksConfig(activity_level=10)
+        mock_load_config.return_value = config
+
+        mgr = self._make_mgr(tmp_path)
+        mgr.setup()
+
+        jobs = mgr.scheduler.get_jobs()
+        heartbeat_jobs = [j for j in jobs if "heartbeat" in j.id]
+        assert len(heartbeat_jobs) == 1
+
+        job = heartbeat_jobs[0]
+        from apscheduler.triggers.cron import CronTrigger as APCronTrigger
+
+        assert isinstance(job.trigger, APCronTrigger)
+        assert mgr._hb_effective_interval == 300
+        mgr.shutdown()
+
+    @pytest.mark.asyncio
+    @patch("core.supervisor.scheduler_manager.load_config")
+    async def test_reschedule_preserves_polling_mode(self, mock_load_config, tmp_path):
+        """Rescheduling with interval > 60 stays in polling mode."""
+        config = AnimaWorksConfig(activity_level=10)
+        mock_load_config.return_value = config
+
+        mgr = self._make_mgr(tmp_path)
+        mgr.setup()
+        assert mgr._hb_effective_interval == 300
+
+        config.activity_level = 20
+        mgr.reschedule_heartbeat()
+
+        # activity 20%: 30 / 0.2 = 150 → still > 60 → polling
+        assert mgr._hb_effective_interval == 150
+        jobs = mgr.scheduler.get_jobs()
+        heartbeat_jobs = [j for j in jobs if "heartbeat" in j.id]
+        assert len(heartbeat_jobs) == 1
+        mgr.shutdown()

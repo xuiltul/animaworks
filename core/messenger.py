@@ -506,8 +506,9 @@ class Messenger:
                     )
                     continue
                 messages.append(msg)
-            except (json.JSONDecodeError, OSError, KeyError) as e:
-                logger.error("Failed to parse message %s: %s", f, e)
+            except Exception as e:
+                logger.error("Failed to parse inbox message %s: %s", f, e)
+                self._quarantine_file(f)
         return messages
 
     def receive_with_paths(self) -> list[InboxItem]:
@@ -540,9 +541,24 @@ class Messenger:
                     )
                     continue
                 items.append(InboxItem(msg=msg, path=f))
-            except (json.JSONDecodeError, OSError, KeyError):
+            except Exception:
                 logger.warning("Failed to read inbox file: %s", f, exc_info=True)
+                self._quarantine_file(f)
         return items
+
+    def _quarantine_file(self, f: Path) -> None:
+        """Move an unparseable inbox file to ``quarantine/``.
+
+        This prevents a single malformed file from blocking all subsequent
+        inbox reads.
+        """
+        quarantine_dir = self.inbox_dir / "quarantine"
+        quarantine_dir.mkdir(exist_ok=True)
+        try:
+            f.rename(quarantine_dir / f.name)
+            logger.warning("Quarantined invalid inbox file: %s", f.name)
+        except OSError:
+            logger.warning("Failed to quarantine file: %s", f.name)
 
     def archive_paths(self, items: list[InboxItem]) -> int:
         """Archive only the specified inbox items to processed/.
