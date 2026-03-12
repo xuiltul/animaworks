@@ -1385,6 +1385,30 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ja": "出力がmax_tokensで途切れた。残りの内容を小さく分割して続行せよ。",
         "en": "Output was cut off at max_tokens. Split the remaining content into smaller parts and continue.",
     },
+    "reminder.hb_time_limit": {
+        "ja": (
+            "⏰ Heartbeatの制限時間が近づいています。今すぐ以下を実行して終了してください:\n"
+            "1. 未完了の作業があれば add_task ツールでタスクキューに登録する\n"
+            "2. 観察結果・計画を current_task.md に update_task または write_memory_file で記録する\n"
+            "3. [REFLECTION] ブロックを出力してHeartbeatを終了する"
+        ),
+        "en": (
+            "⏰ Heartbeat time limit approaching. Execute the following immediately and finish:\n"
+            "1. Use add_task tool to register any remaining work in the task queue\n"
+            "2. Record observations/plans in current_task.md via update_task or write_memory_file\n"
+            "3. Output a [REFLECTION] block and end the heartbeat"
+        ),
+    },
+    "reminder.hb_hard_timeout_recovery": {
+        "ja": (
+            "前回のHeartbeatが制限時間（{timeout}秒）を超過したため強制終了されました。"
+            "中断時点の作業内容を確認し、必要であれば add_task でタスク登録してください。"
+        ),
+        "en": (
+            "Previous heartbeat was terminated due to exceeding the time limit ({timeout}s). "
+            "Review the work in progress and use add_task to register tasks if needed."
+        ),
+    },
     # ── runner.* (i18n) ──────────────────────────────
     "runner.recovery_text": {
         "ja": "応答が中断されました（前回セッションの未完了ストリームを回復, {session_type}）",

@@ -18,6 +18,7 @@ because the SDK is an optional dependency.
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -457,6 +458,28 @@ def _build_pre_tool_hook(
     ) -> SyncHookJSONOutput:
         tool_name = input_data.get("tool_name", "")
         tool_input = input_data.get("tool_input", {})
+
+        # ── Heartbeat soft timeout check ──
+        if session_stats is not None and session_stats.get("trigger") == "heartbeat":
+            elapsed = time.monotonic() - session_stats["start_time"]
+            soft_timeout = session_stats.get("hb_soft_timeout", 300)
+            if elapsed > soft_timeout and not session_stats.get("hb_soft_warned"):
+                session_stats["hb_soft_warned"] = True
+                from core.i18n import t as _t
+
+                logger.info(
+                    "Heartbeat soft timeout reached (%.0fs > %ds) for %s — injecting wrap-up reminder",
+                    elapsed,
+                    soft_timeout,
+                    anima_dir.name,
+                )
+                return SyncHookJSONOutput(
+                    hookSpecificOutput=PreToolUseHookSpecificOutput(
+                        hookEventName="PreToolUse",
+                        permissionDecision="allow",
+                        additionalContext=_t("reminder.hb_time_limit"),
+                    )
+                )
 
         # ── Context budget observation (SDK auto-compact handles limits) ──
         if session_stats is not None:

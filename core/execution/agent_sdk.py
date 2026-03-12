@@ -27,6 +27,7 @@ import logging
 import os
 import sys
 import tempfile
+import time
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
@@ -540,6 +541,10 @@ class AgentSDKExecutor(BaseExecutor):
             "system_prompt_tokens": len(system_prompt) // CHARS_PER_TOKEN,
             "user_prompt_tokens": len(prompt) // CHARS_PER_TOKEN,
             "force_chain": False,
+            "trigger": trigger,
+            "start_time": time.monotonic(),
+            "hb_soft_warned": False,
+            "hb_soft_timeout": self._hb_soft_timeout_s,
         }
 
         session_type = _resolve_session_type(trigger)
@@ -710,6 +715,10 @@ class AgentSDKExecutor(BaseExecutor):
             "system_prompt_tokens": len(system_prompt) // CHARS_PER_TOKEN,
             "user_prompt_tokens": len(prompt) // CHARS_PER_TOKEN,
             "force_chain": False,
+            "trigger": trigger,
+            "start_time": time.monotonic(),
+            "hb_soft_warned": False,
+            "hb_soft_timeout": self._hb_soft_timeout_s,
         }
 
         session_type = _resolve_session_type(trigger)

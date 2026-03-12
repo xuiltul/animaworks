@@ -451,6 +451,15 @@ class BaseExecutor(ABC):
         self._anima_dir = anima_dir
         self._interrupt_event = interrupt_event
         self.reminder_queue: SystemReminderQueue = SystemReminderQueue()
+        self._hb_soft_timeout_s: int = self._load_hb_soft_timeout()
+
+    def _load_hb_soft_timeout(self) -> int:
+        """Load heartbeat soft_timeout_seconds from config (cached at init)."""
+        try:
+            from core.config.models import load_config
+            return load_config().heartbeat.soft_timeout_seconds
+        except Exception:
+            return 300
 
     # -- Properties ----------------------------------------
 

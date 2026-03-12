@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import re
+import time
 from typing import Any
 
 from core.i18n import t
@@ -27,14 +28,24 @@ from core.time_utils import now_iso, now_local
 logger = logging.getLogger("animaworks.anima")
 
 
-def _calc_effective_max_turns(base_max_turns: int, activity_level: int) -> int | None:
+def _calc_effective_max_turns(
+    base_max_turns: int,
+    activity_level: int,
+    hb_max_turns: int | None = None,
+) -> int | None:
     """Calculate effective max_turns for heartbeat based on activity level.
 
-    Below 100%: linear scale (floor 3). At/above 100%: no change (None = use base).
+    When *hb_max_turns* is provided (from ``config.heartbeat.max_turns``),
+    it is used as the base instead of the per-anima chat ``max_turns``.
+
+    Below 100%: linear scale (floor 3). At/above 100%: return None (use base).
     """
+    base = hb_max_turns if hb_max_turns is not None else base_max_turns
     if activity_level >= 100:
+        if hb_max_turns is not None:
+            return hb_max_turns
         return None
-    scaled = max(3, math.ceil(base_max_turns * activity_level / 100))
+    scaled = max(3, math.ceil(base * activity_level / 100))
     return scaled
 
 
@@ -374,16 +385,44 @@ class HeartbeatMixin:
             from core.config.models import load_config as _load_config_fresh
 
             _cfg = _load_config_fresh()
+            _hb_cfg = _cfg.heartbeat
             effective_max_turns = _calc_effective_max_turns(
                 base_max_turns=self.agent.model_config.max_turns,
                 activity_level=_cfg.activity_level,
+                hb_max_turns=_hb_cfg.max_turns,
             )
+
+            _soft_timeout = _hb_cfg.soft_timeout_seconds
+            _hard_timeout = _hb_cfg.hard_timeout_seconds
+            _start = time.monotonic()
+            _soft_warned = False
+            _hard_exceeded = False
+
             async for chunk in self.agent.run_cycle_streaming(
                 prompt,
                 trigger="heartbeat",
                 prior_messages=prior_messages,
                 max_turns_override=effective_max_turns,
             ):
+                # ── Timeout checks (Mode A: reminder_queue injection) ──
+                _elapsed = time.monotonic() - _start
+                if not _soft_warned and _elapsed > _soft_timeout:
+                    _soft_warned = True
+                    self.agent._executor.reminder_queue.push_sync(
+                        t("reminder.hb_time_limit")
+                    )
+                    logger.info(
+                        "[%s] Heartbeat soft timeout reached (%.0fs > %ds)",
+                        self.name, _elapsed, _soft_timeout,
+                    )
+                if _elapsed > _hard_timeout:
+                    _hard_exceeded = True
+                    logger.warning(
+                        "[%s] Heartbeat hard timeout reached (%.0fs > %ds) — breaking",
+                        self.name, _elapsed, _hard_timeout,
+                    )
+                    break
+
                 # Relay text_delta chunks to waiting user stream
                 if chunk.get("type") == "text_delta":
                     accumulated_text += chunk.get("text", "")
@@ -401,6 +440,18 @@ class HeartbeatMixin:
                         total_turns=cycle_result.get("total_turns", 0),
                     )
                     journal.finalize(summary=result.summary[:500])
+
+            # ── Hard timeout: write recovery note ──
+            if _hard_exceeded:
+                try:
+                    recovery_path = self.anima_dir / "state" / "recovery_note.md"
+                    recovery_path.write_text(
+                        t("reminder.hb_hard_timeout_recovery", timeout=_hard_timeout),
+                        encoding="utf-8",
+                    )
+                    logger.info("[%s] Hard timeout recovery note saved", self.name)
+                except Exception:
+                    logger.debug("[%s] Failed to save hard timeout recovery note", self.name, exc_info=True)
 
             if result is None:
                 result = CycleResult(

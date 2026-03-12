@@ -354,6 +354,18 @@ class HeartbeatConfig(BaseModel):
     interval_minutes: int = Field(
         default=30, ge=1, le=1440
     )  # heartbeat interval (config-driven, not parsed from heartbeat.md)
+    soft_timeout_seconds: int = Field(
+        default=300, ge=30, le=3600,
+        description="Seconds before injecting a wrap-up system-reminder into the HB session",
+    )
+    hard_timeout_seconds: int = Field(
+        default=600, ge=60, le=7200,
+        description="Seconds before forcefully terminating the HB session",
+    )
+    max_turns: int | None = Field(
+        default=None, ge=3, le=200,
+        description="HB-specific max_turns override (None = use per-anima model_config.max_turns)",
+    )
     default_model: str | None = None  # global background model for heartbeat/cron (None = use main model)
     msg_heartbeat_cooldown_s: int = 300  # message-triggered heartbeat cooldown
     cascade_window_s: int = 1800  # sliding window for cascade detection

@@ -56,18 +56,49 @@ class LifecycleMixin:
                         )
 
                     # 3. Execute agent cycle (plan-only, no inbox)
+                    from core.config.models import load_config as _load_cfg
                     from core.tooling.handler import active_session_type
 
                     _session_token = self.agent._tool_handler.set_active_session_type("background")
                     self.agent._tool_handler.set_session_origin(ORIGIN_SYSTEM)
                     heartbeat_text = "\n\n".join(parts)
                     prior_msgs = self._build_prior_messages(heartbeat_text)
+                    _hard_timeout = _load_cfg().heartbeat.hard_timeout_seconds
                     try:
-                        result = await self._execute_heartbeat_cycle(
-                            heartbeat_text,
-                            [],
-                            0,
-                            prior_messages=prior_msgs,
+                        result = await asyncio.wait_for(
+                            self._execute_heartbeat_cycle(
+                                heartbeat_text,
+                                [],
+                                0,
+                                prior_messages=prior_msgs,
+                            ),
+                            timeout=float(_hard_timeout),
+                        )
+                    except TimeoutError:
+                        logger.warning(
+                            "[%s] Heartbeat hard timeout (%ds) — forced termination",
+                            self.name,
+                            _hard_timeout,
+                        )
+                        try:
+                            recovery_path = self.anima_dir / "state" / "recovery_note.md"
+                            recovery_path.write_text(
+                                t("reminder.hb_hard_timeout_recovery", timeout=_hard_timeout),
+                                encoding="utf-8",
+                            )
+                        except Exception:
+                            logger.debug("[%s] Failed to write timeout recovery note", self.name, exc_info=True)
+                        self._activity.log(
+                            "heartbeat_end",
+                            summary=f"[TIMEOUT] Hard timeout after {_hard_timeout}s",
+                            meta={"status": "timeout", "hard_timeout_s": _hard_timeout},
+                            safe=True,
+                        )
+                        return CycleResult(
+                            trigger="heartbeat",
+                            action="timeout",
+                            summary=f"Hard timeout after {_hard_timeout}s",
+                            duration_ms=_hard_timeout * 1000,
                         )
                     finally:
                         active_session_type.reset(_session_token)
