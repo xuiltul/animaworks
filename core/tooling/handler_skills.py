@@ -325,6 +325,9 @@ class SkillsToolsMixin:
             meta={"task_id": entry.task_id, "source": source, "assignee": assignee},
         )
 
+        # Auto-regenerate task-board.md and sync to Slack
+        self._trigger_taskboard_sync()
+
         return _json.dumps(entry.model_dump(), ensure_ascii=False, indent=2)
 
     def _handle_update_task(self, args: dict[str, Any]) -> str:
@@ -371,6 +374,9 @@ class SkillsToolsMixin:
                     exc_info=True,
                 )
 
+        # Auto-regenerate task-board.md and sync to Slack
+        self._trigger_taskboard_sync()
+
         return _json.dumps(entry.model_dump(), ensure_ascii=False, indent=2)
 
     def _regenerate_pending_json(self, entry: TaskEntry) -> None:
@@ -406,6 +412,15 @@ class SkillsToolsMixin:
             self._pending_executor_wake()
 
         logger.info("Regenerated pending JSON for retry: %s", entry.task_id)
+
+    def _trigger_taskboard_sync(self) -> None:
+        """Regenerate task-board.md and sync to Slack (best-effort)."""
+        try:
+            from core.memory.taskboard_generator import regenerate_and_sync
+
+            regenerate_and_sync(self._anima_dir)
+        except Exception:
+            logger.warning("task-board sync failed (best-effort)", exc_info=True)
 
     def _handle_list_tasks(self, args: dict[str, Any]) -> str:
         from core.memory.task_queue import TaskQueueManager

@@ -177,19 +177,28 @@ def taskboard_md_to_slack(md_text: str) -> str:
     """
     lines = md_text.strip().split("\n")
     out: list[str] = []
-    in_completed = False
+    in_skipped_section = False
 
     i = 0
     while i < len(lines):
         line = lines[i]
 
-        if "✅ 今週完了" in line or "✅ Completed" in line:
-            in_completed = True
+        # Skip completed and pending sections to keep Slack message short
+        # (chat.update has strict block/size limits)
+        if ("✅ 今週完了" in line or "✅ Completed" in line or "✅ 直近" in line
+                or "📋 未着手" in line or "運用ルール" in line):
+            in_skipped_section = True
             i += 1
             continue
-        if in_completed:
-            i += 1
-            continue
+        # End skip when we hit a new section header
+        if in_skipped_section:
+            if re.match(r"^#{1,3}\s+", line) and "📋" not in line and "✅" not in line:
+                in_skipped_section = False
+            elif line.strip().startswith("## "):
+                in_skipped_section = False
+            else:
+                i += 1
+                continue
 
         # Table separator rows
         if re.match(r"^\|[-|\s:]+\|$", line.strip()):
