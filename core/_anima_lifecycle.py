@@ -75,31 +75,7 @@ class LifecycleMixin:
                             timeout=float(_hard_timeout),
                         )
                     except TimeoutError:
-                        logger.warning(
-                            "[%s] Heartbeat hard timeout (%ds) — forced termination",
-                            self.name,
-                            _hard_timeout,
-                        )
-                        try:
-                            recovery_path = self.anima_dir / "state" / "recovery_note.md"
-                            recovery_path.write_text(
-                                t("reminder.hb_hard_timeout_recovery", timeout=_hard_timeout),
-                                encoding="utf-8",
-                            )
-                        except Exception:
-                            logger.debug("[%s] Failed to write timeout recovery note", self.name, exc_info=True)
-                        self._activity.log(
-                            "heartbeat_end",
-                            summary=f"[TIMEOUT] Hard timeout after {_hard_timeout}s",
-                            meta={"status": "timeout", "hard_timeout_s": _hard_timeout},
-                            safe=True,
-                        )
-                        return CycleResult(
-                            trigger="heartbeat",
-                            action="timeout",
-                            summary=f"Hard timeout after {_hard_timeout}s",
-                            duration_ms=_hard_timeout * 1000,
-                        )
+                        return self._handle_hard_timeout(_hard_timeout)
                     finally:
                         active_session_type.reset(_session_token)
 
@@ -120,6 +96,36 @@ class LifecycleMixin:
             self._notify_lock_released()
             # Signal pending task execution after heartbeat completes
             self._trigger_pending_task_execution()
+
+    # ── Hard timeout helper ───────────────────────────────────
+
+    def _handle_hard_timeout(self, hard_timeout: int) -> CycleResult:
+        """Write recovery note and return a timeout CycleResult."""
+        logger.warning(
+            "[%s] Heartbeat hard timeout (%ds) — forced termination",
+            self.name,
+            hard_timeout,
+        )
+        try:
+            recovery_path = self.anima_dir / "state" / "recovery_note.md"
+            recovery_path.write_text(
+                t("reminder.hb_hard_timeout_recovery", timeout=hard_timeout),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.debug("[%s] Failed to write timeout recovery note", self.name, exc_info=True)
+        self._activity.log(
+            "heartbeat_end",
+            summary=f"[TIMEOUT] Hard timeout after {hard_timeout}s",
+            meta={"status": "timeout", "hard_timeout_s": hard_timeout},
+            safe=True,
+        )
+        return CycleResult(
+            trigger="heartbeat",
+            action="timeout",
+            summary=f"Hard timeout after {hard_timeout}s",
+            duration_ms=hard_timeout * 1000,
+        )
 
     # ── Consolidation helpers ──────────────────────────────────
 
