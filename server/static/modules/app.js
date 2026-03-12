@@ -48,21 +48,36 @@ export function applyTheme(theme) {
 }
 
 async function initTheme() {
+  const mql = window.matchMedia("(prefers-color-scheme: dark)");
+
+  mql.addEventListener("change", (e) => {
+    if (!localStorage.getItem("aw-theme")) {
+      applyTheme(e.matches ? "midnight" : "default");
+    }
+  });
+
   const stored = localStorage.getItem("aw-theme");
   if (stored) {
     applyTheme(stored);
     return;
   }
+
+  let serverTheme = "default";
   try {
     const resp = await fetch("/api/system/config");
     if (resp.ok) {
       const cfg = await resp.json();
-      const theme = cfg?.ui?.theme || "default";
-      applyTheme(theme);
-      return;
+      if (cfg?.ui?.theme) {
+        serverTheme = cfg.ui.theme;
+      }
     }
   } catch { /* ignore */ }
-  applyTheme("default");
+
+  if (serverTheme === "default" && mql.matches) {
+    applyTheme("midnight");
+  } else {
+    applyTheme(serverTheme);
+  }
 }
 import { checkAuth, logout, showLoginScreen, hideLoginScreen, setStartDashboard } from "./login.js";
 import { initRouter } from "./router.js";
