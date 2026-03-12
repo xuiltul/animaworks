@@ -140,7 +140,14 @@ def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
             _use_gpu = False
         device = "cuda" if _use_gpu else "cpu"
         logger.info("Loading embedding model (singleton): %s on %s", resolved_name, device)
-        _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device=device)
+        try:
+            _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device=device)
+        except Exception as e:
+            if device == "cuda" and "out of memory" in str(e).lower():
+                logger.warning("GPU OOM loading embedding model, falling back to CPU: %s", e)
+                _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device="cpu")
+            else:
+                raise
         _embedding_model_name = resolved_name
         logger.info("Embedding model loaded (singleton)")
     return _embedding_model
