@@ -16,7 +16,7 @@
   <br><em>3Dオフィス: Animaたちがデスクに座り、歩き回り、メッセージをやり取り——すべて自律的に。</em>
 </p>
 
-**[English README](README.md)**
+**[English README](README.md)** | **[简体中文 README](README_zh.md)**
 
 ---
 

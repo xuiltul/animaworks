@@ -16,7 +16,7 @@ Each Anima has its own name, personality, memory, and schedule. They talk to eac
   <br><em>3D office: Animas sitting at desks, walking around, exchanging messages — all on their own.</em>
 </p>
 
-**[日本語版 README](README_ja.md)**
+**[日本語版 README](README_ja.md)** | **[简体中文 README](README_zh.md)**
 
 ---
 
