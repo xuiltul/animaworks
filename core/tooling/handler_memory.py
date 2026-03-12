@@ -135,7 +135,7 @@ class MemoryToolsMixin:
                 truncated = "".join(lines[:MAX_LINES])
                 return (
                     truncated
-                    + f"\n[Truncated: showing {MAX_LINES} of {len(lines)} lines. Use offset/limit to read more.]"
+                    + f"\n[Truncated: showing {MAX_LINES} of {len(lines)} lines. Use read_file tool or narrow your search to access more.]"
                 )
             return content
         logger.debug("read_memory_file NOT FOUND path=%s", rel)
