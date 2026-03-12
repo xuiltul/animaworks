@@ -193,8 +193,13 @@ class TestCollectSingleAnima:
         mock_pending = MagicMock()
         mock_pending.status = "pending"
 
+        def _list_tasks_side_effect(status=None):
+            if status == "done":
+                return [mock_task]
+            return [mock_pending]
+
         with patch("core.memory.task_queue.TaskQueueManager") as MockTQM:
-            MockTQM.return_value.list_tasks.return_value = [mock_task, mock_pending]
+            MockTQM.return_value.list_tasks.side_effect = _list_tasks_side_effect
             result = _collect_single_anima(anima_dir, _DATE)
 
         assert result is not None
