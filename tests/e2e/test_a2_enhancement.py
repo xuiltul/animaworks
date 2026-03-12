@@ -229,9 +229,9 @@ class TestBaseToolCount:
     """Verify the base tool set matches the design spec."""
 
     def test_base_tool_count(self, executor):
-        """Base tools should be 30 (use_tool is Mode B only, not in Mode A)."""
+        """Base tools should be 32 (use_tool is Mode B only, not in Mode A)."""
         tools = executor._build_base_tools()
-        assert len(tools) == 30
+        assert len(tools) == 32
         names = {t["function"]["name"] for t in tools}
         assert "search_code" in names
         assert "list_directory" in names

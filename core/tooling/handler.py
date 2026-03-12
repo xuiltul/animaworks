@@ -195,6 +195,8 @@ class ToolHandler(
             "archive_memory_file": self._handle_archive_memory_file,
             "send_message": self._handle_send_message,
             "post_channel": self._handle_post_channel,
+            "slack_channel_post": self._handle_slack_channel_post,
+            "slack_channel_update": self._handle_slack_channel_update,
             "read_channel": self._handle_read_channel,
             "manage_channel": self._handle_manage_channel,
             "read_dm_history": self._handle_read_dm_history,
@@ -430,6 +432,8 @@ class ToolHandler(
 
     _ACTIVITY_TYPE_MAP: dict[str, str] = {
         "post_channel": "channel_post",
+        "slack_channel_post": "channel_post",
+        "slack_channel_update": "channel_post",
         "read_channel": "channel_read",
         "read_dm_history": "channel_read",
         "call_human": "human_notify",
