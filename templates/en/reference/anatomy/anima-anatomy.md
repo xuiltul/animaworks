@@ -197,7 +197,7 @@ Contains:
 - **Checklist**: Items to check during patrol
 - **Notification rules**: Conditional reporting and notifications
 
-**Important**: Heartbeat performs **assessment and planning only**. When tasks needing execution are found, delegate to subordinates via `delegate_task` or submit via `plan_tasks`.
+**Important**: Heartbeat performs **assessment and planning only**. When tasks needing execution are found, delegate to subordinates via `delegate_task` or submit via `submit_tasks`.
 
 | Property | Value |
 |----------|-------|
@@ -253,12 +253,12 @@ Free-form notes for tasks not yet started or things to remember.
 
 ### state/task_queue.jsonl — Task Queue
 
-Structured task tracking. Operated via `add_task` / `update_task` / `list_tasks`.
+Structured task tracking. Operated via `backlog_task` / `update_task` / `list_tasks`.
 Tasks with `source: human` MUST be processed with highest priority.
 
 ### state/pending/ — Execution Queue
 
-Execution queue for tasks submitted via `plan_tasks` / `delegate_task` tools.
+Execution queue for tasks submitted via `submit_tasks` / `delegate_task` tools.
 TaskExec polls every 3 seconds, automatically picking up and executing them. Do not manually create JSON files here.
 
 | Property | Value |

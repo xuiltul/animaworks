@@ -98,7 +98,7 @@
 ### タスク委譲
 - `delegate_task` — 直属部下にタスクを委譲。部下のタスクキューに追加 + DM送信 + 自分側に追跡エントリ作成が一括で行われる。deadline（'30m', '2h', '1d' 等）は必須
 - `task_tracker` — delegate_taskで委譲したタスクの進捗を追跡。部下側キューの最新ステータスと突き合わせて表示。status='active'（デフォルト）, 'completed', 'all' でフィルタ
-- `plan_tasks` — Heartbeat中にタスクを計画し state/pending/ に投入する。`state/pending/` にJSONを手動作成してはならない（MUST）
+- `submit_tasks` — Heartbeat中にタスクを計画し state/pending/ に投入する。`state/pending/` にJSONを手動作成してはならない（MUST）
 
 ### 推奨ワークフロー
 1. heartbeat開始時に `org_dashboard` で全体状況を把握

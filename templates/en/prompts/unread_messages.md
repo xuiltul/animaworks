@@ -58,4 +58,4 @@ When you receive a task delegation message:
 
 1. **Paraphrase confirmation**: Confirm your understanding in your own words ("So to confirm, … is that correct?")
 2. **Clarifying questions**: Ask about unclear completion criteria or expected deliverables before starting
-3. **Task queue registration**: Register the task in your queue with `add_task`
+3. **Task queue registration**: Register the task in your queue with `backlog_task`

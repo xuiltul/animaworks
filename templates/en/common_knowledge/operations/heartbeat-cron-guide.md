@@ -14,7 +14,7 @@ Heartbeat is limited to three phases: **Observe → Plan → Reflect**.
 
 - MUST: Only observe, plan, and reflect during Heartbeat
 - MUST NOT: Do long-running execution (coding, heavy tool use, etc.) during Heartbeat
-- MUST: When execution is needed, delegate via `delegate_task` if subordinates are available, or submit tasks via `plan_tasks`
+- MUST: When execution is needed, delegate via `delegate_task` if subordinates are available, or submit tasks via `submit_tasks`
 
 The **TaskExec path** picks up and runs written tasks automatically.
 TaskExec starts within 3 seconds after Heartbeat finishes.
@@ -24,23 +24,23 @@ TaskExec starts within 3 seconds after Heartbeat finishes.
 Heartbeat and human chat use different locks, so they can run at the same time.
 Messages from humans can be answered immediately even during Heartbeat.
 
-### Submitting Tasks via plan_tasks
+### Submitting Tasks via submit_tasks
 
-When Heartbeat discovers work to do, submit tasks using the `plan_tasks` tool:
+When Heartbeat discovers work to do, submit tasks using the `submit_tasks` tool:
 
 ```
-plan_tasks(batch_id="hb-20260301-api-test", tasks=[
+submit_tasks(batch_id="hb-20260301-api-test", tasks=[
   {"task_id": "api-test", "title": "Run API tests",
    "description": "Run Slack API connectivity tests and summarize results for all endpoints. Report to aoi on completion."}
 ])
 ```
 
-`plan_tasks` registers in both Layer 1 (execution queue `state/pending/`) and Layer 2 (task registry `task_queue.jsonl`) simultaneously.
+`submit_tasks` registers in both Layer 1 (execution queue `state/pending/`) and Layer 2 (task registry `task_queue.jsonl`) simultaneously.
 TaskExec detects the task and runs it in an LLM session.
 
-**Important**: Do not manually write JSON files to `state/pending/`. Always submit via the `plan_tasks` tool.
+**Important**: Do not manually write JSON files to `state/pending/`. Always submit via the `submit_tasks` tool.
 
-Use `plan_tasks` even for single tasks (tasks array with one item).
+Use `submit_tasks` even for single tasks (tasks array with one item).
 For multiple independent tasks, use `parallel: true`; for dependencies, specify `depends_on`.
 See task-management for details.
 

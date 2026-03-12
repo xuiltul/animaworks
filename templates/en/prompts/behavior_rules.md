@@ -35,7 +35,7 @@ In either case:
 ### Task Recording and Reporting
 
 #### Recording to Task Queue
-- Always record instructions and requests from humans in the task queue via `add_task` (source="human")
+- Always record instructions and requests from humans in the task queue via `backlog_task` (source="human")
 - Record delegation between Anima in the task queue and update relay_chain
 - When a task is complete, update status via `update_task`
 

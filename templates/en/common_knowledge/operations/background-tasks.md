@@ -123,9 +123,9 @@ PendingTaskExecutor monitors and executes two types of tasks.
 
 ### LLM-type tasks (state/pending/)
 
-LLM tasks written by Heartbeat or the `plan_tasks` tool are enqueued in a **different directory** `state/pending/`.
+LLM tasks written by Heartbeat or the `submit_tasks` tool are enqueued in a **different directory** `state/pending/`.
 
-1. `plan_tasks` writes task descriptors to `state/pending/{task_id}.json` (with `task_type: "llm"`, `batch_id`, etc.)
+1. `submit_tasks` writes task descriptors to `state/pending/{task_id}.json` (with `task_type: "llm"`, `batch_id`, etc.)
 2. The watcher monitors `state/pending/` every 3 seconds in the same way
 3. Tasks with `batch_id` are accumulated and dispatched via `_dispatch_batch` based on the DAG
 4. Tasks with `parallel: true` run concurrently under a semaphore (`config.json` `background_task.max_parallel_llm_tasks`, default 3)
@@ -145,7 +145,7 @@ state/background_tasks/pending/*.json
   → success: deleted | failure: pending/failed/*.json
 ```
 
-**LLM-type** (plan_tasks / Heartbeat):
+**LLM-type** (submit_tasks / Heartbeat):
 
 ```
 state/pending/*.json

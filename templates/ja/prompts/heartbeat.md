@@ -9,13 +9,13 @@
 **【MUST】対応が必要な事項を発見したら、必ずタスクとして具体化すること。「認識したが何もしない」は禁止。**
 以下のいずれかの手段で必ずアクション化する:
 - 部下に任せる → `delegate_task`
-- 自分で後でやる → `plan_tasks`（state/pending/ に書き出され TaskExec が別セッションで実行）
-- タスクキューに登録 → `add_task`
+- 自分で後でやる → `submit_tasks`（state/pending/ に書き出され TaskExec が別セッションで実行）
+- タスクキューに登録 → `backlog_task`
 - 即座にフォローアップ → `send_message` / `call_human`
 
 ### チェック項目
 - バックグラウンドタスク結果: state/task_results/ に完了タスクがあれば内容を確認し、必要に応じてフォローアップ
-- **MUST**: 直近のチャット・Inboxで人間やAnimaから受けた指示がタスクキューに未登録であれば、`add_task` で登録する（source="human" を指定）
+- **MUST**: 直近のチャット・Inboxで人間やAnimaから受けた指示がタスクキューに未登録であれば、`backlog_task` で登録する（source="human" を指定）
 - STALEタスク・期限間近タスク: 担当者にフォローアップ（send_message）、必要なら上司にエスカレーション
 - 長期待機中タスク（24h超）: 状況確認・リマインド
 - ブロッカーがある場合: 報告のみ行う（send_message / call_human）

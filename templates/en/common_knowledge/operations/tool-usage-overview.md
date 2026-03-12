@@ -22,7 +22,7 @@ Three tool families:
 1. **Claude Code built-ins**: Read, Write, Edit, Grep, Glob, Bash, git, etc. For file operations and command execution
 2. **MCP tools (`mcp__aw__*`)**: AnimaWorks-specific internal features
    - Memory & communication: `send_message`, `post_channel`, `read_channel`, `manage_channel`, `read_dm_history`
-   - Tasks: `add_task`, `update_task`, `list_tasks`, `plan_tasks`
+   - Tasks: `backlog_task`, `update_task`, `list_tasks`, `submit_tasks`
    - Notification & permissions: `call_human`, `search_memory`, `check_permissions`
    - Outcome tracking: `report_procedure_outcome`, `report_knowledge_outcome`
    - Skills: `skill`, `create_skill`
@@ -39,7 +39,7 @@ Same tool system as S-mode. Executed via Codex CLI. Falls back to LiteLLM (Mode 
 
 Two tool families:
 
-1. **Internal tools**: `send_message`, `search_memory`, `read_file`, `execute_command`, `add_task`, `plan_tasks`, etc. Call by name using function calling. `refresh_tools` and `share_tool` can rescan personal and common tools
+1. **Internal tools**: `send_message`, `search_memory`, `read_file`, `execute_command`, `backlog_task`, `submit_tasks`, etc. Call by name using function calling. `refresh_tools` and `share_tool` can rescan personal and common tools
 2. **External tools**: Look up usage via the `skill` tool and execute with `execute_command` running `animaworks-tool <tool> <subcommand>`
 
 ### B-mode (Basic)
@@ -51,7 +51,7 @@ Tools are invoked in JSON text format. Available tools:
 - **File & search**: read_file, write_file, edit_file, execute_command, web_fetch, search_code, list_directory
 - **Skill**: skill, create_skill
 - **Outcome tracking**: report_procedure_outcome, report_knowledge_outcome
-- **Tasks**: add_task, update_task, list_tasks, plan_tasks
+- **Tasks**: backlog_task, update_task, list_tasks, submit_tasks
 - **Background**: check_background_task, list_background_tasks (when BackgroundTaskManager is configured)
 - **Credentials**: vault_get, vault_store, vault_list
 - **Notification**: call_human (when notification channels are configured)
@@ -106,12 +106,12 @@ In S-mode, use Claude Code's Read / Write / Edit / Grep / Glob / Bash for equiva
 
 | Tool | Description |
 |------|-------------|
-| `add_task` | Add task to task queue |
+| `backlog_task` | Add task to task queue |
 | `update_task` | Update task status |
 | `list_tasks` | List tasks |
-| `plan_tasks` | Submit multiple tasks as DAG for parallel/sequential execution |
+| `submit_tasks` | Submit multiple tasks as DAG for parallel/sequential execution |
 
-add_task, update_task, list_tasks, and plan_tasks are also available in B-mode.
+backlog_task, update_task, list_tasks, and submit_tasks are also available in B-mode.
 
 ### Background Task Tools (A/B/S-mode, when BackgroundTaskManager is configured)
 

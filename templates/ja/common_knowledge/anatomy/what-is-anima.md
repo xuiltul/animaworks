@@ -55,7 +55,7 @@ identity と injection を充実させ、heartbeat と cron を設計する。
 | **Inbox** | 他の Anima からのDM | 組織内メッセージへの即時応答 |
 | **Heartbeat** | 定期自動起動 | 観察 → 計画 → 振り返り。**確認と計画のみ、実行はしない** |
 | **Cron** | cron.md のスケジュール | 決まった時間の確定タスク実行 |
-| **TaskExec** | state/pending/ にタスク出現 | Heartbeat が `plan_tasks` で投入したタスクの実行 |
+| **TaskExec** | state/pending/ にタスク出現 | Heartbeat が `submit_tasks` で投入したタスクの実行 |
 
 Chat と Heartbeat は **別ロック** で動くため、Heartbeat 実行中でも人間からの会話に即座に応答できる。
 

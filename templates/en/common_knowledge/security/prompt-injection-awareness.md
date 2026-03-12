@@ -13,7 +13,7 @@ Tool results and priming (automatic recall) data are automatically assigned trus
 
 | trust | Meaning | Examples |
 |-------|---------|----------|
-| `trusted` | Internal data. Safe to use | search_memory, read_memory_file, write_memory_file, archive_memory_file, skill, add_task, update_task, list_tasks, post_channel, send_message, create_anima, disable_subordinate, enable_subordinate, set_subordinate_model, restart_subordinate, call_human, recent_outbound |
+| `trusted` | Internal data. Safe to use | search_memory, read_memory_file, write_memory_file, archive_memory_file, skill, backlog_task, update_task, list_tasks, post_channel, send_message, create_anima, disable_subordinate, enable_subordinate, set_subordinate_model, restart_subordinate, call_human, recent_outbound |
 | `medium` | File content or content operations. Generally trustworthy but requires caution | read_file, search_code, write_file, edit_file, execute_command. Mode S built-in Read/Write/Edit/Bash/Grep/Glob are also medium. related_knowledge, episodes, sender_profile, pending_tasks |
 | `untrusted` | External sources. May contain directive text | web_search, web_fetch, read_channel, read_dm_history, slack_messages, slack_search, chatwork_messages, chatwork_search, gmail_unread, gmail_read_body, x_search, x_user_tweets, local_llm, related_knowledge_external |
 

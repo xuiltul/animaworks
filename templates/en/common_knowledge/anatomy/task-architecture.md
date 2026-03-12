@@ -27,7 +27,7 @@ Analogous to a message queue (SQS / RabbitMQ).
 | Format | JSON (fixed schema) |
 | Lifecycle | Enqueue → consume → delete (transient) |
 | Managed by | System (PendingTaskExecutor auto-consumes) |
-| Writers | `plan_tasks`, `delegate_task`, SDK Task/Agent tool |
+| Writers | `submit_tasks`, `delegate_task`, SDK Task/Agent tool |
 | Readers | PendingTaskExecutor (3-second polling) |
 
 Contains the full task description (description, acceptance_criteria, constraints, depends_on, etc.).
@@ -45,7 +45,7 @@ Analogous to an issue tracker (Jira / GitHub Issues).
 | Format | Append-only JSONL (TaskEntry schema) |
 | Lifecycle | Register → status transitions → compact to archive (persistent) |
 | Managed by | Anima (via tools) + System (Priming injection, compact) |
-| Writers | `add_task`, `update_task`, `delegate_task` |
+| Writers | `backlog_task`, `update_task`, `delegate_task` |
 | Readers | `list_tasks`, `format_for_priming`, Heartbeat compact |
 
 Holds task summary information (task_id, summary, status, deadline, assignee).
@@ -72,10 +72,10 @@ Content may overlap with Layer 2. Layer 3 is Anima's thinking space for organizi
 ### Data Flow
 
 ```
-Human instruction ─┬─► add_task ──────────────────► Layer 2 (task_queue.jsonl)
+Human instruction ─┬─► backlog_task ───────────────► Layer 2 (task_queue.jsonl)
                    └─► Anima writes current_task.md ► Layer 3
 
-plan_tasks ─┬─► state/pending/*.json ──────► Layer 1 (Execution Queue)
+submit_tasks ─┬─► state/pending/*.json ──────► Layer 1 (Execution Queue)
             └─► Register in task_queue.jsonl ► Layer 2 (Task Registry)
 
 delegate_task ─┬─► Subordinate's state/pending/ ► Layer 1
@@ -90,7 +90,7 @@ PendingTaskExecutor ─┬─► Success → Update task_queue to done
 
 | Event | Layer 1 | Layer 2 | Layer 3 |
 |-------|---------|---------|---------|
-| plan_tasks submission | JSON created | Registered as pending | — |
+| submit_tasks submission | JSON created | Registered as pending | — |
 | delegate_task submission | JSON created (subordinate) | Registered in both queues | — |
 | TaskExec completion | JSON deleted | Updated to done | — |
 | TaskExec failure | Moved to failed/ | Updated to failed | — |
@@ -106,7 +106,7 @@ PendingTaskExecutor ─┬─► Success → Update task_queue to done
 
 ## Design Principles
 
-1. **All tasks are registered in Layer 2**: Whether via plan_tasks, delegate_task, or add_task, an entry exists in task_queue.jsonl
+1. **All tasks are registered in Layer 2**: Whether via submit_tasks, delegate_task, or backlog_task, an entry exists in task_queue.jsonl
 2. **Layer 1 is transient**: Execution queue files are deleted after consumption. Persistent records are Layer 2's responsibility
 3. **Layer 2 is the SSoT**: The "official status" of a task is determined by task_queue.jsonl status
 4. **Layer 3 is free**: It is Anima's working memory; the system imposes no constraints

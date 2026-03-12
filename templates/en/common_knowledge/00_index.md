@@ -171,7 +171,7 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | hierarchy, communication path, org_dashboard, ping_subordinate | `organization/hierarchy-rules.md` |
 | delegate_task, task delegation, task_tracker | `organization/hierarchy-rules.md`, `operations/task-management.md` |
 | task, current_task, pending, progress, priority | `operations/task-management.md` |
-| add_task, task queue, plan_tasks, TaskExec | `operations/task-management.md` |
+| backlog_task, task queue, submit_tasks, TaskExec | `operations/task-management.md` |
 | task board, dashboard, human-facing | `operations/task-board-guide.md` |
 | config, status.json, SSoT, reload, settings | `reference/operations/project-setup.md` |
 | Heartbeat, heartbeat, periodic check | `operations/heartbeat-cron-guide.md` |

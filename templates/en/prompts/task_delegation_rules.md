@@ -21,21 +21,21 @@ When you use the Task tool, the framework automatically routes based on your org
 
 | Tool | Purpose | Execution Queue (Layer 1) | Tracking (Layer 2) | When to use |
 |------|---------|--------------------------|--------------------|----|
-| `plan_tasks` | Submit tasks for execution | Creates in `state/pending/` | Registers in `task_queue.jsonl` | When you find tasks that need execution |
+| `submit_tasks` | Submit tasks for execution | Creates in `state/pending/` | Registers in `task_queue.jsonl` | When you find tasks that need execution |
 | `delegate_task` | Delegate to subordinates | Creates in subordinate's `state/pending/` | Registers in both `task_queue.jsonl` | When assigning to subordinates |
-| `add_task` | Tracking registration only | **Not created (not executed)** | Registers in `task_queue.jsonl` | Recording human instructions, tasks for manual pickup |
+| `backlog_task` | Tracking registration only | **Not created (not executed)** | Registers in `task_queue.jsonl` | Recording human instructions, tasks for manual pickup |
 | Task tool (S-mode) | Auto-routed delegation | Creates at auto-selected target | Registered | Quick delegation from Chat path |
 
-**Important**: `add_task` is tracking-only — TaskExec will NOT automatically execute it. Recording human instructions via `add_task` is MUST, but if execution is also needed, use `plan_tasks` as well.
+**Important**: `backlog_task` is tracking-only — TaskExec will NOT automatically execute it. Recording human instructions via `backlog_task` is MUST, but if execution is also needed, use `submit_tasks` as well.
 
-From paths without the Task tool (Heartbeat, Inbox, etc.), use `plan_tasks` / `delegate_task` / `add_task`.
+From paths without the Task tool (Heartbeat, Inbox, etc.), use `submit_tasks` / `delegate_task` / `backlog_task`.
 
-**[MUST] Do NOT manually create JSON files in `state/pending/`.** Always submit via the `plan_tasks` tool. `plan_tasks` registers in both the execution queue and task registry simultaneously, preventing tracking gaps.
+**[MUST] Do NOT manually create JSON files in `state/pending/`.** Always submit via the `submit_tasks` tool. `submit_tasks` registers in both the execution queue and task registry simultaneously, preventing tracking gaps.
 
-## Task Submission via plan_tasks
+## Task Submission via submit_tasks
 
-`plan_tasks` is the sole means of submitting tasks for execution (except subordinate delegation).
-Use `plan_tasks` even for a single task (tasks array with one item).
+`submit_tasks` is the sole means of submitting tasks for execution (except subordinate delegation).
+Use `submit_tasks` even for a single task (tasks array with one item).
 
 ### About the Executor (TaskExec)
 
@@ -62,7 +62,7 @@ Therefore, including sufficient information in the task's `description` and `con
 Single task:
 
 ```
-plan_tasks(batch_id="hb-20260301-api-fix", tasks=[
+submit_tasks(batch_id="hb-20260301-api-fix", tasks=[
   {{"task_id": "api-fix", "title": "Convert API auth to async",
    "description": "Convert verify_token() in core/auth/manager.py (L45-60) to async. Blocking synchronous I/O is causing latency in FastAPI async handlers.",
    "context": "current_task.md: Investigating API response delays. verify_token blocks with synchronous I/O",
@@ -75,7 +75,7 @@ plan_tasks(batch_id="hb-20260301-api-fix", tasks=[
 Parallel tasks:
 
 ```
-plan_tasks(batch_id="deploy-20260301", tasks=[
+submit_tasks(batch_id="deploy-20260301", tasks=[
   {{"task_id": "lint", "title": "Run lint", "description": "Lint all files", "parallel": true}},
   {{"task_id": "test", "title": "Run tests", "description": "Execute unit tests", "parallel": true}},
   {{"task_id": "deploy", "title": "Deploy", "description": "Deploy after lint and test pass",
@@ -112,7 +112,7 @@ plan_tasks(batch_id="deploy-20260301", tasks=[
 - ❌ "Continue from last time" (executor has no conversation history)
 - ❌ Instructions without file paths (executor would have to start by exploring)
 - ❌ Empty context (executor makes poor decisions without background info)
-- ❌ Manually creating JSON in `state/pending/` (always use `plan_tasks`)
+- ❌ Manually creating JSON in `state/pending/` (always use `submit_tasks`)
 
 ### Task Results
 

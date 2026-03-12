@@ -17,7 +17,7 @@ Weaker models may hallucinate (nonexistent processes, fictitious errors). When e
 1. **Quote verbatim**: Include original human instructions as-is (do not summarize or downplay)
 2. **State completion criteria** explicitly
 3. **Request paraphrase confirmation** from delegate
-4. Record delegation path in `relay_chain` via `add_task`
+4. Record delegation path in `relay_chain` via `backlog_task`
 
 ### Message Formats
 

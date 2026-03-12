@@ -14,7 +14,7 @@
 
 - MUST: ハートビート内では状況確認・計画立案・振り返りのみを行う
 - MUST NOT: ハートビート内で長時間の実行タスク（コーディング、大量のツール呼び出し等）を行わない
-- MUST: 実行が必要なタスクを発見したら、部下がいれば `delegate_task` で委任するか、`plan_tasks` でタスク投入する
+- MUST: 実行が必要なタスクを発見したら、部下がいれば `delegate_task` で委任するか、`submit_tasks` でタスク投入する
 
 書き出されたタスクは **TaskExec パス** が自動的に取得・実行する。
 ハートビート完了後、3秒以内に TaskExec が起動してタスクを処理する。
@@ -24,23 +24,23 @@
 ハートビートと人間との会話は **別ロック** で管理されるため、同時に動作できる。
 ハートビート実行中でも、人間からのメッセージには即座に応答可能。
 
-### plan_tasks によるタスク投入
+### submit_tasks によるタスク投入
 
-ハートビートで実行すべきタスクを発見した場合、`plan_tasks` ツールでタスクを投入する:
+ハートビートで実行すべきタスクを発見した場合、`submit_tasks` ツールでタスクを投入する:
 
 ```
-plan_tasks(batch_id="hb-20260301-api-test", tasks=[
+submit_tasks(batch_id="hb-20260301-api-test", tasks=[
   {"task_id": "api-test", "title": "APIテスト実施",
    "description": "Slack API接続テストを実施し、全エンドポイントの結果をレポートにまとめる。完了後 aoi に報告する。"}
 ])
 ```
 
-`plan_tasks` は Layer 1（実行キュー `state/pending/`）と Layer 2（タスクレジストリ `task_queue.jsonl`）の両方に同時登録する。
+`submit_tasks` は Layer 1（実行キュー `state/pending/`）と Layer 2（タスクレジストリ `task_queue.jsonl`）の両方に同時登録する。
 TaskExec がタスクを検出し、LLM セッションで実行する。
 
-**注意**: `state/pending/` にJSONを手動で書き出してはならない。必ず `plan_tasks` ツール経由で投入すること。
+**注意**: `state/pending/` にJSONを手動で書き出してはならない。必ず `submit_tasks` ツール経由で投入すること。
 
-単一タスクでも `plan_tasks`（tasks配列1件）を使う。
+単一タスクでも `submit_tasks`（tasks配列1件）を使う。
 複数の独立タスクは `parallel: true` で並列実行、依存関係がある場合は `depends_on` を指定する。
 詳細は task-management を参照。
 

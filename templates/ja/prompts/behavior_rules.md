@@ -35,7 +35,7 @@ Default: do not narrate routine, low-risk tool calls
 ### タスク記録と報告
 
 #### タスクキューへの記録義務
-- 人間からの指示・依頼は必ず `add_task` でタスクキューに記録せよ（source="human"）
+- 人間からの指示・依頼は必ず `backlog_task` でタスクキューに記録せよ（source="human"）
 - Anima間の委任もタスクキューに記録し、relay_chainを更新せよ
 - タスク完了時は `update_task` でステータスを更新せよ
 

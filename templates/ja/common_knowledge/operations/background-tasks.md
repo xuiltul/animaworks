@@ -123,9 +123,9 @@ PendingTaskExecutor は2種類のタスクを監視・実行する。
 
 ### LLM型タスク（state/pending/）
 
-Heartbeat や `plan_tasks` ツールが書き出す LLM タスクは **別ディレクトリ** `state/pending/` に投入される。
+Heartbeat や `submit_tasks` ツールが書き出す LLM タスクは **別ディレクトリ** `state/pending/` に投入される。
 
-1. `plan_tasks` が `state/pending/{task_id}.json` にタスク記述子を書く（`task_type: "llm"`, `batch_id` 等）
+1. `submit_tasks` が `state/pending/{task_id}.json` にタスク記述子を書く（`task_type: "llm"`, `batch_id` 等）
 2. watcher が `state/pending/` を同様に3秒間隔で監視
 3. `batch_id` 付きタスクはバッチに蓄積し、`_dispatch_batch` で DAG に基づき実行
 4. `parallel: true` のタスクはセマフォ（`config.json` の `background_task.max_parallel_llm_tasks`、デフォルト3）で並列実行
@@ -145,7 +145,7 @@ state/background_tasks/pending/*.json
   → 成功: 削除 | 失敗: pending/failed/*.json
 ```
 
-**LLM型**（plan_tasks / Heartbeat）:
+**LLM型**（submit_tasks / Heartbeat）:
 
 ```
 state/pending/*.json

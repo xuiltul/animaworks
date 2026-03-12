@@ -11,7 +11,7 @@ Task state is managed by files in the `state/` directory and the task queue.
 |----------|------|
 | `state/current_task.md` | Current task being worked on (one at a time) |
 | `state/pending.md` | Manual backlog (free-form) |
-| `state/pending/` directory | LLM tasks (JSON format). Written by Heartbeat, plan_tasks, Task tool, and Agent tool. TaskExec path automatically picks them up and runs them |
+| `state/pending/` directory | LLM tasks (JSON format). Written by Heartbeat, submit_tasks, Task tool, and Agent tool. TaskExec path automatically picks them up and runs them |
 | `state/task_queue.jsonl` | Persistent task queue (append-only JSONL). Tracks requests from humans and Anima |
 
 `state/current_task.md` MUST always reflect the latest state. Update it whenever the task state changes.
@@ -26,22 +26,22 @@ In AnimaWorks, tasks are processed across three independent paths:
 | **Heartbeat** | Scheduled check | Situation assessment and planning (Observe → Plan → Reflect) | Observation and judgment only. Writes execution to `pending/` |
 | **TaskExec** | Task appears in `pending/` | Execute LLM tasks | Full execution (including tool use) |
 
-Heartbeat does **not** execute. When it finds a task that needs execution, it either delegates via `delegate_task` (if subordinates are available) or submits it via `plan_tasks` for the TaskExec path.
+Heartbeat does **not** execute. When it finds a task that needs execution, it either delegates via `delegate_task` (if subordinates are available) or submits it via `submit_tasks` for the TaskExec path.
 
 In S-mode (Claude Agent SDK) Chat path, the **Task tool** (and Agent tool) provides automatic routing:
 - With subordinates → immediately delegated to the subordinate with minimum workload and best role match (same flow as delegate_task)
 - Without subordinates, or when delegation fails → written to `state/pending/`, and TaskExec path runs it
 
-### Task Queue (add_task / update_task / list_tasks)
+### Task Queue (backlog_task / update_task / list_tasks)
 
 The persistent task queue is recorded in `state/task_queue.jsonl` in append-only JSONL format.
-Use `add_task` to register tasks, `update_task` to update status, and `list_tasks` to retrieve the list.
+Use `backlog_task` to register tasks, `update_task` to update status, and `list_tasks` to retrieve the list.
 Tasks registered in the queue are displayed in summarized form in the system prompt Priming section.
 
-#### add_task
+#### backlog_task
 
 ```
-add_task(source="human", original_instruction="Create the monthly sales report and submit it to aoi", assignee="your own name", summary="Monthly report creation", deadline="1d")
+backlog_task(source="human", original_instruction="Create the monthly sales report and submit it to aoi", assignee="your own name", summary="Monthly report creation", deadline="1d")
 ```
 
 | Parameter | Required | Description |
@@ -53,7 +53,7 @@ add_task(source="human", original_instruction="Create the monthly sales report a
 | `deadline` | MUST | Deadline. Relative format `30m` / `2h` / `1d` or ISO8601 |
 | `relay_chain` | MAY | Delegation chain (e.g. `["aoi", "taro"]`) |
 
-- When receiving instructions from a human, always record with `add_task` and specify `source="human"` (MUST)
+- When receiving instructions from a human, always record with `backlog_task` and specify `source="human"` (MUST)
 - Tasks with `source: human` must be processed with highest priority (MUST)
 - Queued tasks are reviewed by Heartbeat; when starting work, update to `in_progress` with `update_task`
 
@@ -68,7 +68,7 @@ update_task(task_id="abc123def456", status="done", summary="Report creation comp
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `task_id` | MUST | Task ID (returned when add_task was called) |
+| `task_id` | MUST | Task ID (returned when backlog_task was called) |
 | `status` | MUST | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `failed` |
 | `summary` | MAY | Updated summary |
 
@@ -364,15 +364,15 @@ Leave gaps when sending in bursts.
 
 Use `[IMPORTANT]` for key learnings (SHOULD). These are prioritized during Heartbeat and memory consolidation.
 
-## Parallel Task Execution (plan_tasks)
+## Parallel Task Execution (submit_tasks)
 
-The `plan_tasks` tool lets you submit multiple tasks with dependencies as a batch for parallel execution.
+The `submit_tasks` tool lets you submit multiple tasks with dependencies as a batch for parallel execution.
 TaskExec resolves dependencies as a DAG (directed acyclic graph) and runs independent tasks concurrently.
 
 ### Usage
 
 ```
-plan_tasks(batch_id="build-20260301", tasks=[
+submit_tasks(batch_id="build-20260301", tasks=[
   {{"task_id": "compile", "title": "Compile", "description": "Build the source", "parallel": true}},
   {{"task_id": "lint", "title": "Lint", "description": "Static analysis", "parallel": true}},
   {{"task_id": "package", "title": "Package", "description": "Package build artifacts",
@@ -394,9 +394,9 @@ plan_tasks(batch_id="build-20260301", tasks=[
 
 ### How It Works
 
-1. `plan_tasks` validates (unique IDs, valid dependencies, cycle detection)
+1. `submit_tasks` validates (unique IDs, valid dependencies, cycle detection)
 2. Task files are written to `state/pending/` with `batch_id`
-3. After plan_tasks runs, TaskExec (PendingTaskExecutor) detects tasks immediately (wake — no polling wait)
+3. After submit_tasks runs, TaskExec (PendingTaskExecutor) detects tasks immediately (wake — no polling wait)
 4. TaskExec detects the batch and determines execution order via topological sort
 5. `parallel: true` tasks with no pending dependencies run concurrently within semaphore limit
 6. Predecessor results are automatically injected into dependent task context
@@ -411,18 +411,18 @@ Max parallel tasks is controlled by `config.json` `background_task.max_parallel_
 
 Completed task result summaries are saved to `state/task_results/{task_id}.md` (max 2,000 characters).
 Dependent tasks automatically receive these results as context. If a predecessor fails, dependent tasks are skipped and `FAILED: {reason}` is recorded.
-When each task completes, a completion notification is sent via DM to the Anima that executed plan_tasks.
+When each task completes, a completion notification is sent via DM to the Anima that executed submit_tasks.
 
-### When to Use plan_tasks
+### When to Use submit_tasks
 
 | Scenario | Method |
 |----------|--------|
-| Single task | `plan_tasks` (submit with a single-item tasks array) |
-| Multiple independent tasks | `plan_tasks` with `parallel: true` |
-| Tasks with dependencies | `plan_tasks` with `depends_on` |
+| Single task | `submit_tasks` (submit with a single-item tasks array) |
+| Multiple independent tasks | `submit_tasks` with `parallel: true` |
+| Tasks with dependencies | `submit_tasks` with `depends_on` |
 | Delegation to subordinates | `delegate_task` (separate mechanism) |
 
-**Important**: Do not manually write JSON files to `state/pending/`. Always submit via the `plan_tasks` tool. `plan_tasks` registers in both Layer 1 (execution queue) and Layer 2 (task registry) simultaneously, preventing task tracking gaps.
+**Important**: Do not manually write JSON files to `state/pending/`. Always submit via the `submit_tasks` tool. `submit_tasks` registers in both Layer 1 (execution queue) and Layer 2 (task registry) simultaneously, preventing task tracking gaps.
 
 ## Task Delegation (delegate_task / Task tool)
 

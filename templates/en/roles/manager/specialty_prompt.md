@@ -98,7 +98,7 @@ Managers have access to these dedicated tools. Use them before asking individual
 ### Task Delegation
 - `delegate_task` — Delegate to direct subordinate. Adds to subordinate task queue + sends DM + creates tracking entry. deadline ('30m', '2h', '1d', etc.) is required
 - `task_tracker` — Track progress of delegated tasks. Shows latest status against subordinate queue. Filter by status='active' (default), 'completed', 'all'
-- `plan_tasks` — Plan tasks during Heartbeat and submit them to state/pending/. Do NOT manually create JSON files in state/pending/ (MUST)
+- `submit_tasks` — Plan tasks during Heartbeat and submit them to state/pending/. Do NOT manually create JSON files in state/pending/ (MUST)
 
 ### Recommended Workflow
 1. At Heartbeat start, use `org_dashboard` for overall status

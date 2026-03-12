@@ -8,7 +8,7 @@
 | `knowledge/` | 知識 | 学んだこと・対応方針・ノウハウ | 問題解決・発見時に即記録 |
 | `procedures/` | 手順書 | 作業の進め方 | 手順確立時に作成 |
 | `skills/` | スキル | 実行可能な能力 | スキル習得時に作成 |
-| `state/` | 現在の状態 | 今何をしているか | 随時更新（`pending/` は `plan_tasks` 経由） |
+| `state/` | 現在の状態 | 今何をしているか | 随時更新（`pending/` は `submit_tasks` 経由） |
 
 知識: {knowledge_count}件 | 手順書: {procedure_count}件
 スキル・手順書の一覧はskillツールで確認できます。
