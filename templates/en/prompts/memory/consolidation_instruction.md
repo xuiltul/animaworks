@@ -55,7 +55,7 @@ If relevant files are found, use `read_memory_file` to review their content.
 ## Notes
 - Do not convert greetings-only or substantively empty exchanges into knowledge
 - [REFLECTION] tagged entries are conscious insights recorded by the agent; when extracted in the "Reflections" section above, prioritize these for knowledge extraction
-- Entries tagged with `[IMPORTANT]` are critical lessons or failure records. You **MUST** extract them into knowledge/. If overlapping with existing knowledge, merge by appending to or updating the existing file
+- Entries tagged with `[IMPORTANT]` are critical lessons or failure records. You **MUST** extract them into knowledge/. If overlapping with existing knowledge, merge by appending to or updating the existing file. **Keep the `[IMPORTANT]` tag in the knowledge file body** (used for forgetting protection and RAG search boosting)
 - When creating new knowledge/ files, add YAML frontmatter:
   ```
   ---

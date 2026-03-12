@@ -14,6 +14,8 @@ When duplicate or similar knowledge/ files are found:
 2. Create a new file with the merged content using `write_memory_file` (or append to the better one)
 3. Archive the older one with `archive_memory_file`
 
+**Note**: When merging, if the original file contains an `[IMPORTANT]` tag, always preserve it in the merged file (used for forgetting protection)
+
 ### 3. Procedure knowledge organization
 Use `list_directory` to check files in procedures/:
 - Outdated procedures → Update to reflect current state or archive with `archive_memory_file`

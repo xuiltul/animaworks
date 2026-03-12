@@ -14,6 +14,8 @@
 2. 統合した内容で新しいファイルを `write_memory_file` で作成（または良い方に追記）
 3. 古い方を `archive_memory_file` でアーカイブ
 
+**注意**: 統合時、元ファイルに `[IMPORTANT]` タグがある場合は統合先にも必ず残すこと（忘却防止に使用される）
+
 ### 3. 手続き知識の整理
 `list_directory` で procedures/ 内のファイルを確認し:
 - 古くなった手順 → 現状に合わせて更新するか、`archive_memory_file` でアーカイブ
