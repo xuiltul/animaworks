@@ -142,14 +142,20 @@ class TestStreamingThinkFilter:
         assert "second response" in r
 
     def test_multiple_close_tags_in_passthrough(self):
-        """Qwen3.5 emits multiple <think> blocks; all </think> stripped."""
+        """Early-exit passthrough preserves </think> for safety-net detection.
+
+        When the initial chunk triggers early-exit (no <think> prefix),
+        _saw_think_close stays False, so </think> tags in passthrough are NOT
+        stripped — they remain for strip_thinking_tags to detect the leak.
+        """
         f = StreamingThinkFilter()
-        # First chunk triggers early-exit (no <think> prefix)
+        # First chunk triggers early-exit (no <think> prefix); _saw_think_close=False
         t1, r1 = f.feed("step 1 done")
         assert r1 == "step 1 done"
-        # Subsequent chunks with </think> get stripped
+        # </think> preserved (not stripped) — post-stream safety net handles them
         t2, r2 = f.feed("</think>\nresult 1\nthinking again</think>\nresult 2")
-        assert "</think>" not in r2
+        assert t2 == ""
+        assert "</think>" in r2  # preserved for safety net
         assert "result 1" in r2
         assert "result 2" in r2
 
@@ -184,12 +190,13 @@ class TestStreamingThinkFilter:
         assert "reasoning content here" in t
         assert r == "actual response"
 
-    def test_missing_open_tag_across_chunks_strips_close_tag(self):
-        """Across-chunk missing-<think>: </think> is stripped in passthrough.
+    def test_missing_open_tag_across_chunks_preserves_close_tag(self):
+        """Across-chunk missing-<think>: </think> is preserved for safety-net.
 
-        The first chunk triggers early-exit (no <think> prefix).
-        Subsequent chunks with orphan </think> get the tag stripped so it
-        never leaks into user-visible text_delta events.
+        The first chunk triggers early-exit (_saw_think_close stays False).
+        The subsequent </think> is NOT stripped so the post-stream
+        strip_thinking_tags safety net can retroactively identify the earlier
+        chunks as thinking content.
         """
         f = StreamingThinkFilter()
         t1, r1 = f.feed("I need to ")
@@ -200,5 +207,25 @@ class TestStreamingThinkFilter:
 
         t3, r3 = f.feed("</think>\n\nHere is my response")
         assert t3 == ""
-        assert "</think>" not in r3
+        assert "</think>" in r3  # preserved — safety net will detect the thinking leak
         assert "Here is my response" in r3
+
+    def test_missing_open_tag_across_chunks_safety_net_catches_thinking(self):
+        """Full-text safety net correctly identifies thinking when </think> is preserved.
+
+        When </think> is not stripped in early-exit passthrough mode, the
+        post-stream strip_thinking_tags call can retroactively split
+        pre-</think> content as thinking and post-</think> as the response.
+        """
+        f = StreamingThinkFilter()
+        _, r1 = f.feed("I need to ")
+        _, r2 = f.feed("think carefully")
+        _, r3 = f.feed("</think>\n\nHere is my answer")
+
+        # All chunks emitted as text_delta (filter doesn't know it's thinking yet).
+        # full_text still contains </think>, enabling the safety net.
+        full_text = r1 + r2 + r3
+        leaked_think, clean = strip_thinking_tags(full_text)
+        assert leaked_think == "I need to think carefully"
+        assert "Here is my answer" in clean
+        assert "</think>" not in clean

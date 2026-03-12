@@ -168,21 +168,25 @@ class StreamingThinkFilter:
 
     _THINK_OPEN = "<think>"
 
-    __slots__ = ("_buffer", "_done")
+    __slots__ = ("_buffer", "_done", "_saw_think_close")
 
     def __init__(self) -> None:
         self._buffer = ""
         self._done = False
+        self._saw_think_close = False  # True only when </think> was processed in buffer
 
     _THINK_CLOSE_RE = re.compile(r"</think>\s*")
 
     def feed(self, delta: str) -> tuple[str, str]:
         """Process *delta* and return ``(thinking_text, response_text)``."""
         if self._done:
-            # Strip orphan </think> tags that leak through in passthrough mode
-            # (e.g. Qwen3.5 emitting multiple <think> blocks throughout its response).
             if "</think>" in delta:
-                delta = self._THINK_CLOSE_RE.sub("", delta)
+                if self._saw_think_close:
+                    # A proper think block was already handled; strip orphan </think>
+                    # (Qwen3.5 multi-block pattern).
+                    delta = self._THINK_CLOSE_RE.sub("", delta)
+                # else: early-exit path — leave </think> intact so the post-stream
+                # strip_thinking_tags safety net can detect the leaked thinking.
             return ("", delta)
         self._buffer += delta
 
@@ -190,6 +194,7 @@ class StreamingThinkFilter:
         # and the edge case where <think> is absent (vLLM reasoning parser).
         if "</think>" in self._buffer:
             self._done = True
+            self._saw_think_close = True
             parts = self._buffer.split("</think>", 1)
             response = parts[1].lstrip("\n")
             self._buffer = ""
