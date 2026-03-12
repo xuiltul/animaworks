@@ -150,10 +150,10 @@ class Message(BaseModel):
                 data["from_person"] = data.pop("from")
             if "to" in data and "to_person" not in data:
                 data["to_person"] = data.pop("to")
-            # Legacy files may use ``ts`` instead of ``timestamp``; discard it
-            # because ``timestamp`` has a default factory.
+            # Legacy files may use ``ts`` instead of ``timestamp``; map it
+            # to the canonical field so that the original value is preserved.
             if "ts" in data and "timestamp" not in data:
-                data.pop("ts", None)
+                data["timestamp"] = data.pop("ts")
         return data
 
 
