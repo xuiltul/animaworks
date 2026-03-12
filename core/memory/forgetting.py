@@ -47,6 +47,11 @@ FORGETTING_MAX_ACCESS_COUNT = 2  # Max access count to still be eligible for del
 # Protected memory types (skills and shared_users are fully protected)
 PROTECTED_MEMORY_TYPES = frozenset({"skills", "shared_users"})
 
+# [IMPORTANT] safety net: after this many days without access,
+# important chunks lose protection (conceptual integration should
+# have happened by then via weekly consolidation prompts).
+IMPORTANT_SAFETY_NET_DAYS = 365
+
 # Procedure-specific forgetting thresholds (more lenient than knowledge)
 PROCEDURE_INACTIVITY_DAYS = 180  # Days since last use (vs 90 for knowledge)
 PROCEDURE_MIN_USAGE = 3  # Minimum total usage to avoid downscaling
@@ -73,18 +78,52 @@ class ForgettingEngine:
         Procedures use utility-based protection via ``_is_protected_procedure``.
         Knowledge with ``success_count >= 2`` is protected via
         ``_is_protected_knowledge``.
-        The ``importance == "important"`` tag protects any memory type.
+        The ``importance == "important"`` tag protects any memory type,
+        but with a safety-net: chunks that remain unaccessed for
+        ``IMPORTANT_SAFETY_NET_DAYS`` lose their protection (conceptual
+        integration via weekly consolidation should have happened by then).
         """
         if metadata.get("memory_type") in PROTECTED_MEMORY_TYPES:
             return True
         if metadata.get("importance") == "important":
-            return True
+            if not self._important_safety_net_expired(metadata):
+                return True
         # Procedures use utility-based protection instead of blanket protection
         if metadata.get("memory_type") == "procedures":
             return self._is_protected_procedure(metadata)
         # Knowledge with confirmed usefulness is protected
         if metadata.get("memory_type") == "knowledge":
             return self._is_protected_knowledge(metadata)
+        return False
+
+    def _important_safety_net_expired(self, metadata: dict) -> bool:
+        """Check if an [IMPORTANT] chunk has exceeded the safety-net window.
+
+        Returns True when the chunk has gone unaccessed for longer than
+        ``IMPORTANT_SAFETY_NET_DAYS``, meaning conceptual integration
+        should have occurred by now and the raw episodic [IMPORTANT]
+        can safely enter normal forgetting.
+        """
+        access_count = int(metadata.get("access_count", 0))
+        if access_count > 0:
+            last_accessed_str = metadata.get("last_accessed_at", "")
+            if last_accessed_str:
+                try:
+                    last_dt = ensure_aware(datetime.fromisoformat(str(last_accessed_str)))
+                    days = (now_local() - last_dt).total_seconds() / 86400.0
+                    return days > IMPORTANT_SAFETY_NET_DAYS
+                except (ValueError, TypeError):
+                    pass
+            return False
+
+        updated_str = metadata.get("updated_at", "")
+        if updated_str:
+            try:
+                updated_dt = ensure_aware(datetime.fromisoformat(str(updated_str)))
+                days = (now_local() - updated_dt).total_seconds() / 86400.0
+                return days > IMPORTANT_SAFETY_NET_DAYS
+            except (ValueError, TypeError):
+                pass
         return False
 
     def _is_protected_knowledge(self, metadata: dict) -> bool:
