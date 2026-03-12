@@ -255,54 +255,6 @@ def _channel_tools() -> list[dict[str, Any]]:
                 "required": ["action", "channel"],
             },
         },
-        {
-            "name": "slack_channel_post",
-            "description": (
-                "Post a message to an actual Slack channel via Bot Token API. "
-                "Returns the message ts for future updates. "
-                "Use this for external Slack channels (not internal Board)."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "channel_id": {
-                        "type": "string",
-                        "description": "Slack channel ID (e.g. C0AJ4J5KK46)",
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "Message text (Markdown will be converted to Slack mrkdwn)",
-                    },
-                },
-                "required": ["channel_id", "text"],
-            },
-        },
-        {
-            "name": "slack_channel_update",
-            "description": (
-                "Update an existing Slack message by ts. "
-                "The message is silently replaced (no notification). "
-                "Use this for live dashboards like task-board."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "channel_id": {
-                        "type": "string",
-                        "description": "Slack channel ID",
-                    },
-                    "ts": {
-                        "type": "string",
-                        "description": "Message timestamp to update (from slack_channel_post result)",
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "New message text",
-                    },
-                },
-                "required": ["channel_id", "ts", "text"],
-            },
-        },
     ]
 
 
