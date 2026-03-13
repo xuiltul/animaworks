@@ -840,7 +840,7 @@ Group 6: メタ設定
 
 ### 11.1 内部ツール一覧
 
-フレームワークが提供する内部ツール（MCP / ToolHandler経由）。Mode S では `mcp__aw__*` として、Mode A/B では ToolHandler のディスパッチテーブルとして提供される。
+フレームワークが提供する内部ツール。全モード共通の18ツール構成（Claude Code互換8 + AW必須10）。Mode S/C では MCP 経由、Mode A/B ではネイティブ tool_use として提供される。それ以外の機能は `Bash` + `animaworks-tool` CLI 経由でアクセスする。
 
 **記憶:**
 
