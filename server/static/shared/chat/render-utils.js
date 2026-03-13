@@ -555,14 +555,14 @@ export function updateStreamingZone(bubble, msg, opts, zone = "all") {
   if (!bubble) return;
   if (zone === "all") {
     bubble.innerHTML = renderStreamingBubbleInner(msg, opts);
-    _autoScrollThinking(bubble);
+    _scrollThinkingToBottom(bubble);
     return;
   }
   const sel = `.streaming-zone-${zone}`;
   const el = bubble.querySelector(sel);
   if (!el) {
     bubble.innerHTML = renderStreamingBubbleInner(msg, opts);
-    _autoScrollThinking(bubble);
+    _scrollThinkingToBottom(bubble);
     return;
   }
   if (zone === "subordinate") {
@@ -586,23 +586,46 @@ export function updateStreamingZone(bubble, msg, opts, zone = "all") {
     }
   }
 
+  if (zone === "thinking") {
+    _patchThinkingZone(el, msg, opts);
+    return;
+  }
+
   const renderers = {
     text: _renderTextZoneContent,
     tools: _renderToolZoneContent,
-    thinking: _renderThinkingZoneContent,
   };
   const fn = renderers[zone];
-  if (fn) {
-    el.innerHTML = fn(msg, opts);
-    if (zone === "thinking") _autoScrollThinking(el);
-  }
+  if (fn) el.innerHTML = fn(msg, opts);
 }
 
-function _autoScrollThinking(container) {
-  requestAnimationFrame(() => {
-    const el = container.querySelector(".thinking-inline-preview");
-    if (el) el.scrollTop = el.scrollHeight;
-  });
+/**
+ * Patch thinking zone without destroying/recreating the DOM element.
+ * Avoids scrollTop reset that causes visible scroll-jump on every update.
+ */
+function _patchThinkingZone(zoneEl, msg, opts) {
+  const { escapeHtml } = opts;
+  const visibleThinking = msg._displayThinkingText || msg.thinkingText;
+
+  if (msg.thinking && visibleThinking) {
+    let preview = zoneEl.querySelector(".thinking-inline-preview");
+    if (preview) {
+      preview.textContent = visibleThinking;
+    } else {
+      zoneEl.innerHTML = `<div class="thinking-inline-preview">${escapeHtml(visibleThinking)}</div>`;
+      preview = zoneEl.querySelector(".thinking-inline-preview");
+    }
+    if (preview) preview.scrollTop = preview.scrollHeight;
+    return;
+  }
+
+  zoneEl.innerHTML = _renderThinkingZoneContent(msg, opts);
+}
+
+/** Scroll thinking preview to bottom (used after full innerHTML replacement). */
+function _scrollThinkingToBottom(container) {
+  const el = container.querySelector(".thinking-inline-preview");
+  if (el) el.scrollTop = el.scrollHeight;
 }
 
 function _renderTextZoneContent(msg, opts) {

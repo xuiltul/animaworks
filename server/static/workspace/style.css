@@ -765,6 +765,10 @@ html, body {
   white-space: pre-wrap;
   word-break: break-word;
   font-style: italic;
+  max-height: calc(1.5em * 5);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--aw-color-border-medium) transparent;
 }
 
 /* ── Tool Indicator ────────────────────── */
