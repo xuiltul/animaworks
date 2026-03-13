@@ -3865,6 +3865,100 @@ html, body {
   opacity: 0;
 }
 
+/* ── External Channel Nodes ────── */
+.org-external-bar {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--aw-color-border, #e5e5e5);
+  background: var(--aw-color-bg-primary, #fff);
+}
+
+.org-external-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  opacity: 0.7;
+  transition: opacity 0.3s;
+}
+
+.org-external-node:hover,
+.org-external-node:active {
+  opacity: 1;
+}
+
+.org-external-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.org-external-label {
+  font-size: 10px;
+  color: var(--aw-color-text-muted, #888);
+}
+
+/* ── Message Line Types ────── */
+.org-msg-trail--internal {
+  stroke: var(--aw-color-border-medium, #cbd5e1);
+  stroke-opacity: 0.6;
+}
+
+.org-msg-trail--external {
+  stroke: rgba(100, 200, 255, 0.5);
+  stroke-dasharray: none;
+}
+
+.org-msg-trail--external_in {
+  stroke: rgba(100, 200, 255, 0.5);
+  stroke-dasharray: 6, 4;
+}
+
+.org-msg-trail--human {
+  stroke: rgba(255, 200, 100, 0.5);
+}
+
+.org-msg-trail--delegation {
+  stroke: rgba(100, 255, 150, 0.5);
+  stroke-width: 2;
+}
+
+.org-msg-packet--internal {
+  fill: var(--aw-color-accent, #3b82f6);
+  fill-opacity: 0.9;
+}
+
+.org-msg-packet--external {
+  fill: rgba(100, 200, 255, 0.9);
+}
+
+.org-msg-packet--external_in {
+  fill: rgba(100, 200, 255, 0.9);
+}
+
+.org-msg-packet--human {
+  fill: rgba(255, 200, 100, 0.9);
+}
+
+.org-msg-packet--delegation {
+  fill: rgba(100, 255, 150, 0.9);
+}
+
+/* ── Card Stream: New entry types ────── */
+.org-stream-entry .org-stream-icon:empty {
+  display: none;
+}
+
+.org-stream-entry .org-stream-icon:empty + .org-stream-text {
+  margin-left: 0;
+}
+
 /* ── Avatar Variants ─────────────────────── */
 
 .org-card-avatar img {

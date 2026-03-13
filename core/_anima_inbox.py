@@ -214,6 +214,7 @@ class InboxMixin:
                             content=accumulated_text[:2000],
                             to_person=senders_str,
                             channel="inbox",
+                            summary=accumulated_text[:200] if accumulated_text else "",
                             meta={"trigger": "inbox"},
                         )
 

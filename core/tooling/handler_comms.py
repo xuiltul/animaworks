@@ -126,7 +126,13 @@ class CommsToolsMixin:
                 meta: dict[str, Any] = {"from_type": "external", "channel": resolved.channel}
                 if intent:
                     meta["intent"] = intent
-                self._activity.log("message_sent", content=content, to_person=to, meta=meta)
+                self._activity.log(
+                    "message_sent",
+                    content=content,
+                    to_person=to,
+                    summary=f"→ {to}: {content[:80]}",
+                    meta=meta,
+                )
             except Exception:
                 logger.warning("Activity logging failed for external send to %s", to)
 

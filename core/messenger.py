@@ -238,7 +238,13 @@ class Messenger:
                     meta: dict[str, Any] = {"from_type": "anima"}
                     if intent:
                         meta["intent"] = intent
-                    activity.log("message_sent", content=content, to_person=to, meta=meta)
+                    activity.log(
+                        "message_sent",
+                        content=content,
+                        to_person=to,
+                        summary=f"→ {to}: {content[:80]}",
+                        meta=meta,
+                    )
             except Exception as e:
                 logger.warning(
                     "Activity logging failed for message_sent (%s -> %s): %s",
