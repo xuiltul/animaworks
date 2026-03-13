@@ -2,7 +2,7 @@
 name: machine-tool
 description: >-
   Delegate tasks to external agent CLIs (machine tools). Offload heavy work like
-  code changes, investigation, and analysis to claude/codex/cursor-agent/gemini.
+  code changes, investigation, and analysis to external agents.
   "machine" "machine tool" "external agent"
 tags: [machine, agent, external, delegation]
 ---
@@ -12,16 +12,15 @@ tags: [machine, agent, external, delegation]
 Delegate tasks to external agent CLIs.
 Offload heavy work like code changes, investigation, and analysis to external agents.
 
-## Recommended Engine: cursor-agent
+## Engines and Default
 
-| Priority | Engine | Notes |
-|----------|--------|-------|
-| 1 (recommended) | **cursor-agent** | Fast, low cost. Use this by default |
-| 2 | claude | Anthropic Claude. High quality but expensive |
-| 3 | codex | OpenAI Codex |
-| 4 | gemini | Google Gemini |
+Available engines and the default **vary by environment**. Always check first:
 
-**Use cursor-agent unless you have a specific reason not to.** Omitting `-e` auto-selects the system's recommended engine.
+```bash
+animaworks-tool machine run --help
+```
+
+Omitting `-e` uses the system-selected default engine.
 
 ## Design Philosophy
 
@@ -33,13 +32,12 @@ It has no memory, no communication, no identity.
 ## CLI Usage (Mode S)
 
 ```bash
-# Basic (recommended engine auto-selected)
+# Basic (default engine auto-selected)
 animaworks-tool machine run "detailed instruction" -d /path/to/workdir
 
 # Explicitly specify engine
 animaworks-tool machine run -e cursor-agent "instruction" -d /path/to/workdir
 animaworks-tool machine run -e claude "instruction" -d /path/to/workdir
-animaworks-tool machine run -e gemini "instruction" -d /path/to/workdir
 
 # Override model
 animaworks-tool machine run -e claude -m claude-sonnet-4-6 "instruction" -d /path/to/workdir
@@ -60,7 +58,7 @@ animaworks-tool machine run -t 300 "instruction" -d /path/to/workdir
     "tool_name": "machine",
     "action": "run",
     "args": {
-      "engine": "cursor-agent",
+      "engine": "engine_name",
       "instruction": "detailed instruction",
       "working_directory": "/path/to/workdir"
     }
@@ -72,20 +70,12 @@ animaworks-tool machine run -t 300 "instruction" -d /path/to/workdir
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| engine | YES | Engine name (cursor-agent, claude, codex, gemini) |
+| engine | YES | Engine name (check `--help` for available engines) |
 | instruction | YES | Task instruction. Specify goal, target, constraints, expected output |
 | working_directory | YES | Absolute path to working directory |
 | background | no | true for async execution (default: false) |
 | model | no | Model override (engine default if omitted) |
 | timeout | no | Timeout in seconds (sync: 600, async: 1800) |
-
-## List Available Engines
-
-To check available engines and priority:
-
-```json
-{"tool": "use_tool", "arguments": {"tool_name": "machine", "action": "run", "args": {"engine": "__list__", "instruction": "", "working_directory": ""}}}
-```
 
 ## Writing Good Instructions (Important)
 

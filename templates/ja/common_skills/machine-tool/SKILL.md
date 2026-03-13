@@ -2,7 +2,7 @@
 name: machine-tool
 description: >-
   外部エージェントCLI（工作機械）にタスクを委託。コード変更・調査・分析など重い作業を
-  claude/codex/cursor-agent/geminiに丸投げできる。「machine」「工作機械」「外部エージェント」
+  外部エージェントに丸投げできる。「machine」「工作機械」「外部エージェント」
 tags: [machine, agent, external, delegation]
 ---
 
@@ -11,16 +11,15 @@ tags: [machine, agent, external, delegation]
 外部エージェントCLI にタスクを委託するツール。
 コード変更・調査・分析など、自分で直接やると重い作業を外部エージェントに丸投げできる。
 
-## 推奨エンジン: cursor-agent
+## エンジンとデフォルト
 
-| 優先順位 | エンジン | 特徴 |
-|---------|---------|------|
-| 1（推奨） | **cursor-agent** | 高速・低コスト。通常はこれを使う |
-| 2 | claude | Anthropic Claude。高品質だがコスト高 |
-| 3 | codex | OpenAI Codex |
-| 4 | gemini | Google Gemini |
+利用可能なエンジンとデフォルトは**環境によって異なる**。必ず以下で確認すること:
 
-**特に理由がなければ cursor-agent を使うこと。** `-e` を省略するとシステムの推奨エンジンが自動選択される。
+```bash
+animaworks-tool machine run --help
+```
+
+`-e` を省略するとシステムが選んだデフォルトエンジンが使われる。
 
 ## 設計思想
 
@@ -31,13 +30,12 @@ tags: [machine, agent, external, delegation]
 ## CLI使用法（Sモード）
 
 ```bash
-# 基本形（推奨エンジンが自動選択される）
+# 基本形（デフォルトエンジンが自動選択される）
 animaworks-tool machine run "詳細な作業指示" -d /path/to/workdir
 
 # エンジンを明示的に指定
 animaworks-tool machine run -e cursor-agent "指示" -d /path/to/workdir
 animaworks-tool machine run -e claude "指示" -d /path/to/workdir
-animaworks-tool machine run -e gemini "指示" -d /path/to/workdir
 
 # モデル上書き
 animaworks-tool machine run -e claude -m claude-sonnet-4-6 "指示" -d /path/to/workdir
@@ -58,7 +56,7 @@ animaworks-tool machine run -t 300 "指示" -d /path/to/workdir
     "tool_name": "machine",
     "action": "run",
     "args": {
-      "engine": "cursor-agent",
+      "engine": "エンジン名",
       "instruction": "詳細な作業指示",
       "working_directory": "/path/to/workdir"
     }
@@ -70,20 +68,12 @@ animaworks-tool machine run -t 300 "指示" -d /path/to/workdir
 
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
-| engine | YES | エンジン名（cursor-agent, claude, codex, gemini） |
+| engine | YES | エンジン名（`--help` で利用可能なエンジンを確認） |
 | instruction | YES | 作業指示。ゴール・対象・制約・期待出力を明記 |
 | working_directory | YES | 作業ディレクトリの絶対パス |
 | background | no | true で非同期実行（デフォルト: false） |
 | model | no | モデル上書き（省略時はエンジンのデフォルト） |
 | timeout | no | タイムアウト秒数（同期: 600、非同期: 1800） |
-
-## エンジン一覧を確認する
-
-利用可能なエンジンと優先順位を確認するには:
-
-```json
-{"tool": "use_tool", "arguments": {"tool_name": "machine", "action": "run", "args": {"engine": "__list__", "instruction": "", "working_directory": ""}}}
-```
 
 ## instruction の書き方（重要）
 
