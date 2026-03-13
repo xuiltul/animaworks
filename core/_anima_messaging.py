@@ -284,7 +284,12 @@ class MessagingMixin:
                     if response_artifacts:
                         resp_meta["images"] = response_artifacts
                     self._activity.log(
-                        "response_sent", content=result.summary, to_person=from_person, channel="chat", meta=resp_meta
+                        "response_sent",
+                        content=result.summary,
+                        to_person=from_person,
+                        channel="chat",
+                        summary=result.summary[:200] if result.summary else "",
+                        meta=resp_meta,
                     )
 
                     logger.info(
@@ -536,7 +541,12 @@ class MessagingMixin:
                             if response_artifacts:
                                 resp_meta["images"] = response_artifacts
                             self._activity.log(
-                                "response_sent", content=summary, to_person=from_person, channel="chat", meta=resp_meta
+                                "response_sent",
+                                content=summary,
+                                to_person=from_person,
+                                channel="chat",
+                                summary=summary[:200] if summary else "",
+                                meta=resp_meta,
                             )
 
                             # Finalize streaming journal (deletes the file)

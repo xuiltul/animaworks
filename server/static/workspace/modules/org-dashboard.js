@@ -54,6 +54,15 @@ let _connectionsGroup = null;
 let _msgLinesGroup = null;
 let _msgLineCounter = 0;
 
+// ── External Channel Nodes ──────────────────────
+const _EXTERNAL_CHANNELS = [
+  { id: "ext_slack", name: "Slack", icon: "💬", color: "#4A154B" },
+  { id: "ext_chatwork", name: "Chatwork", icon: "💭", color: "#D4371C" },
+  { id: "ext_github", name: "GitHub", icon: "🐙", color: "#24292E" },
+  { id: "ext_gmail", name: "Gmail", icon: "📧", color: "#EA4335" },
+  { id: "ext_web", name: "Web", icon: "🌐", color: "#4285F4" },
+];
+
 // ── Avatar Variant State ──────────────────────
 const MESSAGE_LINE_DURATION = 2000;
 const MESSAGE_LINE_FADE = 500;
@@ -461,11 +470,13 @@ function _resizeSvg() {
 
 // ── Message Line Drawing ──────────────────────
 
-export function showMessageLine(fromName, toName, _summary) {
+export function showMessageLine(fromName, toName, _summary, options = {}) {
   if (!_svgLayer || !_msgLinesGroup) return;
   const fromPos = _positions.get(fromName);
   const toPos = _positions.get(toName);
   if (!fromPos || !toPos) return;
+
+  const lineType = options.lineType || "internal";
 
   const { w: cardW, h: cardH } = _getCardDimensions();
   const x1 = fromPos.x + cardW / 2;
@@ -493,12 +504,12 @@ export function showMessageLine(fromName, toName, _summary) {
 
   const trail = document.createElementNS("http://www.w3.org/2000/svg", "path");
   trail.setAttribute("d", pathD);
-  trail.setAttribute("class", "org-msg-trail");
+  trail.setAttribute("class", `org-msg-trail org-msg-trail--${lineType}`);
   group.appendChild(trail);
 
   const packet = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  packet.setAttribute("r", "5");
-  packet.setAttribute("class", "org-msg-packet");
+  packet.setAttribute("r", lineType === "internal" ? "5" : "6");
+  packet.setAttribute("class", `org-msg-packet org-msg-packet--${lineType}`);
 
   const anim = document.createElementNS("http://www.w3.org/2000/svg", "animateMotion");
   anim.setAttribute("dur", `${MESSAGE_LINE_DURATION}ms`);
@@ -514,6 +525,66 @@ export function showMessageLine(fromName, toName, _summary) {
     group.classList.add("org-msg-line--fading");
     setTimeout(() => group.remove(), MESSAGE_LINE_FADE);
   }, MESSAGE_LINE_DURATION);
+}
+
+function _createExternalNodes(container) {
+  const bar = document.createElement("div");
+  bar.className = "org-external-bar";
+  bar.id = "orgExternalBar";
+
+  for (const ch of _EXTERNAL_CHANNELS) {
+    const node = document.createElement("div");
+    node.className = "org-external-node";
+    node.id = `orgExt_${ch.id}`;
+    node.innerHTML = `
+      <span class="org-external-icon" style="background:${ch.color}">${ch.icon}</span>
+      <span class="org-external-label">${ch.name}</span>
+    `;
+    bar.appendChild(node);
+    _positions.set(ch.id, null);
+  }
+
+  container.prepend(bar);
+  return bar;
+}
+
+function _updateExternalPositions() {
+  const bar = document.getElementById("orgExternalBar");
+  if (!bar) return;
+  const viewport = document.getElementById("orgCanvasViewport");
+  if (!viewport) return;
+  const vpRect = viewport.getBoundingClientRect();
+
+  for (const ch of _EXTERNAL_CHANNELS) {
+    const node = document.getElementById(`orgExt_${ch.id}`);
+    if (node) {
+      const rect = node.getBoundingClientRect();
+      _positions.set(ch.id, {
+        x: rect.left - vpRect.left + rect.width / 2,
+        y: rect.top - vpRect.top + rect.height / 2,
+      });
+    }
+  }
+}
+
+const _TOOL_TO_EXTERNAL = {
+  slack: "ext_slack",
+  chatwork: "ext_chatwork",
+  github: "ext_github",
+  gmail: "ext_gmail",
+  web_search: "ext_web",
+  x_search: "ext_web",
+};
+
+export function showExternalLine(animaName, toolName, direction = "out") {
+  const extId = _TOOL_TO_EXTERNAL[String(toolName || "").toLowerCase()];
+  if (!extId) return;
+
+  if (direction === "out") {
+    showMessageLine(animaName, extId, "", { lineType: "external" });
+  } else {
+    showMessageLine(extId, animaName, "", { lineType: "external_in" });
+  }
 }
 
 // ── Avatar Loading & Variants ──────────────────────
@@ -756,6 +827,7 @@ export async function initOrgDashboard(container, animas, { onNodeClick } = {}) 
   _svgLayer = document.getElementById("orgCanvasSvg");
   _nodesLayer = document.getElementById("orgCanvasNodes");
 
+  _createExternalNodes(container);
   _renderKpiBar();
 
   const vpWidth = _viewport.clientWidth || 1200;
@@ -783,6 +855,8 @@ export async function initOrgDashboard(container, animas, { onNodeClick } = {}) 
   _resizeSvg();
   _updateConnections();
   _setupPan(_viewport);
+
+  requestAnimationFrame(() => _updateExternalPositions());
 
   container.addEventListener("click", (e) => {
     if (_didDrag) { _didDrag = false; return; }
@@ -827,6 +901,7 @@ function _onResize() {
     _resizeRafId = null;
     _resizeSvg();
     _updateConnections();
+    _updateExternalPositions();
   });
 }
 
@@ -890,7 +965,47 @@ export function updateCardActivity(name, data) {
   let entries = _cardStreams.get(name) || [];
   const { eventType, toolName, toolId, isError, detail, channel, summary } = data;
 
-  if (eventType === "tool_start") {
+  if (eventType === "message_sent") {
+    entries.push({
+      id: Date.now().toString(),
+      type: "msg_out",
+      text: `↑ ${data.to_person || ""}: ${(data.summary || data.content || "").slice(0, 60)}`,
+      status: "done",
+      ts: Date.now(),
+    });
+  } else if (eventType === "message_received") {
+    entries.push({
+      id: Date.now().toString(),
+      type: "msg_in",
+      text: `↓ ${data.from_person || ""}: ${(data.summary || data.content || "").slice(0, 60)}`,
+      status: "done",
+      ts: Date.now(),
+    });
+  } else if (eventType === "response_sent") {
+    entries.push({
+      id: Date.now().toString(),
+      type: "msg_out",
+      text: `↑ ${(data.summary || data.content || "").slice(0, 80)}`,
+      status: "done",
+      ts: Date.now(),
+    });
+  } else if (eventType === "channel_post") {
+    entries.push({
+      id: Date.now().toString(),
+      type: "board",
+      text: `↑ #${data.channel || "?"}: ${(data.summary || data.content || "").slice(0, 60)}`,
+      status: "done",
+      ts: Date.now(),
+    });
+  } else if (eventType === "task_created" || eventType === "task_updated") {
+    entries.push({
+      id: Date.now().toString(),
+      type: "task",
+      text: `⚙ ${(data.summary || eventType).slice(0, 80)}`,
+      status: "done",
+      ts: Date.now(),
+    });
+  } else if (eventType === "tool_start") {
     for (const e of entries) {
       if (e.type === "tool" && e.status === "running") e.status = "done";
     }
@@ -963,7 +1078,7 @@ function _renderStream(container, entries) {
     return;
   }
   container.innerHTML = entries.map(e => {
-    const typeIcon = { tool: "\u{1F527}", board: "\u{1F4CB}", cron: "\u23F0", heartbeat: "\u{1F49A}" }[e.type] || "\u{1F4CC}";
+    const typeIcon = { tool: "\u{1F527}", board: "\u{1F4CB}", cron: "\u23F0", heartbeat: "\u{1F49A}", msg_out: "", msg_in: "", task: "" }[e.type] ?? "\u{1F4CC}";
     const elapsed = e.status === "running" ? ` ${Math.round((Date.now() - e.ts) / 1000)}s` : "";
     const cls = `org-stream--${e.status}`;
     if (e.status === "running") {
@@ -1044,7 +1159,7 @@ function _toggleCardExpand(name) {
       ${entries.length === 0
         ? '<div class="org-detail-entry org-detail-entry--empty">\u30A2\u30AF\u30C6\u30A3\u30D3\u30C6\u30A3\u306A\u3057</div>'
         : entries.slice(-20).reverse().map(e => {
-          const icon = { tool: "\u{1F527}", board: "\u{1F4CB}", cron: "\u23F0", heartbeat: "\u{1F49A}" }[e.type] || "\u{1F4CC}";
+          const icon = { tool: "\u{1F527}", board: "\u{1F4CB}", cron: "\u23F0", heartbeat: "\u{1F49A}", msg_out: "", msg_in: "", task: "" }[e.type] ?? "\u{1F4CC}";
           const statusIcon = e.status === "running" ? "\u23F3" : e.status === "error" ? "\u2717" : "\u2713";
           return `<div class="org-detail-entry"><span>${icon}</span><span>${escapeHtml(e.text)}</span><span>${statusIcon}</span></div>`;
         }).join("")

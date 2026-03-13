@@ -103,6 +103,11 @@ class ActivityLogger(
             "tool_use",
             "inbox_processing_start",
             "inbox_processing_end",
+            "message_sent",
+            "response_sent",
+            "channel_post",
+            "task_created",
+            "task_updated",
         }
     )
 
@@ -204,6 +209,10 @@ class ActivityLogger(
                     "type": entry.type,
                     "tool": entry.tool,
                     "summary": entry.summary,
+                    "content": entry.content[:200] if entry.content else "",
+                    "from_person": entry.from_person,
+                    "to_person": entry.to_person,
+                    "channel": entry.channel,
                     "ts": entry.ts,
                     "meta": entry.meta,
                 },

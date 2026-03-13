@@ -13,7 +13,7 @@ import { showMessageEffect } from "./interactions.js";
 import { addTimelineEvent, localISOString } from "./timeline.js";
 import { addActivity } from "./activity.js";
 import { getSelectedBoard, appendBoardMessage } from "./board.js";
-import { updateAnimaStatus, updateCardActivity, showMessageLine, updateAvatarExpression } from "./org-dashboard.js";
+import { updateAnimaStatus, updateCardActivity, showMessageLine, showExternalLine, updateAvatarExpression } from "./org-dashboard.js";
 import { playReveal } from "./reveal.js";
 import { createLogger } from "../../shared/logger.js";
 import { bustupCandidates, resolveAvatar, invalidateAvatarCache } from "../../modules/avatar-resolver.js";
@@ -155,16 +155,42 @@ export function setupWebSocket(deps) {
     } else if (evtType) {
       addActivity("tool", data.name, `${data.summary || evtType}`);
     }
-    document.dispatchEvent(
-      new CustomEvent("anima-tool-activity", { detail: { ...data, event: evtType, tool_name: toolName } })
-    );
     updateCardActivity(data.name, {
       eventType: evtType,
       toolName,
       toolId: data.tool_id,
       isError: data.is_error,
       detail: data.detail,
+      summary: data.summary || "",
+      content: data.content || "",
+      from_person: data.from_person || "",
+      to_person: data.to_person || "",
+      channel: data.channel || "",
     });
+    if (evtType === "message_sent" && data.to_person) {
+      if (getCurrentView() === "org") {
+        showMessageLine(data.name, data.to_person, data.summary || "");
+      }
+      addTimelineEvent({
+        id: Date.now().toString(),
+        type: "message",
+        anima: `${data.name} → ${data.to_person}`,
+        ts: data.ts || localISOString(),
+        summary: `${data.name} → ${data.to_person}: ${data.summary || ""}`,
+        meta: { from_person: data.name, to_person: data.to_person },
+      });
+    }
+    if ((evtType === "tool_use" || evtType === "tool_end") && getCurrentView() === "org") {
+      showExternalLine(data.name, toolName, "out");
+    }
+    if (evtType === "message_received" && data.meta?.from_type === "external" && getCurrentView() === "org") {
+      const channel = data.meta?.channel || data.channel || "";
+      const extTool = channel.split(":")[0];
+      if (extTool) showExternalLine(data.name, extTool, "in");
+    }
+    document.dispatchEvent(
+      new CustomEvent("anima-tool-activity", { detail: { ...data, event: evtType, tool_name: toolName } })
+    );
   }));
 
   // ── board.post — shared channel message ──
