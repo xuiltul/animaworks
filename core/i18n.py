@@ -923,12 +923,12 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ja": (
             "\n\n**machine ツール**: コード変更・調査・分析など重い作業は"
             " `animaworks-tool machine run` で外部エージェントに委託できます。"
-            " 詳細は `skill machine` で確認。"
+            " 詳細は `skill machine-tool` で確認。"
         ),
         "en": (
             "\n\n**machine tool**: For heavy tasks like code changes, investigation, "
             "or analysis, delegate to an external agent via "
-            "`animaworks-tool machine run`. Run `skill machine` for details."
+            "`animaworks-tool machine run`. Run `skill machine-tool` for details."
         ),
     },
     # ── handler.* (i18n) ──────────────────────────────
