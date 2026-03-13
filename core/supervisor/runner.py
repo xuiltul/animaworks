@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from core.anima import DigitalAnima
-from core.exceptions import ExecutionError, MemoryWriteError, ProcessError  # noqa: F401
+from core.exceptions import AnimaNotRunningError, ExecutionError, MemoryWriteError, ProcessError  # noqa: F401
 from core.i18n import t
 from core.memory.streaming_journal import StreamingJournal
 from core.supervisor.inbox_rate_limiter import InboxRateLimiter
@@ -427,7 +427,7 @@ class AnimaRunner:
     async def _handle_process_message(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle non-streaming process_message request."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
 
         message = params.get("message", "")
         from_person = params.get("from_person", "human")
@@ -465,14 +465,14 @@ class AnimaRunner:
     async def _handle_greet(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle greet request (character click greeting)."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
 
         return await self.anima.process_greet()
 
     async def _handle_run_bootstrap(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle run_bootstrap request (background bootstrap execution)."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
 
         result = await self.anima.run_bootstrap()
         return {
@@ -484,7 +484,7 @@ class AnimaRunner:
     async def _handle_run_heartbeat(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle run_heartbeat request."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
 
         await self.anima.run_heartbeat()
 
@@ -504,7 +504,7 @@ class AnimaRunner:
     async def _handle_run_cron_task(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle run_cron_task request."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
 
         task_name = params.get("task_name")
         task_description = params.get("task_description", "")
@@ -519,7 +519,7 @@ class AnimaRunner:
     async def _handle_run_consolidation(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle run_consolidation request (Anima-driven memory consolidation)."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
 
         consolidation_type = params.get("consolidation_type", "daily")
         max_turns = params.get("max_turns", 30)
@@ -538,7 +538,7 @@ class AnimaRunner:
     async def _handle_get_status(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle get_status request."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
 
         scheduler = self._scheduler_mgr.scheduler if self._scheduler_mgr else None
         return {
@@ -588,7 +588,7 @@ class AnimaRunner:
     async def _handle_reload_config(self, params: dict[str, Any]) -> dict[str, Any]:
         """Hot-reload ModelConfig from status.json."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
         return self.anima.reload_config()
 
     async def _handle_reschedule_heartbeat(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -612,7 +612,7 @@ class AnimaRunner:
     async def _handle_interrupt(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle interrupt request — cancel current LLM session."""
         if not self.anima:
-            raise RuntimeError("Anima not initialized")
+            raise AnimaNotRunningError("Anima not initialized")
         thread_id = params.get("thread_id")
         return await self.anima.interrupt(thread_id=thread_id)
 

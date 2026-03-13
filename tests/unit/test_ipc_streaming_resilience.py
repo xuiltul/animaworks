@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.exceptions import AnimaNotRunningError, ProcessError
 from core.supervisor.ipc import IPCRequest
 from core.supervisor.process_handle import ProcessHandle, ProcessState
 
@@ -235,7 +236,7 @@ class TestProcessHandleRestartingGuard:
         """send_request raises RuntimeError with 'Process restarting' for RESTARTING."""
         handle.state = ProcessState.RESTARTING
 
-        with pytest.raises(RuntimeError, match="Process restarting"):
+        with pytest.raises(ProcessError, match="Process restarting"):
             await handle.send_request("ping", {})
 
     @pytest.mark.asyncio
@@ -243,7 +244,7 @@ class TestProcessHandleRestartingGuard:
         """send_request_stream raises RuntimeError with 'Process restarting' for RESTARTING."""
         handle.state = ProcessState.RESTARTING
 
-        with pytest.raises(RuntimeError, match="Process restarting"):
+        with pytest.raises(ProcessError, match="Process restarting"):
             async for _ in handle.send_request_stream("process_message", {"stream": True}):
                 pass
 
@@ -252,7 +253,7 @@ class TestProcessHandleRestartingGuard:
         """send_request still raises 'Process not running' for non-RESTARTING states."""
         handle.state = ProcessState.FAILED
 
-        with pytest.raises(RuntimeError, match="Process not running"):
+        with pytest.raises(AnimaNotRunningError, match="Process not running"):
             await handle.send_request("ping", {})
 
 

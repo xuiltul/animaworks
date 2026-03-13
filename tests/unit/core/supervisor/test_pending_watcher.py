@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.exceptions import ToolExecutionError
 from core.supervisor.pending_executor import PendingTaskExecutor
 
 
@@ -503,7 +504,7 @@ class TestDispatchFn:
         mock_result.stderr = "Something went wrong"
 
         with patch("subprocess.run", return_value=mock_result):
-            with pytest.raises(RuntimeError, match="Tool image_gen failed"):
+            with pytest.raises(ToolExecutionError, match="Tool image_gen failed"):
                 dispatch_fn(
                     "image_gen",
                     {

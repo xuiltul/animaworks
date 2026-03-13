@@ -18,6 +18,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from core.exceptions import IPCConnectionError
 from core.supervisor.ipc import (
     IPCClient,
     IPCRequest,
@@ -345,7 +346,7 @@ async def test_send_request_id_mismatch_raises():
                 params={},
             )
 
-            with pytest.raises(RuntimeError, match="IPC protocol error"):
+            with pytest.raises(IPCConnectionError, match="IPC protocol error"):
                 await client.send_request(request, timeout=5.0)
 
             await client.close()
@@ -381,7 +382,7 @@ async def test_stream_id_mismatch_raises():
         return mock_reader, mock_writer
 
     with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
-        with pytest.raises(RuntimeError, match="IPC protocol error: response ID mismatch"):
+        with pytest.raises(IPCConnectionError, match="IPC protocol error: response ID mismatch"):
             async for _ in client.send_request_stream(
                 IPCRequest(id="req_correct_id", method="stream_test"),
                 timeout=5.0,
@@ -419,7 +420,7 @@ async def test_stream_non_streaming_response_with_wrong_id():
         return mock_reader, mock_writer
 
     with patch("asyncio.open_unix_connection", side_effect=mock_open_unix):
-        with pytest.raises(RuntimeError, match="IPC protocol error"):
+        with pytest.raises(IPCConnectionError, match="IPC protocol error"):
             async for _ in client.send_request_stream(
                 IPCRequest(id="req_fresh_001", method="process_message"),
                 timeout=5.0,
@@ -472,7 +473,7 @@ async def test_fresh_connection_after_id_mismatch():
 
             # First request: should raise RuntimeError due to ID mismatch
             req1 = IPCRequest(id="req_first", method="test", params={})
-            with pytest.raises(RuntimeError, match="IPC protocol error"):
+            with pytest.raises(IPCConnectionError, match="IPC protocol error"):
                 await client.send_request(req1, timeout=5.0)
 
             # Second request: should succeed because each request opens
@@ -838,5 +839,5 @@ async def test_send_request_raises_runtime_error_for_missing_socket():
 
     req = IPCRequest(id="missing_001", method="test", params={})
 
-    with pytest.raises(RuntimeError, match="Not connected"):
+    with pytest.raises(IPCConnectionError, match="Not connected"):
         await client.send_request(req, timeout=5.0)

@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.exceptions import IPCConnectionError
 from core.supervisor.ipc import IPCResponse
 from core.supervisor.process_handle import ProcessHandle, ProcessState
 
@@ -43,10 +44,10 @@ class TestSendRequestIPCGrace:
         self,
         handle: ProcessHandle,
     ):
-        """RuntimeError when process alive (poll() is None) must NOT set FAILED."""
-        handle.ipc_client.send_request.side_effect = RuntimeError("IPC connection lost")
+        """IPCConnectionError when process alive (poll() is None) must NOT set FAILED."""
+        handle.ipc_client.send_request.side_effect = IPCConnectionError("IPC connection lost")
 
-        with pytest.raises(RuntimeError, match="IPC connection lost"):
+        with pytest.raises(IPCConnectionError, match="IPC connection lost"):
             await handle.send_request("ping", {}, timeout=5.0)
 
         assert handle.state == ProcessState.RUNNING
@@ -56,12 +57,12 @@ class TestSendRequestIPCGrace:
         self,
         handle: ProcessHandle,
     ):
-        """RuntimeError when process dead (poll() returns exit code) must set FAILED."""
+        """IPCConnectionError when process dead (poll() returns exit code) must set FAILED."""
         handle.process.poll.return_value = 1
         handle.process.returncode = 1
-        handle.ipc_client.send_request.side_effect = RuntimeError("IPC connection lost")
+        handle.ipc_client.send_request.side_effect = IPCConnectionError("IPC connection lost")
 
-        with pytest.raises(RuntimeError, match="IPC connection lost"):
+        with pytest.raises(IPCConnectionError, match="IPC connection lost"):
             await handle.send_request("ping", {}, timeout=5.0)
 
         assert handle.state == ProcessState.FAILED
@@ -75,16 +76,16 @@ class TestSendRequestStreamIPCGrace:
         self,
         handle: ProcessHandle,
     ):
-        """RuntimeError when process alive must NOT set FAILED."""
+        """IPCConnectionError when process alive must NOT set FAILED."""
 
         async def failing_stream(*args, **kwargs):
             yield IPCResponse(id="req_1", stream=True, chunk="{}")
-            raise RuntimeError("IPC stream broken")
+            raise IPCConnectionError("IPC stream broken")
 
         handle.ipc_client.send_request_stream = failing_stream
 
         chunks = []
-        with pytest.raises(RuntimeError, match="IPC stream broken"):
+        with pytest.raises(IPCConnectionError, match="IPC stream broken"):
             async for resp in handle.send_request_stream("chat", {"stream": True}):
                 chunks.append(resp)
 
@@ -95,17 +96,17 @@ class TestSendRequestStreamIPCGrace:
         self,
         handle: ProcessHandle,
     ):
-        """RuntimeError when process dead must set FAILED."""
+        """IPCConnectionError when process dead must set FAILED."""
         handle.process.poll.return_value = 1
         handle.process.returncode = 1
 
         async def failing_stream(*args, **kwargs):
             yield IPCResponse(id="req_1", stream=True, chunk="{}")
-            raise RuntimeError("IPC stream broken")
+            raise IPCConnectionError("IPC stream broken")
 
         handle.ipc_client.send_request_stream = failing_stream
 
-        with pytest.raises(RuntimeError, match="IPC stream broken"):
+        with pytest.raises(IPCConnectionError, match="IPC stream broken"):
             async for _ in handle.send_request_stream("chat", {"stream": True}):
                 pass
 
@@ -116,21 +117,21 @@ class TestSendRequestStreamIPCGrace:
         self,
         handle: ProcessHandle,
     ):
-        """RuntimeError must always be re-raised regardless of process state."""
+        """IPCConnectionError must always be re-raised regardless of process state."""
 
         async def failing_stream(*args, **kwargs):
             yield IPCResponse(id="req_1", stream=True, chunk="{}")
-            raise RuntimeError("IPC stream broken")
+            raise IPCConnectionError("IPC stream broken")
 
         handle.ipc_client.send_request_stream = failing_stream
 
-        with pytest.raises(RuntimeError):
+        with pytest.raises(IPCConnectionError):
             async for _ in handle.send_request_stream("chat", {"stream": True}):
                 pass
 
         handle.process.poll.return_value = 1
         handle.process.returncode = 1
 
-        with pytest.raises(RuntimeError):
+        with pytest.raises(IPCConnectionError):
             async for _ in handle.send_request_stream("chat", {"stream": True}):
                 pass

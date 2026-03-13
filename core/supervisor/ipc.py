@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core.exceptions import IPCConnectionError as IPCConnectionErr  # noqa: F401
+from core.exceptions import IPCConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -309,7 +309,7 @@ class IPCClient:
                     limit=IPC_BUFFER_LIMIT,
                 )
             except (ConnectionRefusedError, FileNotFoundError, OSError) as e:
-                raise RuntimeError(f"Not connected: {e}") from e
+                raise IPCConnectionError(f"Not connected: {e}") from e
 
             try:
                 writer.write(request_line.encode("utf-8"))
@@ -318,7 +318,7 @@ class IPCClient:
 
                 response_line_bytes = await reader.readline()
                 if not response_line_bytes:
-                    raise RuntimeError("Connection closed")
+                    raise IPCConnectionError("Connection closed")
 
                 response_line = response_line_bytes.decode("utf-8").strip()
                 response = IPCResponse.from_json(response_line)
@@ -332,7 +332,7 @@ class IPCClient:
                         request.id,
                         response.id,
                     )
-                    raise RuntimeError(
+                    raise IPCConnectionError(
                         f"IPC protocol error: response ID mismatch (expected={request.id}, got={response.id})"
                     )
 
@@ -393,7 +393,7 @@ class IPCClient:
                 limit=IPC_BUFFER_LIMIT,
             )
         except (ConnectionRefusedError, FileNotFoundError, OSError) as e:
-            raise RuntimeError(f"Not connected: {e}") from e
+            raise IPCConnectionError(f"Not connected: {e}") from e
 
         try:
             # Send request
@@ -439,7 +439,7 @@ class IPCClient:
                         chunk_count,
                         elapsed,
                     )
-                    raise RuntimeError("Connection closed during stream")
+                    raise IPCConnectionError("Connection closed during stream")
 
                 response_line = response_line_bytes.decode("utf-8").strip()
                 if not response_line:
@@ -459,7 +459,7 @@ class IPCClient:
                         chunk_count,
                         elapsed,
                     )
-                    raise RuntimeError(
+                    raise IPCConnectionError(
                         f"IPC protocol error: response ID mismatch (expected={request.id}, got={response.id})"
                     )
 

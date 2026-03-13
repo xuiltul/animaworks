@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.exceptions import AnimaNotRunningError
 from core.schemas import ModelConfig
 
 
@@ -169,7 +170,7 @@ class TestIPCReloadHandler:
         runner.anima = None
 
         handler = AnimaRunner._handle_reload_config.__get__(runner)
-        with pytest.raises(RuntimeError, match="Anima not initialized"):
+        with pytest.raises(AnimaNotRunningError, match="Anima not initialized"):
             await handler({})
 
 

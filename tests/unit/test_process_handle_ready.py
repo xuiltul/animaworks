@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.exceptions import ProcessError
 from core.supervisor.ipc import IPCResponse
 from core.supervisor.process_handle import ProcessHandle
 
@@ -101,7 +102,7 @@ class TestWaitForReady:
         mock_client = AsyncMock()
         handle.ipc_client = mock_client
 
-        with pytest.raises(RuntimeError, match="exited with code 1"):
+        with pytest.raises(ProcessError, match="exited with code 1"):
             await handle._wait_for_ready(timeout=5.0)
 
 
@@ -115,7 +116,7 @@ class TestWaitForSocketEarlyExit:
         handle.process.poll.return_value = 1
         handle.process.returncode = 1
 
-        with pytest.raises(RuntimeError, match="exited with code 1"):
+        with pytest.raises(ProcessError, match="exited with code 1"):
             await handle._wait_for_socket(timeout=5.0)
 
     @pytest.mark.asyncio

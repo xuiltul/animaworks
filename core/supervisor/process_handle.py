@@ -22,7 +22,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from core.exceptions import IPCConnectionError as IPCConnectionErr  # noqa: F401
+from core.exceptions import AnimaNotRunningError, IPCConnectionError, ProcessError
 from core.supervisor.ipc import IPCClient, IPCRequest, IPCResponse
 from core.time_utils import ensure_aware, now_local
 
@@ -103,7 +103,7 @@ class ProcessHandle:
         Spawns the subprocess and waits for socket connection.
         """
         if self.state not in (ProcessState.STOPPED, ProcessState.FAILED):
-            raise RuntimeError(f"Cannot start process in state {self.state}")
+            raise ProcessError(f"Cannot start process in state {self.state}")
 
         self.state = ProcessState.STARTING
         self.stats = ProcessStats(started_at=now_local())
@@ -199,7 +199,7 @@ class ProcessHandle:
                 return
             # Check if the subprocess exited early (crash before socket)
             if self.process and self.process.poll() is not None:
-                raise RuntimeError(
+                raise ProcessError(
                     f"Process '{self.anima_name}' exited with code {self.process.returncode} before creating socket"
                 )
             await asyncio.sleep(0.1)
@@ -219,14 +219,14 @@ class ProcessHandle:
         while loop.time() < deadline:
             # Check if the subprocess exited unexpectedly
             if self.process and self.process.poll() is not None:
-                raise RuntimeError(
+                raise ProcessError(
                     f"Process '{self.anima_name}' exited with code {self.process.returncode} during initialization"
                 )
 
             try:
                 request = IPCRequest(id=f"ping_{uuid.uuid4().hex[:8]}", method="ping", params={})
                 if not self.ipc_client:
-                    raise RuntimeError(f"IPC client not initialized for {self.anima_name}")
+                    raise IPCConnectionError(f"IPC client not initialized for {self.anima_name}")
                 response = await self.ipc_client.send_request(request, timeout=5.0)
                 if response.result and response.result.get("status") == "ok":
                     logger.info(
@@ -265,18 +265,18 @@ class ProcessHandle:
             asyncio.TimeoutError: If timeout exceeded
         """
         if self.state == ProcessState.RESTARTING:
-            raise RuntimeError(f"Process restarting: {self.anima_name}")
+            raise ProcessError(f"Process restarting: {self.anima_name}")
         if self.state != ProcessState.RUNNING:
-            raise RuntimeError(f"Process not running: {self.state}")
+            raise AnimaNotRunningError(f"Process not running: {self.state}")
 
         if not self.ipc_client:
-            raise RuntimeError("IPC client not connected")
+            raise IPCConnectionError("IPC client not connected")
 
         request = IPCRequest(id=f"req_{uuid.uuid4().hex[:8]}", method=method, params=params)
 
         try:
             return await self.ipc_client.send_request(request, timeout=timeout)
-        except RuntimeError:
+        except IPCConnectionError:
             if self.process and self.process.poll() is not None:
                 self.state = ProcessState.FAILED
             raise
@@ -304,12 +304,12 @@ class ProcessHandle:
             asyncio.TimeoutError: If timeout exceeded
         """
         if self.state == ProcessState.RESTARTING:
-            raise RuntimeError(f"Process restarting: {self.anima_name}")
+            raise ProcessError(f"Process restarting: {self.anima_name}")
         if self.state != ProcessState.RUNNING:
-            raise RuntimeError(f"Process not running: {self.state}")
+            raise AnimaNotRunningError(f"Process not running: {self.state}")
 
         if not self.ipc_client:
-            raise RuntimeError("IPC client not connected")
+            raise IPCConnectionError("IPC client not connected")
 
         request = IPCRequest(id=f"req_{uuid.uuid4().hex[:8]}", method=method, params=params)
 
@@ -329,7 +329,7 @@ class ProcessHandle:
             async for response in self.ipc_client.send_request_stream(request, timeout=timeout):
                 chunk_count += 1
                 yield response
-        except RuntimeError as e:
+        except IPCConnectionError as e:
             if self.process and self.process.poll() is not None:
                 self.state = ProcessState.FAILED
                 logger.error(

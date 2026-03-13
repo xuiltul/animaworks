@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.exceptions import ToolExecutionError
 from core.i18n import t
 
 if TYPE_CHECKING:
@@ -843,7 +844,7 @@ class PendingTaskExecutor:
             )
             if result.returncode != 0:
                 error_msg = result.stderr.strip() or f"Exit code {result.returncode}"
-                raise RuntimeError(f"Tool {name} failed: {error_msg}")
+                raise ToolExecutionError(f"Tool {name} failed: {error_msg}")
             return result.stdout.strip()
 
         # Submit to BackgroundTaskManager

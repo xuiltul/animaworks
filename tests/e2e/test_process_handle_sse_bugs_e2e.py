@@ -20,6 +20,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.exceptions import IPCConnectionError
 from core.supervisor.ipc import IPCClient, IPCRequest, IPCResponse, IPCServer
 from core.supervisor.process_handle import ProcessHandle, ProcessState
 
@@ -225,7 +226,7 @@ async def test_ipc_stream_connection_close_raises_runtime_error_e2e():
 
             kill_task = asyncio.create_task(kill_connection_after_chunk())
 
-            with pytest.raises(RuntimeError, match="Connection closed"):
+            with pytest.raises(IPCConnectionError, match="Connection closed"):
                 async for response in client.send_request_stream(
                     request, timeout=5.0
                 ):
