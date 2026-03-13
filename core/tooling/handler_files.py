@@ -7,6 +7,7 @@ from __future__ import annotations
 """FileToolsMixin — file read/write/edit, command execution, search, directory listing, web fetch."""
 
 import logging
+import re
 import shlex
 import subprocess
 import threading
@@ -27,6 +28,67 @@ from core.tooling.handler_base import (
 )
 
 logger = logging.getLogger("animaworks.tool_handler")
+
+# ── CJK-Latin fuzzy edit helpers ──────────────────────────
+
+_CJK_CODEPOINT_RANGES = (
+    (0x3000, 0x303F),  # CJK Symbols and Punctuation
+    (0x3040, 0x309F),  # Hiragana
+    (0x30A0, 0x30FF),  # Katakana
+    (0x4E00, 0x9FFF),  # CJK Unified Ideographs
+    (0x3400, 0x4DBF),  # CJK Extension A
+    (0xF900, 0xFAFF),  # CJK Compatibility Ideographs
+    (0xFF00, 0xFFEF),  # Fullwidth Forms
+)
+
+
+def _is_cjk(ch: str) -> bool:
+    """Return True if *ch* is a CJK character (Kanji, Kana, CJK punctuation, fullwidth)."""
+    cp = ord(ch)
+    return any(lo <= cp <= hi for lo, hi in _CJK_CODEPOINT_RANGES)
+
+
+def _is_latin_or_digit(ch: str) -> bool:
+    """Return True if *ch* is an ASCII letter, digit, or common programming symbol."""
+    return ch.isascii() and (ch.isalpha() or ch.isdigit() or ch in "-_")
+
+
+def _build_fuzzy_cjk_latin_pattern(old: str) -> re.Pattern[str] | None:
+    r"""Build regex allowing optional whitespace at CJK\u2194Latin boundaries.
+
+    Returns None when *old* contains no CJK-Latin boundary (fuzzy not applicable).
+    """
+    if not old:
+        return None
+
+    parts: list[str] = []
+    any_fuzzy = False
+    i = 0
+
+    while i < len(old):
+        ch = old[i]
+
+        if ch == " " and i > 0 and i + 1 < len(old):
+            prev = old[i - 1]
+            nxt = old[i + 1]
+            if (_is_cjk(prev) and _is_latin_or_digit(nxt)) or (_is_latin_or_digit(prev) and _is_cjk(nxt)):
+                parts.append(r"\s?")
+                any_fuzzy = True
+                i += 1
+                continue
+
+        if i > 0 and old[i - 1] != " ":
+            prev = old[i - 1]
+            if (_is_cjk(prev) and _is_latin_or_digit(ch)) or (_is_latin_or_digit(prev) and _is_cjk(ch)):
+                parts.append(r"\s?")
+                any_fuzzy = True
+
+        parts.append(re.escape(ch))
+        i += 1
+
+    if not any_fuzzy:
+        return None
+    return re.compile("".join(parts))
 
 
 class FileToolsMixin:
@@ -249,11 +311,33 @@ class FileToolsMixin:
                 old = args.get("old_string", "")
                 new = args.get("new_string", "")
                 if old not in content:
-                    return _error_result(
-                        "StringNotFound",
-                        f"old_string not found in {path_str}",
-                        suggestion="Use search_code to find the exact string",
-                    )
+                    fuzzy = _build_fuzzy_cjk_latin_pattern(old)
+                    if fuzzy is None:
+                        return _error_result(
+                            "StringNotFound",
+                            f"old_string not found in {path_str}",
+                            suggestion="Use search_code to find the exact string",
+                        )
+                    matches = list(fuzzy.finditer(content))
+                    if not matches:
+                        return _error_result(
+                            "StringNotFound",
+                            f"old_string not found in {path_str}",
+                            suggestion="Use search_code to find the exact string",
+                        )
+                    if len(matches) > 1:
+                        return _error_result(
+                            "AmbiguousMatch",
+                            f"old_string matches {len(matches)} locations (fuzzy CJK-Latin spacing)",
+                            context={"match_count": len(matches)},
+                            suggestion="Provide more surrounding context to make it unique",
+                        )
+                    matched_original = matches[0].group()
+                    content = content.replace(matched_original, new, 1)
+                    path.write_text(content, encoding="utf-8")
+                    logger.info("edit_file path=%s (fuzzy CJK-Latin match)", path_str)
+                    return f"Edited {path_str}"
+
                 count = content.count(old)
                 if count > 1:
                     return _error_result(
