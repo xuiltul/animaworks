@@ -131,13 +131,13 @@ class TestBuildEnv:
 
 class TestBuildInstruction:
     def test_adds_workspace_constraint(self):
-        result = _build_instruction("Do something", "/tmp/work", "claude")
+        result = _build_instruction("Do something", "/tmp/work")
         assert "WORKSPACE CONSTRAINT" in result
         assert "/tmp/work" in result
         assert "Do something" in result
 
     def test_warns_about_animaworks(self):
-        result = _build_instruction("test", "/tmp/work", "claude")
+        result = _build_instruction("test", "/tmp/work")
         assert "~/.animaworks/" in result
 
 
@@ -217,6 +217,13 @@ class TestValidateWorkingDirectory:
         anima_dir = tmp_path / "animas" / "test"
         anima_dir.mkdir(parents=True)
         wd = str(anima_dir / "knowledge")
+        result = _validate_working_directory(wd, str(anima_dir))
+        assert result is not None
+
+    def test_blocks_state_directory(self, tmp_path):
+        anima_dir = tmp_path / "animas" / "test"
+        anima_dir.mkdir(parents=True)
+        wd = str(anima_dir / "state")
         result = _validate_working_directory(wd, str(anima_dir))
         assert result is not None
 
@@ -520,6 +527,89 @@ class TestDispatch:
                 call_kwargs = mock_popen.call_args
                 cwd = call_kwargs.kwargs.get("cwd") or call_kwargs[1].get("cwd")
                 assert cwd == str(tmp_path)
+
+
+# ── Auto-Discovery Test ───────────────────────────────────
+
+
+# ── Output Truncation Tests ───────────────────────────────
+
+
+class TestOutputTruncation:
+    def setup_method(self):
+        reset_call_counts()
+
+    def test_large_output_truncated(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        large_output = "x" * 60_000
+        with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
+            mock_proc = MagicMock()
+            mock_proc.communicate.return_value = (large_output, "")
+            mock_proc.returncode = 0
+            mock_proc.pid = 99999
+            with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
+                result = json.loads(
+                    dispatch(
+                        "machine_run",
+                        {
+                            "engine": "claude",
+                            "instruction": "generate large output",
+                            "working_directory": str(wd),
+                            "anima_dir": "/tmp/anima",
+                        },
+                    )
+                )
+                assert result["success"] is True
+                assert "truncated" in result["output"]
+                assert len(result["output"]) < 60_000
+
+
+# ── CLI Tests ─────────────────────────────────────────────
+
+
+class TestCliMain:
+    def test_no_subcommand_prints_help(self, capsys):
+        from core.tools.machine import cli_main
+
+        cli_main([])
+        captured = capsys.readouterr()
+        assert "machine tool" in captured.out.lower() or "usage" in captured.out.lower()
+
+    def test_run_success_text_output(self, tmp_path, capsys):
+        from core.tools.machine import cli_main
+
+        with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
+            mock_proc = MagicMock()
+            mock_proc.communicate.return_value = ("Hello from CLI", "")
+            mock_proc.returncode = 0
+            mock_proc.pid = 99999
+            with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
+                cli_main(["run", "test instruction", "-d", str(tmp_path)])
+                captured = capsys.readouterr()
+                assert "Hello from CLI" in captured.out
+
+    def test_run_success_json_output(self, tmp_path, capsys):
+        from core.tools.machine import cli_main
+
+        with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
+            mock_proc = MagicMock()
+            mock_proc.communicate.return_value = ("JSON result", "")
+            mock_proc.returncode = 0
+            mock_proc.pid = 99999
+            with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
+                cli_main(["run", "test", "-d", str(tmp_path), "-j"])
+                captured = capsys.readouterr()
+                data = json.loads(captured.out)
+                assert data["success"] is True
+                assert data["output"] == "JSON result"
+
+    def test_run_failure_exits(self, tmp_path):
+        from core.tools.machine import cli_main
+
+        with patch("core.tools.machine.shutil.which", return_value=None):
+            with pytest.raises(SystemExit):
+                cli_main(["run", "test", "-d", str(tmp_path)])
 
 
 # ── Auto-Discovery Test ───────────────────────────────────

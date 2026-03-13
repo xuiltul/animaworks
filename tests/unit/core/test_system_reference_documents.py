@@ -825,6 +825,7 @@ _TEMPLATES_CK_DIR = Path(__file__).resolve().parent.parent.parent.parent / "temp
 # All expected markdown files in templates/ja/common_knowledge
 _EXPECTED_FILES = [
     "00_index.md",
+    "anatomy/machine-tool-philosophy.md",
     "anatomy/memory-system.md",
     "anatomy/task-architecture.md",
     "anatomy/what-is-anima.md",

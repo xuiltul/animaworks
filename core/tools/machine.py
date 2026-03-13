@@ -207,7 +207,7 @@ def _build_env(engine: str) -> dict[str, str]:
 # ── Instruction Prefix ─────────────────────────────────────
 
 
-def _build_instruction(instruction: str, working_directory: str, engine: str) -> str:
+def _build_instruction(instruction: str, working_directory: str) -> str:
     """Prepend workspace scope constraint to the user instruction."""
     prefix = (
         f"WORKSPACE CONSTRAINT: You MUST only modify files within {working_directory}. "
@@ -274,7 +274,7 @@ def _execute(
             error=t("machine.working_directory_not_found", path=working_directory),
         )
 
-    full_instruction = _build_instruction(instruction, working_directory, engine)
+    full_instruction = _build_instruction(instruction, working_directory)
     cmd = _build_command(engine, working_directory, model)
     env = _build_env(engine)
 
@@ -366,7 +366,7 @@ def _validate_working_directory(working_directory: str, anima_dir: str | None) -
         return None
     wd = Path(working_directory).resolve()
     ad = Path(anima_dir).resolve()
-    protected = ["memory", "episodes", "knowledge", "procedures", "shortterm", "activity_log"]
+    protected = ["memory", "episodes", "knowledge", "procedures", "shortterm", "activity_log", "state"]
     for dirname in protected:
         forbidden = ad / dirname
         if wd == forbidden or forbidden in wd.parents or wd in forbidden.parents:

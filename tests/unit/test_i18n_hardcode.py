@@ -103,6 +103,8 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/tools/_image_schemas.py": 1,
     "core/tools/aws_collector.py": 1,
     "core/tools/github.py": 1,
+    # tool schema descriptions (工作機械, 作業ディレクトリ, etc.) — LLM-facing
+    "core/tools/machine.py": 7,
     "core/tools/slack.py": 1,
     # mock task data with Japanese titles
     "server/routes/external_tasks.py": 8,
