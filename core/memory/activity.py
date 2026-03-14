@@ -100,7 +100,6 @@ class ActivityLogger(
 
     _LIVE_EVENT_TYPES = frozenset(
         {
-            "tool_use",
             "inbox_processing_start",
             "inbox_processing_end",
             "message_sent",
@@ -108,6 +107,19 @@ class ActivityLogger(
             "channel_post",
             "task_created",
             "task_updated",
+        }
+    )
+
+    # Keep in sync with org-dashboard.js VISIBLE_TOOL_NAMES
+    _VISIBLE_TOOL_NAMES = frozenset(
+        {
+            "delegate_task",
+            "update_task",
+            "backlog_task",
+            "submit_tasks",
+            "call_human",
+            "post_channel",
+            "send_message",
         }
     )
 
@@ -172,6 +184,8 @@ class ActivityLogger(
         )
         self._append(entry, safe=safe)
         if event_type in self._LIVE_EVENT_TYPES:
+            self._emit_live_event(entry)
+        elif event_type == "tool_use" and entry.tool in self._VISIBLE_TOOL_NAMES:
             self._emit_live_event(entry)
         return entry
 

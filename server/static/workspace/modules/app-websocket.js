@@ -13,7 +13,7 @@ import { showMessageEffect } from "./interactions.js";
 import { addTimelineEvent, localISOString } from "./timeline.js";
 import { addActivity } from "./activity.js";
 import { getSelectedBoard, appendBoardMessage } from "./board.js";
-import { updateAnimaStatus, updateCardActivity, showMessageLine, showExternalLine, updateAvatarExpression, isReplayMode, bufferReplayEvent } from "./org-dashboard.js";
+import { updateAnimaStatus, updateCardActivity, showMessageLine, showExternalLine, updateAvatarExpression, isReplayMode, bufferReplayEvent, VISIBLE_TOOL_NAMES } from "./org-dashboard.js";
 import { playReveal } from "./reveal.js";
 import { createLogger } from "../../shared/logger.js";
 import { bustupCandidates, resolveAvatar, invalidateAvatarCache } from "../../modules/avatar-resolver.js";
@@ -170,22 +170,25 @@ export function setupWebSocket(deps) {
     } else if (evtType) {
       addActivity("tool", data.name, `${data.summary || evtType}`);
     }
-    const _cardUpdatePayload = {
-      eventType: evtType,
-      toolName,
-      toolId: data.tool_id,
-      isError: data.is_error,
-      detail: data.detail,
-      summary: data.summary || "",
-      content: data.content || "",
-      from_person: data.from_person || "",
-      to_person: data.to_person || "",
-      channel: data.channel || "",
-    };
-    if (isReplayMode()) {
-      bufferReplayEvent((d) => updateCardActivity(d.name, d.payload), { name: data.name, payload: _cardUpdatePayload });
-    } else {
-      updateCardActivity(data.name, _cardUpdatePayload);
+    const isStreamingTool = evtType === "tool_start" || evtType === "tool_end" || evtType === "tool_detail";
+    if (!isStreamingTool || VISIBLE_TOOL_NAMES.has(toolName)) {
+      const _cardUpdatePayload = {
+        eventType: evtType,
+        toolName,
+        toolId: data.tool_id,
+        isError: data.is_error,
+        detail: data.detail,
+        summary: data.summary || "",
+        content: data.content || "",
+        from_person: data.from_person || "",
+        to_person: data.to_person || "",
+        channel: data.channel || "",
+      };
+      if (isReplayMode()) {
+        bufferReplayEvent((d) => updateCardActivity(d.name, d.payload), { name: data.name, payload: _cardUpdatePayload });
+      } else {
+        updateCardActivity(data.name, _cardUpdatePayload);
+      }
     }
     if (evtType === "message_sent" && data.to_person) {
       if (getCurrentView() === "org") {

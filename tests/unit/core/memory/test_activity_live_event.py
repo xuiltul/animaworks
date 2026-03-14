@@ -20,9 +20,9 @@ def activity_logger(tmp_path: Path) -> ActivityLogger:
 
 class TestEmitLiveEvent:
 
-    def test_tool_use_emits_event_file(self, activity_logger: ActivityLogger, tmp_path: Path):
+    def test_visible_tool_use_emits_event_file(self, activity_logger: ActivityLogger, tmp_path: Path):
         with patch("core.memory.activity.get_data_dir", return_value=tmp_path):
-            activity_logger.log("tool_use", tool="Read", summary="/foo/bar.py")
+            activity_logger.log("tool_use", tool="delegate_task", summary="task delegation")
 
         event_dir = tmp_path / "run" / "events" / "testanima"
         files = list(event_dir.glob("ta_*.json"))
@@ -32,8 +32,14 @@ class TestEmitLiveEvent:
         assert data["event"] == "anima.tool_activity"
         assert data["data"]["name"] == "testanima"
         assert data["data"]["type"] == "tool_use"
-        assert data["data"]["tool"] == "Read"
-        assert data["data"]["summary"] == "/foo/bar.py"
+        assert data["data"]["tool"] == "delegate_task"
+
+    def test_non_visible_tool_use_does_not_emit(self, activity_logger: ActivityLogger, tmp_path: Path):
+        with patch("core.memory.activity.get_data_dir", return_value=tmp_path):
+            activity_logger.log("tool_use", tool="Read", summary="/foo/bar.py")
+
+        event_dir = tmp_path / "run" / "events" / "testanima"
+        assert not event_dir.exists() or len(list(event_dir.glob("ta_*.json"))) == 0
 
     def test_inbox_processing_start_emits(self, activity_logger: ActivityLogger, tmp_path: Path):
         with patch("core.memory.activity.get_data_dir", return_value=tmp_path):

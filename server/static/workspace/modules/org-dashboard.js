@@ -78,6 +78,32 @@ const _EXTERNAL_CHANNELS = [
   { id: "ext_web", name: "Web", icon: "🌐", color: "#4285F4" },
 ];
 
+// ── Card Stream Visibility Filter ──────────────────────
+const _CARD_VISIBLE_TYPES = new Set([
+  "heartbeat_start", "heartbeat_end",
+  "cron_executed",
+  "message_sent", "message_received",
+  "response_sent",
+  "channel_post",
+  "task_created", "task_updated", "issue_resolved",
+  "inbox_processing_start", "inbox_processing_end",
+  "human_notify",
+]);
+
+// Keep in sync with core/memory/activity.py _VISIBLE_TOOL_NAMES
+export const VISIBLE_TOOL_NAMES = new Set([
+  "delegate_task", "update_task", "backlog_task",
+  "submit_tasks", "call_human",
+  "post_channel", "send_message",
+]);
+
+function _isCardVisible(ev) {
+  const type = ev.type || ev.name || "";
+  if (_CARD_VISIBLE_TYPES.has(type)) return true;
+  if (type === "tool_use" && VISIBLE_TOOL_NAMES.has(ev.tool)) return true;
+  return false;
+}
+
 // ── Avatar Variant State ──────────────────────
 const MESSAGE_LINE_DURATION = 2000;
 const MESSAGE_LINE_FADE = 500;
@@ -761,7 +787,7 @@ async function _loadInitialStreams(animas) {
   for (const r of flatResults) {
     if (r.status !== "fulfilled" || !r.value) continue;
     const { name, events } = r.value;
-    const entries = events.slice(0, MAX_STREAM_ENTRIES).reverse().map(ev => ({
+    const entries = events.filter(_isCardVisible).slice(0, MAX_STREAM_ENTRIES).reverse().map(ev => ({
       id: ev.id || String(Date.now() + Math.random()),
       type: _mapEventType(ev.type || ev.name),
       text: _summarizeEvent(ev),
@@ -839,7 +865,7 @@ function _mapEventType(type) {
 function _summarizeEvent(ev) {
   if (ev.summary) return ev.summary.slice(0, 80);
   const type = ev.type || ev.name || "";
-  if (type.includes("tool_use")) return ev.tool || ev.tool_name || type;
+  if (type.includes("tool_use")) return `⚙ ${ev.tool || ev.tool_name || type}`;
   if (type.includes("heartbeat")) return "heartbeat";
   if (type.includes("cron")) return ev.task || "cron";
   if (type.includes("message")) return ev.intent ? `${type} (${ev.intent})` : type;
@@ -1055,6 +1081,7 @@ export function updateCardActivity(name, data) {
       ts: Date.now(),
     });
   } else if (eventType === "tool_start") {
+    if (!VISIBLE_TOOL_NAMES.has(toolName)) return;
     for (const e of entries) {
       if (e.type === "tool" && e.status === "running") e.status = "done";
     }
@@ -1066,6 +1093,7 @@ export function updateCardActivity(name, data) {
       ts: Date.now(),
     });
   } else if (eventType === "tool_end" || eventType === "tool_use") {
+    if (!VISIBLE_TOOL_NAMES.has(toolName)) return;
     const existing = toolId
       ? entries.find(e => e.id === toolId)
       : [...entries].reverse().find(e => e.type === "tool" && e.status === "running");
@@ -1073,6 +1101,7 @@ export function updateCardActivity(name, data) {
       existing.status = isError ? "error" : "done";
     }
   } else if (eventType === "tool_detail") {
+    if (!VISIBLE_TOOL_NAMES.has(toolName)) return;
     const existing = toolId
       ? entries.find(e => e.id === toolId && e.status === "running")
       : [...entries].reverse().find(e => e.type === "tool" && e.status === "running");
