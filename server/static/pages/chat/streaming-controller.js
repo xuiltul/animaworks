@@ -31,16 +31,11 @@ export function createStreamingController(ctx) {
 
   // ── Context Ring Indicator ──────────────────────────────
   const RING_CIRCUMFERENCE = 97.4; // 2 * PI * 15.5
+  const _contextStateByAnima = {};
 
-  function updateContextRing(data) {
-    const ring = $("chatContextRing");
-    if (!ring) return;
-    const ratio = data.contextUsageRatio || 0;
-    const inputTokens = data.inputTokens || 0;
-    const contextWindow = data.contextWindow || 0;
+  function _applyRing(ring, ratio, inputTokens, contextWindow) {
     const fg = ring.querySelector(".context-ring-fg");
     if (!fg) return;
-
     const offset = RING_CIRCUMFERENCE * (1 - Math.min(ratio, 1));
     fg.style.strokeDashoffset = offset;
 
@@ -53,7 +48,34 @@ export function createStreamingController(ctx) {
     const inK = inputTokens >= 1000 ? `${(inputTokens / 1000).toFixed(0)}k` : String(inputTokens);
     const winK = contextWindow >= 1000 ? `${(contextWindow / 1000).toFixed(0)}k` : String(contextWindow);
     ring.title = contextWindow ? `${pct}%  ${inK} / ${winK}` : `${pct}%`;
-    ring.setAttribute("data-ratio", ratio);
+  }
+
+  function updateContextRing(data, animaName) {
+    const ratio = data.contextUsageRatio || 0;
+    const inputTokens = data.inputTokens || 0;
+    const contextWindow = data.contextWindow || 0;
+
+    const target = animaName || state.selectedAnima;
+    if (target) _contextStateByAnima[target] = { ratio, inputTokens, contextWindow };
+
+    if (!target || target === state.selectedAnima) {
+      const ring = $("chatContextRing");
+      if (ring) _applyRing(ring, ratio, inputTokens, contextWindow);
+    }
+  }
+
+  function restoreContextRing(animaName) {
+    const ring = $("chatContextRing");
+    if (!ring) return;
+    const saved = animaName ? _contextStateByAnima[animaName] : null;
+    if (saved) {
+      _applyRing(ring, saved.ratio, saved.inputTokens, saved.contextWindow);
+    } else {
+      const fg = ring.querySelector(".context-ring-fg");
+      if (fg) fg.style.strokeDashoffset = RING_CIRCUMFERENCE;
+      ring.className = "context-ring-wrap";
+      ring.title = "";
+    }
   }
 
   function updateSendButton() {
@@ -459,7 +481,7 @@ export function createStreamingController(ctx) {
           streamingMsg.thinking = false;
           renderBubble(streamingMsg, "thinking");
         },
-        onContextUpdate: (ctxData) => { updateContextRing(ctxData); },
+        onContextUpdate: (ctxData) => { updateContextRing(ctxData, name); },
         onError: ({ message: errorMsg }) => {
           logger.debug(`onError: ${errorMsg}`);
           if (!streamingMsg?.text) {
@@ -496,7 +518,7 @@ export function createStreamingController(ctx) {
           streamingMsg.activeTool = null;
           streamingMsg.heartbeatRelay = false; streamingMsg.heartbeatText = ""; streamingMsg.afterHeartbeatRelay = false;
           if (contextUsageRatio || contextWindow) {
-            updateContextRing({ contextUsageRatio, inputTokens, contextWindow, threshold: contextThreshold });
+            updateContextRing({ contextUsageRatio, inputTokens, contextWindow, threshold: contextThreshold }, name);
           }
           renderFull();
           ctx.controllers.activity.addLocalActivity("chat", name, `${t("chat.response_prefix")} ${streamingMsg.text.slice(0, 100)}`);
@@ -651,7 +673,7 @@ export function createStreamingController(ctx) {
           if (_resumeThinkingAnimator) { _resumeThinkingAnimator.flush(); _resumeThinkingAnimator = null; }
           if (streamingMsg) { streamingMsg.text += `\n${t("chat.error_prefix")} ${errorMsg}`; delete streamingMsg._displayText; delete streamingMsg._displayThinkingText; streamingMsg.streaming = false; if (state.selectedAnima === animaName) ctx.controllers.renderer.renderChat(smartScroll()); }
         },
-        onContextUpdate: (ctxData) => { updateContextRing(ctxData); },
+        onContextUpdate: (ctxData) => { updateContextRing(ctxData, animaName); },
         onDone: ({ summary, images, thinkingSummary, contextUsageRatio, inputTokens, contextWindow, contextThreshold }) => {
           if (_resumeAnimator) _resumeAnimator.flush();
           if (_resumeThinkingAnimator) { _resumeThinkingAnimator.flush(); _resumeThinkingAnimator = null; }
@@ -665,7 +687,7 @@ export function createStreamingController(ctx) {
             }
             streamingMsg.streaming = false; streamingMsg.activeTool = null;
             if (contextUsageRatio || contextWindow) {
-              updateContextRing({ contextUsageRatio, inputTokens, contextWindow, threshold: contextThreshold });
+              updateContextRing({ contextUsageRatio, inputTokens, contextWindow, threshold: contextThreshold }, animaName);
             }
             if (state.selectedAnima === animaName) ctx.controllers.renderer.renderChat(smartScroll());
             ctx.controllers.renderer.markResponseComplete(animaName, tid);
@@ -709,6 +731,6 @@ export function createStreamingController(ctx) {
     submitChat, sendChat, resumeActiveStream,
     stopStreaming, addToQueue,
     showPendingIndicator, hidePendingIndicator,
-    updateSendButton, updateContextRing,
+    updateSendButton, updateContextRing, restoreContextRing,
   };
 }

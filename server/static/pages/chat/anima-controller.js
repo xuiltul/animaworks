@@ -212,6 +212,7 @@ export function createAnimaController(ctx) {
     }
     ctx.controllers.streaming.showPendingIndicator();
     ctx.controllers.streaming.updateSendButton();
+    ctx.controllers.streaming.restoreContextRing(name);
 
     const tid = state.selectedThreadId;
 
