@@ -15,7 +15,6 @@ from contextlib import contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 # ── litellm mocks ─────────────────────────────────────────
 
 
@@ -146,8 +145,9 @@ class MockResultMessage:
 class MockStreamEvent:
     """Mock for ``claude_agent_sdk.types.StreamEvent``."""
 
-    def __init__(self, event: dict[str, Any]) -> None:
+    def __init__(self, event: dict[str, Any], *, session_id: str = "mock-session-id") -> None:
         self.event = event
+        self.session_id = session_id
 
 
 class MockToolResultBlock:

@@ -50,6 +50,12 @@ RESUME_TIMEOUT_SEC = 15.0
 # free, the PreToolUse hook triggers session termination for auto-compact.
 _CONTEXT_AUTOCOMPACT_SAFETY = 2
 
+# Timeout for client.interrupt() during graceful session interruption.
+# The SDK default is 60s; we use a shorter timeout to avoid blocking the
+# user's next message.  On timeout, the StreamEvent fallback captures the
+# session_id so the session can still be resumed.
+INTERRUPT_TIMEOUT_SEC: float = 5.0
+
 
 # ── Debug helpers ────────────────────────────────────────────
 
