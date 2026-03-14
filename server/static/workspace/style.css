@@ -3457,6 +3457,9 @@ html, body {
   border-color: var(--aw-color-accent, #2563eb);
   opacity: 0.92;
 }
+.org-card--snapping {
+  transition: left 60ms ease-out, top 60ms ease-out;
+}
 
 /* Card Avatar */
 .org-card-avatar {

@@ -24,7 +24,15 @@ const CARD_W = 280;
 const CARD_H = 80;
 const GAP_X = 60;
 const GAP_Y = 120;
+const GRID_SNAP = 20;
 const STORAGE_KEY = "aw-org-positions";
+
+function _snapToGrid(x, y) {
+  return {
+    x: Math.round(x / GRID_SNAP) * GRID_SNAP,
+    y: Math.round(y / GRID_SNAP) * GRID_SNAP,
+  };
+}
 
 // ── Module State ──────────────────────
 
@@ -177,7 +185,8 @@ function _computeTreeLayout(roots, viewportWidth) {
 
   function layout(measured, x, y) {
     const cx = x + measured.w / 2 - CARD_W / 2;
-    positions.set(measured.node.name, { x: cx, y });
+    const snapped = _snapToGrid(cx, y);
+    positions.set(measured.node.name, snapped);
     if (!measured.children) return;
     let childX = x;
     for (const child of measured.children) {
@@ -322,12 +331,31 @@ function _setupDrag(cardEl, name) {
     requestAnimationFrame(() => _updateConnections());
   });
 
+  const _applySnap = () => {
+    const cur = _positions.get(name);
+    if (!cur) return;
+    const snapped = _snapToGrid(cur.x, cur.y);
+    if (snapped.x === cur.x && snapped.y === cur.y) return;
+    _positions.set(name, snapped);
+    cardEl.classList.add("org-card--snapping");
+    cardEl.style.left = `${snapped.x}px`;
+    cardEl.style.top = `${snapped.y}px`;
+    requestAnimationFrame(() => _updateConnections());
+    const onEnd = () => {
+      cardEl.classList.remove("org-card--snapping");
+      cardEl.removeEventListener("transitionend", onEnd);
+    };
+    cardEl.addEventListener("transitionend", onEnd, { once: true });
+    setTimeout(onEnd, 100);
+  };
+
   cardEl.addEventListener("pointerup", () => {
     if (!dragging) return;
     dragging = false;
     if (moved) _didDrag = true;
     _draggingCard = null;
     cardEl.classList.remove("org-card--dragging");
+    _applySnap();
     _persistPositions();
   });
 
@@ -336,6 +364,7 @@ function _setupDrag(cardEl, name) {
     dragging = false;
     _draggingCard = null;
     cardEl.classList.remove("org-card--dragging");
+    _applySnap();
     _persistPositions();
   });
 }
@@ -455,6 +484,7 @@ function _resizeSvg() {
   let maxX = 0;
   let maxY = 0;
   for (const pos of _positions.values()) {
+    if (!pos) continue;
     maxX = Math.max(maxX, pos.x + cw + 40);
     maxY = Math.max(maxY, pos.y + ch + 40);
   }
