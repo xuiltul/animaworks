@@ -57,11 +57,18 @@ class ContextMixin:
             resolve_thinking_effort,
         )
 
+        _thinking = self._model_config.thinking
+        # Resolve max_tokens using only the *explicit* thinking setting so that
+        # the 16 384 floor is NOT applied when thinking is auto-inferred for
+        # openai/ vLLM models (thinking=None).  The inferred True is only used
+        # below to pass enable_thinking params to the provider.
         _eff_max = resolve_max_tokens(
             self._model_config.model,
             self._model_config.max_tokens,
-            self._model_config.thinking,
+            _thinking,
         )
+        if _thinking is None and self._model_config.model.startswith("openai/"):
+            _thinking = True
         kwargs: dict[str, Any] = {
             "model": self._model_config.model,
             "max_tokens": _eff_max,
@@ -117,6 +124,15 @@ class ContextMixin:
                 kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] = self._model_config.thinking
             else:
                 kwargs["think"] = self._model_config.thinking
+        elif self._model_config.model.startswith("openai/"):
+            # vLLM servers typically have --default-chat-template-kwargs
+            # {"enable_thinking": true} so the model thinks regardless.
+            # Default to True so max_tokens floor (16 384) applies and
+            # the framework's thinking-detection pipeline is active.
+            kwargs.setdefault("extra_body", {})
+            kwargs["extra_body"]["enable_thinking"] = True
+            kwargs["extra_body"].setdefault("chat_template_kwargs", {})
+            kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] = True
         elif self._model_config.model.startswith("ollama/"):
             kwargs["think"] = False
         # Ollama num_ctx: explicitly set context window to prevent silent truncation
