@@ -524,14 +524,7 @@ class TestLiteLLMAdaptiveThinking:
         assert kwargs["extra_body"]["enable_thinking"] is False
         assert "think" not in kwargs
 
-    def test_openai_thinking_none_disables_thinking(self, anima_dir, tool_handler, memory):
-        """thinking=None on openai/ models must explicitly disable thinking.
-
-        vLLM-served Qwen3.5 models default to thinking-enabled in their chat
-        templates.  Without explicit ``enable_thinking: false``, the model
-        produces unpredictable behavior — sometimes emitting ``<think>`` tags,
-        sometimes outputting reasoning as plain text without markers.
-        """
+    def test_openai_thinking_none_no_extra_body(self, anima_dir, tool_handler, memory):
         from core.execution.litellm_loop import LiteLLMExecutor
 
         cfg = ModelConfig(
@@ -546,8 +539,7 @@ class TestLiteLLMAdaptiveThinking:
             memory=memory,
         )
         kwargs = ex._build_llm_kwargs()
-        assert kwargs["extra_body"]["enable_thinking"] is False
-        assert kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+        assert "extra_body" not in kwargs
         assert "think" not in kwargs
 
     def test_bedrock_glm_gets_enable_thinking_true(self, anima_dir, tool_handler, memory):

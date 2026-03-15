@@ -384,11 +384,6 @@ class AssistedExecutor(BaseExecutor):
                 kwargs["think"] = self._model_config.thinking
         elif self._model_config.model.startswith("ollama/"):
             kwargs["think"] = False
-        elif self._model_config.model.startswith("openai/"):
-            kwargs.setdefault("extra_body", {})
-            kwargs["extra_body"]["enable_thinking"] = False
-            kwargs["extra_body"].setdefault("chat_template_kwargs", {})
-            kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] = False
 
         # Ollama num_ctx: explicitly set context window to prevent silent truncation
         if self._model_config.model.startswith("ollama/"):
