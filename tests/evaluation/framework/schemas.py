@@ -129,7 +129,7 @@ class GroundTruth:
     @property
     def all_relevant_files(self) -> list[Path]:
         """Get all relevant files regardless of relevance level."""
-        return [rm.file_path for rm.file_path in self.relevant_memories]
+        return [rm.file_path for rm in self.relevant_memories]
 
 
 @dataclass
