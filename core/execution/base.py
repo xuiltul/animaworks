@@ -146,6 +146,54 @@ def strip_thinking_tags(text: str) -> tuple[str, str]:
     return "", text
 
 
+_UNTAGGED_THINKING_PREFIX_RE = re.compile(
+    r"^(?:Thinking Process|思考プロセス|Let me think|考え|Let me analyze|Reasoning)",
+    re.IGNORECASE,
+)
+
+
+def strip_untagged_thinking(text: str) -> tuple[str, str]:
+    """Detect and strip an untagged thinking block from *text*.
+
+    Some vLLM-hosted models output reasoning without ``<think>``/``</think>``
+    tags, starting instead with a natural-language prefix like
+    ``"Thinking Process:"`` or ``"Let me think"``.
+
+    This helper splits the text at a paragraph boundary (triple newline
+    preferred; double newline as fallback) into ``(thinking, response)``.
+
+    Double-newline fallback is skipped when the trailing segment is more
+    than 40 % of the total length (i.e. the boundary is likely mid-content,
+    not a thinking/response separator).
+
+    Returns ``("", text)`` when no thinking pattern is detected.
+    """
+    stripped = text.lstrip()
+    if not _UNTAGGED_THINKING_PREFIX_RE.match(stripped):
+        return ("", text)
+
+    # Triple newline takes priority — unambiguous separator
+    if "\n\n\n" in text:
+        idx = text.index("\n\n\n")
+        thinking = text[:idx]
+        response = text[idx + 3 :]
+        if thinking and response:
+            return (thinking, response)
+
+    # Fall back to double newline using the last occurrence
+    if "\n\n" in text:
+        idx = text.rfind("\n\n")
+        thinking = text[:idx]
+        response = text[idx + 2 :]
+        # Skip when trailing segment dominates — it's probably continuation text
+        if len(response) > len(text) * 0.4:
+            return ("", text)
+        if thinking and response:
+            return (thinking, response)
+
+    return ("", text)
+
+
 class StreamingThinkFilter:
     """Streaming filter that routes ``<think>`` content to thinking deltas.
 

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from core.execution.base import StreamingThinkFilter, strip_thinking_tags
+from core.execution.base import StreamingThinkFilter, strip_thinking_tags, strip_untagged_thinking
 
 # ── strip_thinking_tags ──────────────────────────────────────
 
@@ -229,3 +229,74 @@ class TestStreamingThinkFilter:
         assert leaked_think == "I need to think carefully"
         assert "Here is my answer" in clean
         assert "</think>" not in clean
+
+
+# ── strip_untagged_thinking ─────────────────────────────────
+
+
+class TestStripUntaggedThinking:
+    """Tests for vLLM tag-stripped thinking detection (no <think>/</ think> tags)."""
+
+    def test_no_thinking_prefix_returns_original(self):
+        text = "Hello world, how are you?"
+        thinking, response = strip_untagged_thinking(text)
+        assert thinking == ""
+        assert response == text
+
+    def test_short_text_returns_original(self):
+        text = "Thinking Process: ok"
+        thinking, response = strip_untagged_thinking(text)
+        assert thinking == ""
+        assert response == text
+
+    def test_triple_newline_boundary(self):
+        thinking_block = "Thinking Process:\n\n1. Analyze\n2. Plan\n3. Execute: say hi"
+        actual_response = "こんにちは！"
+        text = thinking_block + "\n\n\n" + actual_response
+        thinking, response = strip_untagged_thinking(text)
+        assert thinking != ""
+        assert "Thinking Process:" in thinking
+        assert response == actual_response
+
+    def test_double_newline_fallback(self):
+        thinking_block = (
+            "Thinking Process:\n\n1. The user greeted me.\n\n2. I should greet back.\n\n3. Final: say hello."
+        )
+        actual_response = "Hi"
+        text = thinking_block + "\n\n" + actual_response
+        thinking, response = strip_untagged_thinking(text)
+        assert thinking != ""
+        assert response == actual_response
+
+    def test_japanese_prefix(self):
+        thinking_block = "思考プロセス:\n\n1. 分析\n2. 計画\n3. 実行"
+        actual_response = "こんにちは！"
+        text = thinking_block + "\n\n\n" + actual_response
+        thinking, response = strip_untagged_thinking(text)
+        assert thinking != ""
+        assert response == actual_response
+
+    def test_let_me_think_prefix(self):
+        thinking_block = (
+            "Let me think about this carefully.\n\nStep 1: Analyze the greeting.\n\nStep 2: Formulate a response."
+        )
+        actual_response = "Hello!"
+        text = thinking_block + "\n\n\n" + actual_response
+        thinking, response = strip_untagged_thinking(text)
+        assert thinking != ""
+        assert response == actual_response
+
+    def test_no_boundary_returns_original(self):
+        text = "Thinking Process: " + "x" * 300
+        thinking, response = strip_untagged_thinking(text)
+        assert thinking == ""
+        assert response == text
+
+    def test_response_too_long_ratio_ignored(self):
+        """When last segment is > 40% of total, skip double-newline fallback."""
+        thinking_block = "Thinking Process:\n\n1. Short thinking."
+        long_response = "This is a very long response " * 10
+        text = thinking_block + "\n\n" + long_response
+        thinking, response = strip_untagged_thinking(text)
+        if thinking:
+            assert len(response) < len(text) * 0.4
