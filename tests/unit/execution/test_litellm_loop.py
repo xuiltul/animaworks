@@ -510,14 +510,14 @@ class TestBgPoolTools:
 class TestBuildLlmKwargsTimeoutAndNumCtx:
     """Verify that _build_llm_kwargs() includes timeout and num_ctx."""
 
-    def test_timeout_included_in_kwargs(self, executor):
+    async def test_timeout_included_in_kwargs(self, executor):
         """_build_llm_kwargs() must include a 'timeout' key."""
         kwargs = executor._build_llm_kwargs()
         assert "timeout" in kwargs
         assert isinstance(kwargs["timeout"], int)
         assert kwargs["timeout"] > 0
 
-    def test_num_ctx_for_ollama_model(
+    async def test_num_ctx_for_ollama_model(
         self, anima_dir: Path, memory: MagicMock,
     ):
         """model='ollama/gemma3:27b' → kwargs must contain 'num_ctx'."""
@@ -545,7 +545,7 @@ class TestBuildLlmKwargsTimeoutAndNumCtx:
         assert isinstance(kwargs["num_ctx"], int)
         assert kwargs["num_ctx"] > 0
 
-    def test_no_num_ctx_for_non_ollama(self, executor):
+    async def test_no_num_ctx_for_non_ollama(self, executor):
         """model='openai/gpt-4o' → kwargs must NOT contain 'num_ctx'."""
         kwargs = executor._build_llm_kwargs()
         assert "num_ctx" not in kwargs
