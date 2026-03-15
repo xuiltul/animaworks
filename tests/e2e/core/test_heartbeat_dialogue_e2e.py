@@ -138,8 +138,6 @@ class TestCrossContextFlow:
 
     def test_load_heartbeat_history_returns_entries(self, dp, anima_dir):
         """_load_heartbeat_history reads back persisted entries."""
-        # Write entries directly to heartbeat_history/ (legacy format)
-        history_dir = anima_dir / "shortterm" / "heartbeat_history"
         # Write heartbeat_end entries to unified activity log
         activity_dir = anima_dir / "activity_log"
         activity_dir.mkdir(parents=True, exist_ok=True)
