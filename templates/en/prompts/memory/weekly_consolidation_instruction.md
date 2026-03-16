@@ -42,4 +42,13 @@ Check for contradictory knowledge files:
 - Keep the accurate one based on the latest information
 - Archive the outdated one with `archive_memory_file`
 
+### 7. injection.md cleanup
+Check the character count of injection.md. If it exceeds 5000 characters:
+1. Use `read_memory_file(path="injection.md")` to review contents
+2. Identify content that is not "role definition" or "absolute rules"
+3. Business rules → Move to knowledge/ with `[IMPORTANT]` tag
+4. Procedural content → Move to procedures/
+5. Temporary directives (expired or already completed) → Delete
+6. Overwrite injection.md with the cleaned-up version
+
 After completion, output a summary of what was done.

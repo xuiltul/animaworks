@@ -943,6 +943,34 @@ _STRINGS: dict[str, dict[str, str]] = {
             "`animaworks-tool machine run`. Run `skill machine-tool` for details."
         ),
     },
+    "builder.default_workspace": {
+        "ja": "あなたのデフォルトワークスペース: {path} ({alias})",
+        "en": "Your default workspace: {path} ({alias})",
+    },
+    "builder.default_workspace_unresolved": {
+        "ja": "あなたのデフォルトワークスペース: (未解決: {alias})",
+        "en": "Your default workspace: (unresolved: {alias})",
+    },
+    "builder.injection_size_warning": {
+        "ja": (
+            "⚠️ あなたの injection.md が {size} 文字に肥大化しています（推奨上限: {threshold} 文字）。\n"
+            "都度指示や学習した知識を knowledge/ に移してください:\n"
+            '1. read_memory_file(path="injection.md") で内容を確認\n'
+            "2. 「役割定義」「絶対遵守ルール」以外の記述を knowledge/ に移動\n"
+            "   - 重要なルールは [IMPORTANT] タグを付けて knowledge/ に書く（常時想起されます）\n"
+            "   - 手順的な内容は procedures/ に移動\n"
+            "3. 移動完了後、injection.md を上書きして整理する"
+        ),
+        "en": (
+            "⚠️ Your injection.md has grown to {size} characters (recommended limit: {threshold}).\n"
+            "Move ad-hoc directives and learned knowledge to knowledge/:\n"
+            '1. read_memory_file(path="injection.md") to review contents\n'
+            "2. Move non-core content (not role definition or absolute rules) to knowledge/\n"
+            "   - Tag important rules with [IMPORTANT] in knowledge/ (they will be always-primed)\n"
+            "   - Move procedural content to procedures/\n"
+            "3. Overwrite injection.md with the cleaned-up version"
+        ),
+    },
     # ── handler.* (i18n) ──────────────────────────────
     "handler.bg_model_change_log": {
         "ja": "{target_name}のbackground_modelを{model}に変更",

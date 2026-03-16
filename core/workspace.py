@@ -97,6 +97,32 @@ def resolve_workspace(alias_or_path: str) -> Path:
     raise ValueError(t("workspace.not_found", alias=alias_or_path))
 
 
+def resolve_default_workspace(anima_dir: Path) -> tuple[Path | None, str]:
+    """Read default_workspace from status.json and resolve it.
+
+    Returns:
+        (resolved_path, alias) if set and resolved successfully.
+        (None, alias) if set but resolution fails.
+        (None, "") if not set.
+    """
+    import json
+
+    status_path = anima_dir / "status.json"
+    if not status_path.is_file():
+        return None, ""
+    try:
+        data = json.loads(status_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None, ""
+    alias = (data.get("default_workspace") or "").strip()
+    if not alias:
+        return None, ""
+    try:
+        return resolve_workspace(alias), alias
+    except ValueError:
+        return None, alias
+
+
 # ── Registration ──────────────────────────────────────────────
 
 

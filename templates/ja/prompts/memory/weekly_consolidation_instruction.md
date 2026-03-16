@@ -42,4 +42,13 @@
 - 最新の情報に基づいて正確な方を残す
 - 古い方は `archive_memory_file` でアーカイブ
 
+### 7. injection.md の整理
+injection.md の文字数を確認してください。5000文字を超えている場合:
+1. `read_memory_file(path="injection.md")` で内容を確認
+2. 「役割定義」と「絶対遵守ルール」以外の内容を特定する
+3. 業務ルール → knowledge/ に `[IMPORTANT]` 付きで移動
+4. 手順的な内容 → procedures/ に移動
+5. 一時的な指示（期限切れ・すでに完了）→ 削除
+6. injection.md を上書きして簡潔にする
+
 完了後、実施した内容のサマリーを出力してください。

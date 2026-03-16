@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from core.memory.rag.store import SearchResult
 from core.time_utils import ensure_aware, now_iso, now_local
 
 logger = logging.getLogger("animaworks.rag.retriever")
@@ -205,6 +206,40 @@ class MemoryRetriever:
                 return initial_results
 
         return initial_results
+
+    def get_important_chunks(
+        self,
+        anima_name: str,
+        include_shared: bool = True,
+        limit: int = 20,
+    ) -> list[SearchResult]:
+        """Collect all [IMPORTANT] chunks regardless of query context."""
+        results: list[SearchResult] = []
+        seen_ids: set[str] = set()
+
+        personal = self.vector_store.get_by_metadata(
+            f"{anima_name}_knowledge",
+            {"importance": "important"},
+            limit=limit,
+        )
+        for r in personal:
+            if r.document.id not in seen_ids:
+                seen_ids.add(r.document.id)
+                results.append(r)
+
+        if include_shared:
+            shared = self.vector_store.get_by_metadata(
+                "shared_common_knowledge",
+                {"importance": "important"},
+                limit=limit,
+            )
+            for r in shared:
+                if r.document.id not in seen_ids:
+                    seen_ids.add(r.document.id)
+                    results.append(r)
+
+        results.sort(key=lambda r: r.score, reverse=True)
+        return results
 
     # ── Search methods ──────────────────────────────────────────────
 

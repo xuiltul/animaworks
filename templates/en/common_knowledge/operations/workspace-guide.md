@@ -70,8 +70,8 @@ Summary:
 
 ### Assigning to Subordinates
 
-Supervisors add a `## Workspace` section to subordinates' `injection.md`
-and document the primary working directory. See the `workspace-manager` skill.
+Supervisors update the subordinate's `status.json` `default_workspace` field
+to assign the primary working directory. See the `workspace-manager` skill.
 
 ## Common Issues
 

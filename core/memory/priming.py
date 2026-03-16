@@ -49,6 +49,7 @@ _BUDGET_HEARTBEAT = 200
 _BUDGET_SENDER_PROFILE = 500
 _BUDGET_RECENT_ACTIVITY = 1300  # Unified: old B(600) + E(700)
 _BUDGET_RELATED_KNOWLEDGE = 1200
+_BUDGET_IMPORTANT_KNOWLEDGE = 300
 _BUDGET_SKILL_MATCH = 200
 _BUDGET_PENDING_TASKS = 300
 _BUDGET_RELATED_EPISODES = 500
@@ -284,10 +285,11 @@ class PrimingEngine:
 
             channel_c_coro = _noop()
 
-        # Execute 6 channels + outbound + human notifications in parallel
+        # Execute 7 channels + outbound + human notifications in parallel
         results = await asyncio.gather(
             self._channel_a_sender_profile(sender_name),
             self._channel_b_recent_activity(sender_name, keywords, channel=channel),
+            self._channel_c0_important_knowledge(),
             channel_c_coro,
             self._channel_d_skill_match(message, keywords, channel=channel),
             self._channel_e_pending_tasks(),
@@ -301,18 +303,22 @@ class PrimingEngine:
         sender_profile = results[0] if isinstance(results[0], str) else ""
         recent_activity = results[1] if isinstance(results[1], str) else ""
 
-        # Channel C returns (medium, untrusted) tuple
-        if isinstance(results[2], tuple):
-            related_knowledge, related_knowledge_untrusted = results[2]
+        important_knowledge = results[2] if isinstance(results[2], str) else ""
+        if isinstance(results[3], tuple):
+            related_knowledge, related_knowledge_untrusted = results[3]
         else:
             related_knowledge = ""
             related_knowledge_untrusted = ""
+        if important_knowledge:
+            related_knowledge = (
+                f"{important_knowledge}\n\n{related_knowledge}" if related_knowledge else important_knowledge
+            )
 
-        matched_skills = results[3] if isinstance(results[3], list) else []
-        pending_tasks = results[4] if isinstance(results[4], str) else ""
-        recent_outbound = results[5] if isinstance(results[5], str) else ""
-        episodes = results[6] if isinstance(results[6], str) else ""
-        pending_human_notifications = results[7] if isinstance(results[7], str) else ""
+        matched_skills = results[4] if isinstance(results[4], list) else []
+        pending_tasks = results[5] if isinstance(results[5], str) else ""
+        recent_outbound = results[6] if isinstance(results[6], str) else ""
+        episodes = results[7] if isinstance(results[7], str) else ""
+        pending_human_notifications = results[8] if isinstance(results[8], str) else ""
 
         # Log exceptions if any
         for i, r in enumerate(results):
@@ -836,6 +842,72 @@ class PrimingEngine:
             return ""
 
         return "\n".join(parts)
+
+    def _extract_summary(self, content: str, metadata: dict) -> str:
+        """Extract summary text from an [IMPORTANT] search result."""
+        summary = metadata.get("summary")
+        if summary:
+            return str(summary).strip()
+        match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+        source = metadata.get("source_file", "")
+        if source:
+            return Path(source).stem.replace("-", " ").replace("_", " ")
+        return ""
+
+    def _to_read_memory_path(self, metadata: dict, anima_name: str) -> str:
+        """Convert chunk metadata to read_memory_file path."""
+        source = metadata.get("source_file", "")
+        if not source:
+            return ""
+        if metadata.get("anima") == "shared":
+            return f"common_knowledge/{source}" if not source.startswith("common_knowledge/") else source
+        return source
+
+    async def _channel_c0_important_knowledge(self) -> str:
+        """Channel C0: Always-prime [IMPORTANT] chunks (summary pointers only)."""
+        if not self.knowledge_dir.is_dir():
+            return ""
+        try:
+            retriever = self._get_or_create_retriever()
+            if retriever is None:
+                return ""
+            anima_name = self.anima_dir.name
+            results = retriever.get_important_chunks(anima_name, include_shared=True)
+            if not results:
+                return ""
+            budget_chars = _BUDGET_IMPORTANT_KNOWLEDGE * _CHARS_PER_TOKEN
+            lines: list[tuple[int, str]] = []
+            for r in results:
+                content = r.document.content
+                meta = r.document.metadata
+                summary = self._extract_summary(content, meta)
+                rel_path = self._to_read_memory_path(meta, anima_name)
+                if not rel_path:
+                    continue
+                line = f'📌 {summary} → read_memory_file(path="{rel_path}")'
+                lines.append((len(line), line))
+            lines.sort(key=lambda x: x[0])
+            out: list[str] = []
+            used = 0
+            header = "### [IMPORTANT] Knowledge (summary pointers)"
+            header_len = len(header) + 1
+            if header_len > budget_chars:
+                return ""
+            out.append(header)
+            used += header_len
+            for _, line in lines:
+                if used + len(line) + 1 > budget_chars:
+                    break
+                out.append(line)
+                used += len(line) + 1
+            if len(out) <= 1:
+                return ""
+            return "\n".join(out)
+        except Exception as e:
+            logger.debug("Channel C0: get_important_chunks failed: %s", e)
+            return ""
 
     async def _channel_c_related_knowledge(
         self,

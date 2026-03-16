@@ -70,8 +70,8 @@ delegate_task(name="aoi", instruction="API テストを実施して", deadline="
 
 ### 部下への割り当て
 
-スーパーバイザーは部下の `injection.md` に `## ワークスペース` セクションを追加し、
-主な作業ディレクトリを記載する。`workspace-manager` スキルを参照。
+スーパーバイザーは部下の `status.json` の `default_workspace` フィールドを更新し、
+主な作業ディレクトリを割り当てる。`workspace-manager` スキルを参照。
 
 ## よくある問題
 

@@ -153,6 +153,8 @@ create_skill(name="deploy-procedure", description="本番デプロイ手順", co
 | 保留タスク | タスクキューの要約 |
 | エピソード | RAG で検索した過去の体験 |
 
+**[IMPORTANT]** `[IMPORTANT]` タグ付きの knowledge は、RAG検索の結果に加えて、Primingで概要ポインタとして常時注入されます。概要のみが表示され、詳細は `read_memory_file` で確認できます。重要な業務ルールを knowledge/ に移す際は `[IMPORTANT]` を付けてください。
+
 Priming は自動で動くため、明示的な操作は不要。
 
 ### Consolidation（記憶統合）

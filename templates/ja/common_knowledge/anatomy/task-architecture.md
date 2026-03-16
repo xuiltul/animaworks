@@ -34,7 +34,7 @@ AnimaWorks のタスク管理は3つの層で構成される。
 PendingTaskExecutor が検出すると `processing/` に移動して実行し、完了後に削除する。
 失敗時は `failed/` に移動する。
 
-タスクに `workspace` フィールドがある場合、レジストリで解決した絶対パスが `working_directory` として TaskExec のプロンプトに注入される。省略時は Anima の injection.md の `## ワークスペース` セクション、またはデフォルト値が使われる。
+タスクに `workspace` フィールドがある場合、レジストリで解決した絶対パスが `working_directory` として TaskExec のプロンプトに注入される。解決順序: タスクの `workspace` → `status.json` の `default_workspace` → なし。
 
 Anima はこの層を直接操作しない。ツール経由で間接的に書き込む。
 

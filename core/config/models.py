@@ -104,6 +104,7 @@ class AnimaDefaults(BaseModel):
     max_outbound_per_hour: int | None = None
     max_outbound_per_day: int | None = None
     max_recipients_per_run: int | None = None
+    default_workspace: str = ""
 
 
 # ── Outbound budget defaults per role ─────────────────────────────────────────
@@ -171,6 +172,12 @@ class RAGConfig(BaseModel):
     spreading_memory_types: list[str] = ["knowledge", "episodes"]
     min_retrieval_score: float = 0.3
     skill_match_min_score: float = 0.75
+
+
+class PromptConfig(BaseModel):
+    """Configuration for system prompt building."""
+
+    injection_size_warning_chars: int = 5000
 
 
 class PrimingConfig(BaseModel):
@@ -501,6 +508,7 @@ class AnimaWorksConfig(BaseModel):
     animas: dict[str, AnimaModelConfig] = {}
     consolidation: ConsolidationConfig = ConsolidationConfig()
     rag: RAGConfig = RAGConfig()
+    prompt: PromptConfig = PromptConfig()
     priming: PrimingConfig = PrimingConfig()
     image_gen: ImageGenConfig = ImageGenConfig()
     human_notification: HumanNotificationConfig = HumanNotificationConfig()
@@ -695,6 +703,7 @@ def _load_status_json(anima_dir: Path) -> dict[str, Any]:
         "max_outbound_per_hour": "max_outbound_per_hour",
         "max_outbound_per_day": "max_outbound_per_day",
         "max_recipients_per_run": "max_recipients_per_run",
+        "default_workspace": "default_workspace",
     }
     # Fields where None is a valid explicit value (e.g. supervisor=null
     # means "top-level / no supervisor").  Empty string is still "not set".

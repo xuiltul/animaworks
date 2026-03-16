@@ -58,24 +58,25 @@ Delete the entry from the workspaces section of config.json.
 
 ### Change Your Default Workspace
 
-Update the ## Workspace section of your injection.md:
-1. `read_memory_file(path="injection.md")` to check current content
-2. Add/update the `## Workspace` section while preserving existing content
-3. `write_memory_file(path="injection.md", content=...)` to save
+Update the `default_workspace` field in your `status.json`:
+1. `read_memory_file(path="status.json")` to check current content
+2. Set `default_workspace` to an alias (e.g., `aischreiber`) or qualified form (e.g., `aischreiber#3af4be6e`)
+3. `write_memory_file(path="status.json", content=...)` to save
 
 Example:
-```markdown
-## Workspace
-- Default: aischreiber#3af4be6e (/home/main/dev/AI-Schreiber)
+```json
+{
+  "default_workspace": "aischreiber#3af4be6e"
+}
 ```
 
 ### Assign to Subordinates (for Supervisors)
 
 1. Register the workspace (see above)
-2. Write the workspace info to the subordinate's injection.md:
-   - `read_memory_file(path="../{subordinate}/injection.md")`
-   - Add/update the `## Workspace` section while preserving existing content
-   - `write_memory_file(path="../{subordinate}/injection.md", content=...)`
+2. Update the subordinate's `status.json` `default_workspace` field:
+   - `read_memory_file(path="../{subordinate}/status.json")`
+   - Set `default_workspace` to the alias
+   - `write_memory_file(path="../{subordinate}/status.json", content=...)`
 
 ## Tool Usage
 

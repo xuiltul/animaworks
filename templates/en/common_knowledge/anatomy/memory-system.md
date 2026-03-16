@@ -152,6 +152,8 @@ Every time you start a conversation, the Priming engine searches relevant memori
 | Pending tasks | Task queue summary |
 | Episodes | Past experiences via RAG search |
 
+**[IMPORTANT]** Knowledge tagged with `[IMPORTANT]` is always injected as summary pointers in Priming, in addition to RAG search results. Only the summary is shown; use `read_memory_file` for full details. When moving important business rules to knowledge/, add the `[IMPORTANT]` tag.
+
 Priming runs automatically, so no explicit action is needed.
 
 ### Consolidation (Memory Integration)

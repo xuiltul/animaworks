@@ -32,6 +32,17 @@ _PENDING_TASK_SUBPROCESS_TIMEOUT = 1800
 _TASK_RESULT_MAX_CHARS = 2000
 
 
+def _resolve_default_workspace(anima_dir: Path) -> str:
+    """Resolve default_workspace from status.json via workspace registry.
+
+    Returns absolute path string, or empty string if not set or resolution fails.
+    """
+    from core.workspace import resolve_default_workspace
+
+    resolved, _alias = resolve_default_workspace(anima_dir)
+    return str(resolved) if resolved else ""
+
+
 # ── DAG helpers ──────────────────────────────────────────────
 
 
@@ -668,6 +679,8 @@ class PendingTaskExecutor:
             full_context = f"{full_context}\n\n{dep_context}"
 
         working_directory = task_desc.get("working_directory", "")
+        if not working_directory:
+            working_directory = _resolve_default_workspace(self._anima_dir)
         prompt = load_prompt(
             "task_exec",
             task_id=task_id,

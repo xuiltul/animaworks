@@ -266,6 +266,44 @@ class ChromaVectorStore(VectorStore):
         except Exception as e:
             logger.warning("Failed to update metadata in '%s': %s", collection, e)
 
+    def get_by_metadata(
+        self,
+        collection_name: str,
+        where: dict,
+        limit: int = 20,
+    ) -> list[SearchResult]:
+        """Retrieve documents by metadata filter without embedding search."""
+        try:
+            coll = self.client.get_collection(name=collection_name)
+        except Exception as e:
+            logger.debug("Collection '%s' not found for get_by_metadata: %s", collection_name, e)
+            return []
+
+        data = coll.get(
+            where=cast(Any, where),
+            limit=limit,
+            include=["documents", "metadatas"],
+        )
+
+        search_results: list[SearchResult] = []
+        ids = data.get("ids") or []
+        documents = data.get("documents") or []
+        metadatas = data.get("metadatas") or []
+
+        for i, doc_id in enumerate(ids):
+            content = documents[i] if i < len(documents) else ""
+            meta_raw = metadatas[i] if i < len(metadatas) else {}
+            meta_dict: dict[str, str | int | float | list[str]] = cast(Any, dict(meta_raw)) if meta_raw else {}
+            doc = Document(id=doc_id, content=content, metadata=meta_dict)
+            search_results.append(SearchResult(document=doc, score=1.0))
+
+        logger.debug(
+            "get_by_metadata returned %d results from collection '%s'",
+            len(search_results),
+            collection_name,
+        )
+        return search_results
+
     def needs_cosine_migration(self) -> list[str]:
         """Return collection names still using L2 (non-cosine) distance."""
         l2_collections: list[str] = []

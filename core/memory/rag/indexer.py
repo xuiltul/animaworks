@@ -766,6 +766,9 @@ class MemoryIndexer:
             fm["valid_until"] = fm.pop("superseded_at")
         metadata["valid_until"] = str(fm.get("valid_until", "") or "")
 
+        if fm.get("summary"):
+            metadata["summary"] = str(fm["summary"])[:200]
+
         # Failure tracking fields from frontmatter (knowledge + procedures)
         if fm:
             for field in ("success_count", "failure_count", "version"):

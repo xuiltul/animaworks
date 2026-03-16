@@ -34,7 +34,7 @@ Contains the full task description (description, acceptance_criteria, constraint
 PendingTaskExecutor detects tasks, moves them to `processing/`, executes, and deletes on completion.
 Failed tasks are moved to `failed/`.
 
-When a task has a `workspace` field, the resolved absolute path is injected as `working_directory` into the TaskExec prompt. If omitted, the Anima's `## Workspace` section in injection.md or a default value is used.
+When a task has a `workspace` field, the resolved absolute path is injected as `working_directory` into the TaskExec prompt. Resolution order: task's `workspace` → `status.json` `default_workspace` → none.
 
 Animas do not directly manipulate this layer. They write indirectly through tools.
 
