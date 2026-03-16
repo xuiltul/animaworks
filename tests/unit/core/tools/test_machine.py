@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.tools._base import ToolResult
 from core.tools.machine import (
     _MAX_CALLS_PER_HEARTBEAT,
     _MAX_CALLS_PER_SESSION,
@@ -751,13 +752,15 @@ class TestCliMain:
             mock_proc.returncode = 0
             mock_proc.pid = 99999
             mock_proc.wait = MagicMock(return_value=None)
-            with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc) as mock_popen:
-                with patch("core.tools.machine._execute", wraps=None) as mock_exec:
-                    mock_exec.return_value = ToolResult(success=True, text="bg done")
-                    cli_main(["run", "--background", "test bg", "-d", str(tmp_path)])
-                    mock_exec.assert_called_once()
-                    call_kwargs = mock_exec.call_args
-                    assert call_kwargs.kwargs.get("timeout") == _DEFAULT_TIMEOUT_ASYNC or call_kwargs[1].get("timeout") == _DEFAULT_TIMEOUT_ASYNC
+            with (
+                patch("core.tools.machine.subprocess.Popen", return_value=mock_proc),
+                patch("core.tools.machine._execute", wraps=None) as mock_exec,
+            ):
+                mock_exec.return_value = ToolResult(success=True, text="bg done")
+                cli_main(["run", "--background", "test bg", "-d", str(tmp_path)])
+                mock_exec.assert_called_once()
+                call_kwargs = mock_exec.call_args
+                assert call_kwargs.kwargs.get("timeout") == _DEFAULT_TIMEOUT_ASYNC or call_kwargs[1].get("timeout") == _DEFAULT_TIMEOUT_ASYNC
 
     def test_run_background_appears_in_help(self, capsys):
         from core.tools.machine import cli_main

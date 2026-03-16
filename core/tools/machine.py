@@ -794,6 +794,11 @@ def cli_main(argv: list[str] | None = None) -> None:
         help="Timeout in seconds",
     )
     run_parser.add_argument(
+        "--background",
+        action="store_true",
+        help="Run in background mode (timeout: 1800s instead of 600s)",
+    )
+    run_parser.add_argument(
         "-j",
         "--json",
         action="store_true",
@@ -805,12 +810,16 @@ def cli_main(argv: list[str] | None = None) -> None:
         parser.print_help()
         return
 
+    effective_timeout = parsed.timeout
+    if effective_timeout is None:
+        effective_timeout = _DEFAULT_TIMEOUT_ASYNC if parsed.background else _DEFAULT_TIMEOUT_SYNC
+
     result = _execute(
         engine=parsed.engine,
         instruction=parsed.instruction,
         working_directory=parsed.working_directory,
         model=parsed.model,
-        timeout=parsed.timeout,
+        timeout=effective_timeout,
     )
 
     if parsed.json:
