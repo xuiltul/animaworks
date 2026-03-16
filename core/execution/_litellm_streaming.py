@@ -111,6 +111,7 @@ class StreamingMixin:
         images: list[ImageData] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
+        trigger: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Token-level streaming via ``litellm.acompletion(stream=True)``.
 
@@ -124,7 +125,7 @@ class StreamingMixin:
         # silently drop the thinking param for that turn instead of crashing.
         litellm.modify_params = True
 
-        tools = self._build_base_tools()
+        tools = self._build_base_tools(trigger=trigger)
         _active_categories: set[str] = set()
         context_window = self._resolve_cw()
 
@@ -662,6 +663,7 @@ class StreamingMixin:
         images: list[ImageData] | None = None,
         prior_messages: list[dict[str, Any]] | None = None,
         max_turns_override: int | None = None,
+        trigger: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Iteration-level streaming for Ollama models.
 
@@ -673,7 +675,7 @@ class StreamingMixin:
         """
         import litellm
 
-        tools = self._build_base_tools()
+        tools = self._build_base_tools(trigger=trigger)
         _active_categories: set[str] = set()
         context_window = self._resolve_cw()
 

@@ -10,6 +10,9 @@
 
 {merge_candidates}
 
+## Critical constraints
+- **You MUST perform this work yourself directly**. Do NOT use `delegate_task`, `submit_tasks`, or `send_message`. Do not delegate to subordinates or send any messages. Complete all work using only memory operation tools
+
 ## Workflow
 
 ### 1. Merge candidate consolidation (highest priority, MUST)

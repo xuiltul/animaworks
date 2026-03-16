@@ -214,7 +214,7 @@ class AssistedExecutor(BaseExecutor):
         schemas = self._build_tool_schemas()
         return {s["name"] for s in schemas}
 
-    def _build_tool_schemas(self) -> list[dict[str, Any]]:
+    def _build_tool_schemas(self, *, trigger: str = "") -> list[dict[str, Any]]:
         """Build canonical tool schemas for text format generation (unified 18-tool schema)."""
         canonical = build_unified_tool_list(
             include_notification_tools=self._tool_handler._human_notifier is not None,
@@ -222,12 +222,13 @@ class AssistedExecutor(BaseExecutor):
             skill_metas=self._memory.list_skill_metas(),
             common_skill_metas=self._memory.list_common_skill_metas(),
             procedure_metas=self._memory.list_procedure_metas(),
+            trigger=trigger,
         )
         return canonical
 
-    def _build_tool_spec_text(self) -> str:
+    def _build_tool_spec_text(self, *, trigger: str = "") -> str:
         """Build the tool specification text for system prompt injection."""
-        schemas = self._build_tool_schemas()
+        schemas = self._build_tool_schemas(trigger=trigger)
         return to_text_format(schemas)
 
     def _preflight_check(
@@ -425,7 +426,7 @@ class AssistedExecutor(BaseExecutor):
         )
 
         # ── 1. Build tool spec and augment system prompt ─────
-        tool_spec = self._build_tool_spec_text()
+        tool_spec = self._build_tool_spec_text(trigger=trigger)
         full_system = system_prompt + "\n\n" + tool_spec if system_prompt else tool_spec
 
         context_window = self._resolve_cw()
@@ -636,7 +637,7 @@ class AssistedExecutor(BaseExecutor):
         )
 
         # ── 1. Build tool spec and augment system prompt ─────
-        tool_spec = self._build_tool_spec_text()
+        tool_spec = self._build_tool_spec_text(trigger=trigger)
         full_system = system_prompt + "\n\n" + tool_spec if system_prompt else tool_spec
 
         context_window = self._resolve_cw()

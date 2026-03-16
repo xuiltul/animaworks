@@ -1494,6 +1494,7 @@ def build_tool_list(
     common_skill_metas: list[Any] | None = None,
     procedure_metas: list[Any] | None = None,
     external_schemas: list[dict[str, Any]] | None = None,
+    trigger: str = "",
 ) -> list[dict[str, Any]]:
     """Assemble a tool list from canonical definitions.
 
@@ -1515,10 +1516,13 @@ def build_tool_list(
         common_skill_metas: Common skill metadata for dynamic description generation.
         procedure_metas: Procedure metadata for dynamic description generation.
         external_schemas: Additional tool schemas in canonical format.
+        trigger: Execution trigger (e.g. ``"consolidation:daily"``).
 
     Returns:
         Combined list in canonical format.
     """
+    is_consolidation = trigger.startswith("consolidation:")
+
     tools: list[dict[str, Any]] = list(MEMORY_TOOLS)
     tools.extend(_channel_tools())
     tools.extend(PROCEDURE_TOOLS)
@@ -1536,13 +1540,13 @@ def build_tool_list(
         tools.extend(_notification_tools())
     if include_admin_tools:
         tools.extend(ADMIN_TOOLS)
-    if include_supervisor_tools:
+    if include_supervisor_tools and not is_consolidation:
         tools.extend(_supervisor_tools())
     if include_tool_management:
         tools.extend(TOOL_MANAGEMENT_TOOLS)
     if include_task_tools:
         tools.extend(_task_tools())
-    if include_submit_tasks:
+    if include_submit_tasks and not is_consolidation:
         tools.extend(SUBMIT_TASKS_TOOLS)
     if include_background_task_tools:
         tools.extend(_background_task_tools())
@@ -1550,6 +1554,10 @@ def build_tool_list(
         tools.extend(_vault_tools())
     if external_schemas:
         tools.extend(external_schemas)
+
+    if is_consolidation:
+        tools = [t for t in tools if t["name"] not in _CONSOLIDATION_BLOCKED_TOOLS]
+
     tools = apply_db_descriptions(tools)
 
     # Skill tool description is dynamically generated — append AFTER
@@ -1570,6 +1578,11 @@ def build_tool_list(
     return tools
 
 
+_CONSOLIDATION_BLOCKED_TOOLS: frozenset[str] = frozenset(
+    {"delegate_task", "submit_tasks", "send_message", "post_channel"}
+)
+
+
 def build_unified_tool_list(
     *,
     include_notification_tools: bool = False,
@@ -1578,6 +1591,7 @@ def build_unified_tool_list(
     skill_metas: list[Any] | None = None,
     common_skill_metas: list[Any] | None = None,
     procedure_metas: list[Any] | None = None,
+    trigger: str = "",
 ) -> list[dict[str, Any]]:
     """Build the unified 18-tool list (Claude Code-compatible 8 + AW-essential 10).
 
@@ -1592,35 +1606,44 @@ def build_unified_tool_list(
         skill_metas: Personal skill metadata for dynamic description.
         common_skill_metas: Common skill metadata for dynamic description.
         procedure_metas: Procedure metadata for dynamic description.
+        trigger: Execution trigger (e.g. ``"consolidation:daily"``).
+            When the trigger starts with ``consolidation:``, delegation and
+            messaging tools are excluded.
 
     Returns:
         Combined list in canonical format (up to 18 tools).
     """
+    is_consolidation = trigger.startswith("consolidation:")
+
     tools: list[dict[str, Any]] = list(CC_TOOLS)
 
-    # AW-essential: memory + messaging (always present)
+    # AW-essential: memory + messaging (always present, but filtered during consolidation)
     for t in MEMORY_TOOLS:
         if t["name"] in _AW_CORE_NAMES:
+            if is_consolidation and t["name"] in _CONSOLIDATION_BLOCKED_TOOLS:
+                continue
             tools.append(t)
 
-    for t in _channel_tools():
-        if t["name"] == "post_channel":
-            tools.append(t)
-            break
+    if not is_consolidation:
+        for t in _channel_tools():
+            if t["name"] == "post_channel":
+                tools.append(t)
+                break
 
     # AW-essential: notification (conditional)
     if include_notification_tools:
         tools.extend(_notification_tools())
 
-    # AW-essential: supervisor delegation (conditional)
-    if include_supervisor_tools:
+    # AW-essential: supervisor delegation (conditional, blocked during consolidation)
+    if include_supervisor_tools and not is_consolidation:
         for t in _supervisor_tools():
             if t["name"] == "delegate_task":
                 tools.append(t)
                 break
 
-    # AW-essential: task management (always present)
-    tools.extend(SUBMIT_TASKS_TOOLS)
+    # AW-essential: task management (always present, but submit_tasks blocked during consolidation)
+    if not is_consolidation:
+        tools.extend(SUBMIT_TASKS_TOOLS)
     for t in _task_tools():
         if t["name"] == "update_task":
             tools.append(t)

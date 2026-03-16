@@ -71,6 +71,9 @@
 - 技術的な判断とその理由
 - 解決済みイベントから得られた教訓と手順
 
+## 重要な制約
+- **この作業はあなた自身が直接実行すること（MUST）**。`delegate_task`、`submit_tasks`、`send_message` は使用禁止。部下への委任やメッセージ送信は一切行わず、`search_memory`、`read_memory_file`、`write_memory_file`、`archive_memory_file` のみで作業を完結させること
+
 ## 注意事項
 - 挨拶のみの会話や実質的な情報を含まないやり取りは知識化不要
 - [REFLECTION] タグ付きエントリは本人が意識的に記録した洞察。上記「振り返り」セクションに抽出済みの場合は優先的に知識化を検討

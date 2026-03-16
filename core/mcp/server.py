@@ -544,9 +544,27 @@ def _wrap_result(tool_name: str, result: str) -> str:
 # ── MCP handlers ─────────────────────────────────────────
 
 
+def _is_consolidation_mode() -> bool:
+    """Check whether this Anima is currently running memory consolidation.
+
+    Reads a flag file written by ``run_consolidation()`` in the main process.
+    """
+    anima_dir_env = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
+    if not anima_dir_env:
+        return False
+    return (Path(anima_dir_env) / "state" / ".consolidation_mode").exists()
+
+
+_CONSOLIDATION_BLOCKED_NAMES: frozenset[str] = frozenset(
+    {"delegate_task", "submit_tasks", "send_message", "post_channel"}
+)
+
+
 @server.list_tools()
 async def list_tools() -> list[Tool]:
     """Return exposed AnimaWorks tools, filtering supervisor tools dynamically."""
+    if _is_consolidation_mode():
+        return [t for t in MCP_TOOLS if t.name not in _CONSOLIDATION_BLOCKED_NAMES]
     if _has_subordinates_for_anima():
         return MCP_TOOLS
     return [t for t in MCP_TOOLS if t.name not in _SUPERVISOR_TOOL_NAMES]
@@ -560,6 +578,22 @@ async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextCon
     (file reads, subprocess calls), so we run it via ``asyncio.to_thread``
     to keep the MCP event loop responsive.
     """
+    # Defense-in-depth: block delegation/messaging tools during consolidation
+    if name in _CONSOLIDATION_BLOCKED_NAMES and _is_consolidation_mode():
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {
+                        "status": "error",
+                        "error_type": "ToolBlocked",
+                        "message": f"Tool '{name}' is not available during memory consolidation",
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        ]
+
     # Defense-in-depth: reject tool names not in our exposed set.
     # The Agent SDK should only call tools from list_tools(), but
     # ToolHandler.handle() would fall through to external dispatch

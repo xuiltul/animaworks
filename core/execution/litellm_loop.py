@@ -129,7 +129,7 @@ class LiteLLMExecutor(
 
         litellm.modify_params = True
 
-        tools = self._build_base_tools()
+        tools = self._build_base_tools(trigger=trigger)
         _active_categories: set[str] = set()
         context_window = self._resolve_cw()
 
@@ -382,6 +382,7 @@ class LiteLLMExecutor(
                 images,
                 prior_messages=prior_messages,
                 max_turns_override=max_turns_override,
+                trigger=trigger,
             ):
                 yield event
         else:
@@ -392,5 +393,6 @@ class LiteLLMExecutor(
                 images,
                 prior_messages=prior_messages,
                 max_turns_override=max_turns_override,
+                trigger=trigger,
             ):
                 yield event

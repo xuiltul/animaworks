@@ -155,7 +155,7 @@ class ToolProcessingMixin:
         }
     )
 
-    def _build_base_tools(self) -> list[dict[str, Any]]:
+    def _build_base_tools(self, *, trigger: str = "") -> list[dict[str, Any]]:
         """Build the base LiteLLM-format tool list (unified 18-tool schema)."""
         canonical = build_unified_tool_list(
             include_notification_tools=self._tool_handler._human_notifier is not None,
@@ -163,6 +163,7 @@ class ToolProcessingMixin:
             skill_metas=self._memory.list_skill_metas(),
             common_skill_metas=self._memory.list_common_skill_metas(),
             procedure_metas=self._memory.list_procedure_metas(),
+            trigger=trigger,
         )
         return to_litellm_format(canonical)
 

@@ -180,7 +180,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         self._memory = memory
         self._personal_tools = personal_tools or {}
 
-    def _build_tools(self) -> list[dict[str, Any]]:
+    def _build_tools(self, *, trigger: str = "") -> list[dict[str, Any]]:
         """Build the Anthropic-format tool list."""
         canonical = build_tool_list(
             include_file_tools=True,
@@ -198,6 +198,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
             skill_metas=self._memory.list_skill_metas(),
             common_skill_metas=self._memory.list_common_skill_metas(),
             procedure_metas=self._memory.list_procedure_metas(),
+            trigger=trigger,
         )
         return to_anthropic_format(canonical)
 
@@ -250,7 +251,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
     ) -> ExecutionResult:
         """Run Anthropic SDK with tool_use loop."""
         client = self._build_client()
-        tools = self._build_tools()
+        tools = self._build_tools(trigger=trigger)
         context_window = self._resolve_cw()
         if prior_messages:
             messages = prior_messages  # Structured history including current msg
@@ -517,7 +518,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         trigger: str = "",
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Inner streaming logic — client lifecycle managed by caller."""
-        tools = self._build_tools()
+        tools = self._build_tools(trigger=trigger)
         context_window = self._resolve_cw()
         if prior_messages:
             messages = prior_messages

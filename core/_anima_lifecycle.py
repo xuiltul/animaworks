@@ -237,6 +237,13 @@ class LifecycleMixin:
                 _session_token = self.agent._tool_handler.set_active_session_type("background")
                 self.agent._tool_handler.set_session_origin(ORIGIN_SYSTEM)
 
+                # Signal consolidation mode to MCP subprocess (Mode S)
+                _consolidation_flag = self.anima_dir / "state" / ".consolidation_mode"
+                try:
+                    _consolidation_flag.write_text("1", encoding="utf-8")
+                except OSError:
+                    pass
+
                 try:
                     from core.memory.consolidation import ConsolidationEngine
 
@@ -334,6 +341,7 @@ class LifecycleMixin:
                     )
                     raise
                 finally:
+                    _consolidation_flag.unlink(missing_ok=True)
                     active_session_type.reset(_session_token)
                     self._status_slots["background"] = "idle"
                     self._task_slots["background"] = ""

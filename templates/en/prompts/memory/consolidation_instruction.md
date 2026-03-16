@@ -68,6 +68,9 @@ any knowledge you are about to create. If duplicates exist, prefer updating exis
 - Technical decisions and their rationale
 - Lessons and procedures from resolved events
 
+## Critical constraints
+- **You MUST perform this work yourself directly**. Do NOT use `delegate_task`, `submit_tasks`, or `send_message`. Do not delegate to subordinates or send any messages. Complete all work using only `search_memory`, `read_memory_file`, `write_memory_file`, and `archive_memory_file`
+
 ## Notes
 - Do not convert greetings-only or substantively empty exchanges into knowledge
 - [REFLECTION] tagged entries are conscious insights recorded by the agent; when extracted in the "Reflections" section above, prioritize these for knowledge extraction
