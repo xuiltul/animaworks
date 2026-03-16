@@ -268,9 +268,7 @@ class RAGMemorySearch:
         indexer = self._get_indexer()
         if indexer is not None:
             try:
-                return self._vector_search_primary(
-                    query, scope, offset, knowledge_dir
-                )
+                return self._vector_search_primary(query, scope, offset, knowledge_dir)
             except Exception as e:
                 logger.debug("Vector search failed, falling back to keyword: %s", e)
 
@@ -331,15 +329,17 @@ class RAGMemorySearch:
                     overlap_ratio = matched / len(tokens)
                     score += WEIGHT_TOKEN_OVERLAP * overlap_ratio
 
-                all_results.append({
-                    "source_file": r.metadata.get("source_file", r.doc_id),
-                    "content": r.content,
-                    "score": score,
-                    "chunk_index": int(r.metadata.get("chunk_index", 0)),
-                    "total_chunks": int(r.metadata.get("total_chunks", 1)),
-                    "memory_type": r.metadata.get("memory_type", memory_type),
-                    "search_method": "vector",
-                })
+                all_results.append(
+                    {
+                        "source_file": r.metadata.get("source_file", r.doc_id),
+                        "content": r.content,
+                        "score": score,
+                        "chunk_index": int(r.metadata.get("chunk_index", 0)),
+                        "total_chunks": int(r.metadata.get("total_chunks", 1)),
+                        "memory_type": r.metadata.get("memory_type", memory_type),
+                        "search_method": "vector",
+                    }
+                )
 
         all_results.sort(key=lambda x: x["score"], reverse=True)
         return all_results[offset : offset + 10]
@@ -423,9 +423,7 @@ class RAGMemorySearch:
                 except Exception:
                     pass
 
-        results = sorted(
-            file_scores.values(), key=lambda x: x["score"], reverse=True
-        )
+        results = sorted(file_scores.values(), key=lambda x: x["score"], reverse=True)
         return results[offset : offset + 10]
 
     @staticmethod

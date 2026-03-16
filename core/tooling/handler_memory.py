@@ -96,15 +96,16 @@ class MemoryToolsMixin:
             total_chunks = r.get("total_chunks", 1)
             content = r.get("content", "")
 
-            entry_header = f"[{offset + shown_count + 1}] score={score:.2f} | {source} | chunk {chunk_idx + 1}/{total_chunks}"
+            entry_header = (
+                f"[{offset + shown_count + 1}] score={score:.2f} | {source} | chunk {chunk_idx + 1}/{total_chunks}"
+            )
             entry = f"\n{entry_header}\n{content}\n"
 
             entry_tokens = len(entry) // 4
             entry_lines = entry.count("\n") + 1
 
             if shown_count >= _SEARCH_MIN_RESULTS and (
-                total_tokens + entry_tokens > max_tokens
-                or total_lines + entry_lines > max_lines
+                total_tokens + entry_tokens > max_tokens or total_lines + entry_lines > max_lines
             ):
                 output_parts.append("\n(truncated — output limit reached)")
                 break
