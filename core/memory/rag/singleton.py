@@ -9,9 +9,14 @@ from __future__ import annotations
 Ensures ChromaVectorStore and SentenceTransformer embedding model
 are initialized only once per process, avoiding costly repeated
 model loading (~6 seconds per initialization).
+
+When ``ANIMAWORKS_EMBED_URL`` is set (child processes), embedding
+generation delegates to the server's ``/api/internal/embed`` endpoint
+via HTTP, eliminating per-process GPU model loading.
 """
 
 import logging
+import os
 import threading
 from typing import TYPE_CHECKING
 
@@ -21,6 +26,8 @@ if TYPE_CHECKING:
     from core.memory.rag.store import ChromaVectorStore
 
 logger = logging.getLogger(__name__)
+
+_BATCH_LIMIT = 1000
 
 _lock = threading.Lock()
 _vector_stores: dict[str | None, ChromaVectorStore | None] = {}
@@ -164,6 +171,48 @@ def get_embedding_dimension() -> int:
     if dim is None:
         raise RuntimeError("Embedding model did not report a dimension")
     return dim
+
+
+# ── Unified embedding generation ─────────────────────────────────
+
+
+def generate_embeddings(texts: list[str]) -> list[list[float]]:
+    """Generate embeddings via HTTP server or local model.
+
+    When ``ANIMAWORKS_EMBED_URL`` is set, delegates to the server's
+    ``/api/internal/embed`` endpoint.  Otherwise, uses the local
+    SentenceTransformer singleton.
+    """
+    if not texts:
+        return []
+    embed_url = os.environ.get("ANIMAWORKS_EMBED_URL")
+    if embed_url:
+        return _generate_embeddings_http(texts, embed_url)
+    return _generate_embeddings_local(texts)
+
+
+def _generate_embeddings_http(texts: list[str], embed_url: str) -> list[list[float]]:
+    """Call server's /api/internal/embed endpoint."""
+    import httpx
+
+    all_embeddings: list[list[float]] = []
+    for i in range(0, len(texts), _BATCH_LIMIT):
+        batch = texts[i : i + _BATCH_LIMIT]
+        resp = httpx.post(
+            embed_url,
+            json={"texts": batch},
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        all_embeddings.extend(resp.json()["embeddings"])
+    return all_embeddings
+
+
+def _generate_embeddings_local(texts: list[str]) -> list[list[float]]:
+    """Use local SentenceTransformer model."""
+    model = get_embedding_model()
+    embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+    return [emb.tolist() for emb in embeddings]
 
 
 def get_embedding_model_name() -> str:

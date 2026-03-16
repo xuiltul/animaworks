@@ -464,23 +464,17 @@ class ForgettingEngine:
         store,
     ) -> list[tuple[dict, dict, float]]:
         """Find pairs of low-activation chunks with high vector similarity."""
-        from core.memory.rag.singleton import get_embedding_model
+        from core.memory.rag.singleton import generate_embeddings
 
         pairs: list[tuple[dict, dict, float]] = []
         processed_ids: set[str] = set()
 
         try:
-            embedding_model = get_embedding_model()
             for _, chunk_a in enumerate(chunks):
                 if chunk_a["id"] in processed_ids:
                     continue
 
-                # Generate embedding for chunk_a
-                embedding = embedding_model.encode(
-                    [chunk_a["content"]],
-                    convert_to_numpy=True,
-                    show_progress_bar=False,
-                )[0].tolist()
+                embedding = generate_embeddings([chunk_a["content"]])[0]
 
                 # Query for similar chunks
                 results = store.query(

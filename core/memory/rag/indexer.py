@@ -89,9 +89,15 @@ class MemoryIndexer:
         self.collection_prefix = collection_prefix or anima_name
         self._embedding_model_name_override = embedding_model_name
 
-        # Use injected embedding model or initialize via singleton
+        # Use injected embedding model or initialize via singleton.
+        # When ANIMAWORKS_EMBED_URL is set (child processes), skip local
+        # model loading — generate_embeddings() handles HTTP delegation.
+        import os
+
         if embedding_model is not None:
             self.embedding_model = embedding_model
+        elif os.environ.get("ANIMAWORKS_EMBED_URL"):
+            self.embedding_model = None  # type: ignore[assignment]
         else:
             self._init_embedding_model()
 
@@ -779,19 +785,18 @@ class MemoryIndexer:
         return metadata
 
     def _generate_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for a batch of texts."""
+        """Generate embeddings for a batch of texts.
+
+        Delegates to ``generate_embeddings()`` which routes to the HTTP
+        server (child processes) or local model (server/test) automatically.
+        """
         if not texts:
             return []
 
         logger.debug("Generating embeddings for %d texts", len(texts))
-        embeddings = self.embedding_model.encode(
-            texts,
-            convert_to_numpy=True,
-            show_progress_bar=False,
-        )
+        from core.memory.rag.singleton import generate_embeddings
 
-        # Convert numpy arrays to lists
-        return [emb.tolist() for emb in embeddings]
+        return generate_embeddings(texts)
 
     @staticmethod
     def _compute_file_hash(file_path: Path) -> str:

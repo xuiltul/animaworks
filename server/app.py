@@ -313,6 +313,17 @@ async def lifespan(app: FastAPI):
         msg_log_scheduler.start()
         app.state.msg_log_scheduler = msg_log_scheduler
 
+        # ── Set embed URL for child processes ──────────────────
+        # Child processes inherit this env var and use HTTP for embeddings
+        # instead of loading SentenceTransformer on their own GPU.
+        import os
+
+        _embed_config = load_config()
+        _server_port = getattr(_embed_config.server, "port", 18500)
+        os.environ["ANIMAWORKS_EMBED_URL"] = (
+            f"http://127.0.0.1:{_server_port}/api/internal/embed"
+        )
+
         # ── Start anima processes in background (parallel) ──
         # Web server is already accepting requests at this point.
         app.state._anima_startup_task = asyncio.create_task(
@@ -343,6 +354,10 @@ async def lifespan(app: FastAPI):
         await app.state.supervisor.shutdown_all()
         if hasattr(app.state, "msg_log_scheduler"):
             app.state.msg_log_scheduler.shutdown(wait=False)
+        # Clean up embed URL env var to avoid leaking into test suites
+        import os
+
+        os.environ.pop("ANIMAWORKS_EMBED_URL", None)
     logger.info("Server stopped")
 
 

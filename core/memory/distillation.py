@@ -414,9 +414,7 @@ class ProceduralDistiller:
             ImportError: When RAG dependencies are unavailable.
             Exception: On embedding or clustering failures.
         """
-        from core.memory.rag.singleton import get_embedding_model
-
-        model = get_embedding_model()
+        from core.memory.rag.singleton import generate_embeddings
 
         # Build text representations
         texts: list[str] = []
@@ -432,11 +430,8 @@ class ProceduralDistiller:
         # Generate embeddings
         import numpy as np
 
-        embeddings = model.encode(
-            texts,
-            convert_to_numpy=True,
-            show_progress_bar=False,
-        )
+        embeddings_list = generate_embeddings(texts)
+        embeddings = np.array(embeddings_list)
 
         # Normalize for cosine similarity
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)

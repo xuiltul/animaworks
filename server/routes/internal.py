@@ -23,6 +23,10 @@ class MessageSentNotification(BaseModel):
     message_id: str = ""
 
 
+class EmbedRequest(BaseModel):
+    texts: list[str]
+
+
 def create_internal_router() -> APIRouter:
     router = APIRouter()
 
@@ -85,5 +89,36 @@ def create_internal_router() -> APIRouter:
             status_code=404,
             content={"detail": "Message not found"},
         )
+
+    # ── Embedding inference endpoint ────────────────────────────
+
+    @router.post("/internal/embed")
+    async def internal_embed(body: EmbedRequest):
+        """Centralized embedding inference for child processes.
+
+        Child processes call this endpoint via HTTP instead of loading
+        the SentenceTransformer model on their own GPU, reducing total
+        VRAM usage from ~22 GB to ~800 MB.
+        """
+        if len(body.texts) > 1000:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Max 1000 texts per request"},
+            )
+        if not body.texts:
+            return {"embeddings": []}
+
+        import asyncio
+
+        from core.memory.rag.singleton import get_embedding_model
+
+        model = get_embedding_model()
+        embeddings = await asyncio.to_thread(
+            model.encode,
+            body.texts,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
+        return {"embeddings": [emb.tolist() for emb in embeddings]}
 
     return router
