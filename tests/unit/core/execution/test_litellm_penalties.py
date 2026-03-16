@@ -78,7 +78,7 @@ class TestResolvePenalties:
         from core.config.models import resolve_penalties
 
         entry = {"frequency_penalty": 0.3, "presence_penalty": 0.1}
-        with patch("core.config.models._match_models_json", return_value=entry):
+        with patch("core.config.model_config._match_models_json", return_value=entry):
             result = resolve_penalties("claude-sonnet-4-6")
         assert result == {"frequency_penalty": 0.3, "presence_penalty": 0.1}
 
@@ -87,7 +87,7 @@ class TestResolvePenalties:
         from core.config.models import resolve_penalties
 
         entry = {"mode": "S", "context_window": 200000}
-        with patch("core.config.models._match_models_json", return_value=entry):
+        with patch("core.config.model_config._match_models_json", return_value=entry):
             result = resolve_penalties("claude-sonnet-4-6")
         assert result == {}
 
@@ -95,7 +95,7 @@ class TestResolvePenalties:
         """When no models.json match, returns empty dict."""
         from core.config.models import resolve_penalties
 
-        with patch("core.config.models._match_models_json", return_value=None):
+        with patch("core.config.model_config._match_models_json", return_value=None):
             result = resolve_penalties("unknown-model")
         assert result == {}
 
@@ -104,7 +104,7 @@ class TestResolvePenalties:
         from core.config.models import resolve_penalties
 
         entry = {"frequency_penalty": 0.5}
-        with patch("core.config.models._match_models_json", return_value=entry):
+        with patch("core.config.model_config._match_models_json", return_value=entry):
             result = resolve_penalties("openai/gpt-4o")
         assert result == {"frequency_penalty": 0.5}
         assert "presence_penalty" not in result
@@ -114,7 +114,7 @@ class TestResolvePenalties:
         from core.config.models import resolve_penalties
 
         entry = {"frequency_penalty": "not-a-number", "presence_penalty": 0.2}
-        with patch("core.config.models._match_models_json", return_value=entry):
+        with patch("core.config.model_config._match_models_json", return_value=entry):
             result = resolve_penalties("claude-sonnet-4-6")
         assert result == {"presence_penalty": 0.2}
 
@@ -123,7 +123,7 @@ class TestResolvePenalties:
         from core.config.models import resolve_penalties
 
         entry = {"frequency_penalty": 5.0, "presence_penalty": -3.0}
-        with patch("core.config.models._match_models_json", return_value=entry):
+        with patch("core.config.model_config._match_models_json", return_value=entry):
             result = resolve_penalties("openai/gpt-4o")
         assert result == {"frequency_penalty": 2.0, "presence_penalty": -2.0}
 

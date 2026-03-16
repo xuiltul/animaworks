@@ -326,7 +326,7 @@ class TestClear:
 
 class TestBuildChatPrompt:
     def test_no_history(self, conv, anima_dir):
-        with patch("core.memory.conversation.load_prompt") as mock_load:
+        with patch("core.memory.conversation_prompt.load_prompt") as mock_load:
             mock_load.return_value = "prompt text"
             result = conv.build_chat_prompt("Hello", from_person="human")
             mock_load.assert_called_once_with("chat_message", from_person="human", content="Hello")
@@ -335,7 +335,7 @@ class TestBuildChatPrompt:
         conv.append_turn("human", "Previous question")
         conv.append_turn("assistant", "Previous answer")
 
-        with patch("core.memory.conversation.load_prompt") as mock_load:
+        with patch("core.memory.conversation_prompt.load_prompt") as mock_load:
             mock_load.return_value = "prompt with history"
             result = conv.build_chat_prompt("New question", from_person="bob")
             mock_load.assert_called_once()
@@ -422,7 +422,7 @@ class TestCompressIfNeeded:
             conv.append_turn("human", "x" * 8000)
             conv.append_turn("assistant", "y" * 8000)
 
-        with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
+        with patch("core.memory.conversation_compression._call_compression_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = "Compressed summary"
             result = await conv.compress_if_needed()
             assert result is True
@@ -437,7 +437,7 @@ class TestCompressIfNeeded:
             conv.append_turn("assistant", "y" * 8000)
 
         original_count = len(conv.load().turns)
-        with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
+        with patch("core.memory.conversation_compression._call_compression_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.side_effect = RuntimeError("API error")
             result = await conv.compress_if_needed()
             assert result is True  # compression was attempted
@@ -668,7 +668,7 @@ class TestCompressKeepCount:
 
         keep = _MAX_DISPLAY_TURNS
         compress = 51 - keep
-        with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
+        with patch("core.memory.conversation_compression._call_compression_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = f"Compressed summary of {compress} turns"
             await conv._compress()
 
@@ -688,7 +688,7 @@ class TestCompressKeepCount:
 
         keep = min(_MAX_DISPLAY_TURNS, 24)
         compress = 25 - keep
-        with patch.object(conv, "_call_compression_llm", new_callable=AsyncMock) as mock_llm:
+        with patch("core.memory.conversation_compression._call_compression_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = f"Compressed summary of {compress} turns"
             await conv._compress()
 
