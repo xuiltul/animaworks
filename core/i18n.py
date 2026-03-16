@@ -69,6 +69,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ja": "タスクをバックグラウンドで実行開始しました (task_id: {task_id})",
         "en": "Task started in background (task_id: {task_id})",
     },
+    "handler.bg_cmd_started": {
+        "ja": "コマンドをバックグラウンドで実行開始しました。進捗は出力ファイルをReadで確認できます。",
+        "en": "Command started in background. Read the output file to check progress.",
+    },
     "handler.bg_task_id_required": {"ja": "Error: task_id は必須です", "en": "Error: task_id is required"},
     "handler.bg_not_enabled": {
         "ja": "Error: バックグラウンドタスク機能が無効です",

@@ -309,14 +309,23 @@ FILE_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "execute_command",
-        "description": "Execute a shell command (subject to permissions allow-list).",
+        "description": (
+            "Execute a shell command (subject to permissions allow-list). "
+            "Set background=true for long-running commands — returns immediately "
+            "with a cmd_id and output file path. Read the output file to check progress."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "command": {"type": "string", "description": "Shell command to run"},
                 "timeout": {
                     "type": "integer",
-                    "description": "Timeout in seconds (default 30)",
+                    "description": ("Timeout in seconds. Default: 30 (foreground), 1800 (background)."),
+                },
+                "background": {
+                    "type": "boolean",
+                    "description": "Run in background. Returns cmd_id + output file path immediately.",
+                    "default": False,
                 },
             },
             "required": ["command"],
@@ -455,14 +464,23 @@ CC_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "Bash",
-        "description": "Execute a shell command (subject to permissions allow-list).",
+        "description": (
+            "Execute shell commands (subject to permissions). "
+            "Set background=true for long-running commands — returns immediately "
+            "with a cmd_id and output file path. Read the output file to check progress."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
                 "command": {"type": "string", "description": "Shell command to run"},
                 "timeout": {
                     "type": "integer",
-                    "description": "Timeout in seconds (default 30)",
+                    "description": ("Timeout in seconds. Default: 30 (foreground), 1800 (background)."),
+                },
+                "background": {
+                    "type": "boolean",
+                    "description": "Run in background. Returns cmd_id + output file path immediately.",
+                    "default": False,
                 },
             },
             "required": ["command"],

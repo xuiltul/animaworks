@@ -26,6 +26,11 @@ from core.tooling.handler_base import (
     _error_result,
     _extract_first_heading,
 )
+import json as _json
+import os
+import signal
+import time
+from typing import ClassVar
 
 logger = logging.getLogger("animaworks.tool_handler")
 
@@ -90,6 +95,206 @@ def _build_fuzzy_cjk_latin_pattern(old: str) -> re.Pattern[str] | None:
     if not any_fuzzy:
         return None
     return re.compile("".join(parts))
+
+
+# ── Background command execution ──────────────────────────
+
+_BG_CMD_TIMEOUT_DEFAULT = 1800  # 30 minutes
+_BG_CMD_OUTPUT_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+class CommandRunner:
+    """Manage background command execution with streaming output to file.
+
+    Output is written to ``state/cmd_output/{cmd_id}.txt`` in Cursor-style
+    format: header (pid, command, started_at) → real-time stdout/stderr →
+    footer (exit_code, elapsed_seconds).
+    """
+
+    _counter: ClassVar[int] = 0
+    _counter_lock: ClassVar[threading.Lock] = threading.Lock()
+    _active: ClassVar[dict[str, "CommandRunner"]] = {}
+
+    def __init__(self, command: str, cwd: Path, timeout: int = _BG_CMD_TIMEOUT_DEFAULT) -> None:
+        self.command = command
+        self.cwd = cwd
+        self.timeout = timeout
+        self.cmd_id = ""
+        self.pid: int | None = None
+        self.process: subprocess.Popen | None = None
+        self._output_path: Path = Path()
+        self._start_time: float = 0.0
+
+    @classmethod
+    def _next_id(cls, prefix: str = "cmd") -> str:
+        with cls._counter_lock:
+            cls._counter += 1
+            return f"{prefix}_{cls._counter}"
+
+    def start(self, output_dir: Path) -> str:
+        """Launch the command in background, return cmd_id immediately."""
+        self.cmd_id = self._next_id()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._output_path = output_dir / f"{self.cmd_id}.txt"
+        self._start_time = time.monotonic()
+
+        use_shell = bool(_NEEDS_SHELL_RE.search(self.command))
+        try:
+            if use_shell:
+                self.process = subprocess.Popen(
+                    self.command,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    cwd=str(self.cwd),
+                    executable="/bin/bash",
+                    start_new_session=True,
+                )
+            else:
+                argv = shlex.split(self.command)
+                self.process = subprocess.Popen(
+                    argv,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    cwd=str(self.cwd),
+                    start_new_session=True,
+                )
+        except Exception as e:
+            self._write_error_file(str(e))
+            raise
+
+        self.pid = self.process.pid
+        self._write_header()
+        CommandRunner._active[self.cmd_id] = self
+
+        stdout_thread = threading.Thread(
+            target=self._stream_pipe,
+            args=(self.process.stdout, ""),
+            daemon=True,
+            name=f"cmd-stdout-{self.cmd_id}",
+        )
+        stderr_thread = threading.Thread(
+            target=self._stream_pipe,
+            args=(self.process.stderr, "[stderr] "),
+            daemon=True,
+            name=f"cmd-stderr-{self.cmd_id}",
+        )
+        stdout_thread.start()
+        stderr_thread.start()
+
+        waiter = threading.Thread(
+            target=self._wait_for_completion,
+            args=(stdout_thread, stderr_thread),
+            daemon=True,
+            name=f"cmd-wait-{self.cmd_id}",
+        )
+        waiter.start()
+
+        logger.info("background_cmd started cmd_id=%s pid=%s cmd=%s", self.cmd_id, self.pid, self.command[:80])
+        return self.cmd_id
+
+    def _write_header(self) -> None:
+        from core.time_utils import now_local
+
+        header = (
+            f"--- {self.cmd_id} ---\n"
+            f"pid: {self.pid}\n"
+            f"command: {self.command}\n"
+            f"started_at: {now_local().isoformat()}\n"
+            f"status: running\n"
+            f"---\n"
+        )
+        self._output_path.write_text(header, encoding="utf-8")
+
+    def _write_footer(self, exit_code: int, elapsed: float, timed_out: bool = False) -> None:
+        footer = f"\n--- FINISHED ---\nexit_code: {exit_code}\nelapsed_seconds: {round(elapsed, 1)}\n"
+        if timed_out:
+            footer += "timed_out: true\n"
+        footer += "---\n"
+        with open(self._output_path, "a", encoding="utf-8") as f:
+            f.write(footer)
+
+    def _write_error_file(self, error: str) -> None:
+        from core.time_utils import now_local
+
+        content = (
+            f"--- {self.cmd_id or 'error'} ---\n"
+            f"command: {self.command}\n"
+            f"started_at: {now_local().isoformat()}\n"
+            f"status: error\n"
+            f"---\n"
+            f"ERROR: {error}\n"
+            f"--- FINISHED ---\n"
+            f"exit_code: -1\n"
+            f"elapsed_seconds: 0.0\n"
+            f"---\n"
+        )
+        self._output_path.write_text(content, encoding="utf-8")
+
+    def _stream_pipe(self, pipe: Any, prefix: str) -> None:
+        """Read lines from a pipe and append to output file."""
+        if pipe is None:
+            return
+        total_bytes = 0
+        try:
+            with open(self._output_path, "a", encoding="utf-8") as f:
+                for line in pipe:
+                    total_bytes += len(line.encode("utf-8", errors="replace"))
+                    if total_bytes > _BG_CMD_OUTPUT_MAX_BYTES:
+                        f.write(
+                            f"\n... (output truncated at {_BG_CMD_OUTPUT_MAX_BYTES // (1024 * 1024)} MB) ...\n"
+                        )
+                        f.flush()
+                        break
+                    f.write(f"{prefix}{line}")
+                    f.flush()
+        except (ValueError, OSError):
+            pass
+        finally:
+            try:
+                pipe.close()
+            except Exception:
+                pass
+
+    def _wait_for_completion(self, stdout_thread: threading.Thread, stderr_thread: threading.Thread) -> None:
+        """Wait for process to finish, then write footer."""
+        proc = self.process
+        if proc is None:
+            return
+        timed_out = False
+        try:
+            proc.wait(timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                pass
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (OSError, ProcessLookupError):
+                    pass
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    pass
+
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+
+        elapsed = time.monotonic() - self._start_time
+        exit_code = proc.returncode if proc.returncode is not None else -1
+        self._write_footer(exit_code, elapsed, timed_out=timed_out)
+        CommandRunner._active.pop(self.cmd_id, None)
+        logger.info(
+            "background_cmd finished cmd_id=%s exit=%d elapsed=%.1fs timed_out=%s",
+            self.cmd_id, exit_code, elapsed, timed_out,
+        )
 
 
 class FileToolsMixin:
@@ -364,6 +569,25 @@ class FileToolsMixin:
         err = self._check_command_permission(command)
         if err:
             return err
+
+        background = args.get("background", False)
+        if background:
+            timeout = args.get("timeout", _BG_CMD_TIMEOUT_DEFAULT)
+            runner = CommandRunner(command, self._task_cwd or self._anima_dir, timeout)
+            output_dir = self._anima_dir / "state" / "cmd_output"
+            try:
+                cmd_id = runner.start(output_dir)
+            except Exception as e:
+                return _error_result("ExecutionError", f"Failed to start background command: {e}")
+            return _json.dumps(
+                {
+                    "status": "background",
+                    "cmd_id": cmd_id,
+                    "output_file": str(runner._output_path),
+                },
+                ensure_ascii=False,
+            )
+
         timeout = args.get("timeout", 30)
 
         use_shell = bool(_NEEDS_SHELL_RE.search(command))
@@ -406,7 +630,7 @@ class FileToolsMixin:
             return _error_result(
                 "Timeout",
                 f"Command timed out after {timeout}s",
-                suggestion="Increase timeout or break the command into smaller steps",
+                suggestion="Increase timeout or use background=true for long-running commands",
             )
         except Exception as e:
             return _error_result("ExecutionError", f"Error executing command: {e}")

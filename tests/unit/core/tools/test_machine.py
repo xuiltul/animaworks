@@ -315,11 +315,16 @@ class TestRateLimiting:
     def test_dispatch_increments_counter(self, tmp_path):
         wd = tmp_path / "workspace"
         wd.mkdir()
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = ("ok", "")
+            mock_proc.stdout = iter(["ok\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 dispatch(
                     "machine_run",
@@ -327,20 +332,24 @@ class TestRateLimiting:
                         "engine": "claude",
                         "instruction": "test",
                         "working_directory": str(wd),
-                        "anima_dir": "/tmp/anima",
+                        "anima_dir": str(anima_dir),
                     },
                 )
 
     def test_rate_limit_exceeded_in_session(self, tmp_path):
         wd = tmp_path / "workspace"
         wd.mkdir()
-        anima_dir = "/tmp/test_anima_rate"
+        anima_dir = tmp_path / "test_anima_rate"
+        anima_dir.mkdir()
 
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = ("ok", "")
+            mock_proc.stdout = iter(["ok\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 for _ in range(_MAX_CALLS_PER_SESSION):
                     dispatch(
@@ -349,7 +358,7 @@ class TestRateLimiting:
                             "engine": "claude",
                             "instruction": "test",
                             "working_directory": str(wd),
-                            "anima_dir": anima_dir,
+                            "anima_dir": str(anima_dir),
                         },
                     )
 
@@ -360,7 +369,7 @@ class TestRateLimiting:
                             "engine": "claude",
                             "instruction": "test",
                             "working_directory": str(wd),
-                            "anima_dir": anima_dir,
+                            "anima_dir": str(anima_dir),
                         },
                     )
                 )
@@ -369,13 +378,17 @@ class TestRateLimiting:
     def test_rate_limit_heartbeat(self, tmp_path):
         wd = tmp_path / "workspace"
         wd.mkdir()
-        anima_dir = "/tmp/test_anima_hb"
+        anima_dir = tmp_path / "test_anima_hb"
+        anima_dir.mkdir()
 
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = ("ok", "")
+            mock_proc.stdout = iter(["ok\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 for _ in range(_MAX_CALLS_PER_HEARTBEAT):
                     dispatch(
@@ -384,7 +397,7 @@ class TestRateLimiting:
                             "engine": "claude",
                             "instruction": "test",
                             "working_directory": str(wd),
-                            "anima_dir": anima_dir,
+                            "anima_dir": str(anima_dir),
                             "trigger": "heartbeat",
                         },
                     )
@@ -396,7 +409,7 @@ class TestRateLimiting:
                             "engine": "claude",
                             "instruction": "test",
                             "working_directory": str(wd),
-                            "anima_dir": anima_dir,
+                            "anima_dir": str(anima_dir),
                             "trigger": "heartbeat",
                         },
                     )
@@ -481,14 +494,18 @@ class TestDispatch:
             assert "error" in result
 
     def test_successful_execution(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = (
-                "Implementation complete.\nFiles modified: 3",
-                "",
-            )
+            mock_proc.stdout = iter(["Implementation complete.\nFiles modified: 3\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 result = json.loads(
                     dispatch(
@@ -496,8 +513,8 @@ class TestDispatch:
                         {
                             "engine": "claude",
                             "instruction": "Refactor the module",
-                            "working_directory": str(tmp_path),
-                            "anima_dir": "/tmp/anima",
+                            "working_directory": str(wd),
+                            "anima_dir": str(anima_dir),
                         },
                     )
                 )
@@ -506,11 +523,18 @@ class TestDispatch:
                 assert result["engine"] == "claude"
 
     def test_execution_with_nonzero_exit(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/codex"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = ("partial output", "error occurred")
+            mock_proc.stdout = iter(["partial output\n"])
+            mock_proc.stderr = iter(["error occurred\n"])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 1
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 result = json.loads(
                     dispatch(
@@ -518,8 +542,8 @@ class TestDispatch:
                         {
                             "engine": "codex",
                             "instruction": "bad instruction",
-                            "working_directory": str(tmp_path),
-                            "anima_dir": "/tmp/anima",
+                            "working_directory": str(wd),
+                            "anima_dir": str(anima_dir),
                         },
                     )
                 )
@@ -527,14 +551,20 @@ class TestDispatch:
                 assert result["exit_code"] == 1
 
     def test_timeout_handling(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.side_effect = [
-                subprocess.TimeoutExpired(cmd=["claude"], timeout=10),
-                ("partial", ""),
-            ]
+            mock_proc.stdout = iter(["partial output\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.pid = 12345
-            mock_proc.kill = MagicMock()
+            mock_proc.returncode = -1
+            mock_proc.wait = MagicMock(
+                side_effect=subprocess.TimeoutExpired(cmd=["claude"], timeout=10)
+            )
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 with patch("core.tools.machine.os.killpg"):
                     with patch("core.tools.machine.os.getpgid", return_value=12345):
@@ -544,8 +574,8 @@ class TestDispatch:
                                 {
                                     "engine": "claude",
                                     "instruction": "long task",
-                                    "working_directory": str(tmp_path),
-                                    "anima_dir": "/tmp/anima",
+                                    "working_directory": str(wd),
+                                    "anima_dir": str(anima_dir),
                                     "timeout": 10,
                                 },
                             )
@@ -558,11 +588,18 @@ class TestDispatch:
         assert "error" in result
 
     def test_subprocess_called_with_sanitized_env(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = ("ok", "")
+            mock_proc.stdout = iter(["ok\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc) as mock_popen:
                 with patch.dict(
                     os.environ,
@@ -573,33 +610,42 @@ class TestDispatch:
                         {
                             "engine": "claude",
                             "instruction": "test",
-                            "working_directory": str(tmp_path),
-                            "anima_dir": "/tmp/anima",
+                            "working_directory": str(wd),
+                            "anima_dir": str(anima_dir),
                         },
                     )
                     call_kwargs = mock_popen.call_args
+                    assert call_kwargs is not None
                     env = call_kwargs.kwargs.get("env") or call_kwargs[1].get("env")
                     assert "ANIMAWORKS_HOME" not in env
 
     def test_subprocess_runs_in_working_directory(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = ("ok", "")
+            mock_proc.stdout = iter(["ok\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc) as mock_popen:
                 dispatch(
                     "machine_run",
                     {
                         "engine": "claude",
                         "instruction": "test",
-                        "working_directory": str(tmp_path),
-                        "anima_dir": "/tmp/anima",
+                        "working_directory": str(wd),
+                        "anima_dir": str(anima_dir),
                     },
                 )
                 call_kwargs = mock_popen.call_args
+                assert call_kwargs is not None
                 cwd = call_kwargs.kwargs.get("cwd") or call_kwargs[1].get("cwd")
-                assert cwd == str(tmp_path)
+                assert cwd == str(wd)
 
 
 # ── Auto-Discovery Test ───────────────────────────────────
@@ -615,12 +661,17 @@ class TestOutputTruncation:
     def test_large_output_truncated(self, tmp_path):
         wd = tmp_path / "workspace"
         wd.mkdir()
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
         large_output = "x" * 60_000
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = (large_output, "")
+            mock_proc.stdout = iter([large_output])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 result = json.loads(
                     dispatch(
@@ -629,7 +680,7 @@ class TestOutputTruncation:
                             "engine": "claude",
                             "instruction": "generate large output",
                             "working_directory": str(wd),
-                            "anima_dir": "/tmp/anima",
+                            "anima_dir": str(anima_dir),
                         },
                     )
                 )
@@ -654,9 +705,12 @@ class TestCliMain:
 
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = ("Hello from CLI", "")
+            mock_proc.stdout = iter(["Hello from CLI\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 cli_main(["run", "test instruction", "-d", str(tmp_path)])
                 captured = capsys.readouterr()
@@ -667,15 +721,18 @@ class TestCliMain:
 
         with patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"):
             mock_proc = MagicMock()
-            mock_proc.communicate.return_value = ("JSON result", "")
+            mock_proc.stdout = iter(["JSON result\n"])
+            mock_proc.stderr = iter([""])
+            mock_proc.stdin = MagicMock()
             mock_proc.returncode = 0
             mock_proc.pid = 99999
+            mock_proc.wait = MagicMock(return_value=None)
             with patch("core.tools.machine.subprocess.Popen", return_value=mock_proc):
                 cli_main(["run", "test", "-d", str(tmp_path), "-j"])
                 captured = capsys.readouterr()
                 data = json.loads(captured.out)
                 assert data["success"] is True
-                assert data["output"] == "JSON result"
+                assert "JSON result" in data["output"]
 
     def test_run_failure_exits(self, tmp_path):
         from core.tools.machine import cli_main

@@ -41,9 +41,20 @@ import os
 import shutil
 import signal
 import subprocess
+import threading as _threading
 import time
 from pathlib import Path
 from typing import Any
+
+_machine_counter = 0
+_machine_counter_lock = _threading.Lock()
+
+
+def _next_machine_id() -> str:
+    global _machine_counter
+    with _machine_counter_lock:
+        _machine_counter += 1
+        return f"machine_{_machine_counter}"
 
 from core.i18n import t
 from core.tools._base import ToolResult
@@ -336,12 +347,116 @@ def _build_command(
 # ── Execution ──────────────────────────────────────────────
 
 
+def _stream_to_file(
+    proc: subprocess.Popen,
+    output_path: Path,
+    engine: str,
+    instruction_preview: str,
+    working_directory: str,
+    timeout: int,
+) -> tuple[int, float, bool, str]:
+    """Stream process output to file. Returns (exit_code, elapsed, timed_out, output_path_str)."""
+    from core.time_utils import now_local
+
+    start = time.monotonic()
+    cmd_id = output_path.stem
+
+    # Write header
+    header = (
+        f"--- {cmd_id} ---\n"
+        f"pid: {proc.pid}\n"
+        f"engine: {engine}\n"
+        f"instruction: {instruction_preview}\n"
+        f"working_directory: {working_directory}\n"
+        f"started_at: {now_local().isoformat()}\n"
+        f"status: running\n"
+        f"---\n"
+    )
+    output_path.write_text(header, encoding="utf-8")
+
+    max_bytes = 10 * 1024 * 1024  # 10 MB
+    total_bytes = 0
+    truncated = False
+
+    def _drain(pipe, prefix=""):
+        nonlocal total_bytes, truncated
+        if pipe is None:
+            return
+        try:
+            with open(output_path, "a", encoding="utf-8") as f:
+                for line in pipe:
+                    if truncated:
+                        break
+                    total_bytes += len(line.encode("utf-8", errors="replace"))
+                    if total_bytes > max_bytes:
+                        truncated = True
+                        f.write(
+                            f"\n... (output truncated at {max_bytes // (1024 * 1024)} MB) ...\n"
+                        )
+                        f.flush()
+                        break
+                    f.write(f"{prefix}{line}")
+                    f.flush()
+        except (ValueError, OSError):
+            pass
+        finally:
+            try:
+                pipe.close()
+            except Exception:
+                pass
+
+    stdout_thread = _threading.Thread(target=_drain, args=(proc.stdout,), daemon=True)
+    stderr_thread = _threading.Thread(
+        target=_drain, args=(proc.stderr, "[stderr] "), daemon=True
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+
+    timed_out = False
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                pass
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
+
+    stdout_thread.join(timeout=5)
+    stderr_thread.join(timeout=5)
+
+    elapsed = time.monotonic() - start
+    exit_code = proc.returncode if proc.returncode is not None else -1
+
+    # Write footer
+    footer = f"\n--- FINISHED ---\nexit_code: {exit_code}\nelapsed_seconds: {round(elapsed, 1)}\n"
+    if timed_out:
+        footer += "timed_out: true\n"
+    footer += "---\n"
+    with open(output_path, "a", encoding="utf-8") as f:
+        f.write(footer)
+
+    return exit_code, elapsed, timed_out, str(output_path)
+
+
 def _execute(
     engine: str,
     instruction: str,
     working_directory: str,
     model: str | None = None,
     timeout: int | None = None,
+    anima_dir: str | None = None,
 ) -> ToolResult:
     """Execute a machine tool synchronously."""
     exe = shutil.which(_ENGINE_COMMANDS[engine][0])
@@ -364,7 +479,6 @@ def _execute(
 
     effective_timeout = timeout or _DEFAULT_TIMEOUT_SYNC
 
-    start = time.monotonic()
     proc = None
     try:
         proc = subprocess.Popen(
@@ -377,63 +491,82 @@ def _execute(
             env=env,
             start_new_session=True,
         )
-        stdout, stderr = proc.communicate(input=full_instruction, timeout=effective_timeout)
 
-        elapsed = time.monotonic() - start
-        output = stdout or ""
+        # Write instruction to stdin and close
+        try:
+            proc.stdin.write(full_instruction)
+            proc.stdin.flush()
+            proc.stdin.close()
+        except (OSError, BrokenPipeError):
+            pass
 
-        if len(output) > _MAX_OUTPUT_CHARS:
-            output = output[:_MAX_OUTPUT_CHARS] + f"\n\n... (truncated at {_MAX_OUTPUT_CHARS} chars)"
+        # Determine output directory
+        if anima_dir:
+            output_dir = Path(anima_dir) / "state" / "cmd_output"
+        else:
+            output_dir = Path(working_directory) / ".cmd_output"
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        if proc.returncode == 0:
+        cmd_id = _next_machine_id()
+        output_path = output_dir / f"{cmd_id}.txt"
+
+        exit_code, elapsed, timed_out, output_file = _stream_to_file(
+            proc,
+            output_path,
+            engine,
+            instruction[:100],
+            working_directory,
+            effective_timeout,
+        )
+
+        # Read final output from file for the result
+        try:
+            raw_output = output_path.read_text(encoding="utf-8")
+        except OSError:
+            raw_output = ""
+
+        if len(raw_output) > _MAX_OUTPUT_CHARS:
+            raw_output = (
+                raw_output[:_MAX_OUTPUT_CHARS]
+                + f"\n\n... (truncated at {_MAX_OUTPUT_CHARS} chars)"
+            )
+
+        if timed_out:
+            return ToolResult(
+                success=False,
+                text=raw_output,
+                error=t("machine.timeout", engine=engine, seconds=effective_timeout),
+                data={
+                    "engine": engine,
+                    "elapsed_seconds": round(elapsed, 1),
+                    "timed_out": True,
+                    "output_file": output_file,
+                },
+            )
+
+        if exit_code == 0:
             return ToolResult(
                 success=True,
-                text=output,
+                text=raw_output,
                 data={
                     "engine": engine,
                     "exit_code": 0,
                     "elapsed_seconds": round(elapsed, 1),
-                    "stderr_excerpt": stderr[:500] if stderr else None,
+                    "output_file": output_file,
                 },
             )
         else:
-            combined = output
-            if stderr:
-                combined += f"\n\n--- stderr ---\n{stderr[:2000]}"
             return ToolResult(
                 success=False,
-                text=combined,
-                error=t("machine.engine_failed", engine=engine, code=proc.returncode),
+                text=raw_output,
+                error=t("machine.engine_failed", engine=engine, code=exit_code),
                 data={
                     "engine": engine,
-                    "exit_code": proc.returncode,
+                    "exit_code": exit_code,
                     "elapsed_seconds": round(elapsed, 1),
+                    "output_file": output_file,
                 },
             )
-    except subprocess.TimeoutExpired:
-        elapsed = time.monotonic() - start
-        partial = ""
-        if proc is not None:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except (OSError, ProcessLookupError):
-                pass
-            try:
-                remaining_out, _ = proc.communicate(timeout=5)
-                if remaining_out:
-                    partial = remaining_out
-            except Exception:
-                proc.kill()
-        return ToolResult(
-            success=False,
-            text=partial[:_MAX_OUTPUT_CHARS] if partial else "",
-            error=t("machine.timeout", engine=engine, seconds=effective_timeout),
-            data={
-                "engine": engine,
-                "elapsed_seconds": round(elapsed, 1),
-                "timed_out": True,
-            },
-        )
     except Exception as exc:
         return ToolResult(
             success=False,
@@ -610,7 +743,14 @@ def dispatch(name: str, args: dict[str, Any]) -> str:
     else:
         effective_timeout = timeout or _DEFAULT_TIMEOUT_SYNC
 
-    result = _execute(engine, instruction, working_directory, model, effective_timeout)
+    result = _execute(
+        engine,
+        instruction,
+        working_directory,
+        model=model,
+        timeout=effective_timeout,
+        anima_dir=anima_dir or None,
+    )
 
     output: dict[str, Any] = {
         "success": result.success,

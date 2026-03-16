@@ -437,6 +437,10 @@ DEFAULT_GUIDES: dict[str, dict[str, str]] = {
 Bash: animaworks-tool <tool> <subcommand> [args]
 ```
 利用可能なCLIコマンドは `skill machine-tool` または `Bash: animaworks-tool --help` で確認。
+
+### Background Command Output
+machine_run等の長時間コマンドの出力は `state/cmd_output/` に保存されます。
+`Read(path="state/cmd_output/{id}.txt")` で中間出力を確認できます。
 """,
         "en": """\
 ## AnimaWorks Tools
@@ -469,6 +473,10 @@ For supervisor management, vault, channel management, background tasks, and exte
 Bash: animaworks-tool <tool> <subcommand> [args]
 ```
 Use `skill machine-tool` or `Bash: animaworks-tool --help` to see available CLI commands.
+
+### Background Command Output
+Long-running commands like machine_run write output to `state/cmd_output/`.
+Use `Read(path="state/cmd_output/{id}.txt")` to check intermediate output.
 """,
     },
     "non_s": {
@@ -482,6 +490,9 @@ Use `skill machine-tool` or `Bash: animaworks-tool --help` to see available CLI 
 - **Write**: ファイルに書き込む。親ディレクトリを自動作成
 - **Edit**: ファイル内の特定の文字列を置換（old_stringは一意であること）
 - **Bash**: シェルコマンドを実行（permissionsの許可範囲内）
+  - 長時間コマンド: `background: true` で非同期実行 → cmd_id + 出力ファイルパスが返る
+  - 進捗確認: `Read(path="state/cmd_output/{cmd_id}.txt")` で中間出力を確認
+  - 一覧: `Glob(pattern="state/cmd_output/*.txt")` でバックグラウンドタスク一覧
 - **Grep**: 正規表現でファイル内を検索
 - **Glob**: グロブパターンでファイルを検索
 - **WebSearch**: Web検索
@@ -523,6 +534,9 @@ You have 18 tools available, unified across all modes.
 - **Write**: Write content to a file. Creates parent directories.
 - **Edit**: Replace a specific string in a file (old_string must be unique).
 - **Bash**: Execute shell commands (subject to permissions).
+  - Long-running: `background: true` for async execution → returns cmd_id + output file path
+  - Check progress: `Read(path="state/cmd_output/{cmd_id}.txt")` for intermediate output
+  - List all: `Glob(pattern="state/cmd_output/*.txt")` for background task list
 - **Grep**: Search for regex patterns in files.
 - **Glob**: Find files matching a glob pattern.
 - **WebSearch**: Search the web for information.
