@@ -864,6 +864,7 @@ _EXPECTED_REFERENCE_FILES = [
     "anatomy/anima-anatomy.md",
     "communication/slack-bot-token-guide.md",
     "internals/common-knowledge-access-paths.md",
+    "operations/browser-automation-guide.md",
     "operations/model-guide.md",
     "operations/mode-s-auth-guide.md",
     "operations/project-setup.md",
