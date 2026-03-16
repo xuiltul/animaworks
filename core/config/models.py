@@ -755,8 +755,6 @@ def resolve_anima_config(
     #   3. anima_defaults (global defaults)
     resolved: dict[str, Any] = {}
     for field_name in AnimaDefaults.model_fields:
-        if field_name == "extra_mcp_servers":
-            continue
         if field_name in status_values:
             resolved[field_name] = status_values[field_name]
         elif field_name in ("supervisor", "speciality"):
@@ -766,10 +764,14 @@ def resolve_anima_config(
                 resolved[field_name] = anima_value
             else:
                 resolved[field_name] = getattr(defaults, field_name)
+        elif field_name == "extra_mcp_servers":
+            # Start from defaults (usually empty), then overlay per-anima config.
+            base: dict[str, Any] = dict(getattr(defaults, field_name))
+            if anima_entry.extra_mcp_servers:
+                base.update(anima_entry.extra_mcp_servers)
+            resolved[field_name] = base
         else:
             resolved[field_name] = getattr(defaults, field_name)
-
-    resolved["extra_mcp_servers"] = dict(anima_entry.extra_mcp_servers)
 
     resolved_defaults = AnimaDefaults.model_validate(resolved)
 
