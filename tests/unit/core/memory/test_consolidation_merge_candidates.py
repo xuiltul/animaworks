@@ -89,8 +89,12 @@ class TestFindMergeCandidates:
         for i in range(4):
             (engine.knowledge_dir / f"file{i}.md").write_text(f"---\n---\nContent {i}", encoding="utf-8")
 
-        def make_result(source_file: str, score: float) -> MagicMock:
-            return MagicMock(score=score, metadata={"source_file": source_file})
+        def make_result(source_file: str, vector_sim: float) -> MagicMock:
+            return MagicMock(
+                score=vector_sim + 0.05,
+                source_scores={"vector": vector_sim},
+                metadata={"source_file": source_file},
+            )
 
         mock_retriever = MagicMock()
         mock_retriever.search.return_value = [
@@ -117,8 +121,12 @@ class TestFindMergeCandidates:
         (engine.knowledge_dir / "a.md").write_text("---\n---\nContent A", encoding="utf-8")
         (engine.knowledge_dir / "b.md").write_text("---\n---\nContent B", encoding="utf-8")
 
-        def make_result(source_file: str, score: float) -> MagicMock:
-            return MagicMock(score=score, metadata={"source_file": source_file})
+        def make_result(source_file: str, vector_sim: float) -> MagicMock:
+            return MagicMock(
+                score=vector_sim + 0.1,
+                source_scores={"vector": vector_sim},
+                metadata={"source_file": source_file},
+            )
 
         mock_retriever = MagicMock()
         mock_retriever.search.return_value = [
@@ -137,14 +145,44 @@ class TestFindMergeCandidates:
             result = engine._find_merge_candidates(similarity_threshold=0.75)
             assert result == []
 
+    def test_uses_raw_vector_similarity(self, tmp_path: Path) -> None:
+        """Verify raw vector similarity is used, not combined score."""
+        engine = self._make_engine(tmp_path)
+        (engine.knowledge_dir / "a.md").write_text("---\n---\nContent A", encoding="utf-8")
+        (engine.knowledge_dir / "b.md").write_text("---\n---\nContent B", encoding="utf-8")
+
+        mock_result = MagicMock(
+            score=0.9,  # combined score is high
+            source_scores={"vector": 0.6},  # raw vector similarity is low
+            metadata={"source_file": "knowledge/b.md"},
+        )
+        mock_retriever = MagicMock()
+        mock_retriever.search.return_value = [mock_result]
+
+        mock_vs = MagicMock()
+        with (
+            patch("core.memory.rag.singleton.get_vector_store", return_value=mock_vs),
+            patch("core.memory.rag.MemoryIndexer"),
+            patch(
+                "core.memory.rag.retriever.MemoryRetriever",
+                return_value=mock_retriever,
+            ),
+        ):
+            result = engine._find_merge_candidates(similarity_threshold=0.75)
+            assert result == [], "Should reject when raw vector sim < threshold even if combined score is high"
+
     def test_deduplicates_pairs(self, tmp_path: Path) -> None:
         """Verify (a,b) and (b,a) are deduplicated to one pair."""
         engine = self._make_engine(tmp_path)
         (engine.knowledge_dir / "a.md").write_text("---\n---\nContent A", encoding="utf-8")
         (engine.knowledge_dir / "b.md").write_text("---\n---\nContent B", encoding="utf-8")
 
-        def make_result(source_file: str, score: float) -> MagicMock:
-            return MagicMock(score=score, metadata={"source_file": source_file})
+        def make_result(source_file: str, vector_sim: float) -> MagicMock:
+            return MagicMock(
+                score=vector_sim + 0.05,
+                source_scores={"vector": vector_sim},
+                metadata={"source_file": source_file},
+            )
 
         mock_retriever = MagicMock()
         mock_retriever.search.side_effect = [

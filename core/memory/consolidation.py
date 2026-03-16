@@ -521,7 +521,7 @@ class ConsolidationEngine:
         for path in sorted(self.knowledge_dir.rglob("*.md")):
             # Skip archive subdirectories
             rel = path.relative_to(self.knowledge_dir)
-            if str(rel).startswith("archive"):
+            if rel.parts and rel.parts[0] == "archive":
                 continue
 
             meta_fields: dict[str, Any] = {"path": str(rel)}
@@ -573,16 +573,15 @@ class ConsolidationEngine:
             return []
 
         # Read all non-archived knowledge files
+        from core.memory.frontmatter import parse_frontmatter
+
         file_contents: dict[str, str] = {}
         for path in sorted(self.knowledge_dir.rglob("*.md")):
             rel = path.relative_to(self.knowledge_dir)
-            if str(rel).startswith("archive"):
+            if rel.parts and rel.parts[0] == "archive":
                 continue
             try:
                 text = path.read_text(encoding="utf-8")
-                # Strip frontmatter for content comparison
-                from core.memory.frontmatter import parse_frontmatter
-
                 _, body = parse_frontmatter(text)
                 if body.strip():
                     file_contents[str(rel)] = body.strip()
@@ -608,7 +607,8 @@ class ConsolidationEngine:
                 continue
 
             for result in results:
-                if result.score < similarity_threshold:
+                raw_sim = getattr(result, "source_scores", {}).get("vector", result.score)
+                if raw_sim < similarity_threshold:
                     continue
 
                 source_file = str(result.metadata.get("source_file", ""))
@@ -624,7 +624,10 @@ class ConsolidationEngine:
                     match_rel = source_file
 
                 # Skip self-match and archived files
-                if match_rel == rel_path or match_rel.startswith("archive"):
+                match_rel_path = Path(match_rel)
+                if match_rel == rel_path:
+                    continue
+                if match_rel_path.parts and match_rel_path.parts[0] == "archive":
                     continue
                 # Skip if the matched file isn't in our content map
                 if match_rel not in file_contents:
@@ -635,7 +638,7 @@ class ConsolidationEngine:
                     continue
                 seen_pairs.add(pair_key)
 
-                candidates.append((rel_path, match_rel, result.score))
+                candidates.append((rel_path, match_rel, raw_sim))
 
         # Sort by similarity descending, cap at max_pairs
         candidates.sort(key=lambda x: x[2], reverse=True)
