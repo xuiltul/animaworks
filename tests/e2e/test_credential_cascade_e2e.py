@@ -88,7 +88,7 @@ class TestSlackCredentialCascade:
         from core.tools.slack import SlackClient
         # SlackClient needs slack_sdk, mock it
         with patch("core.tools._slack_client._require_slack_sdk"):
-            with patch("core.tools.slack.WebClient") as mock_wc:
+            with patch("core.tools._slack_client.WebClient") as mock_wc:
                 client = SlackClient()
                 mock_wc.assert_called_with(token="xoxb-config-test")
 
@@ -98,7 +98,7 @@ class TestSlackCredentialCascade:
 
         from core.tools.slack import SlackClient
         with patch("core.tools._slack_client._require_slack_sdk"):
-            with patch("core.tools.slack.WebClient") as mock_wc:
+            with patch("core.tools._slack_client.WebClient") as mock_wc:
                 client = SlackClient()
                 mock_wc.assert_called_with(token="xoxb-env-test")
 

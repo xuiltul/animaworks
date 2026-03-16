@@ -20,7 +20,7 @@ def _mock_chatwork_env(monkeypatch, tmp_path):
     mock_requests = MagicMock()
     mock_session = MagicMock()
     mock_requests.Session.return_value = mock_session
-    with patch.dict("core.tools.chatwork.__dict__", {"requests": mock_requests}):
+    with patch.dict("core.tools._chatwork_client.__dict__", {"requests": mock_requests}):
         yield mock_session
 
 
@@ -36,7 +36,7 @@ def mock_cache(tmp_path, monkeypatch):
     _real_close = cache.close
     cache.close = lambda: None  # no-op during test
     monkeypatch.setattr(
-        "core.tools.chatwork.MessageCache",
+        "core.tools._chatwork_cli.MessageCache",
         lambda db_path=None: cache,
     )
     yield cache
@@ -71,7 +71,7 @@ class TestSyncCLI:
         ])
         session.request.side_effect = [rooms_resp, msgs_resp, msgs_resp]
 
-        with patch("core.tools.chatwork.time.sleep"):
+        with patch("core.tools._chatwork_cli.time.sleep"):
             cli_main(["sync", "--limit", "2"])
 
         stats = mock_cache.get_stats()
@@ -121,7 +121,7 @@ class TestUnrepliedSyncCLI:
 
         session.request.side_effect = [me_resp, rooms_resp, msgs_resp]
 
-        with patch("core.tools.chatwork.time.sleep"):
+        with patch("core.tools._chatwork_cli.time.sleep"):
             cli_main(["unreplied", "--sync", "--sync-limit", "1"])
 
         captured = capsys.readouterr()
