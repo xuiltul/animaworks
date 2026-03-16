@@ -199,10 +199,10 @@ class TestCallersSendAnimaName:
             mock_gvs.assert_called_once_with("sakura")
 
     def test_priming_passes_anima_name(self):
-        """PrimingEngine uses get_vector_store(anima_name)."""
+        """PrimingEngine uses get_vector_store(anima_name) via RetrieverCache."""
         import inspect
-        from core.memory.priming import PrimingEngine
-        source = inspect.getsource(PrimingEngine._get_or_create_retriever)
+        from core.memory.priming.utils import RetrieverCache
+        source = inspect.getsource(RetrieverCache.get_or_create)
         assert "get_vector_store(anima_name)" in source
 
     def test_contradiction_passes_anima_name(self):

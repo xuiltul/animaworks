@@ -163,15 +163,15 @@ class TestRAGConfig:
 
 class TestInvalidateCache:
     def test_invalidate_clears(self):
-        from core.config import models
+        from core.config import io as config_io
 
-        models._config = AnimaWorksConfig()
-        models._config_path = Path("/fake")
-        models._config_mtime = 99.0
+        config_io._config = AnimaWorksConfig()
+        config_io._config_path = Path("/fake")
+        config_io._config_mtime = 99.0
         invalidate_cache()
-        assert models._config is None
-        assert models._config_path is None
-        assert models._config_mtime == 0.0
+        assert config_io._config is None
+        assert config_io._config_path is None
+        assert config_io._config_mtime == 0.0
 
 
 # ── mtime-based cache reload ─────────────────────────────
@@ -225,22 +225,22 @@ class TestLoadConfigMtimeReload:
 
         # Remove file — stat() will fail
         path.unlink()
-        from core.config import models
+        from core.config import io as config_io
 
         # Set mtime to 0.0 to simulate OSError path matching
-        models._config_mtime = 0.0
+        config_io._config_mtime = 0.0
         c2 = load_config(path)
         # disk_mtime=0.0 == _config_mtime=0.0 → cache hit
         assert c1 is c2
 
     def test_save_config_records_mtime(self, tmp_path):
         """save_config() stores the file's mtime in _config_mtime."""
-        from core.config import models
+        from core.config import io as config_io
 
         path = tmp_path / "config.json"
         save_config(AnimaWorksConfig(), path)
-        assert models._config_mtime > 0.0
-        assert models._config_mtime == path.stat().st_mtime
+        assert config_io._config_mtime > 0.0
+        assert config_io._config_mtime == path.stat().st_mtime
 
 
 # ── get_config_path ───────────────────────────────────────
@@ -337,10 +337,10 @@ class TestSaveConfig:
         path = tmp_path / "config.json"
         save_config(config, path)
         # Should be cached now
-        from core.config import models
+        from core.config import io as config_io
 
-        assert models._config is config
-        assert models._config_path == path
+        assert config_io._config is config
+        assert config_io._config_path == path
 
     def test_save_creates_parent_dir(self, tmp_path):
         config = AnimaWorksConfig()
@@ -587,12 +587,12 @@ class TestResolveExecutionModeWildcard:
     def test_config_legacy_values_normalised(self):
         # config.json model_modes with legacy A2 value → normalised to A
         # Patch models.json lookup so config.model_modes is used (models.json takes priority)
-        with patch("core.config.models._match_models_json", return_value=None):
+        with patch("core.config.model_mode._match_models_json", return_value=None):
             config = AnimaWorksConfig(model_modes={"ollama/qwen3:8b": "A2"})
             assert resolve_execution_mode(config, "ollama/qwen3:8b") == "A"
 
     def test_config_wildcard_overrides_code_default(self):
-        with patch("core.config.models._match_models_json", return_value=None):
+        with patch("core.config.model_mode._match_models_json", return_value=None):
             config = AnimaWorksConfig(model_modes={"ollama/gemma3*": "A"})
             # Code default says B for gemma3*, but config.json overrides
             assert resolve_execution_mode(config, "ollama/gemma3:27b") == "A"
