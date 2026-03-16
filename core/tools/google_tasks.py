@@ -125,10 +125,7 @@ class GoogleTasksClient:
         service = self._build_service()
         result = service.tasklists().list(maxResults=max_results).execute()
         items = result.get("items", [])
-        return [
-            {"id": i.get("id", ""), "title": i.get("title", ""), "updated": i.get("updated", "")}
-            for i in items
-        ]
+        return [{"id": i.get("id", ""), "title": i.get("title", ""), "updated": i.get("updated", "")} for i in items]
 
     def list_tasks(
         self,
@@ -219,9 +216,7 @@ class GoogleTasksClient:
         if not body:
             return {"error": "At least one of title, notes, due, status is required"}
         service = self._build_service()
-        updated = service.tasks().patch(
-            tasklist=tasklist_id, task=task_id, body=body
-        ).execute()
+        updated = service.tasks().patch(tasklist=tasklist_id, task=task_id, body=body).execute()
         return {
             "id": updated.get("id", ""),
             "title": updated.get("title", ""),
@@ -233,9 +228,7 @@ class GoogleTasksClient:
     def update_tasklist(self, *, tasklist_id: str, title: str) -> dict[str, Any]:
         """Update a task list's title."""
         service = self._build_service()
-        updated = service.tasklists().patch(
-            tasklist=tasklist_id, body={"title": title}
-        ).execute()
+        updated = service.tasklists().patch(tasklist=tasklist_id, body={"title": title}).execute()
         return {
             "id": updated.get("id", ""),
             "title": updated.get("title", ""),
@@ -245,12 +238,14 @@ class GoogleTasksClient:
 
 # ── Tool schemas ──────────────────────────────────────────
 
+
 def get_tool_schemas() -> list[dict]:
     """Return tool schemas (empty — use skill-based documentation)."""
     return []
 
 
 # ── Dispatch ──────────────────────────────────────────────
+
 
 def dispatch(name: str, args: dict[str, Any]) -> Any:
     """Dispatch a tool call by schema name."""
@@ -316,6 +311,7 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
 
 
 # ── CLI ───────────────────────────────────────────────────
+
 
 def cli_main(argv: list[str] | None = None) -> None:
     """CLI entry point for the Google Tasks tool."""
