@@ -76,7 +76,7 @@ _SECTION_META: dict[str, tuple[str, str]] = {
     "tool_data_interpretation":  ("framework",    "templates/prompts/tool_data_interpretation.md"),
     "company_vision":           ("company",      "company/vision.md"),
     "specialty_prompt":         ("company",      "animas/{name}/specialty_prompt.md"),
-    "permissions":              ("permissions",  "animas/{name}/permissions.md"),
+    "permissions":              ("permissions",  "animas/{name}/permissions.json"),
     "bootstrap":                ("framework",    "animas/{name}/bootstrap.md"),
     "task_in_progress":         ("state",        "state/current_state.md"),
     "task_queue":               ("state",        "(computed: TaskQueueManager)"),

@@ -73,13 +73,11 @@ class ExternalToolDispatcher:
             return None
 
         try:
-            perm_path = Path(anima_dir) / "permissions.md"
-            if not perm_path.is_file():
-                return None
-            text = perm_path.read_text(encoding="utf-8")
-            from core.tooling.permissions import is_action_gated, parse_permitted_tools
+            from core.config.models import load_permissions
+            from core.tooling.permissions import get_permitted_tools, is_action_gated
 
-            permitted = parse_permitted_tools(text)
+            perm_config = load_permissions(Path(anima_dir))
+            permitted = get_permitted_tools(perm_config)
             if is_action_gated(tool_name, action, permitted):
                 return json.dumps(
                     {

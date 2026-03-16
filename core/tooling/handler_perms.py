@@ -13,6 +13,7 @@ import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.config.models import PermissionsConfig, load_permissions
 from core.i18n import t
 from core.tooling.handler_base import (
     _BLOCKED_CMD_PATTERNS,
@@ -46,11 +47,6 @@ class PermissionsMixin:
     _dispatch: dict[str, Any]
     _external: ExternalToolDispatcher
 
-    # Section header aliases
-    _CMD_SECTION_HEADERS = ("コマンド実行", "実行できるコマンド")
-    _FILE_SECTION_HEADERS = ("ファイル操作", "読める場所")
-    _DENIED_CMD_SECTION_HEADERS = ("実行できないコマンド",)
-
     # ── check_permissions handler ────────────────────────────
 
     def _handle_check_permissions(self, args: dict[str, Any]) -> str:
@@ -71,7 +67,7 @@ class PermissionsMixin:
         except Exception:
             logger.debug("Failed to enumerate external tools", exc_info=True)
 
-        permissions_text = self._memory.read_permissions() if self._memory else ""
+        config = self._load_permissions_config()
 
         file_read: list[str] = [t("handler.file_read_own"), t("handler.file_read_shared")]
         file_write: list[str] = [t("handler.file_write_own")]
@@ -89,18 +85,15 @@ class PermissionsMixin:
         if self._peer_activity_dirs:
             file_read.append(t("handler.peer_activity"))
 
-        file_header = self._find_section_header(permissions_text, self._FILE_SECTION_HEADERS)
-        if file_header:
-            extra_dirs = self._parse_permission_section(file_header)
-            for d in extra_dirs:
-                if d.startswith("/"):
-                    file_read.append(d)
-                    file_write.append(d)
+        if config.file_roots and config.file_roots != ["/"]:
+            for root in config.file_roots:
+                if root.startswith("/"):
+                    file_read.append(root)
+                    file_write.append(root)
 
         restrictions: list[str] = []
-        denied_cmds = self._parse_denied_commands(permissions_text)
-        if denied_cmds:
-            restrictions.extend(t("handler.cmd_denied", cmd=cmd) for cmd in denied_cmds)
+        for cmd in config.commands.deny:
+            restrictions.append(t("handler.cmd_denied", cmd=cmd))
 
         result = {
             "internal_tools": internal_tools,
@@ -120,43 +113,25 @@ class PermissionsMixin:
     # ── Tool creation permission ─────────────────────────────
 
     def _check_tool_creation_permission(self, kind: str) -> bool:
-        """Check if tool creation is permitted via permissions.md."""
-        permissions = self._memory.read_permissions() if self._memory else ""
-        kw_ja = t("handler.tool_creation_keyword", locale="ja")
-        kw_en = t("handler.tool_creation_keyword", locale="en")
-        if kw_ja not in permissions and kw_en not in permissions:
+        """Check if tool creation is permitted via permissions config."""
+        if self._memory is None:
             return False
-        _perm_re = re.compile(
-            rf"[-*]?\s*{re.escape(kind)}\s*:\s*(OK|yes|enabled|true)\s*$",
-            re.IGNORECASE,
-        )
-        for line in permissions.splitlines():  # noqa: SIM110
-            if _perm_re.match(line.strip()):
-                return True
+        config = self._load_permissions_config()
+        kind_lower = kind.lower()
+        if "personal" in kind_lower or "個人" in kind:
+            return config.tool_creation.personal
+        if "shared" in kind_lower or "共有" in kind:
+            return config.tool_creation.shared
         return False
 
-    # ── Permission section parsing ───────────────────────────
+    # ── Permission helpers ───────────────────────────────────
 
-    def _parse_permission_section(self, section_header: str) -> list[str]:
-        """Parse a section from permissions.md and return allowed items."""
-        permissions = self._memory.read_permissions()
-        items: list[str] = []
-        in_section = False
-        for line in permissions.splitlines():
-            stripped = line.strip()
-            if section_header in stripped:
-                in_section = True
-                continue
-            if in_section and stripped.startswith("#"):
-                break
-            if in_section and stripped.startswith("-"):
-                item = stripped.lstrip("- ").split(":")[0].strip()
-                if item:
-                    items.append(item)
-        return items
+    def _load_permissions_config(self) -> PermissionsConfig:
+        """Load PermissionsConfig from permissions.json (with migration fallback)."""
+        return load_permissions(self._anima_dir)
 
     def _check_file_permission(self, path: str, *, write: bool = False) -> str | None:
-        """Check if the file path is allowed by permissions.md.
+        """Check if the file path is allowed by permissions config.
 
         Returns ``None`` if allowed, or an error message string if denied.
         """
@@ -234,22 +209,33 @@ class PermissionsMixin:
                 if shared_dir.exists() and resolved.is_relative_to(shared_dir.resolve()):
                     return None
 
-        permissions = self._memory.read_permissions()
-        header = self._find_section_header(permissions, self._FILE_SECTION_HEADERS)
-        if header is None:
-            logger.warning("permission_denied anima=%s path=%s reason=file_ops_not_enabled", self._anima_name, path)
-            return _error_result("PermissionDenied", "File operations not enabled in permissions.md")
-
-        # Parse allowed directory whitelist from permissions.md
-        raw_items = self._parse_permission_section(header)
-        allowed_dirs = [Path(item).resolve() for item in raw_items if item.startswith("/")]
-
-        if not allowed_dirs:
-            logger.warning("permission_denied anima=%s path=%s reason=no_allowed_dirs", self._anima_name, path)
+        # Inter-anima boundary: block access to other anima's directories
+        # that were not already allowed by subordinate/descendant/peer rules.
+        animas_root = self._anima_dir.resolve().parent
+        if resolved.is_relative_to(animas_root) and not resolved.is_relative_to(self._anima_dir.resolve()):
+            logger.warning("permission_denied anima=%s path=%s reason=other_anima_dir", self._anima_name, path)
             return _error_result(
-                "PermissionDenied", t("handler.no_file_ops_paths"), suggestion="Add directory paths to permissions.md"
+                "PermissionDenied",
+                f"Access to other anima's directory is not allowed: {path}",
             )
 
+        config = self._load_permissions_config()
+
+        # file_roots == ["/"]: allow all (after protected file check)
+        if config.file_roots == ["/"]:
+            return None
+
+        # file_roots == []: only anima_dir + framework shared dirs (already handled above)
+        if not config.file_roots:
+            logger.warning("permission_denied anima=%s path=%s reason=outside_allowed_dirs", self._anima_name, path)
+            return _error_result(
+                "PermissionDenied",
+                f"'{path}' is not under any allowed directory",
+                context={"allowed_dirs": []},
+            )
+
+        # Otherwise: check if path is under any of the file_roots
+        allowed_dirs = [Path(r).resolve() for r in config.file_roots if r.startswith("/")]
         for allowed in allowed_dirs:
             if resolved.is_relative_to(allowed):
                 return None
@@ -261,49 +247,8 @@ class PermissionsMixin:
             context={"allowed_dirs": [str(d) for d in allowed_dirs]},
         )
 
-    def _find_section_header(
-        self,
-        permissions: str,
-        candidates: tuple[str, ...],
-    ) -> str | None:
-        """Return the first matching section header found in *permissions*."""
-        for header in candidates:
-            if header in permissions:
-                return header
-        return None
-
-    def _parse_denied_commands(self, permissions: str) -> list[str]:
-        """Parse the denied-commands section from permissions.md."""
-        header = self._find_section_header(
-            permissions,
-            self._DENIED_CMD_SECTION_HEADERS,
-        )
-        if header is None:
-            return []
-
-        lines: list[str] = []
-        in_section = False
-        for line in permissions.splitlines():
-            stripped = line.strip()
-            if header in stripped:
-                in_section = True
-                continue
-            if in_section and stripped.startswith("#"):
-                break
-            if in_section and stripped:
-                lines.append(stripped)
-
-        items: list[str] = []
-        for line in lines:
-            line = line.lstrip("-* ")
-            for part in line.split(","):
-                part = part.strip()
-                if part:
-                    items.append(part)
-        return items
-
     def _check_command_permission(self, command: str) -> str | None:
-        """Check if the command is allowed by permissions.md and security rules.
+        """Check if the command is allowed by permissions config and security rules.
 
         Returns ``None`` if allowed, or an error message string if denied.
         """
@@ -337,9 +282,9 @@ class PermissionsMixin:
                 )
                 return _error_result("PermissionDenied", reason)
 
-        # Layer 2.5: Per-anima denied commands from permissions.md
-        permissions = self._memory.read_permissions()
-        denied_items = self._parse_denied_commands(permissions)
+        # Layer 2.5: Per-anima denied commands from permissions config
+        config = self._load_permissions_config()
+        denied_items = config.commands.deny
         if denied_items:
             segments = [s.strip() for s in re.split(r"\|(?!\|)|\&\&|\|\|", command) if s.strip()]
             for segment in segments:
@@ -363,17 +308,14 @@ class PermissionsMixin:
                             f"Command '{cmd_base}' is in denied list ('{denied}')",
                         )
 
-        # Layer 3: permissions.md section check
-        header = self._find_section_header(permissions, self._CMD_SECTION_HEADERS)
-        if header is None:
-            logger.warning(
-                "permission_denied anima=%s command=%s reason=cmd_not_enabled", self._anima_name, command[:80]
-            )
-            return _error_result("PermissionDenied", "Command execution not enabled in permissions.md")
-
-        # Layer 4: Per-command allowlist check
-        allowed = self._parse_permission_section(header)
-        if allowed:
+        # Layer 3: If commands.allow_all is False, check commands.allow whitelist
+        if not config.commands.allow_all:
+            allowed = config.commands.allow
+            if not allowed:
+                logger.warning(
+                    "permission_denied anima=%s command=%s reason=cmd_not_enabled", self._anima_name, command[:80]
+                )
+                return _error_result("PermissionDenied", "Command execution not enabled in permissions")
             segments = [s.strip() for s in re.split(r"\|(?!\|)|\&\&|\|\|", command) if s.strip()]
             for segment in segments:
                 try:
@@ -396,7 +338,7 @@ class PermissionsMixin:
                         context={"allowed_commands": allowed},
                     )
         else:
-            segments = [command]
+            segments = [s.strip() for s in re.split(r"\|(?!\|)|\&\&|\|\|", command) if s.strip()] or [command]
 
         # Layer 5: Path traversal check on all segments
         for segment in segments:

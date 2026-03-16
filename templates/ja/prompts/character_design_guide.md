@@ -51,7 +51,7 @@
 ## アバター画像の生成
 
 キャラクター設計が完了したら、`image_gen` ツールでアバター画像一式を生成する。
-`image_gen` が使用可能な場合（permissions.md で `image_gen: yes`）のみ実行すること。
+`image_gen` が使用可能な場合（permissions.json で image_gen が許可）のみ実行すること。
 
 ### NovelAI プロンプトへの変換
 

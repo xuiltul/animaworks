@@ -502,6 +502,27 @@ class CodexSDKExecutor(BaseExecutor):
         bare_model = _resolve_codex_model(self._model_config.model)
         esc = _escape_toml_string
 
+        from core.config.models import load_permissions
+
+        permissions_config = load_permissions(self._anima_dir)
+
+        if "/" in permissions_config.file_roots:
+            sandbox_mode = "danger-full-access"
+            sandbox_section = ""
+        else:
+            sandbox_mode = "workspace-write"
+            writable_roots = [str(self._anima_dir)]
+            for root in permissions_config.file_roots:
+                resolved = str(Path(root).resolve())
+                if resolved not in writable_roots:
+                    writable_roots.append(resolved)
+            if self._task_cwd:
+                cwd_str = str(self._task_cwd)
+                if cwd_str not in writable_roots:
+                    writable_roots.append(cwd_str)
+            roots_list = ", ".join(f'"{esc(r)}"' for r in writable_roots)
+            sandbox_section = f"\n[sandbox_workspace_write]\nwritable_roots = [{roots_list}]\nnetwork_access = true\n"
+
         mcp_env = self._build_mcp_env()
         mcp_env_lines = "\n".join(f'{k} = "{esc(v)}"' for k, v in mcp_env.items())
 
@@ -511,12 +532,9 @@ class CodexSDKExecutor(BaseExecutor):
             f'developer_instructions = "{esc(self._CODEX_DEVELOPER_INSTRUCTIONS)}"\n'
             f'personality = "friendly"\n'
             f'model_verbosity = "high"\n'
-            f'sandbox_mode = "workspace-write"\n'
+            f'sandbox_mode = "{sandbox_mode}"\n'
             f'approval_policy = "never"\n'
-            f"\n"
-            f"[sandbox_workspace_write]\n"
-            f'writable_roots = ["{esc(str(self._anima_dir))}"]'
-            f"\nnetwork_access = true\n"
+            f"{sandbox_section}"
             f"\n"
             f"[mcp_servers.aw]\n"
             f'command = "{esc(sys.executable)}"\n'

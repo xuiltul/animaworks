@@ -57,7 +57,7 @@ All runtime data is stored under `{data_dir}/`.
 3. **Common skills** (`{data_dir}/common_skills/`): Only top-level members (no supervisor) can write. Others read-only. Skills available to all
 4. **Company info** (`{data_dir}/company/`): Only top-level members can write
 5. **Prompts** (`{data_dir}/prompts/`): Read-only. Templates such as character design guide
-6. **Other Anima directories**: Access only as explicitly permitted in permissions.md
+6. **Other Anima directories**: Access only as explicitly permitted in permissions.json
 7. **Descendants' directories** (supervisors only — same permissions for children, grandchildren, great-grandchildren, etc.):
    - **Management files**: `injection.md`, `cron.md`, `heartbeat.md`, `status.json` are **read/write** (for organizational role assignments and configuration changes)
    - **State files**: `activity_log/`, `state/current_state.md` (working memory), `state/task_queue.jsonl`, `state/pending/` are **read-only**

@@ -229,7 +229,15 @@ class MemoryManager:
         return self._read(self.anima_dir / "specialty_prompt.md")
 
     def read_permissions(self) -> str:
-        return self._read(self.anima_dir / "permissions.md")
+        """Read permissions as formatted text for prompt injection.
+
+        Loads from permissions.json (structured) and formats as text.
+        Falls back to raw permissions.md if JSON not available.
+        """
+        from core.config.models import _format_permissions_for_prompt, load_permissions
+
+        config = load_permissions(self.anima_dir)
+        return _format_permissions_for_prompt(config, self.anima_dir.name)
 
     def read_current_state(self) -> str:
         return self._read(self.state_dir / "current_state.md") or "status: idle"

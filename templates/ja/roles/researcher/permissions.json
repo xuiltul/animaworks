@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "file_roots": ["/"],
+  "commands": {
+    "allow_all": true,
+    "allow": [],
+    "deny": []
+  },
+  "external_tools": {
+    "allow_all": true,
+    "allow": [],
+    "deny": []
+  },
+  "tool_creation": {
+    "personal": true,
+    "shared": false
+  }
+}

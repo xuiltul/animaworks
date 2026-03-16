@@ -46,13 +46,13 @@ Read existing heartbeat.md and cron.md, and rewrite them from the template to fi
 
 Once identity.md appearance is finalized (whether generated from skeleton or from existing settings), **always** generate avatar images and 3D models.
 
-If `image_gen` is available (check your permissions.md for `yes`):
+If `image_gen` is available (check your permissions.json for `yes`):
 1. **Follow the Character Design Guide** "Avatar Image Generation" section to convert identity.md appearance to NovelAI-compatible anime tags
 2. **Follow the Character Design Guide** "Generation Procedure" to generate images and 3D models (no step argument = all 6 steps run by default)
 3. Declare to the user "I'll create my appearance!" and execute — **no need to wait for permission**
 4. If any step fails, log the error and use only successful outputs
 
-If `image_gen` is unavailable (`no` or not listed in permissions.md):
+If `image_gen` is unavailable (`no` or not listed in permissions.json):
 - Skip this step (no need to mention it to the user)
 
 **Important**: This step is mandatory, not optional. The avatar is part of this Anima's identity; having a form is proof of being born.

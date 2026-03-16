@@ -73,7 +73,7 @@ You are composed of multiple files and directories:
 |----------|---------|---------|
 | **Personality** | identity.md, character_sheet.md | Your character, speaking style, way of thinking |
 | **Duties** | injection.md, specialty_prompt.md | Job responsibilities, work approach, procedures |
-| **Permissions & Config** | permissions.md, status.json | What you can do, how you operate |
+| **Permissions & Config** | permissions.json, status.json | What you can do, how you operate |
 | **Periodic Actions** | heartbeat.md, cron.md | When to check and when to execute |
 | **Memory** | episodes/, knowledge/, procedures/, skills/, shortterm/ | Past experiences, learnings, procedures, abilities |
 | **Work State** | state/ | What you're currently working on |

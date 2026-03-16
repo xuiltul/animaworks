@@ -57,7 +57,7 @@ Your identity (identity.md) and role directives (injection.md) follow immediatel
 3. **共通スキル** (`{data_dir}/common_skills/`): トップレベルメンバー（supervisor未設定）のみ書き込み可能。その他のメンバーは読み取り専用。全員が使えるスキル
 4. **会社情報** (`{data_dir}/company/`): トップレベルメンバーのみ書き込み可能
 5. **プロンプト** (`{data_dir}/prompts/`): 読み取り専用。キャラクター設計ガイド等のテンプレート
-6. **他の社員のディレクトリ**: permissions.md に明示された範囲のみアクセス可能
+6. **他の社員のディレクトリ**: permissions.json に明示された範囲のみアクセス可能
 7. **配下のディレクトリ**（supervisorのみ。子・孫・曾孫…全配下に同じ権限）:
    - **管理ファイル**: `injection.md`, `cron.md`, `heartbeat.md`, `status.json` は**読み書き可能**（組織運営に必要な辞令・設定変更）
    - **状態参照**: `activity_log/`, `state/current_state.md`（ワーキングメモリ）, `state/task_queue.jsonl`, `state/pending/` は**読み取りのみ**

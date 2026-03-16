@@ -285,6 +285,32 @@ def cmd_anima_info(args: argparse.Namespace) -> None:
             print(f"  {k}: {v}")
 
 
+def cmd_anima_permissions(args: argparse.Namespace) -> None:
+    """Show permissions configuration for an anima in human-readable format."""
+    from core.config.models import _format_permissions_for_prompt, load_permissions
+    from core.i18n import t
+    from core.paths import get_animas_dir
+
+    name: str = args.anima
+    anima_dir = get_animas_dir() / name
+
+    if not anima_dir.exists():
+        print(t("cli.permissions_not_found", name=name))
+        sys.exit(1)
+
+    config = load_permissions(anima_dir)
+    formatted = _format_permissions_for_prompt(config, name)
+    print(formatted)
+
+    perm_path = anima_dir / "permissions.json"
+    if perm_path.exists():
+        print(f"\n{t('cli.permissions_file_path', path=str(perm_path))}")
+    else:
+        md_path = anima_dir / "permissions.md"
+        if md_path.exists():
+            print(f"\n{t('cli.permissions_file_path', path=str(md_path))} (legacy, will migrate on load)")
+
+
 def cmd_anima_delete(args: argparse.Namespace) -> None:
     """Delete an anima with optional archive."""
     import requests

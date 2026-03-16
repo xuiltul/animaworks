@@ -189,7 +189,7 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | WebSocket, /ws/voice, barge-in, VAD, PTT | `reference/operations/voice-chat-guide.md` |
 | Anima, self, anatomy, composition, lifecycle | `anatomy/what-is-anima.md` |
 | identity, injection, personality, guidelines, immutable, mutable | `reference/anatomy/anima-anatomy.md` |
-| permissions.md, bootstrap, heartbeat.md, cron.md | `reference/anatomy/anima-anatomy.md` |
+| permissions.json, bootstrap, heartbeat.md, cron.md | `reference/anatomy/anima-anatomy.md` |
 | memory, episodes, knowledge, procedures, skills | `anatomy/memory-system.md` |
 | Priming, RAG, Consolidation, Forgetting | `anatomy/memory-system.md` |
 | search_memory, write_memory_file, memory search | `anatomy/memory-system.md` |

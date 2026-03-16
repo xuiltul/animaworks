@@ -186,7 +186,7 @@ An Anima with no supervisor or subordinates; operates autonomously. Used for sin
 ### Notes
 
 - speciality is a display label; it does not restrict permissions
-- Actual permissions are defined in `permissions.md`
+- Actual permissions are defined in `permissions.json`
 - Anima works normally without speciality set, but provides less guidance to others
 - speciality can be changed anytime via config.json (applied on server restart)
 
@@ -203,7 +203,7 @@ Role templates are organized across `templates/_shared` and locale-specific path
 | Path | Content | Locale |
 |------|---------|--------|
 | `templates/_shared/roles/{role}/defaults.json` | Model and parameter defaults | Shared |
-| `templates/{locale}/roles/{role}/permissions.md` | Role-specific tool permissions | ja / en |
+| `templates/{locale}/roles/{role}/permissions.json` | Role-specific tool permissions | ja / en |
 | `templates/{locale}/roles/{role}/specialty_prompt.md` | Role-specific behavior guidelines | ja / en |
 
 `locale` is resolved from `config.json`'s `locale` or defaults to `ja`.
@@ -241,10 +241,10 @@ Messaging rate limits (`max_outbound_per_hour`, etc.) are defined per role in `d
 
 ### Application Flow
 
-1. **On creation** (`create_from_md`): `_apply_role_defaults()` copies `permissions.md` and
+1. **On creation** (`create_from_md`): `_apply_role_defaults()` copies `permissions.json` and
    `specialty_prompt.md` to `animas/{name}/`. `_create_status_json()` merges all fields from
    `defaults.json` (including `background_model` and `max_outbound_*`) into `status.json`.
-2. **On role change** (`animaworks anima set-role`): `permissions.md` and `specialty_prompt.md` are recopied.
+2. **On role change** (`animaworks anima set-role`): `permissions.json` and `specialty_prompt.md` are recopied.
    Only `model`, `context_threshold`, `max_turns`, `max_chains`, and `conversation_history_threshold`
    are merged into `status.json`; `background_model` and `max_outbound_*` are not applied on set-role.
    Use `--status-only` to update only status.json, `--no-restart` to skip auto-restart.

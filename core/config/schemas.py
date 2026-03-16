@@ -480,6 +480,112 @@ class ActivityScheduleEntry(BaseModel):
         return self
 
 
+# ── Permissions Config ────────────────────────────────────────────────────────
+
+
+class CommandsPermission(BaseModel):
+    """Permission rules for command execution."""
+
+    allow_all: bool = True
+    allow: list[str] = Field(default_factory=list)
+    deny: list[str] = Field(default_factory=list)
+
+
+class ExternalToolsPermission(BaseModel):
+    """Permission rules for external tool access."""
+
+    allow_all: bool = True
+    allow: list[str] = Field(default_factory=list)
+    deny: list[str] = Field(default_factory=list)
+
+
+class ToolCreationPermission(BaseModel):
+    """Permission rules for tool/skill creation."""
+
+    personal: bool = True
+    shared: bool = False
+
+
+class PermissionsConfig(BaseModel):
+    """Structured permissions for an Anima (replaces permissions.md).
+
+    Default values implement 'Open by Default, Deny by Exception' policy.
+    """
+
+    version: int = 1
+    file_roots: list[str] = Field(default_factory=lambda: ["/"])
+    commands: CommandsPermission = Field(default_factory=CommandsPermission)
+    external_tools: ExternalToolsPermission = Field(default_factory=ExternalToolsPermission)
+    tool_creation: ToolCreationPermission = Field(default_factory=ToolCreationPermission)
+
+
+def load_permissions(anima_dir: Path) -> PermissionsConfig:
+    """Load permissions from permissions.json, with migration fallback.
+
+    Resolution order:
+      1. permissions.json exists -> load and validate
+      2. permissions.md only -> auto-migrate, return config
+      3. Neither exists -> return default (open)
+      4. Invalid JSON -> warning + return default (open)
+    """
+    json_path = anima_dir / "permissions.json"
+    md_path = anima_dir / "permissions.md"
+
+    if json_path.is_file():
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            config = PermissionsConfig.model_validate(data)
+            version = data.get("version")
+            if version is not None and version != 1:
+                logger.warning("permissions.json version %s is unknown; using known fields only", version)
+            return config
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Failed to parse permissions.json at %s: %s — using open defaults", json_path, exc)
+            return PermissionsConfig()
+        except Exception as exc:
+            logger.warning("Invalid permissions.json at %s: %s — using open defaults", json_path, exc)
+            return PermissionsConfig()
+
+    if md_path.is_file():
+        from core.config.migrate import migrate_permissions_md_to_json
+
+        return migrate_permissions_md_to_json(anima_dir)
+
+    return PermissionsConfig()
+
+
+def _format_permissions_for_prompt(config: PermissionsConfig, anima_name: str) -> str:
+    """Convert PermissionsConfig to a human/LLM-readable text block."""
+    lines = [f"## Permissions: {anima_name}"]
+    if config.file_roots == ["/"]:
+        lines.append("- File access: unrestricted")
+    elif not config.file_roots:
+        lines.append("- File access: own directory and shared framework directories only")
+    else:
+        lines.append(f"- File access limited to: {', '.join(config.file_roots)}")
+    if config.commands.allow_all:
+        lines.append("- Commands: all allowed (hardcoded blocks still apply)")
+    else:
+        if config.commands.allow:
+            lines.append(f"- Allowed commands: {', '.join(config.commands.allow)}")
+        else:
+            lines.append("- Commands: none allowed")
+    if config.commands.deny:
+        lines.append(f"- Additionally denied commands: {', '.join(config.commands.deny)}")
+    if config.external_tools.allow_all:
+        lines.append("- External tools: all allowed")
+    else:
+        if config.external_tools.allow:
+            lines.append(f"- Allowed external tools: {', '.join(config.external_tools.allow)}")
+        else:
+            lines.append("- External tools: none allowed")
+    if config.external_tools.deny:
+        lines.append(f"- Denied external tools: {', '.join(config.external_tools.deny)}")
+    tc = config.tool_creation
+    lines.append(f"- Tool creation: personal={'yes' if tc.personal else 'no'}, shared={'yes' if tc.shared else 'no'}")
+    return "\n".join(lines)
+
+
 # ── Main Config ─────────────────────────────────────────────────────────────
 
 

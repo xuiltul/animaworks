@@ -263,7 +263,7 @@ File names: `YYYY-MM-DD.md` (daily log).
 ## 10:00 Task started: Slack integration test
 
 Started Slack API connectivity test per aoi's request.
-Confirmed slack: yes in permissions.md.
+Confirmed slack: yes in permissions.json.
 
 ## 11:30 Task completed: Slack integration test
 

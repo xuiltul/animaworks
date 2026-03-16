@@ -62,7 +62,7 @@ Slack message. `slack_channel_update` (chat.update API) overwrites the message
 silently (no notification), making it work as a live dashboard.
 
 > These are gated actions. Usage requires
-> `slack_channel_post: yes` / `slack_channel_update: yes` in permissions.md.
+> `slack_channel_post: yes` / `slack_channel_update: yes` in permissions.json.
 
 ### Setup
 

@@ -71,6 +71,7 @@ _NEEDS_SHELL_RE = re.compile(r"\||\&\&|\|\||>>?|<<?")
 _PROTECTED_FILES = frozenset(
     {
         "permissions.md",
+        "permissions.json",
         "identity.md",
         "bootstrap.md",
     }

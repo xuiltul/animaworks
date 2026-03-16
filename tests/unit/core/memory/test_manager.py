@@ -77,11 +77,17 @@ class TestReadInjection:
 
 class TestReadPermissions:
     def test_no_file(self, mm):
-        assert mm.read_permissions() == ""
+        """When no permissions file exists, returns formatted default config."""
+        result = mm.read_permissions()
+        assert "Permissions:" in result
+        assert "File access" in result or "Commands" in result
 
     def test_with_file(self, mm, anima_dir):
+        """When permissions.md exists, migrates to JSON and returns formatted config."""
         (anima_dir / "permissions.md").write_text("- web_search: OK", encoding="utf-8")
-        assert mm.read_permissions() == "- web_search: OK"
+        result = mm.read_permissions()
+        assert "Permissions:" in result
+        assert "web_search" in result or "External tools" in result
 
 
 class TestReadCurrentState:

@@ -120,19 +120,17 @@ class TestCreateFromMdEngineerRole:
     def test_permissions_created_with_engineer_content(
         self, data_dir: Path, tmp_path: Path
     ):
-        """permissions.md should be overwritten with engineer template content."""
+        """permissions.json should be created from engineer role template."""
         animas_dir = data_dir / "animas"
         sheet_path = _write_sheet(tmp_path, ENGINEER_SHEET)
 
         anima_dir = create_from_md(animas_dir, sheet_path, role="engineer")
 
-        permissions = anima_dir / "permissions.md"
-        assert permissions.exists(), "permissions.md was not created"
-        content = permissions.read_text(encoding="utf-8")
-        # Engineer permissions template includes tool list
-        assert "Permissions" in content or "ツール" in content
-        # The {name} placeholder should be replaced with the anima name
-        assert "testeng" in content
+        permissions = anima_dir / "permissions.json"
+        assert permissions.exists(), "permissions.json was not created"
+        data = json.loads(permissions.read_text(encoding="utf-8"))
+        assert data.get("version") == 1
+        assert data.get("file_roots") == ["/"]
 
     def test_status_json_contains_engineer_defaults(
         self, data_dir: Path, tmp_path: Path

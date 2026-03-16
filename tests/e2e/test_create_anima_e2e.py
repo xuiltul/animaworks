@@ -104,7 +104,7 @@ class TestCreateFromMdFullFlow:
         expected_files = [
             "identity.md",
             "injection.md",
-            "permissions.md",
+            "permissions.json",
             "status.json",
             "character_sheet.md",
             "bootstrap.md",
@@ -252,18 +252,18 @@ class TestCreateFromMdOmittedSections:
         cron_content = cron.read_text(encoding="utf-8")
         assert "Cron" in cron_content or "毎朝" in cron_content
 
-    def test_permissions_md_keeps_default_content(self, data_dir: Path, tmp_path: Path):
-        """permissions.md should retain template defaults when not overridden."""
+    def test_permissions_json_keeps_default_content(self, data_dir: Path, tmp_path: Path):
+        """permissions.json should retain template defaults when not overridden."""
         animas_dir = data_dir / "animas"
         sheet_path = _write_character_sheet(tmp_path, MINIMAL_CHARACTER_SHEET)
 
         anima_dir = create_from_md(animas_dir, sheet_path)
 
-        permissions = anima_dir / "permissions.md"
+        permissions = anima_dir / "permissions.json"
         assert permissions.exists()
-        perm_content = permissions.read_text(encoding="utf-8")
-        # Should contain the default template permissions (e.g., tool list)
-        assert "Permissions" in perm_content or "ツール" in perm_content
+        data = json.loads(permissions.read_text(encoding="utf-8"))
+        assert data.get("version") == 1
+        assert data.get("file_roots") == ["/"]
 
 
 class TestDuplicateAnimaNameError:

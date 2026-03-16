@@ -130,25 +130,12 @@ def _coerce_integers(
 
 
 def _load_permitted_categories(anima_dir: Path) -> set[str]:
-    """Parse permissions.md to extract permitted external tool categories.
+    """Load permitted external tool categories from permissions.json."""
+    from core.config.models import load_permissions
+    from core.tooling.permissions import get_permitted_tools
 
-    Delegates to :func:`core.tooling.permissions.parse_permitted_tools`.
-    """
-    from core.tooling.permissions import parse_permitted_tools
-    from core.tools import TOOL_MODULES
-
-    all_tools = set(TOOL_MODULES.keys())
-    permissions_path = anima_dir / "permissions.md"
-    if not permissions_path.is_file():
-        return all_tools
-
-    try:
-        text = permissions_path.read_text(encoding="utf-8")
-    except OSError:
-        logger.debug("Cannot read permissions.md from %s", anima_dir)
-        return all_tools
-
-    return parse_permitted_tools(text)
+    config = load_permissions(anima_dir)
+    return get_permitted_tools(config)
 
 
 def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:

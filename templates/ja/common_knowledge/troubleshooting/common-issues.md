@@ -84,7 +84,7 @@ send_message(
 ### 原因
 
 1. 依存タスクが未完了
-2. 権限不足（permissions.md で許可されていない操作を実行しようとした）
+2. 権限不足（permissions.json で許可されていない操作を実行しようとした）
 3. 必要な情報が不足している
 4. 外部サービスの障害
 
@@ -120,7 +120,7 @@ send_message(
    ```
    send_message(
        to="上司の名前",
-       content="【ブロック報告】\nタスク: XXXの実装\nブロック原因: YYYのAPI権限が不足\n発生: 2026-02-15 10:00\n試行: permissions.mdを確認したが該当設定なし\n依頼: API権限の追加をお願いします",
+       content="【ブロック報告】\nタスク: XXXの実装\nブロック原因: YYYのAPI権限が不足\n発生: 2026-02-15 10:00\n試行: permissions.jsonを確認したが該当設定なし\n依頼: API権限の追加をお願いします",
        intent="report"
    )
    ```
@@ -212,7 +212,7 @@ send_message(
 
 ### 原因
 
-1. `permissions.md` で許可されていない操作を実行しようとした
+1. `permissions.json` で許可されていない操作を実行しようとした
 2. 外部ツールのカテゴリが未有効化
 3. ファイルパスが許可範囲外
 
@@ -223,12 +223,12 @@ send_message(
    check_permissions()
    ```
    - 利用可能な内部ツール・外部ツール・ファイルアクセス・制限事項が一覧で返る
-   - 詳細は `read_memory_file(path="permissions.md")` で確認可能
-   - `permissions.md` の主なセクション:
+   - 詳細は `read_memory_file(path="permissions.json")` で確認可能
+   - `permissions.json` の主なセクション:
      - 「ファイル操作」「読める場所」: 読み取り可能なパス
      - 「コマンド実行」「実行できるコマンド」: 実行可能なコマンドのホワイトリスト
      - 「実行できないコマンド」: ブロック対象コマンド
-     - 外部ツール: permissions.md で許可されたカテゴリが有効化される
+     - 外部ツール: permissions.json で許可されたカテゴリが有効化される
 
 2. **許可されている操作か確認する**
    - 自分の anima_dir 内は読み書き可能。共有ディレクトリ・部下の管理ファイル等は `check_permissions` で確認
@@ -262,7 +262,7 @@ send_message(
 
 ### 原因
 
-1. そのツール自体が `permissions.md` で許可されていない
+1. そのツール自体が `permissions.json` で許可されていない
 2. スキルファイルが見つからない
 3. 外部サービスの認証情報が設定されていない
 
@@ -277,7 +277,7 @@ send_message(
    check_permissions()
    ```
    - `external_tools.enabled` に現在有効なカテゴリ、`external_tools.available_but_not_enabled` に許可済みだが未有効のカテゴリが返る
-   - permissions.md で許可されていないカテゴリは使用できない
+   - permissions.json で許可されていないカテゴリは使用できない
 
 3. **カテゴリが許可されていない場合**
    - 上司に利用許可を依頼する
@@ -396,13 +396,13 @@ send_message(
 ### 原因
 
 1. システム全体のブロックリストに含まれるコマンド（`rm -rf /` 等の危険なコマンド）
-2. `permissions.md` の「実行できないコマンド」セクションに記載されたコマンド
+2. `permissions.json` の「実行できないコマンド」セクションに記載されたコマンド
 
 ### 対処手順
 
 1. **自分の権限を確認する**
    ```
-   read_memory_file(path="permissions.md")
+   read_memory_file(path="permissions.json")
    ```
    - `## 実行できないコマンド` セクションにブロック対象が記載されている
 

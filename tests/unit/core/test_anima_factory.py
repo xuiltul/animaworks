@@ -829,11 +829,13 @@ Development.
 - write_file: OK
 """
         _apply_defaults_from_sheet(anima_dir, md)
-        permissions = anima_dir / "permissions.md"
-        assert permissions.exists()
-        content = permissions.read_text(encoding="utf-8")
-        assert "read_file" in content
-        assert "write_file" in content
+        # Character sheet permissions are written as MD then migrated to JSON
+        perm_json = anima_dir / "permissions.json"
+        assert perm_json.exists()
+        import json
+
+        data = json.loads(perm_json.read_text(encoding="utf-8"))
+        assert data.get("version") == 1
 
     def test_does_not_overwrite_when_section_missing(self, tmp_path):
         anima_dir = tmp_path / "anima"

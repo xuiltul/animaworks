@@ -62,7 +62,7 @@ Slack チャンネルのピン留めメッセージとして同期できる。
 `slack_channel_update`（chat.update API）は通知を発生させずにメッセージを上書きするため、
 ライブダッシュボードとして機能する。
 
-> これらは gated アクション。使用するには permissions.md に
+> これらは gated アクション。使用するには permissions.json に
 > `slack_channel_post: yes` / `slack_channel_update: yes` が必要。
 
 ### セットアップ手順

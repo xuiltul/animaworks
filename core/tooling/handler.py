@@ -565,12 +565,13 @@ class ToolHandler(
         # Check gated action permission
         permitted: set[str] = set()
         try:
-            permissions_text = self._memory.read_permissions()
-            from core.tooling.permissions import parse_permitted_tools
+            from core.config.models import load_permissions
+            from core.tooling.permissions import get_permitted_tools
 
-            permitted = parse_permitted_tools(permissions_text)
+            perm_config = load_permissions(self._anima_dir)
+            permitted = get_permitted_tools(perm_config)
         except Exception:
-            logger.debug("Failed to parse permissions for gated action check; defaulting to empty set")
+            logger.debug("Failed to load permissions for gated action check; defaulting to empty set")
 
         from core.tooling.permissions import is_action_gated
 

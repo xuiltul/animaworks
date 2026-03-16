@@ -134,15 +134,15 @@ PrimingがRAG経由で関連知識を取得する際、各チャンクの `origi
 
 #### レイヤー2.5: エージェント個別の禁止コマンド
 
-各エージェントの `permissions.md` に `## 実行できないコマンド` セクションで追加ブロック可能。
+各エージェントの `permissions.json` で `commands.denied_commands` により追加ブロック可能。
 
-#### レイヤー3: セクション必須
+#### レイヤー3: コマンド権限モデル
 
-`permissions.md` に `## コマンド実行` または `## 実行できるコマンド` セクションが必要 — 明示的権限がないエージェントはデフォルト拒否。
+`permissions.json` は「Open by Default, Deny by Exception」モデル。`commands.allow_all` が true（デフォルト）のとき、`denied_commands` とハードコードブロックリストを除く全コマンドが許可。false のときは `commands.allowlist` にマッチするコマンドのみ許可。
 
 #### レイヤー4: エージェント個別の許可リスト
 
-許可リストにマッチするコマンドのみ実行許可。
+`commands.allow_all` が false のとき、許可リストにマッチするコマンドのみ実行許可。
 
 #### レイヤー5: パストラバーサル検出
 
@@ -156,13 +156,14 @@ PrimingがRAG経由で関連知識を取得する際、各チャンクの `origi
 
 ### 4. ファイルアクセス制御 — デフォルトでサンドボックス
 
-各エージェントは自身のディレクトリ（`~/.animaworks/animas/{name}/`）内で動作する。
+各エージェントは自身のディレクトリ（`~/.animaworks/animas/{name}/`）内で動作する。ファイルアクセスは `permissions.json` の `file_roots` で制御 — デフォルト `["/"]` で anima ディレクトリ内フルアクセス。制限時は書き込み可能パスを限定。Mode C（Codex）サンドボックスは動的: `file_roots: ["/"]` → `danger-full-access`、制限時 → `workspace-write`（動的 `writable_roots`）。
 
 #### 保護ファイル・ディレクトリ（イミュータブル）
 
 エージェント自身が書き込めない:
 
-- `permissions.md` — ツール・コマンドの許可リスト
+- `permissions.json` — Pydantic検証済みのツール・ファイル・コマンド権限（従来の `permissions.md` を置換）
+- `permissions.md` — レガシーファイル。存在時は保護（JSON へ自動移行）
 - `identity.md` — 人格の基盤（不変ベースライン）
 - `bootstrap.md` — 初回起動指示
 - `activity_log/` — アクティビティログディレクトリ。`ActivityLogger`（コードレベル）のみが追記可能

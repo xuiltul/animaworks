@@ -15,7 +15,7 @@ You have 18 tools available. The same system applies across all execution modes.
 | **Read** | Read a file with line numbers. Supports partial reads via offset/limit | path |
 | **Write** | Write to a file. Parent directories are created automatically | path, content |
 | **Edit** | Replace text within a file (old_string must be unique) | path, old_string, new_string |
-| **Bash** | Execute shell commands (subject to allowlist in permissions.md) | command |
+| **Bash** | Execute shell commands (subject to allowlist in permissions.json) | command |
 | **Grep** | Search files with regex. Returns results with line numbers | pattern |
 | **Glob** | Search for files by glob pattern | pattern |
 | **WebSearch** | Run a web search. External content is untrusted | query |

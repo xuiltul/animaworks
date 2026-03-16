@@ -15,7 +15,7 @@ description: "ツール体系の全体像と使い方ガイド"
 | **Read** | ファイルを行番号付きで読む。offset/limitで部分読み可 | path |
 | **Write** | ファイルに書き込む。親ディレクトリは自動作成 | path, content |
 | **Edit** | ファイル内の文字列を置換（old_stringは一意であること） | path, old_string, new_string |
-| **Bash** | シェルコマンドを実行（permissions.mdの許可リストに従う） | command |
+| **Bash** | シェルコマンドを実行（permissions.jsonの許可リストに従う） | command |
 | **Grep** | 正規表現でファイル内を検索。行番号付きで結果返却 | pattern |
 | **Glob** | globパターンでファイルを検索 | pattern |
 | **WebSearch** | Web検索を実行。外部コンテンツは非信頼 | query |

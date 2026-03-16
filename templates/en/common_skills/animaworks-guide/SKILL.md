@@ -116,7 +116,7 @@ animaworks anima set-role {name} {role} --no-restart
 Files updated by set-role:
 - `status.json` — role, model, max_turns updated from role template defaults
 - `specialty_prompt.md` — replaced with role-specific guidelines
-- `permissions.md` — replaced with role-specific tool and command permissions
+- `permissions.json` — replaced with role-specific tool and command permissions
 
 Valid roles: `engineer`, `researcher`, `manager`, `writer`, `ops`, `general`
 

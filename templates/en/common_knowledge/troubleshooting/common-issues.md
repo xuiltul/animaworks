@@ -84,7 +84,7 @@ send_message(
 ### Causes
 
 1. Dependency task not completed
-2. Insufficient permissions (attempted operation not allowed in permissions.md)
+2. Insufficient permissions (attempted operation not allowed in permissions.json)
 3. Missing required information
 4. External service outage
 
@@ -120,7 +120,7 @@ send_message(
    ```
    send_message(
        to="supervisor_name",
-       content="[Blocked Report]\nTask: XXX implementation\nBlocked by: YYY API permission missing\nSince: 2026-02-15 10:00\nTried: Checked permissions.md, no relevant setting\nRequest: Please add API permission",
+       content="[Blocked Report]\nTask: XXX implementation\nBlocked by: YYY API permission missing\nSince: 2026-02-15 10:00\nTried: Checked permissions.json, no relevant setting\nRequest: Please add API permission",
        intent="report"
    )
    ```
@@ -212,7 +212,7 @@ send_message(
 
 ### Causes
 
-1. Attempted operation not allowed in `permissions.md`
+1. Attempted operation not allowed in `permissions.json`
 2. External tool category not enabled
 3. File path outside allowed scope
 
@@ -223,12 +223,12 @@ send_message(
    check_permissions()
    ```
    - Returns a list of available internal tools, external tools, file access, and restrictions
-   - Details in `read_memory_file(path="permissions.md")`
-   - Main sections in `permissions.md`:
+   - Details in `read_memory_file(path="permissions.json")`
+   - Main sections in `permissions.json`:
      - "File operations" / "Readable paths": Paths you can read
      - "Command execution" / "Allowed commands": Whitelist of executable commands
      - "Disallowed commands": Blocked commands
-     - External tools: Categories allowed in permissions.md are enabled
+     - External tools: Categories allowed in permissions.json are enabled
 
 2. **Confirm the operation is allowed**
    - Your anima_dir is readable and writable. Shared dirs, subordinate management files, etc. — check with `check_permissions`
@@ -262,7 +262,7 @@ send_message(
 
 ### Causes
 
-1. Tool not allowed in `permissions.md`
+1. Tool not allowed in `permissions.json`
 2. Skill file not found
 3. External service credentials not configured
 
@@ -277,7 +277,7 @@ send_message(
    check_permissions()
    ```
    - `external_tools.enabled` shows currently enabled categories; `external_tools.available_but_not_enabled` shows allowed but not yet enabled categories
-   - Categories not allowed in permissions.md cannot be used
+   - Categories not allowed in permissions.json cannot be used
 
 3. **If category is not allowed**
    - Ask supervisor for permission
@@ -396,13 +396,13 @@ See `communication/sending-limits.md` for details.
 ### Causes
 
 1. Command in system-wide block list (e.g. `rm -rf /`)
-2. Command listed in `permissions.md` "Disallowed commands" section
+2. Command listed in `permissions.json` "Disallowed commands" section
 
 ### Steps
 
 1. **Check your permissions**
    ```
-   read_memory_file(path="permissions.md")
+   read_memory_file(path="permissions.json")
    ```
    - `## Disallowed commands` section lists blocked commands
 

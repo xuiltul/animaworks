@@ -133,7 +133,10 @@ def dispatch(name, args):
     def test_share_tool_copies_to_common(self, tmp_path: Path) -> None:
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "permissions.md").write_text("", encoding="utf-8")
+        (anima_dir / "permissions.json").write_text(
+            json.dumps({"tool_creation": {"personal": True, "shared": True}}),
+            encoding="utf-8",
+        )
         tools_dir = anima_dir / "tools"
         tools_dir.mkdir()
         (tools_dir / "helper.py").write_text("# helper tool", encoding="utf-8")
@@ -141,9 +144,6 @@ def dispatch(name, args):
         common_dir = tmp_path / "common_tools"
 
         memory = MagicMock()
-        memory.read_permissions.return_value = (
-            "## ツール作成\n- 共有ツール: yes"
-        )
         memory.search_memory_text.return_value = []
 
         handler = ToolHandler(
@@ -171,10 +171,12 @@ def dispatch(name, args):
     ) -> None:
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "permissions.md").write_text("", encoding="utf-8")
+        (anima_dir / "permissions.json").write_text(
+            json.dumps({"tool_creation": {"personal": False, "shared": False}}),
+            encoding="utf-8",
+        )
 
         memory = MagicMock()
-        memory.read_permissions.return_value = ""  # No tool creation section
         memory.search_memory_text.return_value = []
 
         handler = ToolHandler(

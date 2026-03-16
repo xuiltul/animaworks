@@ -232,7 +232,7 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
 # 対象は common_skills, common_knowledge, および OSS公開 docs/ 。
 # 以下はすべてマッピング対象外:
 # - prompts/ : システムプロンプトの一部。自動更新はリスク大
-# - roles/ : permissions.md（{name}プレースホルダー付き設定テンプレート）
+# - roles/ : permissions.json（設定テンプレート）
 #            + specialty_prompt.md（プロンプトフラグメント）。prompts/と同種
 # - anima_templates/_blank/* : Anima作成時にコピーされるスケルトン
 # - bootstrap.md, company/vision.md : ユーザー編集前提の初期テンプレート

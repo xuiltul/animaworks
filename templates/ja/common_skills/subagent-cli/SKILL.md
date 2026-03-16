@@ -22,7 +22,7 @@ description: >-
 | モード | 実装 | Bash | このスキルの適用 |
 |--------|------|------|------------------|
 | **Mode S** | `agent_sdk.py` (Claude Agent SDK) | デフォルトで利用可能 | 適用される。Claude Code サブプロセス内で Read/Write/Edit/Bash/Grep/Glob/WebFetch/WebSearch + MCP(send_message 等) + Task/Agent が利用可能。Bash 実行時の cwd は anima_dir |
-| **Mode A/B** | LiteLLM + tool_use / 1ショット | permissions.md で許可時のみ | Bash 許可があれば適用 |
+| **Mode A/B** | LiteLLM + tool_use / 1ショット | permissions.json で許可時のみ | Bash 許可があれば適用 |
 | **Mode C** | `codex_sdk.py` (Codex SDK) | Codex CLI のツールセットに依存 | **codex exec は不要** — フレームワークが openai_codex_sdk 経由で Codex を直接実行。cursor-agent / claude -p は Bash 経由で呼べる（Bash が利用可能な場合） |
 
 **重要**: Mode C (codex/* モデル) の Anima は、フレームワークが Codex SDK 経由で Codex を直接実行する。この場合、自分で `codex exec` を Bash から呼ぶ必要はない。cursor-agent や claude -p を使いたい場合のみ、このスキルの該当セクションを参照する。

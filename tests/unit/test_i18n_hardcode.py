@@ -86,8 +86,8 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/cascade_limiter.py": 4,
     # deprecation warning message
     "core/config/cli.py": 1,
-    # Japanese day-of-week names for cron migration (月曜, 火曜, ...)
-    "core/config/migrate.py": 7,
+    # Japanese day-of-week names for cron migration + permissions.md section headers for migration
+    "core/config/migrate.py": 9,
     # model catalog "note" descriptions (最高性能・推奨, etc.)
     "core/config/model_mode.py": 25,
     # cron instruction prompt to Anima

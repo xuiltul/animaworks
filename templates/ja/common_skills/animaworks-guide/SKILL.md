@@ -144,7 +144,7 @@ animaworks anima set-role {名前} {role} --no-restart
 set-role で自動更新されるファイル:
 - `status.json` — role・モデル・max_turns をロールテンプレートの標準値に更新
 - `specialty_prompt.md` — ロール別専門ガイドラインに差し替え
-- `permissions.md` — ロール別のツール・コマンド許可範囲に差し替え
+- `permissions.json` — ロール別のツール・コマンド許可範囲に差し替え
 
 有効なロール: `engineer`, `researcher`, `manager`, `writer`, `ops`, `general`
 

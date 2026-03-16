@@ -22,7 +22,7 @@ This skill applies **only when the Bash tool is available**.
 | Mode | Implementation | Bash | Skill Applicability |
 |------|----------------|------|---------------------|
 | **Mode S** | `agent_sdk.py` (Claude Agent SDK) | Available by default | Applies. Read/Write/Edit/Bash/Grep/Glob/WebFetch/WebSearch available |
-| **Mode A/B** | LiteLLM + tool_use / 1-shot | Only when permitted in permissions.md | Applies if Bash is permitted |
+| **Mode A/B** | LiteLLM + tool_use / 1-shot | Only when permitted in permissions.json | Applies if Bash is permitted |
 | **Mode C** | `codex_sdk.py` (Codex SDK) | Depends on Codex CLI toolset | **codex exec not needed** — Framework runs Codex directly. cursor-agent / claude -p can be invoked via Bash (when Bash is available) |
 
 **Important**: Anima in Mode C (codex/* model) have the framework run Codex CLI directly via Codex SDK. In this case, you do not need to call `codex exec` from Bash yourself. Refer to the relevant section of this skill only when you want to use cursor-agent or claude -p.

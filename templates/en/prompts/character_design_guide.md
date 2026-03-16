@@ -51,7 +51,7 @@ After design is complete, verify:
 ## Avatar Image Generation
 
 When character design is complete, generate a full set of avatar images with the `image_gen` tool.
-Only execute when `image_gen` is available (permissions.md has `image_gen: yes`).
+Only execute when `image_gen` is available (permissions.json allows image_gen).
 
 ### Conversion to NovelAI Prompts
 

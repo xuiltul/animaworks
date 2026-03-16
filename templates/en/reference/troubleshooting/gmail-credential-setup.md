@@ -2,11 +2,11 @@
 
 ## Overview
 
-To use the Gmail tool, you need both `gmail: yes` in `permissions.md` AND an OAuth token file (`token.json`) placed at the correct runtime path.
+To use the Gmail tool, you need both `gmail` allowed in `permissions.json` AND an OAuth token file (`token.json`) placed at the correct runtime path.
 
 ## Prerequisites
 
-1. `permissions.md` must include `gmail: yes`
+1. `permissions.json` must allow `gmail` (external_tools.allow_all or in allow list)
 2. `~/.animaworks/credentials/gmail/token.json` must exist
 
 **Important**: Permission alone is not enough. The token.json file is required.

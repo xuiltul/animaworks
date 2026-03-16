@@ -4,7 +4,7 @@ description: >-
   AnimaWorks用のPythonツールモジュールを正しいインターフェースで作成するメタスキル。
   個人ツール（animas/{name}/tools/）・共有ツール（common_tools/）の作成手順、
   ExternalToolDispatcher連携、Bash + animaworks-tool 経由の呼び出し、get_credentialによるAPIキー管理、
-  permissions.md許可設定、EXECUTION_PROFILEによる長時間実行対応を提供。
+  permissions.json許可設定、EXECUTION_PROFILEによる長時間実行対応を提供。
   Web API連携・外部サービス統合のカスタムツール開発時に使用。
   「ツールを作成」「ツール化」「新しいツール」「カスタムツール」「Python ツール」
 ---
@@ -21,7 +21,7 @@ AnimaWorksのツールは3種類に分かれる:
 | **共有ツール** | `{data_dir}/common_tools/*.py` | `discover_common_tools()` |
 | **個人ツール** | `{anima_dir}/tools/*.py` | `discover_personal_tools()` |
 
-`{data_dir}` は通常 `~/.animaworks/`。個人ツール・共有ツールは `ExternalToolDispatcher` が `refresh_tools` で再スキャンし、ホットリロード可能。同一ツール名の場合、個人ツールが共有ツールを上書きする（`{**common, **personal}`）。ToolHandler は `write_memory_file` で `tools/*.py` への書き込み時に permissions.md の「ツール作成」セクションで許可をチェックする。
+`{data_dir}` は通常 `~/.animaworks/`。個人ツール・共有ツールは `ExternalToolDispatcher` が `refresh_tools` で再スキャンし、ホットリロード可能。同一ツール名の場合、個人ツールが共有ツールを上書きする（`{**common, **personal}`）。ToolHandler は `write_memory_file` で `tools/*.py` への書き込み時に permissions.json の「ツール作成」セクションで許可をチェックする。
 
 個人ツール・共有ツールは **Bash** 経由で `animaworks-tool <ツール> <サブコマンド> [引数]` を実行する。スキーマ名は `{tool_name}_{action}` 形式（例: `my_tool` + `query` → `my_tool_query`）。
 
@@ -186,7 +186,7 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
 write_memory_file(path="tools/my_tool.py", content=<コード>)
 ```
 
-`tools/` への書き込みには permissions.md の「ツール作成」セクションで **個人ツール** の許可が必要。
+`tools/` への書き込みには permissions.json の「ツール作成」セクションで **個人ツール** の許可が必要。
 
 ### Step 4: ツールの有効化
 
@@ -196,7 +196,7 @@ write_memory_file(path="tools/my_tool.py", content=<コード>)
 refresh_tools()
 ```
 
-これにより、セッションを再起動せずに即座にツールが使えるようになる。個人ツール・共有ツールは permissions.md の「外部ツール」セクションに登録不要。`refresh_tools` で発見されれば Bash + animaworks-tool から呼び出し可能。
+これにより、セッションを再起動せずに即座にツールが使えるようになる。個人ツール・共有ツールは permissions.json の「外部ツール」セクションに登録不要。`refresh_tools` で発見されれば Bash + animaworks-tool から呼び出し可能。
 
 ### Step 5: 共有（任意）
 
@@ -206,7 +206,7 @@ refresh_tools()
 share_tool(tool_name="my_tool")
 ```
 
-これにより `~/.animaworks/common_tools/` にコピーされ、全Animaから利用可能になります。共有には permissions.md で **共有ツール** の許可が必要。
+これにより `~/.animaworks/common_tools/` にコピーされ、全Animaから利用可能になります。共有には permissions.json で **共有ツール** の許可が必要。
 
 ## 必須インターフェース
 
@@ -255,9 +255,9 @@ api_key = get_credential(
 
 **解決順序**: 1) config.json の `credentials.{credential_name}` → 2) vault.json の `shared` セクション（`env_var` をキーに検索）→ 3) shared/credentials.json（`env_var` をキーに検索）→ 4) 環境変数 `env_var`。いずれにもない場合は ToolConfigError。
 
-## permissions.md のツール作成許可
+## permissions.json のツール作成許可
 
-ツール作成・共有には permissions.md に「ツール作成」セクションを追加し、以下を記述:
+ツール作成・共有には permissions.json に「ツール作成」セクションを追加し、以下を記述:
 
 ```markdown
 ## ツール作成
@@ -309,10 +309,10 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
 ## 注意事項
 
 - ツールはPythonコードなので、スキル（Markdown手順書）とは異なります
-- ツール作成には permissions.md の「ツール作成」セクションで **個人ツール: yes** の許可が必要です
+- ツール作成には permissions.json の「ツール作成」セクションで **個人ツール: yes** の許可が必要です
 - 共有ツール化には **共有ツール: yes** の許可が必要です
 - 作成したツールは `refresh_tools` 呼び出しで即座に発見されます（ホットリロード）
-- 個人ツール・共有ツールは permissions.md の「外部ツール」セクションに登録不要。`refresh_tools` で発見されれば Bash + animaworks-tool から利用可能（コアツールのみ外部ツールで許可制御）
+- 個人ツール・共有ツールは permissions.json の「外部ツール」セクションに登録不要。`refresh_tools` で発見されれば Bash + animaworks-tool から利用可能（コアツールのみ外部ツールで許可制御）
 - スキーマ名は `{tool_name}_{action}` 形式。他ツールと衝突しないよう一意にすること
 - コアツールと同名の個人・共有ツールはシャドウされるためスキップされます（`discover_common_tools` / `discover_personal_tools`）
 - 参考実装: `core/tools/web_search.py`, `core/tools/chatwork.py`, `core/tools/image_gen.py`

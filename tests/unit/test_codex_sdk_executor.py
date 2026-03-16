@@ -247,9 +247,20 @@ class TestConfigWriting:
         config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")
         assert "model_instructions_file" in config_toml
         assert "sandbox_mode" in config_toml
-        assert "workspace-write" in config_toml
+        assert "danger-full-access" in config_toml  # default file_roots=["/"]
         assert 'approval_policy = "never"' in config_toml
         assert "[mcp_servers.aw]" in config_toml
+
+    def test_write_codex_config_restricted_sandbox(self, model_config, anima_dir):
+        """Restricted file_roots produces workspace-write with writable_roots."""
+        import json
+        perms = {"version": 1, "file_roots": [str(anima_dir)], "commands": {"allow_all": True, "allow": [], "deny": []}, "external_tools": {"allow_all": True, "allow": [], "deny": []}, "tool_creation": {"personal": True, "shared": False}}
+        (anima_dir / "permissions.json").write_text(json.dumps(perms), encoding="utf-8")
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+        exc._write_codex_config("prompt")
+        config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")
+        assert "workspace-write" in config_toml
+        assert "writable_roots" in config_toml
 
     def test_write_codex_config_includes_model_name(self, executor, anima_dir):
         """config.toml must include model = "o4-mini" (stripped prefix)."""

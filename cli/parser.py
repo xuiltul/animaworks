@@ -396,6 +396,14 @@ def cli_main() -> None:
     )
     p_anima_info.set_defaults(func=_lazy_anima_info)
 
+    # anima permissions
+    p_anima_permissions = anima_sub.add_parser(
+        "permissions",
+        help=t("cli.permissions_help"),
+    )
+    p_anima_permissions.add_argument("anima", help="Anima name")
+    p_anima_permissions.set_defaults(func=_lazy_anima_permissions)
+
     # anima set-model
     p_anima_set_model = anima_sub.add_parser("set-model", help="Change an anima's model")
     p_anima_set_model.add_argument(
@@ -806,6 +814,12 @@ def _lazy_anima_info(args: argparse.Namespace) -> None:
     from cli.commands.anima_mgmt import cmd_anima_info
 
     cmd_anima_info(args)
+
+
+def _lazy_anima_permissions(args: argparse.Namespace) -> None:
+    from cli.commands.anima_mgmt import cmd_anima_permissions
+
+    cmd_anima_permissions(args)
 
 
 def _lazy_anima_set_role(args: argparse.Namespace) -> None:

@@ -11,7 +11,7 @@ Refer to this when you need to know "what is this file for?" or "can I modify it
 ├── injection.md         # Your duties (responsibilities, guidelines, mandatory procedures)
 ├── specialty_prompt.md  # Role-specific expert prompt
 ├── character_sheet.md   # Original design document (reference only)
-├── permissions.md       # Permissions (tools, access paths)
+├── permissions.json       # Permissions (tools, access paths)
 ├── status.json          # Configuration (model, parameters)
 ├── bootstrap.md         # First-boot instructions (deleted after completion)
 ├── heartbeat.md         # Periodic patrol settings
@@ -39,7 +39,7 @@ This classification determines who may modify each file.
 | Layer | Files | Rationale |
 |-------|-------|-----------|
 | **Inside the capsule** (thoughts & memory) | `identity.md`, `episodes/`, `knowledge/`, `procedures/`, `skills/`, `state/`, `shortterm/` | Personality, experiences, and learning belong to the individual. Cannot be modified externally |
-| **Capsule boundary** (org–individual interface) | `injection.md`, `cron.md`, `heartbeat.md`, `permissions.md` | Roles and permissions the organization expects of the individual. Supervisor can modify |
+| **Capsule boundary** (org–individual interface) | `injection.md`, `cron.md`, `heartbeat.md`, `permissions.json` | Roles and permissions the organization expects of the individual. Supervisor can modify |
 | **Outside the capsule** (management info) | `status.json`, `specialty_prompt.md` | Pure configuration and system management. Operated via CLI or admin |
 
 - Changing the **inside** means "becoming a different person" or "losing memories." This is not permitted
@@ -132,7 +132,7 @@ Auto-generated from role templates. Updated only when the role changes.
 
 ## Permissions and Configuration
 
-### permissions.md — What You Can Do
+### permissions.json — What You Can Do
 
 Defines available tools, accessible paths, and executable commands.
 
@@ -320,7 +320,7 @@ Character images, 3D models, and other asset files.
 | `character_sheet.md` | Reference only | Immutable |
 | `injection.md` | Self / supervisor | As needed |
 | `specialty_prompt.md` | System automatic | Rare |
-| `permissions.md` | Supervisor / admin | Rare |
+| `permissions.json` | Supervisor / admin | Rare |
 | `status.json` | CLI / admin / supervisor | As needed |
 | `bootstrap.md` | Once only | Deleted |
 | `heartbeat.md` | Self / supervisor | As needed |

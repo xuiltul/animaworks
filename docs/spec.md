@@ -169,7 +169,7 @@ Each Anima is composed of the following files and directories:
 |----------------------------|------------------------------------|
 |`identity.md`               |Personality and strengths (immutable baseline)|
 |`injection.md`              |Role, principles, behavior rules (replaceable)|
-|`permissions.md`            |Tool/file/command permissions        |
+|`permissions.json`          |Tool/file/command permissions (Pydantic-validated JSON; replaces legacy permissions.md)|
 |`heartbeat.md`              |Periodic check interval and active hours|
 |`cron.md`                   |Scheduled tasks (YAML)              |
 |`bootstrap.md`              |Self-construction instructions on first launch|
@@ -779,7 +779,7 @@ Group 2: Who you are
   - identity.md (personality)
   - injection.md (role, principles)
   - specialty_prompt.md (role-specific specialized prompt)
-  - permissions.md (tool and command permissions)
+  - permissions.json (tool, file, and command permissions)
 
 Group 3: Current situation
   - state/current_state.md + pending.md (in-progress tasks)

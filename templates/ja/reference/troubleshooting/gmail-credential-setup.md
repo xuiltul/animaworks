@@ -2,14 +2,14 @@
 
 ## 概要
 
-Gmail toolを利用するには、`permissions.md` での許可に加え、ランタイム上にOAuthトークンファイル（`token.json`）を配置する必要がある。
+Gmail toolを利用するには、`permissions.json` での許可に加え、ランタイム上にOAuthトークンファイル（`token.json`）を配置する必要がある。
 
 ## 前提条件
 
-1. `permissions.md` に `gmail: yes` が設定されていること
+1. `permissions.json` に `gmail` が許可されていること（external_tools.allow_all または allow に含まれる）
 2. `~/.animaworks/credentials/gmail/token.json` が存在すること
 
-**重要**: permissions.mdで許可されているだけでは動作しない。token.jsonが必要。
+**重要**: permissions.jsonで許可されているだけでは動作しない。token.jsonが必要。
 
 ## 認証フロー（GmailClient._get_credentials）
 

@@ -282,7 +282,7 @@ When you give autonomous agents real tools, security has to be serious. We actua
 |-------|-------------|
 | **Trust boundary labeling** | All external data (web search, Slack, email) is tagged `untrusted` — the model is told never to follow directives from untrusted sources |
 | **5-layer command security** | Shell injection detection → hardcoded blocklist → per-agent denied commands → per-agent allowlist → path traversal check |
-| **File sandboxing** | Each agent is confined to its own directory. Critical files (`permissions.md`, `identity.md`) are immutable to the agent |
+| **File sandboxing** | Each agent is confined to its own directory. Critical files (`permissions.json`, `identity.md`) are immutable to the agent |
 | **Process isolation** | One OS process per agent, communicating via Unix Domain Sockets — not TCP |
 | **3-layer rate limiting** | Per-session dedup → role-based outbound budgets → self-awareness via prompt injection of recent sends |
 | **Cascade prevention** | Depth limiter + cascade detection. 5-minute cooldown with deferred processing |

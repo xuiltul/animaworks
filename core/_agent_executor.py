@@ -19,16 +19,20 @@ class ExecutorFactoryMixin:
     """Mixin: tool registry initialisation, executor creation, API key resolution."""
 
     def _init_tool_registry(self) -> list[str]:
-        """Initialize tool registry from permissions.md (default-all).
+        """Initialize tool registry from permissions config (default-all).
 
-        Delegates to :func:`core.tooling.permissions.parse_permitted_tools`
-        for the actual parsing logic.
+        Loads :class:`PermissionsConfig` and delegates to
+        :func:`core.tooling.permissions.get_permitted_tools`.
         """
         try:
-            from core.tooling.permissions import parse_permitted_tools
+            from core.config.models import PermissionsConfig, load_permissions
+            from core.tooling.permissions import get_permitted_tools
 
-            permissions = self.memory.read_permissions() if self.memory else ""
-            return sorted(parse_permitted_tools(permissions))
+            if self.memory and hasattr(self.memory, "anima_dir"):
+                config = load_permissions(self.memory.anima_dir)
+            else:
+                config = PermissionsConfig()
+            return sorted(get_permitted_tools(config))
         except Exception:
             logger.debug("Tool registry initialization skipped")
             return []

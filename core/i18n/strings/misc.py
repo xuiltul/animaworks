@@ -198,6 +198,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Enable (復帰) an anima",
         "en": "Enable an anima",
     },
+    "cli.permissions_help": {
+        "ja": "Animaの権限設定を表示",
+        "en": "Show anima permissions configuration",
+    },
+    "cli.permissions_not_found": {
+        "ja": "Error: Anima '{name}' が見つかりません",
+        "en": "Error: Anima '{name}' not found",
+    },
+    "cli.permissions_file_path": {
+        "ja": "ファイル: {path}",
+        "en": "File: {path}",
+    },
     "cli.migrate_cron_done": {
         "ja": "Migrated {count} anima(s) to standard cron format.",
         "en": "Migrated {count} anima(s) to standard cron format.",

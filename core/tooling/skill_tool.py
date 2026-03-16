@@ -160,16 +160,15 @@ def _skill_name_to_tool_name(skill_name: str) -> str | None:
 
 
 def _load_permitted_tools(anima_dir: Path) -> set[str]:
-    """Load permitted tool/action set from permissions.md."""
-    from core.tooling.permissions import parse_permitted_tools
-
-    perm_path = anima_dir / "permissions.md"
-    if not perm_path.is_file():
-        return set()
+    """Load permitted tool/action set from permissions config."""
     try:
-        return parse_permitted_tools(perm_path.read_text(encoding="utf-8"))
+        from core.config.models import load_permissions
+        from core.tooling.permissions import get_permitted_tools
+
+        config = load_permissions(anima_dir)
+        return get_permitted_tools(config)
     except Exception:
-        logger.debug("Failed to parse permissions.md", exc_info=True)
+        logger.debug("Failed to load permissions", exc_info=True)
         return set()
 
 

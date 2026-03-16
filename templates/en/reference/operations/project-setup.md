@@ -161,7 +161,7 @@ There are three ways to add an Anima. All use `animaworks anima create` or `anim
 ### Method 1: From Template
 
 Uses predefined templates under `templates/ja/anima_templates/` or `templates/en/anima_templates/`.
-Templates include identity.md, injection.md, permissions.md, skills, etc.
+Templates include identity.md, injection.md, permissions.json, skills, etc.
 
 ```bash
 # Create from template (template name is the directory name)
@@ -187,7 +187,7 @@ animaworks anima create --from-md /path/to/character.md [--name ken] [--role eng
 
 The Markdown file is copied as `character_sheet.md` into the Anima directory.
 The sheet's "Personality" and "Role and behavior guidelines" sections are reflected in identity.md and injection.md.
-permissions.md and specialty_prompt.md are applied from the role template.
+permissions.json and specialty_prompt.md are applied from the role template.
 
 The Markdown file SHOULD include:
 - Heading in form `# Character: Name`, or an "English name" row in the basic info table (used for name extraction)
@@ -215,7 +215,7 @@ All methods produce the following directories and files:
 ├── identity.md          # Personality definition (invariant baseline)
 ├── injection.md         # Role and behavior guidelines (variable)
 ├── bootstrap.md         # First-run instructions (removed when done)
-├── permissions.md       # Tool and command permissions
+├── permissions.json       # Tool and command permissions
 ├── heartbeat.md         # Heartbeat config
 ├── cron.md              # Scheduled task config
 ├── episodes/            # Episode memory (daily logs)
@@ -316,9 +316,9 @@ Each Anima specifies which credential to use via the `credential` field.
 
 **Security**: config.json is saved with file permissions `0600` (MUST). Contains API keys; prevent read access from other users.
 
-## Permissions (permissions.md)
+## Permissions (permissions.json)
 
-Each Anima's `permissions.md` defines allowed tools, accessible paths, and executable commands.
+Each Anima's `permissions.json` defines allowed tools, accessible paths, and executable commands.
 
 ```markdown
 # Permissions: aoi
@@ -346,14 +346,14 @@ rm -rf, system config changes
 ```
 
 Permission rules:
-- Each Anima reads its own `permissions.md` at startup (MUST)
+- Each Anima reads its own `permissions.json` at startup (MUST)
 - ToolHandler performs permission checks and blocks disallowed operations
 - External tools (Slack, Gmail, GitHub, etc.) are enabled/disabled individually in the `External tools` section
 - `Read paths` / `Write paths` are written in natural language; ToolHandler interprets them
 
 ### Blocked Commands
 
-Adding a `## Disallowed commands` section in `permissions.md` blocks execution of the listed commands.
+Adding a `## Disallowed commands` section in `permissions.json` blocks execution of the listed commands.
 In addition to the system-wide hardcoded block list (dangerous commands like `rm -rf /`), per-Anima block lists are applied.
 
 ```markdown

@@ -74,7 +74,7 @@ Chat と Heartbeat は **別ロック** で動くため、Heartbeat 実行中で
 |---------|------|------|
 | **人格** | identity.md, character_sheet.md | あなたの性格・話し方・考え方 |
 | **職務** | injection.md, specialty_prompt.md | 仕事の職責・取り組み方・手順 |
-| **権限・設定** | permissions.md, status.json | 何ができるか、どう動くか |
+| **権限・設定** | permissions.json, status.json | 何ができるか、どう動くか |
 | **定期行動** | heartbeat.md, cron.md | いつ何を確認し、いつ何を実行するか |
 | **記憶** | episodes/, knowledge/, procedures/, skills/, shortterm/ | 過去の経験・学び・手順・能力 |
 | **作業状態** | state/ | 今取り組んでいること |

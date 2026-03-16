@@ -134,15 +134,15 @@ Pattern-matched commands that are **always** blocked regardless of permissions:
 
 #### Layer 2.5: Per-Agent Denied Commands
 
-Each agent's `permissions.md` can define a `## 実行できないコマンド` (Execution Denied Commands) section for additional blocked commands.
+Each agent's `permissions.json` can define `commands.denied_commands` for additional blocked commands.
 
-#### Layer 3: Section Required
+#### Layer 3: Command Permissions Model
 
-A `## コマンド実行` or `## 実行できるコマンド` (Command Execution / Executable Commands) section must exist in `permissions.md` — default-deny for agents without explicit permissions.
+`permissions.json` uses an "Open by Default, Deny by Exception" model. When `commands.allow_all` is true (default), all commands are permitted except those in `denied_commands` and the hardcoded blocklist. When false, only commands in `commands.allowlist` are permitted.
 
 #### Layer 4: Per-Agent Allowlist
 
-Only commands matching the agent's allowlist are permitted.
+When `commands.allow_all` is false, only commands matching the agent's allowlist are permitted.
 
 #### Layer 5: Path Traversal Detection
 
@@ -156,13 +156,14 @@ Command arguments are checked for path traversal patterns (`../`).
 
 ### 4. File Access Control — Sandboxed by Default
 
-Each agent operates within its own directory (`~/.animaworks/animas/{name}/`).
+Each agent operates within its own directory (`~/.animaworks/animas/{name}/`). File access is controlled by `file_roots` in `permissions.json` — default `["/"]` grants full access within the anima directory; restricted roots limit writable paths. Mode C (Codex) sandbox adapts dynamically: `file_roots: ["/"]` → `danger-full-access`; restricted → `workspace-write` with dynamic `writable_roots`.
 
 #### Protected Files and Directories (Immutable)
 
 These cannot be written by the agent that owns them:
 
-- `permissions.md` — Tool and command allowlists
+- `permissions.json` — Pydantic-validated tool, file, and command permissions (replaces legacy `permissions.md`)
+- `permissions.md` — Legacy file; protected when present (auto-migrated to JSON)
 - `identity.md` — Core personality (immutable baseline)
 - `bootstrap.md` — First-run instructions
 - `activity_log/` — Activity log directory; only `ActivityLogger` (code-level) may append entries

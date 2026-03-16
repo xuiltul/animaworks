@@ -31,6 +31,16 @@ _BASH_BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"curl\s+.*-[dFT]\b"), "curl data upload is blocked for security"),
     (re.compile(r"curl\s+.*--data\b"), "curl --data is blocked for security"),
     (re.compile(r"wget\s+.*--post\b"), "wget --post is blocked for security"),
+    (re.compile(r"\brm\s+-[rf]*\s+/(?!\w)"), "rm -rf / is blocked for security"),
+    (re.compile(r"\bmkfs\b"), "mkfs is blocked for security"),
+    (re.compile(r"\bdd\b.*\bof=/dev/"), "dd to device is blocked for security"),
+    (re.compile(r">\s*/dev/(?!null)"), "redirect to /dev/ is blocked for security"),
+    (re.compile(r">\s*/etc/"), "redirect to /etc/ is blocked for security"),
+    (re.compile(r"curl.*\|\s*(?:sh|bash|python)"), "curl pipe to shell is blocked for security"),
+    (re.compile(r"\|\s*(?:sh|bash|python)\b"), "pipe to shell/python is blocked for security"),
+    (re.compile(r"\bchmod\s+[0-7]*7[0-7]*\b"), "world-writable chmod is blocked for security"),
+    (re.compile(r"\b(?:shutdown|reboot)\b"), "shutdown/reboot is blocked for security"),
+    (re.compile(r"\binit\s+[06]\b"), "init 0/6 is blocked for security"),
 ]
 
 # ── Mode S security ──────────────────────────────────────────
@@ -38,6 +48,7 @@ _BASH_BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 _PROTECTED_FILES = frozenset(
     {
         "permissions.md",
+        "permissions.json",
         "identity.md",
         "bootstrap.md",
     }
@@ -133,6 +144,9 @@ def _check_a1_file_access(
             rel = str(resolved.relative_to(anima_resolved))
             if rel in _PROTECTED_FILES:
                 return f"'{rel}' is a protected file and cannot be modified"
+            # Block writes to activity_log directory
+            if "activity_log" in rel:
+                return "'activity_log/' is a protected directory and cannot be modified"
 
     return None
 

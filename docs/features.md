@@ -163,7 +163,7 @@ Memory operations, messaging, task management, skill search — AnimaWorks-nativ
 
 ### External Tools
 
-Slack, Chatwork, Gmail, GitHub, AWS, web search, X search, image generation, and more. Per-Anima permissions are controlled through `permissions.md`. Long-running tools (like image generation) execute asynchronously; results are picked up at the next heartbeat.
+Slack, Chatwork, Gmail, GitHub, AWS, web search, X search, image generation, and more. Per-Anima permissions are controlled through `permissions.json`. Long-running tools (like image generation) execute asynchronously; results are picked up at the next heartbeat.
 
 ### Skill System
 
@@ -220,7 +220,7 @@ Every piece of data is tagged with a trust level: trusted, medium, or untrusted.
 
 ### Command Blocking
 
-Hardcoded blocks for destructive commands (`rm -rf /`, etc.) plus per-Anima `permissions.md` for fine-grained control. Each segment of a pipeline is checked individually.
+Hardcoded blocks for destructive commands (`rm -rf /`, etc.) plus per-Anima `permissions.json` for fine-grained control. Each segment of a pipeline is checked individually.
 
 ### Message Storm Defense
 

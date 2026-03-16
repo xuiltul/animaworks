@@ -3,16 +3,20 @@ from __future__ import annotations
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.config.models import PermissionsConfig
 
 """Shared permission parser for external tool access control.
 
 Both MCP server (``core.mcp.server``) and AgentCore executor
-(``core._agent_executor``) use :func:`parse_permitted_tools` to resolve
-which external tools an Anima is allowed to invoke, keeping the logic
-in a single authoritative location.
+(``core._agent_executor``) use :func:`get_permitted_tools` (or legacy
+:func:`parse_permitted_tools`) to resolve which external tools an Anima
+is allowed to invoke, keeping the logic in a single authoritative location.
 
 Supports action-level gating: dangerous sub-actions (e.g. ``gmail_send``)
-require explicit ``- gmail_send: yes`` in permissions.md even when
+require explicit ``- gmail_send: yes`` in permissions even when
 ``- all: yes`` or ``- gmail: yes`` is present.
 """
 
@@ -41,8 +45,27 @@ _PERMISSION_DENY_RE = re.compile(
 # ── Public API ────────────────────────────────────────────
 
 
+def get_permitted_tools(config: PermissionsConfig) -> set[str]:
+    """Get permitted tool names from structured permissions config."""
+    from core.tools import TOOL_MODULES
+
+    all_tools = set(TOOL_MODULES.keys())
+
+    if config.external_tools.allow_all:
+        base = all_tools - set(config.external_tools.deny)
+        action_permits = set(config.external_tools.allow) - all_tools - set(config.external_tools.deny)
+        return base | action_permits
+    if config.external_tools.allow:
+        return set(config.external_tools.allow) - set(config.external_tools.deny)
+    return all_tools - set(config.external_tools.deny)
+
+
 def parse_permitted_tools(text: str) -> set[str]:
     """Parse permissions.md text and return permitted tool and action names.
+
+    Deprecated: Prefer loading via :func:`load_permissions` and
+    :func:`get_permitted_tools` for structured config. This wrapper parses
+    legacy Markdown and delegates to :func:`get_permitted_tools`.
 
     Strategy:
       1. No ``外部ツール`` / ``External Tools`` section present → ALL tools (default-all)
@@ -55,12 +78,10 @@ def parse_permitted_tools(text: str) -> set[str]:
         Set of permitted names: tool module names (keys from ``core.tools.TOOL_MODULES``)
         and action-level permits (e.g. ``gmail_send``).
     """
-    from core.tools import TOOL_MODULES
-
-    all_tools = set(TOOL_MODULES.keys())
+    from core.config.models import ExternalToolsPermission, PermissionsConfig
 
     if "外部ツール" not in text and "External Tools" not in text:
-        return all_tools
+        return get_permitted_tools(PermissionsConfig())
 
     has_all_yes = False
     allowed: list[str] = []
@@ -81,16 +102,13 @@ def parse_permitted_tools(text: str) -> set[str]:
             name = m_allow.group(1)
             allowed.append(name)
 
-    allowed_set = set(allowed)
-    denied_set = set(denied)
-
-    if has_all_yes:
-        base = all_tools - denied_set
-        action_permits = allowed_set - all_tools - denied_set
-        return base | action_permits
-    if allowed_set:
-        return allowed_set - denied_set
-    return all_tools - denied_set
+    ext = ExternalToolsPermission(
+        allow_all=has_all_yes,
+        allow=allowed,
+        deny=denied,
+    )
+    config = PermissionsConfig(external_tools=ext)
+    return get_permitted_tools(config)
 
 
 # ── Action gating ──────────────────────────────────────────

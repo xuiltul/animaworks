@@ -265,7 +265,7 @@ blockers: |
 ## 10:00 タスク着手: Slack連携テスト
 
 aoi からの指示を受け、Slack API の接続テストを開始。
-permissions.md で slack: yes を確認済み。
+permissions.json で slack: yes を確認済み。
 
 ## 11:30 タスク完了: Slack連携テスト
 

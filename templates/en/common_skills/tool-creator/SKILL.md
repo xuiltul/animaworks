@@ -4,7 +4,7 @@ description: >-
   Meta-skill for creating AnimaWorks Python tool modules with correct interfaces.
   Provides procedure for personal tools (animas/{name}/tools/), shared tools (common_tools/),
   ExternalToolDispatcher integration, API key management via get_credential,
-  and permissions.md allowance configuration.
+  and permissions.json allowance configuration.
   Use when developing custom tools for Web API integration or external service integration.
   "create tool", "toolify", "new tool", "custom tool", "Python tool"
 ---
@@ -21,7 +21,7 @@ AnimaWorks tools are categorized into three types:
 | **Shared tools** | `{data_dir}/common_tools/*.py` | discover_common_tools() |
 | **Personal tools** | `{anima_dir}/tools/*.py` | discover_personal_tools() |
 
-`{data_dir}` is typically `~/.animaworks/`. Personal and shared tools are re-scanned by `ExternalToolDispatcher` via `refresh_tools` and can be hot-reloaded. ToolHandler checks the tool creation permission in permissions.md when writing to `tools/*.py` with `write_memory_file`.
+`{data_dir}` is typically `~/.animaworks/`. Personal and shared tools are re-scanned by `ExternalToolDispatcher` via `refresh_tools` and can be hot-reloaded. ToolHandler checks the tool creation permission in permissions.json when writing to `tools/*.py` with `write_memory_file`.
 
 Personal and shared tools are invoked via **Bash** with `animaworks-tool <tool> <subcommand> [args]`. Schema name format is `{tool_name}_{action}` (e.g., `my_tool` + `query` → `my_tool_query`).
 
@@ -186,7 +186,7 @@ Save as a personal tool (path in `write_memory_file` is relative to anima_dir):
 write_memory_file(path="tools/my_tool.py", content=<code>)
 ```
 
-Writing to `tools/` requires **personal tool** permission in the "Tool creation" section of permissions.md.
+Writing to `tools/` requires **personal tool** permission in the "Tool creation" section of permissions.json.
 
 ### Step 4: Enable the Tool
 
@@ -196,7 +196,7 @@ After saving, call `refresh_tools` for hot reload:
 refresh_tools()
 ```
 
-The tool becomes available immediately without restarting the session. Personal tools do not need to be listed in permissions.md external_tools; once discovered by `refresh_tools`, they are callable via **Bash** with `animaworks-tool <tool> <subcommand>`.
+The tool becomes available immediately without restarting the session. Personal tools do not need to be listed in permissions.json external_tools; once discovered by `refresh_tools`, they are callable via **Bash** with `animaworks-tool <tool> <subcommand>`.
 
 ### Step 5: Share (Optional)
 
@@ -206,7 +206,7 @@ To let other Anima use it, share the tool:
 share_tool(tool_name="my_tool")
 ```
 
-This copies it to `~/.animaworks/common_tools/` and makes it available to all Anima. Sharing requires **shared tool** permission in permissions.md.
+This copies it to `~/.animaworks/common_tools/` and makes it available to all Anima. Sharing requires **shared tool** permission in permissions.json.
 
 ## Required Interface
 
@@ -261,9 +261,9 @@ api_key = get_credential(
 
 **Resolution order**: config.json → vault.json (encrypted vault) → shared/credentials.json → environment variable. ToolConfigError if none found.
 
-## Tool Creation Permission in permissions.md
+## Tool Creation Permission in permissions.json
 
-Add the following to permissions.md for tool creation and sharing:
+Add the following to permissions.json for tool creation and sharing:
 
 ```markdown
 ## Tool creation
@@ -301,9 +301,9 @@ Add the following to permissions.md for tool creation and sharing:
 ## Notes
 
 - Tools are Python code, different from Skills (Markdown procedure documents)
-- Tool creation requires **personal tools: yes** in the "Tool creation" section of permissions.md
+- Tool creation requires **personal tools: yes** in the "Tool creation" section of permissions.json
 - Sharing tools requires **shared tools: yes** permission
 - Created tools are discovered immediately on `refresh_tools` call (hot reload)
-- Personal tools do not need to be in permissions.md external_tools; once discovered, they are available via **Bash** with `animaworks-tool <tool> <subcommand>`
+- Personal tools do not need to be in permissions.json external_tools; once discovered, they are available via **Bash** with `animaworks-tool <tool> <subcommand>`
 - Schema names use `{tool_name}_{action}` format; keep them unique across tools
 - Personal or shared tools with the same name as core tools are shadowed and skipped (`core/tools/__init__.py`)

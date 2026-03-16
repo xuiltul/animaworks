@@ -77,7 +77,18 @@ class TestApplyRoleDefaults:
         role_dir = tmp_path / "roles" / role
         role_dir.mkdir(parents=True, exist_ok=True)
         if permissions_content is not None:
-            (role_dir / "permissions.md").write_text(permissions_content, encoding="utf-8")
+            # Write as permissions.json (default open structure)
+            default_json = {
+                "version": 1,
+                "file_roots": ["/"],
+                "commands": {"allow_all": True, "allow": [], "deny": []},
+                "external_tools": {"allow_all": True, "allow": [], "deny": []},
+                "tool_creation": {"personal": True, "shared": False},
+            }
+            (role_dir / "permissions.json").write_text(
+                json.dumps(default_json, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         if specialty_content is not None:
             (role_dir / "specialty_prompt.md").write_text(specialty_content, encoding="utf-8")
         if defaults_content is not None:
@@ -87,13 +98,13 @@ class TestApplyRoleDefaults:
             )
         return role_dir
 
-    def test_copies_permissions_md(self, tmp_path: Path) -> None:
-        """permissions.md is copied from role template to anima dir."""
+    def test_copies_permissions_json(self, tmp_path: Path) -> None:
+        """permissions.json is copied from role template to anima dir."""
         roles_root = tmp_path / "roles"
         self._make_role_dir(
             tmp_path,
             "engineer",
-            permissions_content="# Engineer permissions\nAll tools allowed.\n",
+            permissions_content="dummy",  # triggers permissions.json creation
         )
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
@@ -104,10 +115,11 @@ class TestApplyRoleDefaults:
         ):
             _apply_role_defaults(anima_dir, "engineer")
 
-        perm_path = anima_dir / "permissions.md"
+        perm_path = anima_dir / "permissions.json"
         assert perm_path.exists()
-        content = perm_path.read_text(encoding="utf-8")
-        assert "Engineer permissions" in content
+        data = json.loads(perm_path.read_text(encoding="utf-8"))
+        assert data.get("version") == 1
+        assert data.get("file_roots") == ["/"]
 
     def test_copies_specialty_prompt_md(self, tmp_path: Path) -> None:
         """specialty_prompt.md is copied from role template to anima dir."""
@@ -132,13 +144,13 @@ class TestApplyRoleDefaults:
         assert "Research guidelines" in content
         assert "Focus on accuracy." in content
 
-    def test_name_placeholder_replaced_in_permissions(self, tmp_path: Path) -> None:
-        """{name} placeholder in permissions.md is replaced with anima dir name."""
+    def test_permissions_json_copied_without_placeholder_expansion(self, tmp_path: Path) -> None:
+        """permissions.json is copied as-is (no placeholder expansion in JSON)."""
         roles_root = tmp_path / "roles"
         self._make_role_dir(
             tmp_path,
             "engineer",
-            permissions_content="# Permissions: {name}\nAllowed tools for {name}.\n",
+            permissions_content="dummy",
         )
         anima_dir = tmp_path / "mybot"
         anima_dir.mkdir()
@@ -149,11 +161,9 @@ class TestApplyRoleDefaults:
         ):
             _apply_role_defaults(anima_dir, "engineer")
 
-        content = (anima_dir / "permissions.md").read_text(encoding="utf-8")
-        assert "{name}" not in content
-        assert "mybot" in content
-        assert "Permissions: mybot" in content
-        assert "Allowed tools for mybot." in content
+        content = (anima_dir / "permissions.json").read_text(encoding="utf-8")
+        data = json.loads(content)
+        assert data.get("version") == 1
 
     def test_fallback_to_general_for_unknown_role(self, tmp_path: Path) -> None:
         """Unknown role falls back to 'general' template."""
@@ -161,7 +171,7 @@ class TestApplyRoleDefaults:
         self._make_role_dir(
             tmp_path,
             "general",
-            permissions_content="# General permissions\n",
+            permissions_content="dummy",
             specialty_content="# General specialty\n",
         )
         anima_dir = tmp_path / "anima"
@@ -173,9 +183,10 @@ class TestApplyRoleDefaults:
         ):
             _apply_role_defaults(anima_dir, "unknown_role")
 
-        # Should have general permissions, not crash
-        perm_content = (anima_dir / "permissions.md").read_text(encoding="utf-8")
-        assert "General permissions" in perm_content
+        # Should have general permissions.json, not crash
+        perm_content = (anima_dir / "permissions.json").read_text(encoding="utf-8")
+        data = json.loads(perm_content)
+        assert data.get("version") == 1
         spec_content = (anima_dir / "specialty_prompt.md").read_text(encoding="utf-8")
         assert "General specialty" in spec_content
 
@@ -195,11 +206,11 @@ class TestApplyRoleDefaults:
             _apply_role_defaults(anima_dir, "engineer")
 
         # No files should have been created
-        assert not (anima_dir / "permissions.md").exists()
+        assert not (anima_dir / "permissions.json").exists()
         assert not (anima_dir / "specialty_prompt.md").exists()
 
     def test_no_permissions_in_template(self, tmp_path: Path) -> None:
-        """Works when role template has specialty_prompt but no permissions.md."""
+        """Works when role template has specialty_prompt but no permissions.json."""
         roles_root = tmp_path / "roles"
         self._make_role_dir(
             tmp_path,
@@ -216,16 +227,16 @@ class TestApplyRoleDefaults:
         ):
             _apply_role_defaults(anima_dir, "writer")
 
-        assert not (anima_dir / "permissions.md").exists()
+        assert not (anima_dir / "permissions.json").exists()
         assert (anima_dir / "specialty_prompt.md").exists()
 
     def test_no_specialty_in_template(self, tmp_path: Path) -> None:
-        """Works when role template has permissions.md but no specialty_prompt.md."""
+        """Works when role template has permissions.json but no specialty_prompt.md."""
         roles_root = tmp_path / "roles"
         self._make_role_dir(
             tmp_path,
             "ops",
-            permissions_content="# Ops permissions\n",
+            permissions_content="dummy",
             # No specialty_content
         )
         anima_dir = tmp_path / "anima"
@@ -237,7 +248,7 @@ class TestApplyRoleDefaults:
         ):
             _apply_role_defaults(anima_dir, "ops")
 
-        assert (anima_dir / "permissions.md").exists()
+        assert (anima_dir / "permissions.json").exists()
         assert not (anima_dir / "specialty_prompt.md").exists()
 
     def test_valid_roles_constant(self) -> None:
@@ -841,7 +852,8 @@ class TestProtectedFiles:
 
     def test_other_protected_files_present(self) -> None:
         """All expected protected files are in the frozenset."""
-        assert "permissions.md" in _PROTECTED_FILES
+        assert "permissions.json" in _PROTECTED_FILES
+        assert "permissions.md" in _PROTECTED_FILES  # legacy, still protected
         assert "identity.md" in _PROTECTED_FILES
         assert "bootstrap.md" in _PROTECTED_FILES
 
@@ -861,7 +873,20 @@ class TestRoleTemplateIntegration:
         roles_root = tmp_path / "roles"
         engineer_dir = roles_root / "engineer"
         engineer_dir.mkdir(parents=True)
-        (engineer_dir / "permissions.md").write_text("# Permissions: {name}\nAll tools.\n", encoding="utf-8")
+        (engineer_dir / "permissions.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "file_roots": ["/"],
+                    "commands": {"allow_all": True, "allow": [], "deny": []},
+                    "external_tools": {"allow_all": True, "allow": [], "deny": []},
+                    "tool_creation": {"personal": True, "shared": False},
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         (engineer_dir / "specialty_prompt.md").write_text("# Engineer guidelines\n", encoding="utf-8")
         (engineer_dir / "defaults.json").write_text(
             json.dumps(
@@ -887,8 +912,8 @@ class TestRoleTemplateIntegration:
             _create_status_json(anima_dir, {}, role="engineer")
 
         # Verify permissions
-        perm = (anima_dir / "permissions.md").read_text(encoding="utf-8")
-        assert "Permissions: hinata" in perm
+        perm = json.loads((anima_dir / "permissions.json").read_text(encoding="utf-8"))
+        assert perm.get("version") == 1
 
         # Verify specialty prompt
         spec = (anima_dir / "specialty_prompt.md").read_text(encoding="utf-8")

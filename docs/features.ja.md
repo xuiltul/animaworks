@@ -164,7 +164,7 @@ Slack（Socket Mode）や Chatwork（Webhook）からのメッセージを自動
 
 ### 外部ツール
 
-Slack、Chatwork、Gmail、GitHub、AWS、Web検索、X検索、画像生成等。`permissions.md` で Anima ごとに許可を制御する。長時間かかるツール（画像生成等）は非同期で実行され、結果は次回ハートビートで確認される。
+Slack、Chatwork、Gmail、GitHub、AWS、Web検索、X検索、画像生成等。`permissions.json` で Anima ごとに許可を制御する。長時間かかるツール（画像生成等）は非同期で実行され、結果は次回ハートビートで確認される。
 
 ### スキルシステム
 
@@ -221,7 +221,7 @@ Animaの視覚的なアイデンティティを自動生成する。
 
 ### コマンドブロック
 
-破壊的コマンド（`rm -rf /` 等）のハードコードブロックに加え、Anima ごとの `permissions.md` で許可コマンドを制御する。パイプラインの各セグメントを個別にチェックする。
+破壊的コマンド（`rm -rf /` 等）のハードコードブロックに加え、Anima ごとの `permissions.json` で許可コマンドを制御する。パイプラインの各セグメントを個別にチェックする。
 
 ### メッセージストーム防御
 

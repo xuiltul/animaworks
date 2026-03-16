@@ -169,7 +169,7 @@ animaworks/
 |----------------------|--------------------------------|
 |`identity.md`         |性格・得意分野（不変ベースライン）          |
 |`injection.md`        |役割・理念・行動規範（差替可能）            |
-|`permissions.md`      |ツール/ファイル/コマンド権限              |
+|`permissions.json`    |ツール/ファイル/コマンド権限（Pydantic検証JSON。従来のpermissions.mdを置換）|
 |`heartbeat.md`        |定期チェック間隔・活動時間               |
 |`cron.md`             |定時タスク（YAML）                   |
 |`bootstrap.md`        |初回起動時の自己構築指示                |
@@ -776,7 +776,7 @@ Group 2: あなた自身
   - identity.md（人格）
   - injection.md（役割・行動指針）
   - specialty_prompt.md（ロール別専門プロンプト）
-  - permissions.md（ツール・コマンド許可）
+  - permissions.json（ツール・ファイル・コマンド許可）
 
 Group 3: 現在の状況
   - state/current_state.md + pending.md（進行中タスク）

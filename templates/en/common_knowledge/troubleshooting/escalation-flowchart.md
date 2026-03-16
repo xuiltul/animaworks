@@ -118,7 +118,7 @@ Task "Monthly report creation" is blocked.
 No read permission for /data/sales/ where sales data is stored.
 
 ■ Tried
-- Checked permissions.md → /data/sales/ not allowed
+- Checked permissions.json → /data/sales/ not allowed
 - Searched for alternative data sources → none found
 
 ■ Request

@@ -93,7 +93,7 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 
 {Responsible areas, decision criteria, reporting rules, conduct standards, etc.}
 
-## 権限 (→ permissions.md) [省略可]
+## 権限 (→ permissions.json) [省略可]
 
 {If omitted: default template applied}
 

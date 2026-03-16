@@ -261,7 +261,7 @@ def create_from_md(
 
     The MD content is validated, then placed as ``character_sheet.md`` in the
     new anima directory.  Sections in the sheet are applied to identity.md,
-    injection.md, permissions.md, and status.json.
+    injection.md, permissions.json, and status.json.
 
     On any failure after the anima directory has been created the directory
     is rolled back (removed) so no partial state is left behind.
@@ -608,13 +608,13 @@ def _apply_defaults_from_sheet(anima_dir: Path, md_content: str) -> None:
     """Apply character-sheet sections to anima files, keeping template defaults.
 
     For sections marked ``[省略可]`` in the sheet, if they are omitted or
-    empty the existing template files (heartbeat.md, cron.md, permissions.md)
+    empty the existing template files (heartbeat.md, cron.md, permissions.json)
     are left untouched.
 
     Sections that **are** present overwrite the corresponding file:
         - Personality (人格 / Personality)          → ``identity.md``
         - Role & Guidelines (役割・行動方針 / …)   → ``injection.md``
-        - Permissions (権限 / Permissions)         → ``permissions.md``
+        - Permissions (権限 / Permissions)         → ``permissions.json`` (via migrate from MD)
 
     Args:
         anima_dir: Target anima directory (already populated by create_blank).
@@ -640,13 +640,16 @@ def _apply_defaults_from_sheet(anima_dir: Path, md_content: str) -> None:
     if permissions:
         permissions = _expand_permission_placeholders(permissions, anima_dir.name)
         (anima_dir / "permissions.md").write_text(permissions + "\n", encoding="utf-8")
-        logger.debug("Wrote permissions.md from character sheet for %s", anima_dir.name)
+        from core.config.migrate import migrate_permissions_md_to_json
+
+        migrate_permissions_md_to_json(anima_dir)
+        logger.debug("Wrote permissions.json from character sheet for %s", anima_dir.name)
 
 
 def _apply_role_defaults(anima_dir: Path, role: str) -> None:
     """Apply role template files to the anima directory.
 
-    Copies permissions.md and specialty_prompt.md from the role template,
+    Copies permissions.json and specialty_prompt.md from the role template,
     and merges defaults.json values into status.json.
 
     Args:
@@ -662,12 +665,10 @@ def _apply_role_defaults(anima_dir: Path, role: str) -> None:
         logger.warning("Role template directory not found: %s", role_dir)
         return
 
-    # Copy permissions.md (overwrite blank template)
-    perm_src = role_dir / "permissions.md"
+    # Copy permissions.json (overwrite blank template)
+    perm_src = role_dir / "permissions.json"
     if perm_src.exists():
-        perm_content = perm_src.read_text(encoding="utf-8")
-        perm_content = _expand_permission_placeholders(perm_content, anima_dir.name)
-        (anima_dir / "permissions.md").write_text(perm_content, encoding="utf-8")
+        shutil.copy2(perm_src, anima_dir / "permissions.json")
 
     # Copy specialty_prompt.md
     spec_src = role_dir / "specialty_prompt.md"

@@ -118,7 +118,7 @@ send_message(
 売上データが格納されている /data/sales/ ディレクトリへの読み取り権限がありません。
 
 ■ 試行済み
-- permissions.md を確認 → /data/sales/ は未許可
+- permissions.json を確認 → /data/sales/ は未許可
 - 代替データソースを検索 → 該当なし
 
 ■ 依頼
