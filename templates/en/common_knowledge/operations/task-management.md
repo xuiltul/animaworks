@@ -450,7 +450,7 @@ delegate_task(name="dave", instruction="Run API test and report results", deadli
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `name` | MUST | Name of the descendant Anima to delegate to (any descendant — child, grandchild, etc.) |
+| `name` | MUST | Name of the direct subordinate Anima to delegate to |
 | `instruction` | MUST | Task instruction content |
 | `deadline` | MUST | Deadline. Relative format `30m` / `2h` / `1d` or ISO8601 |
 | `summary` | MAY | One-line task summary (defaults to first 100 chars of instruction if omitted) |

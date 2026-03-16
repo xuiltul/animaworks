@@ -453,7 +453,7 @@ delegate_task(name="dave", instruction="API テストを実施して結果を報
 
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
-| `name` | MUST | 委譲先の配下Anima名（子・孫・曾孫…全配下に指定可能） |
+| `name` | MUST | 委譲先の直属部下Anima名 |
 | `instruction` | MUST | タスクの指示内容 |
 | `deadline` | MUST | 期限。相対形式 `30m` / `2h` / `1d` または ISO8601 |
 | `summary` | MAY | タスクの1行要約（省略時は instruction の先頭100文字） |

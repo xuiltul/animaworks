@@ -362,7 +362,7 @@ class TestDelegateTaskOriginPropagation:
         handler.set_session_origin(ORIGIN_HUMAN)
 
         # Mock descendant check to pass
-        with patch.object(handler, "_check_descendant", return_value=None), \
+        with patch.object(handler, "_check_subordinate", return_value=None), \
              patch("core.paths.get_animas_dir",
                    return_value=setup["tmp_path"] / "animas"):
             result = handler._handle_delegate_task({

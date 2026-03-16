@@ -10,7 +10,7 @@ description: >-
 
 # Skill: Subordinate Management (Supervisor Tools)
 
-Supervisor tools automatically enabled for Anima that have subordinates. All tools work on all descendants (children, grandchildren, great-grandchildren, etc.) — no distinction between direct and transitive subordinates.
+Supervisor tools automatically enabled for Anima that have subordinates. Most tools work on all descendants (children, grandchildren, great-grandchildren, etc.). `delegate_task` is restricted to direct subordinates only.
 
 ## Available Tools
 
@@ -23,7 +23,7 @@ Supervisor tools automatically enabled for Anima that have subordinates. All too
 | `set_subordinate_model` | Change descendant's main LLM model (updates status.json; requires `restart_subordinate` to take effect) |
 | `set_subordinate_background_model` | Change descendant's background model (for heartbeat/cron; updates status.json; requires `restart_subordinate` to take effect; empty string to clear) |
 | `restart_subordinate` | Restart descendant process (status.json `restart_requested` flag; Reconciliation restarts within ~30 seconds) |
-| `delegate_task` | Delegate task to descendant (queue add + DM send + tracking entry on your side) |
+| `delegate_task` | Delegate task to direct subordinate only (queue add + DM send + tracking entry on your side) |
 | `org_dashboard` | Tree view of process status, last activity, current task, and task count for all descendants |
 | `ping_subordinate` | Liveness check for descendants (`name` omitted = all at once, specified = single) |
 | `read_subordinate_state` | Read descendant's `current_task.md` and `pending.md` |
@@ -109,5 +109,6 @@ For assigning workspaces to subordinates (primary working directory), see the `w
 
 ## Permissions
 
-- **All descendants (recursive)**: All tools work on any descendant — no distinction between direct subordinates and grandchildren
+- **All descendants (recursive)**: Status, management, and audit tools work on any descendant
+- **Direct subordinates only**: `delegate_task` (task delegation)
 - You cannot operate on yourself

@@ -7,7 +7,7 @@
 
 | ツール | 用途 | 備考 |
 |--------|------|------|
-| `delegate_task` | 配下へのタスク委譲 | タスクキューに追加＋DM送信。進捗を `task_tracker` で追跡可能。子・孫・曾孫…全配下に使用可能 |
+| `delegate_task` | 直属部下へのタスク委譲 | タスクキューに追加＋DM送信。進捗を `task_tracker` で追跡可能。直属部下のみに使用可能 |
 | `send_message` | 1対1の依頼・報告・質問 | `intent` 必須: `report` / `question` のいずれか。配下へのタスク委譲は `delegate_task` を使用。人間エイリアス宛ては外部チャネル（Slack/Chatwork等）へ配信 |
 | `post_channel` | 全体共有（お知らせ、解決報告） | acknowledgments・感謝・FYI は Board を使用。`@名前` でメンション可能（メンション先にDM通知）。詳細は `board-guide.md` 参照 |
 | `manage_channel` | チャネルACL管理 | チャネルの作成・メンバー追加・削除・情報確認。制限チャネル運用時に使用。詳細は `board-guide.md` 参照 |
@@ -129,7 +129,7 @@ send_message(
 
 ### パターン1: 単発タスク（配下への委譲）
 
-一度きりの作業を**配下**（子・孫・曾孫…）に委譲する場合、`delegate_task` を使用する。タスクキューに追加され、進捗を `task_tracker` で追跡できる。
+一度きりの作業を**直属部下**に委譲する場合、`delegate_task` を使用する。タスクキューに追加され、進捗を `task_tracker` で追跡できる。
 
 必須パラメータ: `name`（委譲先）、`instruction`（指示内容）、`deadline`（期限。相対形式 `30m`/`2h`/`1d` または ISO8601）。オプション: `summary`（1行要約）。
 

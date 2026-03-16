@@ -96,7 +96,7 @@ Managers have access to these dedicated tools. Use them before asking individual
 - `audit_subordinate` — Comprehensive audit of a subordinate's recent activity. Reports activity summary, task status, error frequency, tool usage statistics, and communication patterns. Parameters: name (required), days (optional, default 1). **Proactively use this when you sense anomalies in subordinate behavior (frequent errors, prolonged idle, unprocessed tasks, unusual communication patterns, etc.).** Early detection and early response is a manager's most critical responsibility
 
 ### Task Delegation
-- `delegate_task` — Delegate to any descendant (child, grandchild, etc.). Adds to descendant task queue + sends DM + creates tracking entry. deadline ('30m', '2h', '1d', etc.) is required
+- `delegate_task` — Delegate to direct subordinates only. Adds to subordinate task queue + sends DM + creates tracking entry. deadline ('30m', '2h', '1d', etc.) is required
 - `task_tracker` — Track progress of delegated tasks. Shows latest status against subordinate queue. Filter by status='active' (default), 'completed', 'all'
 - `submit_tasks` — Plan tasks during Heartbeat and submit them to state/pending/. Do NOT manually create JSON files in state/pending/ (MUST)
 

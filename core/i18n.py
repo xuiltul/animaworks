@@ -1669,13 +1669,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "Workspace alias or alias#hash. The subordinate will work in this directory",
     },
     "schema.delegate_task.desc": {
-        "ja": "配下のAnimaにタスクを委譲する。配下のタスクキューに追加し、state/pending/ に書き出して即時実行をトリガーする。同時にDMで指示を送信。自分側にも追跡用エントリが作成される。配下であれば操作可能。",
-        "en": "Delegate a task to a descendant Anima. Adds to the descendant's task queue and writes to state/pending/ to trigger immediate execution. Also sends a DM with instructions. A tracking entry is created on your side. Any descendant can be targeted.",
+        "ja": "直属部下のAnimaにタスクを委譲する。部下のタスクキューに追加し、state/pending/ に書き出して即時実行をトリガーする。同時にDMで指示を送信。自分側にも追跡用エントリが作成される。直属部下のみ操作可能。",
+        "en": "Delegate a task to a direct subordinate Anima. Adds to the subordinate's task queue and writes to state/pending/ to trigger immediate execution. Also sends a DM with instructions. A tracking entry is created on your side. Only direct subordinates can be targeted.",
     },
     "schema.delegate_task.instruction": {"ja": "タスクの指示内容", "en": "Task instructions"},
     "schema.delegate_task.name": {
-        "ja": "委譲先の配下Anima名",
-        "en": "Descendant Anima name to delegate to",
+        "ja": "委譲先の直属部下Anima名",
+        "en": "Direct subordinate Anima name to delegate to",
     },
     "schema.delegate_task.summary": {"ja": "タスクの1行要約", "en": "One-line task summary"},
     "schema.disable_subordinate.desc": {

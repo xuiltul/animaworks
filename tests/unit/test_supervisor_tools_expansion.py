@@ -402,7 +402,7 @@ class TestDelegateTask:
                 "deadline": "1h",
             })
         assert "PermissionDenied" in result
-        assert "配下ではありません" in result
+        assert "直属部下ではありません" in result
 
     def test_delegate_missing_fields(self, tmp_path):
         handler = _make_handler(tmp_path, "sakura")
@@ -745,8 +745,8 @@ class TestDescendantOrgToolPermission:
                 "summary": "テスト",
                 "deadline": "2h",
             })
-        assert "PermissionDenied" not in result
-        assert "委譲しました" in result
+        assert "PermissionDenied" in result
+        assert "直属部下ではありません" in result
 
     def test_non_descendant_still_blocked(self, tmp_path):
         """Org tools should still block non-descendant targets."""

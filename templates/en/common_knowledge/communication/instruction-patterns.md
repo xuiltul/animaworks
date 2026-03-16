@@ -7,7 +7,7 @@ Vague instructions cause rework and confusion. Follow this guide to give instruc
 
 | Tool | Use Case | Notes |
 |------|----------|-------|
-| `delegate_task` | Task delegation to descendants | Adds to task queue + sends DM. Progress trackable via `task_tracker`. Works on all descendants (children, grandchildren, etc.) |
+| `delegate_task` | Task delegation to direct subordinates | Adds to task queue + sends DM. Progress trackable via `task_tracker`. Direct subordinates only |
 | `send_message` | One-on-one requests, reports, questions | `intent` required: one of `report` / `question`. Use delegate_task for task delegation to subordinates. User aliases are delivered to external channels (Slack, Chatwork, etc.) |
 | `post_channel` | Organization-wide sharing (announcements, resolution reports) | Acknowledgments, thanks, FYI use Board. `@name` for mentions (triggers DM notification to mentioned party). See `board-guide.md` for details |
 | `manage_channel` | Channel ACL management | Create channels, add/remove members, view info. Use for restricted channel operations. See `board-guide.md` for details |
@@ -107,7 +107,7 @@ send_message(
 )
 ```
 
-**Good:** (If carol is a descendant, use `delegate_task` instead. For peers/non-descendants, use send_message with intent="question"):
+**Good:** (If carol is a direct subordinate, use `delegate_task` instead. For peers/non-subordinates, use send_message with intent="question"):
 ```
 send_message(
     to="carol",
@@ -129,7 +129,7 @@ Report: Reply with "LGTM" if no issues; if changes needed, reply with specific l
 
 ### Pattern 1: One-Off Task (Delegation to Direct Subordinate)
 
-For a one-time task delegated to a **descendant** (child, grandchild, etc.), use `delegate_task`. The task is added to the queue and progress can be tracked with `task_tracker`.
+For a one-time task delegated to a **direct subordinate**, use `delegate_task`. The task is added to the queue and progress can be tracked with `task_tracker`.
 
 Required parameters: `name` (delegatee), `instruction` (instruction content), `deadline` (relative format `30m`/`2h`/`1d` or ISO8601). Optional: `summary` (one-line summary).
 
@@ -199,7 +199,7 @@ Please add this to your Heartbeat checklist.""",
 
 ### Pattern 3: Phased Task (with Milestones)
 
-Pattern for delegating a large task broken into phases. Use `delegate_task` for descendants; for peers/non-descendants use `send_message` with `intent="question"`.
+Pattern for delegating a large task broken into phases. Use `delegate_task` for direct subordinates; for peers/non-subordinates use `send_message` with `intent="question"`.
 
 ```
 send_message(
@@ -257,7 +257,7 @@ Let me know if you're stuck; we can extend the deadline if needed.""",
 
 ### Feedback After Deliverable
 
-Revision requests: use `intent="question"`. For descendants, consider `delegate_task` if it is a formal task.
+Revision requests: use `intent="question"`. For direct subordinates, consider `delegate_task` if it is a formal task.
 
 ```
 send_message(
@@ -315,7 +315,7 @@ Please advise.""",
 
 ## Instruction Templates
 
-When using these templates with `send_message`, specify `intent` appropriately (request=question, report=report, question=question). Use delegate_task for task delegation to descendants.
+When using these templates with `send_message`, specify `intent` appropriately (request=question, report=report, question=question). Use delegate_task for task delegation to direct subordinates.
 
 ### Generic Task Request Template
 
