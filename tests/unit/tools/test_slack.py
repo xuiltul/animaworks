@@ -5,16 +5,13 @@
 
 from __future__ import annotations
 
-import sqlite3
-from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.tools._base import ToolConfigError
 from core.tools.slack import (
-    JST,
     MessageCache,
     clean_slack_markup,
     format_slack_ts,

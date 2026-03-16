@@ -1,16 +1,11 @@
 """Tests for swe/runner.py — unit tests for helpers and orchestration logic."""
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 from swe.runner import (
-    chat_sse,
-    clone_repo,
     create_test_instance,
     git_diff,
 )

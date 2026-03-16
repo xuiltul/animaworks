@@ -19,7 +19,6 @@ from unittest.mock import patch
 from core.memory.rag.retriever import (
     WEIGHT_IMPORTANCE,
     MemoryRetriever,
-    RetrievalResult,
 )
 from core.memory.rag.store import Document, SearchResult
 

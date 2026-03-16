@@ -5,10 +5,8 @@
 
 from __future__ import annotations
 
-import time
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
 
 from core.tools._base import ToolConfigError

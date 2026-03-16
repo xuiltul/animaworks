@@ -15,7 +15,6 @@ from core.tools.image_gen import (
     ImageGenPipeline,
     _EXPRESSION_GUIDANCE,
     _EXPRESSION_PROMPTS,
-    _VALID_EXPRESSION_NAMES,
 )
 
 

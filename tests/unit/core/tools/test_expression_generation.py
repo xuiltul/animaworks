@@ -19,7 +19,6 @@ Tests cover:
 - builder.py EMOTION_INSTRUCTION: contains all 7 emotion names
 """
 
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

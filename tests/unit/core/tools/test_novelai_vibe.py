@@ -8,18 +8,16 @@ from __future__ import annotations
 import base64
 import io
 import zipfile
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 
-from core.tools._base import ToolConfigError
 from core.tools.image_gen import (
     NOVELAI_API_URL,
     NOVELAI_ENCODE_URL,
     NOVELAI_MODEL,
     NovelAIClient,
-    _retry,
 )
 
 

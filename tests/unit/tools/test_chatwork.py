@@ -5,10 +5,9 @@
 
 from __future__ import annotations
 
-import sqlite3
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,7 +20,6 @@ from core.tools.chatwork import (
     _format_timestamp,
     _resolve_write_token,
     _sync_rooms,
-    JST,
 )
 
 

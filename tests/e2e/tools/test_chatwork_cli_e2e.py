@@ -6,12 +6,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.tools.chatwork import cli_main, ChatworkClient, MessageCache
+from core.tools.chatwork import cli_main, MessageCache
 
 
 @pytest.fixture(autouse=True)
