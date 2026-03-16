@@ -423,12 +423,13 @@ class MemoryManager:
     def _ensure_shared_skills_indexed(self, vector_store) -> None:
         self._rag._ensure_shared_skills_indexed(vector_store)
 
-    def _vector_search_memory(
+    def _vector_search_primary(
         self,
         query: str,
         scope: str,
-    ) -> list[tuple[str, str]]:
-        return self._rag._vector_search_memory(query, scope, self.knowledge_dir)
+        offset: int = 0,
+    ) -> list[dict]:
+        return self._rag._vector_search_primary(query, scope, offset, self.knowledge_dir)
 
     # ── Facade: ConfigReader ──────────────────────────────
 
@@ -517,18 +518,23 @@ class MemoryManager:
         self,
         query: str,
         scope: str = "all",
-    ) -> list[tuple[str, str]]:
+        *,
+        offset: int = 0,
+        context_window: int = 128_000,
+    ) -> list[dict]:
         """Facade: RAGMemorySearch.search_memory_text."""
         return self._rag.search_memory_text(
             query,
             scope,
+            offset=offset,
+            context_window=context_window,
             knowledge_dir=self.knowledge_dir,
             episodes_dir=self.episodes_dir,
             procedures_dir=self.procedures_dir,
             common_knowledge_dir=self.common_knowledge_dir,
         )
 
-    def search_procedures(self, query: str) -> list[tuple[str, str]]:
+    def search_procedures(self, query: str) -> list[dict]:
         """Facade: search via search_memory_text with procedures scope."""
         return self.search_memory_text(query, scope="procedures")
 

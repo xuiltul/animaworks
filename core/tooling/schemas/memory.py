@@ -14,15 +14,23 @@ from typing import Any
 MEMORY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "search_memory",
-        "description": ("Search the anima's long-term memory (knowledge, episodes, procedures) by keyword."),
+        "description": (
+            "Search the anima's long-term memory by semantic similarity. "
+            "Returns ranked results with scores and full content. "
+            "Use offset for pagination (10 results per page)."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Search keyword"},
+                "query": {"type": "string", "description": "Search query (natural language)"},
                 "scope": {
                     "type": "string",
                     "enum": ["knowledge", "episodes", "procedures", "common_knowledge", "all"],
                     "description": "Memory category to search",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Pagination offset (0=first page, 10=second page, max 50)",
                 },
             },
             "required": ["query"],

@@ -355,59 +355,81 @@ class TestReadRecentEpisodes:
 
 
 class TestSearchMemoryText:
+    """Tests for keyword fallback (vector unavailable)."""
+
     def test_search_all(self, mm, anima_dir):
+        mm._rag._indexer = None
+        mm._rag._indexer_initialized = True
         (anima_dir / "knowledge" / "python.md").write_text("Python is great\nJava is OK", encoding="utf-8")
         (anima_dir / "episodes" / "2026-01-01.md").write_text("Learned Python today", encoding="utf-8")
         results = mm.search_memory_text("python")
         assert len(results) >= 2
 
     def test_search_knowledge_scope(self, mm, anima_dir):
+        mm._rag._indexer = None
+        mm._rag._indexer_initialized = True
         (anima_dir / "knowledge" / "test.md").write_text("keyword here", encoding="utf-8")
         (anima_dir / "episodes" / "2026-01-01.md").write_text("keyword in episode", encoding="utf-8")
         results = mm.search_memory_text("keyword", scope="knowledge")
-        assert all("knowledge" in r[0] or r[0] == "test.md" for r in results)
+        assert all(
+            "knowledge" in r["source_file"] or r["source_file"].endswith("test.md")
+            for r in results
+        )
 
     def test_case_insensitive(self, mm, anima_dir):
+        mm._rag._indexer = None
+        mm._rag._indexer_initialized = True
         (anima_dir / "knowledge" / "test.md").write_text("UPPERCASE content", encoding="utf-8")
         results = mm.search_memory_text("uppercase")
         assert len(results) == 1
 
     def test_no_results(self, mm):
+        mm._rag._indexer = None
+        mm._rag._indexer_initialized = True
         results = mm.search_memory_text("nonexistent_query_xyz")
         assert results == []
 
 
 class TestSearchMemoryTextCommonKnowledge:
+    """Tests for keyword fallback with common_knowledge."""
+
+    def _force_keyword_fallback(self, mm):
+        mm._rag._indexer = None
+        mm._rag._indexer_initialized = True
+
     def test_search_common_knowledge_scope(self, mm, data_dir):
         """search_memory_text with scope='common_knowledge' searches the shared dir."""
+        self._force_keyword_fallback(mm)
         ck_dir = data_dir / "common_knowledge"
         ck_dir.mkdir(parents=True, exist_ok=True)
         (ck_dir / "shared_policy.md").write_text("Company-wide shared policy document", encoding="utf-8")
         results = mm.search_memory_text("shared policy", scope="common_knowledge")
         assert len(results) >= 1
-        assert any("shared_policy.md" in r[0] for r in results)
+        assert any("shared_policy.md" in r["source_file"] for r in results)
 
     def test_search_common_knowledge_scope_no_personal(self, mm, anima_dir, data_dir):
         """scope='common_knowledge' does NOT search personal knowledge."""
+        self._force_keyword_fallback(mm)
         (anima_dir / "knowledge" / "personal.md").write_text("Personal knowledge only", encoding="utf-8")
         ck_dir = data_dir / "common_knowledge"
         ck_dir.mkdir(parents=True, exist_ok=True)
         results = mm.search_memory_text("Personal knowledge", scope="common_knowledge")
-        # Should NOT find the personal knowledge file
-        assert all("personal.md" not in r[0] for r in results)
+        assert all("personal.md" not in r["source_file"] for r in results)
 
     def test_search_all_includes_common_knowledge(self, mm, anima_dir, data_dir):
         """scope='all' includes common_knowledge dir in search."""
+        self._force_keyword_fallback(mm)
         ck_dir = data_dir / "common_knowledge"
         ck_dir.mkdir(parents=True, exist_ok=True)
         (ck_dir / "global_info.md").write_text("Global information for everyone", encoding="utf-8")
         (anima_dir / "knowledge" / "local.md").write_text("Local knowledge for anima", encoding="utf-8")
         results = mm.search_memory_text("information", scope="all")
-        filenames = [r[0] for r in results]
-        assert any("global_info.md" in f for f in filenames)
+        sources = [r["source_file"] for r in results]
+        assert any("global_info.md" in s for s in sources)
 
     def test_search_common_knowledge_empty_dir(self, mm, data_dir):
         """scope='common_knowledge' with empty dir returns no results."""
+        self._force_keyword_fallback(mm)
         ck_dir = data_dir / "common_knowledge"
         ck_dir.mkdir(parents=True, exist_ok=True)
         results = mm.search_memory_text("anything", scope="common_knowledge")

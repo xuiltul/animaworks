@@ -128,21 +128,20 @@ class TestSearchMemoryTextKeywordOnly:
             encoding="utf-8",
         )
 
-        assert rag._indexer is None
-
-        results = rag.search_memory_text(
+        with patch.object(rag, "_get_indexer", return_value=None):
+            results = rag.search_memory_text(
             "python",
             scope="all",
             knowledge_dir=knowledge_dir,
             episodes_dir=episodes_dir,
             procedures_dir=procedures_dir,
-            common_knowledge_dir=common_knowledge_dir,
-        )
+                common_knowledge_dir=common_knowledge_dir,
+            )
 
         assert len(results) >= 2
-        filenames = [r[0] for r in results]
-        assert "python.md" in filenames
-        assert "2026-01-01.md" in filenames
+        sources = [r["source_file"] for r in results]
+        assert any("python.md" in s for s in sources)
+        assert any("2026-01-01.md" in s for s in sources)
 
 
 class TestSearchMemoryTextRespectsScope:
@@ -154,7 +153,7 @@ class TestSearchMemoryTextRespectsScope:
         procedures_dir: Path,
         common_knowledge_dir: Path,
     ) -> None:
-        """scope='knowledge' only searches the knowledge directory."""
+        """scope='knowledge' only searches the knowledge directory (keyword fallback)."""
         (knowledge_dir / "topic.md").write_text(
             "keyword in knowledge", encoding="utf-8",
         )
@@ -165,19 +164,20 @@ class TestSearchMemoryTextRespectsScope:
             "keyword in procedures", encoding="utf-8",
         )
 
-        results = rag.search_memory_text(
-            "keyword",
-            scope="knowledge",
-            knowledge_dir=knowledge_dir,
-            episodes_dir=episodes_dir,
-            procedures_dir=procedures_dir,
-            common_knowledge_dir=common_knowledge_dir,
-        )
+        with patch.object(rag, "_get_indexer", return_value=None):
+            results = rag.search_memory_text(
+                "keyword",
+                scope="knowledge",
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+            )
 
-        filenames = [r[0] for r in results]
-        assert "topic.md" in filenames
-        assert "2026-02-01.md" not in filenames
-        assert "deploy.md" not in filenames
+        sources = [r["source_file"] for r in results]
+        assert any("topic.md" in s for s in sources)
+        assert not any("2026-02-01.md" in s for s in sources)
+        assert not any("deploy.md" in s for s in sources)
 
 
 class TestSearchMemoryTextEmptyQuery:
@@ -194,14 +194,15 @@ class TestSearchMemoryTextEmptyQuery:
             "Line one\nLine two", encoding="utf-8",
         )
 
-        results = rag.search_memory_text(
-            "",
-            scope="knowledge",
-            knowledge_dir=knowledge_dir,
-            episodes_dir=episodes_dir,
-            procedures_dir=procedures_dir,
-            common_knowledge_dir=common_knowledge_dir,
-        )
+        with patch.object(rag, "_get_indexer", return_value=None):
+            results = rag.search_memory_text(
+                "",
+                scope="knowledge",
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+            )
 
         assert results == []
 
@@ -222,20 +223,20 @@ class TestSearchMemoryTextOrSplit:
             encoding="utf-8",
         )
 
-        results = rag.search_memory_text(
-            "Python Rust",
-            scope="knowledge",
-            knowledge_dir=knowledge_dir,
-            episodes_dir=episodes_dir,
-            procedures_dir=procedures_dir,
-            common_knowledge_dir=common_knowledge_dir,
-        )
+        with patch.object(rag, "_get_indexer", return_value=None):
+            results = rag.search_memory_text(
+                "Python Rust",
+                scope="knowledge",
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+            )
 
-        filenames_lines = [(r[0], r[1]) for r in results]
-        lines = [r[1] for r in results]
-        assert "Python is great" in lines
-        assert "Rust is fast" in lines
-        assert "Java is fine" not in lines
+        assert len(results) >= 1
+        content = results[0]["content"]
+        assert "Python is great" in content
+        assert "Rust is fast" in content
 
     def test_or_split_whitespace_only_returns_empty(
         self,

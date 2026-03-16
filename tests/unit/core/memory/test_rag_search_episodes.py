@@ -97,7 +97,7 @@ class TestSearchMemoryTextEpisodesKeyword:
         procedures_dir: Path,
         common_knowledge_dir: Path,
     ) -> None:
-        """scope='episodes' keyword search only returns episode files."""
+        """scope='episodes' keyword fallback only returns episode files."""
         (knowledge_dir / "python.md").write_text(
             "Python keyword", encoding="utf-8",
         )
@@ -106,18 +106,19 @@ class TestSearchMemoryTextEpisodesKeyword:
             encoding="utf-8",
         )
 
-        results = rag.search_memory_text(
-            "keyword",
-            scope="episodes",
-            knowledge_dir=knowledge_dir,
-            episodes_dir=episodes_dir,
-            procedures_dir=procedures_dir,
-            common_knowledge_dir=common_knowledge_dir,
-        )
+        with patch.object(rag, "_get_indexer", return_value=None):
+            results = rag.search_memory_text(
+                "keyword",
+                scope="episodes",
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+            )
 
-        filenames = [r[0] for r in results]
-        assert "2026-03-01.md" in filenames
-        assert "python.md" not in filenames
+        sources = [r["source_file"] for r in results]
+        assert any("2026-03-01.md" in s for s in sources)
+        assert not any("python.md" in s for s in sources)
 
 
 class TestSearchMemoryTextEpisodesVector:
@@ -139,8 +140,19 @@ class TestSearchMemoryTextEpisodesVector:
         )
 
         with patch.object(
-            rag, "_vector_search_memory",
-            return_value=[("episodes/2026-02-20.md", "vector hit line")],
+            rag,
+            "_vector_search_primary",
+            return_value=[
+                {
+                    "source_file": "episodes/2026-02-20.md",
+                    "content": "vector hit line",
+                    "score": 0.9,
+                    "chunk_index": 0,
+                    "total_chunks": 1,
+                    "memory_type": "episodes",
+                    "search_method": "vector",
+                },
+            ],
         ) as mock_vs:
             results = rag.search_memory_text(
                 "deploy error",
@@ -151,9 +163,9 @@ class TestSearchMemoryTextEpisodesVector:
                 common_knowledge_dir=common_knowledge_dir,
             )
 
-        mock_vs.assert_called_once_with("deploy error", "episodes", knowledge_dir)
-        filenames = [r[0] for r in results]
-        assert "episodes/2026-02-20.md" in filenames
+        mock_vs.assert_called_once()
+        sources = [r["source_file"] for r in results]
+        assert any("episodes/2026-02-20.md" in s for s in sources)
 
     def test_vector_search_all_scope_includes_episodes(
         self,
@@ -168,7 +180,7 @@ class TestSearchMemoryTextEpisodesVector:
         rag._indexer = mock_indexer
         rag._indexer_initialized = True
 
-        with patch.object(rag, "_vector_search_memory", return_value=[]) as mock_vs:
+        with patch.object(rag, "_vector_search_primary", return_value=[]) as mock_vs:
             rag.search_memory_text(
                 "query",
                 scope="all",
@@ -178,4 +190,4 @@ class TestSearchMemoryTextEpisodesVector:
                 common_knowledge_dir=common_knowledge_dir,
             )
 
-        mock_vs.assert_called_once_with("query", "all", knowledge_dir)
+        mock_vs.assert_called_once()

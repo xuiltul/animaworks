@@ -29,6 +29,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("animaworks.tool_handler")
 
+_SEARCH_MAX_TOKENS = 25_000
+_SEARCH_MAX_LINES = 2_000
+_SEARCH_CONTEXT_BASE = 128_000
+_SEARCH_MIN_RESULTS = 3
+
 
 class MemoryToolsMixin:
     """Memory file search, read, write, and archive tool handlers."""
@@ -53,19 +58,65 @@ class MemoryToolsMixin:
     def _handle_search_memory(self, args: dict[str, Any]) -> str:
         scope = args.get("scope", "all")
         query = args.get("query", "")
-        results = self._memory.search_memory_text(query, scope=scope)
+        offset = int(args.get("offset", 0))
+
+        results = self._memory.search_memory_text(
+            query,
+            scope=scope,
+            offset=offset,
+            context_window=getattr(self, "_context_window", _SEARCH_CONTEXT_BASE),
+        )
         logger.debug(
-            "search_memory query=%s scope=%s results=%d",
+            "search_memory query=%s scope=%s offset=%d results=%d",
             query,
             scope,
+            offset,
             len(results),
         )
         if not results:
+            if offset > 0:
+                return f"No more results for '{query}' at offset={offset}."
             return f"No results for '{query}'"
-        shown = results[:10]
-        header = f"Found {len(results)} results (showing top {len(shown)}):"
-        lines = [f"- {fname}: {line}" for fname, line in shown]
-        return header + "\n" + "\n".join(lines)
+
+        scale = min(1.0, getattr(self, "_context_window", _SEARCH_CONTEXT_BASE) / _SEARCH_CONTEXT_BASE)
+        max_tokens = int(_SEARCH_MAX_TOKENS * scale)
+        max_lines = int(_SEARCH_MAX_LINES * scale)
+
+        search_method = results[0].get("search_method", "vector") if results else "vector"
+        header = f'Search results for "{query}" ({search_method}, {scope}, {offset + 1}-{offset + len(results)}):\n'
+
+        output_parts: list[str] = [header]
+        total_tokens = len(header) // 4
+        total_lines = header.count("\n") + 1
+
+        for shown_count, r in enumerate(results):
+            source = r.get("source_file", "unknown")
+            score = r.get("score", 0.0)
+            chunk_idx = r.get("chunk_index", 0)
+            total_chunks = r.get("total_chunks", 1)
+            content = r.get("content", "")
+
+            entry_header = f"[{offset + shown_count + 1}] score={score:.2f} | {source} | chunk {chunk_idx + 1}/{total_chunks}"
+            entry = f"\n{entry_header}\n{content}\n"
+
+            entry_tokens = len(entry) // 4
+            entry_lines = entry.count("\n") + 1
+
+            if shown_count >= _SEARCH_MIN_RESULTS and (
+                total_tokens + entry_tokens > max_tokens
+                or total_lines + entry_lines > max_lines
+            ):
+                output_parts.append("\n(truncated — output limit reached)")
+                break
+
+            output_parts.append(entry)
+            total_tokens += entry_tokens
+            total_lines += entry_lines
+
+        if len(results) >= 10:
+            output_parts.append(f"\nUse offset={offset + len(results)} to see next page.")
+
+        return "".join(output_parts)
 
     def _handle_read_memory_file(self, args: dict[str, Any]) -> str:
         rel = args["path"]

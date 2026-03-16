@@ -195,7 +195,15 @@ class TestHandleBackgroundExecution:
         """Memory tools (search_memory, etc.) are handled before the background
         check and should work normally regardless of background_manager."""
         memory.search_memory_text.return_value = [
-            ("knowledge/test.md", "found it"),
+            {
+                "source_file": "knowledge/test.md",
+                "content": "found it",
+                "score": 0.9,
+                "chunk_index": 0,
+                "total_chunks": 1,
+                "memory_type": "knowledge",
+                "search_method": "vector",
+            },
         ]
         handler = ToolHandler(
             anima_dir=anima_dir,

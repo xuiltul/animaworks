@@ -159,7 +159,14 @@ class TestProperties:
 class TestHandleRouting:
     def test_search_memory(self, handler: ToolHandler, memory: MagicMock):
         memory.search_memory_text.return_value = [
-            ("knowledge/k1.md", "some result"),
+            {
+                "source_file": "knowledge/k1.md",
+                "content": "some result",
+                "score": 0.9,
+                "chunk_index": 0,
+                "total_chunks": 1,
+                "search_method": "vector",
+            },
         ]
         result = handler.handle("search_memory", {"query": "test", "scope": "all"})
         assert "knowledge/k1.md" in result

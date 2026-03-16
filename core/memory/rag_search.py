@@ -10,6 +10,10 @@ from pathlib import Path
 
 logger = logging.getLogger("animaworks.memory")
 
+_EPISODES_TOP_K = 10
+_DEFAULT_TOP_K = 5
+WEIGHT_TOKEN_OVERLAP = 0.1
+
 
 # ── Shared-index change detection helpers ─────────────────
 
@@ -246,42 +250,156 @@ class RAGMemorySearch:
         query: str,
         scope: str = "all",
         *,
+        offset: int = 0,
+        context_window: int = 128_000,
         knowledge_dir: Path,
         episodes_dir: Path,
         procedures_dir: Path,
         common_knowledge_dir: Path,
-    ) -> list[tuple[str, str]]:
-        """Search memory files by keyword and optional vector similarity.
+    ) -> list[dict]:
+        """Search memory by vector similarity with keyword fallback.
 
-        Returns ``(filename, matching_line)`` pairs.
-
-        *scope* can be ``"knowledge"``, ``"episodes"``, ``"procedures"``,
-        ``"common_knowledge"``, or ``"all"`` (default).
+        Returns ranked results as dicts with score, content, and metadata.
+        Vector search is primary; keyword OR search is fallback only
+        (activated when ChromaDB is unavailable).
         """
-        dirs: list[Path] = []
+        offset = max(0, min(offset, 50))
+
+        indexer = self._get_indexer()
+        if indexer is not None:
+            try:
+                return self._vector_search_primary(
+                    query, scope, offset, knowledge_dir
+                )
+            except Exception as e:
+                logger.debug("Vector search failed, falling back to keyword: %s", e)
+
+        return self._keyword_search_fallback(
+            query,
+            scope,
+            offset,
+            knowledge_dir=knowledge_dir,
+            episodes_dir=episodes_dir,
+            procedures_dir=procedures_dir,
+            common_knowledge_dir=common_knowledge_dir,
+        )
+
+    def _vector_search_primary(
+        self,
+        query: str,
+        scope: str,
+        offset: int,
+        knowledge_dir: Path,
+    ) -> list[dict]:
+        """Perform vector search as primary result source."""
+        from core.memory.rag.retriever import MemoryRetriever
+
+        if self._indexer is None:
+            return []
+
+        anima_name = self._anima_dir.name
+        retriever = MemoryRetriever(
+            self._indexer.vector_store,
+            self._indexer,
+            knowledge_dir,
+        )
+
+        include_shared = scope in ("common_knowledge", "all")
+        all_results: list[dict] = []
+        tokens = [tok for tok in query.lower().split() if tok]
+
+        for memory_type in self._resolve_search_types(scope):
+            top_k = _EPISODES_TOP_K if memory_type == "episodes" else _DEFAULT_TOP_K
+            fetch_k = offset + top_k
+
+            rag_results = retriever.search(
+                query=query,
+                anima_name=anima_name,
+                memory_type=memory_type,
+                top_k=fetch_k,
+                include_shared=include_shared,
+            )
+
+            if rag_results:
+                retriever.record_access(rag_results, anima_name)
+
+            for r in rag_results:
+                score = r.score
+                if tokens:
+                    content_lower = r.content.lower()
+                    matched = sum(1 for tok in tokens if tok in content_lower)
+                    overlap_ratio = matched / len(tokens)
+                    score += WEIGHT_TOKEN_OVERLAP * overlap_ratio
+
+                all_results.append({
+                    "source_file": r.metadata.get("source_file", r.doc_id),
+                    "content": r.content,
+                    "score": score,
+                    "chunk_index": int(r.metadata.get("chunk_index", 0)),
+                    "total_chunks": int(r.metadata.get("total_chunks", 1)),
+                    "memory_type": r.metadata.get("memory_type", memory_type),
+                    "search_method": "vector",
+                })
+
+        all_results.sort(key=lambda x: x["score"], reverse=True)
+        return all_results[offset : offset + 10]
+
+    def _keyword_search_fallback(
+        self,
+        query: str,
+        scope: str,
+        offset: int,
+        *,
+        knowledge_dir: Path,
+        episodes_dir: Path,
+        procedures_dir: Path,
+        common_knowledge_dir: Path,
+    ) -> list[dict]:
+        """Keyword OR search with scoring. Used only when vector search is unavailable."""
+        dirs: list[tuple[Path, str]] = []
         if scope in ("knowledge", "all"):
-            dirs.append(knowledge_dir)
+            dirs.append((knowledge_dir, "knowledge"))
         if scope in ("episodes", "all"):
-            dirs.append(episodes_dir)
+            dirs.append((episodes_dir, "episodes"))
         if scope in ("procedures", "all"):
-            dirs.append(procedures_dir)
+            dirs.append((procedures_dir, "procedures"))
         if scope in ("common_knowledge", "all"):
             if common_knowledge_dir.is_dir():
-                dirs.append(common_knowledge_dir)
+                dirs.append((common_knowledge_dir, "common_knowledge"))
 
-        # Keyword search — OR-split: match any whitespace-separated token
-        results: list[tuple[str, str]] = []
         tokens = [tok for tok in query.lower().split() if tok]
         if not tokens:
-            return results
-        for d in dirs:
-            for f in d.glob("*.md"):
-                for line in f.read_text(encoding="utf-8").splitlines():
-                    line_lower = line.lower()
-                    if any(tok in line_lower for tok in tokens):
-                        results.append((f.name, line.strip()))
+            return []
 
-        # Search compressed_summary from conversation.json
+        file_scores: dict[str, dict] = {}
+
+        for d, memory_type in dirs:
+            if not d.is_dir():
+                continue
+            for f in d.glob("*.md"):
+                try:
+                    content = f.read_text(encoding="utf-8")
+                except OSError:
+                    continue
+                content_lower = content.lower()
+                matched = sum(1 for tok in tokens if tok in content_lower)
+                if matched == 0:
+                    continue
+                score = matched / len(tokens)
+                rel_path = f"{memory_type}/{f.name}"
+                if rel_path not in file_scores or file_scores[rel_path]["score"] < score:
+                    lines = content.split("\n")
+                    preview = "\n".join(lines[:30])
+                    file_scores[rel_path] = {
+                        "source_file": rel_path,
+                        "content": preview,
+                        "score": score,
+                        "chunk_index": 0,
+                        "total_chunks": 1,
+                        "memory_type": memory_type,
+                        "search_method": "keyword_fallback",
+                    }
+
         if scope in ("all", "conversation_summary"):
             conv_file = self._anima_dir / "state" / "conversation.json"
             if conv_file.is_file():
@@ -289,33 +407,26 @@ class RAGMemorySearch:
                     conv_data = json.loads(conv_file.read_text(encoding="utf-8"))
                     summary = conv_data.get("compressed_summary", "")
                     if summary:
-                        for line in summary.splitlines():
-                            line_lower = line.lower()
-                            if any(tok in line_lower for tok in tokens) and line.strip():
-                                results.append(("conversation_summary", line.strip()))
-                except Exception as e:
-                    logger.debug("Failed to search conversation_summary: %s", e)
+                        content_lower = summary.lower()
+                        matched = sum(1 for tok in tokens if tok in content_lower)
+                        if matched > 0:
+                            score = matched / len(tokens)
+                            file_scores["conversation_summary"] = {
+                                "source_file": "state/conversation.json",
+                                "content": summary[:2000],
+                                "score": score,
+                                "chunk_index": 0,
+                                "total_chunks": 1,
+                                "memory_type": "conversation_summary",
+                                "search_method": "keyword_fallback",
+                            }
+                except Exception:
+                    pass
 
-        # Hybrid: append vector search results when RAG is available
-        if self._indexer is not None and scope in (
-            "knowledge",
-            "episodes",
-            "common_knowledge",
-            "procedures",
-            "conversation_summary",
-            "all",
-        ):
-            try:
-                vector_hits = self._vector_search_memory(query, scope, knowledge_dir)
-                seen_files = {r[0] for r in results}
-                for fname, snippet in vector_hits:
-                    if fname not in seen_files:
-                        results.append((fname, snippet))
-                        seen_files.add(fname)
-            except Exception as e:
-                logger.debug("Vector search augmentation failed: %s", e)
-
-        return results
+        results = sorted(
+            file_scores.values(), key=lambda x: x["score"], reverse=True
+        )
+        return results[offset : offset + 10]
 
     @staticmethod
     def _resolve_search_types(scope: str) -> list[str]:
@@ -333,48 +444,6 @@ class RAGMemorySearch:
         if scope == "all":
             return ["knowledge", "episodes", "procedures", "conversation_summary"]
         return ["knowledge"]
-
-    def _vector_search_memory(
-        self,
-        query: str,
-        scope: str,
-        knowledge_dir: Path,
-    ) -> list[tuple[str, str]]:
-        """Perform vector search to augment keyword results."""
-        from core.memory.rag.retriever import MemoryRetriever
-
-        if self._indexer is None:
-            return []
-
-        anima_name = self._anima_dir.name
-        retriever = MemoryRetriever(
-            self._indexer.vector_store,
-            self._indexer,
-            knowledge_dir,
-        )
-
-        include_shared = scope in ("common_knowledge", "all")
-        hits: list[tuple[str, str]] = []
-
-        for memory_type in self._resolve_search_types(scope):
-            rag_results = retriever.search(
-                query=query,
-                anima_name=anima_name,
-                memory_type=memory_type,
-                top_k=5,
-                include_shared=include_shared,
-            )
-
-            # Record access (Hebbian LTP)
-            if rag_results:
-                retriever.record_access(rag_results, anima_name)
-
-            for r in rag_results:
-                source = r.metadata.get("source_file", r.doc_id)
-                first_line = r.content.split("\n", 1)[0].strip()
-                hits.append((str(source), first_line))
-
-        return hits
 
     def search_knowledge(self, query: str, knowledge_dir: Path) -> list[tuple[str, str]]:
         """Search knowledge/ by keyword (OR-split on whitespace tokens)."""

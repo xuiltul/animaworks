@@ -364,7 +364,7 @@ class TestRAGProceduresSearch:
         )
 
         assert len(results) > 0
-        assert any("deploy" in r[1].lower() for r in results)
+        assert any("deploy" in r["content"].lower() for r in results)
 
     def test_vector_search_condition_includes_procedures(self):
         """Vector search condition now includes 'procedures' scope."""

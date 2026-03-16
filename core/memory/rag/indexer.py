@@ -484,16 +484,13 @@ class MemoryIndexer:
         """Chunk file based on memory type.
 
         Strategies:
-        - knowledge / common_knowledge: Markdown heading sections
-        - episodes: Time-based sections (## HH:MM)
+        - knowledge / common_knowledge / episodes: Markdown heading sections
         - procedures: Whole file (don't split procedures)
         - skills / common_skills: Whole file
         - shared_users: Whole file
         """
-        if memory_type in ("knowledge", "common_knowledge"):
+        if memory_type in ("knowledge", "common_knowledge", "episodes"):
             return self._chunk_by_markdown_headings(file_path, content, memory_type, origin=origin)
-        elif memory_type == "episodes":
-            return self._chunk_by_time_headings(file_path, content, memory_type, origin=origin)
         else:  # procedures, skills, shared_users
             return self._chunk_whole_file(file_path, content, memory_type, origin=origin)
 

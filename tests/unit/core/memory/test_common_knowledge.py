@@ -624,11 +624,11 @@ class TestToolHandlerCommonKnowledgeWrite:
         assert written.startswith("---")  # auto-frontmatter
 
 
-# ── MemoryManager._vector_search_memory ──────────────────────
+# ── MemoryManager._vector_search_primary ──────────────────────
 
 
 class TestManagerVectorSearchMemory:
-    """Test MemoryManager._vector_search_memory with include_shared."""
+    """Test MemoryManager._vector_search_primary with include_shared."""
 
     @pytest.fixture
     def anima_dir(self, tmp_path: Path) -> Path:
@@ -644,7 +644,6 @@ class TestManagerVectorSearchMemory:
 
         mm = MemoryManager(anima_dir)
 
-        # Mock the indexer so _vector_search_memory runs
         mm._indexer = MagicMock()
         mm._indexer.vector_store = MagicMock()
 
@@ -653,9 +652,8 @@ class TestManagerVectorSearchMemory:
             mock_retriever.search.return_value = []
             MockRetriever.return_value = mock_retriever
 
-            mm._vector_search_memory("test query", "common_knowledge")
+            mm._vector_search_primary("test query", "common_knowledge")
 
-            # Verify include_shared=True was passed
             mock_retriever.search.assert_called_once()
             call_kwargs = mock_retriever.search.call_args
             assert call_kwargs.kwargs.get("include_shared") is True
@@ -675,7 +673,7 @@ class TestManagerVectorSearchMemory:
             mock_retriever.search.return_value = []
             MockRetriever.return_value = mock_retriever
 
-            mm._vector_search_memory("test query", "all")
+            mm._vector_search_primary("test query", "all")
 
             call_kwargs = mock_retriever.search.call_args
             assert call_kwargs.kwargs.get("include_shared") is True
@@ -695,7 +693,7 @@ class TestManagerVectorSearchMemory:
             mock_retriever.search.return_value = []
             MockRetriever.return_value = mock_retriever
 
-            mm._vector_search_memory("test query", "knowledge")
+            mm._vector_search_primary("test query", "knowledge")
 
             call_kwargs = mock_retriever.search.call_args
             assert call_kwargs.kwargs.get("include_shared") is False

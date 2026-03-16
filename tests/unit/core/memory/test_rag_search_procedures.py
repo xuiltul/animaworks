@@ -117,13 +117,12 @@ class TestSearchMemoryTextProceduresWithVector:
             "Deploy to production server", encoding="utf-8",
         )
 
-        # Set up a mock indexer to enable vector search path
         mock_indexer = MagicMock()
         rag._indexer = mock_indexer
         rag._indexer_initialized = True
 
         with patch.object(
-            rag, "_vector_search_memory", return_value=[],
+            rag, "_vector_search_primary", return_value=[],
         ) as mock_vector:
             results = rag.search_memory_text(
                 "deploy",
@@ -134,12 +133,34 @@ class TestSearchMemoryTextProceduresWithVector:
                 common_knowledge_dir=common_knowledge_dir,
             )
 
-            # Keyword search should find the file
-            filenames = [r[0] for r in results]
-            assert "deploy.md" in filenames
+            assert results == []
+            mock_vector.assert_called_once()
 
-            # Vector search should have been attempted for procedures scope
-            mock_vector.assert_called_once_with("deploy", "procedures", knowledge_dir)
+    def test_keyword_fallback_when_vector_unavailable(
+        self,
+        rag: RAGMemorySearch,
+        knowledge_dir: Path,
+        episodes_dir: Path,
+        procedures_dir: Path,
+        common_knowledge_dir: Path,
+    ) -> None:
+        """scope='procedures' falls back to keyword when indexer is None."""
+        (procedures_dir / "deploy.md").write_text(
+            "Deploy to production server", encoding="utf-8",
+        )
+
+        with patch.object(rag, "_get_indexer", return_value=None):
+            results = rag.search_memory_text(
+                "deploy",
+                scope="procedures",
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+            )
+
+        sources = [r["source_file"] for r in results]
+        assert any("deploy.md" in s for s in sources)
 
 
 # ── _init_indexer indexes procedures ─────────────────────
