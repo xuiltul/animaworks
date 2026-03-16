@@ -389,6 +389,7 @@ class HeartbeatMixin:
         # Reset reply tracking before the cycle
         self.agent.reset_reply_tracking(session_type="background")
         self.agent.reset_posted_channels(session_type="background")
+        self.agent.reset_read_paths()
         # Clear replied_to persistence file
         _replied_to_path = self.anima_dir / "run" / "replied_to.jsonl"
         if _replied_to_path.exists():

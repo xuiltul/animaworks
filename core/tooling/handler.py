@@ -126,6 +126,7 @@ class ToolHandler(
         self._pending_notifications: list[dict[str, Any]] = []
         self._replied_to: dict[str, set[str]] = {"chat": set(), "background": set()}
         self._posted_channels: dict[str, set[str]] = {"chat": set(), "background": set()}
+        self._read_paths: set[str] = set()
         self._session_id: str = uuid.uuid4().hex[:12]
         self._activity = ActivityLogger(self._anima_dir)
         self._state_file_lock: threading.Lock | None = None
@@ -335,6 +336,11 @@ class ToolHandler(
         """Generate a new session ID (call at start of each interaction cycle)."""
         self._session_id = uuid.uuid4().hex[:12]
         self._min_trust_seen = 2
+        self._read_paths.clear()
+
+    def reset_read_paths(self) -> None:
+        """Reset read-path tracking for new session."""
+        self._read_paths.clear()
 
     def reset_replied_to(self, session_type: str | None = None) -> None:
         """Reset replied-to tracking. If session_type given, clear only that session."""

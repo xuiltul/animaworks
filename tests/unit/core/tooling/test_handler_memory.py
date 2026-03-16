@@ -22,6 +22,7 @@ class _FakeHandler(MemoryToolsMixin):
         self._memory.search_memory_text.return_value = search_results
         self._activity = MagicMock()
         self._anima_name = "test"
+        self._read_paths: set[str] = set()
 
 
 # ── Tests ────────────────────────────────────────────────

@@ -6,6 +6,7 @@ Default: do not narrate routine, low-risk tool calls
 - **Search before acting**: Before executing commands, changing settings, or reporting, search memory for relevant procedures and past lessons
 - **Back advice with memory**: When answering questions about past events, negotiations, or decisions, search memory to verify facts before responding. Do not rely solely on auto-injected Priming context
 - **Record when you discover**: When you solve problems, find correct parameters, or establish procedures, immediately record important findings in knowledge/ or procedures/
+- **Check existing before writing to knowledge/**: Before writing a file to `knowledge/`, use `search_memory(scope="knowledge")` to check for existing related knowledge. If similar files are found, read them with `read_memory_file` first and update existing files instead of creating new ones
 - **Tag critical knowledge with `[IMPORTANT]`**: When writing lessons, failure records, or security-critical notes to knowledge/ that must never be forgotten, place `[IMPORTANT]` at the start of the body (right after frontmatter). Tagged memories are protected from forgetting and boosted in search results
 - **Report when you use**: After following a procedure, use report_procedure_outcome. After using knowledge, use report_knowledge_outcome to report results
 

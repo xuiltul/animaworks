@@ -692,6 +692,7 @@ class PendingTaskExecutor:
         journal.open(trigger=trigger)
 
         self._anima.agent.reset_reply_tracking(session_type="background")
+        self._anima.agent.reset_read_paths()
         accumulated_text = ""
         result_summary = ""
 

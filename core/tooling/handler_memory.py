@@ -48,6 +48,7 @@ class MemoryToolsMixin:
     _state_file_lock: threading.Lock | None
     _on_schedule_changed: Callable[[str], None] | None
     _min_trust_seen: int
+    _read_paths: set[str]
 
     def _handle_search_memory(self, args: dict[str, Any]) -> str:
         scope = args.get("scope", "all")
@@ -128,6 +129,7 @@ class MemoryToolsMixin:
                     )
         if path.exists() and path.is_file():
             logger.debug("read_memory_file path=%s", rel)
+            self._read_paths.add(rel)
             content = path.read_text(encoding="utf-8")
             lines = content.splitlines(keepends=True)
             MAX_LINES = 2000
@@ -203,8 +205,22 @@ class MemoryToolsMixin:
                     t("handler.tool_creation_denied"),
                 )
 
-        content = args["content"]
+        _was_existing = path.exists()
         mode = args.get("mode", "overwrite")
+
+        # ── Read-before-write guard ──
+        _rbw_skip = mode == "append" or not _was_existing or rel.startswith(("episodes/", "state/", "shortterm/"))
+        if not _rbw_skip and rel not in self._read_paths:
+            try:
+                _existing = path.read_text(encoding="utf-8")[:2000]
+            except OSError:
+                _existing = "(could not read existing content)"
+            return _error_result(
+                "ReadBeforeWrite",
+                t("handler.read_before_write", path=rel, existing=_existing),
+            )
+
+        content = args["content"]
 
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -369,6 +385,26 @@ class MemoryToolsMixin:
             meta={"path": rel, "mode": args.get("mode", "overwrite")},
         )
 
+        # ── Filename token hint for new knowledge files ──
+        _similar_hint = ""
+        if rel.startswith("knowledge/") and mode == "overwrite" and not _was_existing:
+            _new_stem = Path(rel).stem.replace("-", "_")
+            _new_tokens = set(_new_stem.split("_"))
+            _knowledge_dir = self._anima_dir / "knowledge"
+            if _knowledge_dir.is_dir():
+                _existing_names = [
+                    f.name for f in _knowledge_dir.iterdir() if f.suffix == ".md" and f.name != Path(rel).name
+                ]
+                _similar = []
+                for _ef in _existing_names:
+                    _ef_tokens = set(_ef.replace("-", "_").replace(".md", "").split("_"))
+                    if len(_new_tokens & _ef_tokens) >= 2:
+                        _similar.append(_ef)
+                if _similar:
+                    _similar.sort()
+                    _lines = "\n".join(f"  - {s}" for s in _similar[:10])
+                    _similar_hint = t("handler.similar_knowledge_hint", files=_lines)
+
         # Trigger schedule reload if heartbeat or cron config changed
         if args["path"] in ("heartbeat.md", "cron.md") and self._on_schedule_changed:
             try:
@@ -378,6 +414,8 @@ class MemoryToolsMixin:
                 logger.exception("Schedule reload failed for '%s'", self._anima_name)
 
         result = f"Written to {args['path']}"
+        if _similar_hint:
+            result = f"{result}\n\n{_similar_hint}"
 
         # Warn (but don't block) if episode filename is non-standard
         episode_warning = _validate_episode_path(args["path"])

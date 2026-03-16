@@ -186,6 +186,10 @@ class AgentCore(
         """Clear posted-channels tracking (call at start of each heartbeat cycle)."""
         self._tool_handler.reset_posted_channels(session_type=session_type)
 
+    def reset_read_paths(self) -> None:
+        """Clear read-path tracking (call at start of each cycle)."""
+        self._tool_handler.reset_read_paths()
+
     @property
     def replied_to(self) -> set[str]:
         """Anima names this agent has sent messages to in the current cycle."""

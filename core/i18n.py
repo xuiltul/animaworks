@@ -108,6 +108,14 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ja": "⚠️ 手順書フォーマット検証:\n{msg}",
         "en": "⚠️ Procedure format validation:\n{msg}",
     },
+    "handler.read_before_write": {
+        "ja": "Error: 既存ファイル {path} を上書きする前に read_memory_file で読み取ってください。\n\n既存内容のプレビュー:\n{existing}",
+        "en": "Error: Read {path} with read_memory_file before overwriting.\n\nExisting content preview:\n{existing}",
+    },
+    "handler.similar_knowledge_hint": {
+        "ja": "類似する既存の知識ファイル（トークン重複）:\n{files}",
+        "en": "Similar existing knowledge files (token overlap):\n{files}",
+    },
     "handler.delegation_intent_deprecated": {
         "ja": "Error: intent='delegation' は廃止されました。タスクを委任するには delegate_task ツールを使用してください。send_message は report / question のみ対応しています。",
         "en": "Error: intent='delegation' has been deprecated. Use the delegate_task tool to assign tasks to subordinates. send_message only supports 'report' and 'question' intents.",

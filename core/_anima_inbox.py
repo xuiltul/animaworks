@@ -155,6 +155,7 @@ class InboxMixin:
 
                     self.agent.reset_reply_tracking(session_type="inbox")
                     self.agent.reset_posted_channels(session_type="inbox")
+                    self.agent.reset_read_paths()
 
                     journal = StreamingJournal(self.anima_dir, session_type="inbox")
                     journal.open(trigger=trigger, from_person=senders_str)
