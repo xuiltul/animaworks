@@ -28,6 +28,10 @@ def make_litellm_response(
     mock_message = MagicMock()
     mock_message.content = content
     mock_message.tool_calls = tool_calls
+    # Explicitly set reasoning fields to None so that non-streaming fallback
+    # code (added in 889ab2af) does not pick up a truthy MagicMock as thinking.
+    mock_message.reasoning_content = None
+    mock_message.reasoning = None
 
     # model_dump() is called when appending assistant message to history
     dump = {"role": "assistant", "content": content}
