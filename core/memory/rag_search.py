@@ -420,8 +420,8 @@ class RAGMemorySearch:
                                 "memory_type": "conversation_summary",
                                 "search_method": "keyword_fallback",
                             }
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to read conversation summary: %s", e)
 
         results = sorted(file_scores.values(), key=lambda x: x["score"], reverse=True)
         return results[offset : offset + 10]
