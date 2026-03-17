@@ -19,6 +19,6 @@ Output format:
 ### Resolved
 - {{list resolved items if any; otherwise "none"}}
 ### New Tasks
-- {{newly created tasks if any; otherwise "none"}}
+- {{only tasks with a concrete action and a clear counterparty or deadline. Exclude: internal system checks, technical notes, casual "might look into X" mentions, and personal reminders/rules. Otherwise "none"}}
 ### Current State
 {{"idle" or what you are currently working on}}
