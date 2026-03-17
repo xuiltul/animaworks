@@ -172,13 +172,16 @@ class TestFacadeDelegation:
         assert any("comprehension" in line for _, line in results)
 
     def test_search_memory_text_scope(self, mm: MemoryManager) -> None:
-        """search_memory_text respects scope parameter."""
+        """search_memory_text respects scope parameter (keyword fallback)."""
+        # Force keyword fallback so the test works without a ChromaDB collection.
+        mm._rag._indexer = None
+        mm._rag._indexer_initialized = True
         (mm.knowledge_dir / "k.md").write_text("knowledge content\n")
         (mm.episodes_dir / "e.md").write_text("episode content\n")
         results = mm.search_memory_text("content", scope="knowledge")
-        files = [f for f, _ in results]
-        assert "k.md" in files
-        assert "e.md" not in files
+        files = [r["source_file"] for r in results]
+        assert any("k.md" in f for f in files)
+        assert all("e.md" not in f for f in files)
 
 
 # ── Backward-compatible RAG proxies ──────────────────────
