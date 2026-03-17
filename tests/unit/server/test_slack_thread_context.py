@@ -39,7 +39,7 @@ class TestFetchThreadContext:
 
     @patch("core.tools.slack.SlackClient", autospec=True)
     def test_formats_thread_context(self, mock_cls):
-        """Normal thread with root + 2 replies formats correctly."""
+        """Normal thread with root + 2 replies: parent summary + reply count."""
         from server.slack_socket import _fetch_thread_context
 
         mock_client = mock_cls.return_value
@@ -51,13 +51,12 @@ class TestFetchThreadContext:
         result = _fetch_thread_context("xoxb-token", "C123", "1000.0")
         assert "[Thread context" in result
         assert "<@U_BOT>: Zombie process detected" in result
-        assert "<@U_HUMAN>: What should I run?" in result
-        assert "Tell me the commands" not in result
+        assert "(2 replies in thread)" in result
         assert "[/Thread context]" in result
 
     @patch("core.tools.slack.SlackClient", autospec=True)
-    def test_limits_to_max_messages(self, mock_cls):
-        """When thread exceeds limit, keeps root + latest (limit-1)."""
+    def test_summary_includes_parent_and_reply_count(self, mock_cls):
+        """Concise summary: parent message (truncated) + reply count only."""
         from server.slack_socket import _fetch_thread_context
 
         replies = [{"user": f"U{i}", "text": f"msg {i}", "ts": f"{i}.0"} for i in range(15)]
@@ -66,10 +65,7 @@ class TestFetchThreadContext:
 
         result = _fetch_thread_context("xoxb-token", "C123", "0.0", limit=5)
         assert "<@U0>: msg 0" in result
-        assert "<@U11>: msg 11" in result
-        assert "<@U13>: msg 13" in result
-        assert "<@U14>:" not in result
-        assert "<@U1>: msg 1" not in result
+        assert "(14 replies in thread)" in result
 
     @patch("core.tools.slack.SlackClient", autospec=True)
     def test_api_failure_returns_empty(self, mock_cls):

@@ -55,11 +55,15 @@ def _detect_slack_intent(text: str, channel_id: str, bot_user_id: str) -> str:
     return ""
 
 
-def _fetch_thread_context(token: str, channel_id: str, thread_ts: str, *, limit: int = 10) -> str:
-    """Fetch Slack thread context and format as a text block.
+_THREAD_CTX_SUMMARY_LIMIT = 150
 
-    Returns a formatted ``[Thread context]`` string to prepend to message
-    content, or an empty string when *thread_ts* is empty or the fetch fails.
+
+def _fetch_thread_context(token: str, channel_id: str, thread_ts: str, *, limit: int = 10) -> str:
+    """Fetch Slack thread context and format as a concise summary block.
+
+    Returns a ``[Thread context]`` block with the parent message's first line
+    (truncated to *_THREAD_CTX_SUMMARY_LIMIT* chars) and the reply count,
+    or an empty string when *thread_ts* is empty or the fetch fails.
     """
     if not thread_ts or not token:
         return ""
@@ -70,17 +74,17 @@ def _fetch_thread_context(token: str, channel_id: str, thread_ts: str, *, limit:
         replies = client.thread_replies(channel_id, thread_ts)
         if len(replies) <= 1:
             return ""
-        if len(replies) > limit:
-            selected = [replies[0]] + replies[-(limit - 1) :]
-        else:
-            selected = replies
-        lines = ["[Thread context — this message is a reply in a Slack thread]"]
-        for msg in selected[:-1]:
-            user = msg.get("user", "unknown")
-            text = msg.get("text", "")
-            lines.append(f"  <@{user}>: {text}")
-        lines.append("[/Thread context]")
-        lines.append("")
+        parent = replies[0]
+        parent_user = parent.get("user", "unknown")
+        parent_text = parent.get("text", "").replace("\n", " ")[:_THREAD_CTX_SUMMARY_LIMIT]
+        reply_count = len(replies) - 1
+        lines = [
+            "[Thread context — this message is a reply in a Slack thread]",
+            f"  <@{parent_user}>: {parent_text}",
+            f"  ({reply_count} replies in thread)",
+            "[/Thread context]",
+            "",
+        ]
         return "\n".join(lines)
     except Exception:
         logger.warning("Failed to fetch Slack thread context", exc_info=True)

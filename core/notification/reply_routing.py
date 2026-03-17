@@ -33,6 +33,7 @@ logger = logging.getLogger("animaworks.notification.reply_routing")
 
 _MAX_AGE_DAYS = 7
 _MAX_REPLY_LENGTH = 4000
+_THREAD_CTX_SUMMARY_LIMIT = 150
 
 # Slack mrkdwn patterns
 _RE_USER_MENTION = re.compile(r"<@[A-Za-z0-9]+>")
@@ -219,9 +220,10 @@ def route_thread_reply(
     if not thread_ctx:
         notification_text = mapping.get("notification_text", "")
         if notification_text:
+            summary = notification_text.replace("\n", " ")[:_THREAD_CTX_SUMMARY_LIMIT]
             thread_ctx = (
                 f"[Thread context — this is a reply to a call_human notification]\n"
-                f"  {target}: {notification_text}\n"
+                f"  {target}: {summary}\n"
                 f"[/Thread context]\n\n"
             )
             ctx_source = "stored"
@@ -257,8 +259,8 @@ def _fetch_thread_context_for_reply(
 ) -> str:
     """Fetch Slack thread context for call_human reply routing.
 
-    Similar to ``server.slack_socket._fetch_thread_context`` but importable
-    from core without depending on server modules.
+    Returns a concise ``[Thread context]`` block with the parent message's
+    first line and reply count, or an empty string on failure.
     """
     if not token or not thread_ts:
         return ""
@@ -269,17 +271,17 @@ def _fetch_thread_context_for_reply(
         replies = client.thread_replies(channel_id, thread_ts)
         if len(replies) <= 1:
             return ""
-        if len(replies) > limit:
-            selected = [replies[0]] + replies[-(limit - 1) :]
-        else:
-            selected = replies
-        lines = ["[Thread context — this message is a reply in a Slack thread]"]
-        for msg in selected[:-1]:
-            user = msg.get("user", "unknown")
-            txt = msg.get("text", "")
-            lines.append(f"  <@{user}>: {txt}")
-        lines.append("[/Thread context]")
-        lines.append("")
+        parent = replies[0]
+        parent_user = parent.get("user", "unknown")
+        parent_text = parent.get("text", "").replace("\n", " ")[:_THREAD_CTX_SUMMARY_LIMIT]
+        reply_count = len(replies) - 1
+        lines = [
+            "[Thread context — this message is a reply in a Slack thread]",
+            f"  <@{parent_user}>: {parent_text}",
+            f"  ({reply_count} replies in thread)",
+            "[/Thread context]",
+            "",
+        ]
         return "\n".join(lines)
     except Exception:
         logger.warning("Failed to fetch thread context for reply routing", exc_info=True)

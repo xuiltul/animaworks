@@ -12,6 +12,7 @@ references are resolved at runtime via MRO when mixed into ``DigitalAnima``.
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -37,6 +38,36 @@ _SOURCE_TO_ORIGIN: dict[str, str] = {
     "human": ORIGIN_HUMAN,
     "anima": ORIGIN_ANIMA,
 }
+
+_RE_THREAD_CTX = re.compile(
+    r"(\[Thread context[^\]]*\].*?\[/Thread context\]\s*)",
+    re.DOTALL,
+)
+_THREAD_CTX_BUDGET = 300
+_MSG_BODY_BUDGET = 2000
+
+
+def _truncate_with_thread_ctx(
+    content: str,
+    *,
+    ctx_budget: int = _THREAD_CTX_BUDGET,
+    body_budget: int = _MSG_BODY_BUDGET,
+) -> str:
+    """Truncate content while preserving the user message after thread context.
+
+    When ``[Thread context]...[/Thread context]`` markers are present,
+    the context portion is truncated to *ctx_budget* characters and the
+    actual user message is kept up to *body_budget* characters.  Without
+    markers, the whole content is truncated to *body_budget*.
+    """
+    m = _RE_THREAD_CTX.match(content)
+    if not m:
+        return content[:body_budget]
+    ctx_part = m.group(1)
+    body_part = content[m.end() :]
+    if len(ctx_part) > ctx_budget:
+        ctx_part = ctx_part[:ctx_budget].rstrip() + "...\n"
+    return ctx_part + body_part[:body_budget]
 
 
 def _build_reply_instruction(m: Any) -> str:
@@ -402,7 +433,7 @@ class InboxMixin:
                 prefix = t("anima.unread_prefix", from_person=m.from_person, count=count)
             else:
                 prefix = f"- {m.from_person}: "
-            line = f"{prefix}{m.content[:800]}"
+            line = f"{prefix}{_truncate_with_thread_ctx(m.content)}"
             if m.source in ("slack", "chatwork") and m.external_channel_id:
                 reply_instr = _build_reply_instruction(m)
                 if reply_instr:
@@ -411,7 +442,7 @@ class InboxMixin:
         # Deferred messages (no InboxItem) are appended without counter
         for m in messages:
             if not any(item.msg is m for item in inbox_items):
-                line = f"- {m.from_person}: {m.content[:800]}"
+                line = f"- {m.from_person}: {_truncate_with_thread_ctx(m.content)}"
                 if m.source in ("slack", "chatwork") and m.external_channel_id:
                     reply_instr = _build_reply_instruction(m)
                     if reply_instr:
@@ -436,7 +467,7 @@ class InboxMixin:
                     "anima.msg_received_episode",
                     ts=_msg_ts,
                     from_person=_m.from_person,
-                    content=_m.content[:1000],
+                    content=_truncate_with_thread_ctx(_m.content, body_budget=1000),
                 )
                 + "\n"
             )
