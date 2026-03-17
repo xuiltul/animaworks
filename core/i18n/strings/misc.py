@@ -26,6 +26,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "定期巡回完了",
         "en": "Periodic check completed",
     },
+    "activity.heartbeat_reflection": {
+        "ja": "HB振り返り",
+        "en": "HB reflection",
+    },
     "activity.heartbeat_start": {
         "ja": "定期巡回開始",
         "en": "Periodic check started",
@@ -491,6 +495,10 @@ STRINGS: dict[str, dict[str, str]] = {
     "task_queue.overdue": {
         "ja": "🔴 OVERDUE({time}期限)",
         "en": "🔴 OVERDUE(deadline {time})",
+    },
+    "task_queue.overdue_aggregate": {
+        "ja": '🔴 OVERDUE集約（{count}件）: {summaries}\n  → list_tasks(status="pending") で詳細確認',
+        "en": '🔴 OVERDUE aggregate ({count}): {summaries}\n  → list_tasks(status="pending") for details',
     },
     "voice.mode_suffix": {
         "ja": (

@@ -112,6 +112,15 @@ def _format_deadline_display(deadline: str, now: datetime) -> str:
     return t("task_queue.deadline_by", time=dl.strftime("%H:%M"))
 
 
+def _is_overdue(deadline: str, now: datetime) -> bool:
+    """Return True if the deadline has passed."""
+    try:
+        dl = ensure_aware(datetime.fromisoformat(deadline))
+        return now >= dl
+    except (ValueError, TypeError):
+        return False
+
+
 class TaskQueueManager:
     """Manages a persistent task queue backed by JSONL.
 
@@ -406,9 +415,8 @@ class TaskQueueManager:
     def format_for_priming(self, budget_tokens: int = 400) -> str:
         """Format pending tasks for system prompt injection.
 
-        Human-origin tasks are displayed with 🔴 HIGH priority marker.
-        Includes elapsed time, ⚠️ STALE (>30min), and 🔴 OVERDUE markers.
-        In-progress TaskExec tasks show (auto: TaskExec).
+        Active (non-OVERDUE) tasks are shown first with full detail.
+        OVERDUE tasks are aggregated into a compact summary line.
         Failed TaskExec tasks are shown in a separate section.
         """
         tasks = self.get_pending()
@@ -419,10 +427,23 @@ class TaskQueueManager:
         total = 0
 
         if tasks:
-            # Sort: human tasks first, then by creation time
-            tasks.sort(key=lambda t: (0 if t.source == "human" else 1, t.ts))
-
+            active: list[TaskEntry] = []
+            overdue: list[TaskEntry] = []
             for task in tasks:
+                if task.deadline and _is_overdue(task.deadline, now):
+                    overdue.append(task)
+                else:
+                    active.append(task)
+
+            active.sort(
+                key=lambda t: (
+                    0 if t.source == "human" else 1,
+                    t.updated_at or t.ts,
+                ),
+                reverse=False,
+            )
+
+            for task in active:
                 priority = "🔴 HIGH" if task.source == "human" else "⚪"
                 status_icon = "🔄" if task.status == "in_progress" else "📋"
                 line = f"- {status_icon} {priority} [{task.task_id[:8]}] {task.summary} (assignee: {task.assignee})"
@@ -431,17 +452,14 @@ class TaskQueueManager:
                 if task.relay_chain:
                     line += f" chain: {' → '.join(task.relay_chain)}"
 
-                # Elapsed time from updated_at (compute once, reuse)
                 elapsed_sec = _elapsed_seconds(task.updated_at, now)
                 elapsed_str = _format_elapsed_from_sec(elapsed_sec)
                 if elapsed_str:
                     line += f" {elapsed_str}"
 
-                # STALE marker (>30min since updated_at)
                 if elapsed_sec is not None and elapsed_sec >= _STALE_TASK_THRESHOLD_SEC:
                     line += " ⚠️ STALE"
 
-                # Deadline display and OVERDUE marker
                 if task.deadline:
                     deadline_str = _format_deadline_display(task.deadline, now)
                     if deadline_str:
@@ -451,6 +469,17 @@ class TaskQueueManager:
                     break
                 lines.append(line)
                 total += len(line) + 1
+
+            if overdue:
+                summaries_str = ", ".join(task.summary[:20] for task in overdue)
+                aggregate_line = t(
+                    "task_queue.overdue_aggregate",
+                    count=len(overdue),
+                    summaries=summaries_str,
+                )
+                if total + len(aggregate_line) + 1 <= max_chars:
+                    lines.append(aggregate_line)
+                    total += len(aggregate_line) + 1
 
         # Failed TaskExec tasks (within remaining budget)
         failed = self.get_failed_taskexec()

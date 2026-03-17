@@ -317,7 +317,7 @@ class TestOverdueDetection:
     def test_overdue_and_stale_both_appear(
         self, task_queue: TaskQueueManager, anima_dir: Path,
     ):
-        """A task that is both stale and overdue should show both markers."""
+        """A task that is both stale and overdue appears in OVERDUE aggregate."""
         old_time = (now_jst() - timedelta(hours=2)).isoformat()
         past_deadline = (now_jst() - timedelta(hours=1)).isoformat()
         _write_task_entry_to_jsonl(
@@ -332,12 +332,9 @@ class TestOverdueDetection:
         )
 
         output = task_queue.format_for_priming()
-        # Find the line for this task
-        lines = output.strip().split("\n")
-        task_line = [l for l in lines if "Stale and overdue" in l]
-        assert len(task_line) == 1
-        assert "STALE" in task_line[0]
-        assert "OVERDUE" in task_line[0]
+        # OVERDUE tasks are aggregated; the summary appears in the aggregate line
+        assert "OVERDUE" in output
+        assert "Stale and overdue" in output
 
     def test_elapsed_time_displayed(
         self, task_queue: TaskQueueManager, anima_dir: Path,

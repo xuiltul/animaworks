@@ -26,19 +26,26 @@ _HEARTBEAT_NOISE_TYPES = frozenset(
         "tool_use",
         "tool_result",
         "heartbeat_start",
-        "heartbeat_end",
         "heartbeat_reflection",
         "inbox_processing_start",
         "inbox_processing_end",
     }
 )
 
-# Event types to exclude from chat priming — cron task results should not
-# leak into chat sessions (prevents Anima from discussing cron output
-# during user conversations).
+# Event types to exclude from chat priming — tool invocations, memory writes,
+# and background lifecycle events crowd out meaningful communication events.
+# Only message exchanges, errors, and task lifecycle events survive.
 _CHAT_NOISE_TYPES = frozenset(
     {
+        "tool_use",
+        "tool_result",
+        "memory_write",
         "cron_executed",
+        "heartbeat_start",
+        "heartbeat_end",
+        "heartbeat_reflection",
+        "inbox_processing_start",
+        "inbox_processing_end",
     }
 )
 
@@ -47,7 +54,6 @@ _OWN_ACTION_TYPES = frozenset(
         "message_sent",
         "response_sent",
         "message_received",
-        "tool_use",
     }
 )
 
@@ -213,7 +219,7 @@ def prioritize_entries(
     """Prioritize activity entries for priming.
 
     Priority order:
-    1. Own actions (message_sent, response_sent, message_received, tool_use)
+    1. Own actions (message_sent, response_sent, message_received)
     2. Entries involving the current sender (most relevant)
     3. Entries matching keywords (topically relevant)
     4. Most recent entries (temporal relevance, timestamp-based)

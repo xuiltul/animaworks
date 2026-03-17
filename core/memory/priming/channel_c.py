@@ -24,18 +24,36 @@ if TYPE_CHECKING:
 logger = logging.getLogger("animaworks.priming")
 
 
-def extract_summary(content: str, metadata: dict) -> str:
-    """Extract summary text from an [IMPORTANT] search result."""
-    summary = metadata.get("summary")
-    if summary:
-        return str(summary).strip()
+def extract_summary(content: str, metadata: dict) -> tuple[str, str]:
+    """Extract title and body summary from an [IMPORTANT] search result.
+
+    Returns:
+        (title, body_summary) where body_summary is the first meaningful
+        line after the H1 heading, truncated to 100 chars. Empty string
+        if no body is available.
+    """
+    title = ""
+    body = ""
+
+    fm_summary = metadata.get("summary")
+    if fm_summary:
+        return (str(fm_summary).strip(), "")
+
     match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
     if match:
-        return match.group(1).strip()
-    source = metadata.get("source_file", "")
-    if source:
-        return Path(source).stem.replace("-", " ").replace("_", " ")
-    return ""
+        title = match.group(1).strip()
+        after_h1 = content[match.end() :].lstrip("\n")
+        for line in after_h1.split("\n"):
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#"):
+                body = stripped[:100]
+                break
+    else:
+        source = metadata.get("source_file", "")
+        if source:
+            title = Path(source).stem.replace("-", " ").replace("_", " ")
+
+    return (title, body)
 
 
 def to_read_memory_path(metadata: dict, anima_name: str) -> str:
@@ -69,11 +87,14 @@ async def channel_c0_important_knowledge(
         for r in results:
             content = r.document.content
             meta = r.document.metadata
-            summary = extract_summary(content, meta)
+            title, body = extract_summary(content, meta)
             rel_path = to_read_memory_path(meta, anima_name)
             if not rel_path:
                 continue
-            line = f'📌 {summary} → read_memory_file(path="{rel_path}")'
+            if body:
+                line = f'📌 {title} — {body}\n  → read_memory_file(path="{rel_path}")'
+            else:
+                line = f'📌 {title} → read_memory_file(path="{rel_path}")'
             lines.append((len(line), line))
         lines.sort(key=lambda x: x[0])
         out: list[str] = []

@@ -13,6 +13,8 @@ Internal module — import from :mod:`core.memory.activity` instead.
 """
 
 
+import re
+
 from core.i18n import t
 from core.memory._activity_models import (
     CHARS_PER_TOKEN,
@@ -75,6 +77,10 @@ class PrimingMixin:
         """Format a single entry as a concise timeline line."""
         ts = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
 
+        if entry.type == "heartbeat_end":
+            reflection_line = PrimingMixin._format_heartbeat_reflection(entry, ts)
+            if reflection_line:
+                return reflection_line
         if entry.type == "tool_result":
             return PrimingMixin._format_tool_result_entry(entry, ts)
 
@@ -160,6 +166,24 @@ class PrimingMixin:
             err_hint = (entry.content or "")[:60]
             return f"[{ts}] TRES {tool} → fail: {err_hint}"
         return f"[{ts}] TRES {tool} → ok{detail}"
+
+    @staticmethod
+    def _format_heartbeat_reflection(entry: ActivityEntry, ts: str) -> str:
+        """Extract [REFLECTION] block from heartbeat_end and format compactly.
+
+        Returns empty string if no REFLECTION block found.
+        """
+        text = entry.summary or entry.content or ""
+        match = re.search(r"\[REFLECTION\](.*?)\[/REFLECTION\]", text, re.DOTALL)
+        if not match:
+            return ""
+        reflection = match.group(1).strip().replace("\n", " ")
+        if not reflection:
+            return ""
+        if len(reflection) > 100:
+            reflection = reflection[:97] + "..."
+        label = t("activity.heartbeat_reflection")
+        return f"[{ts}] {label}: {reflection}"
 
     # ── Grouping ─────────────────────────────────────────────
 
@@ -311,16 +335,16 @@ class PrimingMixin:
             return "\n".join(lines)
 
         if group.type == "hb":
-            hb_summary = ""
             for e in group.entries:
                 if e.type == "heartbeat_end":
-                    hb_summary = (e.summary or e.content)[:50]
-                    break
-            header = f"{time_range} HB: {hb_summary}" if hb_summary else f"{time_range} HB"
-            lines = [header]
-            if group.source_lines:
-                lines.append(f"  -> {group.source_lines}")
-            return "\n".join(lines)
+                    ts = e.ts[11:16] if len(e.ts) >= 16 else e.ts
+                    reflection = PrimingMixin._format_heartbeat_reflection(e, ts)
+                    if reflection:
+                        return reflection
+                    hb_summary = (e.summary or e.content or "")[:50]
+                    if hb_summary:
+                        return f"{time_range} HB: {hb_summary}"
+            return f"{time_range} HB"
 
         if group.type == "cron":
             exit_code = group.entries[0].meta.get("exit_code", "")

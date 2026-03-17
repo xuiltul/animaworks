@@ -169,7 +169,8 @@ class PrimingEngine:
         """Delegate to standalone extract_summary for backward compat."""
         from core.memory.priming.channel_c import extract_summary
 
-        return extract_summary(content, metadata)
+        title, _ = extract_summary(content, metadata)
+        return title
 
     @staticmethod
     def _to_read_memory_path(metadata: dict, anima_name: str) -> str:
@@ -228,15 +229,24 @@ class PrimingEngine:
 
         logger.debug("Token budget: %d", token_budget)
 
-        keywords = self._extract_keywords(message)
+        effective_message = message
+        if not effective_message.strip():
+            state_path = self.anima_dir / "state" / "current_state.md"
+            try:
+                if state_path.is_file():
+                    effective_message = state_path.read_text(encoding="utf-8")[:300]
+            except OSError:
+                pass
+
+        keywords = self._extract_keywords(message or effective_message)
 
         if overflow_files is None:
-            channel_c_coro = self._channel_c_related_knowledge(keywords, message=message)
+            channel_c_coro = self._channel_c_related_knowledge(keywords, message=effective_message)
         elif overflow_files:
             channel_c_coro = self._channel_c_related_knowledge(
                 keywords,
                 restrict_to=overflow_files,
-                message=message,
+                message=effective_message,
             )
         else:
 

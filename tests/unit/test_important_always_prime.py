@@ -215,10 +215,10 @@ class TestChannelC0ImportantKnowledge:
         assert "📌" in result
 
     @pytest.mark.asyncio
-    async def test_budget_trims_when_over_300_tokens(self, temp_anima_dir):
-        """When total exceeds 300 tokens (~1200 chars), output is trimmed."""
+    async def test_budget_trims_when_over_500_tokens(self, temp_anima_dir):
+        """When total exceeds 500 tokens (~2000 chars), output is trimmed."""
         budget_chars = _BUDGET_IMPORTANT_KNOWLEDGE * _CHARS_PER_TOKEN
-        assert budget_chars == 1200
+        assert budget_chars == 2000
 
         long_summary = "A" * 100
         docs = []
