@@ -247,7 +247,7 @@ class TestDistilledKnowledgeSummaryInjectionE2E:
 
         results = mm.search_memory_text("terraform", scope="procedures")
         assert len(results) > 0
-        filenames = [r[0] for r in results]
+        filenames = [r["source_file"] for r in results]
         assert any("deploy-guide" in f for f in filenames)
 
         results2 = mm.search_memory_text("Prometheus", scope="procedures")
