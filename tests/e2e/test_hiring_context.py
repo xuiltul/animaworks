@@ -1,11 +1,10 @@
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-"""E2E tests for hiring_context injection into system prompts.
+"""E2E tests verifying hiring_context is no longer injected.
 
-Verifies that a solo top-level anima sees the hiring context before
-behavior_rules, and that the context is omitted when peers exist or
-the anima has a supervisor.
+hiring_context was migrated to the newstaff skill.
+The system prompt should never contain inline hiring context.
 """
 
 from __future__ import annotations
@@ -17,8 +16,8 @@ from core.memory import MemoryManager
 from core.prompt.builder import build_system_prompt
 
 
-class TestHiringContextE2E:
-    """End-to-end: hiring_context placement in system prompt."""
+class TestHiringContextRemovedE2E:
+    """End-to-end: hiring_context must not appear in system prompts."""
 
     def _build_prompt_for(self, data_dir: Path, name: str) -> str:
         """Helper: build system prompt for the named anima."""
@@ -26,24 +25,14 @@ class TestHiringContextE2E:
         memory = MemoryManager(anima_dir)
         return build_system_prompt(memory)
 
-    def test_solo_anima_sees_hiring_context(self, data_dir: Path, make_anima):
-        """Solo top-level anima should see hiring context."""
+    def test_solo_anima_no_hiring_context(self, data_dir: Path, make_anima):
+        """Solo top-level anima should NOT see hiring context (migrated to skill)."""
         make_anima("solo")
 
         prompt = self._build_prompt_for(data_dir, "solo")
 
-        assert "チーム構成について" in prompt
-        assert "唯一の社員" in prompt
-
-    def test_behavior_rules_before_hiring_context(self, data_dir: Path, make_anima):
-        """behavior_rules (Group 1) must appear before hiring_context (Group 5)."""
-        make_anima("solo")
-
-        prompt = self._build_prompt_for(data_dir, "solo")
-
-        rules_pos = prompt.index("行動ルール")
-        hiring_pos = prompt.index("チーム構成について")
-        assert rules_pos < hiring_pos
+        assert "チーム構成について" not in prompt
+        assert "唯一の社員" not in prompt
 
     def test_anima_with_peers_no_hiring_context(self, data_dir: Path, make_anima):
         """Anima with peers should NOT see hiring context."""
@@ -61,7 +50,6 @@ class TestHiringContextE2E:
         make_anima("boss")
         make_anima("worker", supervisor="boss")
 
-        # worker has a supervisor → no hiring context
         prompt = self._build_prompt_for(data_dir, "worker")
 
         assert "チーム構成について" not in prompt

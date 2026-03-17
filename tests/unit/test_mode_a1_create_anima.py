@@ -21,12 +21,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from tests.helpers.filesystem import create_anima_dir
 
 
-# ── Hiring Rules in System Prompt ─────────────────────────────────
+# ── Hiring Rules Removed from System Prompt ──────────────────────
 
 
-class TestHiringRulesInSystemPrompt:
-    """Test that build_system_prompt generates correct hiring rules
-    depending on execution_mode and the presence of a newstaff skill.
+class TestHiringRulesRemovedFromSystemPrompt:
+    """Verify hiring_rules is no longer injected into system prompts.
+
+    hiring_rules was migrated to the newstaff skill. The system prompt
+    should never contain inline hiring rules regardless of skill presence.
     """
 
     @staticmethod
@@ -39,7 +41,6 @@ class TestHiringRulesInSystemPrompt:
             injection="## Role\nManage the team.",
             permissions="## Permissions\nAll permissions granted.",
         )
-        # Create the newstaff skill file with required 概要 section
         skill_file = anima_dir / "skills" / "newstaff.md"
         skill_file.write_text(
             "# newstaff\n\n## 概要\n新しいAnimaを雇用するスキル\n\n## 手順\n...\n",
@@ -47,23 +48,12 @@ class TestHiringRulesInSystemPrompt:
         )
         return anima_dir
 
-    @staticmethod
-    def _setup_anima_without_newstaff(data_dir: Path, name: str = "worker") -> Path:
-        """Create an anima directory without a newstaff skill."""
-        return create_anima_dir(
-            data_dir,
-            name,
-            identity="# Worker\nRegular worker anima.",
-            injection="## Role\nDo tasks.",
-            permissions="## Permissions\nBasic permissions.",
-        )
-
-    def test_no_newstaff_skill_no_hiring_rules(self, data_dir: Path) -> None:
-        """Without newstaff skill, no hiring rules section in system prompt."""
+    def test_no_hiring_rules_even_with_newstaff(self, data_dir: Path) -> None:
+        """Even with newstaff skill, hiring rules must NOT be in system prompt."""
         from core.memory import MemoryManager
         from core.prompt.builder import build_system_prompt
 
-        anima_dir = self._setup_anima_without_newstaff(data_dir)
+        anima_dir = self._setup_anima_with_newstaff(data_dir)
         memory = MemoryManager(anima_dir)
 
         prompt = build_system_prompt(memory, execution_mode="a1")

@@ -4,7 +4,7 @@ description: >-
   Skill for hiring and creating new Digital Anima in the AnimaWorks organization.
   Create a character sheet (Markdown) based on interviews, then use the CLI command
   (animaworks anima create) to generate identity/injection/permissions in bulk. After creation, self-configure via bootstrap.
-  "Create a new employee", "Hire someone", "New employee", "Hiring", "Create Anima", "Recruitment"
+  "Create a new employee", "Hire someone", "New employee", "Hiring", "Create Anima", "Recruitment", "Add team member", "Expand the team", "Add staff", "Create subordinate", "hire", "recruit", "team member"
 ---
 
 # Skill: New Employee Hiring

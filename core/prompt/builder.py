@@ -418,13 +418,6 @@ def _build_group4(
         ref_dir = data_dir / "reference"
         if ref_dir.exists() and any(ref_dir.rglob("*.md")):
             _add(load_prompt("builder/reference_hint"), "reference_hint", 4)
-        if any(m.name == "newstaff" for m in skill_metas):
-            hr = (
-                load_prompt("builder/hiring_rules_s")
-                if _is_mcp_mode(execution_mode)
-                else load_prompt("builder/hiring_rules_other")
-            )
-            _add(hr, "hiring_rules", 4)
 
     # ── Tool guides ───
     if not prompt_store:
@@ -491,17 +484,6 @@ def _build_group5(
             out.append(SectionEntry(id=sid, priority=pri, kind=kind, content=c))
 
     _add(_ss.get("group5_header", "# 5. Organization and Communication"), "group5_header", 1)
-    if not is_inbox and not is_task and not other_animas:
-        try:
-            mc = memory.read_model_config()
-            if mc.supervisor is None:
-                hc = (prompt_store.get_section("hiring_context") if prompt_store else None) or load_prompt(
-                    "hiring_context"
-                )
-                if hc:
-                    _add(hc, "hiring_context", 4)
-        except Exception:
-            logger.debug("Skipped hiring context injection", exc_info=True)
 
     oc = _build_org_context(pd.name, other_animas, execution_mode)
     if oc:

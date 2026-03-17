@@ -585,7 +585,6 @@ SECTION_CONDITIONS: dict[str, str | None] = {
     "communication_rules": "mode:non_s",
     "emotion_instruction": None,
     "a_reflection": "mode:a",
-    "hiring_context": "solo_top_level",
 }
 
 # ── ToolPromptStore ─────────────────────────────────────────

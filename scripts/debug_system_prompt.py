@@ -93,8 +93,6 @@ _SECTION_META: dict[str, tuple[str, str]] = {
     "human_notification":       ("organization", "builder/human_notification.md"),
     "tool_guides":              ("tools",        "(computed: prompt_db)"),
     "external_tools":           ("tools",        "(computed: build_tools_guide)"),
-    "hiring_rules":             ("organization", "builder/hiring_rules_s.md"),
-    "hiring_context":           ("organization", "templates/prompts/hiring_context.md"),
     "emotion_instruction":      ("meta",         "builder/emotion_instruction.md"),
     "a_reflection":             ("meta",         "builder/a_reflection.md"),
     "c_response_requirement":   ("meta",         "(computed: codex guidance)"),

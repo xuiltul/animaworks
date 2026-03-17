@@ -202,7 +202,6 @@ class TestSectionConditions:
             "communication_rules",
             "emotion_instruction",
             "a_reflection",
-            "hiring_context",
         }
         assert set(SECTION_CONDITIONS.keys()) == expected
 
@@ -218,4 +217,3 @@ class TestSectionConditions:
         assert SECTION_CONDITIONS["messaging_s"] == "mode:s"
         assert SECTION_CONDITIONS["messaging"] == "mode:non_s"
         assert SECTION_CONDITIONS["a_reflection"] == "mode:a"
-        assert SECTION_CONDITIONS["hiring_context"] == "solo_top_level"

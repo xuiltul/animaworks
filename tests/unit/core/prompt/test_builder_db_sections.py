@@ -90,19 +90,6 @@ class TestBuilderDBFallback:
         ) or "file fallback"
         assert result == "DB a2 reflection"
 
-    @patch("core.tooling.prompt_db.get_prompt_store")
-    def test_hiring_context_from_db(self, mock_store_fn: MagicMock) -> None:
-        """Hiring context section uses DB-first pattern."""
-        mock_store = MagicMock()
-        mock_store.get_section.return_value = "DB hiring context"
-        mock_store_fn.return_value = mock_store
-
-        store = mock_store_fn()
-        result = (
-            store.get_section("hiring_context") if store else None
-        ) or "file fallback"
-        assert result == "DB hiring context"
-
 
 # ── Messaging section DB fallback ─────────────────────────────
 

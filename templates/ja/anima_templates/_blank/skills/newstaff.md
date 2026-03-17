@@ -4,7 +4,7 @@ description: >-
   AnimaWorks組織に新しいDigital Animaを雇用・作成するスキル。
   キャラクターシート(Markdown)をヒアリングに基づき作成し、CLIコマンド(animaworks anima create)で
   identity/injection/permissions等を一括生成する。作成後はbootstrapで自己整備。
-  「新しい社員を作って」「人を雇って」「新しい社員」「雇用」「Anima作成」「採用」
+  「新しい社員を作って」「人を雇って」「新しい社員」「雇用」「Anima作成」「採用」「チームメンバーを増やす」「人員追加」「部下を作る」「スタッフ追加」「hire」「recruit」「team member」
 ---
 
 # スキル: 新しい社員雇用

@@ -62,10 +62,6 @@ def _mock_load_prompt_with_builder(default: str = "section"):
         if name == "builder/external_tools_guide":
             cats = kwargs.get("categories", "")
             return f"外部ツールを使うには `discover_tools` を呼んでください。\nカテゴリ: {cats}"
-        if name == "builder/hiring_rules_s":
-            return "## 雇用ルール\n\ncreate-anima"
-        if name == "builder/hiring_rules_other":
-            return "## 雇用ルール\n\ncreate-anima"
         if name == "skills_guide":
             return "## スキルと手順書\n\nスキルと手順書はあなたが持つ能力・作業手順です。\n使用する際はskillツールで読み込んでから実行してください。"
         return default
@@ -635,113 +631,6 @@ class TestBuildOrgContext:
 
         result = _build_org_context("unknown", ["rin"])
         assert "あなたがトップです" in result
-
-
-# ── hiring_context placement ─────────────────────────────
-
-
-class TestHiringContextPlacement:
-    """Verify hiring_context is injected before behavior_rules."""
-
-    def _build_solo_prompt(self, tmp_path, data_dir):
-        """Helper: build system prompt for a solo anima with no supervisor."""
-        anima_dir = tmp_path / "animas" / "solo"
-        anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Solo", encoding="utf-8")
-
-        memory = MagicMock()
-        memory.anima_dir = anima_dir
-        memory.read_company_vision.return_value = ""
-        memory.read_identity.return_value = "I am Solo"
-        memory.read_injection.return_value = ""
-        memory.read_permissions.return_value = ""
-        memory.read_specialty_prompt.return_value = ""
-        memory.read_current_state.return_value = ""
-        memory.read_pending.return_value = ""
-        memory.read_bootstrap.return_value = ""
-        memory.list_knowledge_files.return_value = []
-        memory.list_episode_files.return_value = []
-        memory.list_procedure_files.return_value = []
-        memory.list_skill_summaries.return_value = []
-        memory.list_common_skill_summaries.return_value = []
-        memory.list_skill_metas.return_value = []
-        memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
-        memory.common_skills_dir = data_dir / "common_skills"
-        memory.list_shared_users.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
-
-        # read_model_config returns a ModelConfig with supervisor=None
-        from core.schemas import ModelConfig
-
-        memory.read_model_config.return_value = ModelConfig()
-
-        return memory
-
-    def test_behavior_rules_in_group1_hiring_context_in_group5(self, tmp_path, data_dir):
-        """behavior_rules is in Group 1, hiring_context is in Group 5."""
-        memory = self._build_solo_prompt(tmp_path, data_dir)
-
-        # Use real load_prompt so both templates are loaded with real content
-        result = build_system_prompt(memory)
-
-        # behavior_rules is in Group 1 (動作環境と行動ルール)
-        assert '<group_1 title="1. 動作環境と行動ルール">' in result
-        assert "## 行動ルール" in result
-        # hiring_context is in Group 5 (組織とコミュニケーション)
-        assert '<group_5 title="5. 組織とコミュニケーション">' in result
-        assert "チーム構成について" in result
-        # behavior_rules section appears before hiring_context
-        assert result.index("## 行動ルール") < result.index("チーム構成について")
-
-    def test_hiring_context_not_injected_with_peers(self, tmp_path, data_dir):
-        """hiring_context must NOT be injected when other animas exist."""
-        animas_root = tmp_path / "animas"
-        animas_root.mkdir(parents=True, exist_ok=True)
-        solo = animas_root / "solo"
-        solo.mkdir()
-        (solo / "identity.md").write_text("I am Solo", encoding="utf-8")
-        peer = animas_root / "peer"
-        peer.mkdir()
-        (peer / "identity.md").write_text("I am Peer", encoding="utf-8")
-
-        memory = MagicMock()
-        memory.anima_dir = solo
-        memory.read_company_vision.return_value = ""
-        memory.read_identity.return_value = "I am Solo"
-        memory.read_injection.return_value = ""
-        memory.read_permissions.return_value = ""
-        memory.read_specialty_prompt.return_value = ""
-        memory.read_current_state.return_value = ""
-        memory.read_pending.return_value = ""
-        memory.read_bootstrap.return_value = ""
-        memory.list_knowledge_files.return_value = []
-        memory.list_episode_files.return_value = []
-        memory.list_procedure_files.return_value = []
-        memory.list_skill_summaries.return_value = []
-        memory.list_common_skill_summaries.return_value = []
-        memory.list_skill_metas.return_value = []
-        memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
-        memory.common_skills_dir = data_dir / "common_skills"
-        memory.list_shared_users.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
-
-        result = build_system_prompt(memory)
-
-        assert "チーム構成について" not in result
-
-    def test_hiring_context_not_injected_with_supervisor(self, tmp_path, data_dir):
-        """hiring_context must NOT be injected when anima has a supervisor."""
-        memory = self._build_solo_prompt(tmp_path, data_dir)
-
-        from core.schemas import ModelConfig
-
-        memory.read_model_config.return_value = ModelConfig(supervisor="boss")
-
-        result = build_system_prompt(memory)
-
-        assert "チーム構成について" not in result
 
 
 # ── inject_shortterm ──────────────────────────────────────
