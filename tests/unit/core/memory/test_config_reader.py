@@ -241,6 +241,7 @@ class TestReadModelConfig:
         mock_resolved.background_model = None
         mock_resolved.background_credential = None
         mock_resolved.mode_s_auth = None
+        mock_resolved.extra_mcp_servers = {}
 
         mock_credential = MagicMock()
         mock_credential.api_key = "sk-test"
@@ -306,6 +307,7 @@ class TestReadModelConfig:
         mock_resolved.background_model = None
         mock_resolved.background_credential = None
         mock_resolved.mode_s_auth = None
+        mock_resolved.extra_mcp_servers = {}
 
         mock_credential = MagicMock()
         mock_credential.api_key = ""
