@@ -86,13 +86,13 @@ class HttpVectorStore(VectorStore):
             logger.warning("HTTP vector request failed %s: %s", path, e)
             return None
 
-    def create_collection(self, name: str) -> None:
+    def create_collection(self, name: str) -> bool:
         """Create a new collection."""
-        self._post("/create-collection", {"anima_name": self._anima_name, "collection": name})
+        return self._post("/create-collection", {"anima_name": self._anima_name, "collection": name}) is not None
 
-    def delete_collection(self, name: str) -> None:
+    def delete_collection(self, name: str) -> bool:
         """Delete a collection."""
-        self._post("/delete-collection", {"anima_name": self._anima_name, "collection": name})
+        return self._post("/delete-collection", {"anima_name": self._anima_name, "collection": name}) is not None
 
     def list_collections(self) -> list[str]:
         """List all collection names."""
@@ -101,10 +101,11 @@ class HttpVectorStore(VectorStore):
             return list(data["collections"])
         return []
 
-    def upsert(self, collection: str, documents: list[Document]) -> None:
+    def upsert(self, collection: str, documents: list[Document]) -> bool:
         """Insert or update documents in a collection."""
         if not documents:
-            return
+            return True
+        ok = True
         for i in range(0, len(documents), _UPSERT_BATCH_LIMIT):
             batch = documents[i : i + _UPSERT_BATCH_LIMIT]
             payload = {
@@ -120,7 +121,9 @@ class HttpVectorStore(VectorStore):
                     for d in batch
                 ],
             }
-            self._post("/upsert", payload)
+            if self._post("/upsert", payload) is None:
+                ok = False
+        return ok
 
     def query(
         self,
@@ -143,19 +146,25 @@ class HttpVectorStore(VectorStore):
             return _parse_search_results(data["results"])
         return []
 
-    def delete_documents(self, collection: str, ids: list[str]) -> None:
+    def delete_documents(self, collection: str, ids: list[str]) -> bool:
         """Delete specific documents by ID."""
         if not ids:
-            return
-        self._post("/delete-documents", {"anima_name": self._anima_name, "collection": collection, "ids": ids})
+            return True
+        return (
+            self._post("/delete-documents", {"anima_name": self._anima_name, "collection": collection, "ids": ids})
+            is not None
+        )
 
-    def update_metadata(self, collection: str, ids: list[str], metadatas: list[dict[str, str | int | float]]) -> None:
+    def update_metadata(self, collection: str, ids: list[str], metadatas: list[dict[str, str | int | float]]) -> bool:
         """Update metadata for existing documents."""
         if not ids:
-            return
-        self._post(
-            "/update-metadata",
-            {"anima_name": self._anima_name, "collection": collection, "ids": ids, "metadatas": metadatas},
+            return True
+        return (
+            self._post(
+                "/update-metadata",
+                {"anima_name": self._anima_name, "collection": collection, "ids": ids, "metadatas": metadatas},
+            )
+            is not None
         )
 
     def get_by_metadata(

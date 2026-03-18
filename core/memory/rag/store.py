@@ -48,28 +48,38 @@ class VectorStore(ABC):
     """Abstract base class for vector storage backends."""
 
     @abstractmethod
-    def create_collection(self, name: str) -> None:
+    def create_collection(self, name: str) -> bool:
         """Create a new collection.
 
         Args:
             name: Collection name (e.g., "sakura_knowledge")
+
+        Returns:
+            True on success, False on failure.
         """
 
     @abstractmethod
-    def delete_collection(self, name: str) -> None:
-        """Delete a collection and all its documents."""
+    def delete_collection(self, name: str) -> bool:
+        """Delete a collection and all its documents.
+
+        Returns:
+            True on success, False on failure.
+        """
 
     @abstractmethod
     def list_collections(self) -> list[str]:
         """List all collection names."""
 
     @abstractmethod
-    def upsert(self, collection: str, documents: list[Document]) -> None:
+    def upsert(self, collection: str, documents: list[Document]) -> bool:
         """Insert or update documents in a collection.
 
         Args:
             collection: Collection name
             documents: List of documents with embeddings
+
+        Returns:
+            True on success, False on failure.
         """
 
     @abstractmethod
@@ -93,12 +103,20 @@ class VectorStore(ABC):
         """
 
     @abstractmethod
-    def delete_documents(self, collection: str, ids: list[str]) -> None:
-        """Delete specific documents by ID."""
+    def delete_documents(self, collection: str, ids: list[str]) -> bool:
+        """Delete specific documents by ID.
+
+        Returns:
+            True on success, False on failure.
+        """
 
     @abstractmethod
-    def update_metadata(self, collection: str, ids: list[str], metadatas: list[dict[str, str | int | float]]) -> None:
-        """Update metadata for existing documents without re-embedding."""
+    def update_metadata(self, collection: str, ids: list[str], metadatas: list[dict[str, str | int | float]]) -> bool:
+        """Update metadata for existing documents without re-embedding.
+
+        Returns:
+            True on success, False on failure.
+        """
 
     @abstractmethod
     def get_by_metadata(
@@ -154,7 +172,7 @@ class ChromaVectorStore(VectorStore):
         self.client = chromadb.PersistentClient(path=str(persist_dir))
         self.persist_dir = persist_dir
 
-    def create_collection(self, name: str) -> None:
+    def create_collection(self, name: str) -> bool:
         """Create a new collection or get existing one."""
         try:
             self.client.create_collection(
@@ -162,52 +180,58 @@ class ChromaVectorStore(VectorStore):
                 metadata={"hnsw:space": "cosine"},
             )
             logger.info("Created collection '%s' (space=cosine)", name)
+            return True
         except Exception as e:
-            # Collection already exists
             logger.debug("Collection '%s' already exists: %s", name, e)
+            return True  # already-exists is not a failure
 
-    def delete_collection(self, name: str) -> None:
+    def delete_collection(self, name: str) -> bool:
         """Delete a collection."""
         try:
             self.client.delete_collection(name=name)
             logger.info("Deleted collection '%s'", name)
+            return True
         except Exception as e:
             logger.warning("Failed to delete collection '%s': %s", name, e)
+            return False
 
     def list_collections(self) -> list[str]:
         """List all collections."""
         collections = self.client.list_collections()
         return [c.name for c in collections]
 
-    def upsert(self, collection: str, documents: list[Document]) -> None:
+    def upsert(self, collection: str, documents: list[Document]) -> bool:
         """Upsert documents into collection."""
         if not documents:
-            return
+            return True
 
-        coll = self.client.get_or_create_collection(
-            name=collection,
-            metadata={"hnsw:space": "cosine"},
-        )
+        try:
+            coll = self.client.get_or_create_collection(
+                name=collection,
+                metadata={"hnsw:space": "cosine"},
+            )
 
-        # Prepare batch data
-        ids = [doc.id for doc in documents]
-        contents = [doc.content for doc in documents]
-        embeddings = [doc.embedding for doc in documents]
-        metadatas = [self._serialize_metadata(doc.metadata) for doc in documents]
+            ids = [doc.id for doc in documents]
+            contents = [doc.content for doc in documents]
+            embeddings = [doc.embedding for doc in documents]
+            metadatas = [self._serialize_metadata(doc.metadata) for doc in documents]
 
-        # Validate embeddings
-        if any(emb is None for emb in embeddings):
-            raise ValueError("All documents must have embeddings for upsert")
+            if any(emb is None for emb in embeddings):
+                logger.warning("Upsert to '%s' failed: missing embeddings", collection)
+                return False
 
-        # Upsert to ChromaDB
-        coll.upsert(
-            ids=ids,
-            documents=contents,
-            embeddings=cast(Any, embeddings),
-            metadatas=cast(Any, metadatas),
-        )
+            coll.upsert(
+                ids=ids,
+                documents=contents,
+                embeddings=cast(Any, embeddings),
+                metadatas=cast(Any, metadatas),
+            )
 
-        logger.debug("Upserted %d documents to collection '%s'", len(documents), collection)
+            logger.debug("Upserted %d documents to collection '%s'", len(documents), collection)
+            return True
+        except Exception as e:
+            logger.warning("Failed to upsert %d documents to '%s': %s", len(documents), collection, e)
+            return False
 
     def query(
         self,
@@ -258,29 +282,33 @@ class ChromaVectorStore(VectorStore):
         )
         return search_results
 
-    def delete_documents(self, collection: str, ids: list[str]) -> None:
+    def delete_documents(self, collection: str, ids: list[str]) -> bool:
         """Delete documents by ID."""
         if not ids:
-            return
+            return True
 
         try:
             coll = self.client.get_collection(name=collection)
             coll.delete(ids=ids)
             logger.debug("Deleted %d documents from collection '%s'", len(ids), collection)
+            return True
         except Exception as e:
             logger.warning("Failed to delete documents from '%s': %s", collection, e)
+            return False
 
-    def update_metadata(self, collection: str, ids: list[str], metadatas: list[dict[str, str | int | float]]) -> None:
+    def update_metadata(self, collection: str, ids: list[str], metadatas: list[dict[str, str | int | float]]) -> bool:
         """Update metadata for existing documents."""
         if not ids:
-            return
+            return True
         try:
             coll = self.client.get_collection(name=collection)
             serialized = [self._serialize_metadata(dict(m)) for m in metadatas]
             coll.update(ids=ids, metadatas=cast(Any, serialized))
             logger.debug("Updated metadata for %d documents in '%s'", len(ids), collection)
+            return True
         except Exception as e:
             logger.warning("Failed to update metadata in '%s': %s", collection, e)
+            return False
 
     def get_by_metadata(
         self,

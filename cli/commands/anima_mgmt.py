@@ -1171,15 +1171,17 @@ def _cleanup_rag_collections(anima_dir: Path, old_name: str) -> None:
         index_meta.write_text("{}\n", encoding="utf-8")
 
     try:
-        from core.memory.rag.store import VectorStore
+        from core.memory.rag.store import ChromaVectorStore
 
-        store = VectorStore(old_name)
-        for suffix in ("knowledge", "episodes", "procedures", "skills", "common_knowledge", "conversation_summary"):
-            collection_name = f"{old_name}_{suffix}"
-            try:
-                store.delete_collection(collection_name)
-            except Exception:
-                pass
+        vectordb_dir = anima_dir / "vectordb"
+        if vectordb_dir.is_dir():
+            store = ChromaVectorStore(persist_dir=vectordb_dir)
+            for suffix in ("knowledge", "episodes", "procedures", "skills", "common_knowledge", "conversation_summary"):
+                collection_name = f"{old_name}_{suffix}"
+                try:
+                    store.delete_collection(collection_name)
+                except Exception:
+                    pass
     except Exception:
         pass
 

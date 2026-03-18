@@ -241,9 +241,10 @@ class MemoryIndexer:
 
         collection_name = f"{self.collection_prefix}_{memory_type}"
         self.vector_store.create_collection(collection_name)
-        self.vector_store.upsert(collection_name, documents)
+        if not self.vector_store.upsert(collection_name, documents):
+            logger.warning("Upsert failed for %s, skipping index_meta update", file_path)
+            return 0
 
-        # Update index metadata
         self.index_meta[file_key] = {
             "hash": file_hash,
             "indexed_at": now_iso(),
@@ -366,9 +367,10 @@ class MemoryIndexer:
             )
             for i, chunk in enumerate(chunks)
         ]
-        self.vector_store.upsert(collection_name, documents)
+        if not self.vector_store.upsert(collection_name, documents):
+            logger.warning("Upsert failed for conversation_summary, skipping index_meta update")
+            return 0
 
-        # Update index metadata
         self.index_meta[meta_key] = {
             "hash": content_hash,
             "indexed_at": now_iso(),

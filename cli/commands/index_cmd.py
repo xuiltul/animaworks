@@ -8,11 +8,46 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from pathlib import Path
 
 from core.paths import get_data_dir
 
 logger = logging.getLogger("animaworks.cli.index")
+
+
+def _setup_server_delegation() -> bool:
+    """Detect running server and configure HTTP delegation.
+
+    When the server is running, sets ``ANIMAWORKS_VECTOR_URL`` and
+    ``ANIMAWORKS_EMBED_URL`` so that ``get_vector_store()`` returns
+    ``HttpVectorStore`` and embeddings are generated server-side.
+    This prevents unsafe concurrent ChromaDB access.
+
+    Returns:
+        True if delegation was activated (server is running).
+    """
+    from cli.commands.server import _is_process_alive, _read_pid
+
+    pid = _read_pid()
+    if pid is None or not _is_process_alive(pid):
+        return False
+
+    try:
+        from core.config import load_config
+
+        port = load_config().server.port
+    except Exception:
+        port = 18500
+
+    base = f"http://127.0.0.1:{port}/api"
+    os.environ["ANIMAWORKS_VECTOR_URL"] = f"{base}/internal/vector"
+    os.environ["ANIMAWORKS_EMBED_URL"] = f"{base}/internal/embed"
+    logger.info(
+        "Server detected (pid=%d). Using HTTP delegation for safe ChromaDB access.",
+        pid,
+    )
+    return True
 
 
 def setup_index_command(subparsers: argparse._SubParsersAction) -> None:
@@ -128,9 +163,8 @@ def _index_shared_collections(
     Returns total chunks indexed across all animas.
     """
     from core.memory.rag import MemoryIndexer
-    from core.memory.rag.store import ChromaVectorStore
+    from core.memory.rag.singleton import get_vector_store
     from core.memory.rag_search import _compute_dir_hash, _read_shared_hash, _write_shared_hash
-    from core.paths import get_anima_vectordb_dir
 
     ck_dir = base_dir / "common_knowledge"
     cs_dir = base_dir / "common_skills"
@@ -149,7 +183,10 @@ def _index_shared_collections(
     for anima_dir in anima_dirs:
         anima_name = anima_dir.name
         meta_path = anima_dir / "index_meta.json"
-        vector_store = ChromaVectorStore(persist_dir=get_anima_vectordb_dir(anima_name))
+        vector_store = get_vector_store(anima_name)
+        if vector_store is None:
+            logger.warning("Vector store unavailable for %s, skipping shared indexing", anima_name)
+            continue
 
         for label, src_dir, glob, meta_key in shared_dirs:
             current_hash = _compute_dir_hash(src_dir, glob)
@@ -183,6 +220,7 @@ def index_command(args: argparse.Namespace) -> None:
     """Execute the index command."""
     try:
         from core.memory.rag import MemoryIndexer
+        from core.memory.rag.singleton import get_vector_store
         from core.memory.rag.store import ChromaVectorStore
     except ImportError:
         logger.error("RAG dependencies not installed. Run: pip install 'animaworks[rag]'")
@@ -196,11 +234,11 @@ def index_command(args: argparse.Namespace) -> None:
         logger.info("Run 'animaworks init' first to set up the environment")
         return
 
-    # Check for embedding model change before proceeding
+    server_mode = _setup_server_delegation()
+
     current_model = _check_model_change(base_dir, args.full)
     logger.info("Embedding model: %s", current_model)
 
-    # Determine which animas to index
     if args.anima:
         anima_dirs = [animas_dir / args.anima]
         if not anima_dirs[0].is_dir():
@@ -215,9 +253,6 @@ def index_command(args: argparse.Namespace) -> None:
 
     include_shared = args.shared or (not args.anima)
 
-    from core.paths import get_anima_vectordb_dir
-
-    # Index each anima
     total_chunks = 0
     for anima_dir in anima_dirs:
         anima_name = anima_dir.name
@@ -225,21 +260,22 @@ def index_command(args: argparse.Namespace) -> None:
         logger.info("Indexing anima: %s", anima_name)
         logger.info("=" * 60)
 
-        # Per-anima vector store
-        vector_store = ChromaVectorStore(persist_dir=get_anima_vectordb_dir(anima_name))
+        vector_store = get_vector_store(anima_name)
+        if vector_store is None:
+            logger.warning("Vector store unavailable for %s, skipping", anima_name)
+            continue
 
-        # Check for L2 collections that need cosine migration
-        if not args.full and not args.dry_run:
-            l2_colls = vector_store.needs_cosine_migration()
-            if l2_colls:
-                logger.warning(
-                    "%s: collections using L2 distance detected: %s. "
-                    "Run 'animaworks index --full' to migrate to cosine similarity.",
-                    anima_name,
-                    ", ".join(l2_colls),
-                )
+        if not server_mode and isinstance(vector_store, ChromaVectorStore):
+            if not args.full and not args.dry_run:
+                l2_colls = vector_store.needs_cosine_migration()
+                if l2_colls:
+                    logger.warning(
+                        "%s: collections using L2 distance detected: %s. "
+                        "Run 'animaworks index --full' to migrate to cosine similarity.",
+                        anima_name,
+                        ", ".join(l2_colls),
+                    )
 
-        # Full rebuild: delete existing collections for this anima
         if args.full and not args.dry_run:
             logger.info(
                 "Full rebuild: deleting collections for %s (will recreate with cosine similarity)",
@@ -248,10 +284,8 @@ def index_command(args: argparse.Namespace) -> None:
             for collection in vector_store.list_collections():
                 vector_store.delete_collection(collection)
 
-        # Initialize indexer
         indexer = MemoryIndexer(vector_store, anima_name, anima_dir)
 
-        # Index each memory type
         memory_types = [
             ("knowledge", anima_dir / "knowledge"),
             ("episodes", anima_dir / "episodes"),
@@ -282,7 +316,6 @@ def index_command(args: argparse.Namespace) -> None:
             total_chunks += chunks
             logger.info("  Indexed %d chunks from %s/", chunks, memory_type)
 
-        # Index conversation summary (compressed_summary from conversation.json)
         state_dir = anima_dir / "state"
         conv_file = state_dir / "conversation.json"
         if conv_file.is_file():
@@ -298,7 +331,6 @@ def index_command(args: argparse.Namespace) -> None:
                 total_chunks += chunks
                 logger.info("  Indexed %d chunks from conversation_summary", chunks)
 
-    # Index shared collections (common_knowledge + common_skills)
     if include_shared:
         enabled_dirs = [d for d in anima_dirs if _is_anima_enabled(d)]
         if enabled_dirs:
@@ -312,21 +344,20 @@ def index_command(args: argparse.Namespace) -> None:
                 dry_run=args.dry_run,
             )
 
-    # Index shared user memories
     shared_users_dir = base_dir / "shared" / "users"
     if shared_users_dir.is_dir() and not args.anima:
         logger.info("=" * 60)
         logger.info("Indexing shared user memories")
         logger.info("=" * 60)
 
-        # Use shared vector store for user memories
-        shared_store = ChromaVectorStore()  # defaults to ~/.animaworks/vectordb
-        indexer = MemoryIndexer(shared_store, "shared", shared_users_dir.parent)
-
-        if args.dry_run:
+        shared_store = get_vector_store(None)
+        if shared_store is None:
+            logger.warning("Shared vector store unavailable, skipping user memories")
+        elif args.dry_run:
             user_dirs = [d for d in shared_users_dir.iterdir() if d.is_dir()]
             logger.info("  Would index %d user profiles", len(user_dirs))
         else:
+            indexer = MemoryIndexer(shared_store, "shared", shared_users_dir.parent)
             chunks = indexer.index_directory(
                 shared_users_dir,
                 "shared_users",
@@ -335,11 +366,9 @@ def index_command(args: argparse.Namespace) -> None:
             total_chunks += chunks
             logger.info("  Indexed %d user profile chunks", chunks)
 
-    # Summary
     logger.info("=" * 60)
     if args.dry_run:
         logger.info("Dry run complete (no actual indexing performed)")
     else:
         logger.info("Indexing complete: %d total chunks indexed", total_chunks)
-        # Record the embedding model used for future change detection
         _save_global_index_meta(base_dir, current_model)
