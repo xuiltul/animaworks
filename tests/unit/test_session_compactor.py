@@ -227,6 +227,56 @@ class TestHeartbeatConfigIdleCompactionMinutes:
             HeartbeatConfig(idle_compaction_minutes=121.0)
 
 
+# ── COMPACT_TIMEOUT_SEC ───────────────────────────────────────────────────────
+
+
+class TestCompactTimeoutSec:
+    """COMPACT_TIMEOUT_SEC is independent from RESUME_TIMEOUT_SEC."""
+
+    def test_compact_timeout_defined(self) -> None:
+        from core.execution._sdk_session import COMPACT_TIMEOUT_SEC
+
+        assert COMPACT_TIMEOUT_SEC == 300.0
+
+    def test_compact_timeout_independent_from_resume(self) -> None:
+        from core.execution._sdk_session import COMPACT_TIMEOUT_SEC, RESUME_TIMEOUT_SEC
+
+        assert COMPACT_TIMEOUT_SEC != RESUME_TIMEOUT_SEC
+        assert COMPACT_TIMEOUT_SEC > RESUME_TIMEOUT_SEC
+
+    def test_compact_sdk_session_uses_compact_timeout(self) -> None:
+        """compact_sdk_session source references COMPACT_TIMEOUT_SEC, not RESUME_TIMEOUT_SEC."""
+        import inspect
+
+        from core.execution._sdk_session import compact_sdk_session
+
+        src = inspect.getsource(compact_sdk_session)
+        assert "COMPACT_TIMEOUT_SEC" in src
+        assert "RESUME_TIMEOUT_SEC" not in src
+
+
+class TestCompactSdkSessionLogLevel:
+    """compact_sdk_session logs general exceptions at ERROR level."""
+
+    def test_general_exception_logs_error(self) -> None:
+        """The except-Exception block uses logger.error, not logger.warning."""
+        import ast
+        import inspect
+
+        from core.execution._sdk_session import compact_sdk_session
+
+        src = inspect.getsource(compact_sdk_session)
+        tree = ast.parse(src)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ExceptHandler) and node.type is not None:
+                if isinstance(node.type, ast.Name) and node.type.id == "Exception":
+                    for stmt in ast.walk(node):
+                        if isinstance(stmt, ast.Attribute) and stmt.attr == "error":
+                            return
+        pytest.fail("Expected logger.error in except Exception block of compact_sdk_session")
+
+
 # ── CodexSDKExecutor.discard_thread ───────────────────────────────────────────
 
 

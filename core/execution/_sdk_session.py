@@ -48,6 +48,10 @@ _PROMPT_FILE_THRESHOLD = 100_000  # 100 KB
 # so that a stale/invalid resume fails fast and falls back to a fresh session.
 RESUME_TIMEOUT_SEC = 15.0
 
+# /compact processes the entire session transcript — this takes significantly
+# longer than a simple resume handshake.
+COMPACT_TIMEOUT_SEC: float = 300.0
+
 # When estimated context usage leaves fewer than max_tokens * this factor
 # free, the PreToolUse hook triggers session termination for auto-compact.
 _CONTEXT_AUTOCOMPACT_SAFETY = 2
@@ -292,7 +296,7 @@ async def compact_sdk_session(
         )
 
         found_session_id = False
-        async with asyncio.timeout(RESUME_TIMEOUT_SEC):
+        async with asyncio.timeout(COMPACT_TIMEOUT_SEC):
             async with ClaudeSDKClient(options=options) as client:
                 await client.query("/compact")
                 async for message in client.receive_messages():
@@ -326,7 +330,7 @@ async def compact_sdk_session(
         )
         return False
     except Exception:
-        logger.warning(
+        logger.error(
             "Idle compaction failed for %s/%s/%s; session preserved for next resume",
             anima_dir.name,
             session_type,
