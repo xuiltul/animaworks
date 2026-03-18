@@ -14,3 +14,7 @@
 스킬과 절차서 목록은 skill 도구로 확인할 수 있습니다.
 
 공유 사용자: {shared_users_list}
+
+### 경로 규칙
+- `read_memory_file` / `write_memory_file` → **상대 경로** (예: `knowledge/foo.md`, `common_knowledge/ops/guide.md`)
+- `Read` / `Write` / `read_file` / `write_file` → **절대 경로**
