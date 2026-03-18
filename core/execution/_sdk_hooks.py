@@ -646,11 +646,38 @@ def _build_pre_tool_hook(
                 tool_use_id=tool_use_id,
                 blocked=False,
             )
+
+            # Build deny reason: distinguish success from error
+            is_error = False
+            task_ids_str = ""
+            try:
+                parsed = json.loads(result_str)
+                if "error" in parsed or parsed.get("status") == "error":
+                    is_error = True
+                else:
+                    task_ids_str = ", ".join(parsed.get("task_ids", []))
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            if is_error:
+                deny_reason = f"INTERCEPT_OK: submit_tasks error: {result_str}"
+            else:
+                deny_reason = (
+                    f"SUCCESS — submit_tasks completed successfully (this is NOT an error). "
+                    f"Result: {result_str}\n"
+                    f"All tasks ({task_ids_str}) are now queued in your TaskExecutor "
+                    f"and will begin executing immediately in background. "
+                    f"CRITICAL: Do NOT use delegate_task, send_message, or any other method "
+                    f"to re-submit or re-assign these same tasks — doing so WILL cause "
+                    f"DUPLICATE execution with conflicting changes. "
+                    f"Proceed with your current conversation."
+                )
+
             return SyncHookJSONOutput(
                 hookSpecificOutput=PreToolUseHookSpecificOutput(
                     hookEventName="PreToolUse",
                     permissionDecision="deny",
-                    permissionDecisionReason=(f"INTERCEPT_OK: submit_tasks result: {result_str}"),
+                    permissionDecisionReason=deny_reason,
                 )
             )
 

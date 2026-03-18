@@ -7,18 +7,18 @@ Verifies:
   - reply_to is set to anima_dir.name in intercepted tasks
   - "TaskOutput" and "AgentOutput" are handled for intercepted tasks
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.execution._sdk_hooks import (
     _intercept_task_to_pending,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -71,7 +71,8 @@ class TestInterceptTaskToPending:
     def test_context_from_state_files(self, anima_dir: Path):
         """Context should include current_state.md content."""
         (anima_dir / "state" / "current_state.md").write_text(
-            "Working on API refactor", encoding="utf-8",
+            "Working on API refactor",
+            encoding="utf-8",
         )
         tool_input = {"description": "related task", "prompt": "do stuff"}
         task_id = _intercept_task_to_pending(anima_dir, tool_input, "tu_004")
@@ -90,6 +91,7 @@ class TestPreToolHookAgentIntercept:
     def _build_hook(self, anima_dir: Path, *, has_subordinates: bool = False):
         """Build the pre-tool hook with mock SDK types."""
         from core.execution._sdk_hooks import _build_pre_tool_hook
+
         return _build_pre_tool_hook(
             anima_dir,
             has_subordinates=has_subordinates,
@@ -239,6 +241,7 @@ class TestPreToolHookAgentIntercept:
         callback_called = []
 
         from core.execution._sdk_hooks import _build_pre_tool_hook
+
         hook = _build_pre_tool_hook(
             anima_dir,
             has_subordinates=False,
@@ -269,3 +272,89 @@ class TestPreToolHookAgentIntercept:
         output = result.get("hookSpecificOutput")
         if output is not None:
             assert output.get("permissionDecision") != "deny"
+
+
+# ── PreToolUse hook: submit_tasks intercept deny reason ─────────────────
+
+
+class TestSubmitTasksInterceptDenyReason:
+    """Test submit_tasks intercept returns improved deny reason to prevent duplicate delegation."""
+
+    def _build_hook(self, anima_dir: Path, *, has_subordinates: bool = False):
+        from core.execution._sdk_hooks import _build_pre_tool_hook
+
+        return _build_pre_tool_hook(
+            anima_dir,
+            has_subordinates=has_subordinates,
+        )
+
+    @pytest.mark.asyncio
+    async def test_submit_tasks_intercept_success_reason(self, anima_dir: Path):
+        """Success case: deny reason starts with SUCCESS, contains delegate_task, DUPLICATE."""
+        success_result = json.dumps(
+            {
+                "status": "submitted",
+                "batch_id": "test",
+                "task_count": 2,
+                "task_ids": ["t1", "t2"],
+                "message": "Batch submitted",
+            },
+            ensure_ascii=False,
+        )
+
+        with patch(
+            "core.tooling.handler_skills.SkillsToolsMixin._handle_submit_tasks",
+            return_value=success_result,
+        ):
+            hook = self._build_hook(anima_dir, has_subordinates=False)
+            mock_context = MagicMock()
+            input_data = {
+                "tool_name": "submit_tasks",
+                "tool_input": {
+                    "batch_id": "test",
+                    "tasks": [
+                        {"task_id": "t1", "title": "T1", "description": "D1"},
+                        {"task_id": "t2", "title": "T2", "description": "D2"},
+                    ],
+                },
+            }
+            result = await hook(input_data, "tu_001", mock_context)
+
+        output = result.get("hookSpecificOutput")
+        assert output is not None
+        assert output["permissionDecision"] == "deny"
+        reason = output["permissionDecisionReason"]
+        assert reason.startswith("SUCCESS")
+        assert "delegate_task" in reason
+        assert "DUPLICATE" in reason
+
+    @pytest.mark.asyncio
+    async def test_submit_tasks_intercept_error_reason(self, anima_dir: Path):
+        """Error case: deny reason does NOT start with SUCCESS, contains error."""
+        error_result = json.dumps(
+            {
+                "status": "error",
+                "error_type": "InvalidArguments",
+                "message": "batch_id is required",
+            },
+            ensure_ascii=False,
+        )
+
+        with patch(
+            "core.tooling.handler_skills.SkillsToolsMixin._handle_submit_tasks",
+            return_value=error_result,
+        ):
+            hook = self._build_hook(anima_dir, has_subordinates=False)
+            mock_context = MagicMock()
+            input_data = {
+                "tool_name": "submit_tasks",
+                "tool_input": {"batch_id": "", "tasks": []},
+            }
+            result = await hook(input_data, "tu_002", mock_context)
+
+        output = result.get("hookSpecificOutput")
+        assert output is not None
+        assert output["permissionDecision"] == "deny"
+        reason = output["permissionDecisionReason"]
+        assert not reason.startswith("SUCCESS")
+        assert "error" in reason.lower()
