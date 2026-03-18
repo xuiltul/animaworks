@@ -10,17 +10,19 @@ import asyncio
 import hashlib
 import json
 import logging
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from core.i18n import t
 from core.paths import get_data_dir
 from core.time_utils import now_local
+from server.routes.chat_chunk_handler import _format_sse
 
 logger = logging.getLogger("animaworks.routes.activity_report")
 
@@ -173,8 +175,9 @@ def create_activity_report_router() -> APIRouter:
             }
         )
 
-    @router.post("/generate")
-    async def generate_report(req: GenerateRequest) -> JSONResponse:
+    @router.post("/generate", response_model=None)
+    async def generate_report(req: GenerateRequest):
+        """Generate activity report with SSE streaming for progress updates."""
         try:
             report_date = datetime.strptime(req.date, "%Y-%m-%d").date()
         except ValueError:
@@ -204,35 +207,69 @@ def create_activity_report_router() -> APIRouter:
             cached = _read_cache(req.date, model)
             if cached:
                 cached["cached"] = True
-                return JSONResponse(cached)
 
-        from core.audit import collect_org_audit, generate_org_timeline
+                async def _stream_cached() -> AsyncIterator[str]:
+                    yield _format_sse("result", cached)
 
-        def _gen_timeline() -> str:
-            return generate_org_timeline(req.date, max_chars=_MAX_TIMELINE_CHARS)
+                return StreamingResponse(
+                    _stream_cached(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
 
-        report, timeline_text = await asyncio.gather(
-            collect_org_audit(req.date),
-            asyncio.get_running_loop().run_in_executor(None, _gen_timeline),
+        async def _stream_generate() -> AsyncIterator[str]:
+            from core.audit import collect_org_audit, generate_org_timeline
+
+            try:
+                yield _format_sse("progress", {"phase": "collecting_audit"})
+
+                def _gen_timeline() -> str:
+                    return generate_org_timeline(req.date, max_chars=_MAX_TIMELINE_CHARS)
+
+                report, timeline_text = await asyncio.gather(
+                    collect_org_audit(req.date),
+                    asyncio.get_running_loop().run_in_executor(None, _gen_timeline),
+                )
+                structured = report.to_dict()
+
+                yield _format_sse("progress", {"phase": "generating_timeline"})
+
+                narrative_md: str | None = None
+                if timeline_text.strip() and model:
+                    yield _format_sse("progress", {"phase": "calling_llm"})
+                    narrative_md = await _generate_narrative(timeline_text, model)
+
+                yield _format_sse("progress", {"phase": "done"})
+
+                result: dict[str, Any] = {
+                    "date": req.date,
+                    "structured": structured,
+                    "timeline": timeline_text,
+                    "narrative_md": narrative_md,
+                    "model_used": model,
+                    "cached": False,
+                    "generated_at": now_local().isoformat(),
+                }
+
+                _write_cache(req.date, model, result)
+                yield _format_sse("result", result)
+            except Exception as e:
+                logger.exception("Activity report generation failed: %s", e)
+                yield _format_sse("error", {"code": "GENERATE_ERROR", "message": str(e)})
+
+        return StreamingResponse(
+            _stream_generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
         )
-        structured = report.to_dict()
-
-        narrative_md: str | None = None
-        if timeline_text.strip() and model:
-            narrative_md = await _generate_narrative(timeline_text, model)
-
-        result: dict[str, Any] = {
-            "date": req.date,
-            "structured": structured,
-            "timeline": timeline_text,
-            "narrative_md": narrative_md,
-            "model_used": model,
-            "cached": False,
-            "generated_at": now_local().isoformat(),
-        }
-
-        _write_cache(req.date, model, result)
-        return JSONResponse(result)
 
     @router.get("/{report_date}")
     async def get_cached_report(report_date: str) -> JSONResponse:

@@ -1,6 +1,6 @@
 /* ── Activity Report Page ─────────────────── */
 
-import { api } from "../modules/api.js";
+import { api, apiStream } from "../modules/api.js";
 import { renderMarkdown, escapeHtml } from "../modules/state.js";
 import { t } from "/shared/i18n.js";
 
@@ -115,8 +115,10 @@ async function _onGenerate(container, forceRegenerate) {
 
   _abortCtrl = new AbortController();
 
+  let resultData = null;
+
   try {
-    const data = await api("/api/activity-report/generate", {
+    await apiStream("/api/activity-report/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -125,16 +127,28 @@ async function _onGenerate(container, forceRegenerate) {
         force_regenerate: forceRegenerate,
       }),
       signal: _abortCtrl.signal,
+      onProgress: (data) => {
+        const phase = data.phase || "";
+        const key = `report.phase_${phase}`;
+        statusEl.textContent = t(key) || t("report.generating");
+      },
+      onResult: (data) => {
+        resultData = data;
+      },
+      onError: (data) => {
+        statusEl.className = "report-status report-status-error";
+        statusEl.textContent = t("report.generate_failed") + ": " + (data.message || data.code || "");
+      },
     });
 
-    _renderReport(container, data);
-
-    statusEl.className = "report-status report-status-success";
-    statusEl.textContent = data.cached
-      ? t("report.loaded_from_cache")
-      : t("report.generated_success");
-
-    regenBtn.style.display = "inline-block";
+    if (resultData) {
+      _renderReport(container, resultData);
+      statusEl.className = "report-status report-status-success";
+      statusEl.textContent = resultData.cached
+        ? t("report.loaded_from_cache")
+        : t("report.generated_success");
+      regenBtn.style.display = "inline-block";
+    }
   } catch (err) {
     if (err.name === "AbortError") return;
     statusEl.className = "report-status report-status-error";
