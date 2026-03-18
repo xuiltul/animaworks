@@ -196,6 +196,6 @@ class HttpVectorStore(VectorStore):
         if self._client is not None:
             try:
                 self._client.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to close HTTP client: %s", e)
             self._client = None
