@@ -30,6 +30,33 @@ def client(app: FastAPI) -> TestClient:
     return TestClient(app)
 
 
+def _parse_sse_events(res) -> list[tuple[str, dict]]:
+    """Parse SSE stream from response into (event_type, payload) tuples."""
+    text = res.text
+    events: list[tuple[str, dict]] = []
+    event_type = ""
+    data_buf: list[str] = []
+    for line in text.split("\n"):
+        if line.startswith("event: "):
+            if event_type and data_buf:
+                try:
+                    events.append((event_type, json.loads("\n".join(data_buf))))
+                except json.JSONDecodeError:
+                    pass
+            event_type = line[7:].strip()
+            data_buf = []
+        elif line.startswith("data: "):
+            data_buf.append(line[6:])
+        elif line == "" and event_type and data_buf:
+            try:
+                events.append((event_type, json.loads("\n".join(data_buf))))
+            except json.JSONDecodeError:
+                pass
+            event_type = ""
+            data_buf = []
+    return events
+
+
 def _sample_report(date: str = "2026-03-07") -> OrgAuditReport:
     return OrgAuditReport(
         date=date,
@@ -109,6 +136,7 @@ class TestGenerateEndpoint:
             )
 
         assert res.status_code == 400
+        # 400 returns JSONResponse, not stream
         assert "error" in res.json()
 
     def test_generates_report(self, client: TestClient, tmp_path: Path):
@@ -136,11 +164,21 @@ class TestGenerateEndpoint:
             )
 
         assert res.status_code == 200
-        data = res.json()
+        assert "text/event-stream" in res.headers.get("content-type", "")
+        events = _parse_sse_events(res)
+        result_events = [e for e in events if e[0] == "result"]
+        assert len(result_events) == 1
+        data = result_events[0][1]
         assert data["date"] == "2026-03-07"
         assert data["structured"]["total_entries"] == 100
         assert data["narrative_md"] == "# Report\nAll good"
         assert data["cached"] is False
+
+        progress_events = [e for e in events if e[0] == "progress"]
+        assert any(e[1].get("phase") == "collecting_audit" for e in progress_events)
+        assert any(e[1].get("phase") == "generating_timeline" for e in progress_events)
+        assert any(e[1].get("phase") == "calling_llm" for e in progress_events)
+        assert any(e[1].get("phase") == "done" for e in progress_events)
 
     def test_returns_cached_report(self, client: TestClient):
         cached_data = {"date": "2026-03-07", "structured": {}, "narrative_md": "cached", "model_used": "x"}
@@ -159,7 +197,14 @@ class TestGenerateEndpoint:
             )
 
         assert res.status_code == 200
-        assert res.json()["cached"] is True
+        assert "text/event-stream" in res.headers.get("content-type", "")
+        events = _parse_sse_events(res)
+        result_events = [e for e in events if e[0] == "result"]
+        assert len(result_events) == 1
+        assert result_events[0][1]["cached"] is True
+        # Cache hit: only result event, no progress
+        progress_events = [e for e in events if e[0] == "progress"]
+        assert len(progress_events) == 0
 
     def test_force_regenerate_bypasses_cache(self, client: TestClient):
         report = _sample_report()
@@ -183,6 +228,9 @@ class TestGenerateEndpoint:
 
         mock_cache.assert_not_called()
         assert res.status_code == 200
+        events = _parse_sse_events(res)
+        result_events = [e for e in events if e[0] == "result"]
+        assert len(result_events) == 1
 
     def test_narrative_null_when_no_entries(self, client: TestClient):
         empty_report = OrgAuditReport(date="2026-03-07", animas=[], total_entries=0)
@@ -204,7 +252,10 @@ class TestGenerateEndpoint:
             )
 
         assert res.status_code == 200
-        assert res.json()["narrative_md"] is None
+        events = _parse_sse_events(res)
+        result_events = [e for e in events if e[0] == "result"]
+        assert len(result_events) == 1
+        assert result_events[0][1]["narrative_md"] is None
 
 
 # ── GET /{report_date} ───────────────────────────────────────
