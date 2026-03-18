@@ -135,6 +135,9 @@ class TestNoSilentPasses:
         # _sdk_options.py: best-effort wake-file I/O in agent mode — failure
         # is non-fatal and must not interrupt SDK session startup.
         "_sdk_options.py",
+        # tracker.py: _resolve_version() tries importlib.metadata then pyproject.toml;
+        # each fallback uses 'pass' to chain to the next resolution strategy.
+        "tracker.py",
     })
 
     def test_no_except_exception_pass_in_core(self):

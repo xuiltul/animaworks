@@ -589,8 +589,8 @@ def step_system_sections_resync(data_dir: Path, dry_run: bool, verbose: bool) ->
                 if emotion:
                     store.set_section("emotion_instruction", emotion, None)
                     updated.append("emotion_instruction")
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Skipping section resync for emotion_instruction: %s", _exc)
         details.append(f"Resynced sections: {', '.join(updated)}")
         return StepResult(changed=len(updated), skipped=0, details=details)
     except Exception as exc:
