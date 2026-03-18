@@ -66,9 +66,11 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "archive_memory_file",
         "description": (
-            "Archive a memory file (knowledge, procedures) that is no longer needed. "
+            "Archive a memory file (knowledge, procedures, or state/overflow_inbox) "
+            "that is no longer needed. "
             "The file is moved to archive/ directory, not permanently deleted. "
-            "Use this to clean up stale, outdated, or redundant memory files."
+            "Use this to clean up stale, outdated, or redundant memory files, "
+            "or to mark overflow inbox messages as processed."
         ),
         "parameters": {
             "type": "object",

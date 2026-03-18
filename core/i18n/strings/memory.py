@@ -94,9 +94,20 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": ("\n[...truncated, original {length} chars]"),
         "en": ("\n[...truncated, original {length} chars]"),
     },
-    "dedup.messages_merged": {
-        "ja": "[{count}件のメッセージを統合] ",
-        "en": "[Merged {count} messages] ",
+    # "dedup.messages_merged" removed: consolidate_messages() abolished in dedup overhaul
+    "dedup.overflow_inbox_summary": {
+        "ja": (
+            "⚠️ 未処理メッセージ {count}件 (state/overflow_inbox/): "
+            "{listing}{remaining}\n"
+            'read_memory_file(path="state/overflow_inbox/<filename>") で確認可能。'
+            "処理後は archive_memory_file で移動してください。"
+        ),
+        "en": (
+            "⚠️ {count} unprocessed messages (state/overflow_inbox/): "
+            "{listing}{remaining}\n"
+            'Use read_memory_file(path="state/overflow_inbox/<filename>") to review. '
+            "After processing, use archive_memory_file to move them."
+        ),
     },
     "distillation.none": {
         "ja": "(なし)",

@@ -556,11 +556,12 @@ class MemoryToolsMixin:
         if not reason:
             return _error_result("InvalidArguments", "reason is required")
 
-        if not (rel.startswith("knowledge/") or rel.startswith("procedures/")):
+        _ARCHIVABLE_PREFIXES = ("knowledge/", "procedures/", "state/overflow_inbox/")
+        if not any(rel.startswith(p) for p in _ARCHIVABLE_PREFIXES):
             return _error_result(
                 "PermissionDenied",
-                "Only files under knowledge/ and procedures/ can be archived",
-                suggestion="Specify a path like 'knowledge/old-info.md' or 'procedures/old-proc.md'",
+                "Only files under knowledge/, procedures/, or state/overflow_inbox/ can be archived",
+                suggestion="Specify a path like 'knowledge/old-info.md', 'procedures/old-proc.md', or 'state/overflow_inbox/msg.md'",
             )
 
         target = self._anima_dir / rel

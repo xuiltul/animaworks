@@ -35,6 +35,7 @@ async def run_housekeeping(
     shortterm_retention_days: int = 7,
     task_results_retention_days: int = 7,
     pending_failed_retention_days: int = 14,
+    archive_superseded_retention_days: int = 7,
 ) -> dict[str, Any]:
     """Run all housekeeping tasks. Returns summary of actions taken."""
     loop = asyncio.get_running_loop()
@@ -133,6 +134,19 @@ async def run_housekeeping(
     except Exception:
         logger.exception("Housekeeping: pending_failed cleanup failed")
         results["pending_failed"] = {"error": True}
+
+    # 8. Archive/superseded rotation
+    try:
+        r = await loop.run_in_executor(
+            None,
+            _rotate_archive_superseded,
+            animas_dir,
+            archive_superseded_retention_days,
+        )
+        results["archive_superseded"] = r
+    except Exception:
+        logger.exception("Housekeeping: archive_superseded rotation failed")
+        results["archive_superseded"] = {"error": True}
 
     return results
 
@@ -337,6 +351,38 @@ def _cleanup_task_results(
 
     if total_deleted:
         logger.info("Task results cleanup: deleted %d files", total_deleted)
+    return {"deleted_files": total_deleted}
+
+
+def _rotate_archive_superseded(
+    animas_dir: Path,
+    retention_days: int,
+) -> dict[str, Any]:
+    """Delete archived files in archive/superseded/ older than *retention_days*."""
+    if not animas_dir.exists():
+        return {"skipped": True}
+
+    cutoff_ts = (now_local() - timedelta(days=retention_days)).timestamp()
+    total_deleted = 0
+
+    for anima_dir in sorted(animas_dir.iterdir()):
+        if not anima_dir.is_dir():
+            continue
+        archive_dir = anima_dir / "archive" / "superseded"
+        if not archive_dir.is_dir():
+            continue
+        for f in archive_dir.iterdir():
+            if not f.is_file():
+                continue
+            try:
+                if f.stat().st_mtime < cutoff_ts:
+                    f.unlink()
+                    total_deleted += 1
+            except OSError:
+                logger.warning("Failed to delete archived file: %s", f)
+
+    if total_deleted:
+        logger.info("Archive/superseded cleanup: deleted %d files", total_deleted)
     return {"deleted_files": total_deleted}
 
 

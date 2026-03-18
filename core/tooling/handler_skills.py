@@ -373,8 +373,31 @@ class SkillsToolsMixin:
 
         return _json.dumps(entry.model_dump(), ensure_ascii=False, indent=2)
 
+    _MAX_TASK_RETRY = 3
+
     def _regenerate_pending_json(self, entry: TaskEntry) -> None:
         """Regenerate Layer 1 JSON from task_queue entry for retry execution."""
+        pending_dir = self._anima_dir / "state" / "pending"
+        processing_dir = self._anima_dir / "state" / "processing"
+        task_file = f"{entry.task_id}.json"
+
+        if (pending_dir / task_file).exists() or (processing_dir / task_file).exists():
+            logger.warning(
+                "Task %s already in pipeline, skip regeneration", entry.task_id
+            )
+            return
+
+        retry_count = entry.meta.get("retry_count", 0)
+        if retry_count >= self._MAX_TASK_RETRY:
+            logger.warning(
+                "Task %s exceeded max retries (%d), skip",
+                entry.task_id,
+                self._MAX_TASK_RETRY,
+            )
+            return
+
+        entry.meta["retry_count"] = retry_count + 1
+
         task_desc_meta = entry.meta.get("task_desc", {})
         task_desc = {
             "task_type": "llm",

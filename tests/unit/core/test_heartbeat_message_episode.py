@@ -270,7 +270,7 @@ class TestHeartbeatMessageEpisodeRecording:
             assert content_part.strip() == "A" * 1000
 
     async def test_max_50_messages_recorded(self, data_dir, make_anima):
-        """When 60 messages arrive, only the first 50 should be recorded to episodes."""
+        """When 60 critical messages arrive, only the first 50 should be recorded to episodes."""
         anima_dir = make_anima("alice")
         shared_dir = data_dir / "shared"
 
@@ -284,9 +284,9 @@ class TestHeartbeatMessageEpisodeRecording:
             MockMM.return_value.append_episode = MagicMock()
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
-            # Create 60 messages
+            # Create 60 delegation messages (bypass overflow limit)
             messages = [
-                Message(from_person=f"sender{i}", to_person="alice", content=f"Message {i}")
+                Message(from_person=f"sender{i}", to_person="alice", content=f"Message {i}", intent="delegation")
                 for i in range(60)
             ]
             MockMsg.return_value.has_unread.return_value = True

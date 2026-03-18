@@ -337,55 +337,24 @@ class InboxMixin:
             senders = {m.from_person for m in messages}
             unread_count = len(messages)
 
-        # ── Message deduplication (Phase 4) ──
+        # ── Message overflow handling ──
         try:
             from core.memory.dedup import MessageDeduplicator
 
             dedup = MessageDeduplicator(self.anima_dir)
 
-            # Load previously deferred messages and prepend to inbox
-            deferred_raw = dedup.load_deferred()
-            if deferred_raw:
-                from core.schemas import Message as _Msg
+            critical, non_critical = dedup.split_critical(messages)
+            non_critical, overflow_count = dedup.overflow_to_files(non_critical)
 
-                for raw in deferred_raw:
-                    try:
-                        deferred_msg = _Msg(
-                            from_person=raw.get("from", "unknown"),
-                            to_person=self.name,
-                            content=raw.get("content", ""),
-                            type=raw.get("type", "message"),
-                        )
-                        messages.append(deferred_msg)
-                    except Exception:
-                        logger.debug("[%s] Skipping invalid deferred message", self.name)
-                logger.info("[%s] Restored %d deferred messages", self.name, len(deferred_raw))
+            messages = critical + non_critical
 
-            # Apply rate limiting first (before consolidation)
-            messages, rate_deferred = dedup.apply_rate_limit(messages)
-            if rate_deferred:
-                dedup.archive_suppressed(rate_deferred)
+            if overflow_count:
+                logger.info(
+                    "[%s] %d messages overflowed to state/overflow_inbox/",
+                    self.name,
+                    overflow_count,
+                )
 
-            # Consolidate same-sender messages
-            messages, consolidated_suppressed = dedup.consolidate_messages(messages)
-            if consolidated_suppressed:
-                dedup.archive_suppressed(consolidated_suppressed)
-
-            # Suppress resolved topics
-            try:
-                resolutions = self.memory.read_resolutions(days=7)
-            except Exception:
-                resolutions = []
-            if resolutions:
-                filtered = []
-                for m in messages:
-                    if dedup.is_resolved_topic(m.content, resolutions):
-                        dedup.archive_suppressed([m])
-                    else:
-                        filtered.append(m)
-                messages = filtered
-
-            # Update counts after dedup
             unread_count = len(messages)
             senders = {m.from_person for m in messages}
         except Exception:

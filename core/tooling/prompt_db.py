@@ -115,14 +115,17 @@ DEFAULT_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
     "archive_memory_file": {
         "ja": (
-            "不要になった記憶ファイル（knowledge, procedures）をアーカイブする。"
+            "不要になった記憶ファイル（knowledge, procedures, state/overflow_inbox）をアーカイブする。"
             "ファイルはarchive/ディレクトリに移動され、完全には削除されない。"
-            "古くなった知識、重複ファイル、陳腐化した手順の整理に使用する。"
+            "古くなった知識、重複ファイル、陳腐化した手順の整理、"
+            "および処理済みのoverflow inboxメッセージのアーカイブに使用する。"
         ),
         "en": (
-            "Archive memory files (knowledge, procedures) that are no longer needed. "
+            "Archive memory files (knowledge, procedures, state/overflow_inbox) "
+            "that are no longer needed. "
             "Files are moved to archive/ directory, not permanently deleted. "
-            "Use for cleaning up stale knowledge, duplicates, or outdated procedures."
+            "Use for cleaning up stale knowledge, duplicates, outdated procedures, "
+            "or marking overflow inbox messages as processed."
         ),
     },
     "send_message": {

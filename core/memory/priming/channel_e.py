@@ -83,6 +83,30 @@ async def channel_e_pending_tasks(
                 lines.append(f"  {desc[:100]}")
         parts.append("\n".join(lines))
 
+    # ── Overflow inbox summary ──
+    overflow_dir = anima_dir / "state" / "overflow_inbox"
+    if overflow_dir.is_dir():
+        try:
+            files = sorted(
+                [f for f in overflow_dir.iterdir() if f.suffix == ".md"],
+                key=lambda f: f.name,
+                reverse=True,
+            )
+            if files:
+                names = [f.name for f in files[:5]]
+                listing = ", ".join(names)
+                remaining = f" (+{len(files) - 5})" if len(files) > 5 else ""
+                parts.append(
+                    t(
+                        "dedup.overflow_inbox_summary",
+                        count=len(files),
+                        listing=listing,
+                        remaining=remaining,
+                    )
+                )
+        except Exception:
+            logger.debug("Channel E: overflow_inbox read failed", exc_info=True)
+
     results_dir = anima_dir / "state" / "task_results"
     if results_dir.is_dir():
         try:

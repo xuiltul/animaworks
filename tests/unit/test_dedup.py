@@ -4,15 +4,17 @@ from dataclasses import dataclass
 
 import pytest
 
-from core.memory.dedup import MessageDeduplicator
+from core.memory.dedup import _NON_CRITICAL_LIMIT, MessageDeduplicator
 
 
 @dataclass
 class FakeMessage:
     """Minimal message object for testing."""
+
     from_person: str
     content: str
     type: str = "message"
+    intent: str = ""
 
 
 @pytest.fixture
@@ -22,125 +24,152 @@ def dedup(tmp_path):
     return MessageDeduplicator(anima_dir)
 
 
-class TestIsResolvedTopic:
-    def test_empty_resolutions(self, dedup):
-        assert dedup.is_resolved_topic("IAM脆弱性", []) is False
-
-    def test_empty_message(self, dedup):
-        assert dedup.is_resolved_topic("", [{"issue": "IAM脆弱性レポート"}]) is False
-
-    def test_matching_topic(self, dedup):
-        resolutions = [{"issue": "IAM 脆弱性 レポート resolved"}]
-        assert dedup.is_resolved_topic("IAM脆弱性について報告します", resolutions) is True
-
-    def test_non_matching_topic(self, dedup):
-        resolutions = [{"issue": "IAM 脆弱性 レポート"}]
-        assert dedup.is_resolved_topic("新しいデプロイの話", resolutions) is False
-
-    def test_case_insensitive(self, dedup):
-        resolutions = [{"issue": "AWS IAM Policy Review"}]
-        assert dedup.is_resolved_topic("aws iam policy について", resolutions) is True
+# ── split_critical ──────────────────────────────────────
 
 
-class TestConsolidateMessages:
-    def test_below_threshold_no_change(self, dedup):
+class TestSplitCritical:
+    def test_empty_list(self, dedup):
+        critical, non_critical = dedup.split_critical([])
+        assert critical == []
+        assert non_critical == []
+
+    def test_all_non_critical(self, dedup):
         msgs = [FakeMessage("alice", "hello"), FakeMessage("bob", "hi")]
-        result, suppressed = dedup.consolidate_messages(msgs)
-        assert len(result) == 2
-        assert len(suppressed) == 0
+        critical, non_critical = dedup.split_critical(msgs)
+        assert critical == []
+        assert len(non_critical) == 2
 
-    def test_consolidates_3_from_same_sender(self, dedup):
+    def test_all_critical(self, dedup):
         msgs = [
-            FakeMessage("alice", "msg1"),
-            FakeMessage("alice", "msg2"),
-            FakeMessage("alice", "msg3"),
+            FakeMessage("alice", "task1", intent="delegation"),
+            FakeMessage("bob", "task2", intent="delegation"),
         ]
-        result, suppressed = dedup.consolidate_messages(msgs)
-        assert len(result) == 1
-        assert len(suppressed) == 2
-        assert "3件のメッセージを統合" in result[0].content
+        critical, non_critical = dedup.split_critical(msgs)
+        assert len(critical) == 2
+        assert non_critical == []
 
-    def test_mixed_senders(self, dedup):
+    def test_mixed(self, dedup):
         msgs = [
-            FakeMessage("alice", "a1"),
-            FakeMessage("alice", "a2"),
-            FakeMessage("alice", "a3"),
-            FakeMessage("bob", "b1"),
+            FakeMessage("alice", "task1", intent="delegation"),
+            FakeMessage("bob", "hello", intent="report"),
+            FakeMessage("carol", "task2", intent="delegation"),
+            FakeMessage("dave", "hi"),
         ]
-        result, suppressed = dedup.consolidate_messages(msgs)
-        assert len(result) == 2  # 1 consolidated alice + 1 bob
-        assert len(suppressed) == 2
+        critical, non_critical = dedup.split_critical(msgs)
+        assert len(critical) == 2
+        assert all(m.intent == "delegation" for m in critical)
+        assert len(non_critical) == 2
+        assert all(m.intent != "delegation" for m in non_critical)
 
-
-class TestConsolidateDoesNotMutateInput:
-    def test_original_message_content_preserved(self, dedup):
-        """Consolidation should not mutate the original message objects."""
+    def test_intent_only_no_string_match(self, dedup):
+        """Content containing 'delegation' text should NOT make it critical."""
         msgs = [
-            FakeMessage("alice", "original_1"),
-            FakeMessage("alice", "original_2"),
-            FakeMessage("alice", "original_3"),
+            FakeMessage("alice", "[タスク委譲] do something", intent="report"),
         ]
-        # Keep references to originals
-        originals = [m.content for m in msgs]
-        result, _ = dedup.consolidate_messages(msgs)
-        # Original messages should be unchanged
-        assert msgs[0].content == originals[0]
-        assert msgs[1].content == originals[1]
-        assert msgs[2].content == originals[2]
-        # Consolidated result should be different from original
-        assert "統合" in result[0].content
+        critical, non_critical = dedup.split_critical(msgs)
+        assert len(critical) == 0
+        assert len(non_critical) == 1
 
 
-class TestApplyRateLimit:
-    def test_below_threshold_no_change(self, dedup):
-        msgs = [FakeMessage("alice", f"msg{i}") for i in range(4)]
-        accepted, deferred = dedup.apply_rate_limit(msgs)
-        assert len(accepted) == 4
-        assert len(deferred) == 0
-
-    def test_rate_limits_5_plus(self, dedup):
-        msgs = [FakeMessage("alice", f"msg{i}") for i in range(6)]
-        accepted, deferred = dedup.apply_rate_limit(msgs)
-        assert len(accepted) == 3  # First 3 accepted
-        assert len(deferred) == 3  # Rest deferred
-
-    def test_deferred_saved_to_file(self, dedup):
-        msgs = [FakeMessage("alice", f"msg{i}") for i in range(6)]
-        dedup.apply_rate_limit(msgs)
-        assert dedup._deferred_path.exists()
-
-    def test_mixed_senders_rate_limit(self, dedup):
-        msgs = (
-            [FakeMessage("alice", f"a{i}") for i in range(6)]
-            + [FakeMessage("bob", "b1")]
-        )
-        accepted, deferred = dedup.apply_rate_limit(msgs)
-        # alice: 3 accepted, 3 deferred; bob: 1 accepted
-        assert len(accepted) == 4
-        assert len(deferred) == 3
+# ── overflow_to_files ──────────────────────────────────
 
 
-class TestLoadDeferred:
-    def test_no_file(self, dedup):
-        assert dedup.load_deferred() == []
+class TestOverflowToFiles:
+    def test_under_limit_no_overflow(self, dedup):
+        msgs = [FakeMessage("alice", f"msg{i}") for i in range(_NON_CRITICAL_LIMIT)]
+        kept, overflow_count = dedup.overflow_to_files(msgs)
+        assert len(kept) == _NON_CRITICAL_LIMIT
+        assert overflow_count == 0
+        assert not dedup._overflow_dir.exists()
 
-    def test_loads_and_deletes(self, dedup):
-        msgs = [FakeMessage("alice", f"msg{i}") for i in range(6)]
-        dedup.apply_rate_limit(msgs)
-        deferred = dedup.load_deferred()
-        assert len(deferred) == 3
-        assert not dedup._deferred_path.exists()  # Deleted after load
+    def test_exact_limit_no_overflow(self, dedup):
+        msgs = [FakeMessage("alice", f"msg{i}") for i in range(_NON_CRITICAL_LIMIT)]
+        kept, overflow_count = dedup.overflow_to_files(msgs)
+        assert len(kept) == _NON_CRITICAL_LIMIT
+        assert overflow_count == 0
+
+    def test_overflow_creates_files(self, dedup):
+        total = _NON_CRITICAL_LIMIT + 5
+        msgs = [FakeMessage("alice", f"msg{i}") for i in range(total)]
+        kept, overflow_count = dedup.overflow_to_files(msgs)
+        assert len(kept) == _NON_CRITICAL_LIMIT
+        assert overflow_count == 5
+        assert dedup._overflow_dir.exists()
+        files = list(dedup._overflow_dir.glob("*.md"))
+        assert len(files) == 5
+
+    def test_overflow_file_content(self, dedup):
+        msgs = [FakeMessage("alice", f"msg{i}") for i in range(_NON_CRITICAL_LIMIT + 1)]
+        dedup.overflow_to_files(msgs)
+        files = list(dedup._overflow_dir.glob("*.md"))
+        assert len(files) == 1
+        content = files[0].read_text(encoding="utf-8")
+        assert "from: alice" in content
+        assert f"msg{_NON_CRITICAL_LIMIT}" in content
+        assert "---" in content
+
+    def test_overflow_preserves_order(self, dedup):
+        """First N messages are kept, later ones overflow."""
+        total = _NON_CRITICAL_LIMIT + 3
+        msgs = [FakeMessage("alice", f"msg{i}") for i in range(total)]
+        kept, _ = dedup.overflow_to_files(msgs)
+        assert [m.content for m in kept] == [f"msg{i}" for i in range(_NON_CRITICAL_LIMIT)]
+
+    def test_overflow_different_senders(self, dedup):
+        msgs = [FakeMessage(f"sender{i}", f"msg{i}") for i in range(_NON_CRITICAL_LIMIT + 3)]
+        kept, overflow_count = dedup.overflow_to_files(msgs)
+        assert len(kept) == _NON_CRITICAL_LIMIT
+        assert overflow_count == 3
+        files = list(dedup._overflow_dir.glob("*.md"))
+        assert len(files) == 3
+
+    def test_collision_avoidance(self, dedup):
+        """When files with same timestamp exist, counter suffix is used."""
+        dedup._overflow_dir.mkdir(parents=True, exist_ok=True)
+        msgs = [FakeMessage("alice", f"msg{i}") for i in range(_NON_CRITICAL_LIMIT + 3)]
+        dedup.overflow_to_files(msgs)
+        files = list(dedup._overflow_dir.glob("*.md"))
+        assert len(files) == 3
+
+    def test_empty_list(self, dedup):
+        kept, overflow_count = dedup.overflow_to_files([])
+        assert kept == []
+        assert overflow_count == 0
+
+    def test_overflow_file_has_intent(self, dedup):
+        msgs = [FakeMessage("alice", "hi", intent="report") for _ in range(_NON_CRITICAL_LIMIT + 1)]
+        dedup.overflow_to_files(msgs)
+        files = list(dedup._overflow_dir.glob("*.md"))
+        content = files[0].read_text(encoding="utf-8")
+        assert "intent: report" in content
 
 
-class TestArchiveSuppressed:
-    def test_archives_messages(self, dedup):
-        msgs = [FakeMessage("alice", "suppressed msg")]
-        dedup.archive_suppressed(msgs)
-        assert dedup._suppressed_path.exists()
-        content = dedup._suppressed_path.read_text()
-        assert "suppressed msg" in content
-        assert "dedup_suppressed" in content
+# ── Integration: split_critical + overflow_to_files ─────
 
-    def test_empty_list_no_file(self, dedup):
-        dedup.archive_suppressed([])
-        assert not dedup._suppressed_path.exists()
+
+class TestIntegration:
+    def test_critical_bypass_with_overflow(self, dedup):
+        """Critical messages bypass overflow; non-critical respects limit."""
+        critical_msgs = [FakeMessage("boss", f"delegate{i}", intent="delegation") for i in range(15)]
+        non_critical_msgs = [
+            FakeMessage("worker", f"report{i}", intent="report") for i in range(_NON_CRITICAL_LIMIT + 5)
+        ]
+        all_msgs = critical_msgs + non_critical_msgs
+
+        critical, non_critical = dedup.split_critical(all_msgs)
+        assert len(critical) == 15
+
+        non_critical, overflow_count = dedup.overflow_to_files(non_critical)
+        assert len(non_critical) == _NON_CRITICAL_LIMIT
+        assert overflow_count == 5
+
+        final = critical + non_critical
+        assert len(final) == 15 + _NON_CRITICAL_LIMIT
+
+    def test_no_messages_lost(self, dedup):
+        """All messages end up either in kept or overflow files."""
+        total = _NON_CRITICAL_LIMIT + 7
+        msgs = [FakeMessage("alice", f"msg{i}") for i in range(total)]
+        critical, non_critical = dedup.split_critical(msgs)
+        kept, overflow_count = dedup.overflow_to_files(non_critical)
+        assert len(critical) + len(kept) + overflow_count == total
