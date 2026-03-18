@@ -7,10 +7,13 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-03-18
+
 ### Added
 - unified `animaworks migrate` command — 22 migration steps across 5 categories (structural, per-anima, template sync, DB sync, version tracking) with `--dry-run`, `--list`, `--force`, `--resync-db` options
 - auto-migration on server startup via `ensure_runtime_dir()` — no manual action needed for most upgrades
 - `migration_state.json` for idempotent version tracking of applied migrations
+
 
 ## [0.5.4] - 2026-03-18
 
@@ -1137,8 +1140,8 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.5.4...HEAD
-[0.5.4]: https://github.com/xuiltul/animaworks/compare/v0.5.3...v0.5.4
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/xuiltul/animaworks/compare/v0.5.4...v0.5.5
 [0.4.3]: https://github.com/xuiltul/animaworks/compare/v0.4.2...v0.4.3
 [0.4.0]: https://github.com/xuiltul/animaworks/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/xuiltul/animaworks/compare/v0.3.0...v0.3.1
