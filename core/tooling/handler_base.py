@@ -37,6 +37,12 @@ active_session_type: contextvars.ContextVar[str] = contextvars.ContextVar(
     default="chat",
 )
 
+# ── Meeting mode: block Anima-to-Anima communication tools during meetings ──
+meeting_mode: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "meeting_mode",
+    default=False,
+)
+
 # Type alias for the message-sent callback (from, to, content).
 OnMessageSentFn = Callable[[str, str, str], None]
 

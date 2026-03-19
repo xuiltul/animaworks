@@ -79,7 +79,7 @@ def _get_created_by(request: Request) -> str:
     return "human"
 
 
-def _build_message_for_anima(
+async def _build_message_for_anima(
     room_manager: RoomManager,
     room: MeetingRoom,
     target_name: str,
@@ -91,7 +91,7 @@ def _build_message_for_anima(
 
     Includes meeting context (conversation history) and role-specific prompt.
     """
-    context = room_manager.get_conversation_context(room.room_id)
+    context = await room_manager.get_summarized_context(room.room_id)
     if is_chair:
         chair_prompt = room_manager.build_chair_prompt(room)
         return f"""{chair_prompt}
@@ -164,7 +164,7 @@ async def _meeting_stream(
         is_chair = target_name == room.chair
 
         # Build message for this target
-        msg_content = _build_message_for_anima(
+        msg_content = await _build_message_for_anima(
             room_manager,
             room,
             target_name,

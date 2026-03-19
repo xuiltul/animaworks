@@ -398,4 +398,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "DM送信済み",
         "en": "DM sent",
     },
+    "handler.meeting_tool_blocked": {
+        "ja": "会議中は {tool} を使用できません。会議内で @メンション を使って発言してください。",
+        "en": "Tool '{tool}' is not available during meetings. Use @mentions to communicate within the meeting.",
+    },
 }

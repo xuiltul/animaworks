@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 MAX_PARTICIPANTS = 5
 DEFAULT_MAX_CONTEXT_MESSAGES = 50
+SUMMARY_THRESHOLD = 5
 _ROOM_ID_RE = re.compile(r"^[a-f0-9]{12}$")
 
 # ── Data Model ──────────────────────────────────────────────
@@ -263,29 +264,9 @@ class RoomManager:
         room.conversation.append(entry)
         self.save_room(room_id)
 
-    def get_conversation_context(self, room_id: str, max_messages: int = DEFAULT_MAX_CONTEXT_MESSAGES) -> str:
-        """Build conversation context string for sending to an Anima.
-
-        Format:
-        [human(taka)] メッセージ内容
-        [sakura(議長)] 応答内容
-        [rin] 技術面からの意見...
-
-        If messages exceed max_messages, truncate older ones.
-
-        Args:
-            room_id: Room ID.
-            max_messages: Maximum number of messages to include.
-
-        Returns:
-            Formatted conversation context string.
-        """
-        room = self.get_room(room_id)
-        if room is None:
-            return ""
-        messages = room.conversation
-        if len(messages) > max_messages:
-            messages = messages[-max_messages:]
+    @staticmethod
+    def _format_entries(messages: list[dict]) -> str:
+        """Format conversation entries into display strings."""
         lines: list[str] = []
         for entry in messages:
             speaker = entry.get("speaker", "")
@@ -298,6 +279,74 @@ class RoomManager:
             else:
                 lines.append(f"[{speaker}] {text}")
         return "\n".join(lines)
+
+    def get_conversation_context(self, room_id: str, max_messages: int = DEFAULT_MAX_CONTEXT_MESSAGES) -> str:
+        """Build conversation context string for sending to an Anima.
+
+        If messages exceed max_messages, truncate older ones.
+        """
+        room = self.get_room(room_id)
+        if room is None:
+            return ""
+        messages = room.conversation
+        if len(messages) > max_messages:
+            messages = messages[-max_messages:]
+        return self._format_entries(messages)
+
+    async def get_summarized_context(self, room_id: str) -> str:
+        """Build conversation context with summarization for entries > SUMMARY_THRESHOLD.
+
+        When conversation has more than SUMMARY_THRESHOLD entries, older entries
+        are summarized via LLM and the result is formatted as:
+        "[要約] <summary>\\n\\n<recent N entries verbatim>"
+
+        Falls back to get_conversation_context() on any failure.
+        """
+        room = self.get_room(room_id)
+        if room is None:
+            return ""
+        messages = room.conversation
+        if len(messages) <= SUMMARY_THRESHOLD:
+            return self.get_conversation_context(room_id)
+
+        older = messages[:-SUMMARY_THRESHOLD]
+        recent = messages[-SUMMARY_THRESHOLD:]
+
+        cached_idx = getattr(room, "_summary_up_to", 0)
+        cached_text = getattr(room, "_summary_text", "")
+        if cached_idx == len(older) and cached_text:
+            summary = cached_text
+        else:
+            try:
+                summary = await self._call_summary_llm(older)
+                room._summary_up_to = len(older)  # type: ignore[attr-defined]
+                room._summary_text = summary  # type: ignore[attr-defined]
+            except Exception:
+                logger.warning("Meeting context summarization failed; falling back to full context", exc_info=True)
+                return self.get_conversation_context(room_id)
+
+        recent_text = self._format_entries(recent)
+        return f"[要約] {summary}\n\n{recent_text}"
+
+    async def _call_summary_llm(self, entries: list[dict]) -> str:
+        """Summarize conversation entries using the consolidation LLM."""
+        from core.memory._llm_utils import one_shot_completion
+
+        formatted = self._format_entries(entries)
+        system = (
+            "You are a meeting conversation summarizer. "
+            "Summarize the following meeting discussion concisely in the same language as the input. "
+            "Preserve key decisions, action items, and important opinions. "
+            "Keep the summary under 500 characters."
+        )
+        result = await one_shot_completion(
+            formatted,
+            system_prompt=system,
+            max_tokens=500,
+        )
+        if not result:
+            raise RuntimeError("LLM returned empty summary")
+        return result
 
     # ── Chair prompt ────────────────────────────────────────
 

@@ -190,6 +190,11 @@ class MessagingMixin:
                 self._status_slots[_conv_key] = "thinking"
                 self._task_slots[_conv_key] = f"Responding to {from_person}"
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
+                _meeting_token = None
+                if source == "meeting":
+                    from core.tooling.handler_base import meeting_mode
+
+                    _meeting_token = meeting_mode.set(True)
                 self.agent._tool_handler.set_session_origin(ORIGIN_HUMAN)
 
                 # Build history-aware prompt via conversation memory
@@ -315,6 +320,10 @@ class MessagingMixin:
                     conv_memory.save()
                     raise
                 finally:
+                    if _meeting_token is not None:
+                        from core.tooling.handler_base import meeting_mode
+
+                        meeting_mode.reset(_meeting_token)
                     active_session_type.reset(_session_token)
                     self._status_slots[_conv_key] = "idle"
                     self._task_slots[_conv_key] = ""
@@ -410,6 +419,11 @@ class MessagingMixin:
                 self._status_slots[_conv_key] = "thinking"
                 self._task_slots[_conv_key] = f"Responding to {from_person}"
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
+                _meeting_token = None
+                if source == "meeting":
+                    from core.tooling.handler_base import meeting_mode
+
+                    _meeting_token = meeting_mode.set(True)
                 self.agent._tool_handler.set_session_origin(ORIGIN_HUMAN)
 
                 # Build history-aware prompt via conversation memory
@@ -622,6 +636,10 @@ class MessagingMixin:
                         conv_memory.save()
                     # Close journal (no-op if already finalized)
                     journal.close()
+                    if _meeting_token is not None:
+                        from core.tooling.handler_base import meeting_mode
+
+                        meeting_mode.reset(_meeting_token)
                     try:
                         active_session_type.reset(_session_token)
                     except ValueError:

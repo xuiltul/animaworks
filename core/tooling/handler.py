@@ -56,6 +56,7 @@ from core.tooling.handler_base import (  # noqa: F401
     _validate_procedure_format,
     _validate_skill_format,
     active_session_type,
+    meeting_mode,
     suppress_board_fanout,
 )
 
@@ -68,6 +69,17 @@ from core.tooling.handler_perms import PermissionsMixin
 from core.tooling.handler_skills import SkillsToolsMixin
 
 logger = logging.getLogger("animaworks.tool_handler")
+
+_MEETING_BLOCKED_TOOLS: frozenset[str] = frozenset(
+    {
+        "send_message",
+        "post_channel",
+        "delegate_task",
+        "call_human",
+        "read_dm_history",
+        "read_channel",
+    }
+)
 
 
 @runtime_checkable
@@ -383,6 +395,8 @@ class ToolHandler(
         Returns the tool result as a string (truncated if >500KB).
         """
         try:
+            if meeting_mode.get() and name in _MEETING_BLOCKED_TOOLS:
+                return t("handler.meeting_tool_blocked", tool=name)
             logger.debug("tool_call name=%s args_keys=%s", name, list(args.keys()))
 
             handler = self._dispatch.get(name)
