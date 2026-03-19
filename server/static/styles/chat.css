@@ -531,13 +531,13 @@
   .chat-page-main {
     display: grid;
     grid-template-columns: 64px minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     min-height: 0;
   }
 
   .chat-anima-tabs-header {
     grid-column: 1;
-    grid-row: 1 / 4;
+    grid-row: 1 / 5;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -630,6 +630,25 @@
     border-radius: 999px;
   }
 
+  .chat-header-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .chat-header-actions .meeting-mode-toggle {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+  }
+  .chat-header-actions .meeting-mode-toggle svg {
+    width: 18px;
+    height: 18px;
+  }
+
   .chat-add-conversation {
     width: 100%;
     display: flex;
@@ -665,15 +684,20 @@
     grid-row: 1;
   }
 
-  .chat-messages-area {
+  .meeting-participant-panel {
     grid-column: 2;
     grid-row: 2;
+  }
+
+  .chat-messages-area {
+    grid-column: 2;
+    grid-row: 3;
     min-height: 0;
   }
 
   [data-chat-id="chatPageForm"] {
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 4;
   }
 }
 
@@ -1077,20 +1101,25 @@
   padding: 0.2em 0.8em;
   color: var(--aw-color-text-secondary);
 }
-.chat-bubble.assistant table {
+.chat-bubble table,
+.bg-session-message table {
   border-collapse: collapse;
   margin: 0.4em 0;
   font-size: 0.85em;
   max-width: 100%;
   display: block;
   overflow-x: auto;
+  white-space: normal;
 }
-.chat-bubble.assistant th,
-.chat-bubble.assistant td {
+.chat-bubble th,
+.chat-bubble td,
+.bg-session-message th,
+.bg-session-message td {
   border: 1px solid var(--aw-color-border-dark);
   padding: 4px 8px;
 }
-.chat-bubble.assistant th {
+.chat-bubble th,
+.bg-session-message th {
   background: var(--aw-color-bg-tertiary);
   font-weight: 600;
 }
@@ -3071,15 +3100,19 @@
 
 /* ── Meeting Mode ────────────────────────── */
 .meeting-mode-toggle {
-  padding: 4px 12px;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 6px;
   border: 1px solid var(--aw-color-border-dark, #e0e0e0);
   background: transparent;
   color: var(--aw-color-text-secondary, #666);
-  font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
-  white-space: nowrap;
+  flex-shrink: 0;
 }
 .meeting-mode-toggle.active {
   background: var(--aw-color-accent);
@@ -3089,6 +3122,9 @@
 .meeting-mode-toggle:hover,
 .meeting-mode-toggle:active {
   opacity: 0.85;
+}
+.meeting-mode-toggle svg {
+  pointer-events: none;
 }
 
 .meeting-participant-panel {
@@ -3100,6 +3136,8 @@
   font-size: 0.8rem;
   flex-wrap: wrap;
   background: var(--aw-color-bg-secondary, #f8f9fa);
+  overflow-y: auto;
+  max-height: 50vh;
 }
 
 .meeting-participant-chip {
@@ -3193,27 +3231,57 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 100%;
 }
 .meeting-setup-label {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--aw-color-text-secondary);
+  flex-shrink: 0;
 }
 .meeting-setup-anima-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 .meeting-setup-anima {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 6px 10px;
   border: 1px solid var(--aw-color-border-dark, #e0e0e0);
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.8rem;
   transition: all 0.15s;
+}
+.meeting-setup-anima .chip-avatar,
+.meeting-setup-anima .chip-avatar-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.meeting-setup-anima .chip-avatar-initial {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--aw-color-bg-primary);
+  background: var(--aw-color-accent);
+  flex-shrink: 0;
+}
+.meeting-setup-anima input[type="checkbox"],
+.meeting-setup-anima input[type="radio"] {
+  flex-shrink: 0;
 }
 .meeting-setup-anima.selected {
   border-color: var(--aw-color-accent);
@@ -3223,6 +3291,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-shrink: 0;
 }
 .meeting-start-btn {
   padding: 6px 16px;

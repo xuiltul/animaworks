@@ -38,7 +38,7 @@ export function createMeetingController(ctx) {
     const toggle = $("meetingModeToggle");
     if (toggle) {
       toggle.classList.toggle("active", state.meetingMode);
-      toggle.textContent = state.meetingMode ? `${t("meeting.toggle_active")} ●` : t("meeting.toggle");
+      toggle.title = state.meetingMode ? t("meeting.toggle_active") : t("meeting.toggle");
     }
   }
 
@@ -101,7 +101,13 @@ export function createMeetingController(ctx) {
     }
 
     for (const a of animas) {
-      ctx.controllers.anima?.ensureAnimaTabAvatar?.(a.name)?.then(() => _updateMeetingPanel());
+      ctx.controllers.anima?.ensureAnimaTabAvatar?.(a.name)?.then(() => {
+        const avatarEl = panel.querySelector(`.meeting-setup-anima[data-anima="${a.name}"] .chip-avatar`);
+        if (avatarEl) {
+          const url = state.animaTabAvatarUrls?.[a.name];
+          if (url) avatarEl.outerHTML = `<img class="chip-avatar chip-avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(a.name)}">`;
+        }
+      });
     }
 
     panel.innerHTML = `

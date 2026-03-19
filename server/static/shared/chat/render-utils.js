@@ -566,7 +566,12 @@ export function renderLiveBubble(msg, opts) {
  * @param {object} opts - Same as renderLiveBubble opts
  */
 export function renderStreamingBubbleInner(msg, opts) {
-  return `<div class="streaming-zone-text">${_renderTextZoneContent(msg, opts)}</div>`
+  const { escapeHtml } = opts;
+  const speakerLabel = msg.speaker
+    ? `<div class="chat-speaker-label">${escapeHtml(msg.speaker)}${msg.speakerRole === "chair" ? " 👑" : ""}</div>`
+    : "";
+  return speakerLabel
+    + `<div class="streaming-zone-text">${_renderTextZoneContent(msg, opts)}</div>`
     + `<div class="streaming-zone-tools">${_renderToolZoneContent(msg, opts)}</div>`
     + `<div class="streaming-zone-subordinate">${_renderSubordinateZoneContent(msg, opts)}</div>`
     + `<div class="streaming-zone-thinking">${_renderThinkingZoneContent(msg, opts)}</div>`;

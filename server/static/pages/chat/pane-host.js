@@ -12,6 +12,7 @@ import { createMemoryController } from "./memory-controller.js";
 import { createSidebarController } from "./sidebar-controller.js";
 import { createEventsController } from "./events-controller.js";
 import { createImageVoiceController } from "./image-voice-controller.js";
+import { createMeetingController } from "./meeting-controller.js";
 import { initSplitter } from "./splitter.js";
 import { onEvent } from "../../modules/websocket.js";
 
@@ -24,6 +25,9 @@ function paneHtml() {
         <button class="chat-unified-hamburger" data-chat-id="chatUnifiedHamburger" aria-label="${t("pane.menu")}">&#x2630;</button>
         <div class="anima-tabs" data-chat-id="chatAnimaTabs"></div>
         <div class="chat-header-actions">
+          <button type="button" class="meeting-mode-toggle" data-chat-id="meetingModeToggle" title="${t("meeting.toggle")}">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </button>
           <div class="chat-add-conversation" data-chat-id="chatAddConversationArea">
             <button type="button" data-chat-id="chatAddConversationBtn" class="chat-add-conversation-btn">${t("chat.anima_select")}</button>
             <div data-chat-id="chatAddConversationMenu" class="chat-add-conversation-menu" role="listbox" aria-label="${t("chat.anima_select")}"></div>

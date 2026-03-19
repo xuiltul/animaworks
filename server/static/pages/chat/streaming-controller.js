@@ -684,6 +684,7 @@ export function createStreamingController(ctx) {
             text: "",
             streaming: true,
             timestamp: new Date().toISOString(),
+            streamId: `meeting-${roomId}-${speaker}-${Date.now()}`,
           };
           mgr.getSession("meeting", roomId).messages.push(currentStreamingMsg);
           renderFull();
