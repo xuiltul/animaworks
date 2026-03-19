@@ -14,6 +14,8 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from core.execution._sanitize import (
@@ -89,6 +91,189 @@ def _build_reply_instruction(m: Any) -> str:
         return f"  [reply_instruction: {cmd}]"
 
     return ""
+
+
+# ── Delegation DM framework-level helpers ────────────────────
+
+_RE_TASK_ID = re.compile(r"(?:タスクID|Task ID):\s*([a-f0-9]{12})")
+
+
+def _extract_task_id(msg: Any) -> str | None:
+    """Extract task_id from Message meta (preferred) or content regex fallback."""
+    if hasattr(msg, "meta") and isinstance(msg.meta, dict):
+        tid = msg.meta.get("task_id")
+        if tid:
+            return tid
+    m = _RE_TASK_ID.search(getattr(msg, "content", ""))
+    return m.group(1) if m else None
+
+
+def _split_delegation_items(
+    inbox_items: list[InboxItem],
+    messages: list[Any],
+) -> tuple[list[InboxItem], list[InboxItem]]:
+    """Split inbox items into delegation and non-delegation groups.
+
+    Delegation items where task_id cannot be extracted are kept in
+    non-delegation (safe fallback: let LLM handle them).
+    """
+    delegation: list[InboxItem] = []
+    non_delegation: list[InboxItem] = []
+    for item in inbox_items:
+        if item.msg.intent == "delegation" and _extract_task_id(item.msg):
+            delegation.append(item)
+        else:
+            non_delegation.append(item)
+    return delegation, non_delegation
+
+
+def _check_task_state(anima_dir: Path, task_id: str) -> str:
+    """Check task execution state. Returns one of:
+    'completed', 'processing', 'pending', 'terminal', 'missing'.
+    """
+    results_dir = anima_dir / "state" / "task_results"
+    if (results_dir / f"{task_id}.md").exists():
+        return "completed"
+
+    pending_dir = anima_dir / "state" / "pending"
+    processing_dir = pending_dir / "processing"
+    if (processing_dir / f"{task_id}.json").exists():
+        return "processing"
+
+    if (pending_dir / f"{task_id}.json").exists():
+        return "pending"
+
+    try:
+        from core.memory.task_queue import TaskQueueManager
+
+        tqm = TaskQueueManager(anima_dir)
+        entry = tqm.get_task_by_id(task_id)
+        if entry and entry.status in ("done", "failed", "cancelled"):
+            return "terminal"
+    except Exception:
+        logger.debug("Failed to check task_queue for %s", task_id, exc_info=True)
+
+    return "missing"
+
+
+def _rescue_regenerate_pending(anima_dir: Path, task_id: str, msg: Any) -> None:
+    """Rescue: regenerate pending file from delegation DM content for TaskExec pickup."""
+    pending_dir = anima_dir / "state" / "pending"
+    pending_dir.mkdir(parents=True, exist_ok=True)
+
+    instruction = getattr(msg, "content", "")
+
+    # Try to get original instruction from task_queue
+    try:
+        from core.memory.task_queue import TaskQueueManager
+
+        tqm = TaskQueueManager(anima_dir)
+        entry = tqm.get_task_by_id(task_id)
+        if entry and entry.original_instruction:
+            instruction = entry.original_instruction
+    except Exception:
+        pass
+
+    task_desc = {
+        "task_type": "llm",
+        "task_id": task_id,
+        "title": instruction[:100],
+        "description": instruction,
+        "context": "",
+        "acceptance_criteria": [],
+        "constraints": [],
+        "file_paths": [],
+        "submitted_by": getattr(msg, "from_person", "unknown"),
+        "submitted_at": datetime.now(UTC).isoformat(),
+        "reply_to": getattr(msg, "from_person", ""),
+        "source": "delegation_rescue",
+    }
+    path = pending_dir / f"{task_id}.json"
+    path.write_text(
+        json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    logger.info(
+        "Rescue: regenerated pending file for task %s from delegation DM",
+        task_id,
+    )
+
+
+def _handle_delegation_dms(anima_mixin: Any, delegation_items: list[InboxItem]) -> None:
+    """Handle delegation DMs at framework level without involving LLM.
+
+    Checks task state and either archives (task exists/completed) or
+    rescues (regenerates pending file) for each delegation DM.
+    """
+    anima_dir = anima_mixin.anima_dir
+
+    for item in delegation_items:
+        msg = item.msg
+        task_id = _extract_task_id(msg)
+        if not task_id:
+            continue  # should not happen (filtered in _split_delegation_items)
+
+        state = _check_task_state(anima_dir, task_id)
+
+        if state == "missing":
+            _rescue_regenerate_pending(anima_dir, task_id, msg)
+            logger.info(
+                "[%s] Delegation DM rescue: task=%s from=%s (pending file regenerated)",
+                anima_mixin.name,
+                task_id,
+                msg.from_person,
+            )
+        else:
+            logger.info(
+                "[%s] Delegation DM handled at framework level: task=%s state=%s from=%s",
+                anima_mixin.name,
+                task_id,
+                state,
+                msg.from_person,
+            )
+
+        # Record episode for the delegation DM (same as regular inbox messages)
+        _msg_ts = now_local().strftime("%H:%M")
+        _episode = (
+            t(
+                "anima.msg_received_episode",
+                ts=_msg_ts,
+                from_person=msg.from_person,
+                content=_truncate_with_thread_ctx(msg.content, body_budget=1000),
+            )
+            + "\n"
+        )
+        try:
+            anima_mixin.memory.append_episode(_episode, origin=ORIGIN_ANIMA)
+        except Exception:
+            logger.debug(
+                "[%s] Failed to record delegation DM episode from %s",
+                anima_mixin.name,
+                msg.from_person,
+                exc_info=True,
+            )
+
+        # Activity log
+        anima_mixin._activity.log(
+            "message_received",
+            content=msg.content,
+            summary=f"[delegation DM - framework handled, state={state}] {msg.content[:150]}",
+            from_person=msg.from_person,
+            to_person=anima_mixin.name,
+            meta={"from_type": msg.source, "delegation_state": state, "task_id": task_id},
+            origin=ORIGIN_ANIMA,
+            origin_chain=msg.origin_chain if msg.origin_chain else [ORIGIN_ANIMA],
+        )
+
+    # Archive delegation DMs immediately
+    try:
+        anima_mixin.messenger.archive_paths(delegation_items)
+    except Exception:
+        logger.debug(
+            "[%s] Failed to archive delegation DMs",
+            anima_mixin.name,
+            exc_info=True,
+        )
 
 
 @dataclass
@@ -366,6 +551,15 @@ class InboxMixin:
             unread_count,
             ", ".join(senders),
         )
+
+        # ── Delegation DM framework-level handling ──
+        delegation_items, non_delegation_items = _split_delegation_items(inbox_items, messages)
+        if delegation_items:
+            _handle_delegation_dms(self, delegation_items)
+            inbox_items = non_delegation_items
+            messages = [item.msg for item in non_delegation_items]
+            unread_count = len(messages)
+            senders = {m.from_person for m in messages}
 
         # ── Retry counter: track how many times each inbox message is presented ──
         _read_counts_path = self.anima_dir / "state" / "inbox_read_counts.json"

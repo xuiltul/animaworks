@@ -167,6 +167,7 @@ class Messenger:
         skip_logging: bool = False,
         intent: str = "",
         origin_chain: list[str] | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> Message:
         # ── Conversation depth check (internal Anima only) ──
         if msg_type not in ("ack", "error", "system_alert"):
@@ -213,6 +214,7 @@ class Messenger:
             reply_to=reply_to,
             intent=intent,
             origin_chain=origin_chain or [],
+            meta=meta or {},
         )
         # New thread: use message id as thread_id
         if not msg.thread_id:

@@ -128,6 +128,7 @@ class DelegationMixin(OrgHelpersMixin):
                     ),
                     intent="delegation",
                     origin_chain=outgoing_chain,
+                    meta={"task_id": sub_entry.task_id},
                 )
                 dm_result = t("handler.dm_sent")
             except Exception as e:

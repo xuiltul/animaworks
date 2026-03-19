@@ -392,6 +392,7 @@ def _intercept_task_to_delegation(
                 task_id=sub_entry.task_id,
             ),
             intent="delegation",
+            meta={"task_id": sub_entry.task_id},
         )
         dm_result = "DM sent"
     except Exception as e:

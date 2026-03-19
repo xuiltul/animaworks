@@ -136,6 +136,9 @@ class Message(BaseModel):
     # Provenance tracking (Phase 2)
     origin_chain: list[str] = Field(default_factory=list)
 
+    # Structured metadata (e.g. task_id for delegation DMs)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
     @model_validator(mode="before")
     @classmethod
     def _normalize_legacy_keys(cls, data: Any) -> Any:
