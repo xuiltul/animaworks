@@ -18,6 +18,7 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | Don't know how to send messages | `communication/messaging-guide.md` |
 | Don't know how to use Board (shared channels) | `communication/board-guide.md` |
 | Don't know how to give instructions or report | `communication/instruction-patterns.md` / `communication/reporting-guide.md` |
+| Want to check required fields for delegation/reports/escalation | `communication/message-quality-protocol.md` |
 | Message sending was limited | `communication/sending-limits.md` |
 | Don't know how to notify humans | `communication/call-human-guide.md` |
 | Don't know how to configure Slack bot tokens | `reference/communication/slack-bot-token-guide.md` (→ reference) |
@@ -108,6 +109,7 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | `board-guide.md` | Board (shared channels) guide (post_channel / read_channel usage, posting rules) |
 | `instruction-patterns.md` | Instruction patterns (clear instructions, delegation patterns, progress checks) |
 | `reporting-guide.md` | How to report and escalate (timing, format, urgent vs routine) |
+| `message-quality-protocol.md` | Message quality protocol (delegation 4 fields, completion 3 fields, escalation 4 fields) |
 | `sending-limits.md` | Sending limits in detail (3-layer rate limit, 30/h and 100/day caps, cascade detection) |
 | `call-human-guide.md` | Human notification guide (call_human usage, receiving replies, notification channels) |
 | `slack-bot-token-guide.md` | → Moved to `reference/communication/slack-bot-token-guide.md`. Slack bot token configuration |
@@ -165,6 +167,7 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | DM history, read_dm_history, past conversation | `communication/board-guide.md` |
 | instruction, delegation, task request | `communication/instruction-patterns.md` |
 | report, daily report, summary, escalation | `communication/reporting-guide.md` |
+| quality protocol, required fields, verification evidence, completion criteria, delegation check | `communication/message-quality-protocol.md` |
 | rate limit, sending limit, 30/hour, 100/day, one-round rule | `communication/sending-limits.md` |
 | call_human, human notification, notify human | `communication/call-human-guide.md` |
 | Slack, bot token, SLACK_BOT_TOKEN, not_in_channel | `reference/communication/slack-bot-token-guide.md` |

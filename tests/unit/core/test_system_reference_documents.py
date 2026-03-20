@@ -832,6 +832,7 @@ _EXPECTED_FILES = [
     "communication/board-guide.md",
     "communication/call-human-guide.md",
     "communication/instruction-patterns.md",
+    "communication/message-quality-protocol.md",
     "communication/messaging-guide.md",
     "communication/reporting-guide.md",
     "communication/sending-limits.md",

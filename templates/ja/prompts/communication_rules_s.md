@@ -6,4 +6,5 @@
 **報告**: 【報告】結論→状況→根拠(cmd+出力+時刻)→影響→対処→次のアクション
 **部下報告の検証**: 鵜呑みにしない。自分のツールで事実確認してからエスカレーション
 
+**品質**: 委譲・完了報告・エスカレーション前に `common_knowledge/communication/message-quality-protocol.md` の必須項目を確認(MUST)
 詳細: `read_memory_file(path="common_knowledge/communication/messaging-guide.md")`
