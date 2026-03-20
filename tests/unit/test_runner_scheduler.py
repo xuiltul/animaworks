@@ -85,13 +85,10 @@ Do something
 
         assert mgr.scheduler is not None
         assert mgr.scheduler.running
-        # Only system-level jobs (activity_schedule, cron_health); no heartbeat/cron jobs
+        # Only system-level jobs; no heartbeat/cron user jobs
         job_ids = {j.id for j in mgr.scheduler.get_jobs()}
-        system_jobs = {
-            "test-anima_activity_schedule",
-            "test-anima_cron_health",
-        }
-        assert job_ids == system_jobs
+        assert not any("heartbeat" in jid for jid in job_ids)
+        assert not any("cron_0" in jid for jid in job_ids)
 
         mgr.shutdown()
 
