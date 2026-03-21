@@ -229,17 +229,22 @@ async def lifespan(app: FastAPI):
         gp_path = get_global_permissions_path()
         try:
             gp_cache.load(gp_path)
+        except SystemExit:
+            raise
         except FileNotFoundError:
-            logger.warning(
+            logger.critical(
                 "permissions.global.json not found at %s — "
-                "command security patterns will not be enforced. "
+                "server cannot start without global command security. "
                 "Run 'animaworks init' to generate defaults.",
                 gp_path,
             )
-        except SystemExit:
-            raise
+            raise SystemExit(
+                f"Fatal: permissions.global.json not found at {gp_path}. "
+                "Run 'animaworks init' to generate it."
+            )
         except Exception:
-            logger.exception("Failed to load permissions.global.json")
+            logger.critical("Failed to load permissions.global.json — server cannot start")
+            raise
 
         # ── WebSocket heartbeat (start first so dashboard is responsive) ──
         await app.state.ws_manager.start_heartbeat()
