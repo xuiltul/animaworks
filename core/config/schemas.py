@@ -480,7 +480,35 @@ class ActivityScheduleEntry(BaseModel):
         return self
 
 
-# ── Permissions Config ────────────────────────────────────────────────────────
+# ── Global Permissions Config ─────────────────────────────────────────────────
+
+
+class GlobalDenyPattern(BaseModel):
+    """A single deny pattern with regex and human-readable reason."""
+
+    pattern: str
+    reason: str
+
+
+class GlobalCommandsDeny(BaseModel):
+    """Global command deny configuration."""
+
+    deny: list[GlobalDenyPattern] = Field(default_factory=list)
+
+
+class GlobalPermissionsConfig(BaseModel):
+    """Global permissions loaded from permissions.global.json.
+
+    Applies to ALL Animas.  Loaded once at server startup, cached in memory.
+    Runtime modifications to the on-disk file are auto-reverted.
+    """
+
+    version: int = 1
+    injection_patterns: list[GlobalDenyPattern] = Field(default_factory=list)
+    commands: GlobalCommandsDeny = Field(default_factory=GlobalCommandsDeny)
+
+
+# ── Per-Anima Permissions Config ──────────────────────────────────────────────
 
 
 class CommandsPermission(BaseModel):
@@ -564,7 +592,7 @@ def _format_permissions_for_prompt(config: PermissionsConfig, anima_name: str) -
     else:
         lines.append(f"- File access limited to: {', '.join(config.file_roots)}")
     if config.commands.allow_all:
-        lines.append("- Commands: all allowed (hardcoded blocks still apply)")
+        lines.append("- Commands: all allowed (global permission blocks still apply)")
     else:
         if config.commands.allow:
             lines.append(f"- Allowed commands: {', '.join(config.commands.allow)}")

@@ -499,6 +499,14 @@ def _copy_infrastructure(data_dir: Path) -> None:
             shutil.copy2(models_json_src, models_json_dst)
             logger.info("Copied models.json template to %s", models_json_dst)
 
+    # Copy permissions.global.json from _shared/config_defaults/ to data_dir root
+    gp_src = TEMPLATES_DIR / "_shared" / "config_defaults" / "permissions.global.json"
+    if gp_src.is_file():
+        gp_dst = data_dir / "permissions.global.json"
+        if not gp_dst.exists():
+            shutil.copy2(gp_src, gp_dst)
+            logger.info("Copied permissions.global.json template to %s", gp_dst)
+
 
 def _legacy_copy_default_anima(data_dir: Path) -> None:
     """Legacy fallback: create a blank anima when auto-initialising for server."""
@@ -569,6 +577,14 @@ def merge_templates(data_dir: Path) -> list[str]:
         shutil.copy2(models_json_src, models_json_dst)
         added.append("models.json")
         logger.info("Merged models.json template to %s", models_json_dst)
+
+    # Copy permissions.global.json from _shared/config_defaults/ if missing
+    gp_src = TEMPLATES_DIR / "_shared" / "config_defaults" / "permissions.global.json"
+    gp_dst = data_dir / "permissions.global.json"
+    if gp_src.is_file() and not gp_dst.exists():
+        shutil.copy2(gp_src, gp_dst)
+        added.append("permissions.global.json")
+        logger.info("Merged permissions.global.json template to %s", gp_dst)
 
     # Ensure runtime-only directories exist
     _ensure_runtime_only_dirs(data_dir)

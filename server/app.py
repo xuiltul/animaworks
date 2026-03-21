@@ -221,6 +221,26 @@ async def _startup_animas_background(app: FastAPI) -> None:
 async def lifespan(app: FastAPI):
     # Only start anima processes when setup is complete
     if app.state.setup_complete:
+        # ── Global permissions cache ────────────────────────
+        from core.config.global_permissions import GlobalPermissionsCache
+        from core.paths import get_global_permissions_path
+
+        gp_cache = GlobalPermissionsCache.get()
+        gp_path = get_global_permissions_path()
+        try:
+            gp_cache.load(gp_path)
+        except FileNotFoundError:
+            logger.warning(
+                "permissions.global.json not found at %s — "
+                "command security patterns will not be enforced. "
+                "Run 'animaworks init' to generate defaults.",
+                gp_path,
+            )
+        except SystemExit:
+            raise
+        except Exception:
+            logger.exception("Failed to load permissions.global.json")
+
         # ── WebSocket heartbeat (start first so dashboard is responsive) ──
         await app.state.ws_manager.start_heartbeat()
 
@@ -307,6 +327,14 @@ async def lifespan(app: FastAPI):
             IntervalTrigger(hours=4),
             id="claude_auto_update",
             name="System: Claude CLI/SDK Auto-Update",
+            replace_existing=True,
+        )
+
+        msg_log_scheduler.add_job(
+            gp_cache.check_integrity,
+            IntervalTrigger(minutes=5),
+            id="global_permissions_integrity",
+            name="System: Global Permissions Integrity Check",
             replace_existing=True,
         )
 

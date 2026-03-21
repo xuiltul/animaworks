@@ -16,9 +16,10 @@ from typing import TYPE_CHECKING, Any
 from core.config.models import PermissionsConfig, load_permissions
 from core.i18n import t
 from core.tooling.handler_base import (
-    _BLOCKED_CMD_PATTERNS,
-    _INJECTION_RE,
     _error_result,
+    _get_blocked_patterns,
+    _get_injection_re,
+    _is_global_permissions_write_blocked,
     _is_protected_write,
 )
 
@@ -138,6 +139,14 @@ class PermissionsMixin:
         if self._superuser:
             return None
         resolved = Path(path).resolve()
+
+        if write:
+            gp_err = _is_global_permissions_write_blocked(resolved)
+            if gp_err:
+                logger.warning(
+                    "permission_denied anima=%s path=%s reason=global_permissions_protected", self._anima_name, path
+                )
+                return gp_err
 
         # Own anima_dir
         if resolved.is_relative_to(self._anima_dir.resolve()):
@@ -259,7 +268,8 @@ class PermissionsMixin:
             return _error_result("PermissionDenied", "Empty command")
 
         # Layer 1: Reject injection vectors
-        if _INJECTION_RE.search(command):
+        inj_re = _get_injection_re()
+        if inj_re and inj_re.search(command):
             logger.warning(
                 "permission_denied anima=%s command=%s reason=injection_pattern",
                 self._anima_name,
@@ -272,7 +282,7 @@ class PermissionsMixin:
             )
 
         # Layer 2: Dangerous command patterns
-        for pattern, reason in _BLOCKED_CMD_PATTERNS:
+        for pattern, reason in _get_blocked_patterns():
             if pattern.search(command):
                 logger.warning(
                     "permission_denied anima=%s command=%s reason=blocked_pattern(%s)",

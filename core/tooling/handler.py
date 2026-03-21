@@ -39,9 +39,7 @@ from core.tooling.dispatch import ExternalToolDispatcher
 
 # ── Re-export all handler_base symbols for backward compatibility ──
 from core.tooling.handler_base import (  # noqa: F401
-    _BLOCKED_CMD_PATTERNS,
     _EPISODE_FILENAME_RE,
-    _INJECTION_RE,
     _NEEDS_SHELL_RE,
     _PROTECTED_DIRS,
     _PROTECTED_FILES,
@@ -51,6 +49,8 @@ from core.tooling.handler_base import (  # noqa: F401
     ToolExecutionError,
     _error_result,
     _extract_first_heading,
+    _get_blocked_patterns,
+    _get_injection_re,
     _is_protected_write,
     _validate_episode_path,
     _validate_procedure_format,
