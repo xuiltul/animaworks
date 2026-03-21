@@ -11,10 +11,12 @@ let envData = {
   os_info: "",
 };
 let selectedProvider = "";
+let anthropicAuthMode = "api_key";
 let openaiAuthMode = "api_key";
 let apiKey = "";
 let apiKeyValid = null; // null = unchecked, true/false
 let codexLoginValid = null; // null = unchecked, true/false
+let codexDeviceLogin = null;
 let ollamaUrl = "http://localhost:11434";
 let selectedImageStyle = "realistic";
 let imageKeys = {
@@ -65,8 +67,11 @@ async function fetchEnvironment() {
 
 function render() {
   const provider = PROVIDERS.find((p) => p.id === selectedProvider);
+  const isAnthropic = selectedProvider === "anthropic";
   const isOpenAI = selectedProvider === "openai";
-  const needsKey = provider?.keyRequired && !(isOpenAI && openaiAuthMode === "codex_login");
+  const needsKey = provider?.keyRequired
+    && !(isOpenAI && openaiAuthMode === "codex_login")
+    && !(isAnthropic && anthropicAuthMode === "claude_code_login");
   const isOllama = selectedProvider === "ollama";
 
   container.innerHTML = `
@@ -92,6 +97,8 @@ function render() {
       <div class="provider-cards">
         ${renderProviders()}
       </div>
+      ${isAnthropic ? renderAnthropicAuthModes() : ""}
+      ${isAnthropic && anthropicAuthMode === "claude_code_login" ? renderClaudeCodeLoginInput() : ""}
       ${isOpenAI ? renderOpenAIAuthModes() : ""}
       ${isOpenAI && openaiAuthMode === "codex_login" ? renderCodexLoginInput() : ""}
       ${needsKey ? renderApiKeyInput() : ""}
@@ -174,6 +181,56 @@ function renderApiKeyInput() {
   `;
 }
 
+function renderAnthropicAuthModes() {
+  return `
+    <div class="api-key-section">
+      <label class="form-label" data-i18n="env.anthropic.auth.title">${t("env.anthropic.auth.title")}</label>
+      <div class="provider-cards">
+        <div class="provider-card${anthropicAuthMode === "api_key" ? " selected" : ""}" data-anthropic-auth="api_key">
+          <div class="provider-radio"></div>
+          <div>
+            <div class="provider-name" data-i18n="env.anthropic.auth.api_key">${t("env.anthropic.auth.api_key")}</div>
+            <div class="provider-desc" data-i18n="env.anthropic.auth.api_key.desc">${t("env.anthropic.auth.api_key.desc")}</div>
+          </div>
+        </div>
+        <div class="provider-card${anthropicAuthMode === "claude_code_login" ? " selected" : ""}" data-anthropic-auth="claude_code_login">
+          <div class="provider-radio"></div>
+          <div>
+            <div class="provider-name" data-i18n="env.anthropic.auth.subscription">${t("env.anthropic.auth.subscription")}</div>
+            <div class="provider-desc" data-i18n="env.anthropic.auth.subscription.desc">${t("env.anthropic.auth.subscription.desc")}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderClaudeCodeLoginInput() {
+  let statusMessage = "";
+  let statusClass = "checking";
+
+  if (envData.claude_code_available) {
+    statusMessage = t("env.anthropic.status.ready");
+    statusClass = "valid";
+  } else {
+    statusMessage = t("env.anthropic.status.not_installed");
+    statusClass = "invalid";
+  }
+
+  return `
+    <div class="api-key-section">
+      <label class="form-label" data-i18n="env.anthropic.auth.subscription">${t("env.anthropic.auth.subscription")}</label>
+      <div class="api-key-row">
+        <div class="api-key-input" style="display:flex;align-items:center;">
+          ${statusMessage}
+        </div>
+        <button class="btn-validate" id="btnValidateClaudeCode" data-i18n="btn.validate">${t("btn.validate")}</button>
+      </div>
+      <div id="claudeCodeLoginStatus">${statusMessage ? `<div class="validation-status ${statusClass}">${statusClass === "valid" ? "\u2713" : "\u2717"} ${statusMessage}</div>` : ""}</div>
+    </div>
+  `;
+}
+
 function renderOpenAIAuthModes() {
   return `
     <div class="api-key-section">
@@ -221,8 +278,30 @@ function renderCodexLoginInput() {
           ${statusMessage}
         </div>
         <button class="btn-validate" id="btnValidateCodexLogin" data-i18n="btn.validate">${t("btn.validate")}</button>
+        <button class="btn-validate" id="btnStartCodexBrowserLogin" data-i18n="btn.browser_login">${t("btn.browser_login")}</button>
       </div>
       <div id="codexLoginStatus">${statusMessage ? `<div class="validation-status ${statusClass}">${statusClass === "valid" ? "\u2713" : "\u2717"} ${statusMessage}</div>` : ""}</div>
+      <div id="codexDeviceLoginInfo">${renderCodexDeviceLoginInfo()}</div>
+    </div>
+  `;
+}
+
+function renderCodexDeviceLoginInfo() {
+  if (!codexDeviceLogin) return "";
+  if (codexDeviceLogin.already_logged_in) {
+    return `<div class="validation-status valid">\u2713 ${escapeHtml(codexDeviceLogin.message || t("env.codex.status.ready"))}</div>`;
+  }
+  if (!codexDeviceLogin.ok) {
+    return `<div class="validation-status invalid">\u2717 ${escapeHtml(codexDeviceLogin.message || t("env.codex.browser.failed"))}</div>`;
+  }
+
+  const loginUrl = escapeHtml(codexDeviceLogin.login_url || "");
+  const deviceCode = escapeHtml(codexDeviceLogin.device_code || "");
+  return `
+    <div class="validation-status checking">${t("env.codex.browser.instructions")}</div>
+    <div style="margin-top:8px;font-size:0.9rem;">
+      <div><strong>${t("env.codex.browser.url")}</strong> <a href="${loginUrl}" target="_blank" rel="noopener noreferrer">${loginUrl}</a></div>
+      <div style="margin-top:4px;"><strong>${t("env.codex.browser.code")}</strong> <code>${deviceCode}</code></div>
     </div>
   `;
 }
@@ -293,13 +372,25 @@ function bindEvents() {
   // Provider selection
   container.querySelectorAll(".provider-card").forEach((card) => {
     card.addEventListener("click", () => {
-      if (card.dataset.openaiAuth) return;
+      if (card.dataset.openaiAuth || card.dataset.anthropicAuth) return;
       selectedProvider = card.dataset.provider;
       apiKeyValid = null;
       codexLoginValid = null;
+      codexDeviceLogin = null;
+      if (selectedProvider === "anthropic") {
+        anthropicAuthMode = envData.claude_code_available ? "claude_code_login" : "api_key";
+      }
       if (selectedProvider === "openai") {
         openaiAuthMode = envData.codex_login_available ? "codex_login" : "api_key";
       }
+      render();
+    });
+  });
+
+  container.querySelectorAll("[data-anthropic-auth]").forEach((card) => {
+    card.addEventListener("click", () => {
+      anthropicAuthMode = card.dataset.anthropicAuth;
+      apiKeyValid = null;
       render();
     });
   });
@@ -309,6 +400,7 @@ function bindEvents() {
       openaiAuthMode = card.dataset.openaiAuth;
       apiKeyValid = null;
       codexLoginValid = null;
+      codexDeviceLogin = null;
       render();
     });
   });
@@ -319,9 +411,19 @@ function bindEvents() {
     validateBtn.addEventListener("click", () => validateApiKey());
   }
 
+  const validateClaudeCodeBtn = container.querySelector("#btnValidateClaudeCode");
+  if (validateClaudeCodeBtn) {
+    validateClaudeCodeBtn.addEventListener("click", () => validateClaudeCodeLogin());
+  }
+
   const validateCodexBtn = container.querySelector("#btnValidateCodexLogin");
   if (validateCodexBtn) {
     validateCodexBtn.addEventListener("click", () => validateCodexLogin());
+  }
+
+  const startCodexLoginBtn = container.querySelector("#btnStartCodexBrowserLogin");
+  if (startCodexLoginBtn) {
+    startCodexLoginBtn.addEventListener("click", () => startCodexBrowserLogin());
   }
 
   const apiInput = container.querySelector("#apiKeyInput");
@@ -413,6 +515,53 @@ async function validateCodexLogin() {
   }
 }
 
+async function startCodexBrowserLogin() {
+  const infoEl = container.querySelector("#codexDeviceLoginInfo");
+  if (!infoEl) return;
+
+  infoEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
+
+  try {
+    const res = await fetch("/api/setup/codex/device-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await res.json();
+    codexDeviceLogin = data;
+    if (data.login_url) {
+      window.open(data.login_url, "_blank", "noopener,noreferrer");
+    }
+    infoEl.innerHTML = renderCodexDeviceLoginInfo();
+  } catch {
+    codexDeviceLogin = { ok: false, message: t("error.network") };
+    infoEl.innerHTML = renderCodexDeviceLoginInfo();
+  }
+}
+
+async function validateClaudeCodeLogin() {
+  const statusEl = container.querySelector("#claudeCodeLoginStatus");
+  if (!statusEl) return;
+
+  statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
+
+  try {
+    const res = await fetch("/api/setup/validate-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "anthropic", auth_mode: "claude_code_login" }),
+    });
+    const data = await res.json();
+
+    if (data.valid) {
+      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${data.message || t("env.anthropic.status.ready")}</div>`;
+    } else {
+      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.anthropic.status.not_installed")}</div>`;
+    }
+  } catch {
+    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
+  }
+}
+
 async function validateOllamaUrl() {
   const statusEl = container.querySelector("#ollamaStatus");
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
@@ -468,13 +617,22 @@ export function validateEnvironment() {
   }
 
   const provider = PROVIDERS.find((p) => p.id === selectedProvider);
+  if (selectedProvider === "anthropic" && anthropicAuthMode === "claude_code_login") {
+    if (!envData.claude_code_available) {
+      errorEl.innerHTML = `<div class="error-message">${t("error.claude_code_login_required")}</div>`;
+      return false;
+    }
+  }
   if (selectedProvider === "openai" && openaiAuthMode === "codex_login") {
     if (!(envData.codex_login_available || codexLoginValid === true)) {
       errorEl.innerHTML = `<div class="error-message">${t("error.codex_login_required")}</div>`;
       return false;
     }
   }
-  if (provider?.keyRequired && !(selectedProvider === "openai" && openaiAuthMode === "codex_login") && !apiKey.trim()) {
+  if (provider?.keyRequired
+    && !(selectedProvider === "openai" && openaiAuthMode === "codex_login")
+    && !(selectedProvider === "anthropic" && anthropicAuthMode === "claude_code_login")
+    && !apiKey.trim()) {
     errorEl.innerHTML = `<div class="error-message">${t("error.apikey_required")}</div>`;
     return false;
   }
@@ -484,9 +642,12 @@ export function validateEnvironment() {
 }
 
 export function getEnvironmentData() {
+  const authMode = selectedProvider === "openai" ? openaiAuthMode
+    : selectedProvider === "anthropic" ? anthropicAuthMode
+    : "api_key";
   return {
     provider: selectedProvider,
-    auth_mode: selectedProvider === "openai" ? openaiAuthMode : "api_key",
+    auth_mode: authMode,
     api_key: apiKey || undefined,
     ollama_url: selectedProvider === "ollama" ? ollamaUrl : undefined,
     image_style: selectedImageStyle,
@@ -500,4 +661,8 @@ export function getEnvironmentData() {
 
 function escapeAttr(s) {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeHtml(s) {
+  return escapeAttr(String(s));
 }

@@ -206,12 +206,17 @@ def _run(args: argparse.Namespace) -> None:
     print(f"Loaded style reference: {style_fullbody} ({len(vibe_image):,} bytes)")
 
     # ── Run pipeline ──
-    from core.config.models import ImageGenConfig
+    from core.config.models import ImageGenConfig, load_config
     from core.tools.image_gen import ImageGenPipeline
+
+    try:
+        image_config = load_config().image_gen.model_copy(update={"image_style": image_style})
+    except Exception:
+        image_config = ImageGenConfig(image_style=image_style)
 
     pipeline = ImageGenPipeline(
         target_dir,
-        config=ImageGenConfig(image_style=image_style),
+        config=image_config,
     )
 
     def _progress(step: str, status: str, pct: int) -> None:

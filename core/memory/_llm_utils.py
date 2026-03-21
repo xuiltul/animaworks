@@ -84,22 +84,49 @@ def get_consolidation_llm_kwargs() -> dict[str, Any]:
     Returns:
         Dict with at least "model" key; "api_key" included when resolved.
     """
-    ensure_credentials_in_env()
+    return get_llm_kwargs_for_model("")
 
-    from core.config import load_config
 
-    cfg = load_config()
-    model = cfg.consolidation.llm_model
-    kwargs: dict[str, Any] = {"model": model}
+def _get_provider_for_model(model: str) -> str:
+    if not model or "/" not in model:
+        return ""
+    return model.split("/", 1)[0].lower()
 
-    parts = model.split("/", 1)
-    provider = parts[0].lower() if parts else ""
+
+def _get_api_key_for_provider(cfg: Any, provider: str) -> str | None:
     cred = cfg.credentials.get(provider) if provider else None
     api_key = cred.api_key if cred else None
     if not api_key and provider:
         env_key = _PROVIDER_ENV_MAP.get(provider)
         if env_key:
             api_key = os.environ.get(env_key) or None
+    return api_key
+
+
+def get_llm_kwargs_for_model(model: str) -> dict[str, Any]:
+    """Resolve LiteLLM kwargs for the requested model or the consolidation default."""
+    ensure_credentials_in_env()
+
+    from core.config import load_config
+
+    cfg = load_config()
+    resolved_model = model or cfg.consolidation.llm_model
+    kwargs: dict[str, Any] = {"model": resolved_model}
+
+    provider = _get_provider_for_model(resolved_model)
+    cred = cfg.credentials.get(provider) if provider else None
+
+    if provider == "ollama":
+        base_url = None
+        if cred and cred.base_url:
+            base_url = cred.base_url
+        elif getattr(cfg, "local_llm", None):
+            base_url = getattr(cfg.local_llm, "base_url", None)
+        if base_url:
+            kwargs["api_base"] = base_url
+        return kwargs
+
+    api_key = _get_api_key_for_provider(cfg, provider)
     if api_key:
         kwargs["api_key"] = api_key
     if cred and cred.base_url:
@@ -114,6 +141,11 @@ def get_consolidation_llm_kwargs() -> dict[str, Any]:
 def _is_anthropic_model(model: str) -> bool:
     """Return True if *model* is an Anthropic Claude model (any provider prefix)."""
     return bool(_ANTHROPIC_MODEL_RE.match(model))
+
+
+def _is_codex_model(model: str) -> bool:
+    """Return True if *model* is a Codex model routed via the Codex CLI."""
+    return model.startswith("codex/")
 
 
 def _strip_provider_prefix(model: str) -> str:
@@ -273,6 +305,60 @@ async def _try_agent_sdk(
     return "".join(chunks) or None
 
 
+async def _try_codex_sdk(
+    prompt: str,
+    *,
+    system_prompt: str,
+    model: str,
+    max_tokens: int,
+    llm_kwargs: dict[str, Any],
+) -> str | None:
+    """Attempt one-shot completion via Codex SDK."""
+    del max_tokens
+
+    try:
+        from openai_codex_sdk import Codex
+    except ImportError:
+        logger.debug("Codex SDK not available for one-shot fallback")
+        return None
+
+    from core.execution.codex_sdk import _default_path_env, _resolve_codex_model
+    from core.platform.codex import default_home_dir, get_codex_executable
+
+    env: dict[str, str] = {
+        "PATH": _default_path_env(),
+        "HOME": default_home_dir(),
+    }
+    if llm_kwargs.get("api_key"):
+        env["OPENAI_API_KEY"] = str(llm_kwargs["api_key"])
+    if llm_kwargs.get("api_base"):
+        env["OPENAI_BASE_URL"] = str(llm_kwargs["api_base"])
+
+    options: dict[str, Any] = {"env": env}
+    executable = get_codex_executable()
+    if executable:
+        options["codexPathOverride"] = executable
+
+    try:
+        client = Codex(options)
+        thread = client.start_thread(
+            {
+                "model": _resolve_codex_model(model),
+                "sandboxMode": "read-only",
+                "approvalPolicy": "never",
+                "skipGitRepoCheck": True,
+                "workingDirectory": os.getcwd(),
+                "networkAccessEnabled": False,
+            }
+        )
+        full_prompt = prompt if not system_prompt else f"{system_prompt}\n\nUser request:\n{prompt}"
+        turn = await thread.run(full_prompt)
+        return getattr(turn, "final_response", None) or None
+    except Exception as e:
+        logger.warning("Codex SDK one-shot failed: %s", e)
+        return None
+
+
 async def one_shot_completion(
     prompt: str,
     *,
@@ -296,8 +382,8 @@ async def one_shot_completion(
     Returns:
         Generated text, or None if all backends fail.
     """
-    llm_kwargs = get_consolidation_llm_kwargs()
-    resolved_model = model or llm_kwargs["model"]
+    llm_kwargs = get_llm_kwargs_for_model(model)
+    resolved_model = llm_kwargs["model"]
 
     # 1. Try LiteLLM
     try:
@@ -324,5 +410,17 @@ async def one_shot_completion(
             )
         except Exception as e:
             logger.warning("Agent SDK one-shot fallback also failed: %s", e)
+
+    if _is_codex_model(resolved_model):
+        try:
+            return await _try_codex_sdk(
+                prompt,
+                system_prompt=system_prompt,
+                model=resolved_model,
+                max_tokens=max_tokens,
+                llm_kwargs=llm_kwargs,
+            )
+        except Exception as e:
+            logger.warning("Codex SDK one-shot fallback also failed: %s", e)
 
     return None

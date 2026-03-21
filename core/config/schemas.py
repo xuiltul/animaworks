@@ -247,6 +247,7 @@ class ConsolidationConfig(BaseModel):
 class ImageGenConfig(BaseModel):
     """Configuration for image generation and style consistency."""
 
+    backend: Literal["api", "diffusers"] = "api"
     image_style: Literal["anime", "realistic"] = "realistic"
     style_reference: str | None = None  # Path to organization-wide style reference image
     style_prefix: str = ""  # Common style tags prepended to character prompt
@@ -255,6 +256,13 @@ class ImageGenConfig(BaseModel):
     vibe_strength: float = 0.6  # Vibe Transfer strength (0.0-1.0)
     vibe_info_extracted: float = 0.8  # Vibe Transfer information extraction (0.0-1.0)
     enable_3d: bool = True  # Enable 3D model generation (Meshy API)
+    diffusers_text2img_model: str = "auto"
+    diffusers_img2img_model: str = "auto"
+    diffusers_device: Literal["auto", "cuda", "cpu"] = "auto"
+    diffusers_torch_dtype: Literal["auto", "float16", "float32", "bfloat16"] = "auto"
+    diffusers_local_files_only: bool = True
+    diffusers_num_inference_steps: int = 28
+    diffusers_img2img_strength: float = 0.55
 
 
 class NotificationChannelConfig(BaseModel):

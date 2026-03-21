@@ -27,6 +27,7 @@ from .constants import (
     NOVELAI_ENCODE_URL,
     NOVELAI_MODEL,
 )
+from .diffusers_local import LocalDiffusersClient
 from .fal import FalTextToImageClient, FluxKontextClient
 from .meshy import MeshyClient
 from .novelai import NovelAIClient
@@ -68,6 +69,7 @@ __all__ = [
     "_RETRYABLE_CODES",
     "_retry",
     "_image_to_data_uri",
+    "LocalDiffusersClient",
     "NovelAIClient",
     "FluxKontextClient",
     "FalTextToImageClient",

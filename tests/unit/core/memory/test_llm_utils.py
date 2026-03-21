@@ -78,6 +78,18 @@ class TestGetConsolidationLlmKwargs:
         assert result["model"] == "anthropic/claude-sonnet-4-6"
         assert "api_key" not in result
 
+    def test_explicit_ollama_model_uses_local_base_url(self) -> None:
+        cfg = _make_config(llm_model="anthropic/claude-sonnet-4-6")
+        cfg.credentials = {"ollama": MagicMock(api_key="", base_url="http://127.0.0.1:11434")}
+        cfg.local_llm.base_url = "http://127.0.0.1:11434"
+
+        with patch("core.config.load_config", return_value=cfg):
+            result = llm_utils.get_llm_kwargs_for_model("ollama/qwen2.5-coder:14b")
+
+        assert result["model"] == "ollama/qwen2.5-coder:14b"
+        assert result["api_base"] == "http://127.0.0.1:11434"
+        assert "api_key" not in result
+
 
 # ── ensure_credentials_in_env ─────────────────────────────────────────────────
 
@@ -224,7 +236,7 @@ class TestOneShotCompletion:
         assert messages[1] == {"role": "user", "content": "user prompt"}
 
     @pytest.mark.asyncio
-    @patch("core.memory._llm_utils.get_consolidation_llm_kwargs")
+    @patch("core.memory._llm_utils.get_llm_kwargs_for_model")
     @patch("core.memory._llm_utils._try_agent_sdk")
     @patch("core.memory._llm_utils._try_litellm")
     async def test_default_model_from_config(
@@ -233,7 +245,7 @@ class TestOneShotCompletion:
         mock_try_agent_sdk: MagicMock,
         mock_get_kwargs: MagicMock,
     ) -> None:
-        """When model='' (default), model is resolved from get_consolidation_llm_kwargs()."""
+        """When model='' (default), model is resolved from get_llm_kwargs_for_model()."""
         mock_get_kwargs.return_value = {"model": "anthropic/claude-sonnet-4-6"}
         mock_try_litellm.return_value = "ok"
 
@@ -263,6 +275,26 @@ class TestOneShotCompletion:
         assert result is None
         mock_try_litellm.assert_called_once()
         mock_try_agent_sdk.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("core.memory._llm_utils.get_llm_kwargs_for_model")
+    @patch("core.memory._llm_utils._try_codex_sdk")
+    @patch("core.memory._llm_utils._try_litellm")
+    async def test_codex_model_falls_back_to_codex_sdk(
+        self,
+        mock_try_litellm: MagicMock,
+        mock_try_codex_sdk: MagicMock,
+        mock_get_kwargs: MagicMock,
+    ) -> None:
+        mock_get_kwargs.return_value = {"model": "codex/gpt-5.4-mini"}
+        mock_try_litellm.side_effect = RuntimeError("LiteLLM failed")
+        mock_try_codex_sdk.return_value = "Codex fallback text"
+
+        result = await llm_utils.one_shot_completion("Hi", model="codex/gpt-5.4-mini")
+
+        assert result == "Codex fallback text"
+        mock_try_litellm.assert_called_once()
+        mock_try_codex_sdk.assert_called_once()
 
 
 class TestIsAnthropicModel:

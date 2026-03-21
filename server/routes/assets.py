@@ -99,6 +99,27 @@ def _next_preview_counter(assets_dir: Path, is_realistic: bool) -> int:
     return len(existing) + 1
 
 
+def _effective_image_config(*, image_style: str | None = None, enable_3d: bool | None = None):
+    """Load image generation config and apply per-request overrides."""
+    from core.config.models import ImageGenConfig, load_config
+
+    try:
+        base_config = load_config().image_gen
+        updates: dict[str, object] = {}
+        if image_style is not None:
+            updates["image_style"] = image_style
+        if enable_3d is not None:
+            updates["enable_3d"] = enable_3d
+        return base_config.model_copy(update=updates)
+    except Exception:
+        kwargs: dict[str, object] = {}
+        if image_style is not None:
+            kwargs["image_style"] = image_style
+        if enable_3d is not None:
+            kwargs["enable_3d"] = enable_3d
+        return ImageGenConfig(**kwargs)
+
+
 def create_assets_router() -> APIRouter:
     router = APIRouter()
 
@@ -357,12 +378,7 @@ def create_assets_router() -> APIRouter:
 
         pipeline_kwargs: dict = {}
         if body.image_style:
-            try:
-                from core.config.models import ImageGenConfig
-
-                pipeline_kwargs["config"] = ImageGenConfig(image_style=body.image_style)
-            except Exception:
-                pass
+            pipeline_kwargs["config"] = _effective_image_config(image_style=body.image_style)
 
         pipeline = ImageGenPipeline(anima_dir, **pipeline_kwargs)
 
@@ -431,13 +447,12 @@ def create_assets_router() -> APIRouter:
 
         reference_bytes = reference_path.read_bytes()
 
-        from core.config.models import ImageGenConfig
         from core.tools.image_gen import ImageGenPipeline
 
         style = body.image_style or "anime"
         pipeline = ImageGenPipeline(
             anima_dir,
-            config=ImageGenConfig(image_style=style),
+            config=_effective_image_config(image_style=style),
         )
 
         loop = asyncio.get_running_loop()
@@ -545,12 +560,11 @@ def create_assets_router() -> APIRouter:
                 shutil.copytree(assets_dir, backup_dir)
                 logger.info("Backup created: %s", backup_dir)
 
-        from core.config.models import ImageGenConfig
         from core.tools.image_gen import ImageGenPipeline
 
         pipeline = ImageGenPipeline(
             anima_dir,
-            config=ImageGenConfig(image_style=style or "realistic"),
+            config=_effective_image_config(image_style=style or "realistic"),
         )
 
         gen_kwargs: dict = {
@@ -690,12 +704,11 @@ def create_assets_router() -> APIRouter:
         else:
             remaining_steps = ["bustup", "chibi", "3d", "rigging", "animations"]
 
-        from core.config.models import ImageGenConfig
         from core.tools.image_gen import ImageGenPipeline
 
         pipeline = ImageGenPipeline(
             anima_dir,
-            config=ImageGenConfig(image_style=style or "realistic"),
+            config=_effective_image_config(image_style=style or "realistic"),
         )
 
         app = request.app

@@ -69,6 +69,7 @@ from core.tools._image_clients import (
     NOVELAI_MODEL,
     FalTextToImageClient,
     FluxKontextClient,
+    LocalDiffusersClient,
     MeshyClient,
     NovelAIClient,
     _image_to_data_uri,
@@ -139,6 +140,30 @@ def _looks_like_anime_prompt(prompt: str) -> bool:
     return len(tags & _ANIME_MARKER_TAGS) >= 3
 
 
+def _use_diffusers_backend(image_config: Any) -> bool:
+    return getattr(image_config, "backend", "api") == "diffusers"
+
+
+def _build_fullbody_client(image_config: Any) -> Any:
+    if _use_diffusers_backend(image_config):
+        return LocalDiffusersClient(image_config)
+    if getattr(image_config, "image_style", "anime") == "realistic":
+        if not os.environ.get("FAL_KEY"):
+            raise RuntimeError("FAL_KEY required for realistic image generation.")
+        return FalTextToImageClient()
+    if os.environ.get("NOVELAI_TOKEN"):
+        return NovelAIClient()
+    if os.environ.get("FAL_KEY"):
+        return FalTextToImageClient()
+    raise RuntimeError("No image generation backend configured. Enable Diffusers or set NOVELAI_TOKEN/FAL_KEY.")
+
+
+def _build_reference_client(image_config: Any) -> Any:
+    if _use_diffusers_backend(image_config):
+        return LocalDiffusersClient(image_config)
+    return FluxKontextClient()
+
+
 # ── Dispatch ──────────────────────────────────────────
 
 
@@ -194,10 +219,13 @@ def dispatch(tool_name: str, args: dict[str, Any]) -> Any:
         return result.to_dict()
 
     if tool_name == "generate_fullbody":
+        from core.config.models import load_config
+
         anima_dir = Path(args.pop("anima_dir", ""))
         assets_dir = anima_dir / "assets"
         assets_dir.mkdir(parents=True, exist_ok=True)
-        client = NovelAIClient()
+        image_config = load_config().image_gen
+        client = _build_fullbody_client(image_config)
         img = client.generate_fullbody(
             prompt=args["prompt"],
             negative_prompt=args.get("negative_prompt", ""),
@@ -210,12 +238,15 @@ def dispatch(tool_name: str, args: dict[str, Any]) -> Any:
         return {"path": str(out), "size": len(img)}
 
     if tool_name == "generate_bustup":
+        from core.config.models import load_config
+
         anima_dir = Path(args.pop("anima_dir", ""))
         assets_dir = anima_dir / "assets"
         ref_path = assets_dir / "avatar_fullbody.png"
         if not ref_path.exists():
             return {"error": "No full-body reference image found"}
-        client = FluxKontextClient()
+        image_config = load_config().image_gen
+        client = _build_reference_client(image_config)
         img = client.generate_from_reference(
             reference_image=ref_path.read_bytes(),
             prompt=args.get("prompt", _BUSTUP_PROMPT),
@@ -226,12 +257,15 @@ def dispatch(tool_name: str, args: dict[str, Any]) -> Any:
         return {"path": str(out), "size": len(img)}
 
     if tool_name == "generate_chibi":
+        from core.config.models import load_config
+
         anima_dir = Path(args.pop("anima_dir", ""))
         assets_dir = anima_dir / "assets"
         ref_path = assets_dir / "avatar_fullbody.png"
         if not ref_path.exists():
             return {"error": "No full-body reference image found"}
-        client = FluxKontextClient()
+        image_config = load_config().image_gen
+        client = _build_reference_client(image_config)
         img = client.generate_from_reference(
             reference_image=ref_path.read_bytes(),
             prompt=args.get("prompt", _CHIBI_PROMPT),

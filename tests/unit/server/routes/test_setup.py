@@ -314,6 +314,46 @@ class TestValidateKey:
         data = resp.json()
         assert data["valid"] is True
 
+    async def test_openai_codex_login_validation_not_ready(self):
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        with patch(
+            "server.routes.setup._validate_codex_login",
+            return_value={"valid": False, "message": "Codex login is not ready. Use browser login to sign in."},
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/setup/validate-key",
+                    json={"provider": "openai", "auth_mode": "codex_login"},
+                )
+
+        data = resp.json()
+        assert data["valid"] is False
+        assert "browser login" in data["message"].lower()
+
+    async def test_codex_device_login_endpoint(self):
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        payload = {
+            "ok": True,
+            "already_logged_in": False,
+            "message": "Use device code",
+            "login_url": "https://auth.openai.com/codex/device",
+            "device_code": "73U2-6NBJ3",
+        }
+
+        with patch("server.routes.setup.get_codex_device_login", return_value=payload):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post("/api/setup/codex/device-login")
+
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["ok"] is True
+        assert data["login_url"] == payload["login_url"]
+        assert data["device_code"] == payload["device_code"]
+
     async def test_ollama_no_key_needed(self):
         app = _make_test_app()
         transport = ASGITransport(app=app)

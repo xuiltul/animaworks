@@ -37,6 +37,13 @@ export function render(container) {
     </div>
 
     <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">${tl("setup.anthropic_auth", "Anthropic 認証", "Anthropic Auth")}</div>
+      <div class="card-body" id="anthropicAuthSettings">
+        <div class="loading-placeholder">${t("common.loading")}</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 1.5rem;">
       <div class="card-header">${t("setup.openai_auth")}</div>
       <div class="card-body" id="openaiAuthSettings">
         <div class="loading-placeholder">${t("common.loading")}</div>
@@ -60,6 +67,7 @@ export function render(container) {
 
   _loadChecklist();
   _loadConfig();
+  _loadAnthropicAuthSettings();
   _loadOpenAIAuthSettings();
   _loadLocalLLMSettings();
   _loadAuthSettings();
@@ -378,6 +386,128 @@ async function _loadAuthSettings() {
   }
 }
 
+// ── Anthropic Auth ────────────────────────
+
+async function _loadAnthropicAuthSettings() {
+  const el = document.getElementById("anthropicAuthSettings");
+  if (!el) return;
+
+  try {
+    const state = await api("/api/settings/anthropic-auth");
+    const modeLabel = state.auth_mode === "claude_code_login"
+      ? tl("setup.anthropic_auth_mode_subscription", "サブスクリプション認証", "Subscription Auth")
+      : tl("setup.anthropic_auth_mode_api", "APIキー", "API Key");
+
+    const runtimeBadges = [
+      {
+        label: tl("setup.anthropic_auth_env_key", "環境変数 ANTHROPIC_API_KEY", "Env ANTHROPIC_API_KEY"),
+        ok: !!state.env_api_key_configured,
+      },
+      {
+        label: tl("setup.anthropic_auth_claude_code", "Claude Code CLI", "Claude Code CLI"),
+        ok: !!state.claude_code_available,
+      },
+    ];
+
+    el.innerHTML = `
+      <div style="margin-bottom: 1rem;">
+        <strong>${tl("setup.anthropic_auth_current", "現在の認証方式", "Current auth mode")}:</strong>
+        <code>${escapeHtml(modeLabel)}</code>
+      </div>
+      <div style="margin-bottom: 1rem;">
+        <strong>${tl("setup.anthropic_auth_saved", "設定済み", "Saved")}:</strong>
+        <span>${state.config_present
+          ? tl("setup.anthropic_auth_saved_yes", "はい", "Yes")
+          : tl("setup.anthropic_auth_saved_no", "いいえ", "No")}</span>
+      </div>
+      <div style="display:grid; gap:0.5rem; margin-bottom: 1.25rem;">
+        ${runtimeBadges.map(item => `
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <span style="font-size:1.1rem;">${item.ok ? "\u2705" : "\u274C"}</span>
+            <span>${escapeHtml(item.label)}</span>
+          </div>
+        `).join("")}
+      </div>
+
+      <form id="anthropicAuthForm" style="display:flex; flex-direction:column; gap:0.75rem; max-width:420px;">
+        <label style="display:flex; flex-direction:column; gap:0.35rem;">
+          <span>${tl("setup.anthropic_auth_mode_label", "認証方式", "Auth mode")}</span>
+          <select id="anthropicAuthMode">
+            <option value="api_key"${state.auth_mode === "api_key" ? " selected" : ""}>${tl("setup.anthropic_auth_mode_api", "APIキー", "API Key")}</option>
+            <option value="claude_code_login"${state.auth_mode === "claude_code_login" ? " selected" : ""}>${tl("setup.anthropic_auth_mode_subscription", "サブスクリプション認証（Claude Pro/Max）", "Subscription Auth (Claude Pro/Max)")}</option>
+          </select>
+        </label>
+        <label id="anthropicApiKeyWrap" style="display:${state.auth_mode === "api_key" ? "flex" : "none"}; flex-direction:column; gap:0.35rem;">
+          <span>${tl("setup.anthropic_auth_api_key", "Anthropic APIキー", "Anthropic API Key")}</span>
+          <input type="password" id="anthropicApiKeyInput" placeholder="${tl("setup.anthropic_auth_api_key_placeholder", "sk-ant-...", "sk-ant-...")}">
+          <small style="color:var(--text-secondary, #666);">${tl("setup.anthropic_auth_api_key_hint", "既存の値を上書きする場合のみ入力", "Enter only to overwrite current value")}</small>
+        </label>
+        <div id="anthropicSubscriptionNote" style="display:${state.auth_mode === "claude_code_login" ? "block" : "none"}; color:var(--text-secondary, #666); font-size:0.85rem;">
+          ${tl("setup.anthropic_subscription_note", "Claude Code CLI のログイン状態を使って認証します。APIキーは不要です。", "Uses Claude Code CLI login for authentication. No API key required.")}
+        </div>
+        <div id="anthropicAuthResult" class="login-error hidden"></div>
+        <button type="submit" class="btn-login" style="width:auto;">${tl("setup.anthropic_auth_save", "Anthropic認証を保存", "Save Anthropic Auth")}</button>
+      </form>
+    `;
+
+    const modeEl = document.getElementById("anthropicAuthMode");
+    const apiKeyWrap = document.getElementById("anthropicApiKeyWrap");
+    const subNote = document.getElementById("anthropicSubscriptionNote");
+    modeEl?.addEventListener("change", () => {
+      if (apiKeyWrap) apiKeyWrap.style.display = modeEl.value === "api_key" ? "flex" : "none";
+      if (subNote) subNote.style.display = modeEl.value === "claude_code_login" ? "block" : "none";
+    });
+
+    const form = document.getElementById("anthropicAuthForm");
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const result = document.getElementById("anthropicAuthResult");
+      const authMode = document.getElementById("anthropicAuthMode").value;
+      const apiKey = document.getElementById("anthropicApiKeyInput")?.value || "";
+
+      if (authMode === "api_key" && !apiKey.trim()) {
+        result.style.color = "#ef4444";
+        result.textContent = tl("setup.anthropic_auth_api_key_required", "APIキーを入力してください", "Please enter an API key");
+        result.classList.remove("hidden");
+        return;
+      }
+
+      try {
+        // Save directly (PUT endpoint validates internally)
+        const saveRes = await fetch("/api/settings/anthropic-auth", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            auth_mode: authMode,
+            api_key: apiKey,
+          }),
+        });
+        const saveData = await saveRes.json();
+        if (!saveRes.ok) {
+          result.style.color = "#ef4444";
+          result.textContent = saveData.detail || tl("setup.anthropic_auth_save_failed", "保存に失敗しました", "Failed to save");
+          result.classList.remove("hidden");
+          return;
+        }
+
+        result.style.color = "#22c55e";
+        result.textContent = tl("setup.anthropic_auth_saved_success", "Anthropic認証設定を保存しました", "Anthropic auth settings saved");
+        result.classList.remove("hidden");
+        await _loadConfig();
+        await _loadChecklist();
+        await _loadAnthropicAuthSettings();
+      } catch {
+        result.style.color = "#ef4444";
+        result.textContent = t("setup.network_error");
+        result.classList.remove("hidden");
+      }
+    });
+  } catch {
+    el.innerHTML = `<div class="loading-placeholder">${tl("setup.anthropic_auth_fetch_failed", "Anthropic認証設定を取得できませんでした", "Failed to load Anthropic auth settings")}</div>`;
+  }
+}
+
 // ── OpenAI / Codex Auth ───────────────────
 
 async function _loadOpenAIAuthSettings() {
@@ -464,24 +594,7 @@ async function _loadOpenAIAuthSettings() {
       }
 
       try {
-        const validateRes = await fetch("/api/setup/validate-key", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({
-            provider: "openai",
-            auth_mode: authMode,
-            api_key: apiKey,
-          }),
-        });
-        const validateData = await validateRes.json();
-        if (!validateRes.ok || !validateData.valid) {
-          result.style.color = "#ef4444";
-          result.textContent = validateData.message || validateData.detail || t("setup.openai_auth_save_failed");
-          result.classList.remove("hidden");
-          return;
-        }
-
+        // Save directly (PUT endpoint validates internally)
         const saveRes = await fetch("/api/settings/openai-auth", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },

@@ -39,7 +39,7 @@ from core.execution.base import (
     ToolCallRecord,
     _truncate_for_record,
 )
-from core.platform.codex import default_home_dir
+from core.platform.codex import default_home_dir, get_codex_executable
 from core.memory.shortterm import ShortTermMemory
 from core.prompt.context import ContextTracker
 from core.schemas import ImageData, ModelConfig
@@ -99,10 +99,17 @@ def _default_home_dir() -> str:
 
 def _default_path_env() -> str:
     """Return a non-empty PATH fallback for Codex child processes."""
+    path_parts: list[str] = []
+    executable = get_codex_executable()
+    if executable:
+        path_parts.append(str(Path(executable).resolve().parent))
+
     existing = os.environ.get("PATH")
     if existing:
-        return existing
-    return str(Path(sys.executable).resolve().parent)
+        path_parts.append(existing)
+    else:
+        path_parts.append(str(Path(sys.executable).resolve().parent))
+    return os.pathsep.join(dict.fromkeys(part for part in path_parts if part))
 
 
 # ── Session (thread) ID persistence ──────────────────────────
@@ -440,6 +447,14 @@ class CodexSDKExecutor(BaseExecutor):
             "CODEX_HOME": str(self._codex_home),
             "HOME": _default_home_dir(),
         }
+        # Windows requires SYSTEMROOT for Winsock/TLS initialisation and
+        # TEMP/TMP for scratch files.  Without these the Codex CLI subprocess
+        # fails with OS error 10106 (WSAEPROVIDERFAILEDINIT).
+        if sys.platform == "win32":
+            for var in ("SYSTEMROOT", "TEMP", "TMP", "USERPROFILE", "APPDATA"):
+                val = os.environ.get(var)
+                if val:
+                    env[var] = val
         api_key = self._resolve_api_key()
         if api_key and _is_openai_api_key(api_key):
             env["OPENAI_API_KEY"] = api_key
@@ -448,8 +463,13 @@ class CodexSDKExecutor(BaseExecutor):
                 "Skipping non-OpenAI API key for Codex env (prefix=%s…); relying on cached ChatGPT auth",
                 api_key[:8],
             )
-        if self._model_config.api_base_url:
-            env["OPENAI_BASE_URL"] = self._model_config.api_base_url
+        # Only forward api_base_url when it is a genuine OpenAI-compatible
+        # endpoint.  The default credential may point to Ollama
+        # (127.0.0.1:11434) which must NOT be injected as OPENAI_BASE_URL
+        # — the Codex CLI uses model_provider in config.toml for routing.
+        base = self._model_config.api_base_url
+        if base and ":11434" not in base:
+            env["OPENAI_BASE_URL"] = base
         return env
 
     def _build_mcp_env(self) -> dict[str, str]:
@@ -563,6 +583,7 @@ class CodexSDKExecutor(BaseExecutor):
 
         config_toml = (
             f'model = "{esc(bare_model)}"\n'
+            f'model_provider = "openai"\n'
             f'model_instructions_file = "{esc(str(instructions_file))}"\n'
             f'developer_instructions = "{esc(self._CODEX_DEVELOPER_INSTRUCTIONS)}"\n'
             f'personality = "friendly"\n'
@@ -593,7 +614,12 @@ class CodexSDKExecutor(BaseExecutor):
         except ModuleNotFoundError as e:
             raise ImportError("openai_codex_sdk is required for Mode C (install openai-codex-sdk).") from e
 
-        client = Codex({"env": self._build_env()})
+        options: dict[str, Any] = {"env": self._build_env()}
+        executable = get_codex_executable()
+        if executable:
+            options["codexPathOverride"] = executable
+
+        client = Codex(options)
         _patch_codex_exec_stream_limit(client._exec)
         return client
 

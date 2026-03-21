@@ -19,6 +19,7 @@ from core.execution.codex_sdk import (
     CodexSDKExecutor,
     _clear_thread_id,
     _codex_item_tool_name,
+    _default_path_env,
     _default_home_dir,
     _extract_item_text,
     _extract_tool_records,
@@ -233,6 +234,28 @@ class TestExecutorInit:
         env = executor._build_mcp_env()
         assert "ANIMAWORKS_ANIMA_DIR" in env
         assert "PYTHONPATH" in env
+
+    def test_default_path_env_prepends_embedded_codex(self):
+        with (
+            patch("core.execution.codex_sdk.get_codex_executable", return_value=r"C:\Tools\codex.exe"),
+            patch.dict("os.environ", {"PATH": r"C:\Windows\System32"}, clear=True),
+        ):
+            value = _default_path_env()
+        assert value.startswith(r"C:\Tools")
+
+    def test_create_codex_client_passes_executable_override(self, executor):
+        fake_client = MagicMock()
+        fake_client._exec = MagicMock()
+
+        with (
+            patch("core.execution.codex_sdk.get_codex_executable", return_value=r"C:\Tools\codex.exe"),
+            patch("openai_codex_sdk.Codex", return_value=fake_client) as mock_codex,
+            patch("core.execution.codex_sdk._patch_codex_exec_stream_limit"),
+        ):
+            executor._create_codex_client()
+
+        options = mock_codex.call_args.args[0]
+        assert options["codexPathOverride"] == r"C:\Tools\codex.exe"
 
 
 # ── Config writing tests ─────────────────────────────────────

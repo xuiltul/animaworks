@@ -707,7 +707,11 @@ def _install_signal_diagnostics(anima_name: str) -> None:
         )
         sys.exit(128 + signum)
 
-    for sig in (_sig.SIGTERM, _sig.SIGINT, _sig.SIGHUP):
+    signal_names = ("SIGTERM", "SIGINT", "SIGHUP")
+    for name in signal_names:
+        sig = getattr(_sig, name, None)
+        if sig is None:
+            continue
         _sig.signal(sig, _handler)
 
 

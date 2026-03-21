@@ -77,9 +77,9 @@ export function populateConfirm(data) {
           <span class="confirm-key">${t("confirm.provider")}</span>
           <span class="confirm-value">${t(`env.provider.${provider}`) || provider}</span>
         </div>
-        ${provider === "openai" ? `<div class="confirm-row">
+        ${provider === "anthropic" || provider === "openai" ? `<div class="confirm-row">
           <span class="confirm-key">${t("confirm.auth")}</span>
-          <span class="confirm-value">${authMode === "codex_login" ? t("confirm.codex_login") : t("confirm.api_key")}</span>
+          <span class="confirm-value">${authMode === "claude_code_login" ? t("confirm.subscription") : authMode === "codex_login" ? t("confirm.codex_login") : t("confirm.api_key")}</span>
         </div>` : ""}
         <div class="confirm-row">
           <span class="confirm-key">${t("confirm.imagestyle")}</span>
@@ -126,9 +126,11 @@ export async function completeSetup(data) {
 
   // Add credentials from environment step
   const env = data.environment || {};
-  if (env.provider && (env.api_key || env.auth_mode === "codex_login")) {
+  if (env.provider && (env.api_key || env.auth_mode === "codex_login" || env.auth_mode === "claude_code_login")) {
     payload.credentials[env.provider] = {
-      type: env.auth_mode === "codex_login" ? "codex_login" : "api_key",
+      type: env.auth_mode === "codex_login" ? "codex_login"
+        : env.auth_mode === "claude_code_login" ? "claude_code_login"
+        : "api_key",
       ...(env.api_key ? { api_key: env.api_key } : {}),
     };
   }

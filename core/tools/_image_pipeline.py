@@ -21,6 +21,7 @@ from core.tools._image_clients import (
     _DEFAULT_ANIMATIONS,
     _EXPRESSION_GUIDANCE,
     _EXPRESSION_PROMPTS,
+    LocalDiffusersClient,
     _REALISTIC_EXPRESSION_GUIDANCE,
     _REALISTIC_EXPRESSION_PROMPTS,
 )
@@ -120,12 +121,45 @@ class ImageGenPipeline:
             return self.REALISTIC_ASSET_NAMES[key]
         return self.ASSET_NAMES[key]
 
+    @property
+    def _use_diffusers(self) -> bool:
+        return getattr(self._config, "backend", "api") == "diffusers"
+
     def _bustup_filename(self, expression: str) -> str:
         """Return bustup expression filename based on current style."""
         suffix = "_realistic" if self._is_realistic else ""
         if expression == "neutral":
             return f"avatar_bustup{suffix}.png"
         return f"avatar_bustup_{expression}{suffix}.png"
+
+    @staticmethod
+    def _append_prompt_clause(prompt: str, clause: str) -> str:
+        prompt = prompt.strip()
+        clause = clause.strip()
+        if not prompt:
+            return clause
+        if clause.lower() in prompt.lower():
+            return prompt
+        return f"{prompt}, {clause}"
+
+    def _enforce_single_subject(self, prompt: str, negative_prompt: str) -> tuple[str, str]:
+        """Bias realistic local generation toward one clearly isolated subject."""
+        if not self._use_diffusers or not self._is_realistic:
+            return prompt, negative_prompt
+
+        single_subject_clause = (
+            "solo, single subject, exactly one young woman, one person only, "
+            "subject alone, centered composition, no other people"
+        )
+        multi_person_negative = (
+            "multiple people, two women, two people, group photo, crowd, background people, "
+            "extra person, extra people, duplicate person, cloned person, side character, "
+            "background character, mirrored person, duplicate body, extra body, split image, "
+            "collage, double exposure, floating person, distant person"
+        )
+        prompt = self._append_prompt_clause(prompt, single_subject_clause)
+        negative_prompt = self._append_prompt_clause(negative_prompt, multi_person_negative)
+        return prompt, negative_prompt
 
     def generate_bustup_expression(
         self,
@@ -166,9 +200,12 @@ class ImageGenPipeline:
 
         self._assets_dir.mkdir(parents=True, exist_ok=True)
 
-        from core.tools.image_gen import FluxKontextClient
+        if self._use_diffusers:
+            kontext = LocalDiffusersClient(self._config)
+        else:
+            from core.tools.image_gen import FluxKontextClient
 
-        kontext = FluxKontextClient()
+            kontext = FluxKontextClient()
         if self._is_realistic:
             guidance = _REALISTIC_EXPRESSION_GUIDANCE.get(expression, 4.5)
         else:
@@ -221,12 +258,7 @@ class ImageGenPipeline:
         Returns:
             PipelineResult with paths and error info.
         """
-        from core.tools.image_gen import (
-            FalTextToImageClient,
-            FluxKontextClient,
-            MeshyClient,
-            NovelAIClient,
-        )
+        from core.tools.image_gen import FalTextToImageClient, FluxKontextClient, MeshyClient, NovelAIClient
 
         self._assets_dir.mkdir(parents=True, exist_ok=True)
         if steps:
@@ -257,7 +289,12 @@ class ImageGenPipeline:
             else:
                 try:
                     _notify("fullbody", "generating", 0)
-                    if self._is_realistic:
+                    if self._use_diffusers:
+                        logger.info("Step 1: Generating full-body with local Diffusers …")
+                        client: NovelAIClient | FalTextToImageClient | LocalDiffusersClient = LocalDiffusersClient(
+                            self._config,
+                        )
+                    elif self._is_realistic:
                         if not os.environ.get("FAL_KEY"):
                             raise RuntimeError("FAL_KEY required for realistic image generation.")
                         logger.info("Step 1: Generating realistic full-body with Fal Flux Pro …")
@@ -302,6 +339,11 @@ class ImageGenPipeline:
                             styled_negative += ", " + self._config.negative_prompt_extra
                         else:
                             styled_negative = self._config.negative_prompt_extra
+
+                    styled_prompt, styled_negative = self._enforce_single_subject(
+                        styled_prompt,
+                        styled_negative,
+                    )
 
                     fullbody_bytes = client.generate_fullbody(
                         prompt=styled_prompt,
@@ -399,8 +441,12 @@ class ImageGenPipeline:
             else:
                 try:
                     _notify("chibi", "generating", 0)
-                    logger.info("Step 3: Generating chibi with Flux Kontext …")
-                    kontext = FluxKontextClient()
+                    if self._use_diffusers:
+                        logger.info("Step 3: Generating chibi with local Diffusers …")
+                        kontext = LocalDiffusersClient(self._config)
+                    else:
+                        logger.info("Step 3: Generating chibi with Flux Kontext …")
+                        kontext = FluxKontextClient()
                     chibi_bytes = kontext.generate_from_reference(
                         reference_image=fullbody_bytes,
                         prompt=_CHIBI_PROMPT,

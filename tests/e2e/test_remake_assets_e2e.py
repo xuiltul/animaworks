@@ -20,6 +20,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 
+from core.config.models import ImageGenConfig
+
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -158,6 +160,39 @@ class TestRemakePreview:
         assert call_kwargs["seed"] == 42
         assert call_kwargs["vibe_strength"] == 0.7
         assert call_kwargs["vibe_image"] is not None  # style-ref bytes loaded
+
+    @patch("core.tools.image_gen.ImageGenPipeline")
+    @patch("core.config.load_config")
+    async def test_remake_preview_uses_global_image_backend(
+        self, mock_load_config, mock_pipeline_cls, tmp_path,
+    ):
+        animas_dir = tmp_path / "animas"
+        animas_dir.mkdir()
+
+        target_dir = _setup_anima_with_assets(
+            animas_dir, "target", with_prompt=True, with_fullbody=True,
+        )
+
+        mock_result = _make_pipeline_result(fullbody_path=target_dir / "assets" / "avatar_fullbody_realistic.png")
+        mock_pipeline = MagicMock()
+        mock_pipeline.generate_all.return_value = mock_result
+        mock_pipeline_cls.return_value = mock_pipeline
+        mock_load_config.return_value = MagicMock(
+            image_gen=ImageGenConfig(backend="diffusers", image_style="anime"),
+        )
+
+        app = _make_test_app(animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/target/assets/remake-preview",
+                json={"image_style": "realistic", "prompt": "portrait"},
+            )
+
+        assert resp.status_code == 200
+        config = mock_pipeline_cls.call_args.kwargs["config"]
+        assert config.backend == "diffusers"
+        assert config.image_style == "realistic"
 
     @patch("core.tools.image_gen.ImageGenPipeline")
     async def test_remake_preview_creates_backup(

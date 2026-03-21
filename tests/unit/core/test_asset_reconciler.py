@@ -322,6 +322,42 @@ class TestExtractPrompt:
             result = await _extract_prompt(anima_dir)
         assert result is None
 
+    def test_prompt_synthesis_model_prefers_local_llm(self, tmp_path: Path) -> None:
+        from core.asset_reconciler import _resolve_prompt_synthesis_model
+
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
+
+        cfg = MagicMock()
+        cfg.local_llm.default_model = "ollama/qwen2.5-coder:14b"
+        cfg.local_llm.base_url = "http://127.0.0.1:11434"
+        model_cfg = MagicMock(model="codex/gpt-5.4-mini")
+
+        with patch("core.config.models.load_config", return_value=cfg), patch(
+            "core.config.models.load_model_config", return_value=model_cfg
+        ):
+            result = _resolve_prompt_synthesis_model(anima_dir)
+
+        assert result == "ollama/qwen2.5-coder:14b"
+
+    def test_prompt_synthesis_model_falls_back_to_anima_model(self, tmp_path: Path) -> None:
+        from core.asset_reconciler import _resolve_prompt_synthesis_model
+
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
+
+        cfg = MagicMock()
+        cfg.local_llm.default_model = ""
+        cfg.local_llm.base_url = ""
+        model_cfg = MagicMock(model="codex/gpt-5.4-mini")
+
+        with patch("core.config.models.load_config", return_value=cfg), patch(
+            "core.config.models.load_model_config", return_value=model_cfg
+        ):
+            result = _resolve_prompt_synthesis_model(anima_dir)
+
+        assert result == "codex/gpt-5.4-mini"
+
 
 # ── reconcile_anima_assets ──────────────────────────────────────
 

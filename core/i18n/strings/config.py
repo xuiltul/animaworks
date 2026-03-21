@@ -192,6 +192,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Anthropic APIキー",
         "en": "Anthropic API key",
     },
+    "config.anthropic_auth": {
+        "ja": "Anthropic APIキー / サブスクリプション認証",
+        "en": "Anthropic API key / Subscription auth",
+    },
     "config.config_file": {
         "ja": "設定ファイル",
         "en": "Config file",

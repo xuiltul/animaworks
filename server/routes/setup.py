@@ -17,7 +17,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from core.platform.codex import is_codex_cli_available, is_codex_login_available
+from core.platform.codex import (
+    get_codex_device_login,
+    is_codex_cli_available,
+    is_codex_login_available,
+)
 
 logger = logging.getLogger("animaworks.routes.setup")
 
@@ -104,6 +108,14 @@ class SetupCompleteRequest(BaseModel):
     image_style: str = "realistic"
 
 
+class CodexDeviceLoginResponse(BaseModel):
+    ok: bool
+    already_logged_in: bool = False
+    message: str = ""
+    login_url: str | None = None
+    device_code: str | None = None
+
+
 # ── Router factory ─────────────────────────────────────────
 
 
@@ -119,7 +131,8 @@ def create_setup_router() -> APIRouter:
         from core.config import load_config
 
         config = load_config()
-        claude_available = shutil.which("claude") is not None
+        from core.platform.claude_code import is_claude_code_available
+        claude_available = is_claude_code_available()
         codex_available = is_codex_cli_available()
         codex_logged_in = is_codex_login_available()
 
@@ -153,6 +166,8 @@ def create_setup_router() -> APIRouter:
         api_key = body.api_key
 
         if provider == "anthropic":
+            if body.auth_mode == "claude_code_login":
+                return _validate_claude_code_login()
             return await _validate_anthropic_key(api_key)
         elif provider == "openai":
             if body.auth_mode == "codex_login":
@@ -164,6 +179,12 @@ def create_setup_router() -> APIRouter:
             return {"valid": True, "message": "Ollama does not require an API key"}
         else:
             return {"valid": False, "message": f"Unknown provider: {provider}"}
+
+    @router.post("/codex/device-login")
+    async def start_codex_device_login() -> dict[str, Any]:
+        """Return browser-based device auth instructions for Codex login."""
+        payload = get_codex_device_login()
+        return CodexDeviceLoginResponse.model_validate(payload).model_dump()
 
     # ── POST /api/setup/complete ───────────────────────────
 
@@ -188,12 +209,28 @@ def create_setup_router() -> APIRouter:
         config.locale = body.locale
 
         # Update credentials
+        anthropic_subscription = False
         for cred_name, cred_data in body.credentials.items():
-            config.credentials[cred_name] = CredentialConfig(
-                type=cred_data.get("type", "api_key"),
-                api_key=cred_data.get("api_key", ""),
-                base_url=cred_data.get("base_url"),
-            )
+            cred_type = cred_data.get("type", "api_key")
+            if cred_name == "anthropic" and cred_type == "claude_code_login":
+                anthropic_subscription = True
+                # Store credential with empty api_key (subscription auth)
+                config.credentials[cred_name] = CredentialConfig(
+                    type="claude_code_login",
+                    api_key="",
+                    base_url=cred_data.get("base_url"),
+                )
+            else:
+                config.credentials[cred_name] = CredentialConfig(
+                    type=cred_type,
+                    api_key=cred_data.get("api_key", ""),
+                    base_url=cred_data.get("base_url"),
+                )
+
+        # Set mode_s_auth default when using Anthropic subscription auth
+        if anthropic_subscription:
+            config.anima_defaults.mode_s_auth = "max"
+            logger.info("Set anima_defaults.mode_s_auth=max for Anthropic subscription auth")
 
         # Create anima if specified
         if body.anima:
@@ -408,8 +445,17 @@ def _validate_codex_login() -> dict[str, Any]:
     if not is_codex_cli_available():
         return {"valid": False, "message": "Codex CLI is not installed"}
     if not is_codex_login_available():
-        return {"valid": False, "message": "Run `codex login` first"}
+        return {"valid": False, "message": "Codex login is not ready. Use browser login to sign in."}
     return {"valid": True, "message": "Codex login is available"}
+
+
+def _validate_claude_code_login() -> dict[str, Any]:
+    """Validate that Claude Code CLI is installed for subscription auth."""
+    from core.platform.claude_code import is_claude_code_available
+
+    if not is_claude_code_available():
+        return {"valid": False, "message": "Claude Code CLI is not installed"}
+    return {"valid": True, "message": "Claude Code CLI is available for subscription auth"}
 
 
 async def _validate_google_key(api_key: str) -> dict[str, Any]:

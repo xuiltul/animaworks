@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 
+from core.config.models import ImageGenConfig
+
 
 def _make_test_app(animas_dir: Path | None = None):
     from fastapi import FastAPI
@@ -276,3 +278,38 @@ class TestGenerateAssets:
             )
         assert resp.status_code == 200
         assert resp.json()["status"] == "done"
+
+    @patch("core.tools.image_gen.ImageGenPipeline")
+    @patch("core.config.load_config")
+    async def test_generate_uses_global_image_backend(self, mock_load_config, mock_pipeline_cls, tmp_path):
+        anima_dir = tmp_path / "alice"
+        anima_dir.mkdir()
+
+        mock_result = MagicMock()
+        mock_result.fullbody_path = None
+        mock_result.bustup_path = None
+        mock_result.chibi_path = None
+        mock_result.model_path = None
+        mock_result.rigged_model_path = None
+        mock_result.animation_paths = {}
+        mock_result.errors = []
+        mock_result.to_dict.return_value = {"status": "done"}
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.generate_all.return_value = mock_result
+        mock_pipeline_cls.return_value = mock_pipeline
+
+        mock_load_config.return_value = MagicMock(image_gen=ImageGenConfig(backend="diffusers", image_style="anime"))
+
+        app = _make_test_app(animas_dir=tmp_path)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/alice/assets/generate",
+                json={"prompt": "anime girl", "image_style": "realistic"},
+            )
+
+        assert resp.status_code == 200
+        config = mock_pipeline_cls.call_args.kwargs["config"]
+        assert config.backend == "diffusers"
+        assert config.image_style == "realistic"

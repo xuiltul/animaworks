@@ -28,9 +28,15 @@ from core.config.models import (
 )
 from core.i18n import t
 from core.paths import get_animas_dir
+from core.platform.claude_code import is_claude_code_available
 from core.platform.codex import is_codex_cli_available, is_codex_login_available
 
 logger = logging.getLogger("animaworks.routes.config")
+
+
+class UpdateAnthropicAuthRequest(BaseModel):
+    auth_mode: str = "api_key"
+    api_key: str = ""
 
 
 class UpdateOpenAIAuthRequest(BaseModel):
@@ -89,6 +95,32 @@ def _serialize_openai_auth() -> dict[str, object]:
         "env_api_key_configured": env_api_key_configured,
         "codex_cli_available": codex_cli_available,
         "codex_login_available": codex_login_available,
+        "configured": configured,
+    }
+
+
+def _serialize_anthropic_auth() -> dict[str, object]:
+    """Return current Anthropic auth config and runtime availability."""
+    config = load_config()
+    credential = config.credentials.get("anthropic", CredentialConfig())
+    auth_mode = credential.type or "api_key"
+    config_present = "anthropic" in config.credentials
+    config_api_key_configured = bool(credential.api_key)
+    env_api_key_configured = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    claude_code_available = is_claude_code_available()
+
+    configured = False
+    if auth_mode == "claude_code_login":
+        configured = claude_code_available
+    elif auth_mode == "api_key":
+        configured = config_api_key_configured or env_api_key_configured
+
+    return {
+        "auth_mode": auth_mode,
+        "config_present": config_present,
+        "config_api_key_configured": config_api_key_configured,
+        "env_api_key_configured": env_api_key_configured,
+        "claude_code_available": claude_code_available,
         "configured": configured,
     }
 
@@ -185,8 +217,13 @@ def create_config_router() -> APIRouter:
                 if d.is_dir() and (d / "identity.md").exists():
                     animas_count += 1
 
-        # Check API keys from environment
-        has_anthropic = bool(os.environ.get("ANTHROPIC_API_KEY"))
+        # Check API keys / subscription auth
+        has_anthropic_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+        anthropic_cred = load_config().credentials.get("anthropic", CredentialConfig())
+        has_anthropic_subscription = (
+            anthropic_cred.type == "claude_code_login" and is_claude_code_available()
+        )
+        has_anthropic = has_anthropic_key or has_anthropic_subscription
         has_openai = bool(os.environ.get("OPENAI_API_KEY"))
         has_codex_login = is_codex_login_available()
         has_openai_auth = has_openai or has_codex_login
@@ -204,7 +241,7 @@ def create_config_router() -> APIRouter:
                     "detail": t("config.anima_count_detail", count=animas_count),
                 },
                 {"label": t("config.shared_dir"), "ok": shared_dir.exists()},
-                {"label": t("config.anthropic_api_key"), "ok": has_anthropic},
+                {"label": t("config.anthropic_auth"), "ok": has_anthropic},
                 {"label": t("config.openai_auth"), "ok": has_openai_auth},
                 {"label": t("config.google_api_key"), "ok": has_google},
                 {"label": t("config.init_complete"), "ok": initialized},
@@ -221,6 +258,11 @@ def create_config_router() -> APIRouter:
             "initialized": initialized,
         }
 
+    @router.get("/settings/anthropic-auth")
+    async def get_anthropic_auth(request: Request):
+        """Return current Anthropic auth mode and runtime availability."""
+        return _serialize_anthropic_auth()
+
     @router.get("/settings/openai-auth")
     async def get_openai_auth(request: Request):
         """Return current OpenAI auth mode and runtime availability."""
@@ -230,6 +272,41 @@ def create_config_router() -> APIRouter:
     async def get_local_llm(request: Request):
         """Return local Ollama-backed model settings and runtime availability."""
         return _serialize_local_llm()
+
+    @router.put("/settings/anthropic-auth")
+    async def update_anthropic_auth(body: UpdateAnthropicAuthRequest, request: Request):
+        """Persist Anthropic auth mode in config.json for the settings UI."""
+        auth_mode = body.auth_mode.strip()
+        if auth_mode not in ("api_key", "claude_code_login"):
+            raise HTTPException(status_code=400, detail="Invalid auth mode. Must be 'api_key' or 'claude_code_login'.")
+
+        config = load_config()
+        current = config.credentials.get("anthropic", CredentialConfig())
+
+        if auth_mode == "claude_code_login":
+            if not is_claude_code_available():
+                raise HTTPException(status_code=400, detail="Claude Code CLI is not installed.")
+            config.credentials["anthropic"] = CredentialConfig(
+                type="claude_code_login",
+                api_key="",
+                base_url=current.base_url,
+                keys=dict(current.keys),
+            )
+            config.anima_defaults.mode_s_auth = "max"
+            logger.info("Anthropic auth set to subscription (claude_code_login), mode_s_auth=max")
+        else:
+            api_key = body.api_key.strip()
+            if not api_key:
+                raise HTTPException(status_code=400, detail="API key is required for api_key mode.")
+            config.credentials["anthropic"] = CredentialConfig(
+                type="api_key",
+                api_key=api_key,
+                base_url=current.base_url,
+                keys=dict(current.keys),
+            )
+
+        save_config(config)
+        return _serialize_anthropic_auth()
 
     @router.put("/settings/openai-auth")
     async def update_openai_auth(body: UpdateOpenAIAuthRequest, request: Request):
