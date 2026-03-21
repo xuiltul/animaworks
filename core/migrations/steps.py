@@ -750,6 +750,60 @@ def step_task_delegation_to_common_knowledge(data_dir: Path, dry_run: bool, verb
     return StepResult(changed=total, skipped=0, details=details)
 
 
+def step_v060_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """v0.6.0: Full template resync + models.json update for Mode D/G.
+
+    Deploys Korean locale templates, meeting-room assets, and adds
+    cursor/* / gemini/* entries to existing models.json.
+    """
+    details: list[str] = []
+    total = 0
+
+    # Template resync
+    for resync_fn in (
+        step_common_knowledge_resync,
+        step_common_skills_resync,
+        step_reference_resync,
+        step_prompt_resync,
+        step_system_sections_resync,
+        step_tool_descriptions_resync,
+    ):
+        r = resync_fn(data_dir, dry_run, verbose)
+        total += r.changed
+        details.extend(r.details)
+
+    # models.json: inject cursor/* and gemini/* entries if absent
+    models_path = data_dir / "models.json"
+    if models_path.exists():
+        try:
+            raw: dict[str, Any] = json.loads(models_path.read_text(encoding="utf-8"))
+            new_entries = {
+                "cursor/*": {"mode": "D", "context_window": 1000000},
+                "gemini/*": {"mode": "G", "context_window": 1000000},
+            }
+            added: list[str] = []
+            for key, val in new_entries.items():
+                if key not in raw:
+                    if not dry_run:
+                        raw[key] = val
+                    added.append(key)
+
+            if added:
+                if not dry_run:
+                    models_path.write_text(
+                        json.dumps(raw, indent=2, ensure_ascii=False) + "\n",
+                        encoding="utf-8",
+                    )
+                details.append(f"Added models.json entries: {', '.join(added)}")
+                total += len(added)
+            else:
+                details.append("models.json already has cursor/*/gemini/* entries")
+        except Exception as exc:
+            details.append(f"models.json update skipped: {exc}")
+
+    return StepResult(changed=total, skipped=0, details=details)
+
+
 # ── Category 5: Version tracking ────────────────────────────────
 
 
@@ -818,6 +872,12 @@ def register_all_steps(runner: Any) -> None:
             "Move task_delegation_rules to common_knowledge",
             "template_sync",
             step_task_delegation_to_common_knowledge,
+        ),
+        MigrationStep(
+            "v060_resync",
+            "v0.6.0: Full template resync + Mode D/G models.json",
+            "template_sync",
+            step_v060_resync,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

@@ -7,6 +7,57 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-21
+
+### Added
+
+#### New Execution Engines
+- Mode D (Cursor Agent) execution engine — Cursor Agent CLI subprocess with MCP integration agent loop
+- Mode D session continuity via `cursor-agent --resume` for cross-turn context preservation
+- Mode D system prompt optimization with A+C hybrid turn rotation
+- Mode G (Gemini CLI) execution engine — Gemini CLI subprocess with stream-JSON parse
+- 6 execution modes (S/C/D/G/A/B) supported across docs, setup wizard, and settings UI (#139)
+
+#### Meeting & Communication
+- Meeting Room mode for multi-Anima conferences with facilitator-driven discussion
+- block communication tools during meetings and add context summarization (#130)
+- message quality protocol for Anima-to-Anima communication — structured format, noise reduction (#137)
+- stream activity report generation via SSE
+
+#### Security & Permissions
+- `permissions.global.json` — unified global command security config with startup verification
+- Mode S `bypassPermissions` — full built-in tool access without explicit allowed_tools list
+
+#### Planning & Monitoring
+- `todo_write` session-scoped planning tool for Mode A agents
+- cron health check with `cron.md` parse validation and periodic monitoring
+- heartbeat quality improvement — observe evidence requirements, plan-outcome tracking, OK gate
+
+#### Platform & i18n
+- Korean locale (ko) — full i18n support including prompt templates, common_knowledge, common_skills, reference docs, and web UI strings (#124)
+- Windows-native supervisor support (#136)
+- Codex login support in setup wizard and settings
+
+#### Other
+- migration step for task_delegation_rules → common_knowledge move
+- token usage pricing correction and cache token tracking across all execution paths
+
+### Fixed
+- prevent restart helper from being killed by process scanner during shutdown
+- prevent activity log bloat from unbounded `tool_result` content
+- prevent `delegate_task` dual-trigger duplicate execution (#129)
+- clarify `submit_tasks` vs `delegate_task` tool descriptions to prevent misuse
+- enable real-time streaming for meeting mode chat bubbles
+- eliminate false positives in global permissions deny patterns
+- copy auth credentials and settings to Gemini CLI per-Anima workspace
+- map `message:*` trigger to chat session type for Mode D resume
+- add None guard to SDK stream cache token accumulation
+
+### Changed
+- move task_delegation_rules to common_knowledge and unify access
+- loopback host validation and i18n error messages
+
+
 ## [0.5.5] - 2026-03-18
 
 ### Added
@@ -1140,8 +1191,8 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.5.5...HEAD
-[0.5.5]: https://github.com/xuiltul/animaworks/compare/v0.5.4...v0.5.5
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/xuiltul/animaworks/compare/v0.5.5...v0.6.0
 [0.4.3]: https://github.com/xuiltul/animaworks/compare/v0.4.2...v0.4.3
 [0.4.0]: https://github.com/xuiltul/animaworks/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/xuiltul/animaworks/compare/v0.3.0...v0.3.1
