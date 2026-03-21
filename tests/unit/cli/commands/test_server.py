@@ -471,6 +471,8 @@ class TestCmdStop:
 
 
 class TestCmdRestart:
+    @patch("cli.commands.server._get_daemon_log_path", return_value=Path("/tmp/daemon.log"))
+    @patch("cli.commands.server._is_port_listening", return_value=True)
     @patch("cli.commands.server._clear_pycache", return_value=0)
     @patch("cli.commands.server._stop_server", return_value=True)
     @patch("cli.commands.server._spawn_restart_helper", return_value=99999)
@@ -483,6 +485,8 @@ class TestCmdRestart:
         mock_helper,
         mock_stop,
         mock_clear,
+        mock_port,
+        mock_log,
         capsys,
     ):
         from cli.commands.server import cmd_restart
@@ -495,6 +499,8 @@ class TestCmdRestart:
         out = capsys.readouterr().out
         assert "99999" in out
 
+    @patch("cli.commands.server._get_daemon_log_path", return_value=Path("/tmp/daemon.log"))
+    @patch("cli.commands.server._is_port_listening", return_value=True)
     @patch("cli.commands.server._clear_pycache", return_value=0)
     @patch("cli.commands.server._stop_server", return_value=True)
     @patch("cli.commands.server._spawn_restart_helper", return_value=99999)
@@ -507,6 +513,8 @@ class TestCmdRestart:
         mock_helper,
         mock_stop,
         mock_clear,
+        mock_port,
+        mock_log,
     ):
         from cli.commands.server import cmd_restart
 
@@ -515,6 +523,8 @@ class TestCmdRestart:
 
         mock_stop.assert_called_once_with(force=True, extra_exclude_pids={99999})
 
+    @patch("cli.commands.server._get_daemon_log_path", return_value=Path("/tmp/daemon.log"))
+    @patch("cli.commands.server._is_port_listening", return_value=True)
     @patch("cli.commands.server._clear_pycache", return_value=0)
     @patch("cli.commands.server._stop_server", return_value=True)
     @patch("cli.commands.server._spawn_restart_helper", return_value=99999)
@@ -529,6 +539,8 @@ class TestCmdRestart:
         mock_helper,
         mock_stop,
         mock_clear,
+        mock_port,
+        mock_log,
     ):
         """When PID exists but process is dead, falls back to process scan."""
         from cli.commands.server import cmd_restart
@@ -539,12 +551,16 @@ class TestCmdRestart:
         mock_find.assert_called_once()
         mock_helper.assert_called_once_with(args, None)
 
+    @patch("cli.commands.server._get_daemon_log_path", return_value=Path("/tmp/daemon.log"))
+    @patch("cli.commands.server._is_port_listening", return_value=True)
     @patch("cli.commands.server._clear_pycache", return_value=0)
     @patch("cli.commands.server._stop_server", return_value=True)
     @patch("cli.commands.server._spawn_restart_helper", return_value=99999)
     @patch("cli.commands.server._find_server_pid_by_process", return_value=None)
     @patch("cli.commands.server._read_pid", return_value=None)
-    def test_restart_no_pid_no_process(self, mock_pid, mock_find, mock_helper, mock_stop, mock_clear):
+    def test_restart_no_pid_no_process(
+        self, mock_pid, mock_find, mock_helper, mock_stop, mock_clear, mock_port, mock_log
+    ):
         """When no PID file and no process found, old_pid=None."""
         from cli.commands.server import cmd_restart
 
@@ -554,6 +570,8 @@ class TestCmdRestart:
         mock_find.assert_called_once()
         mock_helper.assert_called_once_with(args, None)
 
+    @patch("cli.commands.server._get_daemon_log_path", return_value=Path("/tmp/daemon.log"))
+    @patch("cli.commands.server._is_port_listening", return_value=True)
     @patch("cli.commands.server._clear_pycache", return_value=0)
     @patch("cli.commands.server._stop_server", return_value=True)
     @patch("cli.commands.server._spawn_restart_helper", return_value=99999)
@@ -566,6 +584,8 @@ class TestCmdRestart:
         mock_helper,
         mock_stop,
         mock_clear,
+        mock_port,
+        mock_log,
     ):
         """When PID file is missing but process scan finds server, passes scanned PID."""
         from cli.commands.server import cmd_restart
