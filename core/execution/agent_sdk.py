@@ -63,7 +63,6 @@ from core.execution._sdk_interrupt import (  # noqa: F401
 )
 from core.execution._sdk_options import SDKOptionsMixin  # noqa: F401
 from core.execution._sdk_security import (  # noqa: F401
-    _BASH_BLOCKED_PATTERNS,
     _BASH_HEAD_BYTES,
     _BASH_TAIL_BYTES,
     _BASH_TRUNCATE_BYTES,

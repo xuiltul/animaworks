@@ -177,7 +177,7 @@ class TestHandleExecuteCommandBackground:
         restricted_perms = "# Permissions\n\n## コマンド実行\n- echo\n- ls\n"
         handler._memory.read_permissions.return_value = restricted_perms
 
-        result = handler.handle("Bash", {"command": "rm -rf /tmp/test", "background": True})
+        result = handler.handle("Bash", {"command": "rm -rf /", "background": True})
         assert "PermissionDenied" in result or "Blocked" in result
 
     def test_background_custom_timeout(self, tmp_path: Path):

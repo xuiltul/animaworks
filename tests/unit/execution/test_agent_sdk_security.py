@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
 
+from core.config.global_permissions import GlobalPermissionsCache
+from core.paths import PROJECT_DIR
 from core.execution.agent_sdk import (
-    _BASH_BLOCKED_PATTERNS,
     _PROTECTED_FILES,
     _WRITE_COMMANDS,
     _check_a1_bash_command,
@@ -21,6 +23,17 @@ from core.execution.agent_sdk import (
     _sanitise_tool_args,
     _summarise_tool_input,
 )
+
+
+@pytest.fixture(autouse=True)
+def _load_global_permissions(tmp_path: Path) -> None:
+    src = PROJECT_DIR / "templates" / "_shared" / "config_defaults" / "permissions.global.json"
+    dst = tmp_path / "permissions.global.json"
+    shutil.copyfile(src, dst)
+    GlobalPermissionsCache.reset()
+    GlobalPermissionsCache.get().load(dst, interactive=False)
+    yield
+    GlobalPermissionsCache.reset()
 
 
 # ── Fixtures ──────────────────────────────────────────────────
@@ -128,6 +141,20 @@ class TestCheckA1FileAccess:
         """Paths outside the animas/ root are not restricted by this function."""
         result = _check_a1_file_access("/tmp/some_file.txt", anima_dir, write=True)
         assert result is None
+
+    def test_write_permissions_global_json_blocked(
+        self, anima_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    ):
+        from core.paths import get_data_dir
+
+        isolated = tmp_path / "data"
+        isolated.mkdir()
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(isolated))
+        p = get_data_dir() / "permissions.global.json"
+        p.write_text("{}", encoding="utf-8")
+        result = _check_a1_file_access(str(p), anima_dir, write=True)
+        assert result is not None
+        assert "permissions.global.json" in result
 
     def test_write_to_own_heartbeat_allowed(self, anima_dir: Path):
         """heartbeat.md is not protected."""
@@ -298,7 +325,7 @@ class TestCheckA1BashCommand:
         assert result is None
 
 
-# ── _BASH_BLOCKED_PATTERNS / blocklist ──────────────────────
+# ── Global permissions / blocklist ─────────────────────────
 
 
 class TestBashBlockedPatterns:
@@ -332,8 +359,8 @@ class TestBashBlockedPatterns:
         assert result is not None
         assert "wget" in result
 
-    def test_blocked_patterns_is_nonempty_list(self):
-        assert len(_BASH_BLOCKED_PATTERNS) >= 2
+    def test_global_blocked_patterns_nonempty(self):
+        assert len(GlobalPermissionsCache.get().blocked_patterns) >= 2
 
 
 # ── _summarise_tool_input ───────────────────────────────────

@@ -47,30 +47,29 @@ meeting_mode: contextvars.ContextVar[bool] = contextvars.ContextVar(
 OnMessageSentFn = Callable[[str, str, str], None]
 
 # ── Command security: blocklist + shell operator detection ────
-_INJECTION_RE = re.compile(r"[;\n`]|\$\(|\$\{|\$[A-Za-z_]")
 
-_BLOCKED_CMD_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\brm\s+(-[^\s]*)*\s*-r", re.IGNORECASE), "Recursive delete (rm -r) is blocked"),
-    (re.compile(r"\brm\s+-rf\b", re.IGNORECASE), "rm -rf is blocked"),
-    (re.compile(r"\bmkfs\b"), "Filesystem creation is blocked"),
-    (re.compile(r"\bdd\b.*\bof\s*=\s*/dev/"), "Direct disk write is blocked"),
-    (re.compile(r">\s*/dev/sd|>\s*/dev/nvme|>\s*/etc/"), "Redirect to device/system files is blocked"),
-    (re.compile(r"(curl|wget)\b.*\|\s*(ba)?sh\b"), "Remote code execution (curl/wget|sh) is blocked"),
-    (re.compile(r"\|\s*(ba)?sh\b"), "Piping to sh/bash is blocked for security"),
-    (
-        re.compile(r"\|\s*(python[23]?|perl|ruby|node)\b"),
-        "Piping to interpreter (python/perl/ruby/node) is blocked for security",
-    ),
-    (re.compile(r"\bchmod\s+[0-7]*7[0-7]*\b"), "World-writable chmod is blocked"),
-    (re.compile(r"\bshutdown\b|\breboot\b|\binit\s+[06]\b"), "System shutdown/reboot is blocked"),
-    (re.compile(r"(?:^|[|;&]\s*)nc\b"), "nc (netcat) is blocked for security"),
-    (re.compile(r"(?:^|[|;&]\s*)ncat\b"), "ncat is blocked for security"),
-    (re.compile(r"(?:^|[|;&]\s*)socat\b"), "socat is blocked for security"),
-    (re.compile(r"(?:^|[|;&]\s*)telnet\b"), "telnet is blocked for security"),
-    (re.compile(r"curl\s+.*-[dFT]\b"), "curl data upload (-d/-F/-T) is blocked for security"),
-    (re.compile(r"curl\s+.*--data\b"), "curl --data is blocked for security"),
-    (re.compile(r"wget\s+.*--post\b"), "wget --post is blocked for security"),
-]
+
+def _get_injection_re() -> re.Pattern[str] | None:
+    """Return the global injection regex from GlobalPermissionsCache.
+
+    Falls back to None if the cache is not loaded (e.g., during tests).
+    """
+    from core.config.global_permissions import GlobalPermissionsCache
+
+    cache = GlobalPermissionsCache.get()
+    return cache.injection_re if cache.loaded else None
+
+
+def _get_blocked_patterns() -> list[tuple[re.Pattern[str], str]]:
+    """Return the global blocked command patterns from GlobalPermissionsCache.
+
+    Falls back to an empty list if the cache is not loaded.
+    """
+    from core.config.global_permissions import GlobalPermissionsCache
+
+    cache = GlobalPermissionsCache.get()
+    return cache.blocked_patterns if cache.loaded else []
+
 
 _NEEDS_SHELL_RE = re.compile(r"\||\&\&|\|\||>>?|<<?")
 
@@ -274,6 +273,23 @@ def _extract_first_heading(text: str) -> str:
         if stripped.startswith("# "):
             return stripped.lstrip("# ").strip()
     return ""
+
+
+def _is_global_permissions_write_blocked(target: Path) -> str | None:
+    """Return an error if *target* is the runtime ``permissions.global.json`` path."""
+    try:
+        from core.paths import get_global_permissions_path
+
+        resolved = target.resolve()
+        gp = get_global_permissions_path().resolve()
+        if resolved == gp:
+            return _error_result(
+                "PermissionDenied",
+                "permissions.global.json is a protected system file and cannot be modified by the anima itself",
+            )
+    except OSError:
+        pass
+    return None
 
 
 def _is_protected_write(anima_dir: Path, target: Path) -> str | None:
