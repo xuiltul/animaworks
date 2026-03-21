@@ -161,7 +161,7 @@ animaworks anima reload --all            # 全Animaをリロード
 
 ```bash
 animaworks models list                   # 既知モデル一覧（名前・実行モード・コンテキスト窓・説明）
-animaworks models list --mode S          # 実行モードでフィルタ（S/A/B/C）
+animaworks models list --mode S          # 実行モードでフィルタ（S/C/D/G/A/B）
 animaworks models list --json            # JSON出力
 animaworks models info {モデル名}        # 特定モデルの解決情報（実行モード・コンテキスト窓・閾値・ソース）
 animaworks models show                   # models.json の現在の内容を表示

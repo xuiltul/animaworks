@@ -6,6 +6,7 @@ Verifies:
 3. Unknown tools fall through to external dispatch
 4. _ACTIVITY_TYPE_MAP covers the expected tools
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +15,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from core.tooling.handler import ToolHandler
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -45,63 +45,66 @@ def handler(anima_dir: Path) -> ToolHandler:
 
 # All built-in tool names that must be in the dispatch dict
 # Includes 8 CC-compatible aliases (Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch)
-EXPECTED_BUILTIN_TOOLS = frozenset({
-    "use_tool",
-    "search_memory",
-    "read_memory_file",
-    "write_memory_file",
-    "archive_memory_file",
-    "send_message",
-    "post_channel",
-    "read_channel",
-    "read_dm_history",
-    "read_file",
-    "write_file",
-    "edit_file",
-    "execute_command",
-    "web_fetch",
-    "search_code",
-    "list_directory",
-    # CC-compatible aliases (Mode A/B unified schema)
-    "Read",
-    "Write",
-    "Edit",
-    "Bash",
-    "Grep",
-    "Glob",
-    "WebSearch",
-    "WebFetch",
-    "call_human",
-    "create_anima",
-    "disable_subordinate",
-    "enable_subordinate",
-    "set_subordinate_model",
-    "set_subordinate_background_model",
-    "restart_subordinate",
-    "org_dashboard",
-    "ping_subordinate",
-    "read_subordinate_state",
-    "check_permissions",
-    "delegate_task",
-    "task_tracker",
-    "refresh_tools",
-    "share_tool",
-    "report_procedure_outcome",
-    "report_knowledge_outcome",
-    "backlog_task",
-    "update_task",
-    "list_tasks",
-    "skill",
-    "create_skill",
-    "submit_tasks",
-    "manage_channel",
-    "audit_subordinate",
-    "check_background_task",
-    "list_background_tasks",
-    "vault_get",
-    "vault_store",
-    "vault_list",
-})
+EXPECTED_BUILTIN_TOOLS = frozenset(
+    {
+        "use_tool",
+        "search_memory",
+        "read_memory_file",
+        "write_memory_file",
+        "archive_memory_file",
+        "send_message",
+        "post_channel",
+        "read_channel",
+        "read_dm_history",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "execute_command",
+        "web_fetch",
+        "search_code",
+        "list_directory",
+        # CC-compatible aliases (Mode A/B unified schema)
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep",
+        "Glob",
+        "WebSearch",
+        "WebFetch",
+        "call_human",
+        "create_anima",
+        "disable_subordinate",
+        "enable_subordinate",
+        "set_subordinate_model",
+        "set_subordinate_background_model",
+        "restart_subordinate",
+        "org_dashboard",
+        "ping_subordinate",
+        "read_subordinate_state",
+        "check_permissions",
+        "delegate_task",
+        "task_tracker",
+        "refresh_tools",
+        "share_tool",
+        "report_procedure_outcome",
+        "report_knowledge_outcome",
+        "backlog_task",
+        "update_task",
+        "list_tasks",
+        "skill",
+        "create_skill",
+        "submit_tasks",
+        "manage_channel",
+        "audit_subordinate",
+        "check_background_task",
+        "list_background_tasks",
+        "vault_get",
+        "vault_store",
+        "vault_list",
+        "todo_write",
+    }
+)
 
 
 class TestDispatchDictCompleteness:
@@ -120,8 +123,8 @@ class TestDispatchDictCompleteness:
         assert extra == set(), f"Unexpected tools in dispatch dict: {extra}"
 
     def test_dispatch_count(self, handler: ToolHandler):
-        """Dispatch dict should have exactly 54 entries (46 + 8 CC aliases)."""
-        assert len(handler._dispatch) == 54
+        """Dispatch dict should have exactly 55 entries (47 + 8 CC aliases)."""
+        assert len(handler._dispatch) == 55
 
     def test_all_dispatch_values_are_callable(self, handler: ToolHandler):
         """Every value in the dispatch dict must be callable."""
@@ -156,7 +159,8 @@ class TestDispatchRouting:
         assert result == "external result"
 
     def test_unknown_tool_returns_unknown_when_external_returns_none(
-        self, handler: ToolHandler,
+        self,
+        handler: ToolHandler,
     ):
         """When external dispatch returns None, should return 'Unknown tool'."""
         handler._external = MagicMock()

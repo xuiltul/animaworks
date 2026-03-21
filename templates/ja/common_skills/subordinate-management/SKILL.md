@@ -87,7 +87,7 @@ audit_subordinate(since="09:00")        # 全配下の今日9時以降の監査
 audit_subordinate(name="aoi", since="13:00")  # aoi の今日13時以降
 ```
 
-CLI からも実行可能（S-mode の Bash 経由で使う場合に便利）:
+CLI からも実行可能（S/C/D/G-mode の Bash 経由で使う場合に便利）:
 
 ```bash
 animaworks anima audit aoi              # 直近1日の監査

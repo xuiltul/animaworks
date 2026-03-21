@@ -42,6 +42,10 @@ STRINGS: dict[str, dict[str, str]] = {
             "⚠ **current_state.md cleanup required** (current: {current_chars} chars / limit: {max_chars} chars)\n\n**As the first action of this heartbeat**, do the following:\n1. Delete all resolved/completed tasks\n2. Keep only in-progress, pending, and waiting tasks\n3. Compress to under {max_chars} chars and save\n4. Then proceed with the normal heartbeat checklist"
         ),
     },
+    "heartbeat.history_plan_entry": {
+        "ja": "- {ts}: [計画] {plan}",
+        "en": "- {ts}: [Plan] {plan}",
+    },
     "scheduler.cron_fallback_description": {
         "ja": "cron.mdの「{task_name}」の指示に従って処理してください。",
         "en": "Follow the instructions for '{task_name}' in cron.md.",

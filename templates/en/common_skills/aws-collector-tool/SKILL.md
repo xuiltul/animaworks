@@ -31,7 +31,7 @@ Use **Bash** with `animaworks-tool aws_collector <subcommand> [args]`. See Actio
 {"tool_name": "aws_collector", "action": "metrics", "args": {"cluster": "cluster-name", "service": "service-name", "metric": "CPUUtilization", "hours": 1}}
 ```
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool aws_collector ecs-status [--cluster NAME] [--service NAME]

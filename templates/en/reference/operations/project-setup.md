@@ -237,9 +237,9 @@ Anima names MUST follow:
 - Must not start with underscore (reserved for templates)
 - Examples: `aoi`, `taro-dev`, `worker01`
 
-## Execution Modes (S / A / B)
+## Execution Modes (S / C / D / G / A / B)
 
-AnimaWorks has three execution modes. They are determined from model name but can be overridden manually.
+AnimaWorks has **six** execution modes. They are determined from the model name but can be overridden with `execution_mode` in `status.json`.
 
 ### Mode S (SDK): Claude Agent SDK
 
@@ -249,9 +249,33 @@ Claude models only. Uses Claude Code subprocess for the richest tool execution.
 - **Features**: File ops, Bash execution, and autonomous memory search all via Claude Agent SDK
 - **Credential**: MUST use `anthropic`
 
+### Mode C (Codex): Codex CLI
+
+Runs OpenAI Codex-class models via the Codex CLI wrapper.
+
+- **Target models**: `codex/*` (e.g. `codex/o4-mini`, `codex/gpt-4.1`)
+- **Features**: MCP + AnimaWorks external-tool path is in the same family as S/D/G
+- **Credential**: Per Codex / OpenAI requirements
+
+### Mode D (Cursor Agent): Cursor Agent CLI
+
+Runs the Cursor `cursor-agent` CLI as a child process; MCP exposes AnimaWorks tools.
+
+- **Target models**: `cursor/*`
+- **Features**: Requires CLI and auth on the host. Can fall back to Mode A (LiteLLM) when needed
+- **Credential**: Depends on Cursor / `agent login` session
+
+### Mode G (Gemini CLI): Gemini CLI
+
+Runs Google's `gemini` CLI as a child process; MCP-integrated.
+
+- **Target models**: `gemini/*`
+- **Features**: Needs CLI or `GEMINI_API_KEY`. On fallback to Mode A, `gemini/` may remap to `google/` (or similar) for LiteLLM
+- **Credential**: CLI login or API key
+
 ### Mode A (Autonomous): LiteLLM + tool_use Loop
 
-For non-Claude models that support tool_use. LiteLLM unifies providers.
+For cloud and local models that support tool_use. LiteLLM unifies providers.
 
 - **Target models**: `openai/gpt-4.1`, `google/gemini-2.5-pro`, `vertex_ai/gemini-2.5-flash`, `ollama/qwen3:30b`, etc.
 - **Features**: Runs tool_use loop via LiteLLM. Framework dispatches tool execution

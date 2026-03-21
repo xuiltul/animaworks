@@ -27,7 +27,7 @@ animaworks-tool web_search "search query" [-n 10] [-l ja] [-f pd]
 | lang | string | "ja" | Search language |
 | freshness | string | null | Freshness filter (pd=24h, pw=1week, pm=1month, py=1year) |
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool web_search "search query" [-n 10] [-l ja] [-f pd]

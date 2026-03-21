@@ -88,7 +88,7 @@ audit_subordinate(since="09:00")        # All subordinates since 9:00 today
 audit_subordinate(name="aoi", since="13:00")  # aoi since 13:00 today
 ```
 
-Also available via CLI (useful for S-mode via Bash):
+Also available via CLI (useful for S/C/D/G-mode via Bash):
 
 ```bash
 animaworks anima audit aoi              # Audit last 1 day

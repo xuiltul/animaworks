@@ -36,7 +36,7 @@ Use **Bash** with `animaworks-tool local_llm <subcommand> [args]`. See Actions b
 {"tool_name": "local_llm", "action": "status", "args": {}}
 ```
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool local_llm generate "prompt" [-S "system prompt"]

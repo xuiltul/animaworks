@@ -1,23 +1,26 @@
-- **MUST**: Check if current_state.md has a task in progress. If so, verify its status. Always check before deciding "idle," "waiting," or "HEARTBEAT_OK"
-- **MUST**: Check task queue for STALE tasks (marked ⚠️ STALE). For overdue or near-deadline tasks, follow up with the assignee (send_message) or escalate to supervisor. Never return HEARTBEAT_OK while STALE tasks exist
-- **MUST**: Check for waiting tasks ("awaiting reply", "pending approval", etc.) stalled for 24+ hours. If stalled, send a status check or reminder
-- Board check: `read_channel(channel="general", limit=5)` to see latest posts. **Respond only to posts where you are assigned** or `@all`. Do **not** post praise/acknowledgment replies ("great," "understood," etc.) to others' reports
-- Whether you can access external tools you should use (if not, report to your supervisor via send command)
-- Whether the task in progress has any blockers
+- **MUST**: Check current_state.md for in-progress tasks and state findings as evidence. Always check before deciding "idle" or "waiting"
+- **MUST**: Check task queue for STALE tasks (⚠️ STALE). Cite `list_tasks()` results as evidence. Never return HEARTBEAT_OK while STALE tasks exist
+- **MUST**: Check for waiting tasks stalled 24+ hours. If stalled, send status check or reminder
+- Board check: Run `read_channel(channel="general", limit=5)` and state specifically whether any mentions target you. Do **not** post praise/acknowledgment replies
+- Whether you can access required external tools (if not, report to supervisor)
+- Whether in-progress tasks have blockers
 - Whether state/pending/ has unexecuted tasks
 
 ### Blocker Reporting (MUST)
 
-When any of the following occurs during task execution, report to the requester immediately.
-Do not leave it in a "waiting" state.
+Report immediately to requester. Do not leave in "waiting" state.
 
 - File/directory not found
-- Insufficient permissions to access
-- Prerequisites not met
-- Technical issue interrupted the work
+- Insufficient permissions / prerequisites not met / technical issues
 - Instructions unclear and cannot decide
 
-Report to: Requester (send_message)
-Critical blockers (30+ minute delay expected): Also notify human via call_human
+Report to: Requester (send_message). Critical blockers (30+ min delay): also call_human
 
-- Only if ALL checks above have no actionable items: HEARTBEAT_OK
+### HEARTBEAT_OK Gate (ALL must be true)
+
+- Zero self-assigned pending tasks (or all delegated)
+- `read_channel` executed with no mentions targeting you
+- Zero STALE / OVERDUE tasks
+- No unaddressed self-assigned tasks in current_state.md
+
+If any condition is unmet, describe the action you are taking.

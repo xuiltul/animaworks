@@ -11,6 +11,7 @@ Validates the following changes through the full FastAPI app stack:
    the existing backward-compatible fields.
 3. system.py — connections endpoint returns websocket and process info.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,7 +19,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -74,6 +74,7 @@ def _create_app(
     # returns local_trust on every request (the with-block patch is
     # restored on exit, but the middleware calls load_auth at request time).
     import server.app as _sa
+
     _auth = MagicMock()
     _auth.auth_mode = "local_trust"
     _sa.load_auth = lambda: _auth
@@ -127,7 +128,8 @@ class TestSchedulerWithCronMd:
     """Verify system_status and system_scheduler parse cron.md correctly."""
 
     async def test_system_status_scheduler_running_true_with_cron(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """scheduler_running should be True when animas have cron.md files."""
         animas_dir = tmp_path / "animas"
@@ -144,7 +146,8 @@ class TestSchedulerWithCronMd:
         assert data["scheduler_running"] is True
 
     async def test_system_scheduler_returns_parsed_jobs(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Scheduler endpoint should return jobs parsed from cron.md."""
         animas_dir = tmp_path / "animas"
@@ -179,7 +182,8 @@ class TestSchedulerWithCronMd:
             assert job["id"].startswith("cron-sakura-")
 
     async def test_scheduler_extracts_schedule_from_parentheses(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Schedule info should be extracted from parentheses in the title."""
         animas_dir = tmp_path / "animas"
@@ -199,7 +203,8 @@ class TestSchedulerWithCronMd:
         assert schedules["Weekly Review (Friday 17:00 JST)"] == "Friday 17:00 JST"
 
     async def test_scheduler_skips_commented_sections(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Jobs inside HTML comment blocks should not appear."""
         animas_dir = tmp_path / "animas"
@@ -219,7 +224,8 @@ class TestSchedulerWithCronMd:
         assert all("Commented Out" not in name for name in job_names)
 
     async def test_scheduler_multiple_animas(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Jobs from multiple animas should all be returned."""
         animas_dir = tmp_path / "animas"
@@ -257,7 +263,8 @@ class TestSchedulerWithoutCronMd:
     """Verify scheduler reports correctly when no cron.md exists."""
 
     async def test_system_status_scheduler_running_false_no_cron(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """scheduler_running should be False when no cron.md files exist."""
         animas_dir = tmp_path / "animas"
@@ -276,7 +283,8 @@ class TestSchedulerWithoutCronMd:
         assert data["scheduler_running"] is False
 
     async def test_system_scheduler_empty_when_no_cron(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Scheduler endpoint should return empty jobs when no cron.md."""
         animas_dir = tmp_path / "animas"
@@ -295,7 +303,8 @@ class TestSchedulerWithoutCronMd:
         assert data["anima_jobs"] == []
 
     async def test_system_scheduler_empty_when_no_animas(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Scheduler endpoint with zero animas should return empty."""
         app = _create_app(tmp_path, anima_names=[])
@@ -309,7 +318,8 @@ class TestSchedulerWithoutCronMd:
         assert data["anima_jobs"] == []
 
     async def test_system_status_no_animas_scheduler_false(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """system_status with zero animas should show scheduler_running=False."""
         app = _create_app(tmp_path, anima_names=[])
@@ -330,7 +340,9 @@ class TestInitStatusChecksArray:
     """Verify init_status returns a checks array with backward-compatible fields."""
 
     async def test_checks_array_present(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """init-status response should contain a checks array."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -350,7 +362,9 @@ class TestInitStatusChecksArray:
         assert len(data["checks"]) > 0
 
     async def test_checks_items_have_label_and_ok(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Each check item should have at least 'label' and 'ok' fields."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -370,13 +384,19 @@ class TestInitStatusChecksArray:
             assert isinstance(check["ok"], bool)
 
     async def test_checks_reflect_actual_state(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Check values should reflect actual filesystem and env state."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.setattr(
+            "server.routes.config_routes.is_codex_login_available",
+            lambda: False,
+        )
 
         # Set up config and one anima
         base_dir = tmp_path / ".animaworks"
@@ -421,12 +441,14 @@ class TestInitStatusChecksArray:
         assert anthropic_check is not None
         assert anthropic_check["ok"] is True
 
-        openai_check = checks_by_label.get("OpenAI APIキー")
+        openai_check = checks_by_label.get("OpenAI APIキー / Codex Login")
         assert openai_check is not None
         assert openai_check["ok"] is False
 
     async def test_backward_compatible_fields_present(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Existing fields (config_exists, animas_count, etc.) should still be present."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -454,7 +476,9 @@ class TestInitStatusChecksArray:
         assert "google" in data["api_keys"]
 
     async def test_initialized_true_with_config_and_animas(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """initialized should be True when config and at least one anima exist."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -496,7 +520,8 @@ class TestConnectionsEndpoint:
     """Verify /api/system/connections returns websocket and process info."""
 
     async def test_connections_with_active_clients(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Connections should report correct websocket client count."""
         animas_dir = tmp_path / "animas"
@@ -517,7 +542,8 @@ class TestConnectionsEndpoint:
         assert "alice" in data["processes"]
 
     async def test_connections_zero_clients(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """With no websocket connections, connected_clients should be 0."""
         app = _create_app(tmp_path, anima_names=["bob"], ws_connections=0)
@@ -531,7 +557,8 @@ class TestConnectionsEndpoint:
         assert "bob" in data["processes"]
 
     async def test_connections_no_animas(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """With no animas, processes should be empty."""
         app = _create_app(tmp_path, anima_names=[])
@@ -545,7 +572,8 @@ class TestConnectionsEndpoint:
         assert data["processes"] == {}
 
     async def test_connections_without_active_connections_attr(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """When ws_manager lacks active_connections, connected_clients should be 0."""
         app = _create_app(tmp_path, anima_names=["alice"])

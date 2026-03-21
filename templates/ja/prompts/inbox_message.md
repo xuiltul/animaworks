@@ -16,4 +16,4 @@ Inboxにメッセージが届いています。以下の内容を確認し、適
 - `{返信内容}` を実際の返信文に置き換えること
 - `send_message` は使わないこと（DMになり、スレッド返信にならない）
 
-{task_delegation_rules}
+**タスク投入ガイドライン**: `submit_tasks` / `delegate_task` 使用時は `read_memory_file(path="common_knowledge/operations/task-delegation-guide.md")` の記述原則・禁止パターンに従うこと（MUST）。

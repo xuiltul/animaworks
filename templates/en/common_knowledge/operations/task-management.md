@@ -28,7 +28,7 @@ In AnimaWorks, tasks are processed across three independent paths:
 
 Heartbeat does **not** execute. When it finds a task that needs execution, it either delegates via `delegate_task` (if subordinates are available) or submits it via `submit_tasks` for the TaskExec path.
 
-In S-mode (Claude Agent SDK) Chat path, the **Task tool** (and Agent tool) provides automatic routing:
+In MCP-integrated modes (S/C/D/G: Claude Agent SDK, Codex CLI, Cursor Agent, Gemini CLI) Chat path, the **Task tool** (and Agent tool) provides automatic routing:
 - With subordinates → immediately delegated to the subordinate with minimum workload and best role match (same flow as delegate_task)
 - Without subordinates, or when delegation fails → written to `state/pending/`, and TaskExec path runs it
 
@@ -344,7 +344,7 @@ When each task completes, a completion notification is sent via DM to the Anima 
 > **IMPORTANT**: `delegate_task` causes the **subordinate's TaskExec** to execute the task (not yours). To run tasks yourself in background, use `submit_tasks` instead.
 
 Anima with subordinates (supervisors) can delegate tasks to subordinates using the `delegate_task` tool.
-In S-mode Chat path, the Task tool (and Agent tool) also supports delegation. The Task tool has no parameter to specify a subordinate; it auto-selects the subordinate with minimum workload and best role match.
+In MCP-integrated modes (S/C/D/G) Chat path, the Task tool (and Agent tool) also supports delegation. The Task tool has no parameter to specify a subordinate; it auto-selects the subordinate with minimum workload and best role match.
 
 ### How delegate_task Works
 

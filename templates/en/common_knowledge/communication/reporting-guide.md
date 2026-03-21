@@ -1,5 +1,7 @@
 # Reporting and Escalation Guide
 
+> **Required**: Check the mandatory fields in `communication/message-quality-protocol.md` before reporting or escalating.
+
 Reporting to your supervisor is the lifeblood of organizational operations.
 Reporting at the right time and in the right format supports early problem detection and rapid decision-making.
 

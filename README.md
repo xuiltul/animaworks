@@ -27,7 +27,7 @@ A framework that treats AI agents not as tools, but as autonomous people. Each A
 | **Autonomy** | Heartbeat (observe/plan/reflect) + Cron + TaskExec — runs 24/7 | Human-triggered | Human-triggered | Cron + heartbeat | Human-triggered |
 | **Org structure** | Supervisor→subordinate hierarchy, delegation, audit, dashboard | Flat roles in a crew | — | Single agent | Handoffs only |
 | **Process model** | One OS process per agent, IPC, auto-restart | Shared process | Shared process | Single process | Shared process |
-| **Multi-model** | 4 engines: Claude SDK / Codex / LiteLLM / Assisted | LiteLLM | LangChain models | OpenAI-compatible | OpenAI-focused |
+| **Multi-model** | 6 engines: Claude SDK / Codex / Cursor Agent / Gemini CLI / LiteLLM / Assisted | LiteLLM | LangChain models | OpenAI-compatible | OpenAI-focused |
 
 > AnimaWorks is not a task runner — it's an organization that thinks, remembers, forgets, and grows. It supports your business as a team and can be operated as a company.
 
@@ -185,6 +185,8 @@ Runs on any LLM. Each Anima can use a different model.
 |------|--------|----------|-------|
 | S (SDK) | Claude Agent SDK | Claude models (recommended) | Full: Read/Write/Edit/Bash/Grep/Glob |
 | C (Codex) | Codex SDK | OpenAI Codex CLI models | Full: same as Mode S |
+| D (Cursor) | Cursor Agent CLI | `cursor/*` models | MCP-integrated agent loop |
+| G (Gemini CLI) | Gemini CLI | `gemini/*` models | stream-json parsing, tool loop |
 | A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, vLLM, etc. | search_memory, Read, Write, send_message, etc. |
 | B (Basic) | LiteLLM 1-shot | Ollama, small local models | Framework handles memory I/O on behalf of the model |
 
@@ -372,7 +374,7 @@ The CLI is for power users and automation. Day-to-day use is through the Web UI.
 
 | Component | Technology |
 |-----------|------------|
-| Agent execution | Claude Agent SDK / Codex SDK / Anthropic SDK / LiteLLM |
+| Agent execution | Claude Agent SDK / Codex SDK / Cursor Agent CLI / Gemini CLI / Anthropic SDK / LiteLLM |
 | LLM providers | Anthropic, OpenAI, Google, Azure, Vertex AI, AWS Bedrock, Ollama, vLLM |
 | Web framework | FastAPI + Uvicorn |
 | Task scheduling | APScheduler |
@@ -394,7 +396,7 @@ animaworks/
 ├── core/                # Digital Anima core engine
 │   ├── anima.py, agent.py, lifecycle.py  # Core entities & orchestrator
 │   ├── memory/          # Memory subsystem (priming, consolidation, forgetting, RAG)
-│   ├── execution/       # Execution engines (S/C/A/B)
+│   ├── execution/       # Execution engines (S/C/D/G/A/B)
 │   ├── tooling/         # Tool dispatch, permission checks
 │   ├── prompt/          # System prompt builder (6-group structure)
 │   ├── supervisor/      # Process supervision

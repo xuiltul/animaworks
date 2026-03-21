@@ -24,7 +24,7 @@ Heartbeat입니다. 아래 프로세스에 따라 행동하세요.
 **중요: 이 단계에서 실제 작업(코드 변경, 파일 편집, 조사 등)을 수행하지 마세요.**
 **작업 실행은 별도 세션에서 자동으로 처리됩니다.**
 
-{task_delegation_rules}
+**작업 제출 가이드라인**: `submit_tasks` / `delegate_task` 사용 시 `read_memory_file(path="common_knowledge/operations/task-delegation-guide.md")`의 작성 원칙과 금지 패턴을 따르세요 (MUST).
 
 ## Reflect (회고)
 위의 관찰과 계획을 모두 마친 후, 인사이트나 관찰 내용이 있으면 아래 형식으로 기술하세요.

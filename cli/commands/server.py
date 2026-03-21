@@ -84,16 +84,26 @@ def _is_process_alive(pid: int) -> bool:
     return is_pid_alive(pid)
 
 
-def _find_server_pid_by_process() -> int | None:
+def _find_server_pid_by_process(
+    extra_exclude_pids: set[int] | None = None,
+) -> int | None:
     """Find the animaworks server process by command pattern."""
+    excluded = {os.getpid(), os.getppid()}
+    if extra_exclude_pids:
+        excluded |= extra_exclude_pids
     return find_first_matching_pid(
         _SERVER_CMD_MARKERS,
-        exclude_pids={os.getpid(), os.getppid()},
+        exclude_pids=excluded,
         require_python=True,
     )
 
 
-def _stop_server(timeout: int = 10, *, force: bool = False) -> bool:
+def _stop_server(
+    timeout: int = 10,
+    *,
+    force: bool = False,
+    extra_exclude_pids: set[int] | None = None,
+) -> bool:
     """Send SIGTERM to the running server and wait for it to exit.
 
     First tries the PID file.  If the file is missing, falls back to
@@ -104,6 +114,8 @@ def _stop_server(timeout: int = 10, *, force: bool = False) -> bool:
         timeout: Maximum seconds to wait before reporting failure.
         force: If True, escalate to SIGKILL after SIGTERM timeout and
             also kill orphan runner processes.
+        extra_exclude_pids: Additional PIDs to exclude from process
+            scanning (e.g. the restart helper).
 
     Returns:
         True if the server was stopped (or was not running), False if
@@ -112,7 +124,7 @@ def _stop_server(timeout: int = 10, *, force: bool = False) -> bool:
     pid = _read_pid()
 
     if pid is None:
-        pid = _find_server_pid_by_process()
+        pid = _find_server_pid_by_process(extra_exclude_pids=extra_exclude_pids)
         if pid is None:
             if force:
                 orphans = _kill_orphan_runners()
@@ -538,7 +550,7 @@ def cmd_restart(args: argparse.Namespace) -> None:
     print(f"Restart helper spawned (pid={helper_pid}). Stopping server...")
 
     force = getattr(args, "force", False)
-    _stop_server(force=force)
+    _stop_server(force=force, extra_exclude_pids={helper_pid})
 
     removed = _clear_pycache()
     if removed:

@@ -16,4 +16,4 @@ When a message has `[reply_instruction: ...]` metadata:
 - Replace `{reply_content}` with your actual reply text
 - Do NOT use `send_message` (it sends DMs, not thread replies)
 
-{task_delegation_rules}
+**Task submission guidelines**: When using `submit_tasks` / `delegate_task`, follow the writing principles and forbidden patterns in `read_memory_file(path="common_knowledge/operations/task-delegation-guide.md")` (MUST).

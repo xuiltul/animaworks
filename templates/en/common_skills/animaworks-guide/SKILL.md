@@ -133,7 +133,7 @@ animaworks anima reload --all            # Reload all Anima
 
 ```bash
 animaworks models list                   # List known models (name, mode, context window, note)
-animaworks models list --mode S          # Filter by execution mode (S/A/B/C)
+animaworks models list --mode S          # Filter by execution mode (S/C/D/G/A/B)
 animaworks models list --json            # JSON output
 animaworks models info {model_name}      # Resolved info (execution mode, context window, threshold, source)
 animaworks models show                   # Show current models.json contents

@@ -22,6 +22,7 @@ from core.tooling.schemas.memory import (
     SEARCH_TOOLS,
 )
 from core.tooling.schemas.notification import _notification_tools
+from core.tooling.schemas.session_todo import _session_todo_tools
 from core.tooling.schemas.skill import DISCOVERY_TOOLS, TOOL_MANAGEMENT_TOOLS, USE_TOOL, _skill_tools
 from core.tooling.schemas.supervisor import (
     _background_task_tools,
@@ -204,6 +205,9 @@ def build_unified_tool_list(
         if t["name"] == "update_task":
             tools.append(t)
             break
+
+    # AW-essential: session todo (planning aid for Mode A)
+    tools.extend(_session_todo_tools())
 
     tools = apply_db_descriptions(tools)
 

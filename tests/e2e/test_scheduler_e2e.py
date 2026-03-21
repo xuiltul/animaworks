@@ -7,6 +7,7 @@ Tests that SchedulerManager and ProcessSupervisor correctly set up schedulers
 with real config files and APScheduler instances. Does NOT trigger actual
 heartbeat/cron execution (would require LLM).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -71,12 +72,8 @@ class TestSchedulerManagerE2E:
         mock_anima.name = "test-anima"
 
         # Use real file reading for config
-        mock_anima.memory.read_heartbeat_config.return_value = (
-            anima_dir / "heartbeat.md"
-        ).read_text()
-        mock_anima.memory.read_cron_config.return_value = (
-            anima_dir / "cron.md"
-        ).read_text()
+        mock_anima.memory.read_heartbeat_config.return_value = (anima_dir / "heartbeat.md").read_text()
+        mock_anima.memory.read_cron_config.return_value = (anima_dir / "cron.md").read_text()
         mock_anima.set_on_schedule_changed = MagicMock()
 
         mgr = SchedulerManager(
@@ -97,7 +94,8 @@ class TestSchedulerManagerE2E:
         assert "test-anima_heartbeat" in job_ids
         assert "test-anima_cron_0" in job_ids
         assert "test-anima_cron_1" in job_ids
-        assert len(jobs) == 3  # 1 heartbeat + 2 cron tasks
+        assert "test-anima_cron_health" in job_ids
+        assert len(jobs) >= 3  # heartbeat + 2 cron + system jobs (cron_health, etc.)
 
         # Verify heartbeat interval
         heartbeat_job = mgr.scheduler.get_job("test-anima_heartbeat")
@@ -110,12 +108,8 @@ class TestSchedulerManagerE2E:
         """After config change, reload_schedule should update jobs."""
         mock_anima = MagicMock()
         mock_anima.name = "test-anima"
-        mock_anima.memory.read_heartbeat_config.return_value = (
-            anima_dir / "heartbeat.md"
-        ).read_text()
-        mock_anima.memory.read_cron_config.return_value = (
-            anima_dir / "cron.md"
-        ).read_text()
+        mock_anima.memory.read_heartbeat_config.return_value = (anima_dir / "heartbeat.md").read_text()
+        mock_anima.memory.read_cron_config.return_value = (anima_dir / "cron.md").read_text()
         mock_anima.set_on_schedule_changed = MagicMock()
 
         mgr = SchedulerManager(
@@ -125,7 +119,8 @@ class TestSchedulerManagerE2E:
             emit_event=MagicMock(),
         )
         mgr.setup()
-        assert len(mgr.scheduler.get_jobs()) == 3
+        initial_count = len(mgr.scheduler.get_jobs())
+        assert initial_count >= 3  # heartbeat + 2 cron + system jobs
 
         # Simulate adding a new cron task
         new_cron = (
@@ -145,8 +140,11 @@ class TestSchedulerManagerE2E:
         mock_anima.memory.read_cron_config.return_value = new_cron
 
         result = mgr.reload_schedule("test-anima")
-        assert result["removed"] == 3  # old jobs removed
-        assert len(result["new_jobs"]) == 4  # 1 heartbeat + 3 cron
+        assert result["removed"] == initial_count  # old jobs removed
+        new_ids = result["new_jobs"]
+        assert any("heartbeat" in j for j in new_ids)
+        assert any("cron_0" in j for j in new_ids)
+        assert any("cron_2" in j for j in new_ids)  # 3rd cron task
 
         mgr.shutdown()
 
@@ -266,9 +264,7 @@ class TestSchedulerAPIE2E:
         app = FastAPI()
         animas_dir = tmp_path / "animas" / "alice"
         animas_dir.mkdir(parents=True)
-        (animas_dir / "cron.md").write_text(
-            "## Task（毎日 9:00 JST）\ntype: llm\nDo thing\n"
-        )
+        (animas_dir / "cron.md").write_text("## Task（毎日 9:00 JST）\ntype: llm\nDo thing\n")
         app.state.animas_dir = tmp_path / "animas"
         app.state.shared_dir = tmp_path / "shared"
         app.state.anima_names = ["alice"]

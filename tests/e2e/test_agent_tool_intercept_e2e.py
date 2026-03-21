@@ -171,11 +171,11 @@ class TestAgentToolInterceptE2E:
         assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-class TestAllowedToolsConfig:
-    """Verify _allowed_tools includes both Task and Agent."""
+class TestBypassPermissionsConfig:
+    """Verify _build_sdk_options uses bypassPermissions mode."""
 
-    def test_allowed_tools_includes_both(self):
-        """The _build_sdk_options should include both Task and Agent."""
+    def test_bypass_permissions_mode(self):
+        """The _build_sdk_options should set permission_mode to bypassPermissions."""
         from tests.helpers.mocks import patch_agent_sdk
 
         with patch_agent_sdk():
@@ -209,7 +209,6 @@ class TestAllowedToolsConfig:
                     "test prompt", 5, 200000, session_stats,
                 )
 
-                assert "Task" in options.allowed_tools
-                assert "Agent" in options.allowed_tools
+                assert options.permission_mode == "bypassPermissions"
                 if pf:
                     pf.unlink(missing_ok=True)

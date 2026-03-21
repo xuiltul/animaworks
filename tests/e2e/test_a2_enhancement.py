@@ -226,12 +226,12 @@ class TestParallelToolCallsE2E:
 
 
 class TestBaseToolCount:
-    """Verify the base tool set matches the unified 18-tool design spec."""
+    """Verify the base tool set matches the unified design spec."""
 
     def test_base_tool_count(self, executor):
-        """Base tools should be 16 (CC 8 + AW-essential 8, no notification/supervisor)."""
+        """Base tools should be 17 (CC 8 + AW-essential 9, no notification/supervisor)."""
         tools = executor._build_base_tools()
-        assert len(tools) == 16
+        assert len(tools) == 17
         names = {t["function"]["name"] for t in tools}
         # CC built-in tools (8)
         assert "Read" in names
@@ -253,5 +253,7 @@ class TestBaseToolCount:
         assert "update_task" in names
         # AW-essential: skill
         assert "skill" in names
+        # AW-essential: planning
+        assert "todo_write" in names
         # Mode B only — must NOT be in Mode A
         assert "use_tool" not in names

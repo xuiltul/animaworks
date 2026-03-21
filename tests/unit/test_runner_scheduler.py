@@ -85,8 +85,10 @@ Do something
 
         assert mgr.scheduler is not None
         assert mgr.scheduler.running
-        # No jobs since no config
-        assert len(mgr.scheduler.get_jobs()) == 0
+        # Only system-level jobs; no heartbeat/cron user jobs
+        job_ids = {j.id for j in mgr.scheduler.get_jobs()}
+        assert not any("heartbeat" in jid for jid in job_ids)
+        assert not any("cron_0" in jid for jid in job_ids)
 
         mgr.shutdown()
 
@@ -112,8 +114,9 @@ Do something
         mgr = self._make_scheduler_mgr(tmp_path, mock_anima)
 
         mgr.setup()
-        initial_jobs = len(mgr.scheduler.get_jobs())
-        assert initial_jobs == 1  # heartbeat only
+        initial_jobs = mgr.scheduler.get_jobs()
+        # heartbeat + system jobs (activity_schedule, cron_health)
+        assert any("heartbeat" in j.id for j in initial_jobs)
 
         # Now add cron config for reload
         mock_anima.memory.read_cron_config.return_value = """## New Task
@@ -122,8 +125,10 @@ type: llm
 New task description
 """
         result = mgr.reload_schedule("test-anima")
-        assert result["removed"] == 1
-        assert len(result["new_jobs"]) == 2  # heartbeat + cron
+        assert result["removed"] == len(initial_jobs)
+        new_ids = result["new_jobs"]
+        assert any("heartbeat" in j for j in new_ids)
+        assert any("cron_0" in j for j in new_ids)
 
         mgr.shutdown()
 
@@ -168,7 +173,8 @@ New task description
 
         result = await runner._handle_get_status({})
         assert result["scheduler_running"] is True
-        assert result["scheduler_jobs"] == 1
+        # heartbeat + system jobs (activity_schedule, cron_health)
+        assert result["scheduler_jobs"] >= 1
 
         runner._scheduler_mgr.shutdown()
 

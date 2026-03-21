@@ -60,7 +60,7 @@ Use **Bash** with `animaworks-tool notion <subcommand> [args]`. See Actions belo
 {"tool_name": "notion", "action": "create_database", "args": {"parent_page_id": "parent-page-id", "title": "DB name", "properties": {}}}
 ```
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool notion search [query] -j

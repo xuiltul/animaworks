@@ -70,6 +70,41 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "タスク: {task}",
         "en": "Task: {task}",
     },
+    "scheduler.cron_health_title": {
+        "ja": "⚠️ Cronヘルスチェック警告",
+        "en": "⚠️ Cron Health Check Warning",
+    },
+    "scheduler.cron_health_no_valid_schedule": {
+        "ja": (
+            "{task_count}件のタスク定義がありますが、有効なスケジュールが0件です。"
+            "cron.mdのフォーマットを確認してください。"
+        ),
+        "en": ("{task_count} task(s) defined but 0 valid schedules. Please check cron.md format."),
+    },
+    "scheduler.cron_health_indented_schedule": {
+        "ja": ("cron.mdにインデント付きの schedule: 行が検出されました。パーサーは行頭の schedule: のみ認識します。"),
+        "en": (
+            "Indented 'schedule:' lines detected in cron.md. "
+            "The parser only recognizes 'schedule:' at the start of a line."
+        ),
+    },
+    "scheduler.cron_health_unrecognized_schedule": {
+        "ja": (
+            "cron.mdに schedule: を含む行がありますが、パーサーに認識されていません。フォーマットを確認してください。"
+        ),
+        "en": ("Lines containing 'schedule:' found in cron.md but not recognized by the parser. Please check format."),
+    },
+    "scheduler.cron_health_no_execution": {
+        "ja": (
+            "{job_count}件のcronジョブが登録されていますが、"
+            "直近{hours}時間でcron実行が0件です。"
+            "cron.mdとスケジュール設定を確認してください。"
+        ),
+        "en": (
+            "{job_count} cron job(s) registered but 0 executions in the last "
+            "{hours} hours. Please check cron.md and schedule settings."
+        ),
+    },
     "anima.greeting_error": {
         "ja": "[ERROR: 挨拶生成中にエラーが発生しました]",
         "en": "[ERROR: An error occurred during greeting generation]",

@@ -37,7 +37,7 @@ animaworks-tool gmail draft --to ADDR --subject SUBJ --body BODY [--thread-id TI
 {"tool_name": "gmail", "action": "draft", "args": {"to": "recipient@example.com", "subject": "Subject", "body": "Body text", "thread_id": "thread ID (optional)"}}
 ```
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool gmail unread [-n 20]

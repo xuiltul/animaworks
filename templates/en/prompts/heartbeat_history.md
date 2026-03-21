@@ -1,6 +1,6 @@
 ## Recent Heartbeat Results
 
-Below are recent Heartbeat results. Avoid repeating the same content or empty exchanges.
-Do not reply again to reports already handled.
+Check whether previous plans were executed. Avoid repeating the same content.
+When "Plan" items are shown, verify if each is completed, in progress, or not started.
 
 {history}

@@ -428,10 +428,10 @@ _INCREMENTAL_SYNC_DIRS = {"common_skills", "common_knowledge", "reference"}
 def _sync_shared_templates(data_dir: Path) -> None:
     """Incrementally sync new common_skills and common_knowledge from templates.
 
-    Only copies entries (directories/files) that do not yet exist in the
-    runtime data directory, preserving any user modifications to existing
-    entries.  Called on every startup so that version upgrades automatically
-    deliver new skill files without requiring ``animaworks init``.
+    Recursively walks the template directory tree and copies any file that
+    does not yet exist in the runtime data directory, preserving user
+    modifications to existing files.  Called on every startup so that version
+    upgrades automatically deliver new files without ``animaworks init``.
     """
     from core.paths import _get_locale
 
@@ -451,15 +451,16 @@ def _sync_shared_templates(data_dir: Path) -> None:
             continue
         dst_dir = data_dir / dir_name
         dst_dir.mkdir(parents=True, exist_ok=True)
-        for entry in src_dir.iterdir():
-            target = dst_dir / entry.name
+        for src_file in src_dir.rglob("*"):
+            if not src_file.is_file():
+                continue
+            rel = src_file.relative_to(src_dir)
+            target = dst_dir / rel
             if target.exists():
                 continue
-            if entry.is_dir():
-                shutil.copytree(entry, target)
-            else:
-                shutil.copy2(entry, target)
-            logger.info("Synced new template %s → %s", entry.name, dir_name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, target)
+            logger.info("Synced new template %s → %s", rel, dir_name)
 
 
 def _copy_infrastructure(data_dir: Path) -> None:

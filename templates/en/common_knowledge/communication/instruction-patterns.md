@@ -1,5 +1,7 @@
 # Instruction Patterns
 
+> **Required**: Check the mandatory fields in `communication/message-quality-protocol.md` before delegating tasks.
+
 A collection of patterns for giving clear, actionable instructions to subordinates and teammates.
 Vague instructions cause rework and confusion. Follow this guide to give instructions that others can act on without hesitation.
 

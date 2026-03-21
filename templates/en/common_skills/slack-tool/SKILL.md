@@ -56,7 +56,7 @@ animaworks-tool slack channels
 - `emoji`: Slack emoji name without colons (e.g. `thumbsup`, `eyes`, `white_check_mark`)
 - `message_ts`: Timestamp of the target message (available from `messages` action results)
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool slack send CHANNEL MESSAGE [--thread TS]

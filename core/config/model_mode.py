@@ -133,7 +133,7 @@ KNOWN_MODELS: list[dict[str, str]] = [
 ]
 
 # ── Legacy mode value mapping ──────────────────────────────
-# Maps legacy A1/A1F/A2 and text-based values to canonical S/A/B scheme.
+# Maps legacy A1/A1F/A2 and text-based values to canonical S/C/D/G/A/B scheme.
 _LEGACY_MODE_MAP: dict[str, str] = {
     "autonomous": "A",
     "assisted": "B",
@@ -335,7 +335,7 @@ def resolve_execution_mode(
 
     Returns:
         One of ``"S"`` (SDK), ``"C"`` (Codex), ``"D"`` (Cursor Agent),
-        ``"A"`` (Autonomous), or ``"B"`` (Basic).
+        ``"G"`` (Gemini CLI), ``"A"`` (Autonomous), or ``"B"`` (Basic).
     """
     # 1. Per-anima explicit override
     if explicit_override:
@@ -358,7 +358,7 @@ def resolve_execution_mode(
     # 4. Code defaults
     result = _match_pattern_table(model_name, DEFAULT_MODEL_MODE_PATTERNS)
     if result is not None:
-        return result  # Already S/A/B in the table
+        return result  # Already S/C/D/G/A/B in the table
 
     return "B"  # unknown model → safe side
 

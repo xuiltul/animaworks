@@ -231,26 +231,9 @@ class SDKOptionsMixin:
 
         _has_subs = self._has_subordinates()
 
-        _allowed_tools = [
-            "Read",
-            "Write",
-            "Edit",
-            "Bash",
-            "Grep",
-            "Glob",
-            "WebFetch",
-            "WebSearch",
-            "mcp__aw__*",
-        ]
-        _allowed_tools.extend(["Task", "Agent"])
-
-        for server_name in self._extra_mcp_servers:
-            _allowed_tools.append(f"mcp__{server_name}__*")
-
         kwargs: dict[str, Any] = dict(
             system_prompt=prompt_kwarg,
-            allowed_tools=_allowed_tools,
-            permission_mode="acceptEdits",
+            permission_mode="bypassPermissions",
             cwd=str(self._task_cwd or self._anima_dir),
             max_turns=max_turns,
             model=self._resolve_agent_sdk_model(),

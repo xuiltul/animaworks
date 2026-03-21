@@ -7,6 +7,7 @@ Validates Fix 1 (cron_command logging), Fix 2 (memory_write/error events),
 Fix 3 (JSONL from/to field names), Fix 5 (dead code removed),
 and Fix 6 (heartbeat history from activity log).
 """
+
 from __future__ import annotations
 
 import json
@@ -74,7 +75,8 @@ async def test_from_to_fields_in_priming_pipeline(anima_dir: Path, tmp_path: Pat
     ):
         engine = PrimingEngine(anima_dir, shared_dir)
         result = await engine._channel_b_recent_activity(
-            sender_name="taro", keywords=[],
+            sender_name="taro",
+            keywords=[],
         )
 
     # DM group header shows the peer name (to_person), not the sender
@@ -158,14 +160,17 @@ def test_heartbeat_history_from_activity_log(anima_dir: Path) -> None:
     # Also create a legacy heartbeat_history file to verify it's NOT read
     legacy_dir = anima_dir / "shortterm" / "heartbeat_history"
     legacy_dir.mkdir(parents=True, exist_ok=True)
-    legacy_entry = json.dumps({
-        "timestamp": "2026-02-17T09:00:00",
-        "trigger": "heartbeat",
-        "action": "checked",
-        "summary": "LEGACY_SHOULD_NOT_APPEAR",
-    })
+    legacy_entry = json.dumps(
+        {
+            "timestamp": "2026-02-17T09:00:00",
+            "trigger": "heartbeat",
+            "action": "checked",
+            "summary": "LEGACY_SHOULD_NOT_APPEAR",
+        }
+    )
     (legacy_dir / f"{today_local().isoformat()}.jsonl").write_text(
-        legacy_entry + "\n", encoding="utf-8",
+        legacy_entry + "\n",
+        encoding="utf-8",
     )
 
     # Create minimal Anima-like object to test _load_heartbeat_history
@@ -175,13 +180,16 @@ def test_heartbeat_history_from_activity_log(anima_dir: Path) -> None:
             self.anima_dir = anima_dir
             self.name = "test-anima"
             self._HEARTBEAT_HISTORY_N = 3
+            self._PLAN_OUTCOME_MAX_CHARS = 200
             self._activity = ActivityLogger(anima_dir)
 
     # Bind the method
     import types
+
     obj = _MinimalAnima(anima_dir)
     obj._load_heartbeat_history = types.MethodType(
-        DigitalAnima._load_heartbeat_history, obj,
+        DigitalAnima._load_heartbeat_history,
+        obj,
     )
 
     text = obj._load_heartbeat_history()
@@ -198,15 +206,15 @@ def test_heartbeat_history_from_activity_log(anima_dir: Path) -> None:
 def test_append_dm_log_restored() -> None:
     """_append_dm_log method restored on Messenger for legacy fallback writes."""
     from core.messenger import Messenger
-    assert hasattr(Messenger, "_append_dm_log"), \
-        "_append_dm_log should exist for parallel dm_logs/ writes"
+
+    assert hasattr(Messenger, "_append_dm_log"), "_append_dm_log should exist for parallel dm_logs/ writes"
 
 
 def test_append_transcript_removed() -> None:
     """_append_transcript method no longer exists on ConversationMemory."""
     from core.memory.conversation import ConversationMemory
-    assert not hasattr(ConversationMemory, "_append_transcript"), \
-        "_append_transcript should have been removed"
+
+    assert not hasattr(ConversationMemory, "_append_transcript"), "_append_transcript should have been removed"
 
 
 # ── Fix 1: cron_command logging E2E ───────────────────────────

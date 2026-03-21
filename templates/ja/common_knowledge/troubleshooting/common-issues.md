@@ -283,15 +283,25 @@ send_message(
    - 上司に利用許可を依頼する
    - 依頼時は「なぜそのツールが必要か」を明記すること
 
-4. **S-mode（Claude Agent SDK / MCP）の場合**
+4. **MCP 統合モード（S/C/D/G: Claude Agent SDK / Codex CLI / Cursor Agent / Gemini CLI）の場合**
    - 組み込みツールはプレフィックスなしで利用可能（例: `send_message`）。見つからない場合はプロセス再起動が必要
-   - 外部ツールは `skill` ツールでCLI使用法を確認し、**Bash** 経由で `animaworks-tool <ツール> <サブコマンド>` を実行する（Claude Code の Bash ツールを使用）
+   - 外部ツールは `skill` ツールでCLI使用法を確認し、**Bash** 経由で `animaworks-tool <ツール> <サブコマンド>` を実行する（エージェントの Bash ツールを使用）
    - 長時間ツール（画像生成、ローカルLLM等）は `animaworks-tool submit` で非同期実行
 
-5. **A-mode（LiteLLM）の場合**
+5. **D-mode（Cursor Agent）特有のよくある問題**
+   - **CLI が見つからない**: ホストに `cursor-agent` CLI がインストールされているか確認する
+   - **認証エラー**: ターミナルで `agent login` を実行してログインする
+   - **フォールバック**: 解決しない場合は `execution_mode` を `A` にするか、モデルを LiteLLM 経由（Mode A）に切り替えて運用する
+
+6. **G-mode（Gemini CLI）特有のよくある問題**
+   - **CLI が見つからない**: ホストに `gemini` CLI がインストールされているか確認する
+   - **認証エラー**: `gemini auth login` を実行するか、環境変数 `GEMINI_API_KEY` を設定する
+   - **フォールバック**: 解決しない場合は `execution_mode` を `A` にするか、モデルを LiteLLM 経由（Mode A）に切り替える。`gemini/` プレフィックスは Google プロバイダ向けに `google/` へリマップされる場合がある
+
+7. **A-mode（LiteLLM）の場合**
    - 外部ツールは `skill` で使い方を確認し、**Bash** 経由で `animaworks-tool <ツール> <サブコマンド>` を実行する
 
-6. **ツールがエラーを返す場合**
+8. **ツールがエラーを返す場合**
    - エラーメッセージを正確に記録する
    - 認証エラーの場合は上司に報告する（認証情報の設定は管理者の責務）
    - タイムアウトの場合はリトライする（最大3回まで）

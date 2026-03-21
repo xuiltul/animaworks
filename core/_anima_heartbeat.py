@@ -58,6 +58,28 @@ _RE_REFLECTION = re.compile(
 
 _MIN_REFLECTION_LENGTH = 50
 
+# ── Plan extraction ───────────────────────────────────────────
+
+_RE_PLAN = re.compile(
+    r"##\s*Plan[^\n]*\n(.*?)(?=\n##\s|\Z)",
+    re.DOTALL,
+)
+
+_MAX_PLAN_SUMMARY_CHARS = 500
+
+
+def _extract_plan_summary(text: str) -> str:
+    """Extract ## Plan section from heartbeat output.
+
+    Returns empty string if not found.
+    """
+    if not text:
+        return ""
+    m = _RE_PLAN.search(text)
+    if m:
+        return m.group(1).strip()[:_MAX_PLAN_SUMMARY_CHARS]
+    return ""
+
 
 def _extract_reflection(text: str) -> str:
     """Extract [REFLECTION]...[/REFLECTION] block from heartbeat output.
@@ -120,11 +142,14 @@ class HeartbeatMixin:
 
     _HEARTBEAT_HISTORY_N = 3
 
-    def _load_heartbeat_history(self) -> str:
-        """Load last N heartbeat history entries from unified activity log.
+    _PLAN_OUTCOME_MAX_CHARS = 200
 
-        Falls back to legacy ``shortterm/heartbeat_history/`` when the
-        activity log is empty (migration period).
+    def _load_heartbeat_history(self) -> str:
+        """Load last N heartbeat history entries with plan-outcome tracking.
+
+        When ``meta.plan_summary`` is available, the entry is rendered as
+        a plan item so the next heartbeat can verify execution status.
+        Falls back to legacy ``shortterm/heartbeat_history/``.
         """
         try:
             entries = self._activity.recent(
@@ -134,10 +159,15 @@ class HeartbeatMixin:
             )
             if entries:
                 lines: list[str] = []
+                limit = self._PLAN_OUTCOME_MAX_CHARS
                 for e in entries:
                     ts_short = e.ts[11:19] if len(e.ts) >= 19 else e.ts
-                    summary = e.summary or e.content
-                    lines.append(f"- {ts_short}: {summary}")
+                    plan = (e.meta or {}).get("plan_summary", "")
+                    if plan:
+                        lines.append(t("heartbeat.history_plan_entry", ts=ts_short, plan=plan[:limit]))
+                    else:
+                        summary = (e.summary or e.content)[:limit]
+                        lines.append(f"- {ts_short}: {summary}")
                 return "\n".join(lines)
 
             # Legacy fallback: read from shortterm/heartbeat_history/
@@ -321,8 +351,7 @@ class HeartbeatMixin:
         """
         hb_config = self.memory.read_heartbeat_config()
         checklist = hb_config or load_prompt("heartbeat_default_checklist")
-        task_delegation_rules = load_prompt("task_delegation_rules")
-        parts = [load_prompt("heartbeat", checklist=checklist, task_delegation_rules=task_delegation_rules)]
+        parts = [load_prompt("heartbeat", checklist=checklist)]
 
         state = self.memory.read_current_state()
         state_len = len(state)
@@ -516,8 +545,10 @@ class HeartbeatMixin:
 
             self._last_activity = now_local()
 
-            # Activity log: heartbeat end
-            self._activity.log("heartbeat_end", summary=result.summary)
+            # Activity log: heartbeat end (with plan summary for plan-outcome tracking)
+            _plan_summary = _extract_plan_summary(accumulated_text)
+            _hb_meta: dict[str, Any] | None = {"plan_summary": _plan_summary} if _plan_summary else None
+            self._activity.log("heartbeat_end", summary=result.summary, meta=_hb_meta)
 
             # Session boundary: finalize pending conversation turns
             try:

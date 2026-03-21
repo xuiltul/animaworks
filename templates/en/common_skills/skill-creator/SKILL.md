@@ -72,7 +72,7 @@ If any of these appear alone, replace with more concrete wording:
 | perform management | hot reload, process restart, status check |
 | perform check | slack_search tool for DM retrieval, unread check |
 | perform response | chatwork_search for room unread retrieval, send reply |
-| mechanism and usage | RAG/Priming/Consolidation, execution mode (S/A/B) |
+| mechanism and usage | RAG/Priming/Consolidation, execution mode (S/C/D/G/A/B) |
 | meta-skill for creating | create in YAML frontmatter format, 「」keyword design |
 
 ### Keyword Design Tips

@@ -6,7 +6,7 @@
 Covers:
 - 3-lock structure (_conversation_locks, _inbox_lock, _background_lock, _state_file_lock)
 - Trigger-based prompt section filtering (chat/inbox/heartbeat/cron/task)
-- New prompt template loading (inbox_message, task_exec, task_delegation_rules)
+- New prompt template loading (inbox_message, task_exec)
 - Heartbeat plan-focus (no inbox processing, Observe/Plan/Reflect)
 - Cron LLM sessions with heartbeat-equivalent context
 - InboxRateLimiter wiring (process_inbox_message instead of run_heartbeat)
@@ -104,9 +104,9 @@ class TestPromptTemplates:
 
     def test_inbox_message_template_loads(self):
         from core.paths import load_prompt
-        result = load_prompt("inbox_message", messages="test msg", task_delegation_rules="rules")
+        result = load_prompt("inbox_message", messages="test msg")
         assert "test msg" in result
-        assert "rules" in result
+        assert "task-delegation-guide" in result
 
     def test_task_exec_template_loads(self):
         from core.paths import load_prompt
@@ -124,11 +124,12 @@ class TestPromptTemplates:
         assert "test-001" in result
         assert "Test Task" in result
 
-    def test_task_delegation_rules_loads(self):
-        from core.paths import load_prompt
-        result = load_prompt("task_delegation_rules")
-        assert "タスク実行の仕組み" in result
-        assert "禁止パターン" in result
+    def test_task_delegation_guide_template_exists(self):
+        from core.paths import TEMPLATES_DIR
+        path = TEMPLATES_DIR / "ja" / "common_knowledge" / "operations" / "task-delegation-guide.md"
+        text = path.read_text(encoding="utf-8")
+        assert "タスク実行の仕組み" in text
+        assert "禁止パターン" in text
 
     def test_task_complete_notify_loads(self):
         from core.paths import load_prompt
@@ -141,7 +142,6 @@ class TestPromptTemplates:
         result = load_prompt(
             "heartbeat",
             checklist="- check item",
-            task_delegation_rules="rules here",
         )
         assert "Plan" in result
         assert "Act" not in result or "実際の作業" in result

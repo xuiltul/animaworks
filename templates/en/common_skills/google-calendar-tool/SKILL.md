@@ -43,7 +43,7 @@ Use **Bash** with `animaworks-tool google_calendar <subcommand> [args]`. See Act
 | calendar_id | string | No | Calendar ID (default: primary) |
 | attendees | array | No | List of attendee email addresses |
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool google_calendar list [-n 20] [-d 7] [--calendar-id primary]

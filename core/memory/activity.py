@@ -98,6 +98,8 @@ class ActivityLogger(
     grouping, conversation view, and rotation are provided by mixins.
     """
 
+    _MAX_CONTENT_CHARS = 20_000
+
     _LIVE_EVENT_TYPES = frozenset(
         {
             "inbox_processing_start",
@@ -168,6 +170,12 @@ class ActivityLogger(
         Returns:
             The recorded :class:`ActivityEntry`.
         """
+        if len(content) > self._MAX_CONTENT_CHARS:
+            content = (
+                content[: self._MAX_CONTENT_CHARS]
+                + f"\n... (truncated {len(content):,} chars → {self._MAX_CONTENT_CHARS:,})"
+            )
+
         entry = ActivityEntry(
             ts=now_iso(),
             type=event_type,
@@ -283,44 +291,53 @@ class ActivityLogger(
             if not path.exists():
                 continue
             try:
-                for line_num, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        raw = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if "event" in raw and "type" not in raw:
-                        raw["type"] = raw.pop("event")
-                    if type_set and raw.get("type") not in type_set:
-                        continue
-                    if involving and not self._involves(raw, involving):
-                        continue
-                    if "timestamp" in raw and "ts" not in raw:
-                        raw["ts"] = raw.pop("timestamp")
-                    if "from" in raw:
-                        raw["from_person"] = raw.pop("from")
-                    if "to" in raw:
-                        raw["to_person"] = raw.pop("to")
-                    if cutoff:
+                with path.open(encoding="utf-8", errors="replace") as fh:
+                    for line_num, line in enumerate(fh, start=1):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        if len(line) > self._MAX_CONTENT_CHARS * 2:
+                            logger.warning(
+                                "Skipping oversized line (%s chars) at %s:%d",
+                                f"{len(line):,}",
+                                path.name,
+                                line_num,
+                            )
+                            continue
                         try:
-                            ts = datetime.fromisoformat(raw.get("ts", ""))
-                            if ts.tzinfo is None:
-                                ts = ts.replace(tzinfo=cutoff.tzinfo)
-                            if ts < cutoff:
-                                continue
-                        except (ValueError, TypeError):
-                            logger.debug("Failed to parse timestamp for cutoff filtering", exc_info=True)
-                    try:
-                        entry = ActivityEntry(
-                            **{k: v for k, v in raw.items() if k in ActivityEntry.__dataclass_fields__}
-                        )
-                    except (TypeError, ValueError, KeyError):
-                        logger.debug("Skipping malformed entry at line %d in %s", line_num, path)
-                        continue
-                    entry._line_number = line_num
-                    entries.append(entry)
+                            raw = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if "event" in raw and "type" not in raw:
+                            raw["type"] = raw.pop("event")
+                        if type_set and raw.get("type") not in type_set:
+                            continue
+                        if involving and not self._involves(raw, involving):
+                            continue
+                        if "timestamp" in raw and "ts" not in raw:
+                            raw["ts"] = raw.pop("timestamp")
+                        if "from" in raw:
+                            raw["from_person"] = raw.pop("from")
+                        if "to" in raw:
+                            raw["to_person"] = raw.pop("to")
+                        if cutoff:
+                            try:
+                                ts = datetime.fromisoformat(raw.get("ts", ""))
+                                if ts.tzinfo is None:
+                                    ts = ts.replace(tzinfo=cutoff.tzinfo)
+                                if ts < cutoff:
+                                    continue
+                            except (ValueError, TypeError):
+                                logger.debug("Failed to parse timestamp for cutoff filtering", exc_info=True)
+                        try:
+                            entry = ActivityEntry(
+                                **{k: v for k, v in raw.items() if k in ActivityEntry.__dataclass_fields__}
+                            )
+                        except (TypeError, ValueError, KeyError):
+                            logger.debug("Skipping malformed entry at line %d in %s", line_num, path)
+                            continue
+                        entry._line_number = line_num
+                        entries.append(entry)
             except OSError:
                 logger.exception("Failed to read activity log %s", path)
 

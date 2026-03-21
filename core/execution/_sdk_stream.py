@@ -117,7 +117,7 @@ def _log_tool_result(
         activity.log(
             "tool_result",
             tool=tool_name,
-            content=result_content,
+            content=result_content[:20_000] if len(result_content) > 20_000 else result_content,
             meta={"tool_use_id": tool_use_id, "is_error": is_error},
         )
     except Exception:

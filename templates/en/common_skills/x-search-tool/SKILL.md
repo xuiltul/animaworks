@@ -33,7 +33,7 @@ animaworks-tool x_search --user @username [-n 10]
 | count | integer | 10 | Number of results |
 | days | integer | 7 | Search period in days |
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool x_search "search query" [-n 10] [--days 7]

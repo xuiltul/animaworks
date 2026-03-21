@@ -154,4 +154,40 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "保存する値（暗号化されて保存される）",
         "en": "Value to store (will be encrypted)",
     },
+    "schema.todo_write.desc": {
+        "ja": (
+            "セッション内タスクチェックリストを作成・更新する。3ステップ以上の複雑なタスクで使用すること。"
+            "merge=falseで全リスト置換、merge=trueで既存リストにマージ（idで照合）。"
+            "in_progressは同時に1つのみ許可。最大20アイテム。"
+        ),
+        "en": (
+            "Create or update a structured task checklist for the current session. "
+            "Use when a task requires 3 or more distinct steps. "
+            "merge=false replaces the entire list; merge=true merges by id. "
+            "Only one task may be in_progress at a time. Maximum 20 items."
+        ),
+    },
+    "schema.todo_write.todos": {
+        "ja": "タスクアイテムの配列",
+        "en": "Array of todo items",
+    },
+    "schema.todo_write.id": {
+        "ja": "タスクの一意識別子",
+        "en": "Unique identifier for the todo item",
+    },
+    "schema.todo_write.content": {
+        "ja": "タスクの内容・説明",
+        "en": "Description/content of the todo item",
+    },
+    "schema.todo_write.status": {
+        "ja": "タスクの状態 (pending=未着手, in_progress=実行中, completed=完了)",
+        "en": "Task status (pending=not started, in_progress=working on, completed=done)",
+    },
+    "schema.todo_write.merge": {
+        "ja": "trueで既存リストにマージ（idで照合し、変更のあるフィールドのみ更新）。falseで全置換。デフォルトfalse",
+        "en": (
+            "If true, merge into existing todos by id (update only changed fields). "
+            "If false, replace the entire list. Default false."
+        ),
+    },
 }

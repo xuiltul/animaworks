@@ -7,6 +7,10 @@ let envData = {
   claude_code_available: false,
   codex_cli_available: false,
   codex_login_available: false,
+  cursor_agent_available: false,
+  cursor_agent_authenticated: false,
+  gemini_cli_available: false,
+  gemini_authenticated: false,
   python_version: "",
   os_info: "",
 };
@@ -17,6 +21,8 @@ let apiKey = "";
 let apiKeyValid = null; // null = unchecked, true/false
 let codexLoginValid = null; // null = unchecked, true/false
 let codexDeviceLogin = null;
+let cursorAgentValid = null;
+let geminiCliValid = null;
 let ollamaUrl = "http://localhost:11434";
 let selectedImageStyle = "realistic";
 let imageKeys = {
@@ -32,6 +38,8 @@ let imageKeyStatus = {
 
 const PROVIDERS = [
   { id: "claude_code", keyRequired: false },
+  { id: "cursor_agent", keyRequired: false },
+  { id: "gemini_cli", keyRequired: false },
   { id: "anthropic", keyRequired: true, keyEnv: "ANTHROPIC_API_KEY" },
   { id: "openai", keyRequired: true, keyEnv: "OPENAI_API_KEY" },
   { id: "google", keyRequired: true, keyEnv: "GOOGLE_API_KEY" },
@@ -90,6 +98,26 @@ function render() {
           </div>
         </div>
       </div>
+      <div class="env-detection">
+        <div class="env-detection-icon">${envData.cursor_agent_available ? "\u2705" : "\u2b1c"}</div>
+        <div class="env-detection-text">
+          <div class="env-detection-name" data-i18n="env.cursor_agent">${t("env.cursor_agent")}</div>
+          <div class="env-detection-status ${envData.cursor_agent_available ? "found" : "not-found"}"
+               data-i18n="env.cursor_agent.${envData.cursor_agent_available ? "found" : "notfound"}">
+            ${envData.cursor_agent_available ? t("env.cursor_agent.found") : t("env.cursor_agent.notfound")}
+          </div>
+        </div>
+      </div>
+      <div class="env-detection">
+        <div class="env-detection-icon">${envData.gemini_cli_available ? "\u2705" : "\u2b1c"}</div>
+        <div class="env-detection-text">
+          <div class="env-detection-name" data-i18n="env.gemini_cli">${t("env.gemini_cli")}</div>
+          <div class="env-detection-status ${envData.gemini_cli_available ? "found" : "not-found"}"
+               data-i18n="env.gemini_cli.${envData.gemini_cli_available ? "found" : "notfound"}">
+            ${envData.gemini_cli_available ? t("env.gemini_cli.found") : t("env.gemini_cli.notfound")}
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="env-section">
@@ -103,6 +131,8 @@ function render() {
       ${isOpenAI && openaiAuthMode === "codex_login" ? renderCodexLoginInput() : ""}
       ${needsKey ? renderApiKeyInput() : ""}
       ${isOllama ? renderOllamaInput() : ""}
+      ${selectedProvider === "cursor_agent" ? renderCursorAgentStatus() : ""}
+      ${selectedProvider === "gemini_cli" ? renderGeminiCliStatus() : ""}
     </div>
 
     <div class="env-section">
@@ -140,6 +170,8 @@ function renderProviders() {
   return PROVIDERS.map((p) => {
     // Hide claude_code option if not detected
     if (p.id === "claude_code" && !envData.claude_code_available) return "";
+    if (p.id === "cursor_agent" && !envData.cursor_agent_available) return "";
+    if (p.id === "gemini_cli" && !envData.gemini_cli_available) return "";
 
     const selected = p.id === selectedProvider ? " selected" : "";
     const badge = p.id === "claude_code" && envData.claude_code_available
@@ -251,6 +283,64 @@ function renderOpenAIAuthModes() {
           </div>
         </div>
       </div>
+    </div>
+  `;
+}
+
+function renderCursorAgentStatus() {
+  let statusMessage = "";
+  let statusClass = "checking";
+
+  if (cursorAgentValid === true || envData.cursor_agent_authenticated) {
+    statusMessage = t("env.cursor_agent.status.ready");
+    statusClass = "valid";
+  } else if (!envData.cursor_agent_available) {
+    statusMessage = t("env.cursor_agent.status.not_installed");
+    statusClass = "invalid";
+  } else if (cursorAgentValid === false || !envData.cursor_agent_authenticated) {
+    statusMessage = t("env.cursor_agent.status.not_logged_in");
+    statusClass = "invalid";
+  }
+
+  return `
+    <div class="api-key-section">
+      <label class="form-label" data-i18n="env.provider.cursor_agent">${t("env.provider.cursor_agent")}</label>
+      <div class="api-key-row">
+        <div class="api-key-input" style="display:flex;align-items:center;">
+          ${statusMessage}
+        </div>
+        <button class="btn-validate" id="btnValidateCursorAgent" data-i18n="btn.validate">${t("btn.validate")}</button>
+      </div>
+      <div id="cursorAgentStatus">${statusMessage ? `<div class="validation-status ${statusClass}">${statusClass === "valid" ? "\u2713" : "\u2717"} ${statusMessage}</div>` : ""}</div>
+    </div>
+  `;
+}
+
+function renderGeminiCliStatus() {
+  let statusMessage = "";
+  let statusClass = "checking";
+
+  if (geminiCliValid === true || envData.gemini_authenticated) {
+    statusMessage = t("env.gemini_cli.status.ready");
+    statusClass = "valid";
+  } else if (!envData.gemini_cli_available) {
+    statusMessage = t("env.gemini_cli.status.not_installed");
+    statusClass = "invalid";
+  } else if (geminiCliValid === false || !envData.gemini_authenticated) {
+    statusMessage = t("env.gemini_cli.status.not_logged_in");
+    statusClass = "invalid";
+  }
+
+  return `
+    <div class="api-key-section">
+      <label class="form-label" data-i18n="env.provider.gemini_cli">${t("env.provider.gemini_cli")}</label>
+      <div class="api-key-row">
+        <div class="api-key-input" style="display:flex;align-items:center;">
+          ${statusMessage}
+        </div>
+        <button class="btn-validate" id="btnValidateGeminiCli" data-i18n="btn.validate">${t("btn.validate")}</button>
+      </div>
+      <div id="geminiCliStatus">${statusMessage ? `<div class="validation-status ${statusClass}">${statusClass === "valid" ? "\u2713" : "\u2717"} ${statusMessage}</div>` : ""}</div>
     </div>
   `;
 }
@@ -377,6 +467,8 @@ function bindEvents() {
       apiKeyValid = null;
       codexLoginValid = null;
       codexDeviceLogin = null;
+      cursorAgentValid = null;
+      geminiCliValid = null;
       if (selectedProvider === "anthropic") {
         anthropicAuthMode = envData.claude_code_available ? "claude_code_login" : "api_key";
       }
@@ -401,6 +493,8 @@ function bindEvents() {
       apiKeyValid = null;
       codexLoginValid = null;
       codexDeviceLogin = null;
+      cursorAgentValid = null;
+      geminiCliValid = null;
       render();
     });
   });
@@ -424,6 +518,16 @@ function bindEvents() {
   const startCodexLoginBtn = container.querySelector("#btnStartCodexBrowserLogin");
   if (startCodexLoginBtn) {
     startCodexLoginBtn.addEventListener("click", () => startCodexBrowserLogin());
+  }
+
+  const validateCursorBtn = container.querySelector("#btnValidateCursorAgent");
+  if (validateCursorBtn) {
+    validateCursorBtn.addEventListener("click", () => validateCursorAgent());
+  }
+
+  const validateGeminiBtn = container.querySelector("#btnValidateGeminiCli");
+  if (validateGeminiBtn) {
+    validateGeminiBtn.addEventListener("click", () => validateGeminiCli());
   }
 
   const apiInput = container.querySelector("#apiKeyInput");
@@ -562,6 +666,60 @@ async function validateClaudeCodeLogin() {
   }
 }
 
+async function validateCursorAgent() {
+  const statusEl = container.querySelector("#cursorAgentStatus");
+  if (!statusEl) return;
+
+  statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
+
+  try {
+    const res = await fetch("/api/setup/validate-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "cursor_agent" }),
+    });
+    const data = await res.json();
+    cursorAgentValid = data.valid;
+    envData.cursor_agent_authenticated = !!data.valid;
+
+    if (data.valid) {
+      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${data.message || t("env.cursor_agent.status.ready")}</div>`;
+    } else {
+      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.cursor_agent.status.not_logged_in")}</div>`;
+    }
+  } catch {
+    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
+    cursorAgentValid = false;
+  }
+}
+
+async function validateGeminiCli() {
+  const statusEl = container.querySelector("#geminiCliStatus");
+  if (!statusEl) return;
+
+  statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
+
+  try {
+    const res = await fetch("/api/setup/validate-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "gemini_cli" }),
+    });
+    const data = await res.json();
+    geminiCliValid = data.valid;
+    envData.gemini_authenticated = !!data.valid;
+
+    if (data.valid) {
+      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${data.message || t("env.gemini_cli.status.ready")}</div>`;
+    } else {
+      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.gemini_cli.status.not_logged_in")}</div>`;
+    }
+  } catch {
+    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
+    geminiCliValid = false;
+  }
+}
+
 async function validateOllamaUrl() {
   const statusEl = container.querySelector("#ollamaStatus");
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
@@ -626,6 +784,18 @@ export function validateEnvironment() {
   if (selectedProvider === "openai" && openaiAuthMode === "codex_login") {
     if (!(envData.codex_login_available || codexLoginValid === true)) {
       errorEl.innerHTML = `<div class="error-message">${t("error.codex_login_required")}</div>`;
+      return false;
+    }
+  }
+  if (selectedProvider === "cursor_agent") {
+    if (!(envData.cursor_agent_authenticated || cursorAgentValid === true)) {
+      errorEl.innerHTML = `<div class="error-message">${t("error.cursor_agent_auth_required")}</div>`;
+      return false;
+    }
+  }
+  if (selectedProvider === "gemini_cli") {
+    if (!(envData.gemini_authenticated || geminiCliValid === true)) {
+      errorEl.innerHTML = `<div class="error-message">${t("error.gemini_auth_required")}</div>`;
       return false;
     }
   }

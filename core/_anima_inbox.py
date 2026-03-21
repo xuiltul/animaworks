@@ -339,12 +339,10 @@ class InboxMixin:
                     senders_str = ", ".join(inbox_result.senders)
                     trigger = f"inbox:{senders_str}"
 
-                    task_delegation_rules = load_prompt("task_delegation_rules")
                     messages_text = "\n\n".join(inbox_result.prompt_parts)
                     prompt = load_prompt(
                         "inbox_message",
                         messages=messages_text,
-                        task_delegation_rules=task_delegation_rules,
                     )
 
                     # Suppress board fanout when replying to board_mention

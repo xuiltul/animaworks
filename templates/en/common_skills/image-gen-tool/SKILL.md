@@ -42,7 +42,7 @@ Use **Bash** with `animaworks-tool image_gen <subcommand> [args]`. For long-runn
 {"tool_name": "image_gen", "action": "3d_model", "args": {"image": "image path"}}
 ```
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool image_gen pipeline "1girl, ..." --anima-dir $ANIMAWORKS_ANIMA_DIR

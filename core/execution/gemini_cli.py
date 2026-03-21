@@ -198,7 +198,7 @@ class GeminiCLIExecutor(BaseExecutor):
             try:
                 p.unlink(missing_ok=True)
             except Exception:
-                pass
+                logger.debug("Failed to remove temp prompt file: %s", p)
         self._prompt_files.clear()
 
     def _build_command(self, prompt: str) -> list[str]:

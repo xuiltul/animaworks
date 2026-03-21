@@ -58,7 +58,7 @@ Use **Bash** with `animaworks-tool chatwork <subcommand> [args]`. See Actions be
 {"tool_name": "chatwork", "action": "sync", "args": {"room": "room name or ID"}}
 ```
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool chatwork send ROOM MESSAGE

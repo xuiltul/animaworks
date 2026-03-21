@@ -17,11 +17,11 @@ from core.paths import get_data_dir, load_prompt
 from core.prompt.sections import _load_fallback_strings, _load_section_strings
 
 # Modes that use MCP-style tool access (built-in + mcp__aw__*).
-_MCP_MODES = frozenset({"s", "c", "g"})
+_MCP_MODES = frozenset({"s", "c", "d", "g"})
 
 
 def _is_mcp_mode(execution_mode: str) -> bool:
-    """Return True for modes using built-in tools + MCP (S, C, and G)."""
+    """Return True for modes using built-in tools + MCP (S, C, D, and G)."""
     return execution_mode in _MCP_MODES
 
 

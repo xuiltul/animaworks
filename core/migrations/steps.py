@@ -637,6 +637,22 @@ def step_tool_descriptions_resync(data_dir: Path, dry_run: bool, verbose: bool) 
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
+def step_v056_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """v0.5.6: Resync common_knowledge + prompts for message-quality-protocol."""
+    details: list[str] = []
+    total = 0
+    r1 = step_common_knowledge_resync(data_dir, dry_run, verbose)
+    total += r1.changed
+    details.extend(r1.details)
+    r2 = step_prompt_resync(data_dir, dry_run, verbose)
+    total += r2.changed
+    details.extend(r2.details)
+    r3 = step_system_sections_resync(data_dir, dry_run, verbose)
+    total += r3.changed
+    details.extend(r3.details)
+    return StepResult(changed=total, skipped=0, details=details)
+
+
 def step_stale_sections_cleanup(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Remove stale entries from system_sections (e.g. hiring_context)."""
     details: list[str] = []
@@ -668,6 +684,47 @@ def step_stale_sections_cleanup(data_dir: Path, dry_run: bool, verbose: bool) ->
     except Exception as exc:
         logger.exception("step_stale_sections_cleanup failed")
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
+def step_v056_heartbeat_quality_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """v0.5.6: Resync prompts for heartbeat quality improvement (Issue #138)."""
+    details: list[str] = []
+    total = 0
+    r1 = step_prompt_resync(data_dir, dry_run, verbose)
+    total += r1.changed
+    details.extend(r1.details)
+    return StepResult(changed=total, skipped=0, details=details)
+
+
+def step_task_delegation_to_common_knowledge(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Move task_delegation_rules from prompts/ to common_knowledge/operations/.
+
+    Resyncs common_knowledge (deploys task-delegation-guide.md), prompts
+    (deploys updated heartbeat.md/inbox_message.md without the old
+    placeholder), and removes the stale prompts/task_delegation_rules.md
+    from the runtime directory.
+    """
+    details: list[str] = []
+    total = 0
+
+    r1 = step_common_knowledge_resync(data_dir, dry_run, verbose)
+    total += r1.changed
+    details.extend(r1.details)
+
+    r2 = step_prompt_resync(data_dir, dry_run, verbose)
+    total += r2.changed
+    details.extend(r2.details)
+
+    stale = data_dir / "prompts" / "task_delegation_rules.md"
+    if stale.is_file():
+        if dry_run:
+            details.append("Would remove stale prompts/task_delegation_rules.md")
+        else:
+            stale.unlink()
+            details.append("Removed stale prompts/task_delegation_rules.md")
+        total += 1
+
+    return StepResult(changed=total, skipped=0, details=details)
 
 
 # ── Category 5: Version tracking ────────────────────────────────
@@ -715,6 +772,24 @@ def register_all_steps(runner: Any) -> None:
             "tool_descriptions_resync", "Resync tool descriptions/guides", "db_sync", step_tool_descriptions_resync
         ),
         MigrationStep("stale_sections_cleanup", "Remove stale DB sections", "db_sync", step_stale_sections_cleanup),
+        MigrationStep(
+            "v056_resync",
+            "v0.5.6: Resync common_knowledge + prompts (message-quality-protocol)",
+            "template_sync",
+            step_v056_resync,
+        ),
+        MigrationStep(
+            "v056_heartbeat_quality_resync",
+            "v0.5.6: Resync prompts (heartbeat quality)",
+            "template_sync",
+            step_v056_heartbeat_quality_resync,
+        ),
+        MigrationStep(
+            "task_delegation_to_common_knowledge",
+            "Move task_delegation_rules to common_knowledge",
+            "template_sync",
+            step_task_delegation_to_common_knowledge,
+        ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]
     for s in steps:

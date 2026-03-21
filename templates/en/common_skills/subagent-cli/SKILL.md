@@ -4,8 +4,8 @@ description: >-
   Skill for running external AI agent CLIs (codex exec, cursor-agent -p) as subagents
   via Bash in non-interactive mode. Provides execution procedure, options, and output
   handling when delegating complex coding tasks, code review, or multi-file changes.
-  Applies when Bash permission is available in Mode S/A/B. In Mode C (codex/*), the
-  framework runs Codex directly, so calling codex exec is unnecessary.
+  Applies when Bash permission is available in Mode S/C/D/G/A/B. In Mode C/D/G (codex/* / cursor/* / gemini/*), the
+  framework runs each engine directly, so manually invoking the matching CLI is usually unnecessary.
   "subagent", "codex", "cursor-agent", "write code", "implement",
   "code review", "refactoring"
 ---
@@ -22,10 +22,12 @@ This skill applies **only when the Bash tool is available**.
 | Mode | Implementation | Bash | Skill Applicability |
 |------|----------------|------|---------------------|
 | **Mode S** | `agent_sdk.py` (Claude Agent SDK) | Available by default | Applies. Read/Write/Edit/Bash/Grep/Glob/WebFetch/WebSearch available |
-| **Mode A/B** | LiteLLM + tool_use / 1-shot | Only when permitted in permissions.json | Applies if Bash is permitted |
 | **Mode C** | `codex_sdk.py` (Codex SDK) | Depends on Codex CLI toolset | **codex exec not needed** — Framework runs Codex directly. cursor-agent / claude -p can be invoked via Bash (when Bash is available) |
+| **Mode D** | Cursor Agent (cursor-agent subprocess) | Depends on Cursor CLI toolset | **cursor-agent -p not needed** — Framework runs cursor-agent directly. MCP integration. Tool access similar to Mode S but via the cursor-agent binary. codex exec / claude -p can be invoked via Bash (when Bash is available) |
+| **Mode G** | Gemini CLI (gemini subprocess) | Depends on Gemini CLI toolset | **Manual gemini invocation not needed** — Framework runs it directly. MCP integration, stream-json output. Other CLIs can be invoked via Bash (when Bash is available) |
+| **Mode A/B** | LiteLLM + tool_use / 1-shot | Only when permitted in permissions.json | Applies if Bash is permitted |
 
-**Important**: Anima in Mode C (codex/* model) have the framework run Codex CLI directly via Codex SDK. In this case, you do not need to call `codex exec` from Bash yourself. Refer to the relevant section of this skill only when you want to use cursor-agent or claude -p.
+**Important**: For Mode C (`codex/*`), Mode D (`cursor/*`), and Mode G (`gemini/*`), the framework runs each engine directly. You do not need to call `codex exec` (Mode C), `cursor-agent -p` (Mode D), or the Gemini CLI (Mode G) from Bash yourself. Refer to the relevant sections only when you explicitly want a different CLI (cursor-agent, claude -p, codex exec, etc.).
 
 ## Tool Selection Priority
 
@@ -59,7 +61,7 @@ This skill applies **only when the Bash tool is available**.
 
 ## 1. codex exec (Recommended)
 
-**Applicability**: Mode S or Mode A/B (with Bash permission). Not needed in Mode C — the framework runs Codex directly.
+**Applicability**: Mode S or Mode A/B (with Bash permission). Not needed in Mode C — the framework runs Codex directly. In Mode D/G, the framework runs those engines; skip this section unless you intentionally use codex as an alternative.
 
 ### Basic Syntax
 
@@ -116,7 +118,7 @@ codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
 
 ## 2. cursor-agent -p (Alternative)
 
-**Applicability**: Mode S or Mode A/B (with Bash permission). Also applies in Mode C when Bash is available.
+**Applicability**: Mode S or Mode A/B (with Bash permission). Also applies in Mode C/G when Bash is available. In Mode D, the framework runs cursor-agent — manual `cursor-agent -p` is usually unnecessary.
 
 ### Basic Syntax
 
@@ -167,7 +169,7 @@ cursor-agent -p --trust --force \
 
 ## 3. claude -p (Fallback)
 
-**Applicability**: Mode S or Mode A/B (with Bash permission). Also applies in Mode C when Bash is available.
+**Applicability**: Mode S or Mode A/B (with Bash permission). Also applies in Mode C/D/G when Bash is available.
 
 Use only when codex/cursor-agent cannot handle the task. API cost is high.
 

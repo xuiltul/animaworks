@@ -491,7 +491,7 @@ class TestCmdRestart:
         cmd_restart(args)
 
         mock_helper.assert_called_once_with(args, 12345)
-        mock_stop.assert_called_once_with(force=False)
+        mock_stop.assert_called_once_with(force=False, extra_exclude_pids={99999})
         out = capsys.readouterr().out
         assert "99999" in out
 
@@ -513,7 +513,7 @@ class TestCmdRestart:
         args = argparse.Namespace(host="0.0.0.0", port=18500, force=True)
         cmd_restart(args)
 
-        mock_stop.assert_called_once_with(force=True)
+        mock_stop.assert_called_once_with(force=True, extra_exclude_pids={99999})
 
     @patch("cli.commands.server._clear_pycache", return_value=0)
     @patch("cli.commands.server._stop_server", return_value=True)

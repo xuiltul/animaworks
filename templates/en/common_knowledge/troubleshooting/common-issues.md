@@ -283,15 +283,25 @@ send_message(
    - Ask supervisor for permission
    - Clearly state why the tool is needed when requesting
 
-4. **S-mode (Claude Agent SDK / MCP)**
+4. **MCP-integrated modes (S/C/D/G: Claude Agent SDK / Codex CLI / Cursor Agent / Gemini CLI)**
    - Built-in tools are available directly (e.g. `send_message`). Restart process if not found
    - External tools: look up usage via `skill` tool and execute via **Bash** with `animaworks-tool <tool> <subcommand>`
    - Long-running tools (image gen, local LLM, etc.) run asynchronously via `animaworks-tool submit`
 
-5. **A-mode (LiteLLM)**
+5. **D-mode (Cursor Agent) — common issues**
+   - **CLI not found**: Ensure the `cursor-agent` CLI is installed on the host
+   - **Authentication error**: Run `agent login` in a terminal
+   - **Fallback**: If unresolved, set `execution_mode` to `A` or switch the model to a LiteLLM (Mode A) path
+
+6. **G-mode (Gemini CLI) — common issues**
+   - **CLI not found**: Ensure the `gemini` CLI is installed on the host
+   - **Authentication error**: Run `gemini auth login` or set `GEMINI_API_KEY`
+   - **Fallback**: If unresolved, set `execution_mode` to `A` or switch to LiteLLM (Mode A). `gemini/` may be remapped to `google/` for the Google provider
+
+7. **A-mode (LiteLLM)**
    - External tools: look up usage via `skill` and execute via **Bash** with `animaworks-tool <tool> <subcommand>`
 
-6. **If tool returns an error**
+8. **If tool returns an error**
    - Record the error message accurately
    - Report to supervisor for auth errors (credential setup is admin responsibility)
    - Retry on timeout (up to 3 times)

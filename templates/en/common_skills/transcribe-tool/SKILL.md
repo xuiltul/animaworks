@@ -28,7 +28,7 @@ animaworks-tool transcribe transcribe audio_file.wav [-l ja] [-m large-v3-turbo]
 | model | string | "large-v3-turbo" | Whisper model name |
 | raw | boolean | false | If true, skip LLM post-processing |
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool transcribe transcribe audio_file.wav [-l ja] [-m large-v3-turbo]

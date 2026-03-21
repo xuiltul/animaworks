@@ -29,7 +29,7 @@ AnimaWorks ではタスクが3つの独立パスで処理される:
 
 Heartbeat は **実行しない**。実行が必要なタスクを発見したら、部下がいれば `delegate_task` で委任するか、`submit_tasks` でタスク投入して TaskExec パスに委譲する。
 
-なお、Sモード（Claude Agent SDK）の Chat パスでは **Task tool**（および Agent tool）を使うと自動ルーティングが行われる:
+なお、MCP 統合モード（S/C/D/G: Claude Agent SDK・Codex CLI・Cursor Agent・Gemini CLI）の Chat パスでは **Task tool**（および Agent tool）を使うと自動ルーティングが行われる:
 - 部下がいる場合 → workload 最小かつ role マッチする部下に即時委譲される（delegate_task と同様のフロー）
 - 部下がいない場合、または委譲失敗時 → `state/pending/` に書き出され、TaskExec パスが実行する
 
@@ -346,7 +346,7 @@ submit_tasks(batch_id="build-20260301", tasks=[
 > **重要**: `delegate_task` は**部下の TaskExec** がタスクを実行します（あなた自身は実行しません）。自分でバックグラウンド実行したい場合は `submit_tasks` を使ってください。
 
 部下を持つ Anima（スーパーバイザー）は `delegate_task` ツールでタスクを部下に委譲できる。
-Sモードの Chat パスでは Task tool（および Agent tool）でも委譲可能。Task tool は部下を指名するパラメータを持たず、workload 最小かつ role マッチで自動選択される。
+MCP 統合モード（S/C/D/G）の Chat パスでは Task tool（および Agent tool）でも委譲可能。Task tool は部下を指名するパラメータを持たず、workload 最小かつ role マッチで自動選択される。
 
 ### delegate_task の動作
 

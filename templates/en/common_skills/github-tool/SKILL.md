@@ -37,7 +37,7 @@ Use **Bash** with `animaworks-tool github <subcommand> [args]`. See Actions belo
 ```
 - `draft` (optional, default: false): Create as draft PR
 
-## CLI Usage (S-mode)
+## CLI Usage (S/C/D/G-mode)
 
 ```bash
 animaworks-tool github issues [--repo OWNER/REPO] [--state open] [--limit 20]

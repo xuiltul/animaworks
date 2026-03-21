@@ -94,4 +94,36 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "ワークスペースの解決に失敗しました: {error}",
         "en": "Failed to resolve workspace: {error}",
     },
+    "setup.cli_tools_auth": {
+        "ja": "CLIツール認証状態",
+        "en": "CLI Tools Auth Status",
+    },
+    "setup.cli_tools_claude_code": {
+        "ja": "Claude Code CLI",
+        "en": "Claude Code CLI",
+    },
+    "setup.cli_tools_codex_cli": {
+        "ja": "Codex CLI",
+        "en": "Codex CLI",
+    },
+    "setup.cli_tools_codex_login": {
+        "ja": "Codex Login",
+        "en": "Codex Login",
+    },
+    "setup.cli_tools_cursor_agent": {
+        "ja": "Cursor Agent CLI",
+        "en": "Cursor Agent CLI",
+    },
+    "setup.cli_tools_cursor_auth": {
+        "ja": "Cursor Agent 認証",
+        "en": "Cursor Agent Auth",
+    },
+    "setup.cli_tools_gemini_cli": {
+        "ja": "Gemini CLI",
+        "en": "Gemini CLI",
+    },
+    "setup.cli_tools_gemini_auth": {
+        "ja": "Gemini CLI 認証",
+        "en": "Gemini CLI Auth",
+    },
 }

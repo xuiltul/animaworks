@@ -6,6 +6,8 @@
 ## Plan（計画）
 観察結果に基づき、次に行うべきタスクを判断してください。
 
+**メッセージ送信前チェック(MUST)**: 委譲・報告・エスカレーション送信前に `common_knowledge/communication/message-quality-protocol.md` の必須項目を確認
+
 **【MUST】対応が必要な事項を発見したら、必ずタスクとして具体化すること。「認識したが何もしない」は禁止。**
 以下のいずれかの手段で必ずアクション化する:
 - 部下に任せる → `delegate_task`
@@ -24,7 +26,7 @@
 **重要: このフェーズで実際の作業（コード変更、ファイル編集、調査等）を行わないでください。**
 **タスクの実行は別セッションで自動的に行われます。**
 
-{task_delegation_rules}
+**タスク投入ガイドライン**: `submit_tasks` / `delegate_task` 使用時は `read_memory_file(path="common_knowledge/operations/task-delegation-guide.md")` の記述原則・禁止パターンに従うこと（MUST）。
 
 ## Reflect（振り返り）
 上記の観察・計画をすべて終えた後、気づいたことや洞察があれば以下の形式で述べてください。

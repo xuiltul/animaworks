@@ -7,12 +7,14 @@ AnimaWorks のモデル設定に関する包括ガイド。
 
 ## 実行モード
 
-AnimaWorks はモデル名から実行モードを自動判定する。4種類の実行モードがある:
+AnimaWorks はモデル名から実行モードを自動判定する。6種類の実行モードがある:
 
 | モード | 名称 | 概要 | 対象モデル例 |
 |--------|------|------|-------------|
 | **S** | SDK | Claude Agent SDK経由。最も高機能 | `claude-opus-4-6`, `claude-sonnet-4-6` |
 | **C** | Codex | Codex CLI経由 | `codex/o4-mini`, `codex/gpt-4.1` |
+| **D** | Cursor Agent | Cursor Agent CLI（`cursor-agent`）経由。MCP 統合 | `cursor/*` |
+| **G** | Gemini CLI | Gemini CLI 経由。MCP 統合 | `gemini/*` |
 | **A** | Autonomous | LiteLLM + tool_useループ | `openai/gpt-4.1`, `google/gemini-2.5-pro`, `ollama/qwen3:14b` |
 | **B** | Basic | 1ショット実行。フレームワークが記憶I/Oを代行 | `ollama/gemma3:4b`, `ollama/deepseek-r1*` |
 
@@ -156,7 +158,7 @@ fnmatch ワイルドカードパターンが使用可能。
 ```json
 {
   "パターン": {
-    "mode": "S" | "A" | "B" | "C",
+    "mode": "S" | "C" | "D" | "G" | "A" | "B",
     "context_window": トークン数
   }
 }

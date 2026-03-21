@@ -6,4 +6,5 @@
 **Reports**: [Report] Conclusion → Situation → Evidence (cmd+output+timestamp) → Impact → Action → Next steps
 **Subordinate verification**: Never accept at face value. Verify facts with your own tools before escalating
 
+**Quality**: Before delegation/completion reports/escalation, check required fields in `common_knowledge/communication/message-quality-protocol.md` (MUST)
 Details: `read_memory_file(path="common_knowledge/communication/messaging-guide.md")`

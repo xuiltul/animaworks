@@ -153,11 +153,13 @@ STRINGS: dict[str, dict[str, str]] = {
             "【重要】直属部下のAnimaにタスクを委譲する（部下のTaskExecが実行する。あなた自身は実行しない）。"
             "部下のタスクキューに追加し、state/pending/ に書き出して即時実行をトリガーする。"
             "同時にDMで指示を送信。自分側にも追跡用エントリが作成される。直属部下のみ操作可能。"
+            "指示内容の書き方は common_knowledge/operations/task-delegation-guide.md を参照（MUST）。"
         ),
         "en": (
             "IMPORTANT: Delegate a task to a direct subordinate Anima — the SUBORDINATE executes it via their own TaskExec (not you). "
             "Adds to the subordinate's task queue and writes to state/pending/ to trigger immediate execution. "
             "Also sends a DM with instructions. A tracking entry is created on your side. Only direct subordinates can be targeted."
+            " For instruction writing guidelines, read common_knowledge/operations/task-delegation-guide.md (MUST)."
         ),
     },
     "schema.submit_tasks.desc": {
@@ -165,6 +167,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "【重要】このツールで投入したタスクはあなた自身のTaskExecが実行します（部下には送られません）。"
             "部下にタスクを委任する場合は delegate_task を使ってください。"
             "複数タスクをDAGとして並列/直列実行する。parallel=trueのタスクは同時実行。depends_on指定タスクは依存完了後に実行。"
+            "TaskExecはあなたの会話履歴を持たない。descriptionの書き方は common_knowledge/operations/task-delegation-guide.md を参照（MUST）。"
         ),
         "en": (
             "IMPORTANT: Tasks submitted here are executed by YOUR OWN TaskExec — they are NOT sent to subordinates. "
@@ -172,6 +175,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "Submit multiple tasks as a DAG for parallel/serial execution. "
             "Independent tasks with parallel=true run concurrently. "
             "Tasks with depends_on wait for dependencies to complete."
+            " TaskExec has NO access to your conversation history. For description writing guidelines, read common_knowledge/operations/task-delegation-guide.md (MUST)."
         ),
     },
     "schema.delegate_task.instruction": {

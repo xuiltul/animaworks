@@ -271,6 +271,36 @@ class TestMigrationSteps:
         result = step_update_version(data_dir, dry_run=False, verbose=True)
         assert result.changed == 1
 
+    def test_step_task_delegation_to_common_knowledge(self, data_dir: Path) -> None:
+        from core.migrations.steps import step_task_delegation_to_common_knowledge
+
+        prompts_dir = data_dir / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        stale = prompts_dir / "task_delegation_rules.md"
+        stale.write_text("old content", encoding="utf-8")
+
+        result = step_task_delegation_to_common_knowledge(data_dir, dry_run=False, verbose=True)
+        assert result.changed >= 1
+        assert not stale.exists(), "stale prompts/task_delegation_rules.md should be removed"
+
+    def test_step_task_delegation_to_common_knowledge_dry_run(self, data_dir: Path) -> None:
+        from core.migrations.steps import step_task_delegation_to_common_knowledge
+
+        prompts_dir = data_dir / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        stale = prompts_dir / "task_delegation_rules.md"
+        stale.write_text("old content", encoding="utf-8")
+
+        result = step_task_delegation_to_common_knowledge(data_dir, dry_run=True, verbose=True)
+        assert result.changed >= 1
+        assert stale.exists(), "dry_run should not remove the file"
+
+    def test_step_task_delegation_no_stale_file(self, data_dir: Path) -> None:
+        from core.migrations.steps import step_task_delegation_to_common_knowledge
+
+        result = step_task_delegation_to_common_knowledge(data_dir, dry_run=False, verbose=True)
+        assert result.changed >= 0
+
 
 # ── CLI tests ───────────────────────────────────────────────
 

@@ -7,12 +7,14 @@ Covers execution modes, supported models, configuration methods, and context win
 
 ## Execution Modes
 
-AnimaWorks automatically determines the execution mode from the model name. There are 4 execution modes:
+AnimaWorks automatically determines the execution mode from the model name. There are 6 execution modes:
 
 | Mode | Name | Overview | Example Models |
 |------|------|----------|---------------|
 | **S** | SDK | Via Claude Agent SDK. Most capable | `claude-opus-4-6`, `claude-sonnet-4-6` |
 | **C** | Codex | Via Codex CLI | `codex/o4-mini`, `codex/gpt-4.1` |
+| **D** | Cursor Agent | Via Cursor Agent CLI (`cursor-agent`). MCP-integrated | `cursor/*` |
+| **G** | Gemini CLI | Via Gemini CLI. MCP-integrated | `gemini/*` |
 | **A** | Autonomous | LiteLLM + tool_use loop | `openai/gpt-4.1`, `google/gemini-2.5-pro`, `ollama/qwen3:14b` |
 | **B** | Basic | Single-shot execution. Framework handles memory I/O | `ollama/gemma3:4b`, `ollama/deepseek-r1*` |
 
@@ -156,7 +158,7 @@ fnmatch wildcard patterns are supported.
 ```json
 {
   "pattern": {
-    "mode": "S" | "A" | "B" | "C",
+    "mode": "S" | "C" | "D" | "G" | "A" | "B",
     "context_window": token_count
   }
 }

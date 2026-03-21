@@ -23,9 +23,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from core.config.models import ActivityScheduleEntry, load_config, save_config
+from core.i18n import t
 from core.schedule_parser import parse_cron_md, parse_heartbeat_config, parse_schedule
 from core.schemas import CronTask
 from core.time_utils import get_app_timezone, now_local
+
+_INDENTED_SCHEDULE_RE = re.compile(r"^\s+schedule:", re.MULTILINE)
+_HEALTH_CHECK_HOURS = 3
 
 if TYPE_CHECKING:
     from core.anima import DigitalAnima
@@ -84,6 +88,7 @@ class SchedulerManager:
             self.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
             self._setup_heartbeat()
             self._setup_cron_tasks()
+            self._setup_cron_health_check()
             self._setup_activity_schedule()
             self.scheduler.start()
 
@@ -322,6 +327,7 @@ class SchedulerManager:
             return
 
         tasks = parse_cron_md(config)
+        registered = 0
         for i, task in enumerate(tasks):
             trigger = parse_schedule(task.schedule)
             if not trigger:
@@ -342,12 +348,114 @@ class SchedulerManager:
                 misfire_grace_time=300,
                 max_instances=1,
             )
+            registered += 1
             logger.info(
                 "Cron registered: %s -> %s (%s) [%s]",
                 self._anima_name,
                 task.name,
                 task.schedule,
                 task.type,
+            )
+
+        self._check_cron_parse_health(config, tasks, registered)
+
+    # ── Cron Health Check ──────────────────────────────────────────
+
+    def _check_cron_parse_health(
+        self,
+        raw_config: str,
+        tasks: list[CronTask],
+        registered: int,
+    ) -> None:
+        """Validate cron parse results and notify the Anima if unhealthy.
+
+        Called at the end of ``_setup_cron_tasks`` (both initial setup and
+        hot-reload).  Writes a markdown file to ``background_notifications/``
+        which is drained into the next heartbeat or cron context.
+        """
+        messages: list[str] = []
+
+        if tasks and registered == 0:
+            messages.append(t("scheduler.cron_health_no_valid_schedule", task_count=len(tasks)))
+
+        if _INDENTED_SCHEDULE_RE.search(raw_config):
+            messages.append(t("scheduler.cron_health_indented_schedule"))
+
+        if not tasks and "schedule:" in raw_config:
+            messages.append(t("scheduler.cron_health_unrecognized_schedule"))
+
+        if messages:
+            self._write_cron_health_notification("\n\n".join(messages))
+
+    def _setup_cron_health_check(self) -> None:
+        """Register a periodic job that checks cron execution health."""
+        if not self.scheduler or not self._anima:
+            return
+
+        self.scheduler.add_job(
+            self._cron_health_tick,
+            CronTrigger(minute=0, hour=f"*/{_HEALTH_CHECK_HOURS}"),
+            id=f"{self._anima_name}_cron_health",
+            name=f"{self._anima_name} cron health check",
+            replace_existing=True,
+            misfire_grace_time=600,
+            max_instances=1,
+        )
+
+    async def _cron_health_tick(self) -> None:
+        """Compare registered cron jobs against actual execution count."""
+        if not self._anima or not self.scheduler:
+            return
+
+        try:
+            cron_job_prefix = f"{self._anima_name}_cron_"
+            cron_jobs = [
+                j
+                for j in self.scheduler.get_jobs()
+                if j.id.startswith(cron_job_prefix) and not j.id.endswith("_health")
+            ]
+            if not cron_jobs:
+                return
+
+            entries = self._anima._activity._load_entries(
+                hours=_HEALTH_CHECK_HOURS,
+                types=["cron_executed"],
+            )
+
+            if len(entries) == 0:
+                self._write_cron_health_notification(
+                    t(
+                        "scheduler.cron_health_no_execution",
+                        job_count=len(cron_jobs),
+                        hours=_HEALTH_CHECK_HOURS,
+                    )
+                )
+        except Exception:
+            logger.debug(
+                "Cron health tick failed for %s",
+                self._anima_name,
+                exc_info=True,
+            )
+
+    def _write_cron_health_notification(self, message: str) -> None:
+        """Write a cron health warning to ``background_notifications/``."""
+        try:
+            notif_dir = self._anima_dir / "state" / "background_notifications"
+            notif_dir.mkdir(parents=True, exist_ok=True)
+            ts = now_local().strftime("%Y%m%d_%H%M%S")
+            notif_path = notif_dir / f"cron_health_{ts}.md"
+            content = f"# {t('scheduler.cron_health_title')}\n\n{message}\n"
+            notif_path.write_text(content, encoding="utf-8")
+            logger.warning(
+                "[%s] Cron health warning written: %s",
+                self._anima_name,
+                notif_path.name,
+            )
+        except Exception:
+            logger.debug(
+                "Failed to write cron health notification for %s",
+                self._anima_name,
+                exc_info=True,
             )
 
     # ── Polling-based Heartbeat ─────────────────────────────────
@@ -574,6 +682,7 @@ class SchedulerManager:
         # Re-setup from current files
         self._setup_heartbeat()
         self._setup_cron_tasks()
+        self._setup_cron_health_check()
         self._setup_activity_schedule()
         self._record_schedule_mtimes()
 

@@ -76,7 +76,7 @@ description: >-
 | 管理を行う | ホットリロード、プロセス再起動、ステータス確認 |
 | 確認する | slack_searchツールでDM取得、未読チェック |
 | 対応を行う | chatwork_searchでルーム内未読取得、返信送信 |
-| 仕組みと使い方 | RAG/Priming/Consolidation、実行モード(S/A/B) |
+| 仕組みと使い方 | RAG/Priming/Consolidation、実行モード(S/C/D/G/A/B) |
 | 作成するためのメタスキル | YAMLフロントマター形式で作成、「」キーワード設計 |
 
 ## 例

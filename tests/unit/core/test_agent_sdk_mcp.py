@@ -15,7 +15,6 @@ import pytest
 
 from core.schemas import ModelConfig
 
-
 # ── Helpers ──────────────────────────────────────────────────
 
 
@@ -220,12 +219,12 @@ class TestMcpServerConfig:
         assert aw_config["args"] == ["-m", "core.mcp.server"]
 
     @pytest.mark.asyncio
-    async def test_allowed_tools_include_mcp_wildcard(
+    async def test_permission_mode_is_bypass(
         self,
         tmp_path: Path,
         mock_sdk,
     ) -> None:
-        """allowed_tools includes 'mcp__aw__*' wildcard."""
+        """permission_mode is set to bypassPermissions (all tools auto-approved)."""
         mock_module, mock_types, captured_options = mock_sdk
         executor = _make_executor(tmp_path / "animas" / "test-anima")
 
@@ -238,7 +237,8 @@ class TestMcpServerConfig:
         ):
             await executor.execute(prompt="hello", system_prompt="sys")
 
-        assert "mcp__aw__*" in captured_options["allowed_tools"]
+        assert captured_options["permission_mode"] == "bypassPermissions"
+        assert "allowed_tools" not in captured_options
 
     @pytest.mark.asyncio
     async def test_extra_mcp_servers_merged_into_mcp_servers(
@@ -271,12 +271,12 @@ class TestMcpServerConfig:
         assert mcp_servers["jira"]["args"] == ["-m", "jira_mcp"]
 
     @pytest.mark.asyncio
-    async def test_extra_mcp_servers_add_allowed_tool_wildcards(
+    async def test_extra_mcp_servers_merged_with_bypass_permissions(
         self,
         tmp_path: Path,
         mock_sdk,
     ) -> None:
-        """extra_mcp_servers also add mcp__{name}__* wildcards to allowed_tools."""
+        """extra_mcp_servers are merged and bypassPermissions covers all tools."""
         mock_module, mock_types, captured_options = mock_sdk
         extra = {
             "browser": {"command": "npx", "args": ["playwright", "run-server"]},
@@ -292,8 +292,8 @@ class TestMcpServerConfig:
         ):
             await executor.execute(prompt="hello", system_prompt="sys")
 
-        allowed = captured_options["allowed_tools"]
-        assert "mcp__browser__*" in allowed
+        assert captured_options["permission_mode"] == "bypassPermissions"
+        assert "browser" in captured_options["mcp_servers"]
 
     @pytest.mark.asyncio
     async def test_empty_extra_mcp_servers_has_no_effect(

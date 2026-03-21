@@ -152,6 +152,9 @@ class ToolHandler(
         # 2 = trusted, 1 = medium, 0 = untrusted; default trusted (no tools used yet)
         self._min_trust_seen: int = 2
 
+        # ── Session-scoped todo list (TodoWrite planning tool) ──
+        self._session_todos: list[dict[str, str]] = []
+
         # ── Cache subordinate paths for permission checks ──
         self._subordinate_activity_dirs: list[Path] = []
         self._subordinate_management_files: list[Path] = []
@@ -236,6 +239,7 @@ class ToolHandler(
             "update_task": self._handle_update_task,
             "list_tasks": self._handle_list_tasks,
             "submit_tasks": self._handle_submit_tasks,
+            "todo_write": self._handle_todo_write,
             "use_tool": self._handle_use_tool,
             "check_background_task": self._handle_check_background_task,
             "list_background_tasks": self._handle_list_background_tasks,
@@ -252,6 +256,82 @@ class ToolHandler(
             "WebSearch": self._handle_web_search,
             "WebFetch": self._handle_web_fetch,
         }
+
+    # ── Session TodoWrite (planning tool) ──────────────────
+
+    def _handle_todo_write(self, args: dict[str, Any]) -> str:
+        """Handle todo_write tool: session-scoped task checklist management."""
+
+        todos_input = args.get("todos")
+        if not todos_input or not isinstance(todos_input, list):
+            return _json.dumps({"error": "todos array is required"})
+
+        merge = bool(args.get("merge", False))
+
+        _MAX_ITEMS = 20
+        _VALID_STATUSES = {"pending", "in_progress", "completed"}
+
+        validated: list[dict[str, str]] = []
+        for item in todos_input:
+            if not isinstance(item, dict):
+                continue
+            todo_id = str(item.get("id", "")).strip()
+            content = str(item.get("content", "")).strip()
+            status = str(item.get("status", "pending")).strip()
+            if not todo_id:
+                continue
+            if status not in _VALID_STATUSES:
+                status = "pending"
+            validated.append({"id": todo_id, "content": content, "status": status})
+
+        if not validated:
+            return _json.dumps({"error": "No valid todo items provided"})
+
+        if merge:
+            existing_map = {t["id"]: t for t in self._session_todos}
+            for item in validated:
+                if item["id"] in existing_map:
+                    existing = existing_map[item["id"]]
+                    if item.get("content"):
+                        existing["content"] = item["content"]
+                    existing["status"] = item["status"]
+                else:
+                    existing_map[item["id"]] = item
+            self._session_todos = list(existing_map.values())
+        else:
+            self._session_todos = validated
+
+        if len(self._session_todos) > _MAX_ITEMS:
+            self._session_todos = self._session_todos[:_MAX_ITEMS]
+
+        in_progress = [t for t in self._session_todos if t["status"] == "in_progress"]
+        warning = ""
+        if len(in_progress) > 1:
+            warning = f" Warning: {len(in_progress)} tasks in_progress (recommended: 1)."
+
+        completed = sum(1 for t in self._session_todos if t["status"] == "completed")
+        total = len(self._session_todos)
+        progress = f"{completed}/{total} completed"
+
+        self._activity.log(
+            event_type="tool_use",
+            content=f"todo_write: {progress}",
+            summary=f"todo_write:{progress}",
+        )
+
+        lines: list[str] = []
+        for todo in self._session_todos:
+            mark = {"completed": "[x]", "in_progress": "[>]", "pending": "[ ]"}.get(todo["status"], "[ ]")
+            lines.append(f"{mark} {todo['id']}: {todo['content']}")
+
+        return _json.dumps(
+            {
+                "status": "ok",
+                "progress": progress,
+                "message": f"Updated todo list ({progress}).{warning}",
+                "todos": "\n".join(lines),
+            }
+        )
 
     # ── Properties and session management ─────────────────────
 
@@ -527,7 +607,7 @@ class ToolHandler(
             self._activity.log(
                 "tool_result",
                 tool=name,
-                content=result,
+                content=result[:20_000] if len(result) > 20_000 else result,
                 meta=meta,
             )
         except Exception as e:
