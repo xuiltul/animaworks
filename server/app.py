@@ -241,7 +241,7 @@ async def lifespan(app: FastAPI):
             raise SystemExit(
                 f"Fatal: permissions.global.json not found at {gp_path}. "
                 "Run 'animaworks init' to generate it."
-            )
+            ) from None
         except Exception:
             logger.critical("Failed to load permissions.global.json — server cannot start")
             raise

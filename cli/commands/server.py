@@ -581,7 +581,7 @@ def cmd_restart(args: argparse.Namespace) -> None:
         print(f"  Dashboard: http://{display_host}:{port}/")
         print(f"  Logs:      {log_path}")
     else:
-        print(f"Error: Server did not start within 20 seconds.")
+        print("Error: Server did not start within 20 seconds.")
         print(f"  Check logs: {log_path}")
         sys.exit(1)
 
