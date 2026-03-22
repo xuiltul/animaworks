@@ -68,6 +68,54 @@ export const ROLES = [
     descKey: "tb.role.content_writer.desc",
     defaultTools: ["notion"],
   },
+  {
+    id: "engineer",
+    nameKey: "tb.role.engineer",
+    descKey: "tb.role.engineer.desc",
+    defaultTools: ["notion"],
+  },
+  {
+    id: "data_analyst",
+    nameKey: "tb.role.data_analyst",
+    descKey: "tb.role.data_analyst.desc",
+    defaultTools: ["notion"],
+  },
+  {
+    id: "designer",
+    nameKey: "tb.role.designer",
+    descKey: "tb.role.designer.desc",
+    defaultTools: ["notion", "slack"],
+  },
+  {
+    id: "marketing",
+    nameKey: "tb.role.marketing",
+    descKey: "tb.role.marketing.desc",
+    defaultTools: ["slack", "notion"],
+  },
+  {
+    id: "hr",
+    nameKey: "tb.role.hr",
+    descKey: "tb.role.hr.desc",
+    defaultTools: ["gmail", "calendar", "notion"],
+  },
+  {
+    id: "legal",
+    nameKey: "tb.role.legal",
+    descKey: "tb.role.legal.desc",
+    defaultTools: ["notion"],
+  },
+  {
+    id: "product_manager",
+    nameKey: "tb.role.product_manager",
+    descKey: "tb.role.product_manager.desc",
+    defaultTools: ["slack", "notion", "calendar"],
+  },
+  {
+    id: "finance",
+    nameKey: "tb.role.finance",
+    descKey: "tb.role.finance.desc",
+    defaultTools: ["notion"],
+  },
 ];
 
 // ── Template Master ──────────────────────────

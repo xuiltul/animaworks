@@ -457,7 +457,7 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
     async def static_cache_control(request: Request, call_next):  # type: ignore[no-untyped-def]
         response = await call_next(request)
         path = request.url.path
-        if path.endswith((".js", ".css", ".html")) or path == "/" or path == "/workspace":
+        if path.endswith((".js", ".css", ".html")) or path == "/" or path.startswith("/workspace"):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return response
 
@@ -611,6 +611,14 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
             "/setup",
             StaticFiles(directory=str(setup_static_dir), html=True),
             name="setup_static",
+        )
+
+    workspace_static_dir = static_dir / "workspace"
+    if workspace_static_dir.exists():
+        app.mount(
+            "/workspace",
+            StaticFiles(directory=str(workspace_static_dir), html=True),
+            name="workspace_static",
         )
 
     if static_dir.exists():

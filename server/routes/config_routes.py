@@ -282,7 +282,7 @@ def create_config_router() -> APIRouter:
 
         # Cloud providers
         for provider, cred in config.credentials.items():
-            if not cred.api_key and cred.type != "claude_code_login":
+            if not cred.api_key and cred.type not in ("claude_code_login", "codex_login"):
                 continue
             if provider == "anthropic":
                 for m in ("claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5"):
@@ -290,15 +290,35 @@ def create_config_router() -> APIRouter:
                         models.append({"id": m, "label": m, "credential": "anthropic"})
                         seen.add(m)
             elif provider == "openai":
-                for m in ("gpt-4.1-mini", "gpt-4.1-nano"):
+                for m in (
+                    "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano",
+                    "gpt-4o", "gpt-4o-mini",
+                    "o3", "o4-mini",
+                ):
                     if m not in seen:
                         models.append({"id": m, "label": m, "credential": "openai"})
                         seen.add(m)
+                # Codex CLI models (codex_login or api_key)
+                if cred.type == "codex_login" or cred.api_key:
+                    for m in (
+                        "codex/o4-mini", "codex/o3", "codex/gpt-4.1",
+                        "openai-codex/gpt-5.3-codex", "openai-codex/gpt-4-turbo",
+                    ):
+                        if m not in seen:
+                            models.append({"id": m, "label": m, "credential": "openai"})
+                            seen.add(m)
             elif provider in ("google", "gemini"):
                 for m in ("gemini-2.5-flash",):
                     if m not in seen:
                         models.append({"id": m, "label": m, "credential": "google"})
                         seen.add(m)
+
+        # Codex CLI models (standalone — no openai credential entry needed)
+        if is_codex_login_available():
+            for m in ("codex/o4-mini", "codex/o3", "codex/gpt-4.1"):
+                if m not in seen:
+                    models.append({"id": m, "label": m, "credential": "codex"})
+                    seen.add(m)
 
         # Local Ollama models
         try:

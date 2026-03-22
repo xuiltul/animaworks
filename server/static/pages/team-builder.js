@@ -40,6 +40,14 @@ const ROLE_ICONS = {
   project_manager: "\uD83C\uDFAF",
   researcher: "\uD83D\uDD0D",
   content_writer: "\u270D\uFE0F",
+  engineer: "\uD83D\uDCBB",
+  data_analyst: "\uD83D\uDCCA",
+  designer: "\uD83C\uDFA8",
+  marketing: "\uD83D\uDCE1",
+  hr: "\uD83E\uDDD1\u200D\uD83E\uDD1D\u200D\uD83E\uDDD1",
+  legal: "\u2696\uFE0F",
+  product_manager: "\uD83D\uDDE3\uFE0F",
+  finance: "\uD83C\uDFDB\uFE0F",
 };
 
 const TEMPLATE_ICONS = {
