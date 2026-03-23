@@ -36,7 +36,8 @@ class DelegationMixin(OrgHelpersMixin):
 
     def _handle_delegate_task(self, args: dict[str, Any]) -> str:
         """Delegate a task to a direct subordinate."""
-        target_name = args.get("name", "").strip().lower()
+        from core.tooling.org_helpers import resolve_anima_name
+        target_name = resolve_anima_name(args.get("name", ""))
         instruction = args.get("instruction", "")
         summary = args.get("summary", "") or instruction[:100]
         deadline = args.get("deadline", "")

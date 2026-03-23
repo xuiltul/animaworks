@@ -20,6 +20,39 @@ if TYPE_CHECKING:
 logger = logging.getLogger("animaworks.tool_handler")
 
 
+def resolve_anima_name(raw: str) -> str:
+    """Resolve a raw name string to the canonical (lowercase) anima name.
+
+    Resolution order:
+      1. Strip + lowercase → exact match against config.animas keys
+      2. Check ``aliases`` field of each anima (case-insensitive), e.g. Japanese names
+      3. Return the stripped value as-is (caller will get AnimaNotFound if invalid)
+
+    This function never raises; callers detect unknown names via config lookups.
+    """
+    from core.config.models import load_config
+
+    stripped = raw.strip()
+    lower = stripped.lower()
+
+    try:
+        config = load_config()
+    except Exception:
+        return lower  # fallback; caller will handle missing key
+
+    # 1. Exact lowercase match
+    if lower in config.animas:
+        return lower
+
+    # 2. Alias match (supports Japanese, display names, etc.)
+    for canonical, cfg in config.animas.items():
+        for alias in cfg.aliases:
+            if alias.strip().lower() == lower or alias.strip() == stripped:
+                return canonical
+
+    return lower  # unknown; return as-is so caller gets AnimaNotFound
+
+
 class OrgHelpersMixin:
     """Shared helpers for subordinate/descendant checks and org utilities."""
 
@@ -31,7 +64,7 @@ class OrgHelpersMixin:
         """Verify that *target_name* is a direct subordinate of this anima."""
         from core.config.models import load_config
 
-        target_name = target_name.strip().lower()
+        target_name = resolve_anima_name(target_name)
         if target_name == self._anima_name:
             return _error_result(
                 "PermissionDenied",
@@ -86,7 +119,7 @@ class OrgHelpersMixin:
 
     def _check_descendant(self, target_name: str) -> str | None:
         """Verify that target_name is a descendant (any depth) of this anima."""
-        target_name = target_name.strip().lower()
+        target_name = resolve_anima_name(target_name)
         if target_name == self._anima_name:
             return _error_result(
                 "PermissionDenied",

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.i18n import t
 from core.tooling.handler_base import _error_result
-from core.tooling.org_helpers import OrgHelpersMixin
+from core.tooling.org_helpers import OrgHelpersMixin, resolve_anima_name
 
 if TYPE_CHECKING:
     from core.memory.activity import ActivityLogger
@@ -32,7 +32,7 @@ class SubordinateControlMixin(OrgHelpersMixin):
 
     def _handle_disable_subordinate(self, args: dict[str, Any]) -> str:
         """Disable a subordinate anima (set enabled=false in status.json)."""
-        target_name = args.get("name", "").strip().lower()
+        target_name = resolve_anima_name(args.get("name", ""))
         reason = args.get("reason", "")
 
         if not target_name:
@@ -87,7 +87,7 @@ class SubordinateControlMixin(OrgHelpersMixin):
 
     def _handle_enable_subordinate(self, args: dict[str, Any]) -> str:
         """Enable a subordinate anima (set enabled=true in status.json)."""
-        target_name = args.get("name", "").strip().lower()
+        target_name = resolve_anima_name(args.get("name", ""))
 
         if not target_name:
             return _error_result("InvalidArguments", "name is required")
@@ -137,7 +137,7 @@ class SubordinateControlMixin(OrgHelpersMixin):
         from core.config.models import KNOWN_MODELS, update_status_model
         from core.paths import get_data_dir
 
-        target_name = args.get("name", "").strip().lower()
+        target_name = resolve_anima_name(args.get("name", ""))
         model = args.get("model", "").strip()
         reason = args.get("reason", "")
 

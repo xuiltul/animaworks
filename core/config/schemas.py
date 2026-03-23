@@ -63,6 +63,8 @@ class AnimaModelConfig(BaseModel):
     supervisor: str | None = None
     speciality: str | None = None
     model: str | None = None
+    aliases: list[str] = []
+    """Alternative names (e.g. Japanese) that resolve to this anima's canonical name."""
 
 
 # ── Default model names (single source of truth) ─────────────────────────────
