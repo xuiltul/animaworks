@@ -31,7 +31,16 @@ _TOOL_MODULES = {
 
 # Expected background-eligible subcommands per tool
 _EXPECTED_BG_ELIGIBLE = {
-    "image_gen": {"pipeline", "3d", "rigging", "animations", "fullbody", "bustup", "chibi"},
+    "image_gen": {
+        "pipeline",
+        "3d",
+        "rigging",
+        "animations",
+        "fullbody",
+        "bustup",
+        "icon",
+        "chibi",
+    },
     "local_llm": {"generate", "chat"},
     "transcribe": {"audio"},
 }
