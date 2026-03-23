@@ -185,16 +185,30 @@ def create_webhooks_router() -> APIRouter:
                 logger.warning("No anima mapping for Slack channel %s and no default_anima", channel_id)
                 return {"ok": True}
 
-            from server.slack_socket import _detect_slack_intent, _fetch_thread_context
+            import asyncio
 
-            intent = _detect_slack_intent(text, channel_id, bot_user_id)
+            from server.slack_socket import (
+                _build_slack_annotation,
+                _detect_mention_intent,
+                _detect_slack_intent,
+                _fetch_thread_context,
+                _load_alias_user_ids,
+                _resolve_slack_mentions,
+            )
+
+            alias_ids = _load_alias_user_ids()
+            mention_intent = _detect_mention_intent(text, bot_user_id, alias_ids)
 
             if thread_ts:
-                import asyncio
-
                 ctx = await asyncio.to_thread(_fetch_thread_context, _token or "", channel_id, thread_ts)
                 if ctx:
                     text = ctx + text
+
+            text = await asyncio.to_thread(_resolve_slack_mentions, text, _token or "")
+            has_mention = bool(mention_intent)
+            annotation = _build_slack_annotation(channel_id, has_mention)
+            text = annotation + text
+            intent = mention_intent or _detect_slack_intent(text, channel_id, bot_user_id)
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)

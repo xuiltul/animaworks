@@ -13,6 +13,7 @@ import asyncio
 import collections
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -33,6 +34,7 @@ logger = logging.getLogger("animaworks.slack_socket")
 # the first handler to process stores the ts; the second skips it.
 _DEDUP_TTL_SEC = 10
 _recent_ts: collections.OrderedDict[str, float] = collections.OrderedDict()
+_user_name_cache: dict[str, str] = {}
 
 
 def _is_duplicate_ts(ts: str) -> bool:
@@ -55,6 +57,62 @@ def _detect_slack_intent(text: str, channel_id: str, bot_user_id: str) -> str:
     return ""
 
 
+def _resolve_slack_mentions(text: str, token: str) -> str:
+    """Resolve <@U...> mentions and Slack markup to human-readable text.
+
+    Extracts all user IDs, resolves unknown ones via Slack API (cached),
+    then applies clean_slack_markup() for full conversion.
+    """
+    if not text:
+        return text
+    user_ids = set(re.findall(r"<@(U[A-Z0-9]+)>", text))
+    unknown = user_ids - set(_user_name_cache)
+    if unknown and token:
+        try:
+            from core.tools.slack import SlackClient
+
+            client = SlackClient(token=token)
+            for uid in unknown:
+                _user_name_cache[uid] = client.resolve_user_name(uid)
+        except Exception:
+            logger.debug("Failed to resolve Slack user mentions", exc_info=True)
+    from core.tools._slack_markdown import clean_slack_markup
+
+    return clean_slack_markup(text, cache=_user_name_cache)
+
+
+def _build_slack_annotation(channel_id: str, has_mention: bool) -> str:
+    """Build a system annotation line for Slack message targeting."""
+    if channel_id.startswith("D"):
+        return "[slack:DM]\n"
+    if has_mention:
+        return "[slack:channel — あなたがメンションされています]\n"
+    return "[slack:channel — あなたへの直接メンションはありません]\n"
+
+
+def _detect_mention_intent(
+    text: str,
+    bot_user_id: str,
+    alias_user_ids: set[str],
+) -> str:
+    """Return 'question' if text mentions the bot or any alias user ID."""
+    if bot_user_id and f"<@{bot_user_id}>" in (text or ""):
+        return "question"
+    for uid in alias_user_ids:
+        if f"<@{uid}>" in (text or ""):
+            return "question"
+    return ""
+
+
+def _load_alias_user_ids() -> set[str]:
+    """Load Slack user IDs from config user_aliases for mention detection."""
+    try:
+        cfg = load_config()
+        return {alias.slack_user_id for alias in cfg.external_messaging.user_aliases.values() if alias.slack_user_id}
+    except Exception:
+        return set()
+
+
 _THREAD_CTX_SUMMARY_LIMIT = 150
 
 
@@ -68,6 +126,7 @@ def _fetch_thread_context(token: str, channel_id: str, thread_ts: str, *, limit:
     if not thread_ts or not token:
         return ""
     try:
+        from core.tools._slack_markdown import clean_slack_markup
         from core.tools.slack import SlackClient
 
         client = SlackClient(token=token)
@@ -77,10 +136,18 @@ def _fetch_thread_context(token: str, channel_id: str, thread_ts: str, *, limit:
         parent = replies[0]
         parent_user = parent.get("user", "unknown")
         parent_text = parent.get("text", "").replace("\n", " ")[:_THREAD_CTX_SUMMARY_LIMIT]
+        # Resolve parent author display name
+        if parent_user not in _user_name_cache:
+            try:
+                _user_name_cache[parent_user] = client.resolve_user_name(parent_user)
+            except Exception:
+                pass
+        parent_display = _user_name_cache.get(parent_user, parent_user)
+        parent_text = clean_slack_markup(parent_text, cache=_user_name_cache)
         reply_count = len(replies) - 1
         lines = [
             "[Thread context — this message is a reply in a Slack thread]",
-            f"  <@{parent_user}>: {parent_text}",
+            f"  @{parent_display}: {parent_text}",
             f"  ({reply_count} replies in thread)",
             "[/Thread context]",
             "",
@@ -323,12 +390,20 @@ class SlackSocketModeManager:
             text = event.get("text", "")
             channel_id = event.get("channel", "")
             thread_ts = event.get("thread_ts", "")
-            intent = _detect_slack_intent(text, channel_id, bot_user_id)
+
+            alias_ids = _load_alias_user_ids()
+            mention_intent = _detect_mention_intent(text, bot_user_id, alias_ids)
 
             if thread_ts:
                 ctx = await asyncio.to_thread(_fetch_thread_context, token, channel_id, thread_ts)
                 if ctx:
                     text = ctx + text
+
+            text = await asyncio.to_thread(_resolve_slack_mentions, text, token)
+            has_mention = bool(mention_intent)
+            annotation = _build_slack_annotation(channel_id, has_mention)
+            text = annotation + text
+            intent = mention_intent or _detect_slack_intent(text, channel_id, bot_user_id)
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)
@@ -363,6 +438,11 @@ class SlackSocketModeManager:
                 ctx = await asyncio.to_thread(_fetch_thread_context, token, channel_id, thread_ts)
                 if ctx:
                     text = ctx + text
+
+            _mention_token = self._get_per_anima_credential("SLACK_BOT_TOKEN", anima_name) or ""
+            text = await asyncio.to_thread(_resolve_slack_mentions, text, _mention_token)
+            annotation = _build_slack_annotation(channel_id, True)
+            text = annotation + text
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)
@@ -425,12 +505,20 @@ class SlackSocketModeManager:
 
             text = event.get("text", "")
             thread_ts = event.get("thread_ts", "")
-            intent = _detect_slack_intent(text, channel_id, bot_user_id)
+
+            alias_ids = _load_alias_user_ids()
+            mention_intent = _detect_mention_intent(text, bot_user_id, alias_ids)
 
             if thread_ts:
                 ctx = await asyncio.to_thread(_fetch_thread_context, _shared_token, channel_id, thread_ts)
                 if ctx:
                     text = ctx + text
+
+            text = await asyncio.to_thread(_resolve_slack_mentions, text, _shared_token)
+            has_mention = bool(mention_intent)
+            annotation = _build_slack_annotation(channel_id, has_mention)
+            text = annotation + text
+            intent = mention_intent or _detect_slack_intent(text, channel_id, bot_user_id)
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)
@@ -475,6 +563,11 @@ class SlackSocketModeManager:
                 ctx = await asyncio.to_thread(_fetch_thread_context, token, channel_id, thread_ts)
                 if ctx:
                     text = ctx + text
+
+            _shared_tok = get_credential("slack", "slack_webhook", env_var="SLACK_BOT_TOKEN") or ""
+            text = await asyncio.to_thread(_resolve_slack_mentions, text, _shared_tok)
+            annotation = _build_slack_annotation(channel_id, True)
+            text = annotation + text
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name_resolved)

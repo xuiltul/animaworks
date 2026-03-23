@@ -120,9 +120,9 @@ class InboxWatcherMixin:
         # Only trigger immediate heartbeat for actionable messages or human messages.
         # Non-actionable messages (ack, thanks, FYI) wait for the scheduled heartbeat.
         has_human = any(m.source == "human" for m in inbox_messages)
-        has_external = any(m.source in EXTERNAL_PLATFORM_SOURCES for m in inbox_messages)
+        has_external_directed = any(m.source in EXTERNAL_PLATFORM_SOURCES and m.intent for m in inbox_messages)
         has_actionable = any(m.intent in self._actionable_intents for m in inbox_messages)
-        if not has_human and not has_external and not has_actionable:
+        if not has_human and not has_external_directed and not has_actionable:
             logger.info(
                 "Intent filter: %s — no actionable messages, deferring to scheduled heartbeat",
                 name,

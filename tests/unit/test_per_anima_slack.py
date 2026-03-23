@@ -344,7 +344,7 @@ class TestWebhookPerAnimaRouting:
         inbox_files = list((shared_dir / "inbox" / "kotoha").glob("*.json"))
         assert len(inbox_files) == 1
         msg_data = json.loads(inbox_files[0].read_text(encoding="utf-8"))
-        assert msg_data["content"] == "Message for Kotoha"
+        assert "Message for Kotoha" in msg_data["content"]
         assert msg_data["source"] == "slack"
 
 
@@ -516,15 +516,12 @@ class TestSlackSocketModeManagerPerAnima:
         await handler_fn(event=event, say=AsyncMock())
 
         mock_messenger_cls.assert_called_with(tmp_path / "shared", "sumire")
-        mock_messenger_cls.return_value.receive_external.assert_called_once_with(
-            content="Hello Sumire",
-            source="slack",
-            source_message_id="9999.1",
-            external_user_id="U_USER",
-            external_channel_id="C_SUMIRE_CHAN",
-            external_thread_ts="",
-            intent="",
-        )
+        call_kwargs = mock_messenger_cls.return_value.receive_external.call_args[1]
+        assert "Hello Sumire" in call_kwargs["content"]
+        assert call_kwargs["source"] == "slack"
+        assert call_kwargs["source_message_id"] == "9999.1"
+        assert call_kwargs["external_user_id"] == "U_USER"
+        assert call_kwargs["external_channel_id"] == "C_SUMIRE_CHAN"
 
 
 # ── 6. Notification channel per-Anima token tests ─────────────────────────

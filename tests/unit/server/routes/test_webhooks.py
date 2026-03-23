@@ -257,7 +257,7 @@ class TestSlackMessageDelivery:
         inbox_files = list((shared_dir / "inbox" / "sakura").glob("*.json"))
         assert len(inbox_files) == 1
         msg_data = json.loads(inbox_files[0].read_text(encoding="utf-8"))
-        assert msg_data["content"] == "Hello Sakura!"
+        assert "Hello Sakura!" in msg_data["content"]
         assert msg_data["source"] == "slack"
         assert msg_data["external_user_id"] == "U999TEST"
         assert msg_data["external_channel_id"] == "C0ACT663B5L"

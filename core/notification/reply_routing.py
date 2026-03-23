@@ -36,7 +36,6 @@ _MAX_REPLY_LENGTH = 4000
 _THREAD_CTX_SUMMARY_LIMIT = 150
 
 # Slack mrkdwn patterns
-_RE_USER_MENTION = re.compile(r"<@[A-Za-z0-9]+>")
 _RE_LINK = re.compile(r"<(https?://[^|>]+)\|([^>]+)>")
 _RE_LINK_BARE = re.compile(r"<(https?://[^>]+)>")
 _RE_CHANNEL = re.compile(r"<#[A-Za-z0-9]+\|([^>]+)>")
@@ -262,10 +261,19 @@ def _fetch_thread_context_for_reply(
         parent = replies[0]
         parent_user = parent.get("user", "unknown")
         parent_text = parent.get("text", "").replace("\n", " ")[:_THREAD_CTX_SUMMARY_LIMIT]
+        from server.slack_socket import _resolve_slack_mentions, _user_name_cache
+
+        if parent_user not in _user_name_cache:
+            try:
+                _user_name_cache[parent_user] = client.resolve_user_name(parent_user)
+            except Exception:
+                pass
+        parent_display = _user_name_cache.get(parent_user, parent_user)
+        parent_text = _resolve_slack_mentions(parent_text, token)
         reply_count = len(replies) - 1
         lines = [
             "[Thread context — this message is a reply in a Slack thread]",
-            f"  <@{parent_user}>: {parent_text}",
+            f"  @{parent_display}: {parent_text}",
             f"  ({reply_count} replies in thread)",
             "[/Thread context]",
             "",
@@ -277,15 +285,14 @@ def _fetch_thread_context_for_reply(
 
 
 def sanitize_slack_reply(text: str, max_length: int = _MAX_REPLY_LENGTH) -> str:
-    """Strip Slack mrkdwn formatting and truncate for safe inbox delivery."""
-    # Remove bot @mentions  <@U0123BOT>
-    text = _RE_USER_MENTION.sub("", text)
-    # <url|label> → label
-    text = _RE_LINK.sub(r"\2", text)
-    # <url> → url
-    text = _RE_LINK_BARE.sub(r"\1", text)
-    # <#C123|channel-name> → #channel-name
-    text = _RE_CHANNEL.sub(r"#\1", text)
+    """Resolve Slack markup and mrkdwn formatting, then truncate for safe inbox delivery.
+
+    User mentions are resolved to display names via the shared cache.
+    URLs, channels, and HTML entities are converted by clean_slack_markup().
+    """
+    from server.slack_socket import _resolve_slack_mentions
+
+    text = _resolve_slack_mentions(text, "")
     # Bold *text* → text, italic _text_ → text, strike ~text~ → text
     text = re.sub(r"(?<!\w)\*([^*]+)\*(?!\w)", r"\1", text)
     text = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"\1", text)
