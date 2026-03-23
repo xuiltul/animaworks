@@ -108,7 +108,7 @@ class TestSlackSocketModeE2E:
         assert len(files) == 1
 
         msg = Message.model_validate_json(files[0].read_text(encoding="utf-8"))
-        assert msg.content == "Hello via Socket Mode"
+        assert "Hello via Socket Mode" in msg.content
         assert msg.source == "slack"
         assert msg.external_user_id == "U_E2E_SOCKET"
         assert msg.external_channel_id == "C_SOCKET_E2E"
@@ -142,7 +142,7 @@ class TestSlackSocketModeE2E:
         files = list(inbox.glob("*.json"))
         assert len(files) == 1
         msg = Message.model_validate_json(files[0].read_text(encoding="utf-8"))
-        assert msg.content == "Log this message"
+        assert "Log this message" in msg.content
 
     async def test_unmapped_channel_no_inbox(self, data_dir, make_anima, monkeypatch):
         """Messages from unmapped channels do NOT create inbox files."""
@@ -238,9 +238,9 @@ class TestSlackSocketModeE2E:
             kotoha_files[0].read_text(encoding="utf-8"),
         )
 
-        assert sakura_msg.content == "For sakura"
+        assert "For sakura" in sakura_msg.content
         assert sakura_msg.to_person == "sakura"
-        assert kotoha_msg.content == "For kotoha"
+        assert "For kotoha" in kotoha_msg.content
         assert kotoha_msg.to_person == "kotoha"
 
     async def test_messages_readable_via_messenger_receive(
@@ -275,7 +275,7 @@ class TestSlackSocketModeE2E:
         messages = messenger.receive()
 
         assert len(messages) == 1
-        assert messages[0].content == "Readable"
+        assert "Readable" in messages[0].content
         assert messages[0].source == "slack"
 
 

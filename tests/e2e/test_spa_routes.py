@@ -148,6 +148,7 @@ class TestInitStatus:
     async def test_api_key_detection(self, tmp_path, monkeypatch):
         """API key presence should be reflected."""
         monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+        monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-123")
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)

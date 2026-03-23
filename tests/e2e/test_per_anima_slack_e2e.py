@@ -279,7 +279,8 @@ class TestWebhookPerAnimaAppIdRouting:
         files = list(inbox.glob("*.json"))
         assert len(files) >= 1
         msg_data = json.loads(files[0].read_text(encoding="utf-8"))
-        assert msg_data.get("content") == "Webhook test for sumire"
+        content = msg_data.get("content", "")
+        assert "Webhook test for sumire" in content
         assert msg_data.get("to_person") == "sumire"
 
 

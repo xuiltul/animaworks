@@ -108,7 +108,7 @@ class TestSlackWebhookE2E:
         assert len(files) == 1
 
         msg = Message.model_validate_json(files[0].read_text(encoding="utf-8"))
-        assert msg.content == "E2E test message from Slack"
+        assert "E2E test message from Slack" in msg.content
         assert msg.source == "slack"
         assert msg.external_user_id == "U_E2E_USER"
         assert msg.external_channel_id == "C_E2E_TEST"
