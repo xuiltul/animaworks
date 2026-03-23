@@ -76,6 +76,9 @@ function _handleWsEvent(eventType, data) {
     case "anima.remake_preview_ready":
       _onPreviewReady(data);
       break;
+    case "anima.image_gen_progress":
+      _onImageGenProgress(data);
+      break;
     case "anima.remake_progress":
       _onRemakeProgress(data);
       break;
@@ -655,6 +658,14 @@ async function _generatePreview() {
 
     _previewBackupId = result.backup_id || _previewBackupId;
 
+    if (result.status === "generating") {
+      // 202 Accepted — generation running in background.
+      // Progress and result arrive via WebSocket (anima.image_gen_progress / anima.remake_preview_ready).
+      // Buttons stay disabled until WS events fire.
+      return;
+    }
+
+    // 200 synchronous result (fallback)
     if (result.preview_url) {
       _addPreviewToHistory(result.preview_url, result.preview_file, result.seed_used);
       _showCurrentPreview();
@@ -925,6 +936,48 @@ function _updateProgressStep(stepName, percent, status) {
 }
 
 // ── WebSocket Event Handlers ────────────────
+
+function _onImageGenProgress(data) {
+  if (data.name !== _selectedAnima) return;
+  const previewContainer = document.getElementById("assetsPreviewContainer");
+  if (!previewContainer) return;
+
+  // Error case: generation failed
+  if (data.error) {
+    previewContainer.innerHTML = `<div class="assets-error">${t("assets.preview_failed")}: ${escapeHtml(data.error)}</div>`;
+    previewContainer.className = "assets-modal-preview-placeholder";
+    const generateBtn = document.getElementById("assetsGeneratePreviewBtn");
+    const retryBtn = document.getElementById("assetsRetryBtn");
+    const acceptBtn = document.getElementById("assetsAcceptBtn");
+    if (generateBtn) { generateBtn.disabled = false; generateBtn.textContent = "Generate Preview"; }
+    if (retryBtn) { retryBtn.disabled = false; }
+    if (acceptBtn) { acceptBtn.disabled = false; }
+    return;
+  }
+
+  // Initial start event (current=0, total=0)
+  if (data.current === 0 && data.total === 0) {
+    const warmupMsg = data.low_vram
+      ? `<div style="font-size:0.78rem; color:var(--color-warning,#e8a000); margin-top:0.3rem;">⚠️ 低VRAMモード (数分かかります)</div>`
+      : "";
+    previewContainer.innerHTML = `<div class="assets-spinner"></div><div style="margin-top:0.5rem;">${t("assets.preview_generating")}</div>${warmupMsg}`;
+    previewContainer.className = "assets-modal-preview-placeholder";
+    return;
+  }
+
+  // Step progress update
+  if (data.total > 0) {
+    const bar = Math.round(data.pct / 5); // 0-20 blocks
+    const filled = "█".repeat(bar);
+    const empty = "░".repeat(20 - bar);
+    previewContainer.innerHTML = `
+      <div class="assets-spinner"></div>
+      <div style="margin-top:0.5rem;">${t("assets.preview_generating")}</div>
+      <div style="font-family:monospace; font-size:0.8rem; letter-spacing:0; margin-top:0.4rem; color:var(--color-primary,#0066cc);">${filled}${empty}</div>
+      <div style="font-size:0.78rem; color:var(--text-secondary,#888); margin-top:0.2rem;">Step ${data.current} / ${data.total} (${data.pct}%)</div>
+    `;
+  }
+}
 
 function _onPreviewReady(data) {
   const animaName = data.name || data.anima;

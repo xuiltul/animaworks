@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, field_validator
 
 from server.events import emit
@@ -592,58 +592,134 @@ def create_assets_router() -> APIRouter:
         if face_reference_bytes is not None:
             gen_kwargs["face_reference_image"] = face_reference_bytes
 
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None,
-            lambda: pipeline.generate_all(**gen_kwargs),
-        )
+        ws_manager = getattr(request.app.state, "ws_manager", None)
 
-        if result.errors:
-            if not body.backup_id and backup_dir.exists():
-                if assets_dir.exists():
-                    shutil.rmtree(assets_dir)
-                backup_dir.rename(assets_dir)
-                logger.info("Assets restored from backup after failure: %s", name)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Preview generation failed: {'; '.join(result.errors)}",
-            )
+        # Detect low-VRAM mode so the UI can warn before starting
+        _low_vram_mode = False
+        try:
+            import torch as _torch
+            if _torch.cuda.is_available():
+                _free_vram, _ = _torch.cuda.mem_get_info()
+                _low_vram_mode = _free_vram < 7 * 1024 ** 3
+        except Exception:
+            pass
 
-        # Save preview as numbered file for history navigation
-        output_filename = "avatar_fullbody_realistic.png" if is_realistic else "avatar_fullbody.png"
-        source_path = assets_dir / output_filename
-        counter = _next_preview_counter(assets_dir, is_realistic)
-        if is_realistic:
-            preview_filename = f"_preview_{counter:03d}_realistic.png"
-        else:
-            preview_filename = f"_preview_{counter:03d}.png"
-
-        if source_path.exists():
-            import shutil as _sh
-
-            _sh.copy2(source_path, assets_dir / preview_filename)
-
-        import time as _time
-        preview_url = f"/api/animas/{name}/assets/{preview_filename}?v={int(_time.time())}"
-
+        # Emit start event immediately so UI shows spinner
         await emit(
             request,
-            "anima.remake_preview_ready",
+            "anima.image_gen_progress",
             {
                 "name": name,
-                "preview_url": preview_url,
-                "preview_file": preview_filename,
-                "seed_used": body.seed,
-                "backup_id": backup_id,
+                "step": "fullbody",
+                "current": 0,
+                "total": 0,
+                "pct": 0,
+                "low_vram": _low_vram_mode,
             },
         )
 
-        return {
-            "preview_url": preview_url,
-            "preview_file": preview_filename,
-            "seed_used": body.seed,
-            "backup_id": backup_id,
-        }
+        # Capture everything needed for the background task before returning HTTP
+        _backup_id_original = body.backup_id
+        _seed_used = body.seed
+        _app_state = request.app.state
+
+        async def _bg_generate() -> None:
+            import shutil as _shutil
+            import time as _time
+
+            bg_loop = asyncio.get_running_loop()
+
+            def _on_step(current: int, total: int) -> None:
+                _ws = getattr(_app_state, "ws_manager", None)
+                if _ws is None:
+                    return
+                pct = int(current * 100 / total) if total > 0 else 0
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        _ws.broadcast({
+                            "type": "anima.image_gen_progress",
+                            "data": {
+                                "name": name,
+                                "step": "fullbody",
+                                "current": current,
+                                "total": total,
+                                "pct": pct,
+                            },
+                        }),
+                        bg_loop,
+                    )
+                except Exception:
+                    pass
+
+            gen_kwargs["fullbody_step_callback"] = _on_step
+
+            async def _ws_emit(etype: str, data: dict) -> None:
+                _ws = getattr(_app_state, "ws_manager", None)
+                if _ws:
+                    try:
+                        await _ws.broadcast({"type": etype, "data": data})
+                    except Exception:
+                        pass
+
+            try:
+                result = await bg_loop.run_in_executor(
+                    None,
+                    lambda: pipeline.generate_all(**gen_kwargs),
+                )
+
+                if result.errors:
+                    if not _backup_id_original and backup_dir.exists():
+                        if assets_dir.exists():
+                            _shutil.rmtree(assets_dir)
+                        backup_dir.rename(assets_dir)
+                        logger.info("Assets restored from backup after failure: %s", name)
+                    await _ws_emit("anima.image_gen_progress", {
+                        "name": name,
+                        "step": "fullbody",
+                        "current": -1,
+                        "total": -1,
+                        "pct": -1,
+                        "error": "; ".join(result.errors),
+                    })
+                    return
+
+                # Save preview as numbered file for history navigation
+                output_filename = "avatar_fullbody_realistic.png" if is_realistic else "avatar_fullbody.png"
+                source_path = assets_dir / output_filename
+                counter = _next_preview_counter(assets_dir, is_realistic)
+                preview_filename = (
+                    f"_preview_{counter:03d}_realistic.png" if is_realistic else f"_preview_{counter:03d}.png"
+                )
+                if source_path.exists():
+                    _shutil.copy2(source_path, assets_dir / preview_filename)
+
+                preview_url = f"/api/animas/{name}/assets/{preview_filename}?v={int(_time.time())}"
+                await _ws_emit("anima.remake_preview_ready", {
+                    "name": name,
+                    "preview_url": preview_url,
+                    "preview_file": preview_filename,
+                    "seed_used": _seed_used,
+                    "backup_id": backup_id,
+                })
+
+            except Exception as exc:
+                logger.exception("Background fullbody generation failed for %s", name)
+                await _ws_emit("anima.image_gen_progress", {
+                    "name": name,
+                    "step": "fullbody",
+                    "current": -1,
+                    "total": -1,
+                    "pct": -1,
+                    "error": str(exc),
+                })
+
+        asyncio.create_task(_bg_generate())
+
+        # Return 202 immediately — result arrives via WebSocket
+        return JSONResponse(
+            status_code=202,
+            content={"status": "generating", "backup_id": backup_id},
+        )
 
     @router.post("/animas/{name}/assets/remake-confirm")
     async def remake_confirm(
