@@ -172,12 +172,12 @@ class TestLifecycleIntentFilter:
         lm.animas["alice"].process_inbox_message.assert_called_once()
         assert "alice" not in lm._pending_triggers
 
-    async def test_lifecycle_slack_source_always_triggers(self):
-        """Message with source='slack' and intent='' should trigger.
+    async def test_lifecycle_slack_directed_triggers(self):
+        """Message with source='slack' and intent='question' should trigger.
 
-        External platform messages always bypass the intent filter.
+        Only directed external messages (non-empty intent) bypass the filter.
         """
-        messages = [_make_message(intent="", source="slack")]
+        messages = [_make_message(intent="question", source="slack")]
         lm = _setup_lifecycle(messages)
 
         with patch("core.lifecycle.load_config", return_value=_default_config()):
@@ -186,12 +186,23 @@ class TestLifecycleIntentFilter:
         lm.animas["alice"].process_inbox_message.assert_called_once()
         assert "alice" not in lm._pending_triggers
 
-    async def test_lifecycle_chatwork_source_always_triggers(self):
-        """Message with source='chatwork' and intent='' should trigger.
+    async def test_lifecycle_slack_undirected_defers(self):
+        """Message with source='slack' and intent='' should defer.
 
-        External platform messages always bypass the intent filter.
+        Non-directed external messages wait for the scheduled heartbeat.
         """
-        messages = [_make_message(intent="", source="chatwork")]
+        messages = [_make_message(intent="", source="slack")]
+        lm = _setup_lifecycle(messages)
+
+        with patch("core.lifecycle.load_config", return_value=_default_config()):
+            await lm._message_triggered_heartbeat("alice")
+
+        lm.animas["alice"].process_inbox_message.assert_not_called()
+        assert "alice" not in lm._pending_triggers
+
+    async def test_lifecycle_chatwork_directed_triggers(self):
+        """Message with source='chatwork' and intent='question' should trigger."""
+        messages = [_make_message(intent="question", source="chatwork")]
         lm = _setup_lifecycle(messages)
 
         with patch("core.lifecycle.load_config", return_value=_default_config()):
@@ -283,12 +294,12 @@ class TestLimiterIntentFilter:
         limiter._anima.process_inbox_message.assert_called_once()
         assert limiter._pending_trigger is False
 
-    async def test_limiter_slack_source_always_triggers(self):
-        """Message with source='slack' and intent='' should trigger.
+    async def test_limiter_slack_directed_triggers(self):
+        """Message with source='slack' and intent='question' should trigger.
 
-        External platform messages always bypass the intent filter.
+        Only directed external messages (non-empty intent) bypass the filter.
         """
-        messages = [_make_message(intent="", source="slack")]
+        messages = [_make_message(intent="question", source="slack")]
         limiter = _make_limiter(messages)
 
         with patch(
@@ -300,12 +311,26 @@ class TestLimiterIntentFilter:
         limiter._anima.process_inbox_message.assert_called_once()
         assert limiter._pending_trigger is False
 
-    async def test_limiter_chatwork_source_always_triggers(self):
-        """Message with source='chatwork' and intent='' should trigger.
+    async def test_limiter_slack_undirected_defers(self):
+        """Message with source='slack' and intent='' should defer.
 
-        External platform messages always bypass the intent filter.
+        Non-directed external messages wait for the scheduled heartbeat.
         """
-        messages = [_make_message(intent="", source="chatwork")]
+        messages = [_make_message(intent="", source="slack")]
+        limiter = _make_limiter(messages)
+
+        with patch(
+            "core.supervisor.inbox_rate_limiter.load_config",
+            return_value=_default_config(),
+        ):
+            await limiter.message_triggered_inbox()
+
+        limiter._anima.process_inbox_message.assert_not_called()
+        assert limiter._pending_trigger is False
+
+    async def test_limiter_chatwork_directed_triggers(self):
+        """Message with source='chatwork' and intent='question' should trigger."""
+        messages = [_make_message(intent="question", source="chatwork")]
         limiter = _make_limiter(messages)
 
         with patch(

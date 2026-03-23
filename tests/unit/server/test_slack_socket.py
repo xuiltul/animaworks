@@ -178,17 +178,14 @@ class TestSlackSocketModeManagerHandlers:
         }
         await handler_fn(event=event, say=AsyncMock())
 
-        # Verify Messenger was called correctly
-        mock_messenger_cls.assert_called_with(tmp_path / "shared", "sakura")
-        mock_messenger.receive_external.assert_called_once_with(
-            content="Hello from Slack",
-            source="slack",
-            source_message_id="1234567890.123456",
-            external_user_id="U_USER_123",
-            external_channel_id="C_TEST_CHAN",
-            external_thread_ts="",
-            intent="",
-        )
+        # Verify Messenger was called and content includes message text
+        mock_messenger.receive_external.assert_called_once()
+        call_kwargs = mock_messenger.receive_external.call_args[1]
+        assert "Hello from Slack" in call_kwargs["content"]
+        assert call_kwargs["source"] == "slack"
+        assert call_kwargs["source_message_id"] == "1234567890.123456"
+        assert call_kwargs["external_user_id"] == "U_USER_123"
+        assert call_kwargs["external_channel_id"] == "C_TEST_CHAN"
 
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")

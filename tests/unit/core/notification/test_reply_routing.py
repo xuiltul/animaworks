@@ -174,15 +174,20 @@ class TestPruning:
 
 
 class TestSanitizeSlackReply:
-    def test_strips_user_mentions(self) -> None:
+    def test_resolves_user_mentions(self) -> None:
         from core.notification.reply_routing import sanitize_slack_reply
 
-        assert sanitize_slack_reply("<@U0123BOT> hello") == "hello"
+        result = sanitize_slack_reply("<@U0123BOT> hello")
+        assert "<@U0123BOT>" not in result
+        assert "hello" in result
+        assert "@U0123BOT" in result
 
     def test_converts_links_with_label(self) -> None:
         from core.notification.reply_routing import sanitize_slack_reply
 
-        assert sanitize_slack_reply("<https://example.com|Example>") == "Example"
+        result = sanitize_slack_reply("<https://example.com|Example>")
+        assert "Example" in result
+        assert "https://example.com" in result
 
     def test_converts_bare_links(self) -> None:
         from core.notification.reply_routing import sanitize_slack_reply
@@ -192,7 +197,8 @@ class TestSanitizeSlackReply:
     def test_converts_channel_mentions(self) -> None:
         from core.notification.reply_routing import sanitize_slack_reply
 
-        assert sanitize_slack_reply("<#C123|general>") == "#general"
+        result = sanitize_slack_reply("<#C123|general>")
+        assert "#general" in result
 
     def test_strips_bold(self) -> None:
         from core.notification.reply_routing import sanitize_slack_reply

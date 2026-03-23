@@ -40,7 +40,9 @@ class TestFetchThreadContext:
     @patch("core.tools.slack.SlackClient", autospec=True)
     def test_formats_thread_context(self, mock_cls):
         """Normal thread with root + 2 replies: parent summary + reply count."""
-        from server.slack_socket import _fetch_thread_context
+        from server.slack_socket import _fetch_thread_context, _user_name_cache
+
+        _user_name_cache.clear()
 
         mock_client = mock_cls.return_value
         mock_client.thread_replies.return_value = [
@@ -48,23 +50,27 @@ class TestFetchThreadContext:
             {"user": "U_HUMAN", "text": "What should I run?", "ts": "1001.0"},
             {"user": "U_HUMAN", "text": "Tell me the commands", "ts": "1002.0"},
         ]
+        mock_client.resolve_user_name.return_value = "BotUser"
         result = _fetch_thread_context("xoxb-token", "C123", "1000.0")
         assert "[Thread context" in result
-        assert "<@U_BOT>: Zombie process detected" in result
+        assert "@BotUser: Zombie process detected" in result
         assert "(2 replies in thread)" in result
         assert "[/Thread context]" in result
 
     @patch("core.tools.slack.SlackClient", autospec=True)
     def test_summary_includes_parent_and_reply_count(self, mock_cls):
         """Concise summary: parent message (truncated) + reply count only."""
-        from server.slack_socket import _fetch_thread_context
+        from server.slack_socket import _fetch_thread_context, _user_name_cache
+
+        _user_name_cache.clear()
 
         replies = [{"user": f"U{i}", "text": f"msg {i}", "ts": f"{i}.0"} for i in range(15)]
         mock_client = mock_cls.return_value
         mock_client.thread_replies.return_value = replies
+        mock_client.resolve_user_name.return_value = "User0"
 
         result = _fetch_thread_context("xoxb-token", "C123", "0.0", limit=5)
-        assert "<@U0>: msg 0" in result
+        assert "@User0: msg 0" in result
         assert "(14 replies in thread)" in result
 
     @patch("core.tools.slack.SlackClient", autospec=True)
@@ -84,6 +90,8 @@ class TestFetchThreadContext:
 class TestPerAnimaHandlerThreadInjection:
     """Per-Anima Socket Mode message handler injects thread context."""
 
+    @patch("server.slack_socket._build_slack_annotation", return_value="")
+    @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda t, tok: t)
     @patch("server.slack_socket._fetch_thread_context", return_value="")
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
@@ -100,6 +108,8 @@ class TestPerAnimaHandlerThreadInjection:
         mock_messenger_cls,
         mock_get_data_dir,
         mock_fetch_ctx,
+        mock_resolve,
+        mock_annotation,
         tmp_path,
     ):
         """Top-level messages (no thread_ts) skip thread context fetch."""
@@ -130,6 +140,8 @@ class TestPerAnimaHandlerThreadInjection:
         call_kw = mock_messenger.receive_external.call_args
         assert call_kw.kwargs.get("external_thread_ts", call_kw[1].get("external_thread_ts", "")) == ""
 
+    @patch("server.slack_socket._build_slack_annotation", return_value="")
+    @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda t, tok: t)
     @patch("server.slack_socket._fetch_thread_context")
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
@@ -146,6 +158,8 @@ class TestPerAnimaHandlerThreadInjection:
         mock_messenger_cls,
         mock_get_data_dir,
         mock_fetch_ctx,
+        mock_resolve,
+        mock_annotation,
         tmp_path,
     ):
         """Thread replies prepend thread context to content."""
@@ -181,7 +195,7 @@ class TestPerAnimaHandlerThreadInjection:
         mock_fetch_ctx.assert_called_once()
         call_kw = mock_messenger.receive_external.call_args
         content = call_kw.kwargs.get("content") or call_kw[1].get("content")
-        assert content.startswith("[Thread context]")
+        assert "[Thread context]" in content
         assert "tell me the command" in content
         thread_ts = call_kw.kwargs.get("external_thread_ts") or call_kw[1].get("external_thread_ts")
         assert thread_ts == "1.0"
@@ -193,6 +207,8 @@ class TestPerAnimaHandlerThreadInjection:
 class TestSharedHandlerThreadInjection:
     """Shared Socket Mode handlers inject thread context."""
 
+    @patch("server.slack_socket._build_slack_annotation", return_value="")
+    @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda t, tok: t)
     @patch("server.slack_socket._fetch_thread_context")
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
@@ -209,6 +225,8 @@ class TestSharedHandlerThreadInjection:
         mock_messenger_cls,
         mock_get_data_dir,
         mock_fetch_ctx,
+        mock_resolve,
+        mock_annotation,
         tmp_path,
     ):
         """Shared message handler injects thread context for thread replies."""
