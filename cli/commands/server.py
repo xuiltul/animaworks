@@ -539,6 +539,9 @@ def cmd_restart(args: argparse.Namespace) -> None:
     current server.  The helper runs in its own session so it survives
     even when the caller is killed during server shutdown (e.g. when an
     Anima triggers restart from inside the server).
+
+    After stopping, waits for the helper to bring the new server up and
+    reports success or failure with log path.
     """
     old_pid = _read_pid()
     if old_pid is not None and not _is_process_alive(old_pid):
@@ -556,7 +559,31 @@ def cmd_restart(args: argparse.Namespace) -> None:
     if removed:
         print(f"Cleared {removed} __pycache__ directories.")
 
-    print("Server stopped. Restart helper will start the new server.")
+    port = getattr(args, "port", 18500)
+    host = getattr(args, "host", "0.0.0.0")
+    check_host = "127.0.0.1" if host == "0.0.0.0" else host
+    log_path = _get_daemon_log_path()
+
+    print("Waiting for server to start...")
+    deadline = time.monotonic() + 20
+    started = False
+    while time.monotonic() < deadline:
+        if _is_port_listening(check_host, port):
+            started = True
+            break
+        time.sleep(0.5)
+
+    if started:
+        new_pid = _read_pid()
+        pid_info = f" (pid={new_pid})" if new_pid else ""
+        display_host = "localhost" if host == "0.0.0.0" else host
+        print(f"Server restarted successfully{pid_info}.")
+        print(f"  Dashboard: http://{display_host}:{port}/")
+        print(f"  Logs:      {log_path}")
+    else:
+        print("Error: Server did not start within 20 seconds.")
+        print(f"  Check logs: {log_path}")
+        sys.exit(1)
 
 
 # ── Deprecated modes ──────────────────────────────────────

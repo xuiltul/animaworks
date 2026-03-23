@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "injection_patterns": [
+    {
+      "pattern": "[;\\n]",
+      "reason": "Command chaining (;) and embedded newlines are blocked — use && or || instead"
+    }
+  ],
+  "commands": {
+    "deny": [
+      {
+        "pattern": "(?i)\\brm\\s+(-\\S+\\s+)*/(?!\\w)",
+        "reason": "Recursive delete targeting root (/) is blocked"
+      },
+      {
+        "pattern": "\\bmkfs\\b",
+        "reason": "Filesystem creation is blocked"
+      },
+      {
+        "pattern": "\\bdd\\b.*\\bof\\s*=\\s*/dev/",
+        "reason": "Direct disk write is blocked"
+      },
+      {
+        "pattern": ">\\s*/dev/(?!null)",
+        "reason": "Redirect to /dev/ (except /dev/null) is blocked"
+      },
+      {
+        "pattern": ">\\s*/etc/",
+        "reason": "Redirect to /etc/ is blocked"
+      },
+      {
+        "pattern": "(curl|wget)\\b.*\\|\\s*(ba)?sh\\b",
+        "reason": "Remote code execution (curl/wget|sh) is blocked"
+      },
+      {
+        "pattern": "\\|\\s*(ba)?sh\\b",
+        "reason": "Piping to sh/bash is blocked for security"
+      },
+      {
+        "pattern": "\\|\\s*(python[23]?|perl|ruby|node)\\b",
+        "reason": "Piping to interpreter (python/perl/ruby/node) is blocked for security"
+      },
+      {
+        "pattern": "\\bchmod\\s+[0-7]{2,3}[2367]\\b",
+        "reason": "World-writable chmod (other has write bit) is blocked"
+      },
+      {
+        "pattern": "(?:^|[|;&]\\s*)(?:shutdown|reboot)\\b|(?:^|[|;&]\\s*)init\\s+[06]\\b",
+        "reason": "System shutdown/reboot is blocked"
+      },
+      {
+        "pattern": "(?:^|[|;&]\\s*)nc\\b",
+        "reason": "nc (netcat) is blocked for security"
+      },
+      {
+        "pattern": "(?:^|[|;&]\\s*)ncat\\b",
+        "reason": "ncat is blocked for security"
+      },
+      {
+        "pattern": "(?:^|[|;&]\\s*)socat\\b",
+        "reason": "socat is blocked for security"
+      },
+      {
+        "pattern": "(?:^|[|;&]\\s*)telnet\\b",
+        "reason": "telnet is blocked for security"
+      },
+      {
+        "pattern": "curl\\s+.*-[dFT]\\b",
+        "reason": "curl data upload (-d/-F/-T) is blocked for security"
+      },
+      {
+        "pattern": "curl\\s+.*--data\\b",
+        "reason": "curl --data is blocked for security"
+      },
+      {
+        "pattern": "wget\\s+.*--post\\b",
+        "reason": "wget --post is blocked for security"
+      },
+      {
+        "pattern": "\\baws\\s+sso\\s+login\\b",
+        "reason": "AWS SSO login is blocked (credential escalation)"
+      },
+      {
+        "pattern": "\\baws\\s+sts\\s+assume-role\\b",
+        "reason": "AWS STS assume-role is blocked (credential escalation)"
+      },
+      {
+        "pattern": "\\baws\\s+configure\\s+(?:set|import)\\b",
+        "reason": "AWS configure modification is blocked"
+      },
+      {
+        "pattern": "\\baws\\s+ecs\\s+execute-command\\b",
+        "reason": "AWS ECS execute-command is blocked (remote code execution)"
+      },
+      {
+        "pattern": "\\baws\\s+ssm\\s+send-command\\b",
+        "reason": "AWS SSM send-command is blocked (remote code execution)"
+      },
+      {
+        "pattern": "\\baws\\s+lambda\\s+invoke\\b",
+        "reason": "AWS Lambda invoke is blocked"
+      },
+      {
+        "pattern": "\\baws\\s+\\S+\\s+(?:delete|terminate|stop|destroy|deregister)-\\S+",
+        "reason": "AWS destructive operation is blocked"
+      },
+      {
+        "pattern": "\\baws\\s+ecs\\s+(?:run-task|update-service)\\b",
+        "reason": "AWS ECS mutating operation is blocked"
+      },
+      {
+        "pattern": "\\baws\\s+s3\\s+r[mb]\\b",
+        "reason": "AWS S3 delete operation (rm/rb) is blocked"
+      },
+      {
+        "pattern": "\\baws\\s+s3\\s+mv\\b",
+        "reason": "AWS S3 mv is blocked"
+      },
+      {
+        "pattern": "\\baws\\s+cloudformation\\s+(?:delete-stack|update-stack)\\b",
+        "reason": "AWS CloudFormation mutating operation is blocked"
+      },
+      {
+        "pattern": "\\baws\\s+iam\\s+(?:create|delete|put|attach|detach)-\\S+",
+        "reason": "AWS IAM mutating operation is blocked"
+      },
+      {
+        "pattern": "\\bterraform\\s+destroy\\b",
+        "reason": "terraform destroy is blocked"
+      },
+      {
+        "pattern": "\\bterraform\\s+apply\\b.*-auto-approve",
+        "reason": "terraform apply -auto-approve is blocked"
+      },
+      {
+        "pattern": "\\bpulumi\\s+destroy\\b",
+        "reason": "pulumi destroy is blocked"
+      },
+      {
+        "pattern": "\\bcdk\\s+destroy\\b",
+        "reason": "CDK destroy is blocked"
+      },
+      {
+        "pattern": "\\banimaworks\\s+(restart|stop|start)\\b",
+        "reason": "AnimaWorks server lifecycle commands are blocked"
+      },
+      {
+        "pattern": "\\bsystemctl\\s+(restart|stop|start|disable|enable)\\s+.*animaworks",
+        "reason": "systemctl operations on AnimaWorks service are blocked"
+      }
+    ]
+  }
+}

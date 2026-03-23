@@ -12,7 +12,6 @@ import pytest
 
 from server.stream_registry import StreamRegistry
 
-
 # ── create_app ───────────────────────────────────────────
 
 
@@ -129,6 +128,7 @@ class TestCreateApp:
     ):
         """Anima with status.json enabled:false is excluded from anima_names."""
         import json
+
         from server.app import create_app
 
         animas_dir = tmp_path / "animas"
@@ -190,7 +190,9 @@ class TestLifespan:
 
         with patch("core.org_sync.sync_org_structure"), \
              patch("core.org_sync.detect_orphan_animas"), \
-             patch("server.app._reconcile_assets_at_startup", new_callable=AsyncMock):
+             patch("server.app._reconcile_assets_at_startup", new_callable=AsyncMock), \
+             patch("core.config.global_permissions.GlobalPermissionsCache.get") as mock_gp:
+            mock_gp.return_value = MagicMock(loaded=True, check_integrity=MagicMock(return_value=True))
             async with lifespan(mock_app):
                 # start_all はバックグラウンドタスクで起動されるため、
                 # 1ティック進めて実行機会を与える。

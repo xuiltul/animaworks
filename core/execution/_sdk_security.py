@@ -15,33 +15,14 @@ Pure functions with no framework state — leaf module in the dependency graph.
 
 import logging
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
+from core.paths import get_data_dir
+
 logger = logging.getLogger("animaworks.execution.agent_sdk")
 
-
-# ── Mode S Bash blocklist ────────────────────────────────────
-
-_BASH_BLOCKED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"(?:^|[|;&]\s*)nc\b"), "nc (netcat) is blocked for security"),
-    (re.compile(r"(?:^|[|;&]\s*)ncat\b"), "ncat is blocked for security"),
-    (re.compile(r"(?:^|[|;&]\s*)socat\b"), "socat is blocked for security"),
-    (re.compile(r"(?:^|[|;&]\s*)telnet\b"), "telnet is blocked for security"),
-    (re.compile(r"curl\s+.*-[dFT]\b"), "curl data upload is blocked for security"),
-    (re.compile(r"curl\s+.*--data\b"), "curl --data is blocked for security"),
-    (re.compile(r"wget\s+.*--post\b"), "wget --post is blocked for security"),
-    (re.compile(r"\brm\s+-[rf]*\s+/(?!\w)"), "rm -rf / is blocked for security"),
-    (re.compile(r"\bmkfs\b"), "mkfs is blocked for security"),
-    (re.compile(r"\bdd\b.*\bof=/dev/"), "dd to device is blocked for security"),
-    (re.compile(r">\s*/dev/(?!null)"), "redirect to /dev/ is blocked for security"),
-    (re.compile(r">\s*/etc/"), "redirect to /etc/ is blocked for security"),
-    (re.compile(r"curl.*\|\s*(?:sh|bash|python)"), "curl pipe to shell is blocked for security"),
-    (re.compile(r"\|\s*(?:sh|bash|python)\b"), "pipe to shell/python is blocked for security"),
-    (re.compile(r"\bchmod\s+[0-7]*7[0-7]*\b"), "world-writable chmod is blocked for security"),
-    (re.compile(r"\b(?:shutdown|reboot)\b"), "shutdown/reboot is blocked for security"),
-    (re.compile(r"\binit\s+[06]\b"), "init 0/6 is blocked for security"),
-]
 
 # ── Mode S security ──────────────────────────────────────────
 
@@ -101,6 +82,16 @@ def _check_a1_file_access(
         return None
 
     resolved = Path(file_path).resolve()
+
+    if write:
+        data_dir = get_data_dir().resolve()
+        if resolved.name == "permissions.global.json":
+            try:
+                if resolved.is_relative_to(data_dir):
+                    return "permissions.global.json cannot be modified via Mode S tools"
+            except ValueError:
+                pass
+
     anima_resolved = anima_dir.resolve()
     animas_root = anima_resolved.parent
 
@@ -159,7 +150,7 @@ def _check_a1_bash_command(
 ) -> str | None:
     """Check bash commands against blocklist patterns and file operation violations.
 
-    Blocklist patterns are matched against the raw command string (before
+    Global deny patterns are matched against the raw command string (before
     shlex parsing) to prevent bypass via pipes/subshells.  Path traversal
     checks use parsed argv for precision.
 
@@ -167,13 +158,57 @@ def _check_a1_bash_command(
     """
     if superuser:
         return None
-    # Blocklist check (raw command string, before shlex parsing)
-    for pattern, reason in _BASH_BLOCKED_PATTERNS:
-        if pattern.search(command):
-            logger.warning("Bash command blocked: %s (command: %s)", reason, command[:200])
-            return reason
 
-    import shlex
+    from core.config.global_permissions import GlobalPermissionsCache
+    from core.config.schemas import load_permissions
+
+    cache = GlobalPermissionsCache.get()
+
+    # NOTE: injection_re is NOT checked here.  Mode S uses Claude Code's
+    # native Bash tool which legitimately requires $VAR, $(...), `;`, etc.
+    # Injection patterns are only enforced on the ToolHandler path (Mode A/B).
+
+    if cache.loaded:
+        for pattern, reason in cache.blocked_patterns:
+            if pattern.search(command):
+                logger.warning("Bash command blocked: %s (command: %s)", reason, command[:200])
+                return reason
+
+    config = load_permissions(anima_dir)
+    if config.commands.deny:
+        segments = [s.strip() for s in re.split(r"\|(?!\|)|\&\&|\|\|", command) if s.strip()]
+        for segment in segments:
+            try:
+                seg_argv = shlex.split(segment)
+            except ValueError:
+                continue
+            if not seg_argv:
+                continue
+            seg_cmd_base = seg_argv[0]
+            for denied in config.commands.deny:
+                if denied in seg_cmd_base or denied in segment:
+                    logger.warning(
+                        "Bash command denied by per-anima config: %s (command: %s)",
+                        denied,
+                        command[:200],
+                    )
+                    return f"Command '{seg_cmd_base}' is in denied list ('{denied}')"
+
+    if not config.commands.allow_all:
+        allowed = config.commands.allow
+        if not allowed:
+            return "Command execution not enabled in permissions"
+        segments = [s.strip() for s in re.split(r"\|(?!\|)|\&\&|\|\|", command) if s.strip()]
+        for segment in segments:
+            try:
+                seg_argv = shlex.split(segment)
+            except ValueError:
+                return f"Invalid command syntax in '{segment}'"
+            if not seg_argv:
+                continue
+            seg_cmd_base = seg_argv[0]
+            if seg_cmd_base not in allowed:
+                return f"Command '{seg_cmd_base}' not in allowed list"
 
     try:
         argv = shlex.split(command)

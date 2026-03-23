@@ -2,7 +2,7 @@
 
 Covers:
 - Generic ``| sh`` / ``| bash`` blocking (not just curl/wget)
-- Newline character detection in ``_INJECTION_RE``
+- Newline character detection in global injection regex (``permissions.global.json``)
 - ``| python`` / ``| perl`` / ``| ruby`` / ``| node`` blocking
 - Legitimate pipe commands still allowed
 """
@@ -20,8 +20,8 @@ import pytest
 
 from core.tooling.handler import (
     ToolHandler,
-    _BLOCKED_CMD_PATTERNS,
-    _INJECTION_RE,
+    _get_blocked_patterns,
+    _get_injection_re,
 )
 
 
@@ -58,7 +58,7 @@ def handler(anima_dir: Path, memory: MagicMock) -> ToolHandler:
 
 
 class TestNewlineInjection:
-    """_INJECTION_RE must detect newline characters."""
+    """Global injection regex must detect newline characters."""
 
     @pytest.mark.parametrize("cmd", [
         "echo hello\nrm -rf /",
@@ -66,7 +66,9 @@ class TestNewlineInjection:
         "echo ok\n\necho secret",
     ])
     def test_newline_detected_by_injection_re(self, cmd: str):
-        assert _INJECTION_RE.search(cmd), f"Newline not detected in: {cmd!r}"
+        inj = _get_injection_re()
+        assert inj is not None
+        assert inj.search(cmd), f"Newline not detected in: {cmd!r}"
 
     def test_newline_command_rejected_by_permission_check(
         self, handler: ToolHandler, memory: MagicMock,
@@ -104,7 +106,7 @@ class TestPipeToShellBlocking:
         "head -1 file.txt | bash",
     ])
     def test_generic_pipe_to_shell_blocked(self, cmd: str):
-        matched = any(p.search(cmd) for p, _ in _BLOCKED_CMD_PATTERNS)
+        matched = any(p.search(cmd) for p, _ in _get_blocked_patterns())
         assert matched, f"Not blocked: {cmd!r}"
 
     @pytest.mark.parametrize("cmd", [
@@ -152,7 +154,7 @@ class TestPipeToInterpreterBlocking:
         "echo 'require(\"child_process\")' | node",
     ])
     def test_pipe_to_interpreter_blocked_by_pattern(self, cmd: str):
-        matched = any(p.search(cmd) for p, _ in _BLOCKED_CMD_PATTERNS)
+        matched = any(p.search(cmd) for p, _ in _get_blocked_patterns())
         assert matched, f"Not blocked: {cmd!r}"
 
     @pytest.mark.parametrize("cmd", [
@@ -193,7 +195,7 @@ class TestLegitimateCommandsStillAllowed:
         "python3 -c 'print(1)'",
     ])
     def test_legitimate_not_blocked_by_patterns(self, cmd: str):
-        matched = any(p.search(cmd) for p, _ in _BLOCKED_CMD_PATTERNS)
+        matched = any(p.search(cmd) for p, _ in _get_blocked_patterns())
         assert not matched, f"Falsely blocked: {cmd!r}"
 
     @pytest.mark.parametrize("cmd", [
@@ -211,19 +213,21 @@ class TestLegitimateCommandsStillAllowed:
     def test_standalone_sh_command_not_blocked(self):
         """Running `sh script.sh` directly (not via pipe) must be allowed."""
         cmd = "sh script.sh"
-        matched = any(p.search(cmd) for p, _ in _BLOCKED_CMD_PATTERNS)
+        matched = any(p.search(cmd) for p, _ in _get_blocked_patterns())
         assert not matched
 
     def test_standalone_python_not_blocked(self):
         cmd = "python3 -m pytest"
-        matched = any(p.search(cmd) for p, _ in _BLOCKED_CMD_PATTERNS)
+        matched = any(p.search(cmd) for p, _ in _get_blocked_patterns())
         assert not matched
 
     def test_no_newline_in_normal_command(self):
-        """Normal commands without newlines pass _INJECTION_RE."""
-        assert _INJECTION_RE.search("ls -la") is None
-        assert _INJECTION_RE.search("echo hello") is None
-        assert _INJECTION_RE.search("git status --short") is None
+        """Normal commands without newlines pass injection regex."""
+        inj = _get_injection_re()
+        assert inj is not None
+        assert inj.search("ls -la") is None
+        assert inj.search("echo hello") is None
+        assert inj.search("git status --short") is None
 
 
 # ── Integration: execute_command ─────────────────────────────

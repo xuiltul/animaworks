@@ -6,14 +6,29 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
 
+from core.config.global_permissions import GlobalPermissionsCache
 from core.execution.agent_sdk import (
     _check_a1_bash_command,
     _log_tool_use,
 )
+
+_GLOBAL_PERMS_TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "_shared" / "config_defaults" / "permissions.global.json"
+
+
+@pytest.fixture(autouse=True)
+def _load_global_permissions(tmp_path: Path):
+    """Load default global permissions so blocklist patterns are active."""
+    GlobalPermissionsCache.reset()
+    gp_path = tmp_path / "permissions.global.json"
+    shutil.copy(_GLOBAL_PERMS_TEMPLATE, gp_path)
+    GlobalPermissionsCache.get().load(gp_path, interactive=False)
+    yield
+    GlobalPermissionsCache.reset()
 
 
 @pytest.fixture

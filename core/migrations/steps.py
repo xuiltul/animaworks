@@ -535,6 +535,29 @@ def step_models_json_create(data_dir: Path, dry_run: bool, verbose: bool) -> Ste
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
+def step_global_permissions_create(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Create permissions.global.json from template if missing."""
+    details: list[str] = []
+    try:
+        from core.paths import TEMPLATES_DIR
+
+        dst = data_dir / "permissions.global.json"
+        if dst.exists():
+            return StepResult(changed=0, skipped=1, details=["permissions.global.json already exists"])
+        src = TEMPLATES_DIR / "_shared" / "config_defaults" / "permissions.global.json"
+        if not src.is_file():
+            return StepResult(changed=0, skipped=1, details=["permissions.global.json template not found"])
+        if dry_run:
+            details.append("Would copy permissions.global.json from template")
+            return StepResult(changed=1, skipped=0, details=details)
+        shutil.copy2(src, dst)
+        details.append("Created permissions.global.json from template")
+        return StepResult(changed=1, skipped=0, details=details)
+    except Exception as exc:
+        logger.exception("step_global_permissions_create failed")
+        return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
 # ── Category 4: SQLite DB sync ──────────────────────────────────
 
 
@@ -727,6 +750,60 @@ def step_task_delegation_to_common_knowledge(data_dir: Path, dry_run: bool, verb
     return StepResult(changed=total, skipped=0, details=details)
 
 
+def step_v060_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """v0.6.0: Full template resync + models.json update for Mode D/G.
+
+    Deploys Korean locale templates, meeting-room assets, and adds
+    cursor/* / gemini/* entries to existing models.json.
+    """
+    details: list[str] = []
+    total = 0
+
+    # Template resync
+    for resync_fn in (
+        step_common_knowledge_resync,
+        step_common_skills_resync,
+        step_reference_resync,
+        step_prompt_resync,
+        step_system_sections_resync,
+        step_tool_descriptions_resync,
+    ):
+        r = resync_fn(data_dir, dry_run, verbose)
+        total += r.changed
+        details.extend(r.details)
+
+    # models.json: inject cursor/* and gemini/* entries if absent
+    models_path = data_dir / "models.json"
+    if models_path.exists():
+        try:
+            raw: dict[str, Any] = json.loads(models_path.read_text(encoding="utf-8"))
+            new_entries = {
+                "cursor/*": {"mode": "D", "context_window": 1000000},
+                "gemini/*": {"mode": "G", "context_window": 1000000},
+            }
+            added: list[str] = []
+            for key, val in new_entries.items():
+                if key not in raw:
+                    if not dry_run:
+                        raw[key] = val
+                    added.append(key)
+
+            if added:
+                if not dry_run:
+                    models_path.write_text(
+                        json.dumps(raw, indent=2, ensure_ascii=False) + "\n",
+                        encoding="utf-8",
+                    )
+                details.append(f"Added models.json entries: {', '.join(added)}")
+                total += len(added)
+            else:
+                details.append("models.json already has cursor/*/gemini/* entries")
+        except Exception as exc:
+            details.append(f"models.json update skipped: {exc}")
+
+    return StepResult(changed=total, skipped=0, details=details)
+
+
 # ── Category 5: Version tracking ────────────────────────────────
 
 
@@ -766,6 +843,12 @@ def register_all_steps(runner: Any) -> None:
         MigrationStep("common_skills_resync", "Resync common_skills/", "template_sync", step_common_skills_resync),
         MigrationStep("reference_resync", "Resync reference/", "template_sync", step_reference_resync),
         MigrationStep("models_json_create", "Create models.json if missing", "template_sync", step_models_json_create),
+        MigrationStep(
+            "global_permissions_create",
+            "Create permissions.global.json if missing",
+            "template_sync",
+            step_global_permissions_create,
+        ),
         MigrationStep("tool_prompt_db_init", "Init tool prompt DB", "db_sync", step_tool_prompt_db_init),
         MigrationStep("system_sections_resync", "Resync system_sections in DB", "db_sync", step_system_sections_resync),
         MigrationStep(
@@ -789,6 +872,12 @@ def register_all_steps(runner: Any) -> None:
             "Move task_delegation_rules to common_knowledge",
             "template_sync",
             step_task_delegation_to_common_knowledge,
+        ),
+        MigrationStep(
+            "v060_resync",
+            "v0.6.0: Full template resync + Mode D/G models.json",
+            "template_sync",
+            step_v060_resync,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

@@ -10,6 +10,10 @@
   "codex/gpt-4.1":           { "mode": "C", "context_window": 1000000 },
   "codex/*":                 { "mode": "C", "context_window": 128000 },
 
+  "cursor/*":                { "mode": "D", "context_window": 1000000 },
+
+  "gemini/*":                { "mode": "G", "context_window": 1000000 },
+
   "openai/gpt-5.4*":        { "mode": "A", "context_window": 272000 },
   "openai/gpt-4.1*":        { "mode": "A", "context_window": 1000000 },
   "openai/qwen3.5*":        { "mode": "A", "context_window": 64000 },
