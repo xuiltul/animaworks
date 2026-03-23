@@ -31,6 +31,7 @@ class OrgHelpersMixin:
         """Verify that *target_name* is a direct subordinate of this anima."""
         from core.config.models import load_config
 
+        target_name = target_name.strip().lower()
         if target_name == self._anima_name:
             return _error_result(
                 "PermissionDenied",
@@ -85,6 +86,7 @@ class OrgHelpersMixin:
 
     def _check_descendant(self, target_name: str) -> str | None:
         """Verify that target_name is a descendant (any depth) of this anima."""
+        target_name = target_name.strip().lower()
         if target_name == self._anima_name:
             return _error_result(
                 "PermissionDenied",

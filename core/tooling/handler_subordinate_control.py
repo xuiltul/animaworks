@@ -32,7 +32,7 @@ class SubordinateControlMixin(OrgHelpersMixin):
 
     def _handle_disable_subordinate(self, args: dict[str, Any]) -> str:
         """Disable a subordinate anima (set enabled=false in status.json)."""
-        target_name = args.get("name", "")
+        target_name = args.get("name", "").strip().lower()
         reason = args.get("reason", "")
 
         if not target_name:
@@ -87,7 +87,7 @@ class SubordinateControlMixin(OrgHelpersMixin):
 
     def _handle_enable_subordinate(self, args: dict[str, Any]) -> str:
         """Enable a subordinate anima (set enabled=true in status.json)."""
-        target_name = args.get("name", "")
+        target_name = args.get("name", "").strip().lower()
 
         if not target_name:
             return _error_result("InvalidArguments", "name is required")
@@ -137,7 +137,7 @@ class SubordinateControlMixin(OrgHelpersMixin):
         from core.config.models import KNOWN_MODELS, update_status_model
         from core.paths import get_data_dir
 
-        target_name = args.get("name", "")
+        target_name = args.get("name", "").strip().lower()
         model = args.get("model", "").strip()
         reason = args.get("reason", "")
 

@@ -36,7 +36,7 @@ class DelegationMixin(OrgHelpersMixin):
 
     def _handle_delegate_task(self, args: dict[str, Any]) -> str:
         """Delegate a task to a direct subordinate."""
-        target_name = args.get("name", "")
+        target_name = args.get("name", "").strip().lower()
         instruction = args.get("instruction", "")
         summary = args.get("summary", "") or instruction[:100]
         deadline = args.get("deadline", "")
