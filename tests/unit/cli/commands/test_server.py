@@ -119,45 +119,68 @@ class TestFindServerPidByProcess:
 
 
 class TestStopServer:
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server._find_server_pid_by_process", return_value=None)
     @patch("cli.commands.server._read_pid", return_value=None)
-    def test_no_pid_file_no_process(self, mock_pid, mock_find, capsys):
+    def test_no_pid_file_no_process(self, mock_pid, mock_find, mock_orphans, capsys):
         from cli.commands.server import _stop_server
 
         result = _stop_server()
         assert result is True
         assert "not running" in capsys.readouterr().out
+        mock_orphans.assert_called_once()
 
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server._remove_pid_file")
     @patch("cli.commands.server._is_process_alive", return_value=False)
     @patch("cli.commands.server._read_pid", return_value=12345)
-    def test_stale_pid(self, mock_pid, mock_alive, mock_remove, capsys):
+    def test_stale_pid(self, mock_pid, mock_alive, mock_remove, mock_orphans, capsys):
         from cli.commands.server import _stop_server
 
         result = _stop_server()
         assert result is True
         assert "Stale" in capsys.readouterr().out
+        mock_orphans.assert_called_once()
 
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server._remove_pid_file")
     @patch("cli.commands.server.terminate_pid")
     @patch("cli.commands.server._is_process_alive", side_effect=[True, False])
     @patch("cli.commands.server._read_pid", return_value=12345)
-    def test_successful_stop(self, mock_pid, mock_alive, mock_terminate, mock_remove, capsys):
+    def test_successful_stop(
+        self,
+        mock_pid,
+        mock_alive,
+        mock_terminate,
+        mock_remove,
+        mock_orphans,
+        capsys,
+    ):
         from cli.commands.server import _stop_server
 
         result = _stop_server()
         assert result is True
         mock_terminate.assert_called_once_with(12345, force=False, include_children=False)
+        mock_orphans.assert_called_once()
 
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server.terminate_pid", side_effect=ProcessLookupError)
     @patch("cli.commands.server._is_process_alive", return_value=True)
     @patch("cli.commands.server._read_pid", return_value=12345)
-    def test_process_already_exited_on_kill(self, mock_pid, mock_alive, mock_terminate, capsys):
+    def test_process_already_exited_on_kill(
+        self,
+        mock_pid,
+        mock_alive,
+        mock_terminate,
+        mock_orphans,
+        capsys,
+    ):
         from cli.commands.server import _stop_server
 
         result = _stop_server()
         assert result is True
         assert "already exited" in capsys.readouterr().out
+        mock_orphans.assert_called_once()
 
     @patch("cli.commands.server.terminate_pid", side_effect=PermissionError)
     @patch("cli.commands.server._is_process_alive", return_value=True)
@@ -169,6 +192,7 @@ class TestStopServer:
         assert result is False
         assert "Permission denied" in capsys.readouterr().out
 
+    @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server._remove_pid_file")
     @patch("cli.commands.server.terminate_pid")
     @patch("cli.commands.server._is_process_alive", side_effect=[True, False])
@@ -181,6 +205,7 @@ class TestStopServer:
         mock_alive,
         mock_terminate,
         mock_remove,
+        mock_orphans,
         capsys,
     ):
         """When PID file is missing, fall back to process scan."""
@@ -192,6 +217,7 @@ class TestStopServer:
         assert "PID file missing" in out
         assert "54321" in out
         mock_terminate.assert_called_once_with(54321, force=False, include_children=False)
+        mock_orphans.assert_called_once()
 
     # ── Force mode tests ─────────────────────────────────
 
@@ -252,20 +278,21 @@ class TestStopServer:
     @patch("cli.commands.server._kill_orphan_runners", return_value=3)
     @patch("cli.commands.server._find_server_pid_by_process", return_value=None)
     @patch("cli.commands.server._read_pid", return_value=None)
-    def test_force_kills_orphans_when_no_server(
+    def test_non_force_kills_orphans_when_no_server(
         self,
         mock_pid,
         mock_find,
         mock_orphans,
         capsys,
     ):
-        """Force mode cleans up orphan runners even when server is not running."""
+        """Normal stop also cleans up orphan runners when server is not running."""
         from cli.commands.server import _stop_server
 
-        result = _stop_server(force=True)
+        result = _stop_server(force=False)
         assert result is True
         out = capsys.readouterr().out
         assert "3 orphan" in out
+        assert "not running" in out
         mock_orphans.assert_called_once()
 
     @patch("cli.commands.server._is_process_alive", return_value=True)

@@ -535,16 +535,39 @@
 }
 
 .usage-bar-track {
-  height: 6px;
+  position: relative;
+  height: 8px;
   background: var(--aw-color-bg-hover, #e5e7eb);
-  border-radius: 3px;
-  overflow: hidden;
+  border-radius: 4px;
+  overflow: visible;
 }
 
 .usage-bar-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 4px;
   transition: width 0.4s ease;
+}
+
+/* Time-proportional marker — vertical line on the bar */
+.usage-bar-time-marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--aw-color-text-primary, #111);
+  border-radius: 1px;
+  opacity: 0.7;
+  z-index: 1;
+}
+.usage-bar-time-marker::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  color: var(--aw-color-text-faint, #999);
+  white-space: nowrap;
 }
 
 .usage-reset {

@@ -157,18 +157,50 @@ function _remainingColor(remaining) {
   return "var(--aw-color-success, #16a34a)";
 }
 
-function _renderUsageBar(label, utilization, resetAt) {
+function _calcTimePct(resetAt, windowSeconds) {
+  // Calculate time_remaining_pct for the time-proportional marker
+  if (!resetAt || !windowSeconds) return null;
+  const resetMs = (typeof resetAt === "number")
+    ? (resetAt < 1e12 ? resetAt * 1000 : resetAt)
+    : new Date(resetAt).getTime();
+  if (isNaN(resetMs)) return null;
+  const remainingSec = (resetMs - Date.now()) / 1000;
+  if (remainingSec <= 0) return 0;
+  const pct = (remainingSec / windowSeconds) * 100;
+  return Math.min(pct, 100);
+}
+
+function _renderUsageBar(label, utilization, resetAt, windowSeconds) {
   const remaining = Math.max(0, 100 - utilization);
   const resetStr = resetAt ? _resetToJst(resetAt) : "";
   const color = _remainingColor(remaining);
+
+  // Time-proportional marker for weekly windows
+  const timePct = _calcTimePct(resetAt, windowSeconds);
+  const isWeekly = windowSeconds && windowSeconds >= 86400; // >= 1 day
+  let markerHtml = "";
+  if (isWeekly && timePct !== null) {
+    const deficit = timePct > remaining;
+    const markerLabel = `${timePct.toFixed(0)}%`;
+    markerHtml = `<div class="usage-bar-time-marker" style="left:${timePct}%" data-label="${markerLabel}"></div>`;
+  }
+
+  // Deficit warning text
+  let deficitHtml = "";
+  if (isWeekly && timePct !== null && timePct > remaining) {
+    const gap = (timePct - remaining).toFixed(0);
+    deficitHtml = `<span class="usage-deficit" style="color:var(--aw-color-error,#dc2626);font-size:0.7rem;margin-left:0.5rem;">-${gap}pt</span>`;
+  }
+
   return `
     <div class="usage-row">
       <div class="usage-row-header">
         <span class="usage-label">${escapeHtml(label)}</span>
-        <span class="usage-pct" style="color:${color}">${remaining.toFixed(0)}%</span>
+        <span class="usage-pct" style="color:${color}">${remaining.toFixed(0)}%${deficitHtml}</span>
       </div>
       <div class="usage-bar-track">
         <div class="usage-bar-fill" style="width:${remaining}%;background:${color}"></div>
+        ${markerHtml}
       </div>
       ${resetStr ? `<div class="usage-reset">${t("home.usage_reset")}: ${escapeHtml(resetStr)}</div>` : ""}
     </div>
@@ -189,16 +221,16 @@ function _renderClaudeUsage(data) {
 
   let html = "";
   if (data.five_hour) {
-    html += _renderUsageBar("5h", data.five_hour.utilization, data.five_hour.resets_at);
+    html += _renderUsageBar("5h", data.five_hour.utilization, data.five_hour.resets_at, data.five_hour.window_seconds);
   }
   if (data.seven_day) {
-    html += _renderUsageBar("7d", data.seven_day.utilization, data.seven_day.resets_at);
+    html += _renderUsageBar("7d", data.seven_day.utilization, data.seven_day.resets_at, data.seven_day.window_seconds);
   }
   if (data.additional_capacity) {
     const ac = data.additional_capacity;
     const usedM = (ac.used_tokens / 1_000_000).toFixed(2);
     const limitM = (ac.limit_tokens / 1_000_000).toFixed(2);
-    html += _renderUsageBar(`Add (${usedM}M/${limitM}M)`, ac.utilization, null);
+    html += _renderUsageBar(`Add (${usedM}M/${limitM}M)`, ac.utilization, null, null);
   }
   el.innerHTML = html || `<div class="usage-ok">${t("home.usage_within_limit")}</div>`;
 }
@@ -222,7 +254,7 @@ function _renderOpenaiUsage(data) {
   let html = "";
   for (const [key, win] of Object.entries(data)) {
     if (skip.has(key) || !win || typeof win !== "object" || win.utilization === undefined) continue;
-    html += _renderUsageBar(key, win.utilization, win.resets_at);
+    html += _renderUsageBar(key, win.utilization, win.resets_at, win.window_seconds);
   }
   el.innerHTML = html || `<div class="usage-ok">${t("home.usage_within_limit")}</div>`;
 }

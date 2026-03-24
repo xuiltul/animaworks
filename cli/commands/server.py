@@ -112,8 +112,7 @@ def _stop_server(
 
     Args:
         timeout: Maximum seconds to wait before reporting failure.
-        force: If True, escalate to SIGKILL after SIGTERM timeout and
-            also kill orphan runner processes.
+        force: If True, escalate to SIGKILL after SIGTERM timeout.
         extra_exclude_pids: Additional PIDs to exclude from process
             scanning (e.g. the restart helper).
 
@@ -121,29 +120,27 @@ def _stop_server(
         True if the server was stopped (or was not running), False if
         it failed to stop within the timeout.
     """
+
+    def _cleanup_orphans() -> int:
+        orphans = _kill_orphan_runners()
+        if orphans:
+            print(f"Killed {orphans} orphan runner process(es).")
+        return orphans
+
     pid = _read_pid()
 
     if pid is None:
         pid = _find_server_pid_by_process(extra_exclude_pids=extra_exclude_pids)
         if pid is None:
-            if force:
-                orphans = _kill_orphan_runners()
-                if orphans:
-                    print(f"Killed {orphans} orphan runner process(es).")
-                else:
-                    print("No PID file found and no server process detected. Server is not running.")
-            else:
-                print("No PID file found and no server process detected. Server is not running.")
+            _cleanup_orphans()
+            print("No PID file found and no server process detected. Server is not running.")
             return True
         print(f"PID file missing — found server process by scanning (pid={pid}).")
     else:
         if not _is_process_alive(pid):
             print(f"Stale PID file (pid={pid}). Server is not running. Cleaning up.")
             _remove_pid_file()
-            if force:
-                orphans = _kill_orphan_runners()
-                if orphans:
-                    print(f"Killed {orphans} orphan runner process(es).")
+            _cleanup_orphans()
             return True
 
     print(f"Stopping server (pid={pid})...")
@@ -152,10 +149,7 @@ def _stop_server(
     except ProcessLookupError:
         print("Server already exited.")
         _remove_pid_file()
-        if force:
-            orphans = _kill_orphan_runners()
-            if orphans:
-                print(f"Killed {orphans} orphan runner process(es).")
+        _cleanup_orphans()
         return True
     except Exception:
         print(f"Error: Permission denied sending signal to pid={pid}.")
@@ -166,10 +160,7 @@ def _stop_server(
         if not _is_process_alive(pid):
             print("Server stopped.")
             _remove_pid_file()
-            if force:
-                orphans = _kill_orphan_runners()
-                if orphans:
-                    print(f"Killed {orphans} orphan runner process(es).")
+            _cleanup_orphans()
             return True
         time.sleep(0.2)
 
@@ -199,10 +190,7 @@ def _stop_server(
 
     print("Server force-killed.")
     _remove_pid_file()
-
-    orphans = _kill_orphan_runners()
-    if orphans:
-        print(f"Killed {orphans} orphan runner process(es).")
+    _cleanup_orphans()
 
     return True
 

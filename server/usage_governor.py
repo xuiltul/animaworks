@@ -18,12 +18,20 @@ Credential-to-provider mapping:
   - ``anthropic`` → ``claude`` rules
   - ``openai``    → ``openai`` rules
   - ``ollama``    → exempt (local)
+
+Rule modes:
+  - **threshold** (list format) — fixed remaining-% cut-offs, ideal for
+    short windows (5 h).
+  - **time_proportional** (dict format) — ``usage_remaining_%`` must stay
+    above ``time_remaining_%``; deficit determines throttle severity.
+    Ideal for weekly windows where pacing matters.
 """
 
 import asyncio
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -40,17 +48,24 @@ _CREDENTIAL_TO_PROVIDER: dict[str, str] = {
 DEFAULT_POLICY: dict[str, Any] = {
     "enabled": True,
     "check_interval_seconds": 120,
+    "hard_floor_pct": 15,  # absolute minimum remaining % for any window
     "providers": {
         "claude": {
+            # 5-hour window: fixed thresholds (list = threshold mode)
             "five_hour": [
                 {"remaining_below": 50, "activity_level": 60},
                 {"remaining_below": 30, "activity_level": 30},
                 {"remaining_below": 15, "activity_level": 10},
             ],
-            "seven_day": [
-                {"remaining_below": 30, "activity_level": 50},
-                {"remaining_below": 15, "activity_level": 10},
-            ],
+            # 7-day window: time-proportional (dict = proportional mode)
+            "seven_day": {
+                "mode": "time_proportional",
+                "deficit_rules": [
+                    {"deficit_above": 0, "activity_level": 60},
+                    {"deficit_above": 10, "activity_level": 30},
+                    {"deficit_above": 20, "activity_level": 10},
+                ],
+            },
         },
         "openai": {
             "5h": [
@@ -58,10 +73,14 @@ DEFAULT_POLICY: dict[str, Any] = {
                 {"remaining_below": 30, "activity_level": 30},
                 {"remaining_below": 15, "activity_level": 10},
             ],
-            "Week": [
-                {"remaining_below": 30, "activity_level": 50},
-                {"remaining_below": 15, "activity_level": 10},
-            ],
+            "Week": {
+                "mode": "time_proportional",
+                "deficit_rules": [
+                    {"deficit_above": 0, "activity_level": 60},
+                    {"deficit_above": 10, "activity_level": 30},
+                    {"deficit_above": 20, "activity_level": 10},
+                ],
+            },
         },
     },
     "suspend_thresholds": {
@@ -184,7 +203,115 @@ def _classify_animas(
     return groups
 
 
+# ── Timestamp helpers ────────────────────────────────────────────────────────
+
+
+def _parse_resets_at(value: Any) -> float | None:
+    """Convert ``resets_at`` (ISO string or unix seconds/ms) → epoch seconds."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        # unix seconds (< 1e12) or ms
+        return float(value) if value < 1e12 else float(value) / 1000.0
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).timestamp()
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def _time_remaining_pct(resets_at_ts: float, window_seconds: int) -> float:
+    """Calculate what % of the window period remains.
+
+    Returns 0–100.  Clamps to [0, 100].
+    """
+    remaining_secs = resets_at_ts - time.time()
+    if remaining_secs <= 0:
+        return 0.0
+    pct = (remaining_secs / window_seconds) * 100.0
+    return min(pct, 100.0)
+
+
 # ── Rule evaluation ──────────────────────────────────────────────────────────
+
+
+def _evaluate_threshold(
+    remaining: float,
+    thresholds: list[dict[str, Any]],
+    provider_key: str,
+    window_key: str,
+) -> tuple[int | None, str]:
+    """Evaluate fixed-threshold rules.  Returns (activity_level, reason)."""
+    sorted_thresholds = sorted(thresholds, key=lambda t: t["remaining_below"])
+    for rule in sorted_thresholds:
+        if remaining < rule["remaining_below"]:
+            level = rule["activity_level"]
+            reason = (
+                f"{provider_key}.{window_key} remaining {remaining:.0f}% "
+                f"< {rule['remaining_below']}% → activity {level}%"
+            )
+            return level, reason
+    return None, ""
+
+
+def _evaluate_time_proportional(
+    remaining: float,
+    window_data: dict[str, Any],
+    config: dict[str, Any],
+    provider_key: str,
+    window_key: str,
+) -> tuple[int | None, str]:
+    """Evaluate time-proportional rules.  Returns (activity_level, reason).
+
+    Compares ``usage_remaining_%`` vs ``time_remaining_%`` of the window.
+    When usage remaining is below time remaining, the deficit (in percentage
+    points) is compared against ``deficit_rules`` to determine the throttle.
+    """
+    resets_at = window_data.get("resets_at")
+    window_seconds = window_data.get("window_seconds")
+
+    resets_ts = _parse_resets_at(resets_at)
+    if resets_ts is None or not window_seconds:
+        # Cannot calculate — fall back to no-op
+        return None, ""
+
+    time_pct = _time_remaining_pct(resets_ts, window_seconds)
+    deficit = time_pct - remaining  # positive means over-consuming
+
+    if deficit <= 0:
+        # Usage pace is sustainable — no throttle needed
+        return None, ""
+
+    # Match deficit against rules (sorted descending so highest matches first)
+    deficit_rules = config.get("deficit_rules", [])
+    sorted_rules = sorted(deficit_rules, key=lambda r: r["deficit_above"], reverse=True)
+    for rule in sorted_rules:
+        if deficit >= rule["deficit_above"]:
+            level = rule["activity_level"]
+            reason = (
+                f"{provider_key}.{window_key} remaining {remaining:.0f}% "
+                f"< time {time_pct:.0f}% (deficit {deficit:.0f}pt) → activity {level}%"
+            )
+            return level, reason
+
+    return None, ""
+
+
+def _evaluate_hard_floor(
+    remaining: float,
+    hard_floor: float,
+    provider_key: str,
+    window_key: str,
+) -> tuple[int | None, str]:
+    """Absolute safety net: if remaining drops below hard floor, emergency throttle."""
+    if remaining < hard_floor:
+        reason = (
+            f"{provider_key}.{window_key} remaining {remaining:.0f}% "
+            f"< hard floor {hard_floor:.0f}% → activity 10%"
+        )
+        return 10, reason
+    return None, ""
 
 
 def _evaluate_provider_remaining(
@@ -194,11 +321,14 @@ def _evaluate_provider_remaining(
 ) -> tuple[float, int | None, str]:
     """Evaluate rules for a single provider.
 
+    Handles both threshold (list) and time_proportional (dict) window configs.
+
     Returns (worst_remaining_pct, target_activity_level_or_None, reason).
     """
     providers_rules = policy.get("providers", {})
     windows_rules = providers_rules.get(provider_key, {})
     provider_data = usage_data.get(provider_key, {})
+    hard_floor = policy.get("hard_floor_pct", 15)
 
     if provider_data.get("error"):
         return 100.0, None, ""
@@ -207,7 +337,13 @@ def _evaluate_provider_remaining(
     worst_level: int | None = None
     worst_reason = ""
 
-    for window_key, thresholds in windows_rules.items():
+    def _update_worst(level: int | None, reason: str) -> None:
+        nonlocal worst_level, worst_reason
+        if level is not None and (worst_level is None or level < worst_level):
+            worst_level = level
+            worst_reason = reason
+
+    for window_key, window_config in windows_rules.items():
         window = provider_data.get(window_key)
         if not window or not isinstance(window, dict):
             continue
@@ -218,17 +354,33 @@ def _evaluate_provider_remaining(
 
         worst_remaining = min(worst_remaining, remaining)
 
-        sorted_thresholds = sorted(thresholds, key=lambda t: t["remaining_below"])
-        for rule in sorted_thresholds:
-            if remaining < rule["remaining_below"]:
-                level = rule["activity_level"]
-                if worst_level is None or level < worst_level:
-                    worst_level = level
-                    worst_reason = (
-                        f"{provider_key}.{window_key} remaining {remaining:.0f}% "
-                        f"< {rule['remaining_below']}% → activity {level}%"
-                    )
-                break
+        # Determine mode
+        if isinstance(window_config, list):
+            # Threshold mode (backward-compatible list format)
+            level, reason = _evaluate_threshold(
+                remaining, window_config, provider_key, window_key,
+            )
+            _update_worst(level, reason)
+        elif isinstance(window_config, dict):
+            mode = window_config.get("mode", "threshold")
+            if mode == "time_proportional":
+                level, reason = _evaluate_time_proportional(
+                    remaining, window, window_config, provider_key, window_key,
+                )
+                _update_worst(level, reason)
+            else:
+                # Dict with "rules" key treated as threshold
+                rules = window_config.get("rules", [])
+                level, reason = _evaluate_threshold(
+                    remaining, rules, provider_key, window_key,
+                )
+                _update_worst(level, reason)
+
+        # Hard floor — always checked regardless of mode
+        level, reason = _evaluate_hard_floor(
+            remaining, hard_floor, provider_key, window_key,
+        )
+        _update_worst(level, reason)
 
     return worst_remaining, worst_level, worst_reason
 

@@ -224,6 +224,7 @@ def _fetch_claude_usage() -> dict[str, Any]:
                 "utilization": fh.get("utilization", 0),
                 "remaining": 100 - fh.get("utilization", 0),
                 "resets_at": fh.get("resets_at"),
+                "window_seconds": 18000,  # 5 hours
             }
 
         if "seven_day" in raw:
@@ -232,6 +233,7 @@ def _fetch_claude_usage() -> dict[str, Any]:
                 "utilization": sd.get("utilization", 0),
                 "remaining": 100 - sd.get("utilization", 0),
                 "resets_at": sd.get("resets_at"),
+                "window_seconds": 604800,  # 7 days
             }
 
         if "additional_capacity" in raw:
@@ -331,6 +333,7 @@ def _fetch_openai_usage() -> dict[str, Any]:
                 "utilization": used_pct,
                 "remaining": 100 - used_pct,
                 "resets_at": reset_at,  # unix timestamp (seconds)
+                "window_seconds": window_sec,
             }
 
         _set_cache("openai", result)
