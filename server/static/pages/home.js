@@ -7,6 +7,7 @@ import { getIcon, getDisplaySummary } from "../shared/activity-types.js";
 import { bustupCandidates, resolveAvatar } from "../modules/avatar-resolver.js";
 
 let _refreshInterval = null;
+let _usageInterval = null;
 
 // ── Render ─────────────────────────────────
 
@@ -15,6 +16,28 @@ export function render(container) {
     <div class="page-header">
       <h2>${t("home.dashboard")}</h2>
     </div>
+
+    <div class="usage-panel" id="homeUsagePanel">
+      <div class="usage-card" id="usageCardClaude">
+        <div class="usage-card-header">
+          <span class="usage-provider-name">Claude</span>
+          <span class="usage-sub-type" id="usageClaudeSub"></span>
+        </div>
+        <div class="usage-card-body" id="usageClaudeBody">
+          <div class="usage-loading">${t("common.loading")}</div>
+        </div>
+      </div>
+      <div class="usage-card" id="usageCardOpenai">
+        <div class="usage-card-header">
+          <span class="usage-provider-name">OpenAI</span>
+          <span class="usage-sub-type" id="usageOpenaiSub"></span>
+        </div>
+        <div class="usage-card-body" id="usageOpenaiBody">
+          <div class="usage-loading">${t("common.loading")}</div>
+        </div>
+      </div>
+    </div>
+    <div id="usageGovernorBar" style="display:none;"></div>
 
     <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
       <div class="stat-card" id="homeStatAnimas">
@@ -77,14 +100,20 @@ export function render(container) {
   `;
 
   _loadAll();
+  _loadUsage();
   _initExternalTasksWidget();
   _refreshInterval = setInterval(_loadAll, 30000);
+  _usageInterval = setInterval(_loadUsage, 60000);
 }
 
 export function destroy() {
   if (_refreshInterval) {
     clearInterval(_refreshInterval);
     _refreshInterval = null;
+  }
+  if (_usageInterval) {
+    clearInterval(_usageInterval);
+    _usageInterval = null;
   }
 }
 
@@ -96,6 +125,144 @@ async function _loadAll() {
   _loadActivity();
   _loadExternalTasks();
 }
+
+// ── Usage Panel ────────────────────────────
+
+function _resetToJst(value) {
+  if (!value) return "";
+  try {
+    // Accept ISO string or unix seconds (number < 1e12 → seconds, else ms)
+    let ms;
+    if (typeof value === "number") {
+      ms = value < 1e12 ? value * 1000 : value;
+    } else {
+      ms = new Date(value).getTime();
+    }
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return String(value);
+    const jst = new Date(d.getTime() + 9 * 3600000);
+    const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const day = days[jst.getUTCDay()];
+    const mm = String(jst.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(jst.getUTCDate()).padStart(2, "0");
+    const hh = String(jst.getUTCHours()).padStart(2, "0");
+    const mi = String(jst.getUTCMinutes()).padStart(2, "0");
+    return `${mm}/${dd}(${day}) ${hh}:${mi}`;
+  } catch { return String(value); }
+}
+
+function _remainingColor(remaining) {
+  if (remaining <= 10) return "var(--aw-color-error, #dc2626)";
+  if (remaining <= 30) return "var(--aw-color-warning, #d97706)";
+  return "var(--aw-color-success, #16a34a)";
+}
+
+function _renderUsageBar(label, utilization, resetAt) {
+  const remaining = Math.max(0, 100 - utilization);
+  const resetStr = resetAt ? _resetToJst(resetAt) : "";
+  const color = _remainingColor(remaining);
+  return `
+    <div class="usage-row">
+      <div class="usage-row-header">
+        <span class="usage-label">${escapeHtml(label)}</span>
+        <span class="usage-pct" style="color:${color}">${remaining.toFixed(0)}%</span>
+      </div>
+      <div class="usage-bar-track">
+        <div class="usage-bar-fill" style="width:${remaining}%;background:${color}"></div>
+      </div>
+      ${resetStr ? `<div class="usage-reset">${t("home.usage_reset")}: ${escapeHtml(resetStr)}</div>` : ""}
+    </div>
+  `;
+}
+
+function _renderClaudeUsage(data) {
+  const el = document.getElementById("usageClaudeBody");
+  if (!el) return;
+
+  if (data.error) {
+    const msg = data.error === "no_credentials"
+      ? t("home.usage_no_credentials")
+      : data.message || data.error;
+    el.innerHTML = `<div class="usage-error">${escapeHtml(msg)}</div>`;
+    return;
+  }
+
+  let html = "";
+  if (data.five_hour) {
+    html += _renderUsageBar("5h", data.five_hour.utilization, data.five_hour.resets_at);
+  }
+  if (data.seven_day) {
+    html += _renderUsageBar("7d", data.seven_day.utilization, data.seven_day.resets_at);
+  }
+  if (data.additional_capacity) {
+    const ac = data.additional_capacity;
+    const usedM = (ac.used_tokens / 1_000_000).toFixed(2);
+    const limitM = (ac.limit_tokens / 1_000_000).toFixed(2);
+    html += _renderUsageBar(`Add (${usedM}M/${limitM}M)`, ac.utilization, null);
+  }
+  el.innerHTML = html || `<div class="usage-ok">${t("home.usage_within_limit")}</div>`;
+}
+
+function _renderOpenaiUsage(data) {
+  const el = document.getElementById("usageOpenaiBody");
+  if (!el) return;
+
+  if (data.error) {
+    const msg = data.error === "no_credentials"
+      ? t("home.usage_no_credentials")
+      : data.error === "not_available"
+        ? t("home.usage_not_available")
+        : data.message || data.error;
+    el.innerHTML = `<div class="usage-error">${escapeHtml(msg)}</div>`;
+    return;
+  }
+
+  // Render usage windows (keys like "5h", "Week", etc.)
+  const skip = new Set(["provider"]);
+  let html = "";
+  for (const [key, win] of Object.entries(data)) {
+    if (skip.has(key) || !win || typeof win !== "object" || win.utilization === undefined) continue;
+    html += _renderUsageBar(key, win.utilization, win.resets_at);
+  }
+  el.innerHTML = html || `<div class="usage-ok">${t("home.usage_within_limit")}</div>`;
+}
+
+function _renderGovernor(gov) {
+  const el = document.getElementById("usageGovernorBar");
+  if (!el) return;
+  if (!gov || !gov.active) {
+    el.style.display = "none";
+    return;
+  }
+  const suspended = (gov.suspended_animas || []).join(", ") || "none";
+  el.style.display = "block";
+  el.innerHTML = `
+    <div class="governor-bar governor-bar--active">
+      <span class="governor-icon">&#x26A0;</span>
+      <span class="governor-text">
+        <strong>Usage Governor</strong>: ${escapeHtml(gov.reason || "throttling")}
+      </span>
+      <span class="governor-suspended">${escapeHtml(suspended)}</span>
+    </div>
+  `;
+}
+
+async function _loadUsage() {
+  try {
+    const data = await api("/api/usage");
+    if (data.claude) _renderClaudeUsage(data.claude);
+    if (data.openai) _renderOpenaiUsage(data.openai);
+    _renderGovernor(data.governor);
+  } catch (err) {
+    const claudeEl = document.getElementById("usageClaudeBody");
+    const openaiEl = document.getElementById("usageOpenaiBody");
+    const msg = `<div class="usage-error">${escapeHtml(err.message)}</div>`;
+    if (claudeEl) claudeEl.innerHTML = msg;
+    if (openaiEl) openaiEl.innerHTML = msg;
+  }
+}
+
+// ── System Status ──────────────────────────
 
 async function _loadSystemStatus() {
   try {

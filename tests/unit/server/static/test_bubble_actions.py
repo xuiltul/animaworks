@@ -77,6 +77,9 @@ class TestRenderUtilsHistoryMessage:
     def test_history_message_calls_bubble_actions_html(self) -> None:
         assert "_bubbleActionsHtml(rawText)" in self.source
 
+    def test_history_message_normalizes_tool_call_text(self) -> None:
+        assert "_normalizeDisplayText(msg.content || \"\")" in self.source
+
 
 class TestRenderUtilsLiveBubble:
     """Verify renderLiveBubble hides action bar during streaming."""
@@ -91,6 +94,38 @@ class TestRenderUtilsLiveBubble:
 
     def test_live_bubble_conditional_data_attr(self) -> None:
         assert "data-raw-text" in self.source
+
+    def test_live_bubble_normalizes_tool_call_text(self) -> None:
+        assert "_normalizeDisplayText(msg.text || \"\")" in self.source
+
+
+class TestRenderUtilsToolCallDisplayNormalization:
+    @pytest.fixture(autouse=True)
+    def _load_source(self) -> None:
+        self.source = _RENDER_UTILS_JS.read_text(encoding="utf-8")
+
+    def test_extract_tool_call_display_text_exists(self) -> None:
+        assert "function _extractToolCallDisplayText(" in self.source
+
+    def test_handles_post_channel_text(self) -> None:
+        assert 'toolName === "post_channel"' in self.source
+        assert "args.text" in self.source
+
+    def test_handles_send_message_content(self) -> None:
+        assert 'toolName === "send_message"' in self.source
+        assert "args.content" in self.source
+
+    def test_extract_structured_json_display_text_exists(self) -> None:
+        assert "function _extractStructuredJsonDisplayText(" in self.source
+
+    def test_handles_status_payload_fields(self) -> None:
+        assert '"file_access_verified" in parsed' in self.source
+        assert '"paths_verified" in parsed' in self.source
+        assert '"last_verified_file" in parsed' in self.source
+        assert '"note" in parsed' in self.source
+
+    def test_normalize_display_text_uses_structured_json_extractor(self) -> None:
+        assert "_extractStructuredJsonDisplayText(rawText)" in self.source
 
 
 class TestBindBubbleActionHandlers:

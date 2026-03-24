@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sys
 from pathlib import Path
 from typing import Any, Literal
 
@@ -647,6 +648,14 @@ def load_permissions(anima_dir: Path) -> PermissionsConfig:
 def _format_permissions_for_prompt(config: PermissionsConfig, anima_name: str) -> str:
     """Convert PermissionsConfig to a human/LLM-readable text block."""
     lines = [f"## Permissions: {anima_name}"]
+    if sys.platform == "win32":
+        lines.extend(
+            [
+                "- Runtime: native Windows environment (not a Linux container and not WSL unless explicitly stated)",
+                "- File reading is available via read_file for absolute paths and read_memory_file for files inside your own memory directory",
+                "- Command execution runs through a PowerShell-compatible shell via execute_command; do not assume Bash-only behavior unless a command actually fails",
+            ]
+        )
     if config.file_roots == ["/"]:
         lines.append("- File access: unrestricted")
     elif not config.file_roots and not config.file_roots_readonly:

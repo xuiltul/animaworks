@@ -1,6 +1,6 @@
 // ── Settings Page ────────────────────────────
 import { t } from "/shared/i18n.js";
-import { applyTheme, applyDisplayMode, getDisplayMode } from "../modules/app.js";
+import { applyTheme, applyDisplayMode, getDisplayMode, applyFontSize, getFontSize } from "../modules/app.js";
 
 const _LS_ACTIVITY  = "aw-activity-level";
 const _LS_SCHEDULE  = "aw-activity-schedule";
@@ -110,6 +110,22 @@ export function render(container) {
     </section>
 
     <section class="settings-section">
+      <h3 class="settings-section-title">${t("settings.font_size.title")}</h3>
+      <p class="settings-section-desc">${t("settings.font_size.desc")}</p>
+      <div class="activity-level-presets">
+        <button class="preset-btn" data-font="12">${t("settings.font_size.small")}</button>
+        <button class="preset-btn" data-font="14">${t("settings.font_size.medium")}</button>
+        <button class="preset-btn" data-font="16">${t("settings.font_size.large")}</button>
+        <button class="preset-btn" data-font="18">${t("settings.font_size.xl")}</button>
+      </div>
+      <div class="activity-level-slider-row">
+        <input type="range" min="10" max="22" value="${getFontSize()}" step="1"
+               class="activity-level-slider" id="fontSizeSlider" />
+        <div class="activity-level-value" id="fontSizeValue">${getFontSize()}px</div>
+      </div>
+    </section>
+
+    <section class="settings-section">
       <h3 class="settings-section-title">${t("settings.input.title")}</h3>
       <p class="settings-section-desc">${t("settings.input.desc")}</p>
       <label class="settings-checkbox-label">
@@ -134,6 +150,19 @@ export function render(container) {
 
   // Activity Level
   _initActivityLevel(container);
+
+  // Font Size
+  const fontSlider = container.querySelector("#fontSizeSlider");
+  const fontValue  = container.querySelector("#fontSizeValue");
+  function _applyFont(px) {
+    applyFontSize(px);
+    if (fontSlider) fontSlider.value = px;
+    if (fontValue)  fontValue.textContent = `${px}px`;
+  }
+  fontSlider?.addEventListener("input", () => _applyFont(Number(fontSlider.value)));
+  container.querySelectorAll("[data-font]").forEach(btn => {
+    btn.addEventListener("click", () => _applyFont(Number(btn.dataset.font)));
+  });
 }
 
 export function destroy() {}

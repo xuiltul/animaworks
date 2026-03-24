@@ -16,14 +16,19 @@ from core.config.models import (
     AnimaDefaults,
     AnimaModelConfig,
     AnimaWorksConfig,
+    CommandsPermission,
     CredentialConfig,
     DEFAULT_LOCAL_LLM_MODEL,
+    ExternalToolsPermission,
     GatewaySystemConfig,
     ImageGenConfig,
     LocalLLMConfig,
+    PermissionsConfig,
     RAGConfig,
     SystemConfig,
+    ToolCreationPermission,
     WorkerSystemConfig,
+    _format_permissions_for_prompt,
     _match_pattern_table,
     _pattern_specificity,
     get_config_path,
@@ -166,6 +171,24 @@ class TestImageGenConfig:
         config = AnimaWorksConfig()
         assert isinstance(config.image_gen, ImageGenConfig)
         assert config.image_gen.style_reference is None
+
+
+class TestFormatPermissionsForPrompt:
+    def test_windows_prompt_mentions_native_runtime(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr("core.config.schemas.sys.platform", "win32")
+        config = PermissionsConfig(
+            file_roots=[r"E:\OneDriveBiz\Tools\General"],
+            file_roots_readonly=[r"E:\OneDriveBiz\Tools\abconfig\Cnct_Env.py"],
+            commands=CommandsPermission(allow_all=True),
+            external_tools=ExternalToolsPermission(allow_all=True),
+            tool_creation=ToolCreationPermission(personal=True, shared=False),
+        )
+
+        prompt = _format_permissions_for_prompt(config, "sora")
+
+        assert "native Windows environment" in prompt
+        assert "read_file for absolute paths" in prompt
+        assert "PowerShell-compatible shell via execute_command" in prompt
 
 
 class TestRAGConfig:

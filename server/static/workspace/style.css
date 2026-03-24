@@ -267,6 +267,13 @@ html, body {
   white-space: nowrap;
 }
 
+.status-meta {
+  font-size: 0.78rem;
+  color: #666;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #eee;
+}
+
 .status-section {
   background: #fafafa;
   border: 1px solid #eee;
@@ -3431,7 +3438,7 @@ html, body {
 
 .org-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
 }
 
@@ -3473,6 +3480,7 @@ html, body {
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
 /* Card Info */
@@ -3517,6 +3525,51 @@ html, body {
   padding: 1px 6px;
   border-radius: 3px;
   white-space: nowrap;
+}
+
+/* Card Meta (department / title / model) */
+.org-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+  line-height: 1.3;
+}
+
+.org-card-dept {
+  font-size: 10px;
+  color: var(--aw-color-warning, #b45309);
+  background: var(--aw-color-warning-bg, #fef3c7);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.org-card-title {
+  font-size: 10px;
+  color: var(--aw-color-success, #047857);
+  background: var(--aw-color-success-bg, #d1fae5);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.org-card-model {
+  font-size: 9px;
+  color: var(--aw-color-text-tertiary, #888);
+  background: var(--aw-color-bg-secondary, #f5f5f5);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-family: var(--aw-font-mono, monospace);
+}
+
+.org-card-meta-sep {
+  font-size: 9px;
+  color: var(--aw-color-text-tertiary, #999);
+  user-select: none;
 }
 
 /* Card Status */

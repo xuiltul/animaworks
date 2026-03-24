@@ -306,6 +306,7 @@ class ImageGenPipeline:
         seed: int | None = None,
         progress_callback: Callable[[str, str, int], None] | None = None,
         face_reference_image: bytes | None = None,
+        fullbody_step_callback: Callable[[int, int], None] | None = None,
     ) -> PipelineResult:
         """Run the 6-step pipeline synchronously.
 
@@ -424,15 +425,19 @@ class ImageGenPipeline:
                         styled_negative,
                     )
 
-                    fullbody_bytes = client.generate_fullbody(
-                        prompt=styled_prompt,
-                        negative_prompt=styled_negative,
-                        seed=seed,
-                        vibe_image=effective_vibe,
-                        vibe_strength=effective_vibe_strength,
-                        vibe_info_extracted=effective_vibe_info,
-                        face_reference_image=face_reference_image,
-                    )
+                    _fb_kwargs: dict[str, Any] = {
+                        "prompt": styled_prompt,
+                        "negative_prompt": styled_negative,
+                        "seed": seed,
+                        "vibe_image": effective_vibe,
+                        "vibe_strength": effective_vibe_strength,
+                        "vibe_info_extracted": effective_vibe_info,
+                    }
+                    if self._use_diffusers:
+                        # LocalDiffusersClient accepts face reference and step callback
+                        _fb_kwargs["face_reference_image"] = face_reference_image
+                        _fb_kwargs["step_callback"] = fullbody_step_callback
+                    fullbody_bytes = client.generate_fullbody(**_fb_kwargs)
                     fullbody_path.write_bytes(fullbody_bytes)
                     result.fullbody_path = fullbody_path
                     fullbody_freshly_generated = True

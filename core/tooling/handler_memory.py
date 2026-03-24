@@ -171,10 +171,64 @@ class MemoryToolsMixin:
     _min_trust_seen: int
     _read_paths: set[str]
 
+    def _anima_search_hint(self, query: str) -> str | None:
+        """If query looks like a search for a registered Anima, return a redirect hint.
+
+        Checks all anima directories and config aliases so that queries like
+        'kanna', '環奈', 'kanna is alive?' all produce a helpful redirect to
+        ping_subordinate instead of silently returning empty results.
+        """
+        try:
+            animas_dir = self._anima_dir.parent
+            query_lower = query.lower()
+            matched_name: str | None = None
+
+            # Pass 1: check anima directory names
+            for d in sorted(animas_dir.iterdir()):
+                if not d.is_dir() or d.name == self._anima_name:
+                    continue
+                if not (d / "identity.md").exists():
+                    continue
+                if d.name.lower() in query_lower:
+                    matched_name = d.name
+                    break
+
+            # Pass 2: check aliases from config
+            if matched_name is None:
+                try:
+                    from core.config import load_config
+
+                    config = load_config()
+                    for name, cfg in config.animas.items():
+                        if name == self._anima_name:
+                            continue
+                        for alias in cfg.aliases or []:
+                            if alias and alias.lower() in query_lower:
+                                matched_name = name
+                                break
+                        if matched_name:
+                            break
+                except Exception:
+                    pass
+
+            if matched_name:
+                return (
+                    f"[重要] '{matched_name}' はメモリファイルではなく、"
+                    f"登録済みの Anima（AIエージェント）です。"
+                    f"メモリを検索しても '{matched_name}' の情報は見つかりません。\n"
+                    f"稼働状態を確認するには ping_subordinate(name='{matched_name}') を呼び出してください。"
+                )
+        except Exception:
+            pass
+        return None
+
     def _handle_search_memory(self, args: dict[str, Any]) -> str:
         scope = args.get("scope", "all")
         query = args.get("query", "")
         offset = int(args.get("offset", 0))
+
+        # If the query seems to be about a registered Anima, redirect immediately.
+        anima_hint = self._anima_search_hint(query)
 
         results = self._memory.search_memory_text(
             query,
@@ -191,8 +245,12 @@ class MemoryToolsMixin:
         )
         if not results:
             if offset > 0:
-                return f"No more results for '{query}' at offset={offset}."
-            return f"No results for '{query}'"
+                base = f"No more results for '{query}' at offset={offset}."
+            else:
+                base = f"No results for '{query}'"
+            if anima_hint:
+                return f"{base}\n\n{anima_hint}"
+            return base
 
         scale = min(1.0, getattr(self, "_context_window", _SEARCH_CONTEXT_BASE) / _SEARCH_CONTEXT_BASE)
         max_tokens = int(_SEARCH_MAX_TOKENS * scale)
@@ -233,7 +291,10 @@ class MemoryToolsMixin:
         if len(results) >= 10:
             output_parts.append(f"\nUse offset={offset + len(results)} to see next page.")
 
-        return "".join(output_parts)
+        result = "".join(output_parts)
+        if anima_hint:
+            result = f"{anima_hint}\n\n{result}"
+        return result
 
     def _handle_read_memory_file(self, args: dict[str, Any]) -> str:
         norm = _normalize_memory_path(args["path"], self._anima_dir)

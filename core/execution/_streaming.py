@@ -17,6 +17,7 @@ and a context-manager helper for converting API errors into
 
 import json as _json
 import logging
+import re
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -107,6 +108,127 @@ def _repair_json_arguments(raw: str) -> dict[str, Any] | None:
                     except (_json.JSONDecodeError, TypeError):
                         pass
                     break
+    return None
+
+
+def _extract_json_object_candidates(text: str) -> list[str]:
+    """Extract balanced JSON-object substrings from *text*.
+
+    This is used for models that prepend a natural-language preamble before
+    emitting a JSON tool call as plain text.
+    """
+    candidates: list[str] = []
+    for start, ch in enumerate(text):
+        if ch != "{":
+            continue
+        depth = 0
+        in_string = False
+        escape = False
+        for end in range(start, len(text)):
+            cur = text[end]
+            if in_string:
+                if escape:
+                    escape = False
+                elif cur == "\\":
+                    escape = True
+                elif cur == '"':
+                    in_string = False
+                continue
+            if cur == '"':
+                in_string = True
+            elif cur == "{":
+                depth += 1
+            elif cur == "}":
+                depth -= 1
+                if depth == 0:
+                    candidates.append(text[start : end + 1].strip())
+                    break
+    return candidates
+
+
+def _parse_text_tool_call_object(
+    obj: dict[str, Any],
+    tool_names: set[str],
+) -> tuple[str, str] | None:
+    """Convert a parsed JSON object into ``(tool_name, arguments_json)``."""
+    func_info = obj.get("function") or {}
+    func_name = func_info.get("name") or obj.get("name")
+    if not func_name or func_name not in tool_names:
+        return None
+    raw_args = func_info.get("arguments") or obj.get("arguments") or {}
+    if isinstance(raw_args, str):
+        try:
+            raw_args = _json.loads(raw_args)
+        except Exception:
+            raw_args = _repair_json_arguments(raw_args) or {}
+    if not isinstance(raw_args, dict):
+        raw_args = {}
+    return func_name, _json.dumps(raw_args, ensure_ascii=False)
+
+
+def try_parse_text_tool_call(
+    text: str,
+    tools: list[dict[str, Any]],
+) -> tuple[str, str] | None:
+    """Try to parse a tool call embedded in plain text.
+
+    Supported forms:
+    1. Structured OpenAI-style JSON
+    2. Top-level ``{"name": "...", "arguments": {...}}``
+    3. Natural-language preamble followed by one of the JSON objects above
+    4. Python-style ``tool_name(key="value")`` lines
+    """
+    if not tools or not text:
+        return None
+
+    tool_names: set[str] = set()
+    for tool in tools:
+        if isinstance(tool, dict) and "function" in tool:
+            name = tool["function"].get("name")
+            if name:
+                tool_names.add(name)
+    if not tool_names:
+        return None
+
+    stripped = text.strip()
+    candidates: list[str] = [stripped]
+    for match in re.finditer(r"```(?:json|tool_call)?\s*\n?(.*?)```", stripped, re.DOTALL | re.IGNORECASE):
+        block = match.group(1).strip()
+        if block:
+            candidates.append(block)
+    candidates.extend(_extract_json_object_candidates(stripped))
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            obj = _json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            parsed = _parse_text_tool_call_object(obj, tool_names)
+            if parsed:
+                return parsed
+
+    for line in stripped.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        match = re.fullmatch(r"(\w+)\(([^)]*)\)", line)
+        if not match:
+            continue
+        func_name = match.group(1)
+        if func_name not in tool_names:
+            continue
+        args: dict[str, Any] = {}
+        for arg_match in re.finditer(r'(\w+)=(?:"([^"]*?)"|\'([^\']*?)\')', match.group(2)):
+            key = arg_match.group(1)
+            val = arg_match.group(2) if arg_match.group(2) is not None else arg_match.group(3)
+            args[key] = val
+        return func_name, _json.dumps(args, ensure_ascii=False)
+
     return None
 
 

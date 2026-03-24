@@ -172,6 +172,92 @@ class LocalDiffusersClient:
         except Exception:
             logger.debug("Failed to set DPM++ scheduler, keeping default", exc_info=True)
 
+    # VRAM thresholds for full-GPU mode.
+    # RealVisXL_V5.0 (SDXL) memory budget in float16:
+    #   UNet ~4.8 GB + VAE ~0.2 GB + CLIP ~1.3 GB = ~6.3 GB base
+    #   Inference activations: ~0.7 GB with xFormers, ~3 GB without
+    #   → need ≥7 GB free to run full-GPU with xFormers safely
+    #   → need ≥10 GB free to run full-GPU without xFormers
+    _VRAM_THRESHOLD_WITH_XFORMERS: int = 7 * 1024 ** 3
+    _VRAM_THRESHOLD_NO_XFORMERS: int = 10 * 1024 ** 3
+
+    @staticmethod
+    def _xformers_available() -> bool:
+        try:
+            import xformers  # noqa: F401
+            return True
+        except ImportError:
+            return False
+
+    def _vram_offload_threshold(self) -> int:
+        if self._xformers_available():
+            return self._VRAM_THRESHOLD_WITH_XFORMERS
+        return self._VRAM_THRESHOLD_NO_XFORMERS
+
+    def _should_use_cpu_offload(self) -> bool:
+        """Return True if free VRAM is below the threshold for full-VRAM mode."""
+        if self._device != "cuda":
+            return False
+        try:
+            torch = _import_torch()
+            free, _ = torch.cuda.mem_get_info()
+            threshold = self._vram_offload_threshold()
+            needs_offload = free < threshold
+            if needs_offload:
+                logger.info(
+                    "Free VRAM %.1fGB < %.0fGB threshold — enabling CPU offload for Diffusers",
+                    free / 1024 ** 3,
+                    threshold / 1024 ** 3,
+                )
+            return needs_offload
+        except Exception:
+            return False
+
+    def _apply_memory_optimizations(self, pipe: Any, cpu_offload: bool) -> Any:
+        """Apply VRAM-saving optimizations and optionally move to device.
+
+        NOTE: xFormers and model_cpu_offload are mutually exclusive —
+        do not enable xFormers when using CPU offload.
+        """
+        if cpu_offload:
+            # CPU offload path: minimal VRAM usage, xFormers NOT compatible
+            # VAE slicing still reduces peak decode VRAM
+            try:
+                pipe.vae.enable_slicing()
+            except Exception:
+                pass
+            try:
+                pipe.enable_model_cpu_offload()
+                logger.info("Model CPU offload enabled (low-VRAM mode)")
+                return pipe  # do NOT call .to(device) after cpu_offload
+            except Exception:
+                logger.warning("enable_model_cpu_offload failed, falling back to .to(device)", exc_info=True)
+            return pipe.to(self._device)
+
+        # Full-GPU path: use xFormers + slicing for maximum VRAM efficiency
+        pipe = pipe.to(self._device)
+
+        if self._xformers_available():
+            try:
+                pipe.enable_xformers_memory_efficient_attention()
+                logger.info("xFormers memory-efficient attention enabled")
+            except Exception:
+                logger.debug("xFormers not applicable for this pipeline", exc_info=True)
+
+        try:
+            pipe.vae.enable_slicing()
+            logger.debug("VAE slicing enabled")
+        except Exception:
+            pass
+
+        try:
+            pipe.enable_attention_slicing()
+            logger.debug("Attention slicing enabled")
+        except Exception:
+            pass
+
+        return pipe
+
     def _load_text2img_pipeline(self) -> Any:
         cache_key = ("text2img", self._text2img_source, self._device, self._dtype_name)
         cached = _PIPELINE_CACHE.get(cache_key)
@@ -180,7 +266,8 @@ class LocalDiffusersClient:
 
         auto_text2img, _ = _import_diffusers()
         pipe = auto_text2img.from_pretrained(self._text2img_source, **self._pipeline_kwargs())
-        pipe = pipe.to(self._device)
+        cpu_offload = self._should_use_cpu_offload()
+        pipe = self._apply_memory_optimizations(pipe, cpu_offload)
         self._apply_scheduler(pipe, self._text2img_source)
         _PIPELINE_CACHE[cache_key] = pipe
         return pipe
@@ -197,7 +284,8 @@ class LocalDiffusersClient:
             pipe = auto_img2img.from_pipe(base_pipe)
         else:
             pipe = auto_img2img.from_pretrained(self._img2img_source, **self._pipeline_kwargs())
-            pipe = pipe.to(self._device)
+            cpu_offload = self._should_use_cpu_offload()
+            pipe = self._apply_memory_optimizations(pipe, cpu_offload)
             self._apply_scheduler(pipe, self._img2img_source)
         _PIPELINE_CACHE[cache_key] = pipe
         return pipe
@@ -258,33 +346,63 @@ class LocalDiffusersClient:
         self,
         prompt: str,
         negative_prompt: str = "",
-        width: int = 768,
-        height: int = 1152,
+        width: int = 512,
+        height: int = 768,
         seed: int | None = None,
-        steps: int = 40,
+        steps: int = 20,
         scale: float = 7.5,
         sampler: str = "k_euler_ancestral",
         vibe_image: bytes | None = None,
         vibe_strength: float = 0.6,
         vibe_info_extracted: float = 0.8,
         face_reference_image: bytes | None = None,
+        step_callback: "Callable[[int, int], None] | None" = None,
     ) -> bytes:
         """Generate a full-body character image locally.
 
         If *face_reference_image* is provided, IP-Adapter (Plus Face) is used
         to inject the facial features from the reference into the generation.
         This takes priority over *vibe_image* when both are supplied.
+
+        *step_callback(current_step, total_steps)* is called after each
+        denoising step so callers can emit progress events.
         """
         del sampler, vibe_info_extracted
 
+        # In CPU-offload mode, further reduce to keep generation under ~5 min.
+        cpu_offload = self._should_use_cpu_offload()
+        if cpu_offload:
+            steps = min(steps, 10)             # cap at 10 steps
+            width = min(width, 512)            # max 512×512
+            height = min(height, 512)
+            logger.info(
+                "Low-VRAM CPU-offload mode: reduced to %d steps at %dx%d",
+                steps, width, height,
+            )
+
         width, height = self._snap_size(width, height)
+        total_steps = max(1, steps)
         generator = self._make_generator(seed)
+
+        # Build Diffusers callback for progress reporting
+        _done_steps = [0]
+
+        def _diffusers_callback(pipe_self: Any, step: int, timestep: Any, callback_kwargs: dict) -> dict:  # noqa: ARG001
+            _done_steps[0] = step + 1
+            if step_callback is not None:
+                try:
+                    step_callback(_done_steps[0], total_steps)
+                except Exception:
+                    pass
+            return callback_kwargs
+
         common_kwargs: dict[str, Any] = {
             "prompt": prompt,
             "negative_prompt": negative_prompt or None,
             "guidance_scale": scale,
-            "num_inference_steps": max(1, steps),
+            "num_inference_steps": total_steps,
             "generator": generator,
+            "callback_on_step_end": _diffusers_callback,
         }
 
         text2img_key = ("text2img", self._text2img_source, self._device, self._dtype_name)

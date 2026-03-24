@@ -32,6 +32,7 @@ from typing import Any
 from core.exceptions import ConfigError, LLMAPIError, ToolExecutionError  # noqa: F401
 from core.execution._litellm_context import ContextMixin, _extract_tool_uses_from_messages
 from core.execution._litellm_streaming import StreamingMixin
+from core.execution._streaming import try_parse_text_tool_call
 
 # ── Mixin imports ──────────────────────────────────────────
 # ── Backward-compatible re-exports ────────────────────────
@@ -278,8 +279,25 @@ class LiteLLMExecutor(
 
             # ── Check for tool calls ──────────────────────────
             tool_calls = message.tool_calls
+            _content = message.content or ""
+            if not tool_calls and iter_tools:
+                _text_tc = try_parse_text_tool_call(_content, iter_tools)
+                if _text_tc:
+                    from types import SimpleNamespace
+
+                    _tc_name, _tc_args_json = _text_tc
+                    _tc_id = f"text_call_{iteration}_{id(_tc_name) % 0xFFFF:04x}"
+                    logger.info(
+                        "A text-format tool call parsed: %s args=%s",
+                        _tc_name,
+                        _tc_args_json,
+                    )
+                    _syn_fn = SimpleNamespace(name=_tc_name, arguments=_tc_args_json)
+                    _syn_tc = SimpleNamespace(id=_tc_id, function=_syn_fn)
+                    tool_calls = [_syn_tc]
+                    _content = ""
             if not tool_calls:
-                final_text = message.content or ""
+                final_text = _content
                 _, final_text = strip_thinking_tags(final_text)
                 all_response_text.append(final_text)
                 logger.debug("A final response at iteration=%d", iteration)
@@ -321,7 +339,6 @@ class LiteLLMExecutor(
                         },
                     }
                 )
-            _content = message.content
             if _content:
                 _, _content = strip_thinking_tags(_content)
             messages.append(

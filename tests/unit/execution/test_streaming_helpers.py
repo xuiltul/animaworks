@@ -12,6 +12,7 @@ from core.execution._streaming import (
     accumulate_tool_call_chunks,
     parse_accumulated_tool_calls,
     stream_error_boundary,
+    try_parse_text_tool_call,
 )
 from core.execution.base import StreamDisconnectedError
 
@@ -256,6 +257,35 @@ class TestRepairJsonArguments:
         result = _repair_json_arguments(raw)
         assert result is not None
         assert result["query"] == "select * from t where a = {1}"
+
+
+class TestTryParseTextToolCall:
+    def test_parses_top_level_name_arguments_after_preamble(self) -> None:
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "post_channel"},
+            }
+        ]
+        text = (
+            "了解しました。以下の方法で回答します。\n\n"
+            '{"name":"post_channel","arguments":{"channel":"general","text":"ok"}}'
+        )
+        parsed = try_parse_text_tool_call(text, tools)
+        assert parsed == ("post_channel", '{"channel": "general", "text": "ok"}')
+
+    def test_parses_top_level_stringified_arguments(self) -> None:
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "send_message"},
+            }
+        ]
+        text = (
+            '{"name":"send_message","arguments":"{\\"to\\":\\"cmnt\\",\\"content\\":\\"hello\\"}"}'
+        )
+        parsed = try_parse_text_tool_call(text, tools)
+        assert parsed == ("send_message", '{"to": "cmnt", "content": "hello"}')
 
 
 class TestParseAccumulatedToolCallsInvalidJson:

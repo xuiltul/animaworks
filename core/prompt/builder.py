@@ -444,7 +444,7 @@ def _build_group4(
             "\n## CLI Tools\n"
             "For supervisor management, vault, channel management, "
             "background tasks, and external tools (Slack, Chatwork, Gmail, GitHub, etc.):\n"
-            "```\nBash: animaworks-tool <tool> <subcommand> [args]\n```\n"
+            "```\nanimaworks-tool <tool> <subcommand> [args]\n```\n"
             "Use `skill machine-tool` to see available commands.",
             "tool_guides",
             1,

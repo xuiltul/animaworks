@@ -547,7 +547,7 @@ class BaseExecutor(ABC):
     def _has_subordinates(self) -> bool:
         """Check if this anima has any subordinates (is a supervisor)."""
         try:
-            from core.config.models import load_config
+            from core.config import load_config
 
             config = load_config()
             my_name = self._anima_dir.name

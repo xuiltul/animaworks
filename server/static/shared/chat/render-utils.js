@@ -24,6 +24,151 @@ export function stripThinkTags(text) {
   return { thinking, response };
 }
 
+function _extractJsonCandidates(text) {
+  const candidates = [];
+  if (!text) return candidates;
+  for (let start = 0; start < text.length; start++) {
+    if (text[start] !== "{") continue;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let end = start; end < text.length; end++) {
+      const ch = text[end];
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (ch === "\\") {
+          escape = true;
+        } else if (ch === "\"") {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === "\"") {
+        inString = true;
+      } else if (ch === "{") {
+        depth += 1;
+      } else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          candidates.push(text.slice(start, end + 1).trim());
+          break;
+        }
+      }
+    }
+  }
+  return candidates;
+}
+
+function _extractToolCallDisplayText(rawText) {
+  if (!rawText || typeof rawText !== "string") return "";
+  const text = rawText.trim();
+  if (!text) return "";
+
+  const candidates = [text, ..._extractJsonCandidates(text)];
+  for (const candidate of candidates) {
+    let parsed;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+
+    const fn = parsed.function && typeof parsed.function === "object" ? parsed.function : null;
+    const toolName = fn?.name || parsed.name || "";
+    let args = fn?.arguments ?? parsed.arguments ?? {};
+    if (typeof args === "string") {
+      try {
+        args = JSON.parse(args);
+      } catch {
+        args = {};
+      }
+    }
+    if (!args || typeof args !== "object" || Array.isArray(args)) args = {};
+
+    if (toolName === "post_channel" && typeof args.text === "string" && args.text.trim()) {
+      return args.text;
+    }
+    if (toolName === "send_message" && typeof args.content === "string" && args.content.trim()) {
+      return args.content;
+    }
+    if ((parsed.id || fn) && toolName) {
+      return "";
+    }
+  }
+  return "";
+}
+
+function _formatStatusValue(value) {
+  if (value === "idle") return "待機中";
+  if (value === "running") return "実行中";
+  if (value === "done") return "完了";
+  if (value === "error") return "エラー";
+  return value == null ? "" : String(value);
+}
+
+function _extractStructuredJsonDisplayText(rawText) {
+  if (!rawText || typeof rawText !== "string") return "";
+  const text = rawText.trim();
+  if (!text) return "";
+
+  const candidates = [text, ..._extractJsonCandidates(text)];
+  for (const candidate of candidates) {
+    let parsed;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+    if (parsed.name || parsed.function || parsed.arguments || parsed.id) continue;
+
+    const hasStatusPayload =
+      "file_access_verified" in parsed
+      || "paths_verified" in parsed
+      || "access_method" in parsed
+      || "last_verified_file" in parsed
+      || "note" in parsed;
+    if (!hasStatusPayload) continue;
+
+    const lines = [];
+    if (typeof parsed.note === "string" && parsed.note.trim()) {
+      lines.push(parsed.note.trim());
+    }
+    if (typeof parsed.status === "string" && parsed.status.trim()) {
+      lines.push(`状態: ${_formatStatusValue(parsed.status.trim())}`);
+    }
+    if (typeof parsed.file_access_verified === "boolean") {
+      lines.push(`ファイルアクセス確認: ${parsed.file_access_verified ? "可能" : "未確認"}`);
+    }
+    if (typeof parsed.access_method === "string" && parsed.access_method.trim()) {
+      lines.push(`確認方法: ${parsed.access_method.trim()}`);
+    }
+    if (typeof parsed.last_verified_file === "string" && parsed.last_verified_file.trim()) {
+      lines.push(`最終確認ファイル: ${parsed.last_verified_file.trim()}`);
+    }
+    if (Array.isArray(parsed.paths_verified) && parsed.paths_verified.length) {
+      lines.push("確認済みパス:");
+      for (const item of parsed.paths_verified) {
+        if (typeof item === "string" && item.trim()) {
+          lines.push(`- ${item.trim()}`);
+        }
+      }
+    }
+
+    return lines.join("\n").trim();
+  }
+  return "";
+}
+
+function _normalizeDisplayText(rawText) {
+  return _extractToolCallDisplayText(rawText)
+    || _extractStructuredJsonDisplayText(rawText)
+    || rawText
+    || "";
+}
+
 // ── TextAnimator ──────────────────────────────────────
 // Buffers incoming text deltas and drips them at a constant rate
 // via requestAnimationFrame to smooth out bursty API token delivery.
@@ -226,7 +371,7 @@ export function renderHistoryMessage(msg, opts) {
     const speakerLabel = msg.speaker
       ? `<div class="chat-speaker-label">${escapeHtml(msg.speaker)}</div>`
       : "";
-    const rawText = msg.content || "";
+    const rawText = _normalizeDisplayText(msg.content || "");
     const content = rawText ? renderMarkdown(rawText, opts.animaName) : "";
     const toolHtml = renderToolCalls(msg.tool_calls, { escapeHtml, truncateLen: truncLen });
     const imagesHtml = renderImages(msg.images, { animaName: opts.animaName });
@@ -553,7 +698,7 @@ export function renderLiveBubble(msg, opts) {
   }
   const imagesHtml = renderImages(msg.images, { animaName: opts.animaName });
 
-  const rawText = msg.text || "";
+  const rawText = _normalizeDisplayText(msg.text || "");
   const actionsHtml = msg.streaming ? "" : _bubbleActionsHtml(rawText);
   const dataRawAttr = rawText && !msg.streaming ? ` data-raw-text="${_escapeAttr(rawText)}"` : "";
   const bubble = `<div class="chat-bubble assistant${streamClass}"${streamIdAttr}${dataRawAttr}>${actionsHtml}${speakerLabel}${content}${imagesHtml}${compressionHtml}${toolHtml}${thinkingHtml}${tsHtml}</div>`;
@@ -678,7 +823,7 @@ function _renderTextZoneContent(msg, opts) {
     const doneLabel = labels.heartbeatRelayDone || t("chat.heartbeat_relay_done");
     return `<div class="heartbeat-relay-indicator"><span class="tool-spinner"></span>${doneLabel}</div>`;
   }
-  const visibleText = msg._displayText || msg.text;
+  const visibleText = _normalizeDisplayText(msg._displayText || msg.text);
   if (visibleText) {
     let html = renderMarkdown(visibleText, opts.animaName);
     if (msg.streaming) {

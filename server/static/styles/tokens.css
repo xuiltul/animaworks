@@ -4,6 +4,9 @@
    ────────────────────────────────────────────────────── */
 
 :root {
+  /* Typography */
+  --aw-font-size-base: 14px;
+
   /* Primary accent */
   --aw-color-accent: #374151;
   --aw-color-accent-hover: #1f2937;

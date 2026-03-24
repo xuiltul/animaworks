@@ -191,12 +191,12 @@ def build_unified_tool_list(
     if include_notification_tools:
         tools.extend(_notification_tools())
 
-    # AW-essential: supervisor delegation (conditional, blocked during consolidation)
+    # AW-essential: supervisor delegation + status check (conditional, blocked during consolidation)
     if include_supervisor_tools and not is_consolidation:
+        _sup_include = {"delegate_task", "ping_subordinate"}
         for t in _supervisor_tools():
-            if t["name"] == "delegate_task":
+            if t["name"] in _sup_include:
                 tools.append(t)
-                break
 
     # AW-essential: task management (always present, but submit_tasks blocked during consolidation)
     if not is_consolidation:

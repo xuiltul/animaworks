@@ -25,6 +25,7 @@ from core.execution._streaming import (
     accumulate_tool_call_chunks,
     parse_accumulated_tool_calls,
     stream_error_boundary,
+    try_parse_text_tool_call,
 )
 from core.execution.base import (
     RepetitionDetector,
@@ -45,52 +46,6 @@ from core.prompt.context import ContextTracker
 from core.schemas import ImageData
 
 logger = logging.getLogger("animaworks.execution.litellm_loop")
-
-
-def _try_parse_text_tool_call(text: str, tools: list[dict[str, Any]]) -> tuple[str, str] | None:
-    """Try to parse a Python-style function call from text.
-
-    Some models (e.g. Llama 4 Maverick on Bedrock) occasionally return tool calls
-    embedded in the text content rather than in the structured ``tool_calls`` field::
-
-        read_memory_file(path="shared/users/shizuku/index.md")
-
-    This helper detects such patterns and converts them to ``(tool_name, args_json)``
-    so the caller can treat them as proper tool calls.
-
-    Returns ``(tool_name, arguments_json)`` or ``None`` if no tool call is detected.
-    """
-    import re
-
-    if not tools or not text:
-        return None
-
-    tool_names: set[str] = set()
-    for t in tools:
-        if isinstance(t, dict) and "function" in t:
-            name = t["function"].get("name")
-            if name:
-                tool_names.add(name)
-
-    if not tool_names:
-        return None
-
-    for line in text.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        m = re.fullmatch(r"(\w+)\(([^)]*)\)", line)
-        if m:
-            func_name = m.group(1)
-            if func_name in tool_names:
-                args: dict[str, Any] = {}
-                for arg_m in re.finditer(r'(\w+)=(?:"([^"]*?)"|\'([^\']*?)\')', m.group(2)):
-                    key = arg_m.group(1)
-                    val = arg_m.group(2) if arg_m.group(2) is not None else arg_m.group(3)
-                    args[key] = val
-                return func_name, _json.dumps(args, ensure_ascii=False)
-
-    return None
 
 
 async def _empty_aiter() -> AsyncGenerator[Any, None]:
@@ -291,7 +246,7 @@ class StreamingMixin:
                             # tool call so the execution loop can actually run the tool.
                             _text_tc: tuple[str, str] | None = None
                             if not msg_obj.tool_calls and iter_tools:
-                                _text_tc = _try_parse_text_tool_call(response_text, iter_tools)
+                                _text_tc = try_parse_text_tool_call(response_text, iter_tools)
                             if _text_tc:
                                 _tc_name, _tc_args_json = _text_tc
                                 _tc_id = f"text_call_{iteration}_{id(_tc_name) % 0xFFFF:04x}"
@@ -540,6 +495,33 @@ class StreamingMixin:
                     )
                 if iter_text:
                     all_response_text.append(iter_text)
+
+                # ── Detect text-format tool calls in streaming path ──
+                # Some models (e.g. qwen3.5:9b via Ollama) emit tool calls as
+                # JSON text in the content stream rather than using the
+                # structured tool_calls field.  Detect and convert here so the
+                # execution loop can run the tool normally.
+                if not tool_calls_acc and not _repetition_detected and iter_tools:
+                    _stream_text_tc = try_parse_text_tool_call(iter_text, iter_tools)
+                    if _stream_text_tc:
+                        _stc_name, _stc_args_json = _stream_text_tc
+                        _stc_id = f"text_call_{iteration}_{id(_stc_name) % 0xFFFF:04x}"
+                        tool_calls_acc[0] = {
+                            "id": _stc_id,
+                            "name": _stc_name,
+                            "arguments": _stc_args_json,
+                        }
+                        # Clear the text parts so the JSON blob isn't shown as
+                        # a chat message — the tool result will follow instead.
+                        iter_text_parts.clear()
+                        if iter_text in all_response_text:
+                            all_response_text.remove(iter_text)
+                        yield {"type": "tool_start", "tool_name": _stc_name, "tool_id": _stc_id}
+                        logger.info(
+                            "A stream: text-format tool call parsed (streaming): %s args=%s",
+                            _stc_name,
+                            _stc_args_json,
+                        )
 
                 # ── No tool calls (or repetition detected): final response ──
                 if not tool_calls_acc or _repetition_detected:
@@ -891,12 +873,47 @@ class StreamingMixin:
                         "usage": _usage_acc_ol.to_dict(),
                     }
                     return
-                if iter_text:
+                # ── Check for text-format tool calls BEFORE yielding as text ──
+                # qwen3.5:9b and similar models sometimes output tool calls as
+                # JSON text instead of using the structured tool_calls field.
+                # Detect and convert so the execution loop runs the tool.
+                tool_calls = message.tool_calls
+                _ol_text_tc: tuple[str, str] | None = None
+                if not tool_calls and iter_text and iter_tools:
+                    _ol_text_tc = try_parse_text_tool_call(iter_text, iter_tools)
+
+                if iter_text and not _ol_text_tc:
                     all_response_text.append(iter_text)
                     yield {"type": "text_delta", "text": iter_text}
 
+                if _ol_text_tc:
+                    _ol_tc_name, _ol_tc_args_json = _ol_text_tc
+                    _ol_tc_id = f"text_call_{iteration}_{id(_ol_tc_name) % 0xFFFF:04x}"
+                    logger.info(
+                        "A ollama stream: text-format tool call parsed: %s args=%s",
+                        _ol_tc_name,
+                        _ol_tc_args_json,
+                    )
+                    yield {"type": "tool_start", "tool_name": _ol_tc_name, "tool_id": _ol_tc_id}
+                    # Build a synthetic tool_calls list so the existing
+                    # processing path below handles execution normally.
+                    from types import SimpleNamespace
+                    _syn_fn = SimpleNamespace(name=_ol_tc_name, arguments=_ol_tc_args_json)
+                    _syn_tc = SimpleNamespace(id=_ol_tc_id, function=_syn_fn)
+                    tool_calls = [_syn_tc]
+                    # Reconstruct message.model_dump with synthetic tool_calls
+                    _msg_dict = message.model_dump() if hasattr(message, "model_dump") else {}
+                    _msg_dict["content"] = None
+                    _msg_dict["tool_calls"] = [
+                        {
+                            "id": _ol_tc_id,
+                            "type": "function",
+                            "function": {"name": _ol_tc_name, "arguments": _ol_tc_args_json},
+                        }
+                    ]
+                    messages.append(_msg_dict)
+
                 # ── Check for tool calls ──
-                tool_calls = message.tool_calls
                 if not tool_calls:
                     full_text = "\n".join(all_response_text)
                     logger.debug(
@@ -913,24 +930,32 @@ class StreamingMixin:
                     return
 
                 # ── Patch Ollama tool_call IDs BEFORE model_dump ──
-                for i, tc in enumerate(tool_calls):
-                    if not tc.id:
-                        tc.id = f"ollama_{iteration}_{i}"
+                # Skip for synthetic text-format tool calls (already appended above).
+                if not _ol_text_tc:
+                    for i, tc in enumerate(tool_calls):
+                        if not tc.id:
+                            tc.id = f"ollama_{iteration}_{i}"
 
-                logger.info(
-                    "A ollama stream tool calls at iteration=%d: %s",
-                    iteration,
-                    ", ".join(tc.function.name or "unknown" for tc in tool_calls),
-                )
-                messages.append(message.model_dump())
+                    logger.info(
+                        "A ollama stream tool calls at iteration=%d: %s",
+                        iteration,
+                        ", ".join(tc.function.name or "unknown" for tc in tool_calls),
+                    )
+                    messages.append(message.model_dump())
 
-                # Yield tool_start events
-                for tc in tool_calls:
-                    yield {
-                        "type": "tool_start",
-                        "tool_name": tc.function.name,
-                        "tool_id": tc.id,
-                    }
+                    # Yield tool_start events
+                    for tc in tool_calls:
+                        yield {
+                            "type": "tool_start",
+                            "tool_name": tc.function.name,
+                            "tool_id": tc.id,
+                        }
+                else:
+                    logger.info(
+                        "A ollama stream tool calls at iteration=%d (text-format): %s",
+                        iteration,
+                        ", ".join(tc.function.name or "unknown" for tc in tool_calls),
+                    )
 
                 parsed_calls = _convert_litellm_tool_calls(tool_calls)
 

@@ -24,6 +24,24 @@ function initDisplayMode() {
   applyDisplayMode(getDisplayMode());
 }
 
+// ── Font Size ────────────────────────────────
+const _LS_FONT_SIZE = "aw-font-size";
+const _FONT_SIZE_DEFAULT = 14;
+
+export function applyFontSize(px) {
+  const clamped = Math.min(22, Math.max(10, Number(px) || _FONT_SIZE_DEFAULT));
+  document.documentElement.style.setProperty("--aw-font-size-base", `${clamped}px`);
+  localStorage.setItem(_LS_FONT_SIZE, String(clamped));
+}
+
+export function getFontSize() {
+  return parseInt(localStorage.getItem(_LS_FONT_SIZE) || String(_FONT_SIZE_DEFAULT), 10);
+}
+
+function initFontSize() {
+  applyFontSize(getFontSize());
+}
+
 // ── Theme ────────────────────────────────────
 
 const ALL_THEMES = [
@@ -258,8 +276,9 @@ async function init() {
   await initI18n();
   applyTranslations();
 
-  // Display mode & theme (before auth so UI looks correct immediately)
+  // Display mode, theme & font size (before auth so UI looks correct immediately)
   initDisplayMode();
+  initFontSize();
   await initTheme();
 
   // Logout button binding

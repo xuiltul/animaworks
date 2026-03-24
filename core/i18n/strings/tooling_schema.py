@@ -276,10 +276,18 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "schema.ping_subordinate.desc": {
         "ja": (
-            "配下のAnimaの生存確認を行う。name を省略すると全配下を一括 ping する。指定すると単一Animaのみ確認する。プロセス状態・最終アクティビティ時刻・経過時間を返す。"
+            "部下Animaが稼働しているか確認する唯一の正しいツール。"
+            "部下の存在確認・生死確認・稼働確認・パス確認はすべてこのツールを使う。"
+            "dir / find / search_memory / ReadMemoryFile など他ツールで部下を探してはいけない。"
+            "nameを省略すると全部下を一括ping。指定すると単一Animaのみ確認。"
+            "プロセス状態・最終アクティビティ時刻・経過時間を返す。"
         ),
         "en": (
-            "Check if subordinate Animas are alive. Omit name to ping all subordinates at once. Specify a name to check a single Anima. Returns process status, last activity time, and elapsed time."
+            "The ONLY correct tool to verify whether a subordinate Anima is running. "
+            "Use this for all subordinate existence checks, liveness checks, and status checks. "
+            "Do NOT use dir, find, search_memory, or ReadMemoryFile to look for subordinates. "
+            "Omit name to ping all subordinates; specify a name to check one Anima. "
+            "Returns process status, last activity time, and elapsed time."
         ),
     },
     "schema.ping_subordinate.name": {

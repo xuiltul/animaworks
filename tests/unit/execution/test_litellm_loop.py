@@ -237,6 +237,28 @@ class TestExecuteWithTools:
             result = await executor.execute("test", system_prompt="sys")
         assert "max iterations" in result.text
 
+    async def test_processes_text_tool_call_with_preamble(self, executor):
+        resp_with_text_tool = make_litellm_response(
+            content=(
+                "了解しました。以下の方法で回答します。\n\n"
+                '{"name":"search_memory","arguments":{"query":"test"}}'
+            ),
+            tool_calls=None,
+        )
+        resp_final = make_litellm_response(content="Final answer", tool_calls=None)
+
+        mock = AsyncMock(side_effect=[resp_with_text_tool, resp_final])
+        _install_litellm_mock(mock)
+
+        async def mock_execute_tool_call(tc, fn_args):
+            return {"role": "tool", "tool_call_id": tc.id, "content": "result"}
+
+        with patch("litellm.acompletion", mock), \
+             patch.object(executor, "_execute_tool_call", side_effect=mock_execute_tool_call):
+            result = await executor.execute("test prompt", system_prompt="sys")
+
+        assert result.text == "Final answer"
+
 
 # ── execute() — context tracking ─────────────────────────────
 

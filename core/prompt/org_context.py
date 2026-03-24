@@ -69,22 +69,58 @@ def _shorten_model_name(model: str | None) -> str | None:
     return m
 
 
-def _format_anima_entry(name: str, speciality: str | None, model: str | None = None) -> str:
-    """Format an anima name with optional speciality and model annotation."""
+def _get_live_status(name: str, animas_dir: Path) -> str:
+    """Return a one-word live status for an anima: 'running', 'stopped', or 'disabled'."""
+    try:
+        sock = get_data_dir() / "run" / "sockets" / f"{name}.sock"
+        if sock.exists():
+            return "running"
+        status_path = animas_dir / name / "status.json"
+        if status_path.exists():
+            import json as _json
+
+            data = _json.loads(status_path.read_text(encoding="utf-8"))
+            if not data.get("enabled", True):
+                return "disabled"
+            return "stopped"
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _format_anima_entry(
+    name: str,
+    speciality: str | None,
+    model: str | None = None,
+    aliases: list[str] | None = None,
+    status: str | None = None,
+    animas_dir: Path | None = None,
+) -> str:
+    """Format an anima name with optional speciality, model, aliases, live status, and path."""
     short_model = _shorten_model_name(model)
     parts = []
     if speciality:
         parts.append(speciality)
     if short_model:
         parts.append(short_model)
-    if parts:
-        return f"{name} ({', '.join(parts)})"
-    return name
+    base = f"{name} ({', '.join(parts)})" if parts else name
+    if aliases:
+        base = f"{base} [別名: {'/'.join(aliases)}]"
+    if status == "running":
+        base = f"{base} 【稼働中】"
+    elif status == "stopped":
+        base = f"{base} 【停止中】"
+    elif status == "disabled":
+        base = f"{base} 【無効】"
+    if animas_dir is not None:
+        base = f"{base} → {animas_dir / name}"
+    return base
 
 
 def _build_full_org_tree(
     anima_name: str,
     all_animas: dict[str, Any],
+    animas_dir: Path | None = None,
 ) -> str:
     """Build an indented full organization tree for top-level animas."""
     _ss = _load_section_strings()
@@ -104,7 +140,9 @@ def _build_full_org_tree(
         acfg = all_animas.get(name)
         spec = acfg.speciality if acfg else None
         mdl = acfg.model if acfg else None
-        label = _format_anima_entry(name, spec, mdl)
+        als = acfg.aliases if acfg else None
+        st = _get_live_status(name, animas_dir) if animas_dir else None
+        label = _format_anima_entry(name, spec, mdl, als or None, st)
         if is_root:
             marker = ""
             suffix = you_marker if name == anima_name else ""
@@ -192,7 +230,9 @@ def _scan_all_animas(animas_dir: Path) -> dict[str, Any]:
         if not speciality and role:
             speciality = role
 
-        result[name] = AnimaModelConfig(supervisor=supervisor, speciality=speciality, model=model)
+        # Preserve aliases from config.json (not stored in status.json)
+        aliases = config_animas[name].aliases if name in config_animas else []
+        result[name] = AnimaModelConfig(supervisor=supervisor, speciality=speciality, model=model, aliases=aliases)
 
     for name, cfg in config_animas.items():
         if name not in result:
@@ -225,7 +265,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     # Top-level anima with subordinates: show full org tree
     if is_top_level and len(all_animas) > 1:
         anima_speciality = my_speciality or _fs.get("unset", "(not set)")
-        tree_text = _build_full_org_tree(anima_name, all_animas)
+        tree_text = _build_full_org_tree(anima_name, all_animas, animas_dir)
         parts = [
             load_prompt(
                 "builder/org_context_toplevel",
@@ -260,7 +300,8 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             continue
         pcfg = all_animas[name]
         if pcfg.supervisor == anima_name:
-            subordinates.append(_format_anima_entry(name, pcfg.speciality, pcfg.model))
+            st = _get_live_status(name, animas_dir)
+            subordinates.append(_format_anima_entry(name, pcfg.speciality, pcfg.model, pcfg.aliases or None, st, animas_dir))
 
     # Peers: animas with the same supervisor (excluding self)
     peers: list[str] = []
@@ -270,7 +311,8 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
                 continue
             pcfg = all_animas[name]
             if pcfg.supervisor == my_supervisor:
-                peers.append(_format_anima_entry(name, pcfg.speciality, pcfg.model))
+                st = _get_live_status(name, animas_dir)
+                peers.append(_format_anima_entry(name, pcfg.speciality, pcfg.model, pcfg.aliases or None, st, animas_dir))
 
     subordinates_line = ", ".join(subordinates) if subordinates else _fs.get("none", "(none)")
     peers_line = ", ".join(peers) if peers else _fs.get("none", "(none)")

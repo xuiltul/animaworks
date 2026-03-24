@@ -7,6 +7,7 @@ let _viewMode = "list"; // "list" | "detail"
 let _selectedName = null;
 let _container = null;
 let _modelsCache = null;
+let _toolsCache = null;
 
 function _extractStatsCount(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -155,6 +156,17 @@ async function _fetchModels() {
   return _modelsCache;
 }
 
+async function _fetchTools() {
+  if (_toolsCache) return _toolsCache;
+  try {
+    const res = await api("/api/system/available-tools");
+    _toolsCache = res.tools || [];
+  } catch {
+    _toolsCache = [];
+  }
+  return _toolsCache;
+}
+
 function _editableCard({ id, title, rawContent, renderFn }) {
   // Returns HTML for a card with edit/preview toggle and save button
   const rendered = rawContent ? renderFn(rawContent) : `<span style="color:var(--text-secondary,#666);">${t("animas.not_set")}</span>`;
@@ -231,7 +243,123 @@ function _bindEditableCard({ id, name, field }) {
   });
 }
 
+// ── Aliases Card ───────────────────────────
+
+function _aliasesCardHtml(aliases) {
+  const tagsHtml = (aliases || []).map((a, i) => `
+    <span class="alias-tag" style="display:inline-flex; align-items:center; gap:0.3rem; background:var(--color-primary-light,#e8f0fe); color:var(--color-primary,#0066cc); border-radius:12px; padding:0.2rem 0.6rem; font-size:0.85rem; margin:0.15rem;">
+      ${escapeHtml(a)}
+      <button class="alias-remove-btn" data-idx="${i}" style="background:none; border:none; cursor:pointer; color:var(--text-secondary,#666); font-size:0.85rem; padding:0; line-height:1;">✕</button>
+    </span>
+  `).join("");
+
+  return `
+    <div class="card" style="margin-bottom: 1.5rem;" id="aliasesCard">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>${t("animas.aliases")}</span>
+        <div style="display:flex; gap:0.4rem; align-items:center;">
+          <span id="aliasesStatus" style="font-size:0.75rem; color:var(--text-secondary,#888);"></span>
+          <button class="btn-primary" id="aliasesSaveBtn" style="font-size:0.75rem; padding:0.15rem 0.5rem;">${t("animas.save")}</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="aliasTagList" style="display:flex; flex-wrap:wrap; gap:0.2rem; min-height:2rem; margin-bottom:0.5rem;">
+          ${tagsHtml || `<span style="color:var(--text-secondary,#888); font-size:0.85rem;">${t("animas.aliases_empty")}</span>`}
+        </div>
+        <div style="display:flex; gap:0.4rem; margin-top:0.4rem;">
+          <input type="text" id="aliasInput" placeholder="${t("animas.aliases_add_placeholder")}"
+            style="flex:1; padding:0.3rem 0.5rem; border:1px solid var(--border,#ddd); border-radius:4px; font-size:0.85rem; background:var(--bg-secondary,#f9f9f9); color:var(--text-primary,#333);">
+          <button class="btn-secondary" id="aliasAddBtn" style="font-size:0.85rem; padding:0.3rem 0.6rem;">${t("animas.aliases_add")}</button>
+        </div>
+        <div style="font-size:0.75rem; color:var(--text-secondary,#888); margin-top:0.4rem;">${t("animas.aliases_hint")}</div>
+      </div>
+    </div>
+  `;
+}
+
+function _bindAliasesCard(name, initialAliases) {
+  let aliases = [...(initialAliases || [])];
+  const tagList = document.getElementById("aliasTagList");
+  const input = document.getElementById("aliasInput");
+  const addBtn = document.getElementById("aliasAddBtn");
+  const saveBtn = document.getElementById("aliasesSaveBtn");
+  const status = document.getElementById("aliasesStatus");
+  if (!tagList || !input || !addBtn || !saveBtn) return;
+
+  function _renderTags() {
+    if (aliases.length === 0) {
+      tagList.innerHTML = `<span style="color:var(--text-secondary,#888); font-size:0.85rem;">${t("animas.aliases_empty")}</span>`;
+      return;
+    }
+    tagList.innerHTML = aliases.map((a, i) => `
+      <span class="alias-tag" style="display:inline-flex; align-items:center; gap:0.3rem; background:var(--color-primary-light,#e8f0fe); color:var(--color-primary,#0066cc); border-radius:12px; padding:0.2rem 0.6rem; font-size:0.85rem; margin:0.15rem;">
+        ${escapeHtml(a)}
+        <button class="alias-remove-btn" data-idx="${i}" style="background:none; border:none; cursor:pointer; color:var(--text-secondary,#666); font-size:0.85rem; padding:0; line-height:1;">✕</button>
+      </span>
+    `).join("");
+    tagList.querySelectorAll(".alias-remove-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        aliases.splice(idx, 1);
+        _renderTags();
+      });
+    });
+  }
+
+  // Bind remove on initial render
+  tagList.querySelectorAll(".alias-remove-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = parseInt(btn.dataset.idx, 10);
+      aliases.splice(idx, 1);
+      _renderTags();
+    });
+  });
+
+  function _addAlias() {
+    const val = input.value.trim();
+    if (!val || aliases.includes(val)) { input.value = ""; return; }
+    aliases.push(val);
+    input.value = "";
+    _renderTags();
+  }
+
+  addBtn.addEventListener("click", _addAlias);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); _addAlias(); }
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = t("animas.saving");
+    status.textContent = "";
+    try {
+      await fetch(`/api/animas/${encodeURIComponent(name)}/aliases`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aliases }),
+      });
+      status.textContent = t("animas.saved");
+      status.style.color = "var(--color-success, #28a745)";
+      setTimeout(() => { status.textContent = ""; }, 3000);
+    } catch {
+      status.textContent = t("animas.save_failed");
+      status.style.color = "var(--color-danger, #dc3545)";
+    }
+    saveBtn.disabled = false;
+    saveBtn.textContent = t("animas.save");
+  });
+}
+
 // ── Permissions UI ─────────────────────────
+
+function _toolChecked(toolName, extTools) {
+  const allowAll = extTools.allow_all;
+  const allow = extTools.allow || [];
+  const deny = extTools.deny || [];
+  if (deny.includes(toolName)) return false;
+  if (allowAll || allow.length === 0) return true;
+  return allow.includes(toolName);
+}
 
 function _permPathRowHtml(path, access, idx) {
   const isRw = access !== "r";
@@ -258,7 +386,7 @@ function _permPathRowHtml(path, access, idx) {
   `;
 }
 
-function _permissionsCardHtml(perm) {
+function _permissionsCardHtml(perm, availableTools) {
   const fileRoots = perm.file_roots || [];
   const fileRootsReadonly = perm.file_roots_readonly || [];
   const cmds = perm.commands || {};
@@ -303,10 +431,29 @@ function _permissionsCardHtml(perm) {
           <!-- external_tools -->
           <fieldset style="border:1px solid var(--border,#ddd); border-radius:4px; padding:0.6rem;">
             <legend style="font-weight:600; font-size:0.85rem; padding:0 0.3rem;">${t("animas.permissions_external_tools")}</legend>
-            <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer;">
-              <input type="checkbox" id="permExtAllowAll" ${extTools.allow_all ? "checked" : ""}>
-              ${t("animas.permissions_allow_all")}
-            </label>
+            ${availableTools && availableTools.length > 0 ? `
+              <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer; font-weight:600; margin-bottom:0.4rem;">
+                <input type="checkbox" id="permExtAllowAll" ${availableTools.every(tool => _toolChecked(tool, extTools)) ? "checked" : ""}>
+                ${t("animas.permissions_allow_all")}
+              </label>
+              <div id="toolPermList" style="max-height:180px; overflow-y:auto; padding:0.3rem 0.4rem; border:1px solid var(--border,#ddd); border-radius:4px; background:var(--bg-primary,#fff);">
+                ${availableTools.map(tool => `
+                  <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.82rem; cursor:pointer; padding:0.1rem 0;">
+                    <input type="checkbox" class="tool-perm-check" data-tool="${escapeHtml(tool)}" ${_toolChecked(tool, extTools) ? "checked" : ""}>
+                    <code style="font-size:0.8rem;">${escapeHtml(tool)}</code>
+                  </label>
+                `).join("")}
+              </div>
+              <div style="display:flex; gap:0.4rem; margin-top:0.3rem;">
+                <button class="btn-secondary" id="toolPermSelectAll" style="font-size:0.73rem; padding:0.15rem 0.4rem;">${t("animas.permissions_tools_select_all")}</button>
+                <button class="btn-secondary" id="toolPermDeselectAll" style="font-size:0.73rem; padding:0.15rem 0.4rem;">${t("animas.permissions_tools_deselect_all")}</button>
+              </div>
+            ` : `
+              <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer;">
+                <input type="checkbox" id="permExtAllowAll" ${extTools.allow_all ? "checked" : ""}>
+                ${t("animas.permissions_allow_all")}
+              </label>
+            `}
           </fieldset>
         </div>
 
@@ -331,7 +478,7 @@ function _permissionsCardHtml(perm) {
   `;
 }
 
-function _bindPermissionsCard(name, perm) {
+function _bindPermissionsCard(name, perm, availableTools) {
   const saveBtn = document.getElementById("permSaveBtn");
   const status = document.getElementById("permStatus");
   const addBtn = document.getElementById("permAddPathBtn");
@@ -379,6 +526,40 @@ function _bindPermissionsCard(name, perm) {
     row.querySelector("input")?.focus();
   });
 
+  // Tool checkboxes: "allow all" toggle + select/deselect all buttons
+  if (availableTools && availableTools.length > 0) {
+    const allowAllChk = document.getElementById("permExtAllowAll");
+    const toolList = document.getElementById("toolPermList");
+    const selectAllBtn = document.getElementById("toolPermSelectAll");
+    const deselectAllBtn = document.getElementById("toolPermDeselectAll");
+
+    function _updateAllowAllState() {
+      if (!allowAllChk || !toolList) return;
+      const checks = toolList.querySelectorAll(".tool-perm-check");
+      const allChecked = Array.from(checks).every(c => c.checked);
+      allowAllChk.checked = allChecked;
+    }
+
+    allowAllChk?.addEventListener("change", () => {
+      const checked = allowAllChk.checked;
+      toolList?.querySelectorAll(".tool-perm-check").forEach(c => { c.checked = checked; });
+    });
+
+    toolList?.querySelectorAll(".tool-perm-check").forEach(c => {
+      c.addEventListener("change", _updateAllowAllState);
+    });
+
+    selectAllBtn?.addEventListener("click", () => {
+      toolList?.querySelectorAll(".tool-perm-check").forEach(c => { c.checked = true; });
+      if (allowAllChk) allowAllChk.checked = true;
+    });
+
+    deselectAllBtn?.addEventListener("click", () => {
+      toolList?.querySelectorAll(".tool-perm-check").forEach(c => { c.checked = false; });
+      if (allowAllChk) allowAllChk.checked = false;
+    });
+  }
+
   // Save
   saveBtn.addEventListener("click", async () => {
     // Collect paths split by access level
@@ -407,11 +588,24 @@ function _bindPermissionsCard(name, perm) {
         allow: perm.commands?.allow || [],
         deny: perm.commands?.deny || [],
       },
-      external_tools: {
-        allow_all: document.getElementById("permExtAllowAll")?.checked ?? true,
-        allow: perm.external_tools?.allow || [],
-        deny: perm.external_tools?.deny || [],
-      },
+      external_tools: (() => {
+        if (availableTools && availableTools.length > 0) {
+          const toolList = document.getElementById("toolPermList");
+          const checks = toolList ? Array.from(toolList.querySelectorAll(".tool-perm-check")) : [];
+          const checkedTools = checks.filter(c => c.checked).map(c => c.dataset.tool);
+          const allChecked = checkedTools.length === availableTools.length;
+          return {
+            allow_all: allChecked,
+            allow: allChecked ? [] : checkedTools,
+            deny: [],
+          };
+        }
+        return {
+          allow_all: document.getElementById("permExtAllowAll")?.checked ?? true,
+          allow: perm.external_tools?.allow || [],
+          deny: perm.external_tools?.deny || [],
+        };
+      })(),
       tool_creation: {
         personal: document.getElementById("permToolPersonal")?.checked ?? true,
         shared: document.getElementById("permToolShared")?.checked ?? false,
@@ -467,18 +661,21 @@ async function _showDetail(name) {
   if (!content) return;
 
   try {
-    const [detail, models] = await Promise.all([
+    const [detail, models, availableTools] = await Promise.all([
       api(`/api/animas/${encodeURIComponent(name)}`),
       _fetchModels(),
+      _fetchTools(),
     ]);
 
     // Try optional endpoints
     let animaConfig = null;
     let memoryStats = null;
     let permissions = {};
+    let aliases = [];
     try { animaConfig = await api(`/api/animas/${encodeURIComponent(name)}/config`); } catch { /* 404 ok */ }
     try { memoryStats = await api(`/api/animas/${encodeURIComponent(name)}/memory/stats`); } catch { /* 404 ok */ }
     try { permissions = await api(`/api/animas/${encodeURIComponent(name)}/permissions`); } catch { /* 404 ok */ }
+    try { const ar = await api(`/api/animas/${encodeURIComponent(name)}/aliases`); aliases = ar.aliases || []; } catch { /* 404 ok */ }
 
     let html = '<div class="card-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem;">';
 
@@ -576,8 +773,11 @@ async function _showDetail(name) {
       </div>
     `;
 
+    // Aliases card
+    html += _aliasesCardHtml(aliases);
+
     // Permissions card
-    html += _permissionsCardHtml(permissions);
+    html += _permissionsCardHtml(permissions, availableTools);
 
     // Action buttons
     html += `
@@ -592,8 +792,11 @@ async function _showDetail(name) {
     _bindEditableCard({ id: "anima_identity", name, field: "identity" });
     _bindEditableCard({ id: "anima_injection", name, field: "injection" });
 
+    // Bind aliases card
+    _bindAliasesCard(name, aliases);
+
     // Bind permissions card
-    _bindPermissionsCard(name, permissions);
+    _bindPermissionsCard(name, permissions, availableTools);
 
     // Bind model change button
     document.getElementById("modelChangeBtn")?.addEventListener("click", async () => {

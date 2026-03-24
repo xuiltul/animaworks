@@ -335,6 +335,18 @@ def create_config_router() -> APIRouter:
 
         return {"models": models}
 
+    @router.get("/system/available-tools")
+    async def get_available_tools(request: Request):
+        """Return available external tool module names (minus disabled services)."""
+        try:
+            from core.tools import TOOL_MODULES
+            from core.tooling.permissions import _disabled_service_tools
+
+            tools = sorted(set(TOOL_MODULES.keys()) - _disabled_service_tools())
+        except Exception:
+            tools = []
+        return {"tools": tools}
+
     @router.get("/system/org-info")
     async def get_org_info(request: Request):
         """Return existing departments, titles, and anima names for team builder."""

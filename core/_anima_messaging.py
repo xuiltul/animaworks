@@ -27,6 +27,7 @@ from core.execution._sanitize import ORIGIN_HUMAN, ORIGIN_SYSTEM
 from core.i18n import t
 from core.image_artifacts import extract_image_artifacts_from_tool_records
 from core.memory.conversation import ConversationMemory, ToolRecord
+from core.response_normalize import normalize_user_facing_response_text
 from core.memory.streaming_journal import StreamingJournal
 from core.paths import load_prompt
 from core.schemas import EXTERNAL_PLATFORM_SOURCES, VALID_EMOTIONS, CycleResult, ImageData
@@ -263,6 +264,7 @@ class MessagingMixin:
                         thread_id=thread_id,
                     )
                     self._last_activity = now_local()
+                    result.summary = normalize_user_facing_response_text(result.summary)
 
                     # Record assistant response with tool records
                     tool_records = [ToolRecord.from_dict(r) for r in result.tool_call_records]
@@ -525,7 +527,8 @@ class MessagingMixin:
                             self._last_activity = now_local()
                             # Record assistant response with tool records
                             cycle_result = chunk.get("cycle_result", {})
-                            summary = cycle_result.get("summary", "")
+                            summary = normalize_user_facing_response_text(cycle_result.get("summary", ""))
+                            cycle_result["summary"] = summary
                             response_artifacts = extract_image_artifacts_from_tool_records(
                                 cycle_result.get("tool_call_records", [])
                             )

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# Names of the 10 AW-essential tools that must remain native (not CLI).
+# Names of the AW-essential tools that must remain native (not CLI).
 _AW_CORE_NAMES: frozenset[str] = frozenset(
     {
         "search_memory",
@@ -21,6 +21,7 @@ _AW_CORE_NAMES: frozenset[str] = frozenset(
         "post_channel",
         "call_human",
         "delegate_task",
+        "ping_subordinate",
         "submit_tasks",
         "update_task",
         "skill",

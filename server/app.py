@@ -362,6 +362,15 @@ async def lifespan(app: FastAPI):
             _startup_animas_background(app),
         )
 
+        # ── Usage Governor (throttles cloud-provider animas based on quota) ──
+        from server.usage_governor import UsageGovernor
+
+        from core.paths import get_data_dir
+
+        governor = UsageGovernor(app, get_data_dir(), app.state.animas_dir)
+        app.state.usage_governor = governor
+        await governor.start()
+
         logger.info("Server started (anima processes launching in background)")
     else:
         logger.info("Server started in setup mode (setup not yet complete)")
@@ -383,6 +392,9 @@ async def lifespan(app: FastAPI):
         await app.state.stream_registry.stop_cleanup_loop()
         if getattr(app.state, "slack_socket_manager", None):
             await app.state.slack_socket_manager.stop()
+        governor = getattr(app.state, "usage_governor", None)
+        if governor:
+            await governor.stop()
         await app.state.supervisor.shutdown_all()
         if hasattr(app.state, "msg_log_scheduler"):
             app.state.msg_log_scheduler.shutdown(wait=False)

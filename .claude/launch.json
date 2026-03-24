@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "animaworks",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "echo Server already running on port 18500"],
+      "port": 18500
+    }
+  ]
+}

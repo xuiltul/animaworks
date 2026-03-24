@@ -314,7 +314,84 @@ class HeartbeatMixin:
                 exc_info=True,
             )
 
+        # ── Usage Governor context for COO ──
+        try:
+            from server.usage_governor import load_policy
+            from core.paths import get_data_dir
+
+            policy = load_policy(get_data_dir())
+            coo_name = policy.get("coo_anima", "sakura")
+            if self.name == coo_name and policy.get("enabled", True):
+                usage_ctx = self._build_usage_context()
+                if usage_ctx:
+                    parts.append(usage_ctx)
+        except Exception:
+            logger.debug("[%s] Failed to inject usage context", self.name, exc_info=True)
+
         return parts
+
+    def _build_usage_context(self) -> str | None:
+        """Build usage status context for the COO anima."""
+        try:
+            from server.routes.usage_routes import _fetch_claude_usage, _fetch_openai_usage
+            from server.usage_governor import load_policy, _classify_animas
+            from core.paths import get_data_dir, get_animas_dir
+
+            claude = _fetch_claude_usage()
+            openai = _fetch_openai_usage()
+
+            lines = ["## Provider Usage Status (自動取得)"]
+
+            # Claude
+            if claude.get("error"):
+                lines.append(f"- Claude: {claude.get('message', claude['error'])}")
+            else:
+                for key in ("five_hour", "seven_day"):
+                    w = claude.get(key)
+                    if w:
+                        lines.append(f"- Claude {key}: remaining {w['remaining']:.0f}%")
+
+            # OpenAI
+            if openai.get("error"):
+                lines.append(f"- OpenAI: {openai.get('message', openai['error'])}")
+            else:
+                skip = {"provider"}
+                for key, w in openai.items():
+                    if key in skip or not isinstance(w, dict) or "remaining" not in w:
+                        continue
+                    lines.append(f"- OpenAI {key}: remaining {w['remaining']:.0f}%")
+
+            # Governor state
+            from server.usage_governor import GovernorState
+            data_dir = get_data_dir()
+            state = GovernorState(data_dir / "usage_governor_state.json")
+            if state.suspended_animas:
+                lines.append(f"\n**Governor制御中**: {', '.join(state.suspended_animas)} を一時停止中")
+                lines.append(f"理由: {state.reason}")
+
+            # Anima-provider mapping
+            animas_dir = get_animas_dir()
+            try:
+                all_names = [d.name for d in animas_dir.iterdir() if (d / "status.json").is_file()]
+                groups = _classify_animas(animas_dir, all_names)
+                mapping_lines = []
+                for prov, names in sorted(groups.items()):
+                    mapping_lines.append(f"  {prov}: {', '.join(names)}")
+                if mapping_lines:
+                    lines.append("\nAnima provider分類:")
+                    lines.extend(mapping_lines)
+            except Exception:
+                pass
+
+            lines.append(
+                "\nCOOとして、上記の使用状況を踏まえて各Animaへの作業配分を最適化してください。"
+                "残量が少ないプロバイダーを使うAnimaの作業を減らし、余裕のあるプロバイダーのAnimaに振り分けてください。"
+            )
+
+            return "\n".join(lines)
+        except Exception:
+            logger.debug("[%s] Failed to build usage context", self.name, exc_info=True)
+            return None
 
     _CURRENT_STATE_CLEANUP_THRESHOLD = 3000
 

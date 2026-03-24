@@ -44,11 +44,18 @@ function modelAlias(model) {
   if (m.includes("opus")) return "Opus";
   if (m.includes("sonnet")) return "Sonnet";
   if (m.includes("haiku")) return "Haiku";
+  // C: Codex CLI
+  if (m.startsWith("codex/")) return "Codex " + model.slice(6);
+  if (m.startsWith("openai-codex/")) return "Codex " + model.slice(13);
   // A: OpenAI
-  if (m.includes("gpt-4o")) return "GPT-4o";
-  if (m.includes("gpt-4")) return "GPT-4";
+  if (m.includes("o4-mini")) return "o4-mini";
   if (m.includes("o3")) return "o3";
   if (m.includes("o1")) return "o1";
+  if (m.includes("gpt-4.1-nano")) return "GPT-4.1 nano";
+  if (m.includes("gpt-4.1-mini")) return "GPT-4.1 mini";
+  if (m.includes("gpt-4.1")) return "GPT-4.1";
+  if (m.includes("gpt-4o-mini")) return "GPT-4o mini";
+  if (m.includes("gpt-4o")) return "GPT-4o";
   // A: Google
   if (m.includes("gemini")) return "Gemini";
   // B: Ollama / OSS
@@ -184,6 +191,15 @@ function renderStatusPanel() {
     sectionsHtml = `<div class="loading-placeholder">${t("ws.no_detail")}</div>`;
   }
 
+  // Build meta info line (department / title / role / model)
+  const dept = animaEntry?.department || "";
+  const ttl  = animaEntry?.title || "";
+  const role = animaEntry?.role || "";
+  const metaParts = [dept, ttl, role].filter(Boolean);
+  const metaLine = metaParts.length
+    ? `<div class="status-meta">${escapeHtml(metaParts.join(" / "))}</div>`
+    : "";
+
   _statusContainer.innerHTML = `
     <div class="anima-status-panel">
       <div class="status-header">
@@ -192,6 +208,7 @@ function renderStatusPanel() {
         <span class="status-label">${escapeHtml(statusLabel(statusStr))}</span>
         ${alias ? `<span class="status-model">${escapeHtml(alias)}</span>` : ""}
       </div>
+      ${metaLine}
       ${sectionsHtml}
     </div>
   `;

@@ -23,7 +23,7 @@ const logger = createLogger("org-dashboard");
 // ── Constants ──────────────────────
 
 const CARD_W = 280;
-const CARD_H = 80;
+const CARD_H = 100;
 const GAP_X = 60;
 const GAP_Y = 120;
 const GRID_SNAP = 20;
@@ -135,6 +135,9 @@ function buildOrgTree(animas) {
       speciality: p.speciality || null,
       supervisor: p.supervisor || null,
       status: p.status,
+      department: p.department || "",
+      title: p.title || "",
+      model: p.model || "",
       children: [],
     });
   }
@@ -448,6 +451,18 @@ function _createCardEl(node) {
     ? `<span class="org-card-tags">${roleLabel ? `<span class="org-card-role">${escapeHtml(roleLabel)}</span>` : ""}${specLabel ? `<span class="org-card-spec">${escapeHtml(specLabel)}</span>` : ""}</span>`
     : "";
 
+  // Department / Title / Model meta line
+  const dept = node.department || "";
+  const ttl = node.title || "";
+  const mdl = node.model || "";
+  const metaParts = [];
+  if (dept) metaParts.push(`<span class="org-card-dept">${escapeHtml(dept)}</span>`);
+  if (ttl) metaParts.push(`<span class="org-card-title">${escapeHtml(ttl)}</span>`);
+  if (mdl) metaParts.push(`<span class="org-card-model">${escapeHtml(mdl)}</span>`);
+  const metaHtml = metaParts.length
+    ? `<div class="org-card-meta">${metaParts.join('<span class="org-card-meta-sep">·</span>')}</div>`
+    : "";
+
   const card = document.createElement("div");
   card.className = "org-card";
   card.dataset.name = node.name;
@@ -459,6 +474,7 @@ function _createCardEl(node) {
       <div class="org-card-info">
         <span class="org-card-name">${escapeHtml(node.name)}</span>
         ${tagHtml}
+        ${metaHtml}
       </div>
       <span class="org-card-status">
         <span class="org-card-dot ${statusDot}"></span>

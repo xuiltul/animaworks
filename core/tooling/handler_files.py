@@ -143,8 +143,8 @@ class CommandRunner:
         self._output_path = output_dir / f"{self.cmd_id}.txt"
         self._start_time = time.monotonic()
 
-        use_shell = bool(_NEEDS_SHELL_RE.search(self.command))
         _is_windows = sys.platform == "win32"
+        use_shell = bool(_NEEDS_SHELL_RE.search(self.command)) or _is_windows
         try:
             if use_shell:
                 self.process = subprocess.Popen(
@@ -595,14 +595,15 @@ class FileToolsMixin:
 
         timeout = args.get("timeout", 30)
 
-        use_shell = bool(_NEEDS_SHELL_RE.search(command))
+        import platform as _platform
+
+        _is_windows = _platform.system() == "Windows"
+        use_shell = bool(_NEEDS_SHELL_RE.search(command)) or _is_windows
 
         try:
             if use_shell:
-                import platform as _platform
-
                 shell_kwargs: dict[str, Any] = {}
-                if _platform.system() != "Windows":
+                if not _is_windows:
                     shell_kwargs["executable"] = "/bin/bash"
                 proc = subprocess.run(
                     command,

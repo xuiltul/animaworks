@@ -836,6 +836,46 @@ class TestA2IterationLevelWithToolCall:
         done = [e for e in events if e["type"] == "done"]
         assert done[0]["full_text"] == "Searching...\nFound it!"
 
+    async def test_parses_text_tool_call_with_preamble(self, ollama_executor) -> None:
+        tracker = MagicMock(spec=ContextTracker)
+
+        resp_tool = _make_litellm_a2_response(
+            content=(
+                "了解しました。以下の方法で回答します。\n\n"
+                '{"name":"search_memory","arguments":{"query":"test"}}'
+            ),
+            tool_calls=None,
+        )
+        resp_final = _make_litellm_a2_response(
+            content="Found it!",
+            tool_calls=None,
+        )
+
+        mock_acompletion = AsyncMock(side_effect=[resp_tool, resp_final])
+
+        async def mock_execute_tool_call(tc, fn_args):
+            return {"role": "tool", "tool_call_id": tc.id, "content": "result"}
+
+        with patch("litellm.acompletion", mock_acompletion), \
+             patch.object(ollama_executor, "_preflight_clamp", return_value={}), \
+             patch.object(
+                 ollama_executor, "_execute_tool_call",
+                 side_effect=mock_execute_tool_call,
+             ):
+            events = await _collect_events(
+                ollama_executor.execute_streaming(
+                    system_prompt="sys",
+                    prompt="Search for data",
+                    tracker=tracker,
+                )
+            )
+
+        types = [e["type"] for e in events]
+        assert "tool_start" in types
+        assert "tool_end" in types
+        done = [e for e in events if e["type"] == "done"]
+        assert done[0]["full_text"] == "Found it!"
+
 
 class TestA2DispatchToTokenLevel:
     """Non-Ollama model routes to token-level streaming."""

@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from core.config.models import load_config, resolve_anima_config
+from core.config.models import load_config, resolve_anima_config, resolve_execution_mode
 
 logger = logging.getLogger("animaworks.routes.animas")
 
@@ -26,6 +26,27 @@ def _read_appearance(anima_dir: Path) -> dict | None:
         return data if data else None
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def _infer_mode_s_auth(
+    *,
+    mode: str,
+    credential_name: str,
+    config: Any,
+) -> str | None:
+    """Infer per-anima Mode S auth from the selected credential."""
+    if mode != "S":
+        return None
+
+    credential = config.credentials.get(credential_name)
+    cred_type = getattr(credential, "type", "") if credential is not None else ""
+
+    if cred_type == "claude_code_login":
+        return "max"
+    if cred_type == "api_key":
+        return "api"
+
+    return getattr(config.anima_defaults, "mode_s_auth", None)
 
 
 def create_animas_router() -> APIRouter:
@@ -56,6 +77,8 @@ def create_animas_router() -> APIRouter:
             # Resolve all config including supervisor from status.json
             model = None
             role = None
+            department = ""
+            title = ""
             anima_supervisor = None
             anima_speciality = None
             try:
@@ -67,6 +90,8 @@ def create_animas_router() -> APIRouter:
                 if status_path.exists():
                     status_data = json.loads(status_path.read_text(encoding="utf-8"))
                     role = status_data.get("role")
+                    department = status_data.get("department", "")
+                    title = status_data.get("title", "")
             except Exception:
                 logger.debug("Failed to resolve config for anima '%s'", name, exc_info=True)
 
@@ -83,6 +108,8 @@ def create_animas_router() -> APIRouter:
                 "speciality": anima_speciality,
                 "role": role,
                 "model": model,
+                "department": department,
+                "title": title,
             }
             result.append(data)
 
@@ -316,17 +343,88 @@ def create_animas_router() -> APIRouter:
             except (json.JSONDecodeError, OSError):
                 pass
 
+        config = load_config()
+        next_credential = credential or str(existing.get("credential", "")).strip()
+        next_mode = resolve_execution_mode(config, model)
+
         existing["model"] = model
+        existing["execution_mode"] = next_mode
         if credential:
             existing["credential"] = credential
+        if next_mode == "S" and next_credential:
+            inferred_auth = _infer_mode_s_auth(
+                mode=next_mode,
+                credential_name=next_credential,
+                config=config,
+            )
+            if inferred_auth:
+                existing["mode_s_auth"] = inferred_auth
+            else:
+                existing.pop("mode_s_auth", None)
+        else:
+            existing.pop("mode_s_auth", None)
 
         await asyncio.to_thread(
             status_path.write_text,
             json.dumps(existing, ensure_ascii=False, indent=2) + "\n",
             "utf-8",
         )
-        logger.info("Updated model for anima '%s': model=%s credential=%s", name, model, credential)
-        return {"status": "ok", "name": name, "model": model, "credential": credential}
+        logger.info(
+            "Updated model for anima '%s': model=%s credential=%s execution_mode=%s mode_s_auth=%s",
+            name,
+            model,
+            next_credential,
+            next_mode,
+            existing.get("mode_s_auth"),
+        )
+        return {
+            "status": "ok",
+            "name": name,
+            "model": model,
+            "credential": next_credential,
+            "execution_mode": next_mode,
+            "mode_s_auth": existing.get("mode_s_auth"),
+        }
+
+    # ── Aliases ──────────────────────────────────────────────
+
+    @router.get("/animas/{name}/aliases")
+    async def get_anima_aliases(name: str, request: Request):
+        """Return aliases for an anima from config.json."""
+        animas_dir = request.app.state.animas_dir
+        anima_dir = animas_dir / name
+        if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
+            raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
+
+        config = load_config()
+        anima_cfg = config.animas.get(name)
+        aliases = anima_cfg.aliases if anima_cfg else []
+        return {"name": name, "aliases": aliases}
+
+    @router.put("/animas/{name}/aliases")
+    async def update_anima_aliases(name: str, request: Request):
+        """Update aliases for an anima in config.json."""
+        animas_dir = request.app.state.animas_dir
+        anima_dir = animas_dir / name
+        if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
+            raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
+
+        data = await request.json()
+        new_aliases = data.get("aliases", [])
+        if not isinstance(new_aliases, list):
+            raise HTTPException(status_code=400, detail="aliases must be a list")
+        new_aliases = [str(a).strip() for a in new_aliases if str(a).strip()]
+
+        from core.config.io import save_config
+        from core.config.schemas import AnimaModelConfig
+
+        config = load_config()
+        if name not in config.animas:
+            config.animas[name] = AnimaModelConfig()
+        config.animas[name].aliases = new_aliases
+        await asyncio.to_thread(save_config, config)
+        logger.info("Updated aliases for anima '%s': %s", name, new_aliases)
+        return {"status": "ok", "name": name, "aliases": new_aliases}
 
     # ── Enable / Disable ─────────────────────────────────────
 

@@ -15,9 +15,10 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "search_memory",
         "description": (
-            "Search the anima's long-term memory by semantic similarity. "
+            "Search YOUR OWN long-term memory (knowledge, episodes, procedures) by semantic similarity. "
             "Returns ranked results with scores and full content. "
-            "Use offset for pagination (10 results per page)."
+            "Use offset for pagination (10 results per page). "
+            "NOT for locating subordinate Animas — use ping_subordinate for that."
         ),
         "parameters": {
             "type": "object",
@@ -182,15 +183,16 @@ FILE_TOOLS: list[dict[str, Any]] = [
     {
         "name": "execute_command",
         "description": (
-            "Execute a shell command. Most commands are allowed by default "
-            "(check your permissions with check_permissions if unsure). "
+            "Execute a shell command. On Windows, commands run in a PowerShell-compatible shell. "
+            "Most commands are allowed by default (check your permissions with check_permissions if unsure). "
+            "Use read_file/write_file/edit_file for direct file access when possible. "
             "Set background=true for long-running commands — returns immediately "
             "with a cmd_id and output file path. Read the output file to check progress."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "command": {"type": "string", "description": "Shell command to run"},
+                "command": {"type": "string", "description": "Shell command to run (PowerShell-compatible on Windows)"},
                 "timeout": {
                     "type": "integer",
                     "description": ("Timeout in seconds. Default: 30 (foreground), 1800 (background)."),

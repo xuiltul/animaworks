@@ -81,6 +81,7 @@ class TestListAnimas:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas_dir=animas_dir,
@@ -216,6 +217,106 @@ class TestGetAnimaConfig:
         assert data["model"] == "claude-sonnet-4-6"
         assert data["execution_mode"] == "a1"
         assert "config" in data
+
+
+# ── PUT /animas/{name}/model ───────────────────────────
+
+
+class TestUpdateAnimaModel:
+    async def test_updates_status_json_with_execution_mode(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        alice_dir = animas_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "status.json").write_text(
+            json.dumps({"model": "claude-sonnet-4-6", "credential": "anthropic", "mode_s_auth": "max"}),
+            encoding="utf-8",
+        )
+
+        app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
+        transport = ASGITransport(app=app)
+        with patch("server.routes.animas.load_config", return_value=MagicMock()), patch(
+            "server.routes.animas.resolve_execution_mode",
+            return_value="C",
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.put(
+                    "/api/animas/alice/model",
+                    json={"model": "codex/gpt-5.4-mini", "credential": "openai"},
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["execution_mode"] == "C"
+        assert data["credential"] == "openai"
+        assert data["mode_s_auth"] is None
+
+        status = json.loads((alice_dir / "status.json").read_text(encoding="utf-8"))
+        assert status["model"] == "codex/gpt-5.4-mini"
+        assert status["credential"] == "openai"
+        assert status["execution_mode"] == "C"
+        assert "mode_s_auth" not in status
+
+    async def test_sets_mode_s_auth_for_claude_subscription(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        alice_dir = animas_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+
+        config = MagicMock()
+        config.credentials = {"anthropic": MagicMock(type="claude_code_login")}
+        config.anima_defaults = MagicMock(mode_s_auth=None)
+
+        app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
+        transport = ASGITransport(app=app)
+        with patch("server.routes.animas.load_config", return_value=config), patch(
+            "server.routes.animas.resolve_execution_mode",
+            return_value="S",
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.put(
+                    "/api/animas/alice/model",
+                    json={"model": "claude-sonnet-4-6", "credential": "anthropic"},
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["execution_mode"] == "S"
+        assert data["mode_s_auth"] == "max"
+
+        status = json.loads((alice_dir / "status.json").read_text(encoding="utf-8"))
+        assert status["execution_mode"] == "S"
+        assert status["mode_s_auth"] == "max"
+
+    async def test_sets_mode_s_auth_api_for_claude_api_key(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        alice_dir = animas_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+
+        config = MagicMock()
+        config.credentials = {"anthropic": MagicMock(type="api_key")}
+        config.anima_defaults = MagicMock(mode_s_auth="max")
+
+        app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
+        transport = ASGITransport(app=app)
+        with patch("server.routes.animas.load_config", return_value=config), patch(
+            "server.routes.animas.resolve_execution_mode",
+            return_value="S",
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.put(
+                    "/api/animas/alice/model",
+                    json={"model": "claude-sonnet-4-6", "credential": "anthropic"},
+                )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["execution_mode"] == "S"
+        assert data["mode_s_auth"] == "api"
+
+        status = json.loads((alice_dir / "status.json").read_text(encoding="utf-8"))
+        assert status["mode_s_auth"] == "api"
 
 
 # ── POST /animas/{name}/enable ─────────────────────────
