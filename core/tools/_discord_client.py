@@ -121,7 +121,12 @@ class DiscordClient:
 
         def _do() -> Any:
             client = self._ensure_http()
-            response = client.request(method, path, **kwargs)
+            try:
+                response = client.request(method, path, **kwargs)
+            except httpx.TimeoutException as exc:
+                raise DiscordAPIError(0, f"Request timeout: {exc}") from exc
+            except httpx.ConnectError as exc:
+                raise DiscordAPIError(0, f"Connection failed: {exc}") from exc
             if response.status_code == 429:
                 message, code = self._parse_error_response(response)
                 retry_after = 1.0

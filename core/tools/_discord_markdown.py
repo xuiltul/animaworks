@@ -74,10 +74,11 @@ def clean_discord_markup(text: str, cache: dict[str, str] | None = None) -> str:
 
 
 def md_to_discord(text: str) -> str:
-    """Map Markdown toward Discord's subset (mostly pass-through) with length cap.
+    """Prepare text for Discord ``content`` field with length cap.
 
-    Discord supports CommonMark-style formatting; this function truncates to
-    :data:`DISCORD_MESSAGE_LIMIT`.
+    Discord supports CommonMark-style formatting natively, so this is
+    mostly a pass-through that enforces :data:`DISCORD_MESSAGE_LIMIT`.
+    Newlines are preserved (Discord renders them as line breaks).
 
     Args:
         text: Markdown source.
@@ -85,7 +86,11 @@ def md_to_discord(text: str) -> str:
     Returns:
         Truncated text safe for ``content`` fields.
     """
-    return truncate(text, limit=DISCORD_MESSAGE_LIMIT)
+    if not text:
+        return ""
+    if len(text) <= DISCORD_MESSAGE_LIMIT:
+        return text
+    return text[: DISCORD_MESSAGE_LIMIT - 3] + "..."
 
 
 def truncate(text: str, limit: int = 2000) -> str:

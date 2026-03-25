@@ -129,16 +129,19 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
     """Dispatch a tool call by schema name."""
     if name == "discord_send":
         client = DiscordClient(token=_resolve_discord_token(args))
-        return client.send_message(
-            args["channel_id"],
-            args["message"],
-            reply_to=args.get("reply_to"),
-        )
+        try:
+            return client.send_message(
+                args["channel_id"],
+                args["message"],
+                reply_to=args.get("reply_to"),
+            )
+        finally:
+            client.close()
     if name == "discord_messages":
         client = DiscordClient(token=_resolve_discord_token(args))
-        channel_id = args["channel_id"]
         cache = MessageCache()
         try:
+            channel_id = args["channel_id"]
             limit = int(args.get("limit", 20))
             msgs = client.channel_history(channel_id, limit=limit)
             if msgs:
@@ -155,6 +158,7 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
                 cache.update_sync_state(channel_id)
             return cache.get_recent(channel_id, limit=limit)
         finally:
+            client.close()
             cache.close()
     if name == "discord_search":
         cache = MessageCache()
@@ -169,26 +173,38 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
             cache.close()
     if name == "discord_guilds":
         client = DiscordClient(token=_resolve_discord_token(args))
-        return client.guilds()
+        try:
+            return client.guilds()
+        finally:
+            client.close()
     if name == "discord_channels":
         client = DiscordClient(token=_resolve_discord_token(args))
-        return client.channels(args["guild_id"])
+        try:
+            return client.channels(args["guild_id"])
+        finally:
+            client.close()
     if name == "discord_react":
         client = DiscordClient(token=_resolve_discord_token(args))
-        return client.add_reaction(
-            args["channel_id"],
-            args["message_id"],
-            args["emoji"],
-        )
+        try:
+            return client.add_reaction(
+                args["channel_id"],
+                args["message_id"],
+                args["emoji"],
+            )
+        finally:
+            client.close()
     if name == "discord_channel_post":
         client = DiscordClient(token=_resolve_discord_token(args))
-        discord_text = md_to_discord(args["text"])
-        resp = client.send_message(
-            args["channel_id"],
-            discord_text,
-        )
-        mid = resp.get("id", "") if isinstance(resp, dict) else ""
-        return {"status": "ok", "channel_id": args["channel_id"], "message_id": mid}
+        try:
+            discord_text = md_to_discord(args["text"])
+            resp = client.send_message(
+                args["channel_id"],
+                discord_text,
+            )
+            mid = resp.get("id", "") if isinstance(resp, dict) else ""
+            return {"status": "ok", "channel_id": args["channel_id"], "message_id": mid}
+        finally:
+            client.close()
     raise ValueError(f"Unknown tool: {name}")
 
 
