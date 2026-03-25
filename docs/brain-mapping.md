@@ -2,7 +2,7 @@
 
 **[日本語版](brain-mapping.ja.md)**
 
-> Created: 2026-02-19 | Updated: 2026-03-05
+> Created: 2026-02-19 | Updated: 2026-03-25
 > Related: [vision.md](vision.md), [memory.md](memory.md)
 
 ---
@@ -25,7 +25,7 @@ In psychiatric practice, one routinely observes dysfunctions of the brain's vari
 | Language comprehension | Wernicke's area (temporal lobe) | Semantic understanding of input messages |
 | Language production | Broca's area (frontal lobe) | Generation of response text |
 | Pre-trained knowledge | Crystallized patterns in temporal cortex | World knowledge baked into LLM weights. A separate system from file-based memory — "innate intelligence" |
-| Transformer Attention | Parietal association cortex + PFC selective attention | Allocation of attention to relevant information within the context |
+| Transformer attention | Parietal association cortex + PFC selective attention | Allocation of attention to relevant information within the context |
 
 The LLM in its entirety corresponds to the **neocortex** as a whole. However, in AnimaWorks' design, because the framework handles subcortical functions (memory consolidation, forgetting, arousal maintenance), the role left to the LLM is effectively distilled into the **conscious processing of the prefrontal cortex (PFC)**.
 
@@ -83,52 +83,60 @@ Following Cowan (2005), working memory is understood as a "spotlight on activate
 |---|---|---|
 | Semantic neighborhood discovery | Spreading activation among concept nodes | Dense vector similarity search (ChromaDB) |
 | Prioritization of recent memories | Recency effect | Time-decay function (half-life: 30 days) |
-| Strengthening of frequently used memories | Hebb's rule / Long-term potentiation (LTP) | Access frequency boost |
-| Multi-hop association | Propagation through associative networks | Knowledge graph + Personalized PageRank |
+| Strengthening of frequently used memories | Hebb's rule / long-term potentiation (LTP) | Access frequency boost |
+| Multi-hop association | Propagation through associative networks | Knowledge graph + Personalized PageRank (implicit-link vector similarity threshold 0.75; procedural distillation RAG duplicate detection at 0.85 is a separate pathway) |
 
 ### Priming Channels and Dynamic Budget — Selective Attention
 
-The PrimingEngine executes 6-channel parallel memory retrieval, each corresponding to a distinct neurocognitive function:
+`PrimingEngine` (`core/memory/priming/engine.py`) pulls from multiple sources **in parallel** via `asyncio.gather`. Conceptually this still maps to the **six channels A–F**, but the implementation also includes:
 
-| Channel | Function | Brain Counterpart | Token Budget |
+- **C0 ([IMPORTANT] knowledge)** (`channel_c.py`): RAG `get_important_chunks` always fetches `[IMPORTANT]` chunks, placing heading summaries and pointers to `read_memory_file(path=...)` at the top (dedicated slot ~500 tokens). Vector search for related knowledge follows.
+- **Recent outbound** (`priming/outbound.py`): Up to 3 `channel_post` / `message_sent` events from the last 2 hours.
+- **Pending human notifications** (`collect_pending_human_notifications` in `priming/outbound.py`): `human_notify` from the last 24 hours, formatted to ~500 tokens. Log reads occur when `channel` is `chat` or `heartbeat`, or when `channel.startswith("message:")` (Anima-to-Anima DM priming). In **`build_system_prompt`** (`core/prompt/builder.py`) **Group 3**, `pending_human_notifications` is included **only when `is_chat or is_heartbeat`** (`is_heartbeat` is **strict equality** `trigger == "heartbeat"`). For `inbox:` / `cron:` / `task:` / `consolidation:` etc., `is_chat` is false, so they **do not appear** in the prompt. Normal `message:peer` DMs have `is_chat` true, so they **do appear**. Note: `consolidation:` priming may use `channel="heartbeat"`, so **collection may run**, but it can **fail to inject** when it does not match the `is_heartbeat` check above. For `cron`, the collection side is also empty.
+
+When dynamic budget is enabled, each channel's character budget scales uniformly with `budget_ratio = token_budget / 2000` against the overall cap `token_budget`. Related knowledge merges `related_knowledge` (trusted) and `related_knowledge_untrusted` before truncation, preserving trust separation. Defaults can be overridden via `priming.budget_*` in `config.json`.
+
+| Channel | Function | Brain Counterpart | Base token budget (`constants.py`, before scaling) |
 |---|---|---|---|
 | A: Sender profile | "Who is talking to me?" | Fusiform face area / temporal pole (person recognition) | 500 |
 | B: Recent activity | "What happened recently?" | Hippocampal replay (recent episode reactivation) | 1300 |
-| C: Related knowledge | "What do I know about this?" | Semantic memory retrieval (temporal cortex) | 1200 |
+| C: Related knowledge | "What do I know about this?" (IMPORTANT prefix + RAG) | Semantic memory retrieval (temporal cortex) | IMPORTANT 500 + related search 1000 |
 | D: Skill matching | "Can I handle this?" | Procedural memory activation (basal ganglia) | 200 |
-| E: Pending tasks | "What am I supposed to be doing?" | Prospective memory / intention monitoring (rostral PFC) | 300 |
-| F: Episodes | "Have I had similar experiences?" | Episodic memory semantic search (hippocampus-cortex) | 500 |
+| E: Pending tasks | "What am I supposed to be doing?" | Prospective memory / intention monitoring (rostral PFC) | 500 |
+| F: Episodes | "Have I had similar experiences?" | Episodic semantic search (hippocampus–cortex) | 800 |
 
-Channel D returns only **skill/procedure names** (progressive disclosure, max 5). Full content is loaded on demand via the `skill` tool. Channel C splits search results by trust level (medium / untrusted), injecting external-origin knowledge separately. Channel B retrieves recent activity from the unified activity log (`activity_log/`) and shared channels (`shared/channels/`). For heartbeat/cron, tool_use, tool_result, heartbeat_start/end, and inbox_processing_start/end are filtered as noise; only actionable communication events are injected.
+Channel D returns **names only** for matched skills, common skills, and procedures (`channel_d.py` `channel_d_skill_match`, three-stage matching in `core.memory.manager.match_skills_by_description`, max `_MAX_SKILL_MATCHES` = 5). Full text is fetched on demand via the `skill` tool. Channel B reads `activity_log/` and `shared/channels/`. Noise filtering branches on the set in `channel_b.py`. **Heartbeat** (`channel == "heartbeat"`) excludes `tool_use`, `tool_result`, `heartbeat_start`, `heartbeat_reflection`, `inbox_processing_start`, and `inbox_processing_end`. Docstrings also treat **`channel.startswith("cron:")`** as background, but **`PrimingMixin`** (`core/_agent_priming.py`) passes the fixed string `prime_memories(..., channel="cron")` even during cron execution, so it **does not match** `startswith("cron:")`. As a result, **cron priming applies chat-side `_CHAT_NOISE_TYPES`**, and `memory_write`, `cron_executed`, `heartbeat_end`, etc. are also excluded (if `channel` were passed as `cron:{task}`, `channel_b` could switch to a heartbeat-like filter).
 
-In addition, PrimingEngine collects **recent outbound** actions (channel posts and DMs from the last 2 hours, max 3 entries) and injects them into the system prompt. This corresponds to self-monitoring of "what I recently did," contributing to duplicate-send suppression and behavioral consistency. The builder does not read ActivityLogger directly; PrimingEngine serves as the sole activity reader for prompt construction (hippocampus model).
+The builder does not read ActivityLogger directly; the priming path (Channel B, recent outbound, pending notifications) is the main activity reader for prompts (hippocampus model).
 
-Channel E (pending tasks) corresponds to **prospective memory**. The rostral prefrontal cortex (Brodmann area 10) maintains future intentions at a low activation level until the appropriate context triggers retrieval. AnimaWorks' task queue surfaces unfinished tasks to the agent's awareness through an analogous mechanism.
+Channel E (`channel_e.py`, pending tasks plus surrounding state) maps to **prospective memory**. The rostral prefrontal cortex (Brodmann area 10) maintains future intentions at low activation until the right context triggers them. AnimaWorks' task queue surfaces unfinished tasks to the agent's awareness through an analogous mechanism. Beyond `TaskQueueManager.format_for_priming`, the same channel concatenates **active parallel tasks** (`PrimingEngine._get_active_parallel_tasks`, `submit_tasks` DAG), summaries from **`state/overflow_inbox/`**, and excerpts of completed background tasks in **`state/task_results/`** (queue I/O is offloaded with `asyncio.to_thread` for non-blocking behavior).
 
 #### Dynamic Budget Allocation — Attentional Resource Management
 
-When `priming.dynamic_budget = true`, the token budget for priming is dynamically adjusted based on message type, implementing **selective attention** at the system level:
+When `priming.dynamic_budget = true`, the priming token budget is adjusted dynamically by message type — **selective attention** at the system level:
 
-| Message Type | Budget | Brain Analogy |
+| Message Type | Budget (default, `PrimingConfig`) | Brain Analogy |
 |---|---|---|
 | Greeting | 500 | Low attentional load (routine social interaction) |
-| Question | 1500 | Moderate attentional load (retrieval-oriented) |
+| Question | 2000 | Moderate-to-high attentional load (retrieval-oriented) |
 | Request | 3000 | High attentional load (task-oriented, maximal resource allocation) |
 | Heartbeat | max(200, context_window * 5%) | Tonic alertness (minimum arousal maintenance) |
 
-The heartbeat budget formula `max(budget_heartbeat, int(context_window * heartbeat_context_pct))` ensures that models with larger context windows receive proportionally more priming data during autonomous patrol. This corresponds to how the tonic firing rate of the reticular activating system scales with overall cortical capacity.
+The heartbeat formula `max(budget_heartbeat, int(context_window * heartbeat_context_pct))` gives larger-context models more priming data during autonomous patrol — analogous to tonic firing of the reticular activating system scaling with overall cortical capacity.
 
-This dynamic budget allocation mirrors Kahneman's (1973) attention-as-resource theory: the system allocates more cognitive resources to demanding tasks and fewer to routine stimuli, optimizing the signal-to-noise ratio within the limited context window.
+`classify_message_type` (`priming/budget.py`) treats the type as **`"heartbeat"` only when `channel == "heartbeat"`**. **Cron priming** uses `channel="cron"`, so it does not qualify; greeting / question / request heuristics apply and one of those **greeting / question / request budgets** is used (the heartbeat percentage scale does **not** apply).
+
+This mirrors Kahneman's (1973) attention-as-resource theory: more cognitive resources for demanding tasks, fewer for routine stimuli, optimizing signal-to-noise within the limited context window.
 
 #### Tiered Prompt and Trigger-Based Filtering
 
-Depending on context window size, `build_system_prompt()` adjusts injected sections in 4 tiers (T1–T4). At 128k+ all sections are included; at 32k–128k the budget is reduced; at 16k–32k bootstrap/vision/specialty/DK/memory_guide are omitted; below 16k permissions/org/messaging/emotion are also omitted. This implements **selective inclusion based on attentional resource limits**.
+Depending on context window size, `build_system_prompt()` adjusts injected sections across four tiers (T1–T4). At 128k+ all sections; 32k–128k reduced; 16k–32k omits bootstrap/vision/specialty/DK/memory_guide; below 16k also omits permissions/org/messaging/emotion. This implements **selective inclusion under attentional limits**.
 
-Additionally, section selection depends on the trigger (`chat` / `inbox` / `heartbeat` / `cron` / `task`). Heartbeat and cron omit specialty, emotion, and a_reflection; task runs with minimal context (identity 3 lines + task description only). Controlling "what surfaces in consciousness" per execution path optimizes cognitive load.
+Section selection also depends on trigger (`chat` / `inbox` / `heartbeat` / `cron` / `task`, etc.). Heartbeat and cron omit specialty, emotion, and a_reflection; task uses minimal context (identity 3 lines + task description). Controlling what enters "consciousness" per path optimizes cognitive load. Apart from priming body text, conditions for injecting unprocessed `human_notify` summaries as `pending_human_notifications` into Group 3 are the **same as `is_chat or is_heartbeat` above** (see bullets in this section).
 
 #### Unified Activity Log
 
-As the sole data source for Priming Channel B, `ActivityLogger` records all Anima interactions in `{anima_dir}/activity_log/{date}.jsonl` in chronological order. Main event types: `message_received` / `message_sent` (backward compatible with `dm_received` / `dm_sent`), `response_sent`, `channel_read` / `channel_post`, `human_notify`, `tool_use` / `tool_result`, `heartbeat_start` / `heartbeat_end` / `heartbeat_reflection`, `inbox_processing_start` / `inbox_processing_end`, `cron_executed`, `memory_write`, `error`, `issue_resolved`, `task_created` / `task_updated`. Crash resilience for streaming output is provided by the Write-Ahead Log at `shortterm/streaming_journal_{session_type}.jsonl` (separate for chat/heartbeat).
+As the primary data source for Channel B, `ActivityLogger` (`core/memory/activity.py`) appends chronologically to `{anima_dir}/activity_log/{date}.jsonl`. The class is a **facade**; timeline, conversation view, priming formatting, and log rotation are split across mixins such as `_activity_timeline`, `_activity_conversation`, `_activity_priming`, and `_activity_rotation`. Representative types: `message_received` / `message_sent` (resolved with `dm_*` aliases), `response_sent`, `channel_read` / `channel_post`, `human_notify`, `tool_use` / `tool_result`, `heartbeat_start` / `heartbeat_end` / `heartbeat_reflection`, `inbox_processing_start` / `inbox_processing_end`, `cron_executed`, `memory_write`, `error`, `issue_resolved`, `task_created` / `task_updated`, and more. Some tool events are pushed over WebSocket for live UI updates (`tool_use` matching `_LIVE_EVENT_TYPES` / `_VISIBLE_TOOL_NAMES`). Crash resilience for streaming output uses the Write-Ahead Log at `shortterm/streaming_journal_{session_type}.jsonl` (chat vs heartbeat) via `core/memory/streaming_journal.py`. Daily consolidated log cleanup and retention-based deletion are handled by **`core/memory/housekeeping.py`** through the supervisor (prompt logs, short-term storage, `task_results`, etc.).
 
 ---
 
@@ -137,11 +145,11 @@ As the sole data source for Priming Channel B, `ActivityLogger` records all Anim
 | AnimaWorks | Brain Process | Description |
 |---|---|---|
 | **Immediate encoding** (session boundary) | Hippocampal rapid one-shot encoding | At conversation end, a differential summary is recorded in episodes/ |
-| **Daily consolidation** (midnight cron) | NREM slow-wave — spindle — ripple cascade | Anima-driven via tools. Knowledge extraction and validation from episodes/ to knowledge/. ConsolidationEngine provides pre-processing (episode collection, issue_resolved collection) and post-processing (RAG index updates) |
-| **issue_resolved → procedure** | Proceduralization of resolutions | Scans activity_log for `issue_resolved` events and generates procedure documents via ProceduralDistiller (`create_procedures_from_resolved`) |
+| **Daily consolidation** (midnight cron) | NREM slow-wave — spindle — ripple cascade | Substantive summarization and extraction are executed by the Anima's tool loop. `ConsolidationEngine` (`core/memory/consolidation.py`) is a module focused on **pre-processing** (episode collection, `issue_resolved` collection) and **post-processing** (RAG index update/rebuild, monthly forgetting invocation, legacy knowledge migration, etc.) |
+| **issue_resolved → procedure** | Proceduralization of resolutions | Scans activity_log for `issue_resolved` events; ProceduralDistiller generates procedures (`create_procedures_from_resolved`) |
 | **Weekly integration** | Neocortical long-term consolidation | Deduplication and merging of knowledge/, pattern distillation |
-| **NLI + LLM validation** | Hippocampal pattern separation | Hallucination elimination. Consistency verification between episodes and extracted knowledge |
-| **Prediction-error-based reconsolidation** (`reconsolidation.py`) | Reconsolidation theory, Nader et al. (2000) | LLM revision of procedures with failure counts above threshold. Version control and archival |
+| **NLI + LLM validation** | Hippocampal pattern separation | Hallucination control. Consistency checks between episodes and extracted knowledge |
+| **Prediction-error-based reconsolidation** (`reconsolidation.py`) | Reconsolidation theory, Nader et al. (2000) | LLM revision of procedures whose failure count exceeds threshold. Versioning and archival |
 
 ---
 
@@ -151,29 +159,29 @@ Based on the synaptic homeostasis hypothesis of Tononi & Cirelli (2003):
 
 | AnimaWorks | Brain Process | Description |
 |---|---|---|
-| **Daily downscaling** | Synaptic downscaling during NREM sleep | Marking of low-activity chunks |
-| **Neurogenesis-inspired reorganization** | Memory circuit reorganization via neurogenesis in the hippocampal dentate gyrus | LLM-driven merging of low-activity + similar chunks |
-| **Complete forgetting** (monthly) | Elimination of sub-threshold synapses | Archive → deletion. Procedure version archives keep only the 5 most recent versions |
-| **Forgetting resistance** (procedures, skills, knowledge) | Procedural memory in basal ganglia is resistant to forgetting | procedures: version >= 3 or protected: true, or utility-based protection (low failure rate, high usage). knowledge: success_count >= 2. skills / shared_users: fully protected |
+| **Daily downscaling** | Synaptic downscaling during NREM sleep | Marking low-activity chunks |
+| **Neurogenesis-inspired reorganization** | Memory circuit reorganization via dentate neurogenesis | LLM merge of low-activity + similar chunks |
+| **Complete forgetting** (monthly) | Elimination of sub-threshold synapses | Knowledge-like chunks: archive → delete when low activation exceeds **90 days** and `access_count` is below threshold (`FORGETTING_LOW_ACTIVATION_DAYS` / `FORGETTING_MAX_ACCESS_COUNT`). **Procedure** downscaling uses separate thresholds (e.g. **180 days** unused with low use counts) via `PROCEDURE_INACTIVITY_DAYS` etc. Procedure archives keep only **`PROCEDURE_ARCHIVE_KEEP_VERSIONS`** (5 versions) |
+| **Forgetting resistance** (procedures, skills, knowledge) | Basal ganglia procedural memory resists forgetting | procedures: `_is_protected_procedure` when `importance == important` / `protected: true` / `version >= 3`. Low utility and high failure feed `_should_downscale_procedure` (`PROCEDURE_*` constants). knowledge: `_is_protected_knowledge` when `importance == important` or `success_count >= 2`. `IMPORTANT_SAFETY_NET_DAYS` (**365 days**) is used in `_is_protected` as the **first-tier** lift for `importance == important`, but **knowledge / procedures still apply type-specific checks that continue to protect `[IMPORTANT]`**. skills / `shared_users` are fully skipped as `PROTECTED_MEMORY_TYPES` |
 
 ### Procedural Distillation and Metaplasticity
 
-Beyond the 3-stage forgetting cycle, AnimaWorks implements additional memory subsystems that correspond to more nuanced aspects of neural plasticity:
+Beyond the three-stage forgetting cycle, AnimaWorks adds memory subsystems aligned with finer aspects of neural plasticity:
 
 | AnimaWorks | Brain Process | Description |
 |---|---|---|
-| **Procedural distillation** (`distillation.py`) | Skill consolidation in the basal ganglia-cerebellar circuit | LLM-based classification of episodic memories into knowledge and procedures. Repeated action patterns are detected from activity logs and distilled into reusable procedure files — analogous to how repeated motor sequences become automated through basal ganglia loop consolidation |
-| **Weekly pattern detection** | Metaplasticity (Abraham & Bear, 1996) | Activity log clustering identifies recurrent behavioral patterns across 7-day windows. Represents "learning how to learn" — the system adapts not just memory content but memory formation processes themselves |
-| **RAG duplicate detection** (similarity >= 0.85) | Hippocampal pattern separation | Before saving a new procedure, vector similarity checks prevent redundant encoding — mirroring how the dentate gyrus performs orthogonalization to keep similar memories distinct |
-| **Resolution tracking** (`resolution_tracker.py`) | Organizational long-term memory (transactive memory systems) | Records cross-Anima shared resolution log in `shared/resolutions.jsonl`. Enables organizational knowledge about "who resolved what" — corresponding to Wegner's (1987) transactive memory theory |
-| **Persistent task queue** (`task_queue.py`) | Prospective memory / working memory extension | Append-only JSONL task queue with deadline tracking and stale-task detection. Extends working memory beyond the context window, like an external notepad for the central executive |
+| **Procedural distillation** (`distillation.py`) | Skill consolidation in basal ganglia–cerebellar circuits | LLM sorts episodic memory into knowledge vs procedures. Detects repeated action patterns from activity logs and distills reusable procedure files — analogous to motor sequences automating through basal ganglia loops |
+| **Weekly pattern detection** | Metaplasticity (Abraham & Bear, 1996) | Activity-log clustering over 7-day windows finds recurrent behavior. Expresses "learning how to learn" — adapting memory formation, not just content |
+| **RAG duplicate detection** (similarity ≥ 0.85) | Hippocampal pattern separation | `RAG_DUPLICATE_THRESHOLD = 0.85` in `distillation.py`. Vector similarity before saving new procedures avoids redundant encoding — like dentate orthogonalization of similar memories |
+| **Resolution tracking** (`resolution_tracker.py`) | Organizational long-term memory (transactive memory) | Cross-Anima shared resolution log in `shared/resolutions.jsonl`. Organizational knowledge of "who resolved what" — Wegner (1987) |
+| **Persistent task queue** (`task_queue.py`) | Prospective memory / working-memory extension | Append-only JSONL with deadlines and stale detection. Extends working memory past the context window, like an external notepad for the central executive |
 
-The procedural distillation pipeline operates on two timescales:
+The procedural distillation pipeline runs on two timescales:
 
-- **Daily**: LLM classifies episode sections into knowledge / procedures / skip categories, writing structured procedure files with YAML frontmatter (confidence scores, success/failure counts)
-- **Weekly**: Vector-based clustering of activity log entries detects repeated behavioral patterns and distills them into generalized procedures
+- **Daily**: LLM classifies episode sections into knowledge / procedures / skip; writes structured procedure files with YAML front matter (confidence scores, success/failure counts)
+- **Weekly**: Vector clustering on activity entries detects repeated patterns and distills generalized procedures
 
-This dual-timescale architecture mirrors the neuroscience of skill acquisition: initial explicit learning (daily classification) transitions to implicit procedural knowledge (weekly pattern distillation) through repeated exposure — the same progression from hippocampal-dependent to basal ganglia-dependent processing described by Doyon & Benali (2005).
+This dual-timescale design mirrors skill-acquisition neuroscience: explicit daily classification shifts toward implicit procedural knowledge via weekly pattern distillation — the hippocampus-to-basal-ganglia transition Doyon & Benali (2005) describe.
 
 ---
 
@@ -181,23 +189,23 @@ This dual-timescale architecture mirrors the neuroscience of skill acquisition: 
 
 | AnimaWorks | Brain Region | Description |
 |---|---|---|
-| **Heartbeat** (periodic patrol) | **Reticular activating system (ARAS)** | Maintenance of arousal. Does not specify the content of consciousness; provides the precondition for consciousness. Fires rhythmically — without it, dormancy (coma) ensues |
-| **Cron** (scheduled tasks) | Hypothalamic circadian rhythm (SCN) | Time-based periodic action triggers. Sleep-wake cycle, daily/weekly/monthly biorhythms |
-| **ProcessSupervisor** | Autonomic nervous system | Manages process life and death. Operates outside consciousness, handling startup, monitoring, and restart of each Anima |
-| **Unix Domain Socket IPC** | Nerve fiber bundles (white matter tracts) | Physical communication pathways between Anima processes |
-| **Messenger** | Synaptic transmission | Sending and receiving messages. Connecting encapsulated individuals through text |
+| **Heartbeat** (periodic patrol) | **Reticular activating system (ARAS)** | Maintains arousal. Does not fix the content of consciousness; provides its preconditions. Fires rhythmically — without it, dormancy (coma) |
+| **Cron** (scheduled tasks) | Hypothalamic circadian rhythm (SCN) | Time-based periodic triggers. Sleep–wake and daily/weekly/monthly biorhythms |
+| **ProcessSupervisor** | Autonomic nervous system | Process life cycle outside awareness: start, monitor, restart each Anima |
+| **Unix domain socket IPC** | White-matter tracts | Physical pathways between Anima processes |
+| **Messenger** | Synaptic transmission | Message send/receive; text links encapsulated individuals |
 
 #### Heartbeat = Reticular Activating System (ARAS) in Detail
 
-The Ascending Reticular Activating System (ARAS) projects from the brainstem's reticular formation through the thalamus to the entire cerebral cortex, maintaining the state of arousal. Its characteristics correspond to AnimaWorks' heartbeat as follows:
+The ascending reticular activating system (ARAS) projects from the brainstem reticular formation through the thalamus to the cortex, sustaining arousal. It maps to AnimaWorks heartbeat as follows:
 
 | ARAS Characteristic | Heartbeat Characteristic |
 |---|---|
-| Maintains arousal (does not specify the content of consciousness) | Periodically activates the Anima (what to think about is delegated to heartbeat.md) |
-| Fires automatically and rhythmically | Executes automatically at configured intervals |
-| Functional cessation leads to coma | Without heartbeat, the Anima remains dormant unless externally stimulated (by messages) |
-| A precondition for consciousness, not consciousness itself | A precondition for autonomous action, not the judgment itself |
-| Arousal level fluctuates with sensory input | Activates immediately upon receiving a message (even outside the heartbeat cycle) |
+| Sustains arousal (does not specify conscious content) | Periodically activates the Anima (what to think is left to heartbeat.md) |
+| Automatic, rhythmic firing | Runs automatically at the configured interval |
+| Failure leads to coma | Without heartbeat, the Anima sleeps unless messaged |
+| Precondition for consciousness, not consciousness itself | Precondition for autonomous action, not the judgment itself |
+| Arousal varies with sensory input | Wakes immediately on inbound messages (even off heartbeat cadence) |
 
 ---
 
@@ -205,24 +213,26 @@ The Ascending Reticular Activating System (ARAS) projects from the brainstem's r
 
 | AnimaWorks | Brain / Psychology Counterpart | Description |
 |---|---|---|
-| **Supervisor-subordinate hierarchy** | Neural basis of social hierarchy (PFC-amygdala circuit) | Flow of instructions and reports |
-| **Encapsulation (internal state invisible)** | Theory of Mind (ToM) | The internal state of others can only be inferred |
-| **Message-based communication** | Linguistic communication | Connected only through text. No shared memory or direct references |
-| **identity.md (personality)** | Personality (stable PFC-limbic patterns) | Immutable baseline. Foundation for judgment |
-| **injection.md (role)** | Social role / occupational identity | Mutable. Behavioral guidelines within the organization |
+| **Supervisor–subordinate hierarchy** | Neural basis of social hierarchy (PFC–amygdala circuit) | Flow of orders and reports |
+| **Encapsulation (internals invisible)** | Theory of mind | Others' internal states are only inferable |
+| **Messaging** | Linguistic communication | Text-only links; no shared memory or direct reference |
+| **identity.md (personality)** | Personality (stable PFC–limbic patterns) | Immutable baseline for judgment |
+| **injection.md (role)** | Social / occupational role | Mutable organizational guidance |
 
 ### Execution Modes — Levels of Autonomy
 
-AnimaWorks defines four execution modes, each corresponding to a different level of cognitive autonomy:
+Memory subsystems are mode-agnostic, but cortical (LLM) executor choice changes how autonomous the agent is. Current code distinguishes **six modes** (`resolve_execution_mode()`):
 
 | Mode | Executor | Brain Analogy | Description |
 |---|---|---|---|
-| **S** (SDK) | Claude Agent SDK | Full cortical function with executive control | Native Claude tool use with session continuity. The most autonomous mode — corresponds to a fully awake brain with intact prefrontal executive function |
-| **C** (Codex) | Codex SDK (Codex CLI) | Same full cortical function as S | Runs OpenAI models via Codex CLI. MCP integration and sandbox isolation. Natively handles tool use and session continuity like S |
-| **A** (Autonomous) | LiteLLM + tool_use loop | Cortical function via external mediation | Multi-provider tool use (GPT-4o, Gemini, etc.) with framework-managed tool loop. Like a patient who can think and act but requires external scaffolding for some executive functions |
-| **B** (Basic) | 1-shot assisted | Cortical function with external executive support | Framework handles memory I/O on behalf of the LLM. Analogous to a patient with executive dysfunction who can reason locally but needs external cues and structure for task management |
+| **S** (SDK) | Claude Agent SDK | Full cortical function with executive control | Native Claude tools and session continuity |
+| **C** (Codex) | Codex CLI | Cortical function close to S | OpenAI Codex-family models via Codex |
+| **D** (Cursor Agent) | Cursor Agent CLI | External agent loop | MCP-integrated alternate path |
+| **G** (Gemini CLI) | Gemini CLI | External agent loop | stream-json and tool loop |
+| **A** (Autonomous) | LiteLLM + tool_use loop | Cortical function via external mediation | Multi-provider tool use managed by the framework |
+| **B** (Basic) | One-shot (assisted) | Heavy external scaffolding | Framework handles memory I/O; session chaining largely unsupported |
 
-The mode naming (S/C/A/B) replaces the earlier A1/A2/B convention. Mode is automatically resolved from the model name via wildcard pattern matching, with explicit per-Anima override available. S and C share MCP-style tool access.
+Wildcard rules in `models.json` (and related config) auto-select mode; `status.json` `execution_mode` can override. S/C/D/G favor tools plus continued sessions; B strongly externalizes working memory — consistent with the memory mapping in this document.
 
 ---
 
@@ -230,24 +240,24 @@ The mode naming (S/C/A/B) replaces the earlier A1/A2/B convention. Mode is autom
 
 ### Why Context Window Limits Are a "Feature"
 
-Human working memory capacity is limited to 4 ± 1 chunks (Cowan, 2001). This is not a defect but an **evolutionary adaptation that enforces selective attention, thereby ensuring quality of judgment**. If all memories surfaced in consciousness simultaneously, relevant information could not be selected, and judgment would deteriorate.
+Human working memory capacity is limited to about 4 ± 1 chunks (Cowan, 2001). This is not a defect but an **evolutionary adaptation that enforces selective attention and preserves judgment quality**. If all memories surfaced at once, relevant information could not be selected and decisions would degrade.
 
-AnimaWorks adopts this principle as a "design feature." Only the necessary information is recalled through priming, enabling judgment within a clean context.
+AnimaWorks adopts this as a deliberate design feature: prime only what is needed so the model decides in a clean context.
 
 ### Why Forgetting Is Necessary
 
-Synaptic downscaling during sleep globally weakens synapses that were strengthened during wakefulness, maintaining the signal-to-noise ratio (SNR). Without forgetting, accumulated memories become noise, degrading search precision.
+Sleep-related synaptic downscaling weakens wake-strengthened synapses globally, preserving signal-to-noise ratio. Without forgetting, accumulated memories become noise and retrieval quality falls.
 
-AnimaWorks' active forgetting reproduces this biological mechanism, maintaining vector search accuracy over the long term.
+Active forgetting in AnimaWorks mimics this biology and helps keep vector search accurate long term.
 
-### Why Collaboration Among "Imperfect Individuals" Is More Robust Than Omniscient Individuals
+### Why Collaboration Among "Imperfect Individuals" Beats One Omniscient Agent
 
-Human organizations function because each member makes judgments with limited perspective and memory, communicating imperfect information in their own words (vision.md). This aligns with Cognitive Load Theory (Sweller, 1988) and Distributed Cognition (Hutchins, 1995).
+Human organizations work because each member decides with limited view and memory, exchanging imperfect information in their own words (vision.md). That aligns with cognitive load theory (Sweller, 1988) and distributed cognition (Hutchins, 1995).
 
 ---
 
 ## Summary
 
-AnimaWorks is a design born at the intersection of a psychiatrist's clinical knowledge and engineering experience. The brain's information-processing architecture is a **universal design pattern** that can be reused independently of its biological substrate (neurons), and AnimaWorks is a system that demonstrates this.
+AnimaWorks is a design born at the intersection of psychiatric clinical practice and engineering. The brain's information architecture is a **reusable design pattern** independent of its biological substrate (neurons); AnimaWorks is a system that demonstrates that reuse.
 
-By mapping the LLM to the neocortex, the memory system to the hippocampal-cortical system, heartbeat to the reticular activating system, and forgetting to synaptic homeostasis — and by having these operate in an integrated manner — AnimaWorks realizes "an entity that autonomously thinks, learns, forgets, and collaborates."
+By mapping the LLM to the neocortex, the memory system to the hippocampal–cortical complex, heartbeat to the reticular activating system, and forgetting to synaptic homeostasis — integrated end to end — it realizes an entity that thinks, learns, forgets, and collaborates autonomously.

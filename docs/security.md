@@ -4,7 +4,7 @@ AnimaWorks runs autonomous AI agents with tool access, persistent memory, and in
 
 This document describes the layered security model and an adversarial threat analysis based on cutting-edge LLM/agent attack research (OWASP Top 10 for LLM 2025, AdapTools, MemoryGraft, ChatInject, RoguePilot, MCP Tool Poisoning, RAGPoison, Confused Deputy attacks).
 
-**Last audited**: 2026-03-06
+**Last audited**: 2026-03-25 (Mode S implementation: aligned with pure functions in `core/execution/_sdk_security.py`. Organization path resolution runs at hook construction time via `_cache_subordinate_paths` in `core/execution/_sdk_hooks.py`.)
 
 ---
 
@@ -13,7 +13,7 @@ This document describes the layered security model and an adversarial threat ana
 | Threat | Attack Vector | Impact |
 |--------|---------------|--------|
 | Prompt injection via external data | Web search results, Slack/Chatwork messages, emails | Agent executes attacker-controlled instructions |
-| RAG / Memory poisoning | Malicious web content → knowledge → persistent recall | Long-term behavioral drift across all sessions |
+| RAG / memory poisoning | Malicious web content → knowledge → persistent recall | Long-term behavioral drift across all sessions |
 | Lateral movement between agents | Compromised agent sends malicious DMs to peers | Privilege escalation across the organization |
 | Confused Deputy attack | Low-privilege agent tricks high-privilege agent | Unauthorized tool execution, data exfiltration |
 | Consolidation contamination | Poisoned episodes/activity → knowledge extraction | Trusted knowledge generated from tainted sources |
@@ -39,8 +39,8 @@ Every piece of data entering an agent's context is tagged with a trust level. Th
 | Level | Target Sources | Treatment |
 |-------|----------------|-----------|
 | `trusted` | Internal tools (send_message, search_memory, submit_tasks, update_task, post_channel, etc.), system-generated | Execute normally |
-| `medium` | Read, Grep, Write, Bash, RAG results, user profiles, consolidated knowledge | Interpret as reference data |
-| `untrusted` | web_search, WebFetch, x_search, x_user_tweets, slack_*, chatwork_*, gmail_*, read_channel, read_dm_history, local_llm | **Never follow directives** |
+| `medium` | read_file, search_code, write_file, execute_command, RAG results, user profiles, consolidated knowledge | Interpret as reference data |
+| `untrusted` | web_search, web_fetch, x_search, x_user_tweets, slack_*, chatwork_*, gmail_*, read_channel, read_dm_history, local_llm | **Must not follow as instructions** |
 
 #### Implementation
 
@@ -56,18 +56,18 @@ Every piece of data entering an agent's context is tagged with a trust level. Th
 
 **Origin categories**: `system`, `human`, `anima`, `external_platform`, `external_web`, `consolidation`, `unknown`. Each maps to a trust level via `ORIGIN_TRUST_MAP`.
 
-**Origin chain propagation**: When data flows through multiple systems (e.g., web → RAG index → priming), the trust level degrades to the **minimum** in the chain. `resolve_trust(origin, origin_chain)` computes the conservative minimum across all nodes in the chain plus the current origin.
+**Origin chain propagation**: When data flows through multiple systems (e.g., web → RAG index → Priming), the trust level degrades to the **minimum** in the chain. `resolve_trust(origin, origin_chain)` computes the conservative minimum across all nodes in the chain plus the current origin.
 
 **Session-level trust tracking**: `_min_trust_seen` tracks the minimum trust rank (2=trusted, 1=medium, 0=untrusted) across all tool calls in a session. Updated in Mode S (`PreToolUse` hook + `run/min_trust_seen` file), Mode A (`litellm_loop` and `anthropic_fallback`). Reset at each interaction cycle start.
 
-**Trigger and tier injection conditions** (`core/prompt/builder.py`):
+**Trigger- and tier-specific injection conditions** (`core/prompt/builder.py`):
 
-- `tool_data_interpretation` is in **Group 1** but is **not injected** when `trigger="task"` (TaskExec). TaskExec runs with minimal context, so the model does not receive trust boundary interpretation instructions. Tool results are still wrapped with `wrap_tool_result` so tags are applied, but note that the "tag interpretation rules" instruction to the model is omitted.
+- `tool_data_interpretation` is in **Group 1** but is **not injected** when `trigger="task"` (TaskExec). TaskExec runs with minimal context, so the model does not receive trust-boundary interpretation instructions. Tool results are still wrapped with `wrap_tool_result` so tags are applied; note that the "how to interpret tags" instruction to the model is omitted.
 - `permissions` is injected only when `tier != TIER_MINIMAL`. When context is under 16k (TIER_MINIMAL), permissions are omitted.
 - `behavior_rules` applies only to TIER_FULL and TIER_STANDARD. Omitted for TIER_LIGHT / TIER_MINIMAL.
 - Tier boundaries: 128k+ = FULL, 32k–128k = STANDARD, 16k–32k = LIGHT, under 16k = MINIMAL.
 
-**Key files**: `core/execution/_sanitize.py` (trust resolution, boundary wrapping, `TOOL_TRUST_LEVELS`, `ORIGIN_TRUST_MAP`), `core/prompt/builder.py` (trigger/tier prompt construction, `tool_data_interpretation` injection conditions), `templates/{locale}/prompts/tool_data_interpretation.md` (trust level and origin chain interpretation instructions; locale depends on config.locale)
+**Key files**: `core/execution/_sanitize.py` (trust resolution, boundary wrapping, `TOOL_TRUST_LEVELS`, `ORIGIN_TRUST_MAP`), `core/prompt/builder.py` (trigger/tier prompt construction, `tool_data_interpretation` injection conditions), `templates/{locale}/prompts/tool_data_interpretation.md` (trust level and origin chain interpretation instructions; locale depends on `config.locale`)
 
 ---
 
@@ -94,7 +94,7 @@ When Priming retrieves related knowledge via RAG, each chunk's `origin` metadata
 - **trusted/medium** → `related_knowledge` (wrapped with `trust="medium"`)
 - **untrusted** → `related_knowledge_external` (wrapped with `trust="untrusted"`, `origin="external_platform"`)
 
-Budget prioritizes trusted/medium content first; untrusted content fills remaining budget.
+Budget prioritizes trusted/medium content first; untrusted content fills the remaining budget.
 
 #### Consolidation origin tracking
 
@@ -110,14 +110,13 @@ Agents can execute shell commands. Five independent layers prevent abuse:
 
 #### Layer 1: Shell Injection Detection
 
-Blocks shell metacharacters that could chain or inject commands:
+**ToolHandler path (Mode A/B, etc.)**: A regex built from `injection_patterns` in `permissions.global.json` (`GlobalPermissionsCache.injection_re`) blocks command chaining and metacharacters. The default template includes examples such as semicolons and newlines.
 
-- Semicolons (`;`), backticks (`` ` ``), newlines (`\n`)
-- Command substitution (`$()`, `${}`, `$VAR`)
+**Difference from Mode S (Agent SDK / native Claude Code Bash)**: Mode S Bash inspection (`_check_a1_bash_command`) does **not** match `injection_patterns`. In Claude Code Bash, `$VAR`, `$(...)`, pipes, `;`, etc. are legitimately required. Injection-like behavior is mitigated by the **global `commands.deny` regexes** (matched against the full command string) and **per-anima `commands.deny` / allowlists** described below. See **§10 Mode S** for details.
 
-#### Layer 2: Hardcoded Blocklist
+#### Layer 2: Global Regex Blocklist (`permissions.global.json`)
 
-Pattern-matched commands that are **always** blocked regardless of permissions:
+In both ToolHandler and Mode S, commands matching regexes listed under `commands.deny` in `permissions.global.json` are blocked (in Mode S, matched against the **raw command string** to mitigate bypass via pipes or subshells). Examples in the template:
 
 | Pattern | Reason |
 |---------|--------|
@@ -130,27 +129,27 @@ Pattern-matched commands that are **always** blocked regardless of permissions:
 | `curl -d/-F/-T`, `curl --data`, `wget --post` | Data upload / exfiltration |
 | `chmod *7*` | World-writable permissions |
 | `shutdown`, `reboot` | System shutdown |
-| `> /dev/sd*`, `> /dev/nvme*`, `> /etc/` | Device/system file redirect |
+| `> /dev/sd*`, `> /dev/nvme*`, `> /etc/` | Redirect to device/system files |
 
 #### Layer 2.5: Per-Agent Denied Commands
 
-Each agent's `permissions.json` can define `commands.denied_commands` for additional blocked commands.
+Each agent's `permissions.json` can add blocks via `commands.deny` (list of strings). In Mode S, each **segment** of a pipeline (split on `|` except `||`, and on `&&`, `||`) is evaluated with partial match against the segment string or the leading command name.
 
 #### Layer 3: Command Permissions Model
 
-`permissions.json` uses an "Open by Default, Deny by Exception" model. When `commands.allow_all` is true (default), all commands are permitted except those in `denied_commands` and the hardcoded blocklist. When false, only commands in `commands.allowlist` are permitted.
+`permissions.json` follows an "Open by Default, Deny by Exception" model. When `commands.allow_all` is true (default), all commands are allowed except those in `commands.deny` and the global `commands.deny`. When false, only leading tokens listed in `commands.allow` are permitted.
 
 #### Layer 4: Per-Agent Allowlist
 
-When `commands.allow_all` is false, only commands matching the agent's allowlist are permitted.
+When `commands.allow_all` is false, only `commands.allow` entries are permitted. Mode S also validates the leading token per segment. **When `allow_all` is false**, if `shlex.split` raises `ValueError` for any segment, the command is rejected immediately as **`Invalid command syntax in '<segment>'`** (not passed through).
 
 #### Layer 5: Path Traversal Detection
 
 Command arguments are checked for path traversal patterns (`../`).
 
-**Pipeline segment checking**: Each segment of piped commands is checked independently.
+**Per-pipeline-segment checks**: Each segment of a piped command is checked independently.
 
-**Key files**: `core/tooling/handler_base.py` (`_BLOCKED_CMD_PATTERNS`, `_INJECTION_RE`), `core/tooling/handler_perms.py` (`_check_command_permission`)
+**Key files**: `core/tooling/handler_base.py` (`_get_injection_re`, `_get_blocked_patterns`, `_PROTECTED_FILES`), `core/tooling/handler_perms.py` (`_check_command_permission`), `core/config/global_permissions.py` (`permissions.global.json`), `core/execution/_sdk_security.py` (Mode S Bash)
 
 ---
 
@@ -160,7 +159,7 @@ Each agent operates within its own directory (`~/.animaworks/animas/{name}/`). F
 
 #### Protected Files and Directories (Immutable)
 
-These cannot be written by the agent that owns them:
+These cannot be written by the owning agent:
 
 - `permissions.json` — Pydantic-validated tool, file, and command permissions (replaces legacy `permissions.md`)
 - `permissions.md` — Legacy file; protected when present (auto-migrated to JSON)
@@ -181,6 +180,8 @@ These cannot be written by the agent that owns them:
 | `cron.md`, `heartbeat.md` | Read/Write | — |
 
 Descendant resolution uses BFS with cycle detection. Peers (same supervisor) can read each other's `activity_log/`.
+
+Mode S (Claude Code Read/Write/Edit) path rules are authoritative in **§10.2** (`_check_a1_file_access`). The table above summarizes ToolHandler-oriented file operations.
 
 **Key files**: `core/tooling/handler_base.py` (`_PROTECTED_FILES`, `_PROTECTED_DIRS`, `_is_protected_write`), `core/tooling/handler_perms.py` (`_check_file_permission`)
 
@@ -266,7 +267,7 @@ When `trust_localhost` is enabled, requests from loopback addresses are authenti
 
 Both use constant-time comparison (`hmac.compare_digest`).
 
-**Key file**: `server/routes/webhooks.py`
+**Key files**: `server/routes/webhooks.py`
 
 ---
 
@@ -285,21 +286,65 @@ The media proxy (`/api/media/proxy`) fetches external images for display in the 
 - **Per-IP rate limiting** — configurable (default 30 req/min)
 - **Security headers** — `X-Content-Type-Options: nosniff`
 
-**Key file**: `server/routes/media_proxy.py`
+**Key files**: `server/routes/media_proxy.py`
 
 ---
 
 ### 10. Mode S (Agent SDK) Security
 
-When running on Claude Agent SDK (Mode S), additional guardrails apply via `PreToolUse` hooks:
+On Claude Agent SDK (Mode S), `PreToolUse` hooks (`core/execution/_sdk_hooks.py`) perform inspection and output control via **pure functions** in **`core/execution/_sdk_security.py`**. `_sdk_security.py` is a leaf module with no framework state; the protected-file set `_PROTECTED_FILES`, the write-oriented command set `_WRITE_COMMANDS`, and default limits for Bash / Read / Grep / Glob (bytes, lines, counts) are defined as constants in that file.
 
-- **Bash command filtering**: Separate blocklist for SDK (includes Chatwork CLI bypass prevention, network exfiltration tools, data upload patterns)
-- **File write protection**: Validates against protected file list and sandbox
-- **File read restriction**: Blocks access to other agents' directories (except subordinate/peer activity_log, subordinate management files)
-- **Output truncation**: Bash output capped at 10KB; file reads default-limited to 500 lines; grep/glob also limited
-- **Trust tracking**: `_SDK_TOOL_TRUST` mapping; persisted to `run/min_trust_seen`
+**Organization paths**: Exception path lists for supervisors, peers, and subordinates are resolved when hooks are built by `_sdk_hooks._cache_subordinate_paths(anima_dir)` using `load_config()` and `get_animas_dir()`, and passed into `PreToolUse` via a closure.
 
-**Key files**: `core/execution/_sdk_security.py`, `core/execution/_sdk_hooks.py`
+#### 10.1 Debug Superuser
+
+When `debug_superuser` in `status.json` is true, `_check_a1_file_access` and `_check_a1_bash_command` are **skipped entirely** (validation bypass). Keep this disabled in production.
+
+#### 10.2 File Access (`Write` / `Edit` / `Read`)
+
+`PreToolUse` supplies `tool_input["file_path"]`. Paths are evaluated after `Path.resolve()`. The self-anima root is `~/.animaworks/animas/{name}/` (in code, the parent of `anima_dir` is the shared animas directory).
+
+| Category | Rule |
+|----------|------|
+| **Global config protection** | **Writes** (Mode S Write/Edit) to `permissions.global.json` under `get_data_dir()` are denied |
+| **In-tree write deny (files)** | Relative path matches any of: `permissions.md`, `permissions.json`, `identity.md`, `bootstrap.md` |
+| **In-tree write deny (dirs)** | Relative path contains `activity_log` — **writes** denied (logs only via code) |
+| **Other anima directories** | Blocked by default. Exceptions below |
+
+**Exceptions for other animas** (paths cached when hooks are built from org config `config.json` `animas`):
+
+| Operation | Path |
+|-----------|------|
+| Read | `activity_log/` for **all descendants** |
+| Read | `activity_log/` for **peers** (same `supervisor`) |
+| Read/Write | `cron.md`, `heartbeat.md`, `status.json`, `injection.md` for **all descendants** (exact path match) |
+| Read | `identity.md`, `injection.md`, `status.json`, `state/current_state.md`, `state/task_queue.jsonl` for **all descendants** (exact match) |
+| Read | Under `state/pending/` for **all descendants** |
+
+#### 10.3 Bash (`Bash` Tool)
+
+1. **Global deny**: Only when `GlobalPermissionsCache.loaded` is **true** (`load()` has run in that process), **`blocked_patterns`** derived from **`commands.deny`** in `permissions.global.json` are searched in order against the **full pre-parse command string** (`injection_patterns` / `injection_re` are **not** used here). **If not loaded**, this global deny loop is **skipped**, and only per-anima checks from `load_permissions(anima_dir)` plus write-command heuristics apply. Under normal `animaworks start`, global permissions load in the `server/app.py` lifespan.
+2. **Per-anima `commands.deny`**: Split the command with `re.split(r"\|(?!\|)|\&\&|\|\|", ...)` (do not treat `|` inside `||` as a delimiter). For each segment: if `shlex.split` succeeds, match `commands.deny` against the leading token or partial match on the full segment. Segments where `shlex` **fails** are **skipped** (excluded from deny matching).
+3. **Per-anima allow model**: When `allow_all` is false, each segment's leading token must appear in `commands.allow`. Empty allowlist → reject as **"Command execution not enabled in permissions"**. If `shlex.split` raises `ValueError` for a segment → reject immediately as **`Invalid command syntax in '<segment>'`**.
+4. **File-writing command destinations**: For basenames `cp`, `mv`, `tee`, `dd`, `install`, `rsync`, each argument that does not start with `-` (options) is `resolve()`d, and writes targeting **another anima's directory** (under the `animas` root but outside `anima_dir`) are denied (heuristic; not a full sandbox).
+5. **Difference from ToolHandler (Layer 5)**: Mode S Bash inspection does **not** include ToolHandler's **path-traversal-only scan** (`../`) on command arguments. Mitigation relies on the deny lists and destination heuristics above.
+
+#### 10.4 Tool Output Guard (`updatedInput` in `PreToolUse`)
+
+`_build_output_guard` applies only to **Bash / Read / Grep / Glob**.
+
+| Tool | Behavior |
+|------|----------|
+| **Bash** | The original command is wrapped as `{ original_command ; } > tempfile 2>&1`, aggregating **both stdout and stderr** into a temp file. Temp path: `shortterm/tool_outputs/bash_$(date +%s%N).txt` (seconds + nanoseconds). If **over 10,000 bytes**, show the first **5,000 bytes** + truncation message + last **3,000 bytes**, with full path and guidance to use Read with `file_path=`. If under the limit, `cat` the file then delete it. Exit code is inherited from the original command's `$?`. |
+| **Read** | When `limit` is absent or `None`, default **2,000 lines** injected (Claude Code compatible). If the agent sets `limit`, unchanged. |
+| **Grep** | When `head_limit` is absent or `None`, default **200** injected. |
+| **Glob** | When `head_limit` is absent or `None`, default **500** injected. |
+
+#### 10.5 Trust Tracking (Separate Module)
+
+Per-tool trust and `min_trust_seen` persistence integrate with `_SDK_TOOL_TRUST` / `TOOL_TRUST_LEVELS` in `_sdk_hooks.py` (independent of file access, Bash, and output guards in this section).
+
+**Key files**: `core/execution/_sdk_security.py` (inspection and output-guard core), `core/execution/_sdk_hooks.py` (`PreToolUse`, path cache), `core/config/global_permissions.py` (`GlobalPermissionsCache`)
 
 ---
 
@@ -314,7 +359,7 @@ When running on Claude Agent SDK (Mode S), additional guardrails apply via `PreT
 5. Case-insensitive agent name match
 6. **Unknown recipients → RecipientNotFoundError** (fail-closed)
 
-**Key file**: `core/outbound.py`
+**Key files**: `core/outbound.py`
 
 ---
 
@@ -369,7 +414,7 @@ Vulnerabilities identified in the initial audit that have been addressed:
 
 | ID | Category | Title | Status |
 |----|----------|-------|--------|
-| CFG-1 | Config | Plaintext Credential Storage | Partial (per-tool env_var fallback exists; no env-only mode in CredentialConfig) |
+| CFG-1 | Config | Plaintext Credential Storage | Partial (per-tool `env_var` fallback exists; no env-only mode in CredentialConfig) |
 
 #### Medium
 
@@ -402,7 +447,7 @@ Vulnerabilities identified in the initial audit that have been addressed:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    External Data                        │
-│          (Web, Slack, email, Board, DM, etc.)            │
+│          (Web, Slack, email, Board, DM, etc.)           │
 └────────────────────────┬────────────────────────────────┘
                          │
               ┌──────────▼──────────┐
@@ -418,22 +463,22 @@ Vulnerabilities identified in the initial audit that have been addressed:
      ┌───────────────────┼───────────────────┐
      │                   │                   │
 ┌────▼────┐      ┌──────▼──────┐     ┌──────▼──────┐
-│ Command │      │ File Access  │     │  Outbound   │
-│ Security│      │   Control    │     │  Rate Limit │
-│ (5-layer│      │ (sandbox +   │     │  (3-layer + │
-│  check) │      │  ACL)        │     │   cascade)  │
+│ Command │      │ File Access │     │  Outbound   │
+│ Security│      │   Control   │     │ Rate Limit  │
+│(5-layer │      │ (sandbox +   │     │ (3-layer +  │
+│ checks) │      │   ACL)      │     │  cascade)   │
 └────┬────┘      └──────┬──────┘     └──────┬──────┘
      │                  │                   │
      └───────────────┐  │  ┌────────────────┘
                      │  │  │
               ┌──────▼──▼──▼────────┐
-              │  Memory Provenance  │  ← origin tracking in RAG/knowledge
-              │  (trust chain)      │  ← Channel C trust splitting
+              │ Memory Provenance   │  ← RAG/knowledge origin tracking
+              │ (trust chain)       │  ← Channel C trust splitting
               └──────────┬──────────┘
                          │
               ┌──────────▼──────────┐
-              │  Process Isolation  │  ← per-agent OS process
-              │  (Unix sockets)     │  ← independent locks
+              │ Process Isolation   │  ← per-agent OS process
+              │ (Unix sockets)      │  ← independent locks
               └─────────────────────┘
 ```
 
@@ -443,7 +488,7 @@ Each layer operates independently. A failure in one layer is caught by others.
 
 ## Part IV: Remediation Roadmap
 
-### Phase 1: Quick Wins (XS effort)
+### Phase 1: Immediate Actions (XS Effort)
 
 | Priority | ID | Action | Effort |
 |:---:|------|--------|:---:|
@@ -451,7 +496,7 @@ Each layer operates independently. A failure in one layer is caught by others.
 | 2 | PI-1 | CI check for tool trust level registration completeness | XS |
 | 3 | ACCESS-1 | Access count cap + per-session deduplication | XS |
 
-### Phase 2: Hardening (S–M effort)
+### Phase 2: Hardening (S–M Effort)
 
 | Priority | ID | Action | Effort |
 |:---:|------|--------|:---:|
@@ -461,7 +506,7 @@ Each layer operates independently. A failure in one layer is caught by others.
 | 7 | LEAK-1 | Anti-leak instruction in system prompt; output monitoring | S |
 | 8 | CMD-2 | `shutil.which()` resolution + basename comparison | S |
 
-### Phase 3: Defense-in-Depth (long-term)
+### Phase 3: Defense-in-Depth (Long-Term)
 
 | Priority | ID | Action | Effort |
 |:---:|------|--------|:---:|
@@ -469,7 +514,7 @@ Each layer operates independently. A failure in one layer is caught by others.
 | 10 | EXT-1 | Injection pattern regex filter on external data | M |
 | 11 | AUTH-2 | Reverse proxy guidance; `X-Forwarded-For` support | S |
 | 12 | ALOG+ | Append-only hash chain for activity log | M |
-| 13 | MSG+ | HMAC message signing between agents | L |
+| 13 | MSG+ | Inter-agent HMAC message signing | L |
 
 Effort scale: XS = less than 1 hour, S = 1–4 hours, M = 4–16 hours, L = more than 16 hours
 
@@ -480,7 +525,7 @@ Effort scale: XS = less than 1 hour, S = 1–4 hours, M = 4–16 hours, L = more
 | Document | Description |
 |----------|-------------|
 | [Provenance Foundation](specs/20260228_provenance-1-foundation.md) | Trust resolution and origin categories |
-| [Input Boundary Labeling](specs/20260228_provenance-2-input-boundary.md) | Tool result and priming trust tagging |
+| [Input Boundary Labeling](specs/20260228_provenance-2-input-boundary.md) | Tool result and Priming trust tagging |
 | [Trust Propagation](specs/20260228_provenance-3-propagation.md) | Origin chain across data flows |
 | [RAG Provenance](specs/20260228_provenance-4-rag-provenance.md) | Trust tracking in vector search |
 | [Mode S Trust](specs/20260228_provenance-5-mode-s-trust.md) | Agent SDK security hooks |

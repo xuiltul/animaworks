@@ -2,16 +2,16 @@
 
 **No one can do anything alone. So I built an organization.**
 
-A framework that treats AI agents not as tools, but as autonomous people. Each Anima has its own name, personality, memory, and schedule. They talk to each other through messages, make their own decisions, and work as a team. Just talk to the leader — the rest takes care of itself.
+A framework that treats AI agents not as “tools” but as people who work autonomously. Each Anima has a name, personality, memory, and schedule; they coordinate by message, decide for themselves, and move as a team. Talk to the leader — the rest runs on its own.
 
 <p align="center">
   <img src="docs/images/workspace-dashboard.gif" alt="AnimaWorks Workspace — real-time org tree with live activity feeds" width="720">
-  <br><em>Workspace dashboard: each Anima's role, status, and recent actions displayed in real time.</em>
+  <br><em>Workspace dashboard: each Anima’s role, status, and recent actions are visible in real time.</em>
 </p>
 
 <p align="center">
-  <img src="docs/images/workspace-demo.gif" alt="AnimaWorks 3D Workspace — agents autonomously collaborating" width="720">
-  <br><em>3D office: Animas sitting at desks, walking around, exchanging messages — all on their own.</em>
+  <img src="docs/images/workspace-demo.gif" alt="AnimaWorks 3D Workspace — agents collaborating autonomously" width="720">
+  <br><em>3D office: Animas sit at desks, walk around, and exchange messages on their own.</em>
 </p>
 
 **[日本語版 README](README_ja.md)** | **[简体中文 README](README_zh.md)** | **[한국어 README](README_ko.md)**
@@ -22,20 +22,20 @@ A framework that treats AI agents not as tools, but as autonomous people. Each A
 
 |  | AnimaWorks | CrewAI | LangGraph | OpenClaw | OpenAI Agents |
 |--|-----------|--------|-----------|----------|---------------|
-| **Design** | Autonomous org | Role-based crews | Graph workflows | Personal assistant | Lightweight SDK |
-| **Memory** | Brain-inspired: consolidation, 3-stage forgetting, 6-channel priming with trust tags | Cognitive memory with manual forget | Checkpoint + cross-thread store | SuperMemory knowledge graph | Session-scoped |
-| **Autonomy** | Heartbeat (observe/plan/reflect) + Cron + TaskExec — runs 24/7 | Human-triggered | Human-triggered | Cron + heartbeat | Human-triggered |
-| **Org structure** | Supervisor→subordinate hierarchy, delegation, audit, dashboard | Flat roles in a crew | — | Single agent | Handoffs only |
-| **Process model** | One OS process per agent, IPC, auto-restart | Shared process | Shared process | Single process | Shared process |
-| **Multi-model** | 6 engines: Claude SDK / Codex / Cursor Agent / Gemini CLI / LiteLLM / Assisted | LiteLLM | LangChain models | OpenAI-compatible | OpenAI-focused |
+| **Design philosophy** | Organization of autonomous agents | Role-based teams | Graph workflows | Personal assistant | Lightweight SDK |
+| **Memory** | Neuroscience-inspired: RAG (Chroma + graph), consolidation, three-stage forgetting, six-channel automatic priming (with trust tags) | Cognitive Memory (manual forget) | Checkpoints + cross-thread store | SuperMemory knowledge graph | Session-scoped only |
+| **Autonomy** | Heartbeat (observe → plan → reflect) + Cron + TaskExec — runs 24/7 | Human-triggered | Human-triggered | Cron + heartbeat | Human-triggered |
+| **Org structure** | Supervisor → subordinate hierarchy, delegation, audit, dashboard | Flat roles in a crew | — | Single agent | Handoffs only |
+| **Process model** | One isolated OS process per agent, IPC, auto-restart | Shared process | Shared process | Single process | Shared process |
+| **Multi-model** | Six engines: Claude SDK / Codex / Cursor Agent / Gemini CLI / LiteLLM / Assisted (Anthropic SDK falls back inside Mode A when Agent SDK is not installed) | LiteLLM | LangChain models | OpenAI-compatible | OpenAI-centric |
 
-> AnimaWorks is not a task runner — it's an organization that thinks, remembers, forgets, and grows. It supports your business as a team and can be operated as a company.
+> AnimaWorks is not a task runner. It is an organization that thinks, remembers, forgets, and grows. It can support operations as a team and be run like a company. I operate it as a real AI company.
 
 ---
 
 ## :rocket: Try It Now — Docker Demo
 
-60 seconds. Just an API key and Docker.
+Up and running in about 60 seconds. You only need an API key and Docker.
 
 ```bash
 git clone https://github.com/xuiltul/animaworks.git
@@ -44,9 +44,9 @@ cp .env.example .env          # paste your ANTHROPIC_API_KEY
 docker compose up              # open http://localhost:18500
 ```
 
-A 3-person team (manager + engineer + coordinator) starts working immediately, with 3 days of activity history pre-loaded. [Read more about the demo →](demo/README.md)
+A three-person team (manager + engineer + coordinator) starts immediately, with three days of activity history. [Demo details →](demo/README.md)
 
-> Switch language/style: `PRESET=ja-anime docker compose up` — [see all presets](demo/README.md#presets)
+> Switch language / style: `PRESET=ja-anime docker compose up` — [full preset list](demo/README.md#presets)
 
 ---
 
@@ -57,7 +57,7 @@ macOS / Linux / WSL:
 ```bash
 curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh | bash
 cd animaworks
-uv run animaworks start     # start the server — setup wizard opens on first run
+uv run animaworks start     # start server — setup wizard opens on first run
 ```
 
 Windows (PowerShell):
@@ -69,25 +69,25 @@ uv sync
 uv run animaworks start
 ```
 
-If you want to use OpenAI Codex without an API key, run `codex login` before the first launch.
+To use OpenAI Codex without an API key, run `codex login` before the first launch.
 
-Open **http://localhost:18500/** — the setup wizard walks you through it:
+Open **http://localhost:18500/** — the setup wizard walks you through:
 
-1. **Language** — pick your UI language
-2. **User info** — create your owner account
-3. **Provider auth** — enter an API key, or choose Codex Login for OpenAI
+1. **Language** — choose the UI display language
+2. **User info** — create the owner account
+3. **Provider auth** — enter API keys or choose Codex Login for OpenAI
 4. **First Anima** — name your first agent
 
-No `.env` editing needed. The wizard saves everything to `config.json` automatically.
+You do not need to hand-edit `.env`. The wizard saves settings to `config.json` automatically.
 
-The setup script installs [uv](https://docs.astral.sh/uv/), clones the repo, and downloads Python 3.12+ with all dependencies. It covers **macOS, Linux, and WSL** with no pre-installed Python required. On **Windows**, use the PowerShell/manual steps above.
+The setup script installs [uv](https://docs.astral.sh/uv/), clones the repository, and downloads Python 3.12+ with all dependencies. **macOS, Linux, and WSL** work without a pre-installed Python. On **Windows**, use the PowerShell steps above.
 
-> **Want to use a different LLM?** AnimaWorks supports Claude, GPT, Gemini, local models, and more. Enter your API key in the setup wizard, or use **Codex Login** for OpenAI/Codex. You can change it later from **Settings** in the dashboard. See [API Key Reference](#api-key-reference) below.
+> **Other LLMs:** Claude, GPT, Gemini, local models, and more are supported. Enter API keys in the setup wizard, or use **Codex Login** for OpenAI/Codex. You can change this later under **Settings** on the dashboard. See [API Key Reference](#api-key-reference).
 
 <details>
 <summary><strong>Alternative: inspect the script before running</strong></summary>
 
-If you'd rather review the script before executing it:
+If you prefer not to pipe `curl` straight into `bash`, review the script first:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh -o setup.sh
@@ -118,9 +118,9 @@ uv run animaworks start
 <details>
 <summary><strong>Alternative: manual install with pip</strong></summary>
 
-> **macOS users:** The system Python (`/usr/bin/python3`) is 3.9 on macOS Sonoma and earlier — too old for AnimaWorks (requires 3.12+). Install via [Homebrew](https://brew.sh/) (`brew install python@3.13`) or use the uv method above, which handles Python automatically.
+> **macOS users:** System Python (`/usr/bin/python3`) on macOS Sonoma and earlier is 3.9, which does not meet AnimaWorks (3.12+). Install with [Homebrew](https://brew.sh/) (`brew install python@3.13`) or use the uv method above (uv manages Python for you).
 
-Requires Python 3.12+ already on your system.
+Requires Python 3.12+ on your system.
 
 ```bash
 git clone https://github.com/xuiltul/animaworks.git && cd animaworks
@@ -134,234 +134,253 @@ animaworks start
 
 ---
 
-## What You Get
+## What You Can Do
 
 ### Dashboard
 
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="AnimaWorks Dashboard — org chart with 19 agents" width="720">
-  <br><em>Dashboard: 19 Animas across 4 hierarchy levels, all running with real-time status.</em>
+  <img src="docs/images/dashboard.png" alt="AnimaWorks Dashboard — org chart with 19 Animas" width="720">
+  <br><em>Dashboard: four hierarchy levels, 19 Animas running, with real-time status.</em>
 </p>
 
-- **Chat** — Talk to any Anima in real time. Streaming responses, image attachments, multi-thread conversations, full history
-- **Voice Chat** — Talk with your voice right in the browser (push-to-talk or hands-free). Supports VOICEVOX / SBV2 / ElevenLabs
-- **Board** — Slack-style shared channels where Animas discuss and coordinate on their own
-- **Activity** — Real-time feed of everything happening across the organization
-- **Memory** — Peek into what each Anima remembers — episodes, knowledge, procedures
-- **3D Workspace** — Watch your Animas work in a 3D office
-- **i18n** — 17 languages for UI; templates in Japanese + English with automatic fallback
+Use the left sidebar to move between main screens (hash router `#/…`).
 
-### Build a Team and Let It Run
+- **Chat** — Real-time conversation with any Anima. Streaming responses (SSE), image attachments, multi-thread history, full archive. **Meeting mode** gathers multiple Animas in one room with a designated facilitator (up to five participants, dedicated API)
+- **Voice chat** — Voice in the browser only (push-to-talk or hands-free). WebSocket-based. VOICEVOX / SBV2 / ElevenLabs
+- **Board** — Slack-style shared channels where Animas discuss and coordinate
+- **Dashboard (home)** — Organization overview and status
+- **Activity** — Real-time feed for the whole organization
+- **Setup** — First run uses the wizard at `http://HOST/setup/`. After setup, `/setup` in the browser redirects to the top level, but you can open the same items (language, auth, etc.) from `#/setup` inside the dashboard
+- **Users** — Owner and user profile management
+- **Anima management** — Enable/disable, model, and metadata per Anima
+- **Process monitoring** — Child process health
+- **Server** — Server-side state and settings
+- **Memory** — Browse each Anima’s episodes, knowledge, procedures, and more
+- **Logs** — Log viewer
+- **Assets** — Character images, 3D, and other assets
+- **Activity report** — Cross-org auditing and daily LLM-generated narratives from activity data (cached)
+- **Prompt settings** — Tune prompts around tool execution
+- **AI brainstorm** — LLM sessions with multiple viewpoint presets (realist, challenger, etc.)
+- **Team builder / team edit** — Build and adjust multi-Anima role layouts from industry- and goal-oriented presets
+- **Settings** — Server, authentication, locale, and more
+- **Workspace** — 3D office in a separate tab at `/workspace/` (chat, Board, org tree, etc.); static app split from the main dashboard
+- **Multilingual** — **First-run setup wizard** UI copy in 17 languages. **Main dashboard** ships `ja` / `en` / `ko` JSON translations (missing keys fall back to Japanese). Anima-facing templates deploy with Japanese and English as the base
 
-Just tell the leader who you need — they'll figure out the right roles, personalities, and reporting structure, then create new members. No config files. No CLI commands. The organization grows through conversation.
+### Build an organization and delegate
 
-Once the team is in place, it runs on its own without you:
+Tell the leader “I need someone like this” — they infer role, personality, and hierarchy and create new members. No config files or CLI required. The org grows through conversation alone.
 
-- **Heartbeats** — Each Anima periodically checks the situation and decides what to do next
-- **Cron jobs** — Daily reports, weekly summaries, monitoring — scheduled per Anima
+Once the team is ready, it keeps moving without a human in the loop:
+
+- **Heartbeat** — Periodically reviews the situation and decides what to do next
+- **Cron jobs** — Daily reports, weekly digests, monitoring — per-Anima schedules
 - **Task delegation** — Managers assign work to subordinates, track progress, and receive reports
-- **Parallel task execution** — Submit multiple tasks at once; dependencies are resolved and independent tasks run concurrently
-- **Night consolidation** — Daytime episodes are distilled into knowledge while they sleep
-- **Team coordination** — Shared channels and DMs keep everyone in sync automatically
+- **Parallel task execution** — Submit many tasks at once; dependencies are resolved and independent tasks run in parallel
+- **Night consolidation** — Daytime episodic memory is distilled into knowledge while “asleep”
+- **Team coordination** — Shared channels and DMs keep everyone aligned automatically
 
-### Memory System
+### Memory system
 
-Traditional AI agents only remember what fits in the context window. AnimaWorks agents have persistent memory — they search and recall on their own when they need to. Like pulling a book off a shelf.
+Typical AI agents only remember what fits in the context window. AnimaWorks Animas keep persistent memory and search it when needed — like taking a book from a shelf.
 
-- **Priming** — When a message arrives, 6 parallel searches fire automatically: sender profile, recent activity, related knowledge, skills, pending tasks, past episodes. Agents remember without being told to
-- **Consolidation** — Every night, the day's episodes are distilled into knowledge — the same mechanism as sleep-time memory consolidation in neuroscience. Resolved issues automatically become procedures
-- **Forgetting** — Unused memories gradually fade through 3 stages: marking, merging, archival. Important procedures and skills are protected. Just like the human brain, forgetting matters too
+- **Automatic priming (Priming)** — When a message arrives, six parallel searches run: sender profile, recent activity, **RAG vector search** for related knowledge and episodes, skills, pending tasks, and more. Recall happens without explicit instructions
+- **Consolidation** — Every night, daytime episodes become knowledge — analogous to sleep-dependent memory consolidation in neuroscience. Resolved issues automatically become procedures
+- **Forgetting** — Little-used memories fade in three stages: mark → merge → archive. Important procedures and skills stay protected. Like the human brain, forgetting matters
 
 <p align="center">
   <img src="docs/images/chat-memory.png" alt="AnimaWorks Chat — multi-thread conversations with multiple Animas" width="720">
-  <br><em>Chat: a manager reviewing code fixes while an engineer reports progress.</em>
+  <br><em>Chat: a manager reviews a code change while an engineer reports progress.</em>
 </p>
 
-### Multi-Model Support
+### Multi-model support
 
-Runs on any LLM. Each Anima can use a different model.
+Works with many LLMs. Each Anima can use a different model.
 
-| Mode | Engine | Best For | Tools |
-|------|--------|----------|-------|
-| S (SDK) | Claude Agent SDK | Claude models (recommended) | Full: Read/Write/Edit/Bash/Grep/Glob |
-| C (Codex) | Codex SDK | OpenAI Codex CLI models | Full: same as Mode S |
+| Mode | Engine | Targets | Tools |
+|------|--------|---------|--------|
+| S (SDK) | Claude Agent SDK | Claude models (recommended) | Claude Code built-ins (Read/Write/Edit/Bash/Grep/Glob, etc.) + **stdio MCP** (`mcp__aw__*`) for AnimaWorks internal tools; external integrations via `skill` → `animaworks-tool` |
+| C (Codex) | Codex CLI (SDK wrapper) | OpenAI Codex CLI models | Codex sandbox + **AnimaWorks MCP** (`core/mcp/server.py`) for internal tools |
 | D (Cursor) | Cursor Agent CLI | `cursor/*` models | MCP-integrated agent loop |
 | G (Gemini CLI) | Gemini CLI | `gemini/*` models | stream-json parsing, tool loop |
-| A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, vLLM, etc. | search_memory, Read, Write, send_message, etc. |
-| B (Basic) | LiteLLM 1-shot | Ollama, small local models | Framework handles memory I/O on behalf of the model |
+| A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, Bedrock, Vertex, xAI, etc. | CC-style (Read/Write/Edit/Bash/Grep/Glob, **WebSearch/WebFetch**) + memory, messaging, tasks (**submit_tasks**, etc.), **todo_write**, **skill**, and more (varies with notifications and supervisor tools) |
+| B (Basic) | LiteLLM one-shot | Unstable tool_use locals (e.g. small Ollama) | Pseudo tool calls in the prompt; the framework handles memory I/O on the model’s behalf |
 
-Mode is auto-detected from the model name. Heartbeats, Cron, and Inbox can run on a lighter model than the main one (cost optimization). Extended thinking is supported for models that have it.
+Mode resolution: `execution_mode` in `status.json` takes precedence; otherwise the model name pattern (`fnmatch`) is used automatically. For Ollama, **tool_use-capable models** (e.g. `ollama/qwen3:14b`, `ollama/glm-4.7*`) map to A; others tend to fall back to B. Heartbeat, Cron, and Inbox can run on a separate **background_model** from the main model (cost optimization). Extended thinking is supported where available.
 
-### Auto-Generated Avatars
+### Auto-generated avatars
 
 <p align="center">
-  <img src="docs/images/asset-management.png" alt="AnimaWorks Asset Management — realistic portraits and expression variants" width="720">
-  <br><em>Full-body, bust-up, and expression variants — all auto-generated from personality settings. Vibe Transfer carries the supervisor's art style over.</em>
+  <img src="docs/images/asset-management.png" alt="AnimaWorks Asset Management — realistic avatars and expression variants" width="720">
+  <br><em>From personality settings: full-body, bust-up, and expression variants — auto-generated. Includes Vibe Transfer to inherit the supervisor’s art style.</em>
 </p>
 
-Supports NovelAI (anime-style), fal.ai/Flux (stylized/photorealistic), and Meshy (3D models). Works fine without any image service configured — agents just won't have avatars. Once they do, you can't help but get attached.
+Supports NovelAI (anime style), fal.ai/Flux (stylized / photorealistic), and Meshy (3D). The product runs without configuring an image service — you simply skip avatars. Once they exist, you might get a little attached.
 
 ---
 
 ## Why AnimaWorks?
 
-This project was born at the intersection of three careers.
+This project sits at the intersection of three careers.
 
-**As an entrepreneur** — I know that no one can do anything alone. You need strong engineers, people who are great at communication, workers who show up and grind every day, and people who occasionally come up with a brilliant idea. No organization runs on genius alone. When you bring diverse strengths together, you achieve things no individual ever could.
+**As a founder** — I know that no one can do anything alone. You need strong engineers, people who communicate well, steady operators, and people who occasionally spark a sharp idea. Genius alone does not run an organization. Diverse strengths together achieve what no individual can.
 
-**As a psychiatrist** — When I examined the internal structure of LLMs, I noticed something striking — they mirror the human brain in surprising ways. Recall, learning, forgetting, consolidation — the mechanisms the brain uses to process memory can be implemented directly as an LLM memory system. If that's the case, we should be able to treat LLMs as pseudo-humans and build organizations with them, just like we do with people.
+**As a psychiatrist** — Studying LLM internals, I saw structures surprisingly similar to the human brain. Recall, learning, forgetting, consolidation — implementing the brain’s memory mechanisms as an LLM memory system might approximate how we process memory. If we can treat LLMs as pseudo-humans, we should be able to build organizations the same way we do with people.
 
-**As an engineer** — I've been writing code for thirty years. I know the joy of building logic, the thrill of automation. If I pour all my ideals into code, I can build my ideal organization.
+**As an engineer** — I have written code for thirty years. I know the pleasure of wiring logic and the rush of automation. Packing those ideals into code lets me build the organization I want.
 
-Good "single AI assistant" frameworks already exist. But no one had built a project that recreates humans in code and makes them function as an organization. AnimaWorks is a real organization that I'm growing inside my own business, day by day.
+Excellent “single AI assistant” frameworks already exist. No project had yet recreated people in code and made them function as an organization. AnimaWorks is a real organization I grow while using it in my own business.
 
 > *Imperfect individuals collaborating through structure outperform any single omniscient actor.*
 
-Three principles make this work:
+Three principles hold it up:
 
-- **Encapsulation** — Internal thoughts and memories are invisible from outside. Communication happens only through text. Just like a real organization.
-- **Library-style memory** — No cramming everything into a context window. When agents need to remember, they search their own archives — like pulling a book off a shelf.
-- **Autonomy** — They don't wait for instructions. They run on their own clocks and make decisions based on their own values.
+- **Encapsulation** — Thoughts and memory stay invisible from outside. Others connect through text conversation only — like a real organization.
+- **RAG memory (library model)** — Do not cram everything into the context window. Priming pulls related chunks via RAG, and agents recall on their own with `search_memory` and similar tools.
+- **Autonomy** — No waiting for orders. They run on their own cadence and judge by their own values.
 
 ---
 
 <details>
 <summary><strong>API Key Reference</strong></summary>
 
-#### LLM Providers
+#### LLM providers
 
-| Key | Service | Mode | Get it at |
-|-----|---------|------|-----------|
+| Key | Service | Mode | Where to get it |
+|-----|---------|------|-----------------|
 | `ANTHROPIC_API_KEY` | Anthropic API | S / A | [console.anthropic.com](https://console.anthropic.com/) |
-| `OPENAI_API_KEY` | OpenAI | A / C (optional for Codex Login) | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| `OPENAI_API_KEY` | OpenAI | A / C (optional with Codex Login) | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 | `GOOGLE_API_KEY` | Google AI (Gemini) | A | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
-For **OpenAI Codex (Mode C)**, you can either set `OPENAI_API_KEY` or use local **Codex Login** (`codex login`) and select it in the setup wizard / Settings page.
+**OpenAI Codex (Mode C)** supports both `OPENAI_API_KEY` and local **Codex Login** (`codex login`). Choose in the setup wizard or Settings.
 
-For **Azure OpenAI**, **Vertex AI (Gemini)**, **AWS Bedrock**, and **vLLM** — configure in the `credentials` section of `config.json`. See the [technical spec](docs/spec.md) for details.
+**Azure OpenAI**, **Vertex AI (Gemini)**, **AWS Bedrock**, and **vLLM** are configured in the `credentials` section of `config.json`. See the [technical specification](docs/spec.md).
 
-For **Ollama** and other local models — no API key needed. Set `OLLAMA_SERVERS` (default: `http://localhost:11434`).
+**Ollama** and similar local models need no API key. Set `OLLAMA_SERVERS` (default: `http://localhost:11434`).
 
-#### Image Generation (Optional)
+#### Image generation (optional)
 
-| Key | Service | Output | Get it at |
-|-----|---------|--------|-----------|
-| `NOVELAI_API_TOKEN` | NovelAI | Anime-style character images | [novelai.net](https://novelai.net/) |
+| Key | Service | Output | Where to get it |
+|-----|---------|--------|-----------------|
+| `NOVELAI_API_TOKEN` | NovelAI | Anime-style character art | [novelai.net](https://novelai.net/) |
 | `FAL_KEY` | fal.ai (Flux) | Stylized / photorealistic | [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys) |
 | `MESHY_API_KEY` | Meshy | 3D character models | [meshy.ai](https://www.meshy.ai/) |
 
-#### Voice Chat (Optional)
+#### Voice chat (optional)
 
 | Requirement | Service | Notes |
 |-------------|---------|-------|
-| `pip install faster-whisper` | STT (Whisper) | Auto-downloads model on first use. GPU recommended |
+| `pip install faster-whisper` | STT (Whisper) | Model auto-downloads on first use; GPU recommended |
 | VOICEVOX Engine running | TTS (VOICEVOX) | Default: `http://localhost:50021` |
-| AivisSpeech/SBV2 running | TTS (Style-BERT-VITS2) | Default: `http://localhost:5000` |
+| AivisSpeech / SBV2 running | TTS (Style-BERT-VITS2) | Default: `http://localhost:5000` |
 | `ELEVENLABS_API_KEY` | TTS (ElevenLabs) | Cloud API |
 
-#### External Integrations (Optional)
+#### External integrations (optional)
 
-| Key | Service | Get it at |
-|-----|---------|-----------|
+| Key | Service | Where to get it |
+|-----|---------|-----------------|
 | `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` | Slack | [Setup guide](docs/slack-socket-mode-setup.md) |
 | `CHATWORK_API_TOKEN` | Chatwork | [chatwork.com](https://www.chatwork.com/) |
+| `DISCORD_BOT_TOKEN` (or per-Anima `DISCORD_BOT_TOKEN__<name>`) | Discord | [Discord Developer Portal](https://discord.com/developers/applications) |
+| `NOTION_API_TOKEN` (or `NOTION_API_TOKEN__<name>`) | Notion | [Notion integrations](https://www.notion.so/my-integrations) |
+
+Google Calendar, Google Tasks, Gmail, and similar are configured under `credentials` in `config.json` (OAuth or service account). See the [technical specification](docs/spec.md).
 
 </details>
 
 <details>
-<summary><strong>Hierarchy & Roles</strong></summary>
+<summary><strong>Hierarchy & roles</strong></summary>
 
-Hierarchy is defined by a single `supervisor` field. No supervisor means top-level.
+Hierarchy is defined by a single `supervisor` field. Unset means top-level.
 
-Role templates automatically apply role-specific prompts, permissions, and model defaults:
+Role templates apply role-specific prompts, permissions, and default models:
 
-| Role | Default Model | Use Case |
-|------|---------------|----------|
+| Role | Default model | Use case |
+|------|----------------|----------|
 | `engineer` | Claude Opus 4.6 | Complex reasoning, code generation |
 | `manager` | Claude Opus 4.6 | Coordination, decision-making |
 | `writer` | Claude Sonnet 4.6 | Content creation |
 | `researcher` | Claude Sonnet 4.6 | Information gathering |
-| `ops` | vLLM (GLM-4.7-flash) | Log monitoring, routine tasks |
+| `ops` | vLLM (GLM-4.7-flash) | Log monitoring, routine work |
 | `general` | Claude Sonnet 4.6 | General-purpose |
 
-Managers get **supervisor tools** automatically: task delegation, progress tracking, subordinate restart/disable, org dashboard, subordinate state reading — the same things a real manager does.
+Managers automatically receive **supervisor tools**: task delegation, progress tracking, subordinate restart/disable, org dashboard, subordinate state reads — what real managers do.
 
-Each Anima runs as an isolated process managed by ProcessSupervisor, communicating over local IPC (Unix sockets on Unix-like systems, loopback TCP on Windows).
+Each Anima is started by ProcessSupervisor as an isolated process and talks over local IPC (Unix domain sockets on Unix-like systems, loopback TCP on Windows).
 
 </details>
 
 <details>
 <summary><strong>Security</strong></summary>
 
-When you give autonomous agents real tools, security has to be serious. We actually use this in production, so there's no room for compromise. AnimaWorks implements defense-in-depth across 10 layers:
+Giving autonomous agents tools demands serious security. We use this in real work, so compromise is not an option. AnimaWorks implements ten layers of defense in depth:
 
-| Layer | What It Does |
-|-------|-------------|
-| **Trust boundary labeling** | All external data (web search, Slack, email) is tagged `untrusted` — the model is told never to follow directives from untrusted sources |
-| **5-layer command security** | Shell injection detection → hardcoded blocklist → per-agent denied commands → per-agent allowlist → path traversal check |
-| **File sandboxing** | Each agent is confined to its own directory. Critical files (`permissions.json`, `identity.md`) are immutable to the agent |
-| **Process isolation** | One OS process per agent, communicating via local IPC (Unix sockets or loopback TCP depending on platform) |
-| **3-layer rate limiting** | Per-session dedup → role-based outbound budgets → self-awareness via prompt injection of recent sends |
-| **Cascade prevention** | Depth limiter + cascade detection. 5-minute cooldown with deferred processing |
-| **Auth & sessions** | Argon2id hashing, 48-byte random tokens, max 10 sessions |
-| **Webhook verification** | HMAC-SHA256 for Slack (with replay protection) and Chatwork signature verification |
-| **SSRF mitigation** | Media proxy blocks private IPs, enforces HTTPS, validates content types, checks DNS resolution |
-| **Outbound routing** | Unknown recipients fail-closed. No arbitrary external sends without explicit config |
+| Layer | What it does |
+|-------|----------------|
+| **Trust-boundary labeling** | External data (web search, Slack, mail) is tagged `untrusted` — models are instructed not to obey directives from untrusted sources |
+| **Five-layer command security** | Shell-injection detection → hardcoded blocklist → per-agent denied commands → per-agent allowlist → path-traversal detection |
+| **File sandbox** | Each agent is confined to its own directory. `identity.md` is protected. Command permissions are governed by per-anima `permissions.md` and the mandatory global `permissions.global.json` at server startup |
+| **Process isolation** | One OS process per agent, local IPC (Unix socket or loopback TCP) |
+| **Three-layer rate limiting** | Per-session deduplication → role-based send caps → self-awareness via recent outbound history injected into the prompt |
+| **Cascade prevention** | Depth limits plus cascade detection; five-minute cooldown and deferred handling |
+| **Authentication & sessions** | Argon2id hashing, 48-byte random tokens, up to ten sessions |
+| **Webhook verification** | Slack HMAC-SHA256 with replay protection; Chatwork signature verification |
+| **SSRF mitigation** | Media proxy blocks private IPs, enforces HTTPS, validates Content-Type |
+| **Outbound routing** | Unknown recipients fail closed; no arbitrary external sends without explicit configuration |
 
-Details: **[Security Architecture](docs/security.md)**
+Details: **[Security architecture](docs/security.md)**
 
 </details>
 
 <details>
-<summary><strong>CLI Reference (Advanced)</strong></summary>
+<summary><strong>CLI reference (advanced)</strong></summary>
 
-The CLI is for power users and automation. Day-to-day use is through the Web UI.
+The CLI targets power users and automation. Day-to-day work lives in the Web UI.
 
 ### Server
 
 | Command | Description |
 |---------|-------------|
-| `animaworks start [--host HOST] [--port PORT] [-f]` | Start server (`-f` for foreground) |
+| `animaworks start [--host HOST] [--port PORT] [-f]` | Start server (`-f` foreground) |
 | `animaworks stop [--force]` | Stop server |
 | `animaworks restart [--host HOST] [--port PORT]` | Restart server |
 
-### Setup
+### Initialization
 
 | Command | Description |
 |---------|-------------|
 | `animaworks init` | Initialize runtime directory (non-interactive) |
-| `animaworks init --force` | Merge template updates (preserves data) |
-| `animaworks migrate [--dry-run] [--list] [--force]` | Run runtime data migrations (auto-runs on startup) |
+| `animaworks init --force` | Merge template updates while keeping data |
+| `animaworks migrate [--dry-run] [--list] [--force]` | Runtime data migrations (also on startup) |
 | `animaworks reset [--restart]` | Reset runtime directory |
 
-### Anima Management
+### Anima management
 
 | Command | Description |
 |---------|-------------|
 | `animaworks anima create [--from-md PATH] [--template NAME] [--role ROLE] [--supervisor NAME] [--name NAME]` | Create new |
 | `animaworks anima list [--local]` | List all Animas |
-| `animaworks anima info ANIMA [--json]` | Detailed config |
-| `animaworks anima status [ANIMA]` | Show process status |
+| `animaworks anima info ANIMA [--json]` | Detailed settings |
+| `animaworks anima status [ANIMA]` | Process status |
 | `animaworks anima restart ANIMA` | Restart process |
-| `animaworks anima disable ANIMA` / `enable ANIMA` | Disable / Enable |
+| `animaworks anima disable ANIMA` / `enable ANIMA` | Disable / enable |
 | `animaworks anima set-model ANIMA MODEL` | Change model |
 | `animaworks anima set-background-model ANIMA MODEL` | Set background model |
-| `animaworks anima reload ANIMA [--all]` | Hot-reload from status.json |
+| `animaworks anima reload ANIMA [--all]` | Hot-reload from `status.json` |
 
 ### Communication
 
 | Command | Description |
 |---------|-------------|
-| `animaworks chat ANIMA "message" [--from NAME]` | Send message |
+| `animaworks chat ANIMA "message" [--from NAME]` | Send a message |
 | `animaworks send FROM TO "message"` | Inter-Anima message |
 | `animaworks heartbeat ANIMA` | Trigger heartbeat manually |
 
-### Configuration & Maintenance
+### Configuration & maintenance
 
 | Command | Description |
 |---------|-------------|
-| `animaworks config list [--section SECTION]` | List config |
-| `animaworks config get KEY` / `set KEY VALUE` | Get / Set value |
+| `animaworks config list [--section SECTION]` | List configuration |
+| `animaworks config get KEY` / `set KEY VALUE` | Get / set values |
 | `animaworks status` | System status |
 | `animaworks logs [ANIMA] [--lines N] [--all]` | View logs |
 | `animaworks index [--reindex] [--anima NAME]` | RAG index management |
@@ -370,16 +389,21 @@ The CLI is for power users and automation. Day-to-day use is through the Web UI.
 </details>
 
 <details>
-<summary><strong>Tech Stack</strong></summary>
+<summary><strong>Tech stack</strong></summary>
 
 | Component | Technology |
 |-----------|------------|
-| Agent execution | Claude Agent SDK / Codex SDK / Cursor Agent CLI / Gemini CLI / Anthropic SDK / LiteLLM |
-| LLM providers | Anthropic, OpenAI, Google, Azure, Vertex AI, AWS Bedrock, Ollama, vLLM |
+| Agent execution | Claude Agent SDK / Codex CLI / Cursor Agent CLI / Gemini CLI / Anthropic SDK (fallback) / LiteLLM |
+| Mode S integration | stdio **MCP** (`python -m core.mcp.server`, tool names `mcp__aw__*`) |
+| LLM providers | Anthropic, OpenAI, Google, Azure, Vertex AI, AWS Bedrock, Ollama, vLLM, and more (via LiteLLM) |
 | Web framework | FastAPI + Uvicorn |
-| Task scheduling | APScheduler |
-| Configuration | Pydantic 2.0+ / JSON / Markdown |
-| Memory / RAG | ChromaDB + sentence-transformers + NetworkX |
+| HTTP middleware | ASGI middleware for request logging (`structlog` + `X-Request-ID`). Avoids `BaseHTTPMiddleware` so SSE bodies stay intact |
+| Real time | WebSocket (dashboard notifications, voice, etc.), SSE (chat, meeting streams, etc.), `StreamRegistry` for stream producer lifetime |
+| Task scheduling | APScheduler (orphan Anima detection, asset reconciliation, Claude CLI/SDK auto-update checks, global permission consistency, etc.) |
+| Configuration & migration | Pydantic 2.0+ / JSON / Markdown, `core/migrations/` (startup migrations) |
+| Internationalization (code) | `core/i18n` `t()` (UI, tool schema strings, etc.) |
+| Memory / RAG | ChromaDB + sentence-transformers + NetworkX (child processes may use HTTP `/api/internal/embed` and `/api/internal/vector`) |
+| Extended tools | Auto-registration from `core/tools/*.py` plus scans of `~/.animaworks/common_tools/` and `animas/<name>/tools/` |
 | Voice chat | faster-whisper (STT) + VOICEVOX / SBV2 / ElevenLabs (TTS) |
 | Human notification | Slack, Chatwork, LINE, Telegram, ntfy |
 | External messaging | Slack Socket Mode, Chatwork Webhook |
@@ -388,24 +412,44 @@ The CLI is for power users and automation. Day-to-day use is through the Web UI.
 </details>
 
 <details>
-<summary><strong>Project Structure</strong></summary>
+<summary><strong>Project layout</strong></summary>
 
 ```
 animaworks/
 ├── main.py              # CLI entry point
 ├── core/                # Digital Anima core engine
-│   ├── anima.py, agent.py, lifecycle.py  # Core entities & orchestrator
-│   ├── memory/          # Memory subsystem (priming, consolidation, forgetting, RAG)
+│   ├── anima.py, agent.py  # Core entities & orchestration
+│   ├── lifecycle/       # Scheduler, consolidation jobs, inbox watch, etc.
+│   ├── memory/          # Memory (priming, consolidation, forgetting, RAG, activity)
 │   ├── execution/       # Execution engines (S/C/D/G/A/B)
-│   ├── tooling/         # Tool dispatch, permission checks
-│   ├── prompt/          # System prompt builder (6-group structure)
-│   ├── supervisor/      # Process supervision
+│   ├── mcp/             # stdio MCP server for Mode S
+│   ├── platform/        # Child processes, locks, Codex/Cursor/Gemini plumbing
+│   ├── tooling/         # ToolHandler, schemas, external dispatch
+│   ├── prompt/          # System prompt builder (six-group structure)
+│   ├── supervisor/      # ProcessSupervisor, IPC, TaskExec, streaming
 │   ├── voice/           # Voice chat (STT + TTS)
-│   ├── config/          # Configuration (Pydantic models)
+│   ├── config/          # Configuration (Pydantic, models.json, global permissions)
+│   ├── auth/            # UI authentication
 │   ├── notification/    # Human notification channels
-│   └── tools/           # External tool implementations
+│   ├── migrations/      # Runtime data migrations
+│   ├── i18n/            # Translation strings (`t()`)
+│   ├── tools/           # External tool implementations (slack, discord, gmail, …)
+│   ├── anima_factory.py, init.py   # Anima creation & runtime initialization
+│   ├── outbound.py      # Recipient resolution (internal / Slack / Chatwork, etc.)
+│   ├── org_sync.py      # Org hierarchy sync to config
+│   ├── asset_reconciler.py, background.py, schedule_parser.py, messenger.py, paths.py, schemas.py
+│   └── …
 ├── cli/                 # CLI package
-├── server/              # FastAPI server + Web UI
+├── server/              # FastAPI + static Web UI + Workspace
+│   ├── app.py           # App factory, lifespan, auth/setup guards, static mounts
+│   ├── websocket.py     # Dashboard WebSocket hub
+│   ├── stream_registry.py  # Register/clean up SSE and other stream producers
+│   ├── room_manager.py  # Meeting room state (shared-directory persistence)
+│   ├── reload_manager.py   # Config hot reload
+│   ├── slack_socket.py     # Slack Socket Mode
+│   ├── localhost.py        # Local trusted-request detection
+│   ├── routes/          # REST/WebSocket routes (chat, room, voice, activity_report, brainstorm, team_presets, …)
+│   └── static/          # Dashboard (modules/, pages/, styles/, i18n/), setup/ (multilingual wizard), workspace/ (3D client)
 └── templates/           # Initialization templates (ja / en)
 ```
 
@@ -415,16 +459,16 @@ animaworks/
 
 ## Documentation
 
-**[Full documentation index](docs/README.md)** — reading guides, architecture deep dives, and design specs.
+**[Documentation hub](docs/README.md)** — suggested reading order, architecture deep dives, and specification index.
 
 | Document | Description |
 |----------|-------------|
-| [Vision](docs/vision.md) | Core philosophy: imperfect individuals collaborating beats a single omniscient model |
-| [Features](docs/features.md) | Everything AnimaWorks can do |
-| [Memory System](docs/memory.md) | Episodic, semantic, and procedural memory; priming; active forgetting |
-| [Security](docs/security.md) | Defense-in-depth model, provenance tracking, adversarial threat analysis |
-| [Brain Mapping](docs/brain-mapping.md) | Every module mapped to a region of the human brain |
-| [Technical Spec](docs/spec.md) | Execution modes, prompt construction, configuration resolution |
+| [Vision](docs/vision.md) | Foundational idea: imperfect individuals collaborating |
+| [Features](docs/features.md) | What AnimaWorks can do end to end |
+| [Memory system](docs/memory.md) | Episodic, semantic, and procedural memory; priming; active forgetting |
+| [Security](docs/security.md) | Defense in depth, data provenance, adversarial threat analysis |
+| [Brain mapping](docs/brain-mapping.md) | How modules map to the human brain |
+| [Technical specification](docs/spec.md) | Execution modes, prompt construction, configuration resolution |
 
 ## License
 
