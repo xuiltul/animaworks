@@ -416,6 +416,12 @@ def _animas_to_suspend(
     return to_suspend
 
 
+def _provider_usage_fetch_failed(usage_data: dict[str, Any], provider_key: str) -> bool:
+    """Return True when provider usage could not be fetched this cycle."""
+    provider_data = usage_data.get(provider_key, {})
+    return bool(provider_data.get("error"))
+
+
 # ── Governor loop ────────────────────────────────────────────────────────────
 
 
@@ -486,6 +492,7 @@ class UsageGovernor:
         # Classify running animas by provider credential
         all_names = self._get_all_anima_names()
         groups = _classify_animas(self._animas_dir, all_names)
+        currently_suspended = set(self._state.suspended_animas)
 
         all_suspend: list[str] = []
         reasons: list[str] = []
@@ -494,6 +501,18 @@ class UsageGovernor:
             provider_animas = groups.get(provider_key, [])
             if not provider_animas:
                 continue  # No animas using this provider — skip
+
+            if _provider_usage_fetch_failed(usage_data, provider_key):
+                retained = sorted(currently_suspended.intersection(provider_animas))
+                all_suspend.extend(retained)
+                error_code = usage_data.get(provider_key, {}).get("error", "unknown")
+                if retained:
+                    reasons.append(
+                        f"{provider_key} usage unavailable ({error_code}) → keeping {', '.join(retained)} suspended",
+                    )
+                else:
+                    reasons.append(f"{provider_key} usage unavailable ({error_code})")
+                continue
 
             remaining, _level, reason = _evaluate_provider_remaining(
                 usage_data, policy, provider_key,
