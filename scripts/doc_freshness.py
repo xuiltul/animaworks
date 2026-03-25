@@ -199,6 +199,11 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
         "core/tooling/schemas.py",
     ],
     "common_skills/tool-creator/SKILL.md": ["core/tooling/", "core/tools/"],
+    "common_skills/discord-tool/SKILL.md": [
+        "core/tools/discord.py",
+        "core/tools/_discord_client.py",
+        "core/tools/_discord_cli.py",
+    ],
     # ── docs (OSS公開リポジトリ同期ドキュメント) ──
     # publish.sh で公開リポジトリに同期されるファイル。
     # doc_key は "docs/{stem}" 形式。ja=docs/{stem}.ja.md, en=docs/{stem}.md
