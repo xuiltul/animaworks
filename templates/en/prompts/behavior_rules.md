@@ -49,5 +49,5 @@ In either case:
 #### current_state.md (Working Memory) and Task Management Separation
 - `state/current_state.md` is your **working memory**. Record observations, plans, situational awareness, and blockers — your current thinking context
 - **Manage tasks** using `backlog_task` / `update_task` tools, which write to `task_queue.jsonl`. Do not write task lists in current_state.md
-- Keep current_state.md under 30 lines / 3000 characters. Excess content is auto-archived during heartbeats
+- current_state.md is automatically archived and replaced with a summary at session boundaries. Feel free to write notes during the session
 - Write important knowledge or procedures to `knowledge/` or `procedures/`, not current_state.md

@@ -236,6 +236,9 @@ async def finalize_session(
     state.compressed_turn_count += len(new_turns)
     save_fn()
 
+    new_status = parsed.current_status.strip() if parsed.current_status else "status: idle"
+    memory_mgr.archive_and_reset_state(new_status or "status: idle")
+
     logger.info(
         "Session finalized: %d new turns summarized and written to episodes/%s.md",
         len(new_turns),

@@ -351,6 +351,23 @@ class MemoryManager:
     def update_state(self, content: str) -> None:
         atomic_write_text(self.state_dir / "current_state.md", content)
 
+    def archive_and_reset_state(self, new_status: str = "status: idle") -> None:
+        """Archive current_state.md to episodes and reset.
+
+        Skips archiving if current content is just "status: idle" or empty.
+        On append_episode failure, the state is left unchanged to avoid
+        data loss.
+        """
+        state = self.read_current_state()
+        if not state or state.strip() == "status: idle":
+            return
+        try:
+            self.append_episode(f"## Working notes archived\n\n{state}")
+        except Exception:
+            logger.warning("archive_and_reset_state: failed to archive, leaving state unchanged", exc_info=True)
+            return
+        self.update_state(new_status.strip() or "status: idle")
+
     def update_pending(self, content: str) -> None:
         logger.warning("update_pending() is deprecated — pending.md has been abolished")
 

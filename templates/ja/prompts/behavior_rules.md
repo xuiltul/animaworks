@@ -49,5 +49,5 @@ Default: do not narrate routine, low-risk tool calls
 #### current_state.md（ワーキングメモリ）とタスク管理の役割分離
 - `state/current_state.md` は**ワーキングメモリ**です。観察メモ・計画・状況認識・ブロッカーなど、今の思考コンテキストを記録してください
 - **タスクの管理**には `backlog_task` / `update_task` ツールを使い、`task_queue.jsonl` に記録してください。current_state.md にタスクリストを書かないこと
-- current_state.md は常に30行以内・3000文字以内に保つこと。超過分はHeartbeat時に自動退避されます
+- current_state.md はセッション終了時に自動アーカイブされ、要約に置き換わります。セッション中は自由にメモを残してください
 - 重要な知識や手順は `knowledge/` や `procedures/` に書き、current_state.md には残さないこと

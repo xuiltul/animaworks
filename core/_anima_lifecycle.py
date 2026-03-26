@@ -416,6 +416,7 @@ class LifecycleMixin:
                         task_name,
                         result.duration_ms,
                     )
+                    self.memory.archive_and_reset_state()
                     return result
                 except Exception as exc:
                     logger.exception(

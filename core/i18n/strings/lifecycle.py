@@ -34,14 +34,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": " 次の送信可能時刻（目安）: {reset_time}",
         "en": " Estimated next send time: {reset_time}",
     },
-    "heartbeat.current_state_cleanup_required": {
-        "ja": (
-            "⚠ **current_state.md 圧縮が必要です**（現在 {current_chars} 文字 / 上限 {max_chars} 文字）\n\n**このHBの最初のアクション**として以下を実行してください:\n1. 解決済み・完了済みのタスクをすべて削除する\n2. 進行中・保留・待ち状態のタスクのみ残す\n3. {max_chars} 文字以内に圧縮して書き込む\n4. その後、通常のHBチェックリストを実行する"
-        ),
-        "en": (
-            "⚠ **current_state.md cleanup required** (current: {current_chars} chars / limit: {max_chars} chars)\n\n**As the first action of this heartbeat**, do the following:\n1. Delete all resolved/completed tasks\n2. Keep only in-progress, pending, and waiting tasks\n3. Compress to under {max_chars} chars and save\n4. Then proceed with the normal heartbeat checklist"
-        ),
-    },
     "heartbeat.history_plan_entry": {
         "ja": "- {ts}: [計画] {plan}",
         "en": "- {ts}: [Plan] {plan}",
