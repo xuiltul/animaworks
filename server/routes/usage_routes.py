@@ -13,6 +13,7 @@ via ``GET /api/usage``.  Results are cached for 60 seconds.
 import json
 import logging
 import os
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -98,6 +99,24 @@ def _find_credential_file(candidates: list[str]) -> Path | None:
 def _clear_usage_cache(*keys: str) -> None:
     for key in keys:
         _CACHE.pop(key, None)
+
+
+def _launch_claude_login_terminal(executable: str | None) -> bool:
+    """Open a new CMD window and run `claude login`."""
+    if not executable:
+        return False
+    try:
+        creationflags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+        command = f'"{executable}" login'
+        subprocess.Popen(
+            ["cmd.exe", "/k", command],
+            creationflags=creationflags,
+            cwd=str(Path.home()),
+        )
+        return True
+    except Exception:
+        logger.warning("Failed to launch Claude login terminal", exc_info=True)
+        return False
 
 
 # ── Claude (Anthropic OAuth) ─────────────────────────────────────────────────
@@ -219,31 +238,43 @@ def _relogin_claude() -> tuple[dict[str, Any], int]:
 
     best_path, best_token, best_refresh, best_expires = _select_best_claude_credential()
     if not best_path or not best_token:
+        launched = _launch_claude_login_terminal(executable)
         return ({
-            "success": False,
-            "message": "No Claude credentials found. Run 'claude login' in CMD.",
+            "success": launched,
+            "message": "Opened a CMD window for 'claude login'." if launched else "No Claude credentials found. Run 'claude login' in CMD.",
             "manual_command": "claude login",
             "executable": executable,
-        }, 400)
+            "terminal_launched": launched,
+        }, 200 if launched else 400)
 
     now_ms = int(time.time() * 1000)
     if best_expires > now_ms:
         mins = max(0, round((best_expires - now_ms) / 1000 / 60))
+        launched = _launch_claude_login_terminal(executable)
         return ({
             "success": True,
-            "message": f"Claude token is already fresh (expires in ~{mins} min). If usage still fails, it is likely a provider-side rate limit rather than expired auth.",
+            "message": (
+                f"Claude token is already fresh (expires in ~{mins} min). "
+                "Opened a CMD window for 'claude login' anyway so you can force re-auth manually."
+                if launched else
+                f"Claude token is already fresh (expires in ~{mins} min). If usage still fails, it is likely a provider-side rate limit rather than expired auth."
+            ),
             "file": str(best_path),
             "executable": executable,
+            "terminal_launched": launched,
+            "manual_command": "claude login",
         }, 200)
 
     if not best_refresh:
+        launched = _launch_claude_login_terminal(executable)
         return ({
-            "success": False,
-            "message": "Claude token is expired and no refresh token is available. Run 'claude login' in CMD.",
+            "success": launched,
+            "message": "Opened a CMD window for 'claude login'." if launched else "Claude token is expired and no refresh token is available. Run 'claude login' in CMD.",
             "manual_command": "claude login",
             "file": str(best_path),
             "executable": executable,
-        }, 400)
+            "terminal_launched": launched,
+        }, 200 if launched else 400)
 
     refreshed = _refresh_claude_token(best_path, best_refresh)
     _clear_usage_cache("claude")
@@ -255,12 +286,14 @@ def _relogin_claude() -> tuple[dict[str, Any], int]:
             "executable": executable,
         }, 200)
 
+    launched = _launch_claude_login_terminal(executable)
     return ({
-        "success": False,
-        "message": "Claude token refresh failed. Run 'claude login' in CMD.",
+        "success": launched,
+        "message": "Claude token refresh failed, so a CMD window for 'claude login' was opened." if launched else "Claude token refresh failed. Run 'claude login' in CMD.",
         "manual_command": "claude login",
         "executable": executable,
-    }, 400)
+        "terminal_launched": launched,
+    }, 200 if launched else 400)
 
 
 def _relogin_openai() -> tuple[dict[str, Any], int]:
