@@ -124,11 +124,24 @@ def _strip_outer_quotes(val: str) -> str:
     return val
 
 
+def _strip_inline_comment(val: str) -> str:
+    """Strip trailing inline comment (e.g. ``'value  # comment'`` -> ``'value'``).
+
+    Only strips when ``#`` is preceded by whitespace, so values like
+    ``echo#nocomment`` are preserved.
+    """
+    return re.sub(r"\s+#.*$", "", val)
+
+
 def _parse_section(name: str, lines: list[str]) -> CronTask:
     """Parse a single cron task section from its body lines.
 
     Extracts ``schedule:``, ``type:``, ``command:``, ``tool:``, ``args:``
     directives.  All remaining non-directive lines form the task description.
+
+    Format tolerance:
+        - YAML list prefix ``- `` is stripped (e.g. ``- schedule:`` -> ``schedule:``)
+        - Inline comments ``# ...`` after directive values are stripped
     """
     schedule = ""
     task_type = "llm"
@@ -144,16 +157,21 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
         line = lines[i]
         stripped = line.strip()
 
+        # Strip YAML list prefix (e.g. "- schedule:" -> "schedule:")
+        if stripped.startswith("- "):
+            stripped = stripped[2:]
+
         if stripped.startswith("schedule:"):
-            schedule = stripped[len("schedule:") :].strip()
+            schedule = _strip_inline_comment(stripped[len("schedule:") :].strip())
+            schedule = _strip_outer_quotes(schedule)
         elif stripped.startswith("type:"):
-            task_type = stripped[5:].strip()
+            task_type = _strip_inline_comment(stripped[5:].strip())
         elif stripped.startswith("command:"):
-            command = stripped[8:].strip()
+            command = _strip_inline_comment(stripped[8:].strip())
         elif stripped.startswith("tool:"):
-            tool = stripped[5:].strip()
+            tool = _strip_inline_comment(stripped[5:].strip())
         elif stripped.startswith("skip_pattern:"):
-            val = stripped[len("skip_pattern:") :].strip()
+            val = _strip_inline_comment(stripped[len("skip_pattern:") :].strip())
             val = _strip_outer_quotes(val)
             if val:
                 try:
@@ -162,7 +180,7 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
                 except re.error as e:
                     logger.warning("Invalid skip_pattern for task %s: %s", name, e)
         elif stripped.startswith("trigger_heartbeat:"):
-            val = stripped.split(":", 1)[1].strip().lower()
+            val = _strip_inline_comment(stripped.split(":", 1)[1].strip()).lower()
             trigger_heartbeat = val not in ("false", "no", "0")
         elif stripped.startswith("args:"):
             # Parse YAML args block (indented lines following "args:")
