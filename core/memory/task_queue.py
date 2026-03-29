@@ -500,6 +500,19 @@ class TaskQueueManager:
                     lines.append(line)
                     total += len(line) + 1
 
+        # Delegated tasks (within remaining budget)
+        delegated = self.get_delegated_tasks()
+        if delegated and total < max_chars:
+            try:
+                from core.paths import get_animas_dir
+
+                del_section = self.format_delegated_for_priming(get_animas_dir(), budget_chars=max_chars - total)
+                if del_section:
+                    lines.append(del_section)
+                    total += len(del_section) + 1
+            except Exception:
+                logger.debug("format_for_priming: delegated section failed", exc_info=True)
+
         return "\n".join(lines) if lines else ""
 
     def get_stale_tasks(self) -> list[TaskEntry]:
@@ -511,6 +524,121 @@ class TaskQueueManager:
             if elapsed is not None and elapsed >= _STALE_TASK_THRESHOLD_SEC:
                 result.append(task)
         return result
+
+    # ── Delegation sync ─────────────────────────────────────────
+
+    def sync_delegated(self, animas_dir: Path) -> int:
+        """Sync delegated tasks with subordinate completion status.
+
+        For each task in ``delegated`` status, reads the subordinate's
+        queue (with archive fallback) and transitions:
+        - subordinate done/cancelled → own entry ``done``
+        - subordinate failed → own entry ``failed``
+
+        Returns the number of tasks synced.
+        """
+        delegated = self.get_delegated_tasks()
+        synced = 0
+        for task in delegated:
+            meta = task.meta or {}
+            target = meta.get("delegated_to", "")
+            child_id = meta.get("delegated_task_id", "")
+            if not target or not child_id:
+                continue
+            target_dir = animas_dir / target
+            if not target_dir.is_dir():
+                logger.debug("sync_delegated: target dir missing for %s", target)
+                continue
+            sub_status = self._resolve_subordinate_status(target_dir, child_id)
+            if sub_status is None:
+                continue
+            if sub_status in ("done", "cancelled"):
+                self.update_status(
+                    task.task_id,
+                    "done",
+                    summary=t("task_queue.sync_done", orig=task.summary, target=target),
+                )
+                task.meta["auto_synced"] = True
+                task.meta["resolved_by"] = target
+                synced += 1
+            elif sub_status == "failed":
+                self.update_status(
+                    task.task_id,
+                    "failed",
+                    summary=t("task_queue.sync_failed", orig=task.summary, target=target),
+                )
+                task.meta["auto_synced"] = True
+                task.meta["resolved_by"] = target
+                synced += 1
+        return synced
+
+    def _resolve_subordinate_status(self, target_dir: Path, child_id: str) -> str | None:
+        """Look up subordinate task status, falling back to archive."""
+        try:
+            sub_tqm = TaskQueueManager(target_dir)
+            sub_task = sub_tqm.get_task_by_id(child_id)
+            if sub_task:
+                return sub_task.status if sub_task.status in _TERMINAL_STATUSES else None
+            return self._search_archive(target_dir, child_id)
+        except Exception:
+            logger.debug(
+                "sync_delegated: failed to read subordinate queue at %s",
+                target_dir,
+                exc_info=True,
+            )
+            return None
+
+    @staticmethod
+    def _search_archive(target_dir: Path, child_id: str) -> str | None:
+        """Search task_queue_archive.jsonl for a terminal task entry."""
+        archive = target_dir / "state" / "task_queue_archive.jsonl"
+        if not archive.exists():
+            return None
+        try:
+            for line in reversed(archive.read_text(encoding="utf-8").strip().splitlines()):
+                try:
+                    data = json.loads(line)
+                    if data.get("task_id") == child_id and data.get("status") in _TERMINAL_STATUSES:
+                        return data["status"]
+                except (json.JSONDecodeError, KeyError):
+                    continue
+        except OSError:
+            logger.debug("sync_delegated: archive unreadable at %s", archive, exc_info=True)
+        return None
+
+    def format_delegated_for_priming(self, animas_dir: Path, budget_chars: int = 400) -> str:
+        """Format delegated tasks with subordinate status for Priming display."""
+        delegated = self.get_delegated_tasks()
+        if not delegated:
+            return ""
+        now = now_local()
+        lines: list[str] = []
+        total = 0
+        _status_icons = {"done": "✅", "failed": "❌", "cancelled": "🚫"}
+        for task in delegated[:5]:
+            meta = task.meta or {}
+            target = meta.get("delegated_to", "unknown")
+            child_id = meta.get("delegated_task_id", "")
+            sub_status = "?"
+            if child_id and target != "unknown":
+                target_dir = animas_dir / target
+                if target_dir.is_dir():
+                    resolved = self._resolve_subordinate_status(target_dir, child_id)
+                    if resolved:
+                        sub_status = resolved
+                    else:
+                        sub_tqm = TaskQueueManager(target_dir)
+                        sub_task = sub_tqm.get_task_by_id(child_id)
+                        sub_status = sub_task.status if sub_task else "archived"
+            icon = _status_icons.get(sub_status, "⏳")
+            elapsed_sec = _elapsed_seconds(task.updated_at, now)
+            elapsed_str = _format_elapsed_from_sec(elapsed_sec) or ""
+            line = f"- 📌 [{task.task_id[:8]}] {task.summary} → {target} ({target}: {sub_status} {icon}) {elapsed_str}"
+            if total + len(line) > budget_chars:
+                break
+            lines.append(line)
+            total += len(line) + 1
+        return "\n".join(lines)
 
     # ── Maintenance ────────────────────────────────────────────
 

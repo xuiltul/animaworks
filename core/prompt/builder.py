@@ -292,7 +292,7 @@ def _build_group3(
         if state_content:
             _add(state_content, "current_state", 2, "elastic")
 
-    if not is_inbox and not is_task:
+    if not is_task:
         try:
             resolutions = memory.read_resolutions(days=7)
             if resolutions:

@@ -500,6 +500,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": '🔴 OVERDUE集約（{count}件）: {summaries}\n  → list_tasks(status="pending") で詳細確認',
         "en": '🔴 OVERDUE aggregate ({count}): {summaries}\n  → list_tasks(status="pending") for details',
     },
+    "task_queue.sync_done": {
+        "ja": "{orig} (→{target}: 完了)",
+        "en": "{orig} (→{target}: done)",
+    },
+    "task_queue.sync_failed": {
+        "ja": "{orig} (→{target}: 失敗 — 再委任を検討)",
+        "en": "{orig} (→{target}: failed — consider re-delegation)",
+    },
     "voice.mode_suffix": {
         "ja": (
             "\n\n[voice-mode: 音声会話です。話し言葉で200文字以内で簡潔に回答してください。Markdown記法（見出し・太字・リスト・コードブロック等）は使わないでください]"
