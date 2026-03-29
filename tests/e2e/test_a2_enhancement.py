@@ -10,6 +10,7 @@ Tests the complete A2 loop with:
 - Parallel tool_call execution
 - JSON parse error handling
 """
+
 from __future__ import annotations
 
 import sys
@@ -27,23 +28,12 @@ from tests.helpers.mocks import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _bypass_completion_gate():
-    """Disable completion_gate enforcement so tests don't need extra mock responses."""
-    with patch(
-        "core.execution.litellm_loop.completion_gate_applies_to_trigger",
-        return_value=False,
-    ):
-        yield
-
-
 @pytest.fixture
 def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "test"
     d.mkdir(parents=True)
     (d / "permissions.md").write_text(
-        "## 外部ツール\n- chatwork: OK\n- slack: OK\n"
-        "## ファイル操作\n## コマンド実行\n",
+        "## 外部ツール\n- chatwork: OK\n- slack: OK\n## ファイル操作\n## コマンド実行\n",
         encoding="utf-8",
     )
     (d / "identity.md").write_text("# Test Anima", encoding="utf-8")
@@ -67,11 +57,9 @@ def model_config() -> ModelConfig:
 @pytest.fixture
 def memory(anima_dir: Path) -> MagicMock:
     from core.memory import MemoryManager
+
     m = MagicMock(spec=MemoryManager)
-    m.read_permissions.return_value = (
-        "## 外部ツール\n- chatwork: OK\n- slack: OK\n"
-        "## ファイル操作\n## コマンド実行\n"
-    )
+    m.read_permissions.return_value = "## 外部ツール\n- chatwork: OK\n- slack: OK\n## ファイル操作\n## コマンド実行\n"
     m.search_memory_text.return_value = []
     m.anima_dir = anima_dir
     return m
@@ -79,8 +67,9 @@ def memory(anima_dir: Path) -> MagicMock:
 
 @pytest.fixture
 def executor(model_config, anima_dir, memory):
-    from core.tooling.handler import ToolHandler
     from core.execution.litellm_loop import LiteLLMExecutor
+    from core.tooling.handler import ToolHandler
+
     th = ToolHandler(
         anima_dir=anima_dir,
         memory=memory,
@@ -132,7 +121,8 @@ class TestSearchCodeE2E:
     async def test_search_code_in_loop(self, executor, anima_dir):
         """LLM calls search_code → gets results → responds."""
         (anima_dir / "test_file.py").write_text(
-            "def calculate():\n    return 42\n", encoding="utf-8",
+            "def calculate():\n    return 42\n",
+            encoding="utf-8",
         )
 
         tc = make_tool_call("search_code", {"pattern": "calculate"}, "call_001")
