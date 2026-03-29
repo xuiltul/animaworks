@@ -25,8 +25,18 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                 "query": {"type": "string", "description": "Search query (natural language)"},
                 "scope": {
                     "type": "string",
-                    "enum": ["knowledge", "episodes", "procedures", "common_knowledge", "all"],
-                    "description": "Memory category to search",
+                    "enum": [
+                        "knowledge",
+                        "episodes",
+                        "procedures",
+                        "common_knowledge",
+                        "activity_log",
+                        "all",
+                    ],
+                    "description": (
+                        "Memory category to search. 'activity_log' searches recent tool results "
+                        "and messages (last 3 days via BM25)."
+                    ),
                 },
                 "offset": {
                     "type": "integer",

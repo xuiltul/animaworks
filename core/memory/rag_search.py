@@ -10,6 +10,12 @@ from pathlib import Path
 
 logger = logging.getLogger("animaworks.memory")
 
+try:
+    from core.memory.bm25 import reciprocal_rank_fusion, search_activity_log
+except ImportError:
+    search_activity_log = None  # type: ignore[assignment,misc]
+    reciprocal_rank_fusion = None  # type: ignore[assignment,misc]
+
 _EPISODES_TOP_K = 10
 _DEFAULT_TOP_K = 5
 WEIGHT_TOKEN_OVERLAP = 0.1
@@ -265,22 +271,68 @@ class RAGMemorySearch:
         """
         offset = max(0, min(offset, 50))
 
+        if scope == "activity_log":
+            if search_activity_log is None:
+                return []
+            return search_activity_log(
+                self._anima_dir,
+                query,
+                top_k=10,
+                offset=offset,
+            )
+
+        primary_results: list[dict] = []
         indexer = self._get_indexer()
         if indexer is not None:
             try:
-                return self._vector_search_primary(query, scope, offset, knowledge_dir)
+                primary_results = self._vector_search_primary(
+                    query,
+                    scope,
+                    offset,
+                    knowledge_dir,
+                )
             except Exception as e:
                 logger.debug("Vector search failed, falling back to keyword: %s", e)
+                primary_results = self._keyword_search_fallback(
+                    query,
+                    scope,
+                    offset,
+                    knowledge_dir=knowledge_dir,
+                    episodes_dir=episodes_dir,
+                    procedures_dir=procedures_dir,
+                    common_knowledge_dir=common_knowledge_dir,
+                )
+        else:
+            primary_results = self._keyword_search_fallback(
+                query,
+                scope,
+                offset,
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+            )
 
-        return self._keyword_search_fallback(
-            query,
-            scope,
-            offset,
-            knowledge_dir=knowledge_dir,
-            episodes_dir=episodes_dir,
-            procedures_dir=procedures_dir,
-            common_knowledge_dir=common_knowledge_dir,
-        )
+        if scope == "all" and reciprocal_rank_fusion is not None and search_activity_log is not None:
+            try:
+                bm25_results = search_activity_log(
+                    self._anima_dir,
+                    query,
+                    top_k=10,
+                    offset=0,
+                )
+            except Exception:
+                logger.debug("activity_log BM25 search failed", exc_info=True)
+                bm25_results = []
+
+            if bm25_results:
+                return reciprocal_rank_fusion(
+                    primary_results,
+                    bm25_results,
+                    k=60,
+                )[:10]
+
+        return primary_results
 
     def _vector_search_primary(
         self,
