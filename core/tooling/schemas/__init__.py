@@ -17,6 +17,7 @@ from core.tooling.schemas.builder import (
     build_unified_tool_list,
 )
 from core.tooling.schemas.channel import _channel_tools
+from core.tooling.schemas.completion_gate import _completion_gate_tools
 from core.tooling.schemas.converters import (
     apply_db_descriptions,
     to_anthropic_format,
@@ -69,6 +70,7 @@ __all__ = [
     "_CONSOLIDATION_BLOCKED_TOOLS",
     "_background_task_tools",
     "_channel_tools",
+    "_completion_gate_tools",
     "_check_permissions_tools",
     "_notification_tools",
     "_normalise_schema",

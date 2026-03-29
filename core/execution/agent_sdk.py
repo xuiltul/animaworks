@@ -19,7 +19,7 @@ Implementation is split across submodules for readability:
   - ``_sdk_security``: Security checks and output size guards
   - ``_sdk_session``: Session persistence, SDK input helpers, cleanup
   - ``_sdk_stream``: Tool logging/sanitization, stream block processing
-  - ``_sdk_hooks``: PreToolUse/PreCompact hooks, subordinate management
+  - ``_sdk_hooks``: PreToolUse/PreCompact/Stop hooks, subordinate management
   - ``_sdk_options``: SDK option building (Mixin)
   - ``_sdk_interrupt``: Graceful interrupt helpers
 """
@@ -50,7 +50,9 @@ from core.execution._sdk_hooks import (  # noqa: F401
     _build_post_tool_hook,
     _build_pre_compact_hook,
     _build_pre_tool_hook,
+    _build_stop_hook,
     _cache_subordinate_paths,
+    _cleanup_gate_marker,
     _collect_all_subordinates,
     _intercept_task_to_delegation,
     _intercept_task_to_pending,
@@ -274,6 +276,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         _cw = self._resolve_cw()
         _max_turns = max_turns_override or self._model_config.max_turns
         session_stats = self._init_session_stats(system_prompt, prompt, trigger)
+        _cleanup_gate_marker(self._anima_dir)
         session_type = _resolve_session_type(trigger)
         session_id_to_resume = (
             _load_session_id(self._anima_dir, session_type, thread_id=thread_id)
@@ -374,6 +377,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         _cw = self._resolve_cw()
         _max_turns = max_turns_override or self._model_config.max_turns
         session_stats = self._init_session_stats(system_prompt, prompt, trigger)
+        _cleanup_gate_marker(self._anima_dir)
         session_type = _resolve_session_type(trigger)
         session_id_to_resume = (
             _load_session_id(self._anima_dir, session_type, thread_id=thread_id)

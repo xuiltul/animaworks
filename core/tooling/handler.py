@@ -241,6 +241,7 @@ class ToolHandler(
             "list_tasks": self._handle_list_tasks,
             "submit_tasks": self._handle_submit_tasks,
             "todo_write": self._handle_todo_write,
+            "completion_gate": self._handle_completion_gate,
             "use_tool": self._handle_use_tool,
             "check_background_task": self._handle_check_background_task,
             "list_background_tasks": self._handle_list_background_tasks,
@@ -333,6 +334,23 @@ class ToolHandler(
                 "todos": "\n".join(lines),
             }
         )
+
+    def _handle_completion_gate(self, args: dict[str, Any]) -> str:
+        """Record pre-completion verification and return the checklist text."""
+        del args
+        marker = self._anima_dir / "run" / "completion_gate_called"
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("", encoding="utf-8")
+        except OSError as e:
+            logger.warning("completion_gate: failed to write marker: %s", e)
+
+        self._activity.log(
+            event_type="tool_use",
+            tool="completion_gate",
+            summary=t("completion_gate.activity_log_summary"),
+        )
+        return t("completion_gate.checklist")
 
     # ── Properties and session management ─────────────────────
 

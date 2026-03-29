@@ -67,6 +67,8 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "update_task",
         # AW-essential: skill/CLI manual
         "skill",
+        # Mode S: pre-completion verification
+        "completion_gate",
     }
 )
 
@@ -156,6 +158,7 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         _background_task_tools,
         _channel_tools,
         _check_permissions_tools,
+        _completion_gate_tools,
         _notification_tools,
         _skill_tools,
         _submit_tasks_tools,
@@ -167,6 +170,7 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
     all_schemas: list[dict[str, Any]] = [
         *MEMORY_TOOLS,
         *_channel_tools(),
+        *_completion_gate_tools(),
         *_task_tools(),
         *_notification_tools(),
         *PROCEDURE_TOOLS,

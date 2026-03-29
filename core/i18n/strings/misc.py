@@ -536,4 +536,34 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "音声認識に失敗しました",
         "en": "Speech recognition failed",
     },
+    "completion_gate.checklist": {
+        "ja": (
+            "## 完了前検証\n\n"
+            "最終回答を出す前に、以下を確認してください。\n\n"
+            "- [ ] 元の指示を今ここで読み返し、各要件への対応を列挙した\n"
+            "- [ ] 「できたはず」ではなく、このセッションで実際に確認した証拠がある\n"
+            "- [ ] 依頼されたものを簡略化・省略していない\n"
+            "- [ ] 別の人がこの成果を評価したら、完了と認める品質である"
+        ),
+        "en": (
+            "## Pre-Completion Verification\n\n"
+            "Before providing your final answer, verify the following:\n\n"
+            "- [ ] Re-read the original instructions now and list how each requirement was addressed\n"
+            "- [ ] Evidence exists from THIS session confirming completion — not just assumption\n"
+            "- [ ] Nothing was simplified or omitted from what was requested\n"
+            "- [ ] An independent reviewer would accept this as complete"
+        ),
+    },
+    "completion_gate.stop_hook_block_reason": {
+        "ja": "最終回答を出す前に completion_gate ツールを呼んで完了前検証を行ってください。",
+        "en": "Please call the completion_gate tool to perform pre-completion verification before providing your final answer.",
+    },
+    "completion_gate.activity_log_summary": {
+        "ja": "完了前検証を実施",
+        "en": "Pre-completion verification performed",
+    },
+    "completion_gate.schema_description": {
+        "ja": "最終回答を出す前に呼び出す完了前検証チェックリスト。",
+        "en": "Pre-completion verification checklist. Call before providing your final answer.",
+    },
 }

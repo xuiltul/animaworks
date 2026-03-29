@@ -8,8 +8,8 @@ from __future__ import annotations
 # See LICENSE for the full license text.
 
 
-"""Mode S PreToolUse / PreCompact hook factories, subordinate path management,
-and task-to-pending interception.
+"""Mode S PreToolUse / PreCompact / Stop hook factories, subordinate path
+management, and task-to-pending interception.
 
 Depends on ``_sdk_security``, ``_sdk_stream``, and ``_sdk_session`` within
 this package.  ``claude_agent_sdk.types`` is imported at function scope
@@ -859,6 +859,79 @@ def _build_post_tool_hook(anima_dir: Path) -> Callable:
         return {"async_": True}
 
     return _post_tool_hook
+
+
+# ── Stop hook: completion gate (Mode S) ────────────────────────
+
+
+def _completion_gate_marker_path(anima_dir: Path) -> Path:
+    """Path to the IPC marker written when ``completion_gate`` is invoked."""
+    return anima_dir / "run" / "completion_gate_called"
+
+
+def _gate_marker_exists(anima_dir: Path) -> bool:
+    """Return True if the completion gate marker file exists."""
+    return _completion_gate_marker_path(anima_dir).is_file()
+
+
+def _cleanup_gate_marker(anima_dir: Path) -> None:
+    """Remove the completion gate marker if present. Ignores missing file."""
+    p = _completion_gate_marker_path(anima_dir)
+    try:
+        if p.exists():
+            p.unlink()
+    except OSError:
+        logger.debug("Failed to cleanup completion gate marker", exc_info=True)
+
+
+def _completion_gate_applies_to_trigger(trigger: str | None) -> bool:
+    """Return True when stop must wait for ``completion_gate`` (marker required)."""
+    if trigger is None:
+        return True
+    if trigger == "heartbeat":
+        return False
+    return not trigger.startswith("inbox")
+
+
+def _build_stop_hook(
+    anima_dir: Path,
+    *,
+    session_stats: dict[str, Any] | None = None,
+) -> Callable:
+    """Build a Stop hook that blocks until ``completion_gate`` writes the marker file.
+
+    Skips gating for heartbeat and inbox triggers. When allowing stop, removes
+    the marker file if present.
+    """
+    from claude_agent_sdk.types import HookContext, SyncHookJSONOutput
+
+    async def _stop_hook(
+        input_data: dict[str, Any],
+        tool_use_id: str | None,
+        context: HookContext,
+    ) -> SyncHookJSONOutput | dict[str, Any]:
+        stop_hook_active = bool(input_data.get("stop_hook_active", False))
+        if stop_hook_active:
+            _cleanup_gate_marker(anima_dir)
+            return {}
+
+        trigger = (session_stats or {}).get("trigger")
+
+        if not _completion_gate_applies_to_trigger(trigger):
+            return {}
+
+        if _gate_marker_exists(anima_dir):
+            _cleanup_gate_marker(anima_dir)
+            return {}
+
+        from core.i18n import t
+
+        return SyncHookJSONOutput(
+            decision="block",
+            reason=t("completion_gate.stop_hook_block_reason"),
+        )
+
+    return _stop_hook
 
 
 async def _update_knowledge_frontmatter(path: Path) -> None:
