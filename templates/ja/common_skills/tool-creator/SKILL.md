@@ -28,7 +28,7 @@ AnimaWorksのツールは3種類に分かれる:
 
 | モード | 典型経路 |
 |--------|-----------|
-| **A（LiteLLM 等）** | 統合ツール **`use_tool(tool_name, action, args)`** → モジュールの `dispatch`（`core/tooling/handler.py`）。詳細は **`skill`** で各ツールの手順を読む設計（`core/tooling/schemas/skill.py` の `USE_TOOL`）。 |
+| **A（LiteLLM 等）** | 統合ツール **`use_tool(tool_name, action, args)`** → モジュールの `dispatch`（`core/tooling/handler.py`）。詳細は **`read_memory_file`** で各ツールのスキルを読む設計（`core/tooling/schemas/skill.py` の `USE_TOOL`）。 |
 | **S（Agent SDK）** | Claude Code 組み込み **Bash** で `animaworks-tool <ツール> …`、または MCP 経由（MCP に載るのは厳選サブセットのみ。下記「コアツールをリポジトリに追加する場合」参照）。 |
 | **Anthropic フォールバック等** | `build_tool_list` で `include_use_tool=False` の構成があり得る → 外部は **Bash + animaworks-tool** やスキル前提。 |
 
@@ -272,7 +272,7 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
 
 1. `core/tools/{name}.py` を追加（`_` 始まりはスキャン対象外）。
 2. `TOOL_MODULES` は `discover_core_tools()` で自動登録。`core/tools/__init__.py` の手動リストは不要。
-3. **Mode S（MCP）** に載せるのは `core/mcp/server.py` の `_EXPOSED_TOOL_NAMES` のみ（厳選）。2026-03 時点の例: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `skill`。**Slack / Gmail / `web_search` 等の外部サービス系コアツールは MCP に出ない** — 通常は **`use_tool` / Bash（`animaworks-tool`）/ スキル** 経路。
+3. **Mode S（MCP）** に載せるのは `core/mcp/server.py` の `_EXPOSED_TOOL_NAMES` のみ（厳選）。2026-03 時点の例: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`。**Slack / Gmail / `web_search` 等の外部サービス系コアツールは MCP に出ない** — 通常は **`use_tool` / Bash（`animaworks-tool`）/ スキル** 経路。
 4. テストを `tests/` に追加。スキーマやリファレンス文書を自動生成している場合は `scripts/generate_reference.py` の対象も確認。
 5. 破壊的操作は `gated: True` と permissions 側の説明更新を検討。
 
@@ -298,7 +298,7 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
 
 - 薄いエントリ + `_client` / `_cli` 分割: `core/tools/chatwork.py`, `slack.py`, `discord.py`
 - 認証・API: `core/tools/gmail.py`, `github.py`, `notion.py`, `google_calendar.py`, `google_tasks.py`
-- CLI マシンガイド集約: `core/tools/machine.py`（`skill machine-tool` 等の参照元）
+- CLI マシンガイド集約: `core/tools/machine.py`（`read_memory_file(path="common_skills/machine-tool/SKILL.md")` 等の参照元）
 - 長時間・パイプライン: `core/tools/image_gen.py`（ファサード、`image/` サブパッケージ + `EXECUTION_PROFILE`）
 - 検索・ローカル LLM: `core/tools/web_search.py`（`get_tool_schemas` が空 → `ExternalToolDispatcher.dispatch` のコア経路ではマッチしない。`use_tool` は `dispatch` で可）、`x_search.py`, `local_llm.py`
 - ディスパッチャ・CLI エントリ: `core/tooling/dispatch.py`, `core/tools/__init__.py`（`cli_dispatch` / `_handle_submit`）
