@@ -1,9 +1,8 @@
 ---
 name: image-gen-tool
 description: >-
-  이미지 및 3D 모델 생성 도구. 캐릭터 전신, 바스트업, 치비 캐릭터, 3D 모델 생성.
-  NovelAI/Flux/Meshy 지원.
-  "이미지 생성" "전신 일러스트" "바스트업" "치비" "3D 모델" "아바타"
+  이미지·3D 모델 생성 도구. NovelAI·Flux·Meshy로 전신·바스트업·치비·3D를 생성한다.
+  Use when: 일러스트 생성, 캐릭터 이미지, 3D·Meshy 출력, 이미지 파이프라인 실행이 필요할 때.
 tags: [image, 3d, generation, external]
 ---
 

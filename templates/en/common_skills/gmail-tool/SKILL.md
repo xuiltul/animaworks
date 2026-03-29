@@ -1,8 +1,8 @@
 ---
 name: gmail-tool
 description: >-
-  Gmail integration tool. Check unread emails, read message body, create drafts. OAuth2 authentication.
-  "gmail" "email" "unread" "draft" "inbox"
+  Gmail integration tool for unread checks, reading bodies, and drafts via OAuth2 Gmail API access.
+  Use when: reading inbox mail, fetching message bodies, writing drafts, or searching labeled mail.
 tags: [communication, gmail, email, external]
 ---
 

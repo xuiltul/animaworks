@@ -36,58 +36,23 @@ def apply_builtins(content: str, builtins: dict[str, str]) -> str:
 
 # ── Description builder ──────────────────────────────────
 
-_DESCRIPTION_BUDGET = 8000
-
 
 def build_skill_tool_description(
     skill_metas: list[Any],
     common_skill_metas: list[Any],
     procedure_metas: list[Any],
 ) -> str:
-    """Build dynamic description for the skill tool.
+    """Build simple description for the skill tool.
 
-    Aggregates all skill/procedure name+description into an
-    <available_skills> block within the budget.
+    The full skill catalog is now in the system prompt (Group 4).
+    This function returns only the tool usage description.
     """
-    lines = [
-        t("skill.desc_line1"),
-        t("skill.desc_line2"),
-        t("skill.desc_line3"),
-        "",
-        "<available_skills>",
-    ]
-    total = sum(len(line) for line in lines)
-
-    truncated = t("skill.truncated")
-
-    for meta in skill_metas:
-        entry = f"- {meta.name}: {meta.description}"
-        if total + len(entry) > _DESCRIPTION_BUDGET:
-            lines.append(truncated)
-            break
-        lines.append(entry)
-        total += len(entry)
-
-    common_label = t("skill.label_common")
-    for meta in common_skill_metas:
-        entry = f"- {meta.name} ({common_label}): {meta.description}"
-        if total + len(entry) > _DESCRIPTION_BUDGET:
-            lines.append(truncated)
-            break
-        lines.append(entry)
-        total += len(entry)
-
-    procedure_label = t("skill.label_procedure")
-    for meta in procedure_metas:
-        entry = f"- {meta.name} ({procedure_label}): {meta.description}"
-        if total + len(entry) > _DESCRIPTION_BUDGET:
-            lines.append(truncated)
-            break
-        lines.append(entry)
-        total += len(entry)
-
-    lines.append("</available_skills>")
-    return "\n".join(lines)
+    return "\n".join(
+        [
+            t("skill.desc_line1"),
+            t("skill.desc_line2"),
+        ]
+    )
 
 
 # ── Skill loader ─────────────────────────────────────────

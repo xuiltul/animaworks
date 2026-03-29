@@ -1,8 +1,8 @@
 ---
 name: google-calendar-tool
 description: >-
-  Googleカレンダー連携ツール。予定一覧取得・予定追加。OAuth2認証でCalendar APIに直接アクセス。
-  「カレンダー」「予定」「スケジュール」「Google Calendar」「イベント」
+  Googleカレンダー連携ツール。予定の一覧取得・作成をOAuth2でCalendar API経由で行う。
+  Use when: 予定の確認、新規イベント作成、スケジュール変更、カレンダー同期が必要なとき。
 tags: [calendar, google, schedule, external]
 ---
 

@@ -1,10 +1,8 @@
 ---
 name: cron-management
 description: >-
-  Skill for reading and writing cron.md in the correct format.
-  Always follow this skill's procedure when adding, changing, or removing Cron tasks.
-  Use for: "cron setup", "cron task", "schedule", "scheduled task", "cron.md",
-  "add cron", "update cron", "remove cron", "periodic execution", "scheduled".
+  Skill for reading and writing cron.md in the correct format for scheduled LLM or command tasks.
+  Use when: editing cron.md, adding or changing cron schedules, or removing periodic jobs.
 ---
 
 ## cron.md Structure

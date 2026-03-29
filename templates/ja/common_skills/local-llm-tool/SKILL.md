@@ -1,8 +1,8 @@
 ---
 name: local-llm-tool
 description: >-
-  ローカルLLM実行ツール。Ollama/vLLM経由でローカルモデルにテキスト生成・チャットを依頼。
-  「ローカルLLM」「Ollama」「テキスト生成」「ローカルモデル」
+  ローカルLLM実行ツール。OllamaやvLLMでGPU上のモデルにテキスト生成・チャットを依頼する。
+  Use when: オンプレ推論、Ollamaエンドポイント呼び出し、ローカルモデルでの要約・生成が必要なとき。
 tags: [llm, local, ollama, external]
 ---
 

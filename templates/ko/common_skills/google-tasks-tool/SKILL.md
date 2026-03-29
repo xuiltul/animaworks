@@ -1,8 +1,8 @@
 ---
 name: google-tasks-tool
 description: >-
-  Google Tasks 연동 도구. 태스크 리스트 및 태스크의 목록 조회, 추가, 업데이트. OAuth2 인증.
-  "Google Tasks" "태스크" "TODO" "태스크 리스트"
+  Google Tasks 연동 도구. 태스크 리스트·태스크 목록·추가·갱신을 OAuth2로 수행한다.
+  Use when: TODO 목록 조회, 태스크 추가, 완료 처리, 리스트 전환이 필요할 때.
 tags: [tasks, google, todo, external]
 ---
 

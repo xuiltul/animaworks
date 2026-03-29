@@ -1,8 +1,8 @@
 ---
 name: aws-collector-tool
 description: >-
-  AWS infrastructure monitoring tool. ECS status, CloudWatch error logs, and metrics.
-  "AWS" "ECS" "CloudWatch" "infrastructure" "metrics" "logs"
+  AWS infrastructure collector. Fetches ECS status, CloudWatch logs, and metrics.
+  Use when: checking ECS health, inspecting CloudWatch error logs, pulling infra metrics, or monitoring AWS resources.
 tags: [infrastructure, aws, monitoring, external]
 ---
 

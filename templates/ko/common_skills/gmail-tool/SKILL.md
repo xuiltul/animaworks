@@ -1,8 +1,8 @@
 ---
 name: gmail-tool
 description: >-
-  Gmail 연동 도구. 읽지 않은 메일 확인, 본문 읽기, 임시 보관함 작성. OAuth2 인증으로 Gmail API에 직접 접근.
-  "Gmail" "이메일" "읽지 않은 메일" "임시 보관함" "수신함"
+  Gmail 연동 도구. 미읽음 확인·본문 읽기·임시보관 작성을 OAuth2 Gmail API로 수행한다.
+  Use when: 받은편지함 확인, 본문 조회, 임시보관 작성, 라벨 메일 처리가 필요할 때.
 tags: [communication, gmail, email, external]
 ---
 

@@ -1,8 +1,8 @@
 ---
 name: transcribe-tool
 description: >-
-  Audio transcription tool. Convert audio files to text using Whisper models.
-  "transcribe" "speech to text" "whisper" "STT" "audio"
+  Audio transcription tool. Converts audio files to text with Whisper and optional LLM post-processing.
+  Use when: transcribing meetings, podcasts, or extracting text from recorded audio files.
 tags: [audio, transcription, whisper, external]
 ---
 

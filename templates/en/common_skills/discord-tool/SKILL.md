@@ -1,8 +1,8 @@
 ---
 name: discord-tool
 description: >-
-  Discord integration tool. Send/receive messages, search, list servers (guilds) and channels, add reactions.
-  "Discord" "server" "guild" "channel" "reaction"
+  Discord integration tool for messaging, search, guild and channel listing, and reactions.
+  Use when: posting to Discord, listing channels, searching messages, or adding reactions in guilds.
 tags: [communication, discord, external]
 ---
 

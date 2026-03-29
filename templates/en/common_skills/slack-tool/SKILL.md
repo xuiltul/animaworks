@@ -1,8 +1,8 @@
 ---
 name: slack-tool
 description: >-
-  Slack integration tool. Send/receive messages, search, check unreplied, list channels, emoji reactions.
-  "slack" "channel" "thread" "reaction"
+  Slack integration tool for send/receive messages, search, unreplied checks, channel listing, and emoji reactions.
+  Use when: posting to Slack, listing channels, replying in threads, checking unreplied items, or adding reactions.
 tags: [communication, slack, external]
 ---
 

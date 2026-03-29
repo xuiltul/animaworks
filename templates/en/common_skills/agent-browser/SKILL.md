@@ -1,8 +1,8 @@
 ---
 name: agent-browser
 description: >-
-  Headless browser automation CLI. Browse web pages, interact with elements, and take screenshots.
-  "check in browser", "open web page", "take screenshot", "browser automation", "check the site"
+  Headless browser automation CLI. Open, browse, interact with, and screenshot web pages.
+  Use when: opening websites, browser-based login, web app testing, taking screenshots, UI verification.
 tags: [browser, web, automation]
 ---
 

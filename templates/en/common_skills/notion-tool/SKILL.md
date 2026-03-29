@@ -1,8 +1,8 @@
 ---
 name: notion-tool
 description: >-
-  Notion integration tool. Search, get, create, and update pages and databases.
-  "notion" "page" "database"
+  Notion integration tool for searching, reading, creating, and updating pages and databases via the API.
+  Use when: editing Notion pages, adding database rows, or searching a workspace.
 tags: [productivity, notion, external]
 ---
 

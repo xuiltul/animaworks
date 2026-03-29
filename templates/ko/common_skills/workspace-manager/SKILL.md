@@ -1,8 +1,8 @@
 ---
 name: workspace-manager
 description: >-
-  워크스페이스(작업 디렉토리)의 등록, 목록 조회, 삭제, 할당을 수행합니다.
-  "워크스페이스" "작업 디렉토리" "프로젝트 등록"
+  워크스페이스(작업 디렉토리) 등록·목록·삭제·할당을 설정한다.
+  Use when: 프로젝트 경로를 Anima에 연결, 별칭 관리, 작업 루트 전환이 필요할 때.
 tags: [workspace, directory, project, management]
 ---
 

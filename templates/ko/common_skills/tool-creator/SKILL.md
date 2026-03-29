@@ -1,12 +1,8 @@
 ---
 name: tool-creator
 description: >-
-  올바른 인터페이스로 AnimaWorks용 Python 도구 모듈을 생성하는 메타 스킬.
-  개인 도구(animas/{name}/tools/)와 공유 도구(common_tools/)의 생성 절차,
-  ExternalToolDispatcher 연동, get_credential을 통한 API 키 관리,
-  permissions.json 허가 설정을 제공합니다.
-  Web API 연동 또는 외부 서비스 통합의 커스텀 도구 개발 시 사용하세요.
-  "도구 생성", "도구화", "새 도구", "커스텀 도구", "Python 도구"
+  AnimaWorks용 Python 외부 도구 모듈을 만드는 메타 스킬. ExternalToolDispatcher·get_credential·permissions를 다룬다.
+  Use when: core/tools에 모듈 추가, Web API 래퍼 구현, animaworks-tool로 호출할 커스텀 도구 개발이 필요할 때.
 ---
 
 # tool-creator

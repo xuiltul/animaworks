@@ -1,8 +1,8 @@
 ---
 name: transcribe-tool
 description: >-
-  음성 문자 변환 도구. Whisper 모델로 오디오 파일을 텍스트로 변환합니다. LLM 후처리 옵션 지원.
-  "문자 변환" "transcribe" "음성 인식" "Whisper" "STT"
+  음성 문자 변환 도구. Whisper로 오디오를 텍스트로 바꾸고 필요 시 LLM 후처리한다.
+  Use when: 회의 녹음 전사, 팟캐스트 텍스트화, 녹음 파일에서 본문 추출이 필요할 때.
 tags: [audio, transcription, whisper, external]
 ---
 

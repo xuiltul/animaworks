@@ -1,11 +1,8 @@
 ---
 name: subordinate-management
 description: >-
-  Process management for subordinate Anima: pause, resume, model change, background model change, restart,
-  task delegation, status confirmation, and auditing.
-  "pause", "stop", "resume", "wake", "disable", "enable",
-  "change model", "background model", "restart", "delegate task", "check subordinate status",
-  "pause", "resume", "process management", "stop subordinate", "dashboard", "audit"
+  Supervisor tools for subordinate Anima: disable/enable, model changes, restart, delegation, state reads, and audits.
+  Use when: pausing a subordinate, changing main or background models, restarting processes, delegating tasks, or org dashboards.
 ---
 
 # Skill: Subordinate Management (Supervisor Tools)

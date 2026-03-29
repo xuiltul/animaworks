@@ -1,8 +1,8 @@
 ---
 name: web-search-tool
 description: >-
-  Web search tool. Search the internet using Brave Search API.
-  "search" "web search" "look up" "brave"
+  Web search tool. Queries the public internet via the Brave Search API.
+  Use when: researching current events, finding documentation, fact-checking, or fetching ranked search results.
 tags: [search, web, external]
 ---
 

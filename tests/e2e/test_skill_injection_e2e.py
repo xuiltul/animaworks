@@ -3,10 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """E2E tests for skill tool integration after unified table removal.
 
-After the builder refactor, the unified skill/procedure table was removed from
-the system prompt. Skills are now exposed via the ``skill`` tool with a dynamic
-description listing available skills. Full content is returned on-demand when
-the skill tool is invoked.
+The skill catalog lives in system prompt Group 4 (``<available_skills>``).
+The ``skill`` tool carries a short usage description only; full content is
+returned on-demand when the skill tool is invoked.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
+from core.i18n import t
 from core.prompt.builder import build_system_prompt
 from core.schemas import SkillMeta
 from core.tooling.schemas import build_tool_list
@@ -65,13 +64,10 @@ def _fake_load_prompt(name: str, **kwargs) -> str:
 
 
 class TestUnifiedSkillTableE2E:
-    """After the refactor, skills/procedures are NOT in the system prompt table.
-
-    Instead they are exposed via the ``skill`` tool with a dynamic description.
-    """
+    """Skills/procedures are not in a markdown table; catalog is in Group 4 XML block."""
 
     def test_skills_not_in_system_prompt_table(self, tmp_path: Path):
-        """Personal and common skills must NOT appear as table rows in the system prompt."""
+        """Personal and common skills must NOT appear as table rows; catalog lists names in Group 4."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
 
@@ -93,11 +89,16 @@ class TestUnifiedSkillTableE2E:
         memory.list_common_skill_metas.return_value = [common_meta]
 
         with (
+            patch("core.memory.skill_metadata.SkillMetadataService") as mock_svc_class,
             patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
             patch("core.prompt.builder._build_org_context", return_value=""),
             patch("core.prompt.builder._discover_other_animas", return_value=[]),
             patch("core.prompt.builder._build_messaging_section", return_value=""),
         ):
+            svc_inst = MagicMock()
+            svc_inst.list_common_skill_metas.return_value = [common_meta]
+            mock_svc_class.return_value = svc_inst
+
             result = build_system_prompt(memory, message="cron設定をして")
 
         prompt = result.system_prompt
@@ -107,6 +108,9 @@ class TestUnifiedSkillTableE2E:
         # Skill names should NOT appear as table rows in the prompt
         assert "| cron-management |" not in prompt
         assert "| animaworks-guide |" not in prompt
+        assert "<available_skills>" in prompt
+        assert "cron-management" in prompt
+        assert "animaworks-guide" in prompt
 
     def test_skill_tool_present_in_build_tool_list(self, tmp_path: Path):
         """build_tool_list with include_skill_tools=True adds a 'skill' tool."""
@@ -129,16 +133,16 @@ class TestUnifiedSkillTableE2E:
             common_skill_metas=[common_meta],
             procedure_metas=[],
         )
-        names = {t["name"] for t in tools}
+        names = {x["name"] for x in tools}
         assert "skill" in names
 
-        # Verify the skill tool description lists available skills
-        skill_tool = next(t for t in tools if t["name"] == "skill")
-        assert "cron-management" in skill_tool["description"]
-        assert "animaworks-guide" in skill_tool["description"]
+        skill_tool = next(x for x in tools if x["name"] == "skill")
+        assert "cron-management" not in skill_tool["description"]
+        assert "animaworks-guide" not in skill_tool["description"]
+        assert t("skill.desc_line1") in skill_tool["description"]
 
-    def test_procedures_in_skill_tool_description(self, tmp_path: Path):
-        """Procedure metas appear in the skill tool description with '手順' label."""
+    def test_procedures_not_in_skill_tool_description(self, tmp_path: Path):
+        """Procedure metas are not embedded in the skill tool description (catalog is in prompt)."""
         procedure_meta = SkillMeta(
             name="deploy-procedure",
             description="本番デプロイの手順書",
@@ -148,9 +152,8 @@ class TestUnifiedSkillTableE2E:
 
         desc = build_skill_tool_description([], [], [procedure_meta])
 
-        # Procedure appears with (手順) label
-        assert "deploy-procedure (手順)" in desc
-        assert "本番デプロイの手順書" in desc
+        assert "deploy-procedure" not in desc
+        assert "<available_skills>" not in desc
 
     def test_no_full_text_in_system_prompt(self, tmp_path: Path):
         """Even when description keywords match the message, no skill body text
@@ -243,9 +246,8 @@ class TestUnifiedSkillTableE2E:
 
         assert result.injected_procedures == []
 
-    def test_mixed_skills_in_tool_description(self, tmp_path: Path):
-        """Personal skills, common skills, and procedures all appear in the
-        skill tool description with correct type labels."""
+    def test_mixed_skills_ignored_in_tool_description(self, tmp_path: Path):
+        """build_skill_tool_description ignores meta lists (catalog is in system prompt)."""
         personal_meta = SkillMeta(
             name="tool-creator",
             description="新しいPythonツールモジュールを作成するためのメタスキル",
@@ -271,12 +273,10 @@ class TestUnifiedSkillTableE2E:
             [procedure_meta],
         )
 
-        # Personal skill (no type label)
-        assert "- tool-creator: 新しいPythonツールモジュールを作成するためのメタスキル" in desc
-        # Common skill with (共通) label
-        assert "- animaworks-guide (共通): AnimaWorksフレームワークの仕組みガイド" in desc
-        # Procedure with (手順) label
-        assert "- incident-response (手順): 障害発生時の対応手順書" in desc
+        assert "tool-creator" not in desc
+        assert "animaworks-guide" not in desc
+        assert "incident-response" not in desc
+        assert desc == "\n".join([t("skill.desc_line1"), t("skill.desc_line2")])
 
     def test_skill_tool_loads_content_on_demand(self, tmp_path: Path):
         """load_and_render_skill returns the full skill content when invoked."""
@@ -310,8 +310,7 @@ class TestUnifiedSkillTableE2E:
         """Skill tool description must not be overwritten by apply_db_descriptions.
 
         The skill tool is appended AFTER apply_db_descriptions, so even if
-        the DB has an entry for 'skill', it will not affect the dynamic
-        <available_skills> description.
+        the DB has an entry for 'skill', the short usage text from ``t()`` wins.
         """
         personal_meta = SkillMeta(
             name="deploy",
@@ -334,11 +333,11 @@ class TestUnifiedSkillTableE2E:
                 procedure_metas=[],
             )
 
-        skill_tool = next(t for t in tools if t["name"] == "skill")
-        # The dynamic description must survive — DB override must NOT apply
-        assert "deploy" in skill_tool["description"]
-        assert "<available_skills>" in skill_tool["description"]
+        skill_tool = next(x for x in tools if x["name"] == "skill")
+        assert "deploy" not in skill_tool["description"]
+        assert "<available_skills>" not in skill_tool["description"]
         assert "DB OVERRIDE" not in skill_tool["description"]
+        assert t("skill.desc_line1") in skill_tool["description"]
 
 
 class TestHandleSkillIntegration:

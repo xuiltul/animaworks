@@ -1,8 +1,8 @@
 ---
 name: aws-collector-tool
 description: >-
-  AWSインフラ監視ツール。ECSステータス確認・CloudWatchエラーログ取得・メトリクス取得。
-  「AWS」「ECS」「CloudWatch」「インフラ」「メトリクス」「ログ」
+  AWSインフラ情報収集ツール。ECS状態・CloudWatchログ・メトリクスを取得する。
+  Use when: ECS稼働確認、CloudWatchでエラーログ調査、メトリクス取得、AWSリソース監視が必要なとき。
 tags: [infrastructure, aws, monitoring, external]
 ---
 

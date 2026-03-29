@@ -7,7 +7,7 @@ from __future__ import annotations
 
 Tests the full integration of:
 1. Knowledge failure tracking (success_count/failure_count lifecycle)
-2. Channel D vector search (semantic skill matching)
+2. Channel D stub (priming returns no matched skills; catalog lives in system prompt)
 3. Contradiction history persistence + failure_count auto-increment
 
 Requires ChromaDB and sentence-transformers.
@@ -266,8 +266,7 @@ def test_contradiction_history_and_failure_increment(anima_dir, monkeypatch):
 
 
 def test_channel_d_vector_search_integration(anima_dir, monkeypatch):
-    """Channel D should find semantically related skills via vector search."""
-    from core.memory.manager import MemoryManager
+    """Channel D is deprecated; stub returns no skills (catalog is in system prompt)."""
     from core.memory.priming import PrimingEngine
     from core.memory.rag.indexer import MemoryIndexer
     from core.memory.rag.retriever import MemoryRetriever
@@ -292,7 +291,6 @@ def test_channel_d_vector_search_integration(anima_dir, monkeypatch):
 
     # Create retriever and priming engine
     retriever = MemoryRetriever(store, indexer, anima_dir / "knowledge")
-    mm = MemoryManager(anima_dir)
 
     engine = PrimingEngine(anima_dir)
     engine._retriever = retriever
@@ -303,7 +301,7 @@ def test_channel_d_vector_search_integration(anima_dir, monkeypatch):
     result = asyncio.run(
         engine._channel_d_skill_match("サーバーをデプロイしたい", ["デプロイ"]),
     )
-    assert "deploy_procedure" in result
+    assert result == []
 
 
 # ── Test 5: Backward Compatibility ─────────────────────────────

@@ -484,6 +484,34 @@ def step_common_skills_resync(data_dir: Path, dry_run: bool, verbose: bool) -> S
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
+def step_skill_description_use_when_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Resync common_skills/ to migrate descriptions to Use-when pattern."""
+    details: list[str] = []
+    try:
+        from core.paths import TEMPLATES_DIR, _get_locale
+
+        locale = _get_locale()
+        for loc in (locale, "en", "ja"):
+            candidate = TEMPLATES_DIR / loc / "common_skills"
+            if candidate.exists():
+                src = candidate
+                break
+        else:
+            return StepResult(changed=0, skipped=1, details=["No common_skills template found"])
+        dst = data_dir / "common_skills"
+        count = _count_copytree_files(src, dst)
+        if dry_run:
+            details.append(f"Would copy {count} file(s) to common_skills/ (Use-when migration)")
+            return StepResult(changed=count, skipped=0, details=details)
+        dst.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        details.append(f"Copied {count} file(s) to common_skills/ (Use-when migration)")
+        return StepResult(changed=count, skipped=0, details=details)
+    except Exception as exc:
+        logger.exception("step_skill_description_use_when_resync failed")
+        return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
 def step_reference_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Overwrite reference/ from templates."""
     details: list[str] = []
@@ -954,6 +982,12 @@ def register_all_steps(runner: Any) -> None:
             "Resync common_knowledge (team-design + operations/machine layout)",
             "template_sync",
             step_common_knowledge_team_design_resync,
+        ),
+        MigrationStep(
+            "skill_description_use_when_resync",
+            "Resync common_skills/ with Use-when descriptions",
+            "template_sync",
+            step_skill_description_use_when_resync,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

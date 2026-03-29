@@ -1,8 +1,8 @@
 ---
 name: gmail-tool
 description: >-
-  Gmail連携ツール。未読メール確認・本文読み取り・下書き作成。OAuth2認証でGmail APIに直接アクセス。
-  「Gmail」「メール」「未読」「下書き」「受信」
+  Gmail連携ツール。未読確認・本文取得・下書き作成をOAuth2でGmail API経由で行う。
+  Use when: メール受信確認、本文読取、下書き作成、受信トレイ検索、ラベル付きメール操作が必要なとき。
 tags: [communication, gmail, email, external]
 ---
 

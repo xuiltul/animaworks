@@ -1,12 +1,8 @@
 ---
 name: tool-creator
 description: >-
-  Meta-skill for creating AnimaWorks Python tool modules with correct interfaces.
-  Provides procedure for personal tools (animas/{name}/tools/), shared tools (common_tools/),
-  ExternalToolDispatcher integration, API key management via get_credential,
-  and permissions.json allowance configuration.
-  Use when developing custom tools for Web API integration or external service integration.
-  "create tool", "toolify", "new tool", "custom tool", "Python tool"
+  Meta-skill for building AnimaWorks Python external tools: ExternalToolDispatcher, get_credential, and permissions.
+  Use when: adding a module under core/tools, wrapping a Web API, or exposing commands via animaworks-tool.
 ---
 
 # tool-creator

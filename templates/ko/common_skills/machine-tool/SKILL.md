@@ -1,8 +1,8 @@
 ---
 name: machine-tool
 description: >-
-  외부 에이전트 CLI(공작 기계)에 태스크를 위임합니다. 코드 변경, 조사, 분석 등 무거운 작업을
-  외부 에이전트에 맡길 수 있습니다. "machine" "공작 기계" "외부 에이전트"
+  외부 에이전트 CLI(공작 기계)에 태스크를 위임합니다. 대규모 코드 변경·조사·분석을 외부에 맡긴다.
+  Use when: machine 명령으로 구현 위임, 대규모 리팩터·조사 배치, 무거운 에이전트 실행이 필요할 때.
 tags: [machine, agent, external, delegation]
 ---
 

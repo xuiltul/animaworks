@@ -1,11 +1,8 @@
 ---
 name: image-posting
 description: >-
-  Skill for displaying images in chat responses.
-  Covers auto-detection of image URLs in tool results (web_search etc.) with proxy-based display,
-  embedding images via Markdown syntax in response text,
-  and showing own assets images.
-  "post image", "show image", "display picture", "attach image", "show search results", "show found image"
+  Skill for embedding images in chat replies: URL detection from tool results, Markdown image syntax, and assets paths.
+  Use when: surfacing images from search or generation tools, pasting Markdown images, or showing attachments.
 ---
 
 # image-posting — Displaying Images in Chat Responses

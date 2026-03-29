@@ -1,18 +1,8 @@
 ---
 name: animaworks-guide
 description: >-
-  Complete reference for animaworks commands and CLI.
-  Covers server operations (start/stop/restart/status/reset), chat and messaging (chat/send/board),
-  Anima management (list/info/create/enable/disable/delete/restart/set-model/set-role/reload/audit),
-  model information (models list/info/show), heartbeat/cron, logs/cost,
-  task management (task add/update/list), config management (config get/set/list),
-  RAG index management (index), asset operations (optimize-assets/remake-assets),
-  animaworks-tool external tool execution,
-  and background task monitoring (check_background_task/list_background_tasks).
-  "command", "usage", "CLI", "animaworks", "start", "stop", "restart", "send",
-  "create Anima", "change role", "change model", "status", "info",
-  "model list", "model info", "logs", "cost", "task", "config",
-  "background task", "task status"
+  Full animaworks CLI reference: server, Anima lifecycle, models, tasks, config, RAG, assets, external tools.
+  Use when: looking up subcommands, starting or stopping the server, or managing Anima, models, tasks, logs, config, indexes.
 ---
 
 # AnimaWorks CLI Complete Reference

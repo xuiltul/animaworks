@@ -1,9 +1,8 @@
 ---
 name: image-gen-tool
 description: >-
-  Image and 3D model generation tool. Character fullbody, bustup, chibi, and 3D model generation.
-  NovelAI/Flux/Meshy support.
-  "image generation" "fullbody" "bustup" "chibi" "3D model" "avatar"
+  Image and 3D model generation tool using NovelAI, Flux, and Meshy for illustrations and 3D output.
+  Use when: generating character art, bust or chibi images, avatars, or running image pipelines.
 tags: [image, 3d, generation, external]
 ---
 

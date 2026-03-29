@@ -122,8 +122,7 @@ def build_tool_list(
 
     tools = apply_db_descriptions(tools)
 
-    # Skill tool description is dynamically generated — append AFTER
-    # apply_db_descriptions to prevent DB overwrite of <available_skills>.
+    # Skill tool description — catalog is now in system prompt Group 4.
     if include_skill_tools:
         from core.tooling.skill_tool import build_skill_tool_description
 
@@ -211,7 +210,7 @@ def build_unified_tool_list(
 
     tools = apply_db_descriptions(tools)
 
-    # AW-essential: skill (always present, appended AFTER apply_db_descriptions)
+    # Skill tool description — catalog is now in system prompt Group 4.
     if include_skill_tools:
         from core.tooling.skill_tool import build_skill_tool_description
 

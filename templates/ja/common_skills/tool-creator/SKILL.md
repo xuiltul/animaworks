@@ -1,13 +1,8 @@
 ---
 name: tool-creator
 description: >-
-  AnimaWorks用のPythonツールモジュールを正しいインターフェースで作成するメタスキル。
-  個人ツール（animas/{name}/tools/）・共有ツール（common_tools/）の作成手順、
-  ExternalToolDispatcher 連携、use_tool / Bash+animaworks-tool 経由の呼び出し、
-  get_credential による認証情報解決、permissions（JSON/MD）の tool_creation・外部ツール、
-  EXECUTION_PROFILE（background / gated）を提供。
-  Web API連携・外部サービス統合のカスタムツール開発時に使用。
-  「ツールを作成」「ツール化」「新しいツール」「カスタムツール」「Python ツール」
+  AnimaWorks向けPython外部ツールモジュールを作成するメタスキル。core/tools連携・get_credential・permissionsを扱う。
+  Use when: core/toolsへ新規モジュール追加、Web APIラッパー実装、animaworks-toolから呼ぶカスタムツール開発が必要なとき。
 ---
 
 # tool-creator

@@ -1,11 +1,8 @@
 ---
 name: image-posting
 description: >-
-  채팅 응답에 이미지를 첨부하고 표시하는 스킬.
-  도구 결과(web_search, image_gen 등)에 포함된 이미지 URL/경로의 자동 감지 및 표시 방법,
-  응답 텍스트 내 Markdown 이미지 구문을 통한 임베딩 방법,
-  자신의 assets/attachments 이미지 표시 방법을 제공합니다.
-  "이미지 첨부", "이미지 보여줘", "일러스트 표시", "사진 올리기", "검색 이미지 표시"
+  채팅 응답에 이미지를 넣어 표시하는 스킬. 도구 결과 URL 감지, Markdown 이미지, assets 경로를 다룬다.
+  Use when: 검색·생성 도구 이미지를 답변에 포함, Markdown으로 이미지 삽입, 첨부 표시가 필요할 때.
 ---
 
 # image-posting — 채팅 응답에 이미지 표시하기

@@ -1,13 +1,8 @@
 ---
 name: skill-creator
 description: >-
-  Markdownスキルをディレクトリ構造で作成するメタスキル。
-  create_skillツールでSKILL.md（frontmatter + 本文）を生成し、
-  オプションでreferences/やtemplates/にファイルを配置する。
-  description記述ルール、「」キーワード設計、Progressive Disclosure構造を提供する。
-  skillツールの解決順・手続き(procedures)・ビルトイン置換など読み込み側の挙動は
-  core/tooling/skill_tool.py に準拠する。
-  「スキル作成」「スキルを作りたい」「新しいスキル」「手順書を作成」「スキルファイル」
+  Markdownスキルを作成するメタスキル。SKILL.mdのfrontmatterと本文、Progressive Disclosureとcreate_skillの手順を扱う。
+  Use when: 新規スキル追加、skillツール向けの記述ルール確認、referencesやtemplates付きスキル生成が必要なとき。
 ---
 
 # skill-creator
@@ -100,10 +95,10 @@ SKILL.md はYAMLフロントマターとMarkdown本文で構成される。
 
 ```yaml
 ---
-name: スキル名
+name: skill-name
 description: >-
-  スキルの説明。
-  「キーワード1」「キーワード2」
+  スキルが行うことの簡潔な説明（三人称）。
+  Use when: このスキルを使う具体的な場面をカンマ区切りで列挙する。
 allowed_tools:
   - read_memory_file
   - web_search
@@ -111,6 +106,8 @@ allowed_tools:
 ```
 
 ### `description` の役割（明示呼び出し vs 自動候補）
+
+**新規スキルの記述**は Agent Skills 標準に沿い、**`Use when:`** で利用シーンを書く（詳細は `references/description_guide.md`）。作成後は **`python scripts/lint_skill.py`** で形式を検証できる。
 
 - **`skill` ツールを名前指定で呼んだ場合**: 上記解決パスにファイルがあれば **description のマッチに関係なく** 本文が読み込まれ、ビルトイン置換・`*-tool` フィルタ・`allowed_tools` 追記まで行われる。
 - **Priming（Channel D 等）でスキル名だけが候補として載る場合**: `match_skills_by_description(message, metas, retriever=..., anima_name=...)` の **3層マッチ**を通過したスキル／手続きが最大 **5 件**（`_MAX_SKILL_MATCHES`）まで選ばれる。本文は載らず **名前のみ**。
@@ -120,7 +117,7 @@ allowed_tools:
 
 **レガシー互換**: `description` が空のとき、`extract_skill_meta()` は本文先頭付近の **`## 概要` セクションの最初の非空行**を description のフォールバックとして使う。新規スキルではフロントマターを正とし、`## 概要` 依存は避ける。
 
-**description の書き方**（具体化・キーワード設計）は `references/description_guide.md` を参照。
+**description の書き方**（**Use when:** パターン・lint）は `references/description_guide.md` を参照。
 
 ## Progressive Disclosure（段階的開示）
 
@@ -144,14 +141,14 @@ Level 1 は一覧・マッチングでコンテキストを消費しやすいた
 
 - 何を自動化・手順化したいか
 - 対象は個人スキルか共通スキルか（手続きなら `procedures/` への別設計）
-- どのような言葉で発動させたいか（トリガーキーワード）
+- **Use when:** に書く利用シーン（いつこのスキルを選ぶか）
 
 ### Step 2: 設計
 
 以下を決定する:
 
 - **name**: スキル名（ケバブケース、例: `my-skill`）。外部ツールガイドなら `*-tool` 規約を検討
-- **description**: トリガーとなる説明文とキーワード（`references/description_guide.md` を参照）
+- **description**: 三人称の要約 + **`Use when:`** 行（`references/description_guide.md` を参照）
 - **body**: 手順の構成（セクション分け）。必要なら `{{now_local}}` 等のプレースホルダを利用
 - **references** / **templates**: 必要なら外部ファイルの設計
 - **allowed_tools**: 推奨ツールを絞りたい場合のみ
@@ -193,7 +190,7 @@ create_skill(
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
 | skill_name | ✓ | スキル名（ケバブケース）。`/`, `\`, `..` 不可 |
-| description | ✓ | frontmatter description（トリガーキーワード含む） |
+| description | ✓ | frontmatter description（**Use when:** 推奨。`references/description_guide.md`） |
 | body | ✓ | SKILL.md本文（Markdown）。ビルトイン置換対象 |
 | location | | `personal`（デフォルト）または `common` |
 | references | | `references/` に配置するファイル群。`[{filename, content}, ...]` |
@@ -211,6 +208,7 @@ create_skill(
 - **個人スキル**: `read_memory_file(path="skills/{name}/SKILL.md")` で内容確認、または `skill` ツールで `skill_name="{name}"` を実行
 - **共通スキル**: 同上（パスは組織の `common_skills/` 基準）
 - **手続き**: `skill(skill_name="{name}")` で `procedures/{name}.md` が解決されることを確認
+- **`python scripts/lint_skill.py`** で `SKILL.md` の frontmatter / description を検証（任意だが推奨）
 
 ## チェックリスト
 
@@ -219,7 +217,7 @@ create_skill(
 - [ ] `---` で始まり `---` で閉じるYAMLフロントマターがある
 - [ ] `name` フィールドがある
 - [ ] `description` フィールドがある
-- [ ] description に `「」` キーワードを置くか、Tier 2/3 でも拾われるよう具体的な語を含める（括弧キーワードが最も制御しやすい）
+- [ ] description に **`Use when:`** があり、かつドメイン固有の具体語を含める（旧 `「」` 列挙は使わない）
 - [ ] **descriptionがドメイン固有で具体的**（「管理を行う」「確認する」のような汎用表現を避け、ツール名・操作名・対象を明記）
 - [ ] bodyに具体的な手順が記載されている
 - [ ] 新規ではフロントマターに `description` を置き、**`## 概要` だけに説明を依存しない**（`## 発動条件` 等の旧テンプレート形式も避ける）
@@ -233,9 +231,8 @@ create_skill(
 ---
 name: {スキル名}
 description: >-
-  {具体的な対象}の{具体的な操作}スキル。
-  {使用するツール名/API名}で{具体的な手順の概要}を実行する。
-  「{ドメイン固有キーワード1}」「{ドメイン固有キーワード2}」「{ドメイン固有キーワード3}」
+  {具体的な対象}の{具体的な操作}スキル（三人称の短い要約）。
+  Use when: {利用シーンをカンマ区切り}
 ---
 
 # {スキル名}

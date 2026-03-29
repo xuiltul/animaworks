@@ -51,7 +51,6 @@ from core.memory.priming.constants import (
     _BUDGET_RELATED_KNOWLEDGE,
     _BUDGET_REQUEST,
     _BUDGET_SENDER_PROFILE,
-    _BUDGET_SKILL_MATCH,
     _CHARS_PER_TOKEN,
     _DEFAULT_MAX_PRIMING_TOKENS,
 )
@@ -114,7 +113,7 @@ class PrimingEngine:
       A. Sender profile (direct file read)
       B. Recent activity (unified activity log, replaces old episodes + channels)
       C. Related knowledge (dense vector search)
-      D. Skill matching (description-based 3-tier match with vector search)
+      D. (deprecated — skill catalog moved to system prompt)
       E. Pending tasks (persistent task queue summary)
       F. Episodes (dense vector search over episode memory)
     """
@@ -266,7 +265,6 @@ class PrimingEngine:
             self._channel_b_recent_activity(sender_name, keywords, channel=channel),
             self._channel_c0_important_knowledge(),
             channel_c_coro,
-            self._channel_d_skill_match(message, keywords, channel=channel),
             self._channel_e_pending_tasks(),
             self._collect_recent_outbound(),
             self._channel_f_episodes(
@@ -292,11 +290,11 @@ class PrimingEngine:
                 f"{important_knowledge}\n\n{related_knowledge}" if related_knowledge else important_knowledge
             )
 
-        matched_skills = results[4] if isinstance(results[4], list) else []
-        pending_tasks = results[5] if isinstance(results[5], str) else ""
-        recent_outbound = results[6] if isinstance(results[6], str) else ""
-        episodes = results[7] if isinstance(results[7], str) else ""
-        pending_human_notifications = results[8] if isinstance(results[8], str) else ""
+        matched_skills: list[str] = []  # Channel D deprecated
+        pending_tasks = results[4] if isinstance(results[4], str) else ""
+        recent_outbound = results[5] if isinstance(results[5], str) else ""
+        episodes = results[6] if isinstance(results[6], str) else ""
+        pending_human_notifications = results[7] if isinstance(results[7], str) else ""
 
         for i, r in enumerate(results):
             if isinstance(r, Exception):
@@ -306,7 +304,6 @@ class PrimingEngine:
         budget_profile = int(_BUDGET_SENDER_PROFILE * budget_ratio)
         budget_activity = max(400, int(_BUDGET_RECENT_ACTIVITY * budget_ratio))
         budget_knowledge = int(_BUDGET_RELATED_KNOWLEDGE * budget_ratio)
-        budget_skills = int(_BUDGET_SKILL_MATCH * budget_ratio)
         budget_tasks = int(_BUDGET_PENDING_TASKS * budget_ratio)
         budget_episodes = int(_BUDGET_RELATED_EPISODES * budget_ratio)
 
@@ -324,7 +321,7 @@ class PrimingEngine:
             recent_activity=truncate_tail(recent_activity, budget_activity),
             related_knowledge=truncated_knowledge,
             related_knowledge_untrusted=truncated_untrusted,
-            matched_skills=matched_skills[: max(1, budget_skills // 50)],
+            matched_skills=matched_skills,
             pending_tasks=truncate_head(pending_tasks, budget_tasks),
             recent_outbound=recent_outbound,
             episodes=truncate_tail(episodes, budget_episodes),

@@ -334,6 +334,7 @@ def _build_group4(
     scale: float,
     execution_mode: str,
     skill_metas: list[Any],
+    common_skill_metas: list[Any],
     prompt_store: Any,
     is_heartbeat: bool,
     is_task: bool,
@@ -461,6 +462,45 @@ def _build_group4(
                 et += t("builder.machine_hint")
             _add(et, "external_tools", 2)
 
+    # ── Skill catalog (Agent Skills standard) ───
+    if not is_task and not is_heartbeat:
+        from core.memory.skill_metadata import SkillMetadataService
+
+        _DESC_LIMIT = 250
+        catalog_lines: list[str] = [
+            t("builder.skill_catalog_header"),
+            t("builder.skill_catalog_instruction"),
+            "",
+            "<available_skills>",
+        ]
+        for meta in skill_metas:
+            desc = (meta.description[:_DESC_LIMIT] + "…") if len(meta.description) > _DESC_LIMIT else meta.description
+            catalog_lines.append(f"- {meta.name}: {desc}")
+
+        common_label = t("skill.label_common")
+        for meta in common_skill_metas:
+            desc = (meta.description[:_DESC_LIMIT] + "…") if len(meta.description) > _DESC_LIMIT else meta.description
+            catalog_lines.append(f"- {meta.name} ({common_label}): {desc}")
+
+        procedure_label = t("skill.label_procedure")
+        proc_dir = pd / "procedures"
+        if proc_dir.is_dir():
+            for f in sorted(proc_dir.glob("*.md")):
+                try:
+                    pmeta = SkillMetadataService.extract_skill_meta(f)
+                    desc = (
+                        (pmeta.description[:_DESC_LIMIT] + "…")
+                        if len(pmeta.description) > _DESC_LIMIT
+                        else pmeta.description
+                    )
+                    catalog_lines.append(f"- {pmeta.name} ({procedure_label}): {desc}")
+                except Exception:
+                    logger.debug("Failed to extract procedure meta from %s", f, exc_info=True)
+
+        catalog_lines.append("</available_skills>")
+        catalog_text = "\n".join(catalog_lines)
+        _add(catalog_text, "skill_catalog", 2, "elastic")
+
     return out, injected_procs, injected_know, overflow
 
 
@@ -581,6 +621,7 @@ def build_system_prompt(
     prompt_store = get_prompt_store()
     other_animas = _discover_other_animas(pd)
     skill_metas = memory.list_skill_metas()
+    common_skill_metas = memory.list_common_skill_metas()
     permissions = memory.read_permissions()
 
     # Assemble sections from all 6 groups
@@ -607,6 +648,7 @@ def build_system_prompt(
         scale,
         execution_mode,
         skill_metas,
+        common_skill_metas,
         prompt_store,
         is_heartbeat,
         is_task,

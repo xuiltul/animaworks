@@ -1,20 +1,8 @@
 ---
 name: animaworks-guide
 description: >-
-  animaworksコマンド・CLIの完全リファレンス。
-  サーバー操作(start/serve/stop/restart/status/reset)、チャット・メッセージング(chat/send/board)、
-  Anima管理(list/info/permissions/create/enable/disable/delete/restart/set-model/set-background-model/
-  set-outbound-limit/set-role/reload/rename/audit)、
-  モデル情報(models list・--modeはS/A/B/Cのみ/info/show)、ランタイム移行(migrate)、ハートビート、ログ・コスト(logs/cost)、
-  タスク管理(task add/update/list・ANIMAWORKS_ANIMA_DIR必須)、設定管理(config get/set/list/export-sections/-i)、
-  プロファイル(profile list/add/remove/start/stop/start-all/stop-all)、RAGインデックス管理(index・conversation要約・L2警告・--shared)、
-  アセット操作(optimize-assets: -a/--all/--simplify等、remake-assets: 7ステップ・Vibe Transferオプション)、
-  内部サブコマンド(internal/vault/supervisor・同上環境変数)、
-  animaworks-toolの外部ツール実行・第1引数ショートカット、background_tasksとbackground_notificationsの区別を網羅。
-  「コマンド」「使い方」「CLI」「animaworks」「起動」「停止」「再起動」「送信方法」
-  「Anima作成」「ロール変更」「モデル変更」「ステータス確認」「インデックス」「migrate」
-  「モデル一覧」「モデル情報」「ログ」「コスト」「タスク」「設定」「プロファイル」
-  「バックグラウンドタスク確認」「タスク状態」
+  animaworksコマンドの完全リファレンス。サーバー操作・Anima管理・モデル・タスク・設定・RAG・資産・外部ツールのCLI書式をまとめる。
+  Use when: サブコマンドの書式確認、サーバー起動停止、Anima作成・モデル変更・タスク追加・ログ・設定・インデックス操作が必要なとき。
 ---
 
 # AnimaWorks CLI 完全リファレンス

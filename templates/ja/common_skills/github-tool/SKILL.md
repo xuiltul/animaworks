@@ -1,8 +1,8 @@
 ---
 name: github-tool
 description: >-
-  GitHub連携ツール。Issue・PR一覧取得、Issue作成、PR作成。gh CLIラッパー。
-  「GitHub」「Issue」「PR」「プルリクエスト」「リポジトリ」
+  GitHub連携ツール。Issue・PRの一覧取得・作成をgh CLI経由で行う。
+  Use when: IssueやPRの作成・一覧、リポジトリ操作、GitHub上のタスク確認が必要なとき。
 tags: [development, github, external]
 ---
 

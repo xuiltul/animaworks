@@ -199,15 +199,14 @@ class TestBuilderProcedureInjection:
         assert "deploy" in str(result.injected_procedures[0]).lower()
 
 
-# ── 2-3: Priming Channel D with procedures ──────────────
+# ── 2-3: Priming Channel D (deprecated stub) ──────────────
 
 
 class TestPrimingChannelDProcedures:
-    """Test that Channel D searches procedures/ in addition to skills/."""
+    """Channel D is a no-op stub; skill discovery is in the system prompt catalog."""
 
     async def test_channel_d_matches_procedure_filename(self, anima_dir: Path) -> None:
-        """Procedure filenames should be matched in Channel D."""
-        # Create a procedure file
+        """Procedure filenames are not matched via Channel D (stub returns empty)."""
         proc_dir = anima_dir / "procedures"
         proc_dir.mkdir(parents=True, exist_ok=True)
         (proc_dir / "deploy-pipeline.md").write_text(
@@ -220,10 +219,10 @@ class TestPrimingChannelDProcedures:
         engine = PrimingEngine(anima_dir)
 
         result = await engine._channel_d_skill_match("deploy pipeline", ["deploy"])
-        assert "deploy-pipeline" in result
+        assert result == []
 
     async def test_channel_d_matches_procedure_content(self, anima_dir: Path) -> None:
-        """Procedure file content should be matched in Channel D."""
+        """Procedure content is not matched via Channel D (stub returns empty)."""
         proc_dir = anima_dir / "procedures"
         proc_dir.mkdir(parents=True, exist_ok=True)
         (proc_dir / "ops-runbook.md").write_text(
@@ -236,10 +235,10 @@ class TestPrimingChannelDProcedures:
         engine = PrimingEngine(anima_dir)
 
         result = await engine._channel_d_skill_match("incident response", ["incident"])
-        assert "ops-runbook" in result
+        assert result == []
 
     async def test_channel_d_no_double_count(self, anima_dir: Path) -> None:
-        """Same-named skill and procedure should not produce duplicates."""
+        """Stub returns empty even when skills and procedures exist."""
         skills_dir = anima_dir / "skills"
         proc_dir = anima_dir / "procedures"
         skills_dir.mkdir(parents=True, exist_ok=True)
@@ -260,5 +259,4 @@ class TestPrimingChannelDProcedures:
         engine = PrimingEngine(anima_dir)
 
         result = await engine._channel_d_skill_match("deploy the application", ["deploy"])
-        # "deploy" should appear only once due to dedup (personal skill takes precedence)
-        assert result.count("deploy") == 1
+        assert result == []
