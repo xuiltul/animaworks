@@ -6,18 +6,15 @@
 
 {episodes_summary}
 
-## Resolved Events
-
-{resolved_events_summary}
-
-## Today's Activity Log (behavioral records)
-{activity_log_summary}
-
-※ The activity log records actions and does not include reasoning.
-When extracting knowledge from it, note the following:
+※ The episodes above are structured timelines automatically extracted from the activity log.
+When extracting knowledge from them, note the following:
 - Record in knowledge/ only what can be confidently judged as fact
 - Record items requiring inference or interpretation with confidence: 0.5
 - Add `source: "activity_log"` to frontmatter
+
+## Resolved Events
+
+{resolved_events_summary}
 
 {reflections_summary}
 

@@ -6,18 +6,15 @@
 
 {episodes_summary}
 
-## 해결된 이벤트
-
-{resolved_events_summary}
-
-## 오늘의 액티비티 로그 (행동 기록)
-{activity_log_summary}
-
-※ 액티비티 로그는 행동의 기록이며 추론 과정은 포함되지 않습니다.
+※ 위의 에피소드는 액티비티 로그에서 자동 추출된 구조화된 타임라인입니다.
 여기서 knowledge를 추출할 때는 다음 사항에 주의하세요:
 - 확실히 사실이라고 판단할 수 있는 것만 knowledge/에 기록
 - 추측이나 해석이 필요한 항목은 confidence: 0.5로 기록
 - frontmatter에 `source: "activity_log"` 추가
+
+## 해결된 이벤트
+
+{resolved_events_summary}
 
 {reflections_summary}
 
