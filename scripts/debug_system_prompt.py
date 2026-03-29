@@ -446,8 +446,6 @@ def main() -> None:
             print(f"  - recent_activity  : {len(priming_result.recent_activity)} chars")
         if priming_result.related_knowledge:
             print(f"  - related_knowledge: {len(priming_result.related_knowledge)} chars")
-        if priming_result.matched_skills:
-            print(f"  - matched_skills   : {priming_result.matched_skills}")
         if priming_result.pending_tasks:
             print(f"  - pending_tasks    : {len(priming_result.pending_tasks)} chars")
     except Exception as e:

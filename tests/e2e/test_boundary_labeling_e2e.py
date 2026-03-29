@@ -83,18 +83,6 @@ def test_format_priming_section_wraps_pending_tasks() -> None:
     assert "Task 1, Task 2" in formatted
 
 
-def test_format_priming_section_skills_not_wrapped() -> None:
-    """PrimingResult with matched_skills -> output does NOT contain <priming> for skills."""
-    result = PrimingResult(matched_skills=["skill1", "skill2"])
-    formatted = format_priming_section(result, sender_name="human")
-    assert "skill1" in formatted
-    assert "skill2" in formatted
-    assert "使えそうなスキル" in formatted
-    assert "あなたが持っているスキル" in formatted
-    # Skills are plain text only - no <priming> wrapper
-    assert "<priming" not in formatted
-
-
 def test_format_priming_section_empty_result() -> None:
     """Empty PrimingResult returns empty string."""
     result = PrimingResult()

@@ -251,8 +251,8 @@ class TestBaseToolCount:
         # AW-essential: task management
         assert "submit_tasks" in names
         assert "update_task" in names
-        # AW-essential: skill
-        assert "skill" in names
+        # AW-essential: create_skill
+        assert "create_skill" in names
         # AW-essential: planning
         assert "todo_write" in names
         # Mode B only — must NOT be in Mode A

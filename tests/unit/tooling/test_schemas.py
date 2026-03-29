@@ -40,6 +40,7 @@ class TestMemoryTools:
         schema = next(t for t in MEMORY_TOOLS if t["name"] == "search_memory")
         scope_enum = schema["parameters"]["properties"]["scope"]["enum"]
         assert "common_knowledge" in scope_enum
+        assert "skills" in scope_enum
         assert "activity_log" in scope_enum
         # Also verify other expected values are still present
         assert "knowledge" in scope_enum

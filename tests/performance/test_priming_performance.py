@@ -410,7 +410,6 @@ async def test_concurrent_priming(tmp_path):
         assert isinstance(result.sender_profile, str)
         assert isinstance(result.recent_activity, str)
         assert isinstance(result.related_knowledge, str)
-        assert isinstance(result.matched_skills, list)
 
 
 @pytest.mark.performance

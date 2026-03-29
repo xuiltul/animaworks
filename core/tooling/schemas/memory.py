@@ -30,6 +30,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                         "episodes",
                         "procedures",
                         "common_knowledge",
+                        "skills",
                         "activity_log",
                         "all",
                     ],

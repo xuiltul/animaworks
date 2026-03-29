@@ -168,10 +168,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "builder.heartbeat_tool_fallback": {
         "ja": (
-            "Heartbeatでは**観察・報告・計画・フォローアップ**にツールを使ってください。\n- OK: read_channel, search_memory, read_memory_file, send_message, post_channel, update_task, delegate_task, submit_tasks, skill, Write（pending作成用）\n- NG: コード変更、ファイル大量編集、長時間の分析・調査\n重い作業が必要な場合は state/pending/ にタスクファイルを書き出してください。"
+            "Heartbeatでは**観察・報告・計画・フォローアップ**にツールを使ってください。\n- OK: read_channel, search_memory, read_memory_file, send_message, post_channel, update_task, delegate_task, submit_tasks, Write（pending作成用）\n- NG: コード変更、ファイル大量編集、長時間の分析・調査\n重い作業が必要な場合は state/pending/ にタスクファイルを書き出してください。"
         ),
         "en": (
-            "In Heartbeat, use tools for **observation, reporting, planning, and follow-up**.\n- OK: read_channel, search_memory, read_memory_file, send_message, post_channel, update_task, delegate_task, submit_tasks, skill, Write (for pending creation)\n- NG: code changes, bulk file edits, lengthy analysis/investigation\nIf heavy work is needed, write a task file to state/pending/."
+            "In Heartbeat, use tools for **observation, reporting, planning, and follow-up**.\n- OK: read_channel, search_memory, read_memory_file, send_message, post_channel, update_task, delegate_task, submit_tasks, Write (for pending creation)\n- NG: code changes, bulk file edits, lengthy analysis/investigation\nIf heavy work is needed, write a task file to state/pending/."
         ),
     },
     "builder.injection_size_warning": {
@@ -184,10 +184,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "builder.machine_hint": {
         "ja": (
-            "\n\n**machine ツール**: コード変更・調査・分析など重い作業は `animaworks-tool machine run` で外部エージェントに委託できます。 詳細は `skill machine-tool` で確認。"
+            '\n\n**machine ツール**: コード変更・調査・分析など重い作業は `animaworks-tool machine run` で外部エージェントに委託できます。詳細は read_memory_file(path="common_skills/machine-tool/SKILL.md") で確認。'
         ),
         "en": (
-            "\n\n**machine tool**: For heavy tasks like code changes, investigation, or analysis, delegate to an external agent via `animaworks-tool machine run`. Run `skill machine-tool` for details."
+            '\n\n**machine tool**: For heavy tasks like code changes, investigation, or analysis, delegate to an external agent via `animaworks-tool machine run`. Use read_memory_file(path="common_skills/machine-tool/SKILL.md") for details.'
         ),
     },
     "builder.skill_catalog_header": {
@@ -195,8 +195,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "## Available Skills",
     },
     "builder.skill_catalog_instruction": {
-        "ja": "該当するスキルがあれば `skill` ツールで skill_name を指定して全文をロードすること。",
-        "en": "When a matching skill exists, use the `skill` tool with skill_name to load full instructions.",
+        "ja": "該当するスキルがあれば、表示されているパスで `read_memory_file` を使って全文を読むこと。",
+        "en": "When a matching skill exists, use `read_memory_file` with the path shown to load full instructions.",
     },
     "builder.procedure_label": {
         "ja": "手順",
@@ -412,18 +412,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "アクティビティレベルを {level}% に変更しました",
         "en": "Activity level changed to {level}%",
     },
-    "skill.context_header": {
-        "ja": "## コンテキスト",
-        "en": "## Context",
-    },
-    "skill.desc_line1": {
-        "ja": "スキル・手順書をオンデマンドでロードする。",
-        "en": "Load skills and procedures on demand.",
-    },
-    "skill.desc_line2": {
-        "ja": "システムプロンプトの available_skills セクションから該当スキルを選び、skill_name を指定して呼び出す。",
-        "en": "Choose a matching skill from the available_skills section in the system prompt and call with skill_name.",
-    },
     "skill.desc_line3": {
         "ja": "該当するスキルがある場合に使用すること。",
         "en": "Use when a matching skill is available.",
@@ -436,33 +424,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "手順",
         "en": "procedure",
     },
-    "skill.not_found": {
-        "ja": ("スキル '{skill_name}' が見つかりません。\n利用可能なスキル: {available}"),
-        "en": ("Skill '{skill_name}' not found.\nAvailable skills: {available}"),
-    },
-    "skill.tool_constraint_desc": {
-        "ja": "このスキルの実行中は以下のツールのみ使用してください:",
-        "en": "Only use the following tools while executing this skill:",
-    },
-    "skill.tool_constraint_header": {
-        "ja": "## ツール制約",
-        "en": "## Tool Constraints",
-    },
     "skill.truncated": {
         "ja": "(以降省略)",
         "en": "(truncated)",
-    },
-    "skill.type_common": {
-        "ja": "共通",
-        "en": "common",
-    },
-    "skill.type_personal": {
-        "ja": "個人",
-        "en": "personal",
-    },
-    "skill.type_procedure": {
-        "ja": "手順",
-        "en": "procedure",
     },
     "skill_creator.created": {
         "ja": ("スキル '{skill_name}' を作成しました: {skill_dir}\n作成ファイル: {files_str}"),

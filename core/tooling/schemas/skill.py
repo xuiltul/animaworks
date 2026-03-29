@@ -23,7 +23,7 @@ USE_TOOL: list[dict[str, Any]] = [
             "Combines tool_name and action to dispatch to the appropriate "
             "external tool module (e.g. chatwork + send → chatwork_send). "
             "Available tools depend on permissions.md settings. "
-            "Use the 'skill' tool to look up detailed usage for each tool."
+            "Use read_memory_file on common_skills/<name>/SKILL.md to look up detailed usage for each tool."
         ),
         "parameters": {
             "type": "object",
@@ -93,24 +93,6 @@ TOOL_MANAGEMENT_TOOLS: list[dict[str, Any]] = [
 
 def _skill_tools() -> list[dict[str, Any]]:
     return [
-        {
-            "name": "skill",
-            "description": _t("schema.skill.desc"),  # Enriched at runtime via build_skill_tool_description()
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "skill_name": {
-                        "type": "string",
-                        "description": _t("schema.skill.skill_name"),
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": _t("schema.skill.context"),
-                    },
-                },
-                "required": ["skill_name"],
-            },
-        },
         {
             "name": "create_skill",
             "description": _t("schema.create_skill.desc"),

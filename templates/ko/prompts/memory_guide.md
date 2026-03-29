@@ -11,7 +11,7 @@
 | `state/` | 현재 상태 | 현재 무엇을 하고 있는지 | 수시 업데이트 (`pending/`은 `submit_tasks` 경유) |
 
 지식: {knowledge_count}건 | 절차서: {procedure_count}건
-스킬과 절차서 목록은 skill 도구로 확인할 수 있습니다.
+스킬·절차서 경로는 시스템 프롬프트의 스킬 카탈로그에서 확인하고, 본문은 `read_memory_file`로 읽습니다.
 
 공유 사용자: {shared_users_list}
 

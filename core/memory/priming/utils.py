@@ -39,8 +39,7 @@ class RetrieverCache:
     def get_or_create(self, anima_dir: Path, knowledge_dir: Path) -> MemoryRetriever | None:
         """Return a MemoryRetriever instance, creating one lazily if needed.
 
-        Shared between Channel C (related knowledge) and Channel D (skill
-        matching).  Returns ``None`` when RAG dependencies are unavailable
+        Shared for Channel C (related knowledge).  Returns ``None`` when RAG dependencies are unavailable
         or the knowledge directory does not exist.
         """
         if self._initialized or self._retriever is not None:

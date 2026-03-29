@@ -11,7 +11,7 @@
 | `state/` | 現在の状態 | 今何をしているか | 随時更新（`pending/` は `submit_tasks` 経由） |
 
 知識: {knowledge_count}件 | 手順書: {procedure_count}件
-スキル・手順書の一覧はskillツールで確認できます。
+スキル・手順書のパスはシステムプロンプトのスキルカタログで確認し、本文は `read_memory_file` で読み込めます。
 
 共有ユーザー: {shared_users_list}
 

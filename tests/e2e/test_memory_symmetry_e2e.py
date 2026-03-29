@@ -262,49 +262,7 @@ def test_contradiction_history_and_failure_increment(anima_dir, monkeypatch):
     datetime.fromisoformat(entry["ts"])
 
 
-# ── Test 4: Channel D Semantic Skill Matching ──────────────────
-
-
-def test_channel_d_vector_search_integration(anima_dir, monkeypatch):
-    """Channel D is deprecated; stub returns no skills (catalog is in system prompt)."""
-    from core.memory.priming import PrimingEngine
-    from core.memory.rag.indexer import MemoryIndexer
-    from core.memory.rag.retriever import MemoryRetriever
-    from core.memory.rag.store import ChromaVectorStore
-
-    # Create skills with descriptions
-    skills_dir = anima_dir / "skills"
-    _write_skill(skills_dir, "deploy_procedure.md",
-                 "「デプロイ」「deploy」AWSへのサーバーデプロイ手順",
-                 "# Deploy\n\n1. Build 2. Push 3. Deploy")
-    _write_skill(skills_dir, "database_migration.md",
-                 "「DB」「マイグレーション」データベースのスキーマ変更手順",
-                 "# DB Migration\n\n1. Backup 2. Migrate 3. Verify")
-    _write_skill(skills_dir, "meeting_notes.md",
-                 "「会議」「議事録」会議メモの書き方",
-                 "# Meeting Notes\n\n議事録テンプレート")
-
-    # Index skills
-    store = ChromaVectorStore(persist_dir=anima_dir / "vectordb")
-    indexer = MemoryIndexer(store, "test_anima", anima_dir)
-    indexer.index_directory(skills_dir, "skills")
-
-    # Create retriever and priming engine
-    retriever = MemoryRetriever(store, indexer, anima_dir / "knowledge")
-
-    engine = PrimingEngine(anima_dir)
-    engine._retriever = retriever
-    engine._retriever_initialized = True
-
-    # Test: keyword match should find deploy skill
-    import asyncio
-    result = asyncio.run(
-        engine._channel_d_skill_match("サーバーをデプロイしたい", ["デプロイ"]),
-    )
-    assert result == []
-
-
-# ── Test 5: Backward Compatibility ─────────────────────────────
+# ── Test 4: Backward Compatibility ─────────────────────────────
 
 
 def test_backward_compatibility_legacy_knowledge(anima_dir):

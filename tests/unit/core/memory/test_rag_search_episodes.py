@@ -76,6 +76,7 @@ class TestResolveSearchTypes:
         assert "episodes" in types
         assert "knowledge" in types
         assert "procedures" in types
+        assert "skills" in types
         assert "conversation_summary" in types
 
     def test_knowledge_scope(self) -> None:

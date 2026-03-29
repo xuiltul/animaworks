@@ -52,9 +52,6 @@ def build_tool_list(
     include_background_task_tools: bool = False,
     include_vault_tools: bool = False,
     include_skill_tools: bool = False,
-    skill_metas: list[Any] | None = None,
-    common_skill_metas: list[Any] | None = None,
-    procedure_metas: list[Any] | None = None,
     external_schemas: list[dict[str, Any]] | None = None,
     trigger: str = "",
 ) -> list[dict[str, Any]]:
@@ -73,10 +70,7 @@ def build_tool_list(
         include_submit_tasks: Include submit_tasks DAG batch submission tool.
         include_background_task_tools: Include background task check/list tools.
         include_vault_tools: Include credential vault tools (get/store/list).
-        include_skill_tools: Include skill on-demand loading tool.
-        skill_metas: Personal skill metadata for dynamic description generation.
-        common_skill_metas: Common skill metadata for dynamic description generation.
-        procedure_metas: Procedure metadata for dynamic description generation.
+        include_skill_tools: Include create_skill tool.
         external_schemas: Additional tool schemas in canonical format.
         trigger: Execution trigger (e.g. ``"consolidation:daily"``).
 
@@ -122,20 +116,8 @@ def build_tool_list(
 
     tools = apply_db_descriptions(tools)
 
-    # Skill tool description — catalog is now in system prompt Group 4.
     if include_skill_tools:
-        from core.tooling.skill_tool import build_skill_tool_description
-
-        desc = build_skill_tool_description(
-            skill_metas or [],
-            common_skill_metas or [],
-            procedure_metas or [],
-        )
-        skill_schemas = _skill_tools()
-        skill_tool_schema = {**skill_schemas[0], "description": desc}
-        tools.append(skill_tool_schema)
-        for st in skill_schemas[1:]:
-            tools.append(st)
+        tools.extend(_skill_tools())
     return tools
 
 
@@ -144,9 +126,6 @@ def build_unified_tool_list(
     include_notification_tools: bool = False,
     include_supervisor_tools: bool = False,
     include_skill_tools: bool = True,
-    skill_metas: list[Any] | None = None,
-    common_skill_metas: list[Any] | None = None,
-    procedure_metas: list[Any] | None = None,
     trigger: str = "",
 ) -> list[dict[str, Any]]:
     """Build the unified 18-tool list (Claude Code-compatible 8 + AW-essential 10).
@@ -158,10 +137,7 @@ def build_unified_tool_list(
     Args:
         include_notification_tools: Include call_human (when HumanNotifier is configured).
         include_supervisor_tools: Include delegate_task (when Anima has subordinates).
-        include_skill_tools: Include skill tool (default True).
-        skill_metas: Personal skill metadata for dynamic description.
-        common_skill_metas: Common skill metadata for dynamic description.
-        procedure_metas: Procedure metadata for dynamic description.
+        include_skill_tools: Include create_skill tool (default True).
         trigger: Execution trigger (e.g. ``"consolidation:daily"``).
             When the trigger starts with ``consolidation:``, delegation and
             messaging tools are excluded.
@@ -216,16 +192,7 @@ def build_unified_tool_list(
 
     tools = apply_db_descriptions(tools)
 
-    # Skill tool description — catalog is now in system prompt Group 4.
     if include_skill_tools:
-        from core.tooling.skill_tool import build_skill_tool_description
-
-        desc = build_skill_tool_description(
-            skill_metas or [],
-            common_skill_metas or [],
-            procedure_metas or [],
-        )
-        skill_schemas = _skill_tools()
-        tools.append({**skill_schemas[0], "description": desc})
+        tools.extend(_skill_tools())
 
     return tools

@@ -260,7 +260,7 @@ class TestBuildSystemPrompt:
             assert "I am Alice" in result
 
     def test_skills_not_in_system_prompt(self, tmp_path, data_dir):
-        """Skills are not listed in memory_guide — they live in the skill tool description."""
+        """Skills are not listed in memory_guide — catalog is in Group 4 ``<available_skills>``."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")

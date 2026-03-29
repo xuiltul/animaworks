@@ -23,7 +23,7 @@ description: >-
 ```
 
 `description` is the primary field for discovery and selection: the model uses it to decide relevance.
-The body is injected only when the skill is loaded via the `skill` tool by name.
+The body is read when you open the path from the system prompt skill catalog with `read_memory_file` (e.g. `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`).
 
 **Authoring format**: follow **`Use when:`** as described in `references/description_guide.md` (Agent Skills standard).
 After editing, validate with **`python scripts/lint_skill.py path/to/SKILL.md`**.
@@ -45,7 +45,7 @@ Skill information is disclosed in three levels.
 | Level | Content | When shown |
 |-------|---------|------------|
 | Level 1 | `name` + `description` | Skill catalog / tool descriptions (budgeted) |
-| Level 2 | body | Injected when `skill(skill_name=...)` runs |
+| Level 2 | body | Loaded with `read_memory_file(path="skills/.../SKILL.md")` or `common_skills/.../SKILL.md` |
 | Level 3 | External files | Loaded per body instructions (`references/`, `templates/`) |
 
 Keep Level 1 concise; put procedures in Level 2; offload long material to Level 3.
@@ -78,11 +78,11 @@ Common skills:
 create_skill(skill_name="{name}", description="{description}", body="{body}", location="common")
 ```
 
-Prefer `create_skill` for new skills; flat `skills/foo.md` alone may not resolve via the skill tool.
+Prefer `create_skill` for new skills; flat `skills/foo.md` alone may not match `skills/foo/SKILL.md` for `read_memory_file`.
 
 ### Step 4: Verify
 
-- Re-read `skills/{name}/SKILL.md` or use `skill(skill_name="{name}")`
+- Re-read with `read_memory_file(path="skills/{name}/SKILL.md")` (or the `common_skills/...` path from the catalog)
 - Run **`python scripts/lint_skill.py`** on the file (recommended)
 
 ## Checklist

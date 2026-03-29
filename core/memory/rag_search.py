@@ -354,7 +354,7 @@ class RAGMemorySearch:
             knowledge_dir,
         )
 
-        include_shared = scope in ("common_knowledge", "all")
+        include_shared = scope in ("common_knowledge", "skills", "all")
         all_results: list[dict] = []
         tokens = [tok for tok in query.lower().split() if tok]
 
@@ -489,10 +489,12 @@ class RAGMemorySearch:
             return ["procedures"]
         if scope == "common_knowledge":
             return ["knowledge"]
+        if scope == "skills":
+            return ["skills"]
         if scope == "conversation_summary":
             return ["conversation_summary"]
         if scope == "all":
-            return ["knowledge", "episodes", "procedures", "conversation_summary"]
+            return ["knowledge", "episodes", "procedures", "skills", "conversation_summary"]
         return ["knowledge"]
 
     def search_knowledge(self, query: str, knowledge_dir: Path) -> list[tuple[str, str]]:

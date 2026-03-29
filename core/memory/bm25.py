@@ -50,7 +50,6 @@ _EXCLUDED_TOOLS: frozenset[str] = frozenset(
         "ToolSearch",
         "read_memory_file",
         "search_memory",
-        "skill",
         "write_memory_file",
         "post_channel",
         "send_message",

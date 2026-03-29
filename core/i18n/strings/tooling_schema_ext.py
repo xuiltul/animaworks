@@ -10,18 +10,6 @@
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
-    "schema.skill.context": {
-        "ja": "スキルに渡す補足コンテキスト（任意）",
-        "en": "Supplementary context to pass to the skill (optional)",
-    },
-    "schema.skill.desc": {
-        "ja": "スキル・手順書を発動する。skill_nameで指定したスキルの全文を返す。",
-        "en": ("Invoke a skill or procedure. Returns the full text of the skill specified by skill_name."),
-    },
-    "schema.skill.skill_name": {
-        "ja": "発動するスキル名（個人スキル、共通スキル、手順書）",
-        "en": "Skill name to invoke (personal skill, common skill, or procedure)",
-    },
     "schema.task_tracker.desc": {
         "ja": (
             "delegate_task で委譲したタスクの進捗を追跡する。自分のタスクキューから delegated ステータスのエントリを取得し、部下側の最新ステータスと突き合わせて返す。"

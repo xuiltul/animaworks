@@ -123,9 +123,6 @@ async def test_priming_all_channels(temp_anima_dir, temp_shared_dir):
     print(f"\nKnowledge search result: {len(result.related_knowledge)} chars")
     # Don't assert on knowledge content - it's OK if empty in Phase 1
 
-    # Verify skills were not matched (no "search" in message)
-    assert len(result.matched_skills) == 0
-
     # Verify token estimate is reasonable
     assert result.estimated_tokens() > 0
     assert result.estimated_tokens() < 2500  # Should be under budget
@@ -134,21 +131,7 @@ async def test_priming_all_channels(temp_anima_dir, temp_shared_dir):
     print(f"  Sender profile: {len(result.sender_profile)} chars")
     print(f"  Episodes: {len(result.recent_activity)} chars")
     print(f"  Knowledge: {len(result.related_knowledge)} chars")
-    print(f"  Skills: {result.matched_skills}")
     print(f"  Total tokens: {result.estimated_tokens()}")
-
-
-@pytest.mark.asyncio
-async def test_priming_skill_match(temp_anima_dir, temp_shared_dir):
-    """Channel D is deprecated; matched_skills stays empty (catalog is in system prompt)."""
-    engine = PrimingEngine(temp_anima_dir)
-
-    result = await engine.prime_memories(
-        message="web search を使って情報を調べてください",
-        sender_name="human",
-    )
-
-    assert result.matched_skills == []
 
 
 @pytest.mark.asyncio
@@ -178,7 +161,6 @@ def test_format_priming_section():
         sender_profile="テストユーザーのプロファイル",
         recent_activity="最近の会話履歴",
         related_knowledge="関連する知識",
-        matched_skills=["skill1", "skill2"],
     )
 
     formatted = format_priming_section(result, sender_name="テストユーザー")
@@ -187,9 +169,6 @@ def test_format_priming_section():
     assert "テストユーザー について" in formatted
     assert "直近のアクティビティ" in formatted
     assert "関連する知識" in formatted
-    assert "使えそうなスキル" in formatted
-    assert "skill1" in formatted
-    assert "skill2" in formatted
 
     print(f"\nFormatted priming section:\n{formatted}")
 

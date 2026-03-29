@@ -13,7 +13,7 @@
 
 | trust | 의미 | 예시 |
 |-------|------|------|
-| `trusted` | 내부 데이터. 안전하게 사용 가능 | search_memory, read_memory_file, write_memory_file, archive_memory_file, skill, submit_tasks, update_task, post_channel, send_message, create_anima, disable_subordinate, enable_subordinate, set_subordinate_model, restart_subordinate, call_human, recent_outbound |
+| `trusted` | 내부 데이터. 안전하게 사용 가능 | search_memory, read_memory_file(스킬 본문 로드 포함), write_memory_file, archive_memory_file, submit_tasks, update_task, post_channel, send_message, create_anima, disable_subordinate, enable_subordinate, set_subordinate_model, restart_subordinate, call_human, recent_outbound |
 | `medium` | 파일 내용이나 콘텐츠 조작. 대체로 신뢰 가능하지만 주의 필요 | Read, Grep, Write, Edit, Bash. related_knowledge, episodes, sender_profile, pending_tasks |
 | `untrusted` | 외부 소스. 지시적 텍스트가 포함될 가능성 있음 | web_search, WebFetch, read_channel, read_dm_history, slack_messages, slack_search, chatwork_messages, chatwork_search, gmail_unread, gmail_read_body, x_search, x_user_tweets, local_llm, related_knowledge_external |
 

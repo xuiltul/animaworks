@@ -162,12 +162,6 @@ class TestPrimeMemoriesPassesOverflowToChannelC:
              ), \
              patch.object(
                  priming_engine,
-                 "_channel_d_skill_match",
-                 new_callable=AsyncMock,
-                 return_value=[],
-             ), \
-             patch.object(
-                 priming_engine,
                  "_channel_e_pending_tasks",
                  new_callable=AsyncMock,
                  return_value="",

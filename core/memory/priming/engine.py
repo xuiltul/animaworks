@@ -7,12 +7,12 @@ from __future__ import annotations
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 
-"""PrimingEngine - slim orchestrator for 6-channel memory priming."""
+"""PrimingEngine - slim orchestrator for 5-channel memory priming."""
 
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -28,9 +28,6 @@ from core.memory.priming import (
 )
 from core.memory.priming import (
     channel_c as _channel_c,
-)
-from core.memory.priming import (
-    channel_d as _channel_d,
 )
 from core.memory.priming import (
     channel_e as _channel_e,
@@ -67,7 +64,6 @@ class PrimingResult:
     recent_activity: str = ""
     related_knowledge: str = ""
     related_knowledge_untrusted: str = ""
-    matched_skills: list[str] = field(default_factory=list)
     pending_tasks: str = ""
     recent_outbound: str = ""
     episodes: str = ""
@@ -80,7 +76,6 @@ class PrimingResult:
             and not self.recent_activity
             and not self.related_knowledge
             and not self.related_knowledge_untrusted
-            and not self.matched_skills
             and not self.pending_tasks
             and not self.recent_outbound
             and not self.episodes
@@ -94,7 +89,6 @@ class PrimingResult:
             + len(self.recent_activity)
             + len(self.related_knowledge)
             + len(self.related_knowledge_untrusted)
-            + sum(len(s) for s in self.matched_skills)
             + len(self.pending_tasks)
             + len(self.recent_outbound)
             + len(self.episodes)
@@ -109,11 +103,10 @@ class PrimingResult:
 class PrimingEngine:
     """Automatic memory priming engine.
 
-    Executes 6-channel parallel memory retrieval:
+    Executes 5-channel parallel memory retrieval:
       A. Sender profile (direct file read)
       B. Recent activity (unified activity log, replaces old episodes + channels)
       C. Related knowledge (dense vector search)
-      D. (deprecated — skill catalog moved to system prompt)
       E. Pending tasks (persistent task queue summary)
       F. Episodes (dense vector search over episode memory)
     """
@@ -129,7 +122,6 @@ class PrimingEngine:
         self.context_window = context_window
         self.episodes_dir = anima_dir / "episodes"
         self.knowledge_dir = anima_dir / "knowledge"
-        self.skills_dir = anima_dir / "skills"
         self._retriever_cache = RetrieverCache()
         self._retriever: Any | None = None
         self._retriever_initialized = False
@@ -290,7 +282,6 @@ class PrimingEngine:
                 f"{important_knowledge}\n\n{related_knowledge}" if related_knowledge else important_knowledge
             )
 
-        matched_skills: list[str] = []  # Channel D deprecated
         pending_tasks = results[4] if isinstance(results[4], str) else ""
         recent_outbound = results[5] if isinstance(results[5], str) else ""
         episodes = results[6] if isinstance(results[6], str) else ""
@@ -321,7 +312,6 @@ class PrimingEngine:
             recent_activity=truncate_tail(recent_activity, budget_activity),
             related_knowledge=truncated_knowledge,
             related_knowledge_untrusted=truncated_untrusted,
-            matched_skills=matched_skills,
             pending_tasks=truncate_head(pending_tasks, budget_tasks),
             recent_outbound=recent_outbound,
             episodes=truncate_tail(episodes, budget_episodes),
@@ -330,13 +320,12 @@ class PrimingEngine:
 
         logger.info(
             "Priming complete: %d chars (~%d tokens), sender_prof=%d, activity=%d, "
-            "knowledge=%d, skills=%d, episodes=%d, outbound=%d",
+            "knowledge=%d, episodes=%d, outbound=%d",
             result.total_chars(),
             result.estimated_tokens(),
             len(result.sender_profile),
             len(result.recent_activity),
             len(result.related_knowledge),
-            len(result.matched_skills),
             len(result.episodes),
             len(result.recent_outbound),
         )
@@ -385,21 +374,6 @@ class PrimingEngine:
             restrict_to=restrict_to,
             message=message,
             recent_human_messages=recent_human_messages,
-        )
-
-    async def _channel_d_skill_match(
-        self,
-        message: str,
-        keywords: list[str],
-        channel: str = "chat",
-    ) -> list[str]:
-        return await _channel_d.channel_d_skill_match(
-            self.anima_dir,
-            self.skills_dir,
-            self._get_retriever,
-            message,
-            keywords,
-            channel=channel,
         )
 
     async def _channel_e_pending_tasks(self) -> str:

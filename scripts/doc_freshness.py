@@ -181,7 +181,6 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "common_skills/skill-creator/SKILL.md": [
         "core/tooling/skill_creator.py",
-        "core/tooling/skill_tool.py",
         "core/memory/skill_metadata.py",
     ],
     "common_skills/skill-creator/references/description_guide.md": [

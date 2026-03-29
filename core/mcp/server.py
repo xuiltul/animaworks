@@ -65,8 +65,10 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "delegate_task",
         "submit_tasks",
         "update_task",
-        # AW-essential: skill/CLI manual
-        "skill",
+        # AW-essential: skill authoring
+        "create_skill",
+        # Mode S: pre-completion verification
+        "completion_gate",
     }
 )
 
@@ -193,18 +195,12 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         if schema["name"] in exposed:
             _TOOL_SCHEMAS[schema["name"]] = schema.get("parameters", {})
 
-    # Generate dynamic description for the skill tool
-    _skill_description = _build_skill_description()
-
     tools: list[Tool] = []
     for schema in all_schemas:
         name = schema["name"]
         if name not in exposed:
             continue
         desc = schema.get("description", "")
-        # Override skill tool description with dynamic content
-        if name == "skill" and _skill_description:
-            desc = _skill_description
         input_schema = schema.get("parameters", {"type": "object", "properties": {}})
         input_schema = _relax_integer_types(input_schema)
         tools.append(
@@ -222,16 +218,6 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         logger.warning("MCP tool schemas missing for: %s", ", ".join(sorted(missing)))
 
     return tools, exposed
-
-
-def _build_skill_description() -> str:
-    """Build simple skill tool description.
-
-    The full skill catalog is now in the system prompt (Group 4).
-    """
-    from core.tooling.skill_tool import build_skill_tool_description
-
-    return build_skill_tool_description([], [], [])
 
 
 # Build once at import time.  DB descriptions are baked in at this point;

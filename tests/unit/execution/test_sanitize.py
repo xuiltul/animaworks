@@ -176,7 +176,7 @@ def test_trust_levels_trusted_tools() -> None:
         "read_memory_file",
         "write_memory_file",
         "archive_memory_file",
-        "skill",
+        "create_skill",
         "list_directory",
         "backlog_task",
         "update_task",

@@ -511,9 +511,8 @@ def test_e2e_priming_integration(anima_dir, vector_store, indexer):
     # At least one channel should have produced output
     has_activity = bool(result.recent_activity)
     has_knowledge = bool(result.related_knowledge)
-    has_skills = bool(result.matched_skills)
 
-    assert has_activity or has_knowledge or has_skills, (
+    assert has_activity or has_knowledge, (
         "At least one priming channel should return content"
     )
 
@@ -530,8 +529,6 @@ def test_e2e_priming_integration(anima_dir, vector_store, indexer):
         assert "直近のアクティビティ" in formatted
     if has_knowledge:
         assert "関連する知識" in formatted
-    if has_skills:
-        assert "使えそうなスキル" in formatted
 
 
 # ── Test 7: Multi Memory Type ─────────────────────────────────────

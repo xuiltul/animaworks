@@ -2,7 +2,7 @@
 name: skill-creator
 description: >-
   Markdown 스킬을 만드는 메타 스킬. SKILL.md frontmatter·본문과 Progressive Disclosure·create_skill 절차를 다룬다.
-  Use when: 신규 스킬 추가, skill 도구용 기술 규칙 확인, references·templates 포함 생성이 필요할 때.
+  Use when: 신규 스킬 추가, read_memory_file 경로 규칙 확인, references·templates 포함 생성이 필요할 때.
 ---
 
 # skill-creator
@@ -23,7 +23,7 @@ description: >-
 ```
 
 `description`은 발견·선택에 쓰이는 핵심 필드이며, 모델이 관련성을 판단하는 데 사용된다.
-본문은 `skill` 도구로 이름 지정 로드 시 주입된다.
+본문은 시스템 프롬프트 스킬 카탈로그의 경로를 `read_memory_file(path="...")`로 읽는다.
 
 **작성 형식**: `references/description_guide.md`의 **`Use when:`** 패턴(Agent Skills 표준)을 따른다.
 편집 후 **`python scripts/lint_skill.py path/to/SKILL.md`** 로 검증한다.
@@ -45,7 +45,7 @@ description: >-
 | 레벨 | 내용 | 표시 시점 |
 |------|------|----------|
 | Level 1 | `name` + `description` | 스킬 목록·도구 설명(예산 내) |
-| Level 2 | 본문 | `skill(skill_name=...)` 실행 시 주입 |
+| Level 2 | 본문 | `read_memory_file(path="skills/.../SKILL.md")` 등으로 로드 시 |
 | Level 3 | 외부 파일 | 본문 지시에 따라 `references/`·`templates/` 로드 |
 
 Level 1은 간결하게, 절차는 Level 2에, 긴 자료는 Level 3으로 분리한다.
@@ -78,11 +78,11 @@ create_skill(skill_name="{name}", description="{description}", body="{body}")
 create_skill(skill_name="{name}", description="{description}", body="{body}", location="common")
 ```
 
-신규 스킬은 `create_skill` 사용을 권장한다. 플랫 `skills/foo.md` 만으로는 스킬 도구 해석이 안 될 수 있다.
+신규 스킬은 `create_skill` 사용을 권장한다. 플랫 `skills/foo.md` 만으로는 `skills/foo/SKILL.md` 경로와 맞지 않을 수 있다.
 
 ### Step 4: 확인
 
-- `skills/{name}/SKILL.md` 재확인 또는 `skill(skill_name="{name}")`
+- `read_memory_file(path="skills/{name}/SKILL.md")`로 재확인 (또는 카탈로그의 `common_skills/...` 경로)
 - **`python scripts/lint_skill.py`** 실행(권장)
 
 ## 체크리스트

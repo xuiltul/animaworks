@@ -137,10 +137,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "### 関連する過去の経験",
         "en": "### Related Past Experiences",
     },
-    "priming.matched_skills_header": {
-        "ja": "### 使えそうなスキル",
-        "en": "### Matching Skills",
-    },
     "priming.outbound_header": {
         "ja": "## 直近のアウトバウンド行動",
         "en": "## Recent Outbound Actions",
@@ -172,14 +168,6 @@ STRINGS: dict[str, dict[str, str]] = {
     "priming.section_title": {
         "ja": "## あなたが思い出していること",
         "en": "## What you recall",
-    },
-    "priming.skills_detail_hint": {
-        "ja": "※詳細はskillツールで取得してください。",
-        "en": "Use the skill tool to load full details.",
-    },
-    "priming.skills_list": {
-        "ja": "あなたが持っているスキル: {skills_line}",
-        "en": "Your skills: {skills_line}",
     },
     "shortterm.already_sent_note": {
         "ja": "**注意: 以下の内容は既にユーザーに送信済みです。繰り返さないでください。**",

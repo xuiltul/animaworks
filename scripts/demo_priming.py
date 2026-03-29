@@ -149,7 +149,6 @@ async def demo_priming():
         print(f"  - 送信者プロファイル: {len(result1.sender_profile)} 文字")
         print(f"  - 直近エピソード: {len(result1.recent_episodes)} 文字")
         print(f"  - 関連知識: {len(result1.related_knowledge)} 文字")
-        print(f"  - スキルマッチ: {len(result1.matched_skills)} 件")
         print(f"  - 推定トークン数: {result1.estimated_tokens()} トークン")
         print()
 
@@ -174,7 +173,6 @@ async def demo_priming():
         print(f"  - 送信者プロファイル: {len(result2.sender_profile)} 文字")
         print(f"  - 直近エピソード: {len(result2.recent_episodes)} 文字")
         print(f"  - 関連知識: {len(result2.related_knowledge)} 文字")
-        print(f"  - スキルマッチ: {result2.matched_skills}")
         print(f"  - 推定トークン数: {result2.estimated_tokens()} トークン")
         print()
 
@@ -202,7 +200,6 @@ async def demo_priming():
         print(f"  - 送信者プロファイル: {len(result3.sender_profile)} 文字")
         print(f"  - 直近エピソード: {len(result3.recent_episodes)} 文字 (常に読み込まれる)")
         print(f"  - 関連知識: {len(result3.related_knowledge)} 文字")
-        print(f"  - スキルマッチ: {len(result3.matched_skills)} 件")
         print(f"  - 推定トークン数: {result3.estimated_tokens()} トークン")
         print()
 

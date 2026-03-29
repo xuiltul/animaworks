@@ -233,14 +233,6 @@ async def test_priming_with_real_anima_directory(anima_dir: Path):
         # Just verify it's a string (could be empty)
         assert isinstance(result.related_knowledge, str)
 
-        # Channel D: Skills should be matched (python_coding)
-        # Note: Skills are matched by keywords in message
-        # The test message contains "プライミング", "テスト", "200ms"
-        # These might not match "python_coding" skill name/content
-        # This is expected behavior - skills only match when relevant
-        # We just verify it's a list (could be empty)
-        assert isinstance(result.matched_skills, list)
-
         # Overall: Should not be empty
         assert not result.is_empty()
 
@@ -290,9 +282,6 @@ async def test_message_to_response_flow(anima_dir: Path):
 
         if priming_result.related_knowledge:
             assert "関連する知識" in priming_section
-
-        if priming_result.matched_skills:
-            assert "使えそうなスキル" in priming_section
 
         # Priming section should be ready for injection into system prompt
         # In real usage, this would be passed to PromptBuilder
@@ -412,7 +401,6 @@ async def test_priming_empty_directories(tmp_path: Path):
     assert result.sender_profile == ""
     assert result.recent_activity == ""
     assert result.related_knowledge == ""
-    assert result.matched_skills == []
 
 
 @pytest.mark.asyncio

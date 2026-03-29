@@ -234,7 +234,6 @@ class ToolHandler(
             "share_tool": self._handle_share_tool,
             "report_procedure_outcome": self._handle_report_procedure_outcome,
             "report_knowledge_outcome": self._handle_report_knowledge_outcome,
-            "skill": self._handle_skill,
             "create_skill": self._handle_create_skill,
             "backlog_task": self._handle_backlog_task,
             "update_task": self._handle_update_task,

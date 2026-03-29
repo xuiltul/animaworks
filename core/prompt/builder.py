@@ -446,7 +446,7 @@ def _build_group4(
             "For supervisor management, vault, channel management, "
             "background tasks, and external tools (Slack, Chatwork, Gmail, GitHub, etc.):\n"
             "```\nBash: animaworks-tool <tool> <subcommand> [args]\n```\n"
-            "Use `skill machine-tool` to see available commands.",
+            'Use read_memory_file(path="common_skills/machine-tool/SKILL.md") to see available commands.',
             "tool_guides",
             1,
         )
@@ -455,7 +455,7 @@ def _build_group4(
         if cats:
             et = (
                 f"## External Tools\nAvailable categories: {', '.join(cats)}\n"
-                f"Use the `skill` tool to look up CLI usage, "
+                "Use read_memory_file to load skill content and look up CLI usage, "
                 f"then execute via Bash: `animaworks-tool <tool> <subcommand>`."
             )
             if "machine" in cats:
@@ -475,12 +475,12 @@ def _build_group4(
         ]
         for meta in skill_metas:
             desc = (meta.description[:_DESC_LIMIT] + "…") if len(meta.description) > _DESC_LIMIT else meta.description
-            catalog_lines.append(f"- {meta.name}: {desc}")
+            catalog_lines.append(f"- skills/{meta.name}/SKILL.md: {desc}")
 
         common_label = t("skill.label_common")
         for meta in common_skill_metas:
             desc = (meta.description[:_DESC_LIMIT] + "…") if len(meta.description) > _DESC_LIMIT else meta.description
-            catalog_lines.append(f"- {meta.name} ({common_label}): {desc}")
+            catalog_lines.append(f"- common_skills/{meta.name}/SKILL.md ({common_label}): {desc}")
 
         procedure_label = t("skill.label_procedure")
         proc_dir = pd / "procedures"
@@ -493,7 +493,7 @@ def _build_group4(
                         if len(pmeta.description) > _DESC_LIMIT
                         else pmeta.description
                     )
-                    catalog_lines.append(f"- {pmeta.name} ({procedure_label}): {desc}")
+                    catalog_lines.append(f"- procedures/{pmeta.name}.md ({procedure_label}): {desc}")
                 except Exception:
                     logger.debug("Failed to extract procedure meta from %s", f, exc_info=True)
 
