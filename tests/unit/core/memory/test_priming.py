@@ -140,19 +140,15 @@ async def test_priming_all_channels(temp_anima_dir, temp_shared_dir):
 
 @pytest.mark.asyncio
 async def test_priming_skill_match(temp_anima_dir, temp_shared_dir):
-    """Test skill matching in Channel D."""
+    """Channel D is deprecated; matched_skills stays empty (catalog is in system prompt)."""
     engine = PrimingEngine(temp_anima_dir)
 
-    # Use "web search" to match web_search skill via description keyword
     result = await engine.prime_memories(
         message="web search を使って情報を調べてください",
         sender_name="human",
     )
 
-    # Should match "web_search" skill by description keyword (Tier 1: 「web search」)
-    assert "web_search" in result.matched_skills
-
-    print(f"\nMatched skills: {result.matched_skills}")
+    assert result.matched_skills == []
 
 
 @pytest.mark.asyncio

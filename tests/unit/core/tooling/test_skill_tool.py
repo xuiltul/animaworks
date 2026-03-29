@@ -11,7 +11,7 @@ from __future__ import annotations
 
 Covers:
 - apply_builtins: placeholder replacement
-- build_skill_tool_description: dynamic description generation with budget
+- build_skill_tool_description: short usage text (catalog in system prompt Group 4)
 - _resolve_skill_path: skill name resolution (personal > common > procedure)
 - _strip_frontmatter: YAML frontmatter removal
 - _resolve_builtins: builtin variable resolution
@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from core.i18n import t
 from core.schemas import SkillMeta
 from core.tooling.skill_tool import (
     _resolve_builtins,
@@ -123,54 +124,26 @@ class TestApplyBuiltins:
 
 
 class TestBuildSkillToolDescription:
-    """Test build_skill_tool_description() dynamic description generation."""
+    """Test build_skill_tool_description() — short usage text only."""
 
-    def test_skill_metas_included_in_available_skills_block(self):
+    def test_skill_metas_not_included_catalog_in_system_prompt(self):
         metas = [_make_skill_meta("deploy", "デプロイ手順")]
         result = build_skill_tool_description(metas, [], [])
-        assert "<available_skills>" in result
-        assert "</available_skills>" in result
-        assert "- deploy: デプロイ手順" in result
+        assert "<available_skills>" not in result
+        assert "deploy" not in result
+        assert result == "\n".join([t("skill.desc_line1"), t("skill.desc_line2")])
 
-    def test_all_types_included(self):
+    def test_all_meta_types_ignored(self):
         personal = [_make_skill_meta("coding", "コーディング規約")]
         common = [_make_skill_meta("review", "レビュー手順", is_common=True)]
         procedures = [_make_skill_meta("onboarding", "入社手続き")]
         result = build_skill_tool_description(personal, common, procedures)
-        assert "- coding: コーディング規約" in result
-        assert "- review (共通): レビュー手順" in result
-        assert "- onboarding (手順): 入社手続き" in result
+        assert "coding" not in result
+        assert result == "\n".join([t("skill.desc_line1"), t("skill.desc_line2")])
 
-    def test_budget_exceeded_truncation(self):
-        """When entries exceed 8000 chars, truncation marker appears."""
-        # Create enough metas to exceed the 8000-char budget.
-        # Each entry is roughly "- skill_NNN: description_for_skill_NNN" ~40 chars.
-        # Header lines consume ~150 chars, so we need ~200 entries to exceed.
-        metas = [
-            _make_skill_meta(
-                f"skill_{i:03d}",
-                f"A reasonably long description for skill number {i:03d} to fill budget",
-            )
-            for i in range(300)
-        ]
-        result = build_skill_tool_description(metas, [], [])
-        assert "(以降省略)" in result
-        # The closing tag should still be present
-        assert "</available_skills>" in result
-
-    def test_budget_exceeded_in_common_skills(self):
-        """Budget overflow in common skills section also triggers truncation."""
-        personal = [_make_skill_meta(f"p{i}", f"description {'x' * 80}") for i in range(100)]
-        common = [_make_skill_meta(f"c{i}", f"common description {'y' * 80}", is_common=True) for i in range(100)]
-        result = build_skill_tool_description(personal, common, [])
-        assert "(以降省略)" in result
-
-    def test_empty_meta_lists_generate_minimal_description(self):
+    def test_empty_meta_lists_generate_usage_text(self):
         result = build_skill_tool_description([], [], [])
-        assert "<available_skills>" in result
-        assert "</available_skills>" in result
-        # Should still have the base instructional text
-        assert "スキル" in result
+        assert result == "\n".join([t("skill.desc_line1"), t("skill.desc_line2")])
 
 
 # ── _resolve_skill_path ──────────────────────────────────

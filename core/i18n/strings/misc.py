@@ -190,6 +190,14 @@ STRINGS: dict[str, dict[str, str]] = {
             "\n\n**machine tool**: For heavy tasks like code changes, investigation, or analysis, delegate to an external agent via `animaworks-tool machine run`. Run `skill machine-tool` for details."
         ),
     },
+    "builder.skill_catalog_header": {
+        "ja": "## Available Skills",
+        "en": "## Available Skills",
+    },
+    "builder.skill_catalog_instruction": {
+        "ja": "該当するスキルがあれば `skill` ツールで skill_name を指定して全文をロードすること。",
+        "en": "When a matching skill exists, use the `skill` tool with skill_name to load full instructions.",
+    },
     "builder.procedure_label": {
         "ja": "手順",
         "en": "procedure",
@@ -413,8 +421,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Load skills and procedures on demand.",
     },
     "skill.desc_line2": {
-        "ja": "スキルを発動すると、詳細な手順がこのツールのレスポンスとして提供される。",
-        "en": "When activated, detailed instructions are provided in the tool response.",
+        "ja": "システムプロンプトの available_skills セクションから該当スキルを選び、skill_name を指定して呼び出す。",
+        "en": "Choose a matching skill from the available_skills section in the system prompt and call with skill_name.",
     },
     "skill.desc_line3": {
         "ja": "該当するスキルがある場合に使用すること。",

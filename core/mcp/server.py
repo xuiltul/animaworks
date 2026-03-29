@@ -223,42 +223,13 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
 
 
 def _build_skill_description() -> str:
-    """Build dynamic skill tool description from available skills.
+    """Build simple skill tool description.
 
-    Called once at MCP server startup.  Returns empty string on failure
-    (the static empty description from SKILL_TOOLS will be used instead).
+    The full skill catalog is now in the system prompt (Group 4).
     """
-    try:
-        anima_dir_env = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
-        if not anima_dir_env:
-            return ""
+    from core.tooling.skill_tool import build_skill_tool_description
 
-        anima_dir = Path(anima_dir_env).resolve()
-        if not anima_dir.is_dir():
-            return ""
-
-        from core.memory.skill_metadata import SkillMetadataService
-        from core.paths import get_common_skills_dir
-        from core.tooling.skill_tool import build_skill_tool_description
-
-        svc = SkillMetadataService(
-            skills_dir=anima_dir / "skills",
-            common_skills_dir=get_common_skills_dir(),
-        )
-        skill_metas = svc.list_skill_metas()
-        common_metas = svc.list_common_skill_metas()
-
-        # Procedures use the same SkillMetadataService extraction
-        procedures_dir = anima_dir / "procedures"
-        procedure_metas = []
-        if procedures_dir.is_dir():
-            procedure_metas = [SkillMetadataService.extract_skill_meta(f) for f in sorted(procedures_dir.glob("*.md"))]
-
-        return build_skill_tool_description(skill_metas, common_metas, procedure_metas)
-
-    except Exception:
-        logger.debug("Failed to build skill description for MCP", exc_info=True)
-        return ""
+    return build_skill_tool_description([], [], [])
 
 
 # Build once at import time.  DB descriptions are baked in at this point;

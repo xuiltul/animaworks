@@ -461,6 +461,47 @@ def _build_group4(
                 et += t("builder.machine_hint")
             _add(et, "external_tools", 2)
 
+    # ── Skill catalog (Agent Skills standard) ───
+    if not is_task and not is_heartbeat:
+        from core.memory.skill_metadata import SkillMetadataService
+        from core.paths import get_common_skills_dir
+
+        _DESC_LIMIT = 250
+        catalog_lines: list[str] = [
+            t("builder.skill_catalog_header"),
+            t("builder.skill_catalog_instruction"),
+            "",
+            "<available_skills>",
+        ]
+        for meta in skill_metas:
+            desc = (meta.description[:_DESC_LIMIT] + "…") if len(meta.description) > _DESC_LIMIT else meta.description
+            catalog_lines.append(f"- {meta.name}: {desc}")
+
+        common_label = t("skill.label_common")
+        svc = SkillMetadataService(pd / "skills", get_common_skills_dir())
+        for meta in svc.list_common_skill_metas():
+            desc = (meta.description[:_DESC_LIMIT] + "…") if len(meta.description) > _DESC_LIMIT else meta.description
+            catalog_lines.append(f"- {meta.name} ({common_label}): {desc}")
+
+        procedure_label = t("skill.label_procedure")
+        proc_dir = pd / "procedures"
+        if proc_dir.is_dir():
+            for f in sorted(proc_dir.glob("*.md")):
+                try:
+                    pmeta = SkillMetadataService.extract_skill_meta(f)
+                    desc = (
+                        (pmeta.description[:_DESC_LIMIT] + "…")
+                        if len(pmeta.description) > _DESC_LIMIT
+                        else pmeta.description
+                    )
+                    catalog_lines.append(f"- {pmeta.name} ({procedure_label}): {desc}")
+                except Exception:
+                    pass
+
+        catalog_lines.append("</available_skills>")
+        catalog_text = "\n".join(catalog_lines)
+        _add(catalog_text, "skill_catalog", 2, "elastic")
+
     return out, injected_procs, injected_know, overflow
 
 
