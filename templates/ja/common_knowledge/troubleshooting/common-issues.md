@@ -285,7 +285,7 @@ send_message(
 ### 対処手順
 
 1. **スキルでツールの使い方を確認する**
-   - `skill` ツールでスキル名を指定し、手順の全文を取得する（利用可能スキルはセッションのツールガイド等で確認）
+   - `read_memory_file` でシステムプロンプトのスキルカタログに示されたパス（例: `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`）を指定し、手順の全文を取得する
    - B-mode で外部ツールが許可されている場合、`Bash: animaworks-tool <ツール> <サブコマンド>` で呼び出しが可能
 
 2. **権限を確認する**
@@ -301,7 +301,7 @@ send_message(
 
 4. **MCP 統合モード（S/C/D/G: Claude Agent SDK / Codex CLI / Cursor Agent / Gemini CLI）の場合**
    - 組み込みツールはプレフィックスなしで利用可能（例: `send_message`）。見つからない場合はプロセス再起動が必要
-   - 外部ツールは `skill` ツールでCLI使用法を確認し、**Bash** 経由で `animaworks-tool <ツール> <サブコマンド>` を実行する（エージェントの Bash ツールを使用）
+   - 外部ツールは `read_memory_file` でスキル本文を読みCLI使用法を確認し、**Bash** 経由で `animaworks-tool <ツール> <サブコマンド>` を実行する（エージェントの Bash ツールを使用）
    - 長時間ツール（画像生成、ローカルLLM等）は `animaworks-tool submit` で非同期実行
 
 5. **D-mode（Cursor Agent）特有のよくある問題**
@@ -315,7 +315,7 @@ send_message(
    - **フォールバック**: 解決しない場合は `execution_mode` を `A` にするか、モデルを LiteLLM 経由（Mode A）に切り替える。`gemini/` プレフィックスは Google プロバイダ向けに `google/` へリマップされる場合がある
 
 7. **A-mode（LiteLLM）の場合**
-   - 外部ツールは `skill` で使い方を確認し、**Bash** 経由で `animaworks-tool <ツール> <サブコマンド>` を実行する
+   - 外部ツールは `read_memory_file` でスキル本文を読み使い方を確認し、**Bash** 経由で `animaworks-tool <ツール> <サブコマンド>` を実行する
 
 8. **ツールがエラーを返す場合**
    - エラーメッセージを正確に記録する

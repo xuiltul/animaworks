@@ -119,20 +119,20 @@ search_memory(query="SSL 인증서 갱신", scope="procedures")
 **실행 가능한 절차서 및 도구 사용 가이드**입니다. "특기"에 해당합니다.
 
 - 개인 스킬 (`skills/`)과 공통 스킬 (`common_skills/`)이 있음
-- Priming이 메시지 내용에 따라 관련 스킬의 **이름만** 자동 표시함 (단계적 공개)
-- 상세 내용이 필요할 때는 `skill` 도구로 전문을 가져옴
+- 시스템 프롬프트의 스킬 카탈로그에 `skills/.../SKILL.md`, `common_skills/.../SKILL.md`, `procedures/...` 등의 경로가 표시됨
+- 상세 내용이 필요할 때는 `read_memory_file(path="...")`로 전문을 가져옴
 - **망각 내성 있음**
 
 ### 스킬 확인
 
 ```
-skill(name="newstaff")  # 스킬 전문 가져오기
+read_memory_file(path="skills/newstaff/SKILL.md")  # 스킬 전문 가져오기
 ```
 
 ### 스킬 생성
 
 ```
-create_skill(name="deploy-procedure", description="운영 배포 절차", content="...")
+create_skill(skill_name="deploy-procedure", description="운영 배포 절차", body="...")
 ```
 
 ---
@@ -141,16 +141,17 @@ create_skill(name="deploy-procedure", description="운영 배포 절차", conten
 
 ### Priming (자동 상기)
 
-대화를 시작할 때마다 Priming 엔진이 6개 channel에서 관련 기억을 병렬 검색하여 시스템 프롬프트에 자동 주입합니다:
+대화를 시작할 때마다 Priming 엔진이 5개 channel에서 관련 기억을 병렬 검색하여 시스템 프롬프트에 자동 주입합니다:
 
 | Channel | 검색 대상 |
 |---------|----------|
 | 발신자 프로필 | 상대방의 사용자 정보 |
 | 최근 활동 | 최근 행동 타임라인 |
 | 관련 지식 | RAG 벡터 검색을 통한 지식 |
-| 스킬 매치 | 메시지와 관련된 스킬명 |
 | 보류 태스크 | 태스크 큐 요약 |
 | 일화 | RAG 검색을 통한 과거 경험 |
+
+스킬·절차 본문은 시스템 프롬프트의 스킬 카탈로그에 표시되며 `read_memory_file`로 읽습니다(구 스킬 매치 채널 삭제).
 
 **[IMPORTANT]** `[IMPORTANT]` 태그가 붙은 knowledge는 RAG 검색 결과에 더해 Priming에서 요약 포인터로 상시 주입됩니다. 요약만 표시되며, 상세 내용은 `read_memory_file`로 확인하세요. 중요한 업무 규칙을 knowledge/로 이동할 때는 `[IMPORTANT]`를 붙여 주세요.
 
