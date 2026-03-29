@@ -863,34 +863,15 @@ def _build_post_tool_hook(anima_dir: Path) -> Callable:
 
 # ── Stop hook: completion gate (Mode S) ────────────────────────
 
-
-def _completion_gate_marker_path(anima_dir: Path) -> Path:
-    """Path to the IPC marker written when ``completion_gate`` is invoked."""
-    return anima_dir / "run" / "completion_gate_called"
-
-
-def _gate_marker_exists(anima_dir: Path) -> bool:
-    """Return True if the completion gate marker file exists."""
-    return _completion_gate_marker_path(anima_dir).is_file()
-
-
-def _cleanup_gate_marker(anima_dir: Path) -> None:
-    """Remove the completion gate marker if present. Ignores missing file."""
-    p = _completion_gate_marker_path(anima_dir)
-    try:
-        if p.exists():
-            p.unlink()
-    except OSError:
-        logger.debug("Failed to cleanup completion gate marker", exc_info=True)
-
-
-def _completion_gate_applies_to_trigger(trigger: str | None) -> bool:
-    """Return True when stop must wait for ``completion_gate`` (marker required)."""
-    if trigger is None:
-        return True
-    if trigger == "heartbeat":
-        return False
-    return not trigger.startswith("inbox")
+from core.execution._completion_gate import (
+    cleanup_gate_marker as _cleanup_gate_marker,
+)
+from core.execution._completion_gate import (
+    completion_gate_applies_to_trigger as _completion_gate_applies_to_trigger,
+)
+from core.execution._completion_gate import (
+    gate_marker_exists as _gate_marker_exists,
+)
 
 
 def _build_stop_hook(

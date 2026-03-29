@@ -46,13 +46,15 @@ from core.execution._sdk_patch import apply_sdk_transport_patch
 apply_sdk_transport_patch()
 
 # ── Re-exports from submodules (backward compatibility) ──────
+from core.execution._completion_gate import (  # noqa: F401
+    cleanup_gate_marker as _cleanup_gate_marker,
+)
 from core.execution._sdk_hooks import (  # noqa: F401
     _build_post_tool_hook,
     _build_pre_compact_hook,
     _build_pre_tool_hook,
     _build_stop_hook,
     _cache_subordinate_paths,
-    _cleanup_gate_marker,
     _collect_all_subordinates,
     _intercept_task_to_delegation,
     _intercept_task_to_pending,

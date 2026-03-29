@@ -30,6 +30,11 @@ from pathlib import Path
 from typing import Any
 
 from core.exceptions import ConfigError, LLMAPIError, ToolExecutionError  # noqa: F401
+from core.execution._completion_gate import (
+    cleanup_gate_marker,
+    completion_gate_applies_to_trigger,
+    gate_marker_exists,
+)
 from core.execution._litellm_context import ContextMixin, _extract_tool_uses_from_messages
 from core.execution._litellm_streaming import StreamingMixin
 
@@ -145,6 +150,8 @@ class LiteLLMExecutor(
         max_iterations = max_turns_override or self._model_config.max_turns
         chain_count = 0
         usage_acc = TokenUsage()
+        cleanup_gate_marker(self._anima_dir)
+        _gate_attempted = False
 
         for iteration in range(max_iterations):
             if self._check_interrupted():
@@ -279,6 +286,26 @@ class LiteLLMExecutor(
             # ── Check for tool calls ──────────────────────────
             tool_calls = message.tool_calls
             if not tool_calls:
+                # ── completion_gate enforcement ──
+                if (
+                    not _gate_attempted
+                    and completion_gate_applies_to_trigger(trigger)
+                    and not gate_marker_exists(self._anima_dir)
+                ):
+                    _gate_attempted = True
+                    from core.i18n import t
+
+                    messages.append({"role": "assistant", "content": message.content or ""})
+                    messages.append({
+                        "role": "user",
+                        "content": SystemReminderQueue.format_reminder(
+                            t("completion_gate.stop_hook_block_reason"),
+                        ),
+                    })
+                    logger.info("A completion_gate not called; injecting retry at iteration=%d", iteration)
+                    continue
+                cleanup_gate_marker(self._anima_dir)
+
                 final_text = message.content or ""
                 _, final_text = strip_thinking_tags(final_text)
                 all_response_text.append(final_text)

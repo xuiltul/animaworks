@@ -1,4 +1,4 @@
-"""Unit tests for completion_gate Stop hook IPC and ToolHandler."""
+"""Unit tests for completion_gate: shared helpers, Stop hook, ToolHandler, and Mode A gate."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.execution._sdk_hooks import (
-    _build_stop_hook,
-    _cleanup_gate_marker,
-    _completion_gate_marker_path,
-    _gate_marker_exists,
+from core.execution._completion_gate import (
+    cleanup_gate_marker,
+    completion_gate_applies_to_trigger,
+    completion_gate_marker_path,
+    gate_marker_exists,
 )
 from core.tooling.handler import ToolHandler
 
@@ -63,38 +63,63 @@ def memory(anima_dir: Path) -> MagicMock:
     return m
 
 
-# ── Marker helpers ────────────────────────────────────────────
+# ── Shared helpers ────────────────────────────────────────────
 
 
 class TestGateMarkerHelpers:
     def test_gate_marker_exists_false(self, anima_dir: Path):
-        assert _gate_marker_exists(anima_dir) is False
+        assert gate_marker_exists(anima_dir) is False
 
     def test_gate_marker_exists_true(self, anima_dir: Path):
-        p = _completion_gate_marker_path(anima_dir)
+        p = completion_gate_marker_path(anima_dir)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("", encoding="utf-8")
-        assert _gate_marker_exists(anima_dir) is True
+        assert gate_marker_exists(anima_dir) is True
 
     def test_cleanup_gate_marker(self, anima_dir: Path):
-        p = _completion_gate_marker_path(anima_dir)
+        p = completion_gate_marker_path(anima_dir)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("", encoding="utf-8")
-        _cleanup_gate_marker(anima_dir)
+        cleanup_gate_marker(anima_dir)
         assert not p.exists()
 
     def test_cleanup_gate_marker_no_file(self, anima_dir: Path):
-        _cleanup_gate_marker(anima_dir)
+        cleanup_gate_marker(anima_dir)
 
 
-# ── Stop hook ─────────────────────────────────────────────────
+class TestTriggerApplicability:
+    def test_none_trigger_applies(self):
+        assert completion_gate_applies_to_trigger(None) is True
+
+    def test_chat_applies(self):
+        assert completion_gate_applies_to_trigger("chat") is True
+
+    def test_task_applies(self):
+        assert completion_gate_applies_to_trigger("task:exec") is True
+
+    def test_cron_applies(self):
+        assert completion_gate_applies_to_trigger("cron:0") is True
+
+    def test_heartbeat_skipped(self):
+        assert completion_gate_applies_to_trigger("heartbeat") is False
+
+    def test_inbox_skipped(self):
+        assert completion_gate_applies_to_trigger("inbox:dm") is False
+
+    def test_inbox_mention_skipped(self):
+        assert completion_gate_applies_to_trigger("inbox:mention") is False
+
+
+# ── Stop hook (Mode S) ──────────────────────────────────────
 
 
 @pytest.mark.skipif(not _sdk_available(), reason="claude_agent_sdk not installed")
 class TestStopHookCompletionGate:
     @pytest.mark.asyncio
     async def test_stop_hook_allows_when_stop_hook_active(self, anima_dir: Path):
-        p = _completion_gate_marker_path(anima_dir)
+        from core.execution._sdk_hooks import _build_stop_hook
+
+        p = completion_gate_marker_path(anima_dir)
         p.write_text("", encoding="utf-8")
         hook = _build_stop_hook(anima_dir, session_stats={"trigger": "chat"})
         result = await hook(_stop_input(stop_hook_active=True), None, {})
@@ -103,13 +128,17 @@ class TestStopHookCompletionGate:
 
     @pytest.mark.asyncio
     async def test_stop_hook_blocks_when_no_gate_called(self, anima_dir: Path):
+        from core.execution._sdk_hooks import _build_stop_hook
+
         hook = _build_stop_hook(anima_dir, session_stats={"trigger": "chat"})
         result = await hook(_stop_input(stop_hook_active=False), None, {})
         assert _decision_from(result) == "block"
 
     @pytest.mark.asyncio
     async def test_stop_hook_allows_when_gate_called(self, anima_dir: Path):
-        p = _completion_gate_marker_path(anima_dir)
+        from core.execution._sdk_hooks import _build_stop_hook
+
+        p = completion_gate_marker_path(anima_dir)
         p.write_text("", encoding="utf-8")
         hook = _build_stop_hook(anima_dir, session_stats={"trigger": "chat"})
         result = await hook(_stop_input(stop_hook_active=False), None, {})
@@ -118,43 +147,53 @@ class TestStopHookCompletionGate:
 
     @pytest.mark.asyncio
     async def test_stop_hook_skips_heartbeat(self, anima_dir: Path):
+        from core.execution._sdk_hooks import _build_stop_hook
+
         hook = _build_stop_hook(anima_dir, session_stats={"trigger": "heartbeat"})
         result = await hook(_stop_input(stop_hook_active=False), None, {})
         assert _decision_from(result) is None
 
     @pytest.mark.asyncio
     async def test_stop_hook_skips_inbox(self, anima_dir: Path):
+        from core.execution._sdk_hooks import _build_stop_hook
+
         hook = _build_stop_hook(anima_dir, session_stats={"trigger": "inbox:dm"})
         result = await hook(_stop_input(stop_hook_active=False), None, {})
         assert _decision_from(result) is None
 
     @pytest.mark.asyncio
     async def test_stop_hook_blocks_for_chat(self, anima_dir: Path):
+        from core.execution._sdk_hooks import _build_stop_hook
+
         hook = _build_stop_hook(anima_dir, session_stats={"trigger": "chat"})
         result = await hook(_stop_input(stop_hook_active=False), None, {})
         assert _decision_from(result) == "block"
 
     @pytest.mark.asyncio
     async def test_stop_hook_blocks_for_task(self, anima_dir: Path):
+        from core.execution._sdk_hooks import _build_stop_hook
+
         hook = _build_stop_hook(anima_dir, session_stats={"trigger": "task:exec"})
         result = await hook(_stop_input(stop_hook_active=False), None, {})
         assert _decision_from(result) == "block"
 
     @pytest.mark.asyncio
     async def test_stop_hook_blocks_for_cron(self, anima_dir: Path):
+        from core.execution._sdk_hooks import _build_stop_hook
+
         hook = _build_stop_hook(anima_dir, session_stats={"trigger": "cron:0"})
         result = await hook(_stop_input(stop_hook_active=False), None, {})
         assert _decision_from(result) == "block"
 
 
-# ── completion_gate tool ────────────────────────────────────────
+# ── completion_gate tool ────────────────────────────────────
 
 
 class TestCompletionGateTool:
     def test_completion_gate_writes_marker(self, anima_dir: Path, memory: MagicMock):
         h = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
         h.handle("completion_gate", {})
-        assert _gate_marker_exists(anima_dir)
+        assert gate_marker_exists(anima_dir)
 
     def test_completion_gate_returns_checklist(self, anima_dir: Path, memory: MagicMock):
         h = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
@@ -162,3 +201,56 @@ class TestCompletionGateTool:
         assert isinstance(raw, str)
         assert len(raw) > 10
         assert "Pre-Completion" in raw or "完了前検証" in raw
+
+
+# ── Mode A loop gate ────────────────────────────────────────
+
+
+class TestModeALoopGate:
+    """Verify that completion_gate helpers are importable from the shared module
+    and that the unified tool list includes completion_gate."""
+
+    def test_completion_gate_in_unified_tool_list(self):
+        from core.tooling.schemas import build_unified_tool_list
+
+        tools = build_unified_tool_list()
+        names = {t["name"] for t in tools}
+        assert "completion_gate" in names
+
+    def test_completion_gate_not_in_consolidation_tools(self):
+        from core.tooling.schemas import build_unified_tool_list
+
+        tools = build_unified_tool_list(trigger="consolidation:daily")
+        names = {t["name"] for t in tools}
+        assert "completion_gate" not in names
+
+    def test_shared_helpers_importable_from_litellm_loop(self):
+        """Ensure litellm_loop.py can use the shared helpers."""
+        from core.execution._completion_gate import (  # noqa: F401
+            cleanup_gate_marker,
+            completion_gate_applies_to_trigger,
+            gate_marker_exists,
+        )
+
+    def test_gate_marker_roundtrip(self, anima_dir: Path):
+        assert not gate_marker_exists(anima_dir)
+        marker = completion_gate_marker_path(anima_dir)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("", encoding="utf-8")
+        assert gate_marker_exists(anima_dir)
+        cleanup_gate_marker(anima_dir)
+        assert not gate_marker_exists(anima_dir)
+
+
+# ── non_s guide ─────────────────────────────────────────────
+
+
+class TestNonSGuide:
+    def test_non_s_guide_mentions_completion_gate(self):
+        from core.tooling.prompt_db import get_default_guide
+
+        ja = get_default_guide("non_s", locale="ja")
+        assert "completion_gate" in ja
+
+        en = get_default_guide("non_s", locale="en")
+        assert "completion_gate" in en

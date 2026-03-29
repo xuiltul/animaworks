@@ -138,6 +138,15 @@ class StreamingMixin:
         _repetition_detector = RepetitionDetector()
         _repetition_detected = False
 
+        from core.execution._completion_gate import (
+            cleanup_gate_marker,
+            completion_gate_applies_to_trigger,
+            gate_marker_exists,
+        )
+
+        cleanup_gate_marker(self._anima_dir)
+        _gate_attempted = False
+
         # Inject synthetic thinking_blocks into prior assistant messages
         # that have tool_calls but no thinking_blocks.  Without this,
         # LiteLLM drops the thinking param for the entire session because
@@ -542,6 +551,28 @@ class StreamingMixin:
 
                 # ── No tool calls (or repetition detected): final response ──
                 if not tool_calls_acc or _repetition_detected:
+                    # ── completion_gate enforcement ──
+                    if (
+                        not _gate_attempted
+                        and not _repetition_detected
+                        and completion_gate_applies_to_trigger(trigger)
+                        and not gate_marker_exists(self._anima_dir)
+                    ):
+                        _gate_attempted = True
+                        from core.i18n import t
+
+                        _assist_text = "".join(iter_text_parts)
+                        messages.append({"role": "assistant", "content": _assist_text})
+                        messages.append({
+                            "role": "user",
+                            "content": SystemReminderQueue.format_reminder(
+                                t("completion_gate.stop_hook_block_reason"),
+                            ),
+                        })
+                        logger.info("A stream completion_gate not called; injecting retry at iteration=%d", iteration)
+                        continue
+
+                    cleanup_gate_marker(self._anima_dir)
                     full_text = "\n".join(all_response_text)
                     # Safety net: strip any residual <think> tags that the
                     # streaming filter missed (e.g. vLLM returning thinking
@@ -716,6 +747,19 @@ class StreamingMixin:
         _usage_acc_ol = TokenUsage()
         _repetition_detector = RepetitionDetector()
 
+        from core.execution._completion_gate import (
+            cleanup_gate_marker as _cg_cleanup,
+        )
+        from core.execution._completion_gate import (
+            completion_gate_applies_to_trigger as _cg_applies,
+        )
+        from core.execution._completion_gate import (
+            gate_marker_exists as _cg_exists,
+        )
+
+        _cg_cleanup(self._anima_dir)
+        _gate_attempted_ol = False
+
         async with stream_error_boundary(
             all_response_text,
             executor_name="A-ollama-stream",
@@ -861,6 +905,26 @@ class StreamingMixin:
                 # ── Check for tool calls ──
                 tool_calls = message.tool_calls
                 if not tool_calls:
+                    # ── completion_gate enforcement ──
+                    if (
+                        not _gate_attempted_ol
+                        and _cg_applies(trigger)
+                        and not _cg_exists(self._anima_dir)
+                    ):
+                        _gate_attempted_ol = True
+                        from core.i18n import t
+
+                        messages.append({"role": "assistant", "content": message.content or ""})
+                        messages.append({
+                            "role": "user",
+                            "content": SystemReminderQueue.format_reminder(
+                                t("completion_gate.stop_hook_block_reason"),
+                            ),
+                        })
+                        logger.info("A ollama stream completion_gate not called; injecting retry at iteration=%d", iteration)
+                        continue
+                    _cg_cleanup(self._anima_dir)
+
                     full_text = "\n".join(all_response_text)
                     logger.debug(
                         "A ollama stream final response at iteration=%d",
