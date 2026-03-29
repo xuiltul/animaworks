@@ -29,6 +29,10 @@
 
 {merge_candidates}
 
+## エラーパターン（過去24時間）
+
+{error_patterns_summary}
+
 ---
 
 ## 作業手順
@@ -53,6 +57,25 @@
 1. `search_memory` で関連する既存の knowledge/ / procedures/ を検索
 2. 関連ファイルがあれば `read_memory_file` で確認し、`write_memory_file` で追記・更新
 3. 該当する既存ファイルがない場合のみ、新規ファイルを作成
+
+### Step 2.5: エラーパターン分析
+
+上記「エラーパターン」セクションを確認し、繰り返し発生しているパターンがあれば:
+1. `search_memory` で関連する既存の procedures/ を検索
+2. 既存の手順書があれば `read_memory_file` で確認し、`write_memory_file` で追記・更新
+3. 該当する既存ファイルがない場合のみ、`procedures/` に新規作成
+4. 1回限りのエラーは記録不要（ノイズ）
+
+新規作成時の frontmatter:
+```
+---
+created_at: "YYYY-MM-DDTHH:MM:SS"
+confidence: 0.4
+auto_consolidated: true
+source: "error_trace_analysis"
+version: 1
+---
+```
 
 ### Step 3: 品質チェック
 - 更新・作成した内容がエピソードの事実と矛盾していないか確認

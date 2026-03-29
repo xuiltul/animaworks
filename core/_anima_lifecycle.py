@@ -275,6 +275,7 @@ class LifecycleMixin:
                                 + "\n\n"
                                 + reflections_summary
                             )
+                        error_patterns_summary = engine._collect_error_entries(hours=24)
                         prompt = load_prompt(
                             "memory/consolidation_instruction",
                             anima_name=self.name,
@@ -284,6 +285,7 @@ class LifecycleMixin:
                             reflections_summary=reflections_section,
                             knowledge_files_list=knowledge_list_text,
                             merge_candidates=merge_candidates_text,
+                            error_patterns_summary=error_patterns_summary,
                         )
                     else:
                         prompt = load_prompt(

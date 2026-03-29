@@ -29,6 +29,10 @@ When extracting knowledge from it, note the following:
 
 {merge_candidates}
 
+## Error patterns (past 24 hours)
+
+{error_patterns_summary}
+
 ---
 
 ## Workflow
@@ -53,6 +57,25 @@ Review today's episodes; if substantive information exists:
 1. Use `search_memory` to find related existing knowledge/ and procedures/
 2. If relevant files found, review with `read_memory_file` and update with `write_memory_file`
 3. Create new files only when no existing file covers the topic
+
+### Step 2.5: Error pattern analysis
+
+Review the "Error patterns" section above and if recurring patterns are found:
+1. Use `search_memory` to find related existing procedures/
+2. If existing procedures found, review with `read_memory_file` and update with `write_memory_file`
+3. Create new files in `procedures/` only when no existing file covers the pattern
+4. Single-occurrence errors should be ignored (noise)
+
+Frontmatter for new procedure files:
+```
+---
+created_at: "YYYY-MM-DDTHH:MM:SS"
+confidence: 0.4
+auto_consolidated: true
+source: "error_trace_analysis"
+version: 1
+---
+```
 
 ### Step 3: Quality check
 - Verify updated or created content does not contradict episode facts

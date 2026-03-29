@@ -29,6 +29,10 @@
 
 {merge_candidates}
 
+## 에러 패턴 (지난 24시간)
+
+{error_patterns_summary}
+
 ---
 
 ## 작업 절차
@@ -53,6 +57,25 @@
 1. `search_memory`로 관련 기존 knowledge/ 및 procedures/ 검색
 2. 관련 파일이 있으면 `read_memory_file`로 확인하고 `write_memory_file`로 추가·업데이트
 3. 해당하는 기존 파일이 없는 경우에만 새 파일 생성
+
+### Step 2.5: 에러 패턴 분석
+
+위 "에러 패턴" 섹션을 확인하고, 반복적으로 발생하는 패턴이 있으면:
+1. `search_memory`로 관련 기존 procedures/ 검색
+2. 기존 절차가 있으면 `read_memory_file`로 확인하고 `write_memory_file`로 추가·업데이트
+3. 해당하는 기존 파일이 없는 경우에만 `procedures/`에 새로 생성
+4. 1회성 에러는 기록 불필요 (노이즈)
+
+새로 생성 시 frontmatter:
+```
+---
+created_at: "YYYY-MM-DDTHH:MM:SS"
+confidence: 0.4
+auto_consolidated: true
+source: "error_trace_analysis"
+version: 1
+---
+```
 
 ### Step 3: 품질 점검
 - 업데이트하거나 생성한 내용이 에피소드의 사실과 모순되지 않는지 확인

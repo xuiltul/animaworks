@@ -270,6 +270,97 @@ class ConsolidationEngine:
             logger.debug("Failed to collect resolved events", exc_info=True)
             return []
 
+    # ── Error Pattern Collection ─────────────────────────────
+
+    _ERROR_CHAR_BUDGET = 3_000
+    _ERROR_ENTRY_LIMIT = 50
+
+    def _collect_error_entries(self, hours: int = 24) -> str:
+        """Collect error and failed tool_result entries for pattern analysis.
+
+        Extracts ``error`` events and ``tool_result`` entries with
+        ``result_status == "fail"`` from the activity log, formatted for
+        injection into the daily consolidation prompt.
+
+        Args:
+            hours: Number of hours to look back (default 24).
+
+        Returns:
+            Formatted error summary string.  Returns a placeholder
+            message when no errors are found.
+        """
+        try:
+            from core.memory.activity import ActivityLogger
+
+            activity = ActivityLogger(self.anima_dir)
+            entries = activity.recent(
+                days=max(1, (hours + 23) // 24),
+                limit=200,
+                types=["error", "tool_result"],
+            )
+        except Exception:
+            logger.debug("Failed to collect error entries", exc_info=True)
+            return "（エラーなし / No errors）"
+
+        if not entries:
+            return "（エラーなし / No errors）"
+
+        cutoff = now_local() - timedelta(hours=hours)
+        lines: list[str] = []
+        total_chars = 0
+        count = 0
+
+        for entry in entries:
+            try:
+                ts = ensure_aware(datetime.fromisoformat(entry.ts))
+                if ts < cutoff:
+                    continue
+            except (ValueError, TypeError):
+                pass
+
+            line = self._format_error_entry(entry)
+            if line is None:
+                continue
+
+            if total_chars + len(line) + 1 > self._ERROR_CHAR_BUDGET:
+                break
+            lines.append(line)
+            total_chars += len(line) + 1
+            count += 1
+            if count >= self._ERROR_ENTRY_LIMIT:
+                break
+
+        if not lines:
+            return "（エラーなし / No errors）"
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_error_entry(entry: Any) -> str | None:
+        """Format a single error or failed tool_result entry.
+
+        Returns:
+            Formatted line, or ``None`` if the entry should be skipped.
+        """
+        ts_short = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
+        meta = entry.meta or {}
+
+        if entry.type == "error":
+            phase = meta.get("phase", "unknown")
+            error_text = meta.get("error", "") or entry.summary or ""
+            if len(error_text) > 120:
+                error_text = error_text[:120] + "..."
+            return f"[{ts_short}] ERR phase={phase}: {error_text}"
+
+        if entry.type == "tool_result":
+            if meta.get("result_status") != "fail":
+                return None
+            tool_name = entry.tool or "unknown"
+            err_hint = (entry.content or entry.summary or "")[:100]
+            return f"[{ts_short}] FAIL tool={tool_name}: {err_hint}"
+
+        return None
+
     # ── Reflection Extraction ──────────────────────────────────
 
     @staticmethod
