@@ -26,10 +26,26 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+class TaskExecError(RuntimeError):
+    """Raised when a TaskExec LLM session encounters a non-recoverable error."""
+
 _PENDING_WATCHER_POLL_INTERVAL = 3.0
 _LLM_TASK_TTL_HOURS = 24
 _PENDING_TASK_SUBPROCESS_TIMEOUT = 1800
 _TASK_RESULT_MAX_CHARS = 2000
+
+_SENTINEL_CANCELLED = "(cancelled)"
+_SENTINEL_EXPIRED = "(expired)"
+
+
+def _classify_task_result(result: str) -> tuple[str, str]:
+    """Map _run_llm_task return value to (queue_status, summary)."""
+    if result == _SENTINEL_CANCELLED:
+        return "cancelled", "cancelled before execution"
+    if result == _SENTINEL_EXPIRED:
+        return "skipped", "expired (TTL exceeded)"
+    return "done", (result or "")[:200]
 
 
 def _resolve_default_workspace(anima_dir: Path) -> str:
@@ -482,6 +498,7 @@ class PendingTaskExecutor:
                 if any(dep in failed for dep in task.get("depends_on", [])):
                     failed.add(task["task_id"])
                     self._write_failed_result(task["task_id"], "failed_dependency")
+                    self._sync_task_queue(task["task_id"], "failed", summary="FAILED: failed_dependency")
                     continue
                 try:
                     result = await self._execute_serial_batch_task(
@@ -570,7 +587,8 @@ class PendingTaskExecutor:
             try:
                 result = await self._run_llm_task(task_desc, completed_results)
                 self._save_task_result(task_id, result)
-                self._sync_task_queue(task_id, "done", summary=(result or "")[:200])
+                status, summary = _classify_task_result(result)
+                self._sync_task_queue(task_id, status, summary=summary)
                 return result
             finally:
                 self._anima._active_parallel_tasks.pop(task_id, None)
@@ -585,7 +603,8 @@ class PendingTaskExecutor:
         task_id = task_desc.get("task_id", "unknown")
         result = await self._run_llm_task(task_desc, completed_results)
         self._save_task_result(task_id, result)
-        self._sync_task_queue(task_id, "done", summary=(result or "")[:200])
+        status, summary = _classify_task_result(result)
+        self._sync_task_queue(task_id, status, summary=summary)
         return result
 
     async def _run_llm_task(
@@ -625,7 +644,7 @@ class PendingTaskExecutor:
                     self._anima_name,
                     task_id,
                 )
-                return "(cancelled)"
+                return _SENTINEL_CANCELLED
         except Exception:
             logger.debug(
                 "Could not check task_queue for cancellation: %s",
@@ -649,7 +668,7 @@ class PendingTaskExecutor:
                         age_hours,
                         _LLM_TASK_TTL_HOURS,
                     )
-                    return "(expired)"
+                    return _SENTINEL_EXPIRED
             except (ValueError, TypeError):
                 pass
 
@@ -708,16 +727,31 @@ class PendingTaskExecutor:
         self._anima.agent.reset_read_paths()
         accumulated_text = ""
         result_summary = ""
+        had_error = False
+        error_message = ""
 
         try:
             async for chunk in self._anima.agent.run_cycle_streaming(
                 prompt,
                 trigger=trigger,
             ):
-                if chunk.get("type") == "text_delta":
+                chunk_type = chunk.get("type")
+                if chunk_type == "text_delta":
                     accumulated_text += chunk.get("text", "")
                     journal.write_text(chunk.get("text", ""))
-                if chunk.get("type") == "cycle_done":
+                elif chunk_type == "error":
+                    had_error = True
+                    error_message = chunk.get("message", "unknown error")
+                    logger.warning(
+                        "[%s] Streaming error during task %s: %s",
+                        self._anima_name,
+                        task_id,
+                        error_message,
+                    )
+                elif chunk_type == "retry_start":
+                    had_error = False
+                    error_message = ""
+                elif chunk_type == "cycle_done":
                     cycle_result = chunk.get("cycle_result", {})
                     result_summary = cycle_result.get(
                         "summary",
@@ -727,6 +761,11 @@ class PendingTaskExecutor:
         finally:
             journal.close()
             self._anima.agent.set_task_cwd(None)
+
+        if had_error:
+            raise TaskExecError(
+                f"Task {task_id} encountered streaming error: {error_message}"
+            )
 
         if not result_summary:
             result_summary = accumulated_text[:500] or t("pending_executor.task_completed")
@@ -899,7 +938,8 @@ class PendingTaskExecutor:
                 self._anima._task_slots["background"] = task_id
                 try:
                     result = await self._run_llm_task(task_desc)
-                    self._sync_task_queue(task_id, "done", summary=(result or "")[:200])
+                    status, summary = _classify_task_result(result)
+                    self._sync_task_queue(task_id, status, summary=summary)
                 finally:
                     self._anima._status_slots["background"] = "idle"
                     self._anima._task_slots["background"] = ""
