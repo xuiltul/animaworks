@@ -1,8 +1,8 @@
 ---
 name: slack-tool
 description: >-
-  Slack 연동 도구. 메시지 송신/수신, 검색, 미회신 확인, 채널 목록, 이모지 리액션.
-  "Slack" "채널" "스레드" "리액션"
+  Slack 연동 도구. 메시지 송수신·검색·미회신 확인·채널 목록·이모지 리액션을 수행한다.
+  Use when: Slack에 게시, 채널 목록, 스레드 답장, 미회신 확인, 리액션 추가가 필요할 때.
 tags: [communication, slack, external]
 ---
 

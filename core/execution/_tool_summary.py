@@ -40,8 +40,8 @@ def summarize_tool_args(tool_name: str, args: dict[str, Any]) -> str:
             return (args.get("query") or "")[:80]
         case "x_search":
             return (args.get("query") or "")[:80]
-        case "skill":
-            return args.get("name") or ""
+        case "create_skill":
+            return args.get("skill_name") or ""
         case "search_memory":
             return (args.get("query") or "")[:80]
         case "save_memory":

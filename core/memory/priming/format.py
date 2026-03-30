@@ -87,15 +87,6 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
         parts.append(wrap_priming("episodes", result.episodes, trust="medium"))
         parts.append("")
 
-    if result.matched_skills:
-        parts.append(t("priming.matched_skills_header"))
-        parts.append("")
-        skills_line = ", ".join(result.matched_skills)
-        parts.append(t("priming.skills_list", skills_line=skills_line))
-        parts.append("")
-        parts.append(t("priming.skills_detail_hint"))
-        parts.append("")
-
     if result.pending_tasks:
         parts.append(t("priming.pending_tasks_header"))
         parts.append("")

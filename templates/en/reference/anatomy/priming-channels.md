@@ -3,6 +3,8 @@
 Detailed specification of all channels executed by PrimingEngine.
 Includes budget, search sources, filtering, and dynamic adjustment.
 
+Parallel retrieval uses **five channels** (A / B / C / E / F). Channel C0 (important_knowledge) is an auxiliary block inside the same pipeline as Channel C. The former Channel D (Distilled Knowledge) and any “six channel” wording are obsolete.
+
 ---
 
 ## Channel Overview
@@ -13,7 +15,6 @@ Includes budget, search sources, filtering, and dynamic adjustment.
 | B: recent_activity | 1300 | `activity_log/` + shared channels | trusted |
 | C: related_knowledge | 1200 | RAG vector search (knowledge + common_knowledge) | medium / untrusted |
 | C0: important_knowledge | 300 | Chunks tagged with `[IMPORTANT]` | medium |
-| D: skill_match | 200 | 3-stage matching (keyword → vocab → vector) | trusted |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
 | F: episodes | 500 | RAG vector search (episodes/) | medium |
 
@@ -23,6 +24,8 @@ Additional injection:
 |------|-----------|--------|-------|
 | Recent outbound | No limit (max 3 items) | activity_log (last 2 hours, `channel_post` / `message_sent`) | trusted |
 | Pending human notifications | 500 | `human_notify` events (last 24 hours) | trusted |
+
+Skill and procedure bodies are not injected by Priming. Use paths shown in the system prompt skill catalog (e.g. `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`, `procedures/baz.md`) and load them with `read_memory_file`.
 
 ---
 
@@ -42,6 +45,8 @@ Injects the recent activity timeline.
 
 - **Source**: `activity_log/{date}.jsonl` + latest posts from shared channels
 - **Budget**: 1300 tokens
+
+**Priming vs. explicit search:** Channel B injects a **budget-limited**, automatic timeline from `activity_log/`. That is separate from on-demand recall: use `search_memory(query="...", scope="activity_log")` when you need to **query** recent actions (tool results, messages, etc.) beyond what Priming surfaced.
 
 ### Trigger-based Filtering
 
@@ -80,17 +85,6 @@ Always injects summary pointers for chunks tagged with `[IMPORTANT]`.
 - **Target**: Chunks tagged with `[IMPORTANT]` in `knowledge/`
 - **Injection format**: Summary pointers only (not full text). Details fetched via `read_memory_file`
 - **Purpose**: Reliable recall of important business rules and decision criteria
-
----
-
-## Channel D: skill_match
-
-Injects skill names related to the message.
-
-- **Budget**: 200 tokens
-- **Matching**: 3-stage (keyword → vocab → vector)
-- **Return**: Skill names only (max 5). Full text fetched via `skill` tool (progressive disclosure)
-- **Target**: Personal `skills/` + `common_skills/`
 
 ---
 

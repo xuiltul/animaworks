@@ -589,3 +589,149 @@ command: echo hello
         assert parse_schedule("09:00") is None
         assert parse_schedule("毎週金曜 17:00") is None
         assert parse_schedule("every 5 minutes") is None
+
+
+# ── Inline comment stripping tests ───────────────────────
+
+
+class TestInlineCommentStripping:
+    """Tests for stripping inline comments from directive values."""
+
+    def test_schedule_with_inline_comment(self):
+        """Inline comment after schedule is stripped."""
+        content = """\
+## Task
+schedule: 0 10 * * 1,4  # 毎週月・木 10:00 JST
+type: llm
+Do something.
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].schedule == "0 10 * * 1,4"
+
+    def test_type_with_inline_comment(self):
+        """Inline comment after type is stripped."""
+        content = """\
+## Task
+schedule: 0 9 * * *
+type: llm  # LLM判断が必要
+Do something.
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].type == "llm"
+
+    def test_command_with_inline_comment(self):
+        """Inline comment after command is stripped."""
+        content = """\
+## Task
+schedule: 0 2 * * *
+type: command
+command: /usr/bin/backup.sh  # nightly backup
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].command == "/usr/bin/backup.sh"
+
+    def test_tool_with_inline_comment(self):
+        """Inline comment after tool is stripped."""
+        content = """\
+## Task
+schedule: 0 9 * * *
+type: command
+tool: health_check  # ヘルスチェック
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].tool == "health_check"
+
+    def test_hash_without_leading_space_preserved(self):
+        """Hash without leading space is NOT treated as comment (safety)."""
+        content = """\
+## Task
+schedule: 0 9 * * *
+type: command
+command: echo#nocomment
+"""
+        tasks = parse_cron_md(content)
+        assert tasks[0].command == "echo#nocomment"
+
+
+# ── YAML list prefix stripping tests ─────────────────────
+
+
+class TestYamlListPrefixStripping:
+    """Tests for stripping YAML list prefix '- ' from directive lines."""
+
+    def test_yaml_list_prefix_schedule(self):
+        """YAML list prefix '- ' before schedule: is stripped."""
+        content = """\
+## Task
+- schedule: 0 9 * * *
+- type: llm
+Do something.
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].schedule == "0 9 * * *"
+        assert tasks[0].type == "llm"
+
+    def test_yaml_list_prefix_command(self):
+        """YAML list prefix '- ' before command: is stripped."""
+        content = """\
+## Task
+- schedule: 0 2 * * *
+- type: command
+- command: /usr/bin/backup.sh
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].command == "/usr/bin/backup.sh"
+
+    def test_markdown_list_in_description_preserved(self):
+        """Markdown list items in description are preserved (not stripped)."""
+        content = """\
+## Task
+schedule: 0 9 * * *
+type: llm
+Do these things:
+- Check the logs
+- Review PRs
+- Update docs
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert "- Check the logs" in tasks[0].description
+        assert "- Review PRs" in tasks[0].description
+
+
+# ── Combined tolerance tests ─────────────────────────────
+
+
+class TestCombinedTolerances:
+    """Tests for combined format tolerance (YAML prefix + inline comments)."""
+
+    def test_yaml_list_prefix_plus_inline_comment(self):
+        """Both YAML list prefix AND inline comment are handled together."""
+        content = """\
+## Task
+- schedule: 0 10 * * 1,4  # 毎週月・木
+- type: llm  # LLM型
+Do something.
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].schedule == "0 10 * * 1,4"
+        assert tasks[0].type == "llm"
+
+    def test_quoted_schedule_with_inline_comment(self):
+        """Quoted schedule with inline comment: both quotes and comment stripped."""
+        content = """\
+## Task
+schedule: "0 9 * * *"  # daily
+type: llm
+Do something.
+"""
+        tasks = parse_cron_md(content)
+        assert len(tasks) == 1
+        assert tasks[0].schedule == "0 9 * * *"

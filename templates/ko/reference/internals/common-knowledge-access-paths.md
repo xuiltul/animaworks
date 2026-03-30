@@ -45,6 +45,7 @@ Anima가 `search_memory(query="...", scope="common_knowledge")`를 호출하면,
 - **키워드 검색**: `~/.animaworks/common_knowledge/` 내의 .md 파일을 텍스트 스캔
 - **벡터 검색**: `shared_common_knowledge` 컬렉션을 검색
 - **scope 지정**: `"common_knowledge"`로 한정 검색, `"all"` (기본값)로도 포함됨
+- **`scope="all"`**: 개인 기억 전역 검색 시 벡터 검색 결과와 `activity_log/`의 BM25 키워드 검색 결과를 **RRF(Reciprocal Rank Fusion)**로 병합하여 반환합니다 (최근 도구·메시지 등의 회상에 유리)
 
 ### 사용 예시
 ```

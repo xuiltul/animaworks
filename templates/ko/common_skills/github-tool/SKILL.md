@@ -1,8 +1,8 @@
 ---
 name: github-tool
 description: >-
-  GitHub 연동 도구. Issue/PR 목록 조회, Issue 생성, PR 생성. gh CLI 래퍼.
-  "GitHub" "Issue" "PR" "풀 리퀘스트" "리포지토리"
+  GitHub 연동 도구. Issue·PR 목록·생성을 gh CLI 래퍼로 수행한다.
+  Use when: Issue·PR 작성·목록, 리포지토리 작업 확인, GitHub에서 작업 상태 조회가 필요할 때.
 tags: [development, github, external]
 ---
 

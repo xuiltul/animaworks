@@ -219,9 +219,6 @@ class AssistedExecutor(BaseExecutor):
         canonical = build_unified_tool_list(
             include_notification_tools=self._tool_handler._human_notifier is not None,
             include_supervisor_tools=self._has_subordinates(),
-            skill_metas=self._memory.list_skill_metas(),
-            common_skill_metas=self._memory.list_common_skill_metas(),
-            procedure_metas=self._memory.list_procedure_metas(),
             trigger=trigger,
         )
         return canonical
@@ -424,6 +421,9 @@ class AssistedExecutor(BaseExecutor):
             len(prompt),
             trigger,
         )
+        from core.execution._completion_gate import cleanup_gate_marker
+
+        cleanup_gate_marker(self._anima_dir)
 
         # ── 1. Build tool spec and augment system prompt ─────
         tool_spec = self._build_tool_spec_text(trigger=trigger)
@@ -643,6 +643,9 @@ class AssistedExecutor(BaseExecutor):
             "Mode B streaming START prompt_len=%d",
             len(prompt),
         )
+        from core.execution._completion_gate import cleanup_gate_marker
+
+        cleanup_gate_marker(self._anima_dir)
 
         # ── 1. Build tool spec and augment system prompt ─────
         tool_spec = self._build_tool_spec_text(trigger=trigger)

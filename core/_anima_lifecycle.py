@@ -209,17 +209,22 @@ class LifecycleMixin:
         consolidation_type: str = "daily",
         max_turns: int = 30,
     ) -> CycleResult:
-        """Run memory consolidation as an Anima-driven task.
+        """Run memory consolidation as a 2-phase Anima-driven task.
 
-        The Anima uses its own tools (search_memory, read_memory_file,
-        write_memory_file, archive_memory_file) to organize, consolidate,
-        and clean up its memories within a tool-call loop.
+        Daily consolidation uses a 2-phase approach:
+          **Phase A** — Episode extraction: activity_log → structured timeline
+            episodes via ``one_shot_completion`` (no tool loop).
+          **Phase B** — Knowledge extraction: the Anima uses tools to read
+            the newly created episodes and manage knowledge/.
 
-        Works with all execution modes: S, A, and B.
+        Weekly consolidation retains the existing single-phase flow.
+
+        Uses ``config.consolidation.llm_model`` instead of the Anima's main
+        model to control costs.
 
         Args:
             consolidation_type: "daily" or "weekly"
-            max_turns: Maximum tool-call loop iterations for this task
+            max_turns: Maximum tool-call loop iterations for Phase B
         """
         logger.info(
             "[%s] run_consolidation START type=%s max_turns=%d",
@@ -237,7 +242,6 @@ class LifecycleMixin:
                 _session_token = self.agent._tool_handler.set_active_session_type("background")
                 self.agent._tool_handler.set_session_origin(ORIGIN_SYSTEM)
 
-                # Signal consolidation mode to MCP subprocess (Mode S)
                 _consolidation_flag = self.anima_dir / "state" / ".consolidation_mode"
                 try:
                     _consolidation_flag.write_text("1", encoding="utf-8")
@@ -248,67 +252,24 @@ class LifecycleMixin:
                     from core.memory.consolidation import ConsolidationEngine
 
                     engine = ConsolidationEngine(self.anima_dir, self.name)
-                    knowledge_files = engine._list_knowledge_files_with_meta()
-                    knowledge_list_text = _format_knowledge_list(knowledge_files)
 
-                    try:
-                        merge_candidates = engine._find_merge_candidates(
-                            max_pairs=20 if consolidation_type == "daily" else 30,
-                        )
-                    except Exception:
-                        logger.debug("[%s] merge candidate detection failed", self.name, exc_info=True)
-                        merge_candidates = []
-                    merge_candidates_text = _format_merge_candidates(merge_candidates)
-
-                    # Build consolidation prompt
-                    if consolidation_type == "daily":
-                        episodes_summary, resolved_events_summary, activity_log_summary, reflections_summary = (
-                            self._collect_episodes_summary()
-                        )
-                        reflections_section = ""
-                        if reflections_summary:
-                            reflections_section = (
-                                "## "
-                                + t("anima.reflections_header")
-                                + "\n\n"
-                                + t("anima.reflections_intro")
-                                + "\n\n"
-                                + reflections_summary
-                            )
-                        prompt = load_prompt(
-                            "memory/consolidation_instruction",
-                            anima_name=self.name,
-                            episodes_summary=episodes_summary,
-                            resolved_events_summary=resolved_events_summary,
-                            activity_log_summary=activity_log_summary or t("anima.no_activity_log"),
-                            reflections_summary=reflections_section,
-                            knowledge_files_list=knowledge_list_text,
-                            merge_candidates=merge_candidates_text,
-                        )
-                    else:
-                        prompt = load_prompt(
-                            "memory/weekly_consolidation_instruction",
-                            anima_name=self.name,
-                            knowledge_files_list=knowledge_list_text,
-                            merge_candidates=merge_candidates_text,
-                            total_knowledge_count=len(knowledge_files),
-                        )
-
-                    # Activity log
                     self._activity.log(
                         "consolidation_start",
                         summary=t("anima.consolidation_start", type=consolidation_type),
                     )
 
-                    result = await self.agent.run_cycle(
-                        prompt,
-                        trigger=f"consolidation:{consolidation_type}",
-                        message_intent="request",
-                        max_turns_override=max_turns,
-                    )
-                    self._last_activity = now_local()
+                    if consolidation_type == "daily":
+                        result = await self._run_daily_consolidation(
+                            engine,
+                            max_turns=max_turns,
+                        )
+                    else:
+                        result = await self._run_weekly_consolidation(
+                            engine,
+                            max_turns=max_turns,
+                        )
 
-                    # Activity log: completion
+                    self._last_activity = now_local()
                     self._activity.log(
                         "consolidation_end",
                         summary=t("anima.consolidation_end", type=consolidation_type),
@@ -347,6 +308,199 @@ class LifecycleMixin:
                     self._task_slots["background"] = ""
         finally:
             self._notify_lock_released()
+
+    async def _run_daily_consolidation(
+        self,
+        engine: Any,
+        *,
+        max_turns: int = 30,
+    ) -> CycleResult:
+        """Execute 2-phase daily consolidation.
+
+        Phase A: Extract structured timeline episodes from activity_log.
+        Phase B: Run knowledge extraction with the Anima's tool loop.
+        """
+        import time as _time
+
+        from core.config import load_config
+
+        cfg = load_config()
+        consolidation_model = cfg.consolidation.llm_model
+        start_mono = _time.monotonic()
+
+        # ── Phase A: Episode extraction ─────────────────────────
+        chunks = engine.collect_activity_chunks(hours=24, model=consolidation_model)
+        episode_parts: list[str] = []
+
+        if chunks:
+            from core.memory._llm_utils import one_shot_completion
+
+            logger.info(
+                "[%s] Phase A: extracting episodes from %d chunk(s) with model=%s",
+                self.name,
+                len(chunks),
+                consolidation_model,
+            )
+
+            for i, chunk in enumerate(chunks):
+                time_range = f"chunk {i + 1}/{len(chunks)}"
+                ep_prompt = load_prompt(
+                    "memory/episode_extraction",
+                    anima_name=self.name,
+                    time_range=time_range,
+                    activity_chunk=chunk,
+                )
+                raw = await one_shot_completion(
+                    ep_prompt,
+                    model=consolidation_model,
+                    max_tokens=8192,
+                )
+                if raw:
+                    episode_parts.append(engine._sanitize_llm_output(raw))
+                    logger.debug(
+                        "[%s] Phase A chunk %d/%d: %d chars extracted",
+                        self.name,
+                        i + 1,
+                        len(chunks),
+                        len(episode_parts[-1]),
+                    )
+
+        # Merge and write episodes
+        if episode_parts:
+            merged_episodes = engine.merge_timeline_parts(episode_parts)
+            today = now_local().date()
+            episode_path = engine.episodes_dir / f"{today}.md"
+            episode_path.write_text(merged_episodes, encoding="utf-8")
+            logger.info(
+                "[%s] Phase A complete: wrote %d chars to %s",
+                self.name,
+                len(merged_episodes),
+                episode_path.name,
+            )
+
+        # ── Phase B: Knowledge extraction ───────────────────────
+        episodes = engine._collect_recent_episodes(hours=24)
+        if episodes:
+            episodes_summary = "\n\n".join(f"## {e['date']} {e['time']}\n{e['content']}" for e in episodes)
+        else:
+            episodes_summary = t("anima.no_episodes_today")
+
+        reflections_text = engine._extract_reflections_from_episodes(episodes_summary)
+        reflections_section = ""
+        if reflections_text:
+            reflections_section = (
+                "## "
+                + t("anima.reflections_header")
+                + "\n\n"
+                + t("anima.reflections_intro")
+                + "\n\n"
+                + reflections_text
+            )
+
+        resolved = engine._collect_resolved_events(hours=24)
+        resolved_text = "\n".join(f"- {r['ts'][:16]}: {r['content']}" for r in resolved) if resolved else ""
+
+        error_patterns = engine._collect_error_entries(hours=24)
+        knowledge_files = engine._list_knowledge_files_with_meta()
+        knowledge_list_text = _format_knowledge_list(knowledge_files)
+
+        try:
+            merge_candidates = engine._find_merge_candidates(max_pairs=20)
+        except Exception:
+            logger.debug("[%s] merge candidate detection failed", self.name, exc_info=True)
+            merge_candidates = []
+        merge_candidates_text = _format_merge_candidates(merge_candidates)
+
+        prompt = load_prompt(
+            "memory/consolidation_instruction",
+            anima_name=self.name,
+            episodes_summary=episodes_summary,
+            resolved_events_summary=resolved_text,
+            reflections_summary=reflections_section,
+            knowledge_files_list=knowledge_list_text,
+            merge_candidates=merge_candidates_text,
+            error_patterns_summary=error_patterns,
+        )
+
+        logger.info(
+            "[%s] Phase B: knowledge extraction with model=%s",
+            self.name,
+            consolidation_model,
+        )
+
+        # Temporarily override model to consolidation model for Phase B
+        _orig_model = self.model_config.model
+        try:
+            self.model_config.model = consolidation_model
+            result = await self.agent.run_cycle(
+                prompt,
+                trigger="consolidation:daily",
+                message_intent="request",
+                max_turns_override=max_turns,
+            )
+        finally:
+            self.model_config.model = _orig_model
+
+        elapsed_ms = int((_time.monotonic() - start_mono) * 1000)
+        return CycleResult(
+            trigger="consolidation:daily",
+            action="completed",
+            summary=result.summary or "",
+            duration_ms=elapsed_ms,
+        )
+
+    async def _run_weekly_consolidation(
+        self,
+        engine: Any,
+        *,
+        max_turns: int = 30,
+    ) -> CycleResult:
+        """Execute weekly consolidation (unchanged single-phase flow)."""
+        import time as _time
+
+        from core.config import load_config
+
+        cfg = load_config()
+        consolidation_model = cfg.consolidation.llm_model
+        start_mono = _time.monotonic()
+
+        knowledge_files = engine._list_knowledge_files_with_meta()
+        knowledge_list_text = _format_knowledge_list(knowledge_files)
+
+        try:
+            merge_candidates = engine._find_merge_candidates(max_pairs=30)
+        except Exception:
+            logger.debug("[%s] merge candidate detection failed", self.name, exc_info=True)
+            merge_candidates = []
+        merge_candidates_text = _format_merge_candidates(merge_candidates)
+
+        prompt = load_prompt(
+            "memory/weekly_consolidation_instruction",
+            anima_name=self.name,
+            knowledge_files_list=knowledge_list_text,
+            merge_candidates=merge_candidates_text,
+            total_knowledge_count=len(knowledge_files),
+        )
+
+        _orig_model = self.model_config.model
+        try:
+            self.model_config.model = consolidation_model
+            result = await self.agent.run_cycle(
+                prompt,
+                trigger="consolidation:weekly",
+                message_intent="request",
+                max_turns_override=max_turns,
+            )
+        finally:
+            self.model_config.model = _orig_model
+
+        elapsed_ms = int((_time.monotonic() - start_mono) * 1000)
+        return CycleResult(
+            trigger="consolidation:weekly",
+            action="completed",
+            summary=result.summary or "",
+            duration_ms=elapsed_ms,
+        )
 
     async def run_cron_task(
         self,

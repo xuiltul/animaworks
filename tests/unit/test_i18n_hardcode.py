@@ -95,7 +95,7 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     # label "個人ツール"
     "core/tooling/handler_memory.py": 1,
     # tool descriptions — already have ja/en dict structure
-    "core/tooling/prompt_db.py": 26,
+    "core/tooling/prompt_db.py": 25,
     # Japanese field names in schema descriptions (上司, 基本情報)
     "core/tooling/schemas/admin.py": 2,
     # user-facing message (バックグラウンドタスク投入)

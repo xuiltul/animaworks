@@ -672,11 +672,19 @@ class HeartbeatMixin:
             except Exception:
                 logger.debug("[%s] Failed to remove heartbeat checkpoint", self.name, exc_info=True)
 
-            # Compact task queue after heartbeat
+            # Sync delegated tasks then compact task queue after heartbeat
             try:
                 from core.memory.task_queue import TaskQueueManager
+                from core.paths import get_animas_dir
 
                 _tqm = TaskQueueManager(self.anima_dir)
+                _synced = _tqm.sync_delegated(get_animas_dir())
+                if _synced:
+                    logger.info(
+                        "[%s] Synced %d delegated tasks from subordinates",
+                        self.name,
+                        _synced,
+                    )
                 _removed = _tqm.compact()
                 if _removed:
                     logger.info(

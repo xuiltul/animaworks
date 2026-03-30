@@ -6,18 +6,15 @@
 
 {episodes_summary}
 
-## 해결된 이벤트
-
-{resolved_events_summary}
-
-## 오늘의 액티비티 로그 (행동 기록)
-{activity_log_summary}
-
-※ 액티비티 로그는 행동의 기록이며 추론 과정은 포함되지 않습니다.
+※ 위의 에피소드는 액티비티 로그에서 자동 추출된 구조화된 타임라인입니다.
 여기서 knowledge를 추출할 때는 다음 사항에 주의하세요:
 - 확실히 사실이라고 판단할 수 있는 것만 knowledge/에 기록
 - 추측이나 해석이 필요한 항목은 confidence: 0.5로 기록
 - frontmatter에 `source: "activity_log"` 추가
+
+## 해결된 이벤트
+
+{resolved_events_summary}
 
 {reflections_summary}
 
@@ -28,6 +25,10 @@
 ## 병합 후보 (유사 파일 쌍)
 
 {merge_candidates}
+
+## 에러 패턴 (지난 24시간)
+
+{error_patterns_summary}
 
 ---
 
@@ -53,6 +54,25 @@
 1. `search_memory`로 관련 기존 knowledge/ 및 procedures/ 검색
 2. 관련 파일이 있으면 `read_memory_file`로 확인하고 `write_memory_file`로 추가·업데이트
 3. 해당하는 기존 파일이 없는 경우에만 새 파일 생성
+
+### Step 2.5: 에러 패턴 분석
+
+위 "에러 패턴" 섹션을 확인하고, 반복적으로 발생하는 패턴이 있으면:
+1. `search_memory`로 관련 기존 procedures/ 검색
+2. 기존 절차가 있으면 `read_memory_file`로 확인하고 `write_memory_file`로 추가·업데이트
+3. 해당하는 기존 파일이 없는 경우에만 `procedures/`에 새로 생성
+4. 1회성 에러는 기록 불필요 (노이즈)
+
+새로 생성 시 frontmatter:
+```
+---
+created_at: "YYYY-MM-DDTHH:MM:SS"
+confidence: 0.4
+auto_consolidated: true
+source: "error_trace_analysis"
+version: 1
+---
+```
 
 ### Step 3: 품질 점검
 - 업데이트하거나 생성한 내용이 에피소드의 사실과 모순되지 않는지 확인

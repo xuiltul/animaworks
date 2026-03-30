@@ -292,7 +292,7 @@ def _build_group3(
         if state_content:
             _add(state_content, "current_state", 2, "elastic")
 
-    if not is_inbox and not is_task:
+    if not is_task:
         try:
             resolutions = memory.read_resolutions(days=7)
             if resolutions:
@@ -334,6 +334,7 @@ def _build_group4(
     scale: float,
     execution_mode: str,
     skill_metas: list[Any],
+    common_skill_metas: list[Any],
     prompt_store: Any,
     is_heartbeat: bool,
     is_task: bool,
@@ -444,30 +445,61 @@ def _build_group4(
             "\n## CLI Tools\n"
             "For supervisor management, vault, channel management, "
             "background tasks, and external tools (Slack, Chatwork, Gmail, GitHub, etc.):\n"
-            "```\nanimaworks-tool <tool> <subcommand> [args]\n```\n"
-            "Use `skill machine-tool` to see available commands.",
+            "```\nBash: animaworks-tool <tool> <subcommand> [args]\n```\n"
+            'Use read_memory_file(path="common_skills/machine-tool/SKILL.md") to see available commands.',
             "tool_guides",
             1,
         )
     if not is_heartbeat and (tool_registry or personal_tools):
         cats = sorted(set((tool_registry or []) + list((personal_tools or {}).keys())))
         if cats:
-            if _is_mcp_mode(execution_mode):
-                et = (
-                    f"## External Tools\nAvailable categories: {', '.join(cats)}\n"
-                    "When a dedicated external tool is visible in your tool list, call it directly by tool name.\n"
-                    "Prefer direct tools such as `slack_channel_post` over Bash/CLI.\n"
-                    "Use `animaworks-tool <tool> <subcommand>` via Bash only when no equivalent dedicated tool is available."
-                )
-            else:
-                et = (
-                    f"## External Tools\nAvailable categories: {', '.join(cats)}\n"
-                    f"Use the `skill` tool to look up CLI usage, "
-                    f"then execute via Bash: `animaworks-tool <tool> <subcommand>`."
-                )
+            et = (
+                f"## External Tools\nAvailable categories: {', '.join(cats)}\n"
+                "Use read_memory_file to load skill content and look up CLI usage, "
+                f"then execute via Bash: `animaworks-tool <tool> <subcommand>`."
+            )
             if "machine" in cats:
                 et += t("builder.machine_hint")
             _add(et, "external_tools", 2)
+
+    # ── Skill catalog (Agent Skills standard) ───
+    if not is_task and not is_heartbeat:
+        from core.memory.skill_metadata import SkillMetadataService
+
+        _DESC_LIMIT = 250
+        catalog_lines: list[str] = [
+            t("builder.skill_catalog_header"),
+            t("builder.skill_catalog_instruction"),
+            "",
+            "<available_skills>",
+        ]
+        for meta in skill_metas:
+            desc = (meta.description[:_DESC_LIMIT] + "…") if len(meta.description) > _DESC_LIMIT else meta.description
+            catalog_lines.append(f"- skills/{meta.name}/SKILL.md: {desc}")
+
+        common_label = t("skill.label_common")
+        for meta in common_skill_metas:
+            desc = (meta.description[:_DESC_LIMIT] + "…") if len(meta.description) > _DESC_LIMIT else meta.description
+            catalog_lines.append(f"- common_skills/{meta.name}/SKILL.md ({common_label}): {desc}")
+
+        procedure_label = t("skill.label_procedure")
+        proc_dir = pd / "procedures"
+        if proc_dir.is_dir():
+            for f in sorted(proc_dir.glob("*.md")):
+                try:
+                    pmeta = SkillMetadataService.extract_skill_meta(f)
+                    desc = (
+                        (pmeta.description[:_DESC_LIMIT] + "…")
+                        if len(pmeta.description) > _DESC_LIMIT
+                        else pmeta.description
+                    )
+                    catalog_lines.append(f"- procedures/{pmeta.name}.md ({procedure_label}): {desc}")
+                except Exception:
+                    logger.debug("Failed to extract procedure meta from %s", f, exc_info=True)
+
+        catalog_lines.append("</available_skills>")
+        catalog_text = "\n".join(catalog_lines)
+        _add(catalog_text, "skill_catalog", 2, "elastic")
 
     return out, injected_procs, injected_know, overflow
 
@@ -589,6 +621,7 @@ def build_system_prompt(
     prompt_store = get_prompt_store()
     other_animas = _discover_other_animas(pd)
     skill_metas = memory.list_skill_metas()
+    common_skill_metas = memory.list_common_skill_metas()
     permissions = memory.read_permissions()
 
     # Assemble sections from all 6 groups
@@ -615,6 +648,7 @@ def build_system_prompt(
         scale,
         execution_mode,
         skill_metas,
+        common_skill_metas,
         prompt_store,
         is_heartbeat,
         is_task,

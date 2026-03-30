@@ -217,7 +217,9 @@ send_message(
 | `episodes` | Past action logs | Fact-checking “what happened when” |
 | `procedures` | Procedures | “How to” steps |
 | `common_knowledge` | Knowledge shared across all Anima | Org rules, system guides |
-| `all` | All of the above | Keyword existence, broad search |
+| `skills` | Skills and common skills (vector search) | Discovering and searching skills |
+| `activity_log` | Unified activity timeline (tool results, messages, etc.) | “What did I just read?” recent actions |
+| `all` | All of the above (vector search + activity_log BM25 fused via RRF) | Keyword existence, broad search |
 
 ---
 
@@ -284,7 +286,7 @@ send_message(
 ### Steps
 
 1. **Confirm how to use the tool via skills**
-   - Use the `skill` tool with the skill name to load the full procedure (available skills appear in the session tool guide, etc.)
+   - Use `read_memory_file` with the path from the system prompt skill catalog (e.g. `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`) to load the full procedure
    - In B-mode, when external tools are allowed, you can call them with `Bash: animaworks-tool <tool> <subcommand>`
 
 2. **Check permissions**
@@ -300,7 +302,7 @@ send_message(
 
 4. **MCP-integrated modes (S/C/D/G: Claude Agent SDK / Codex CLI / Cursor Agent / Gemini CLI)**
    - Built-in tools are available without a prefix (e.g. `send_message`). If missing, restart the process
-   - External tools: use the `skill` tool for CLI usage, then run `animaworks-tool <tool> <subcommand>` via **Bash** (the agent’s Bash tool)
+   - External tools: load CLI usage from the skill file with `read_memory_file`, then run `animaworks-tool <tool> <subcommand>` via **Bash** (the agent’s Bash tool)
    - Long-running tools (image generation, local LLM, etc.): use `animaworks-tool submit` for async execution
 
 5. **D-mode (Cursor Agent) — common issues**
@@ -314,7 +316,7 @@ send_message(
    - **Fallback**: If unresolved, set `execution_mode` to `A` or switch to LiteLLM (Mode A). The `gemini/` prefix may be remapped to `google/` for the Google provider
 
 7. **A-mode (LiteLLM)**
-   - External tools: confirm usage with `skill`, then run `animaworks-tool <tool> <subcommand>` via **Bash**
+   - External tools: confirm usage with `read_memory_file` on the skill path, then run `animaworks-tool <tool> <subcommand>` via **Bash**
 
 8. **If the tool returns an error**
    - Record the error message accurately

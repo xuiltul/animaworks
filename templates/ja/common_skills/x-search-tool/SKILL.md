@@ -1,8 +1,8 @@
 ---
 name: x-search-tool
 description: >-
-  X（Twitter）検索ツール。キーワード検索とユーザーツイート取得。
-  「X」「Twitter」「ツイート」「ポスト」「SNS検索」
+  X（Twitter）検索ツール。キーワード検索と指定ユーザーのツイート取得を行う。
+  Use when: X上の話題検索、特定アカウントの投稿取得、トレンド・世論の把握が必要なとき。
 tags: [search, x, twitter, external]
 ---
 

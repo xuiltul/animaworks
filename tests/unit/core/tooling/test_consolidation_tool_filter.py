@@ -19,7 +19,7 @@ class TestConsolidationToolFilter:
     def test_normal_trigger_includes_delegation_tools(self):
         tools = build_unified_tool_list(
             include_supervisor_tools=True,
-            include_skill_tools=False,
+            include_create_skill=False,
             trigger="chat",
         )
         names = _tool_names(tools)
@@ -30,7 +30,7 @@ class TestConsolidationToolFilter:
     def test_consolidation_trigger_excludes_blocked_tools(self):
         tools = build_unified_tool_list(
             include_supervisor_tools=True,
-            include_skill_tools=False,
+            include_create_skill=False,
             trigger="consolidation:daily",
         )
         names = _tool_names(tools)
@@ -40,7 +40,7 @@ class TestConsolidationToolFilter:
     def test_consolidation_weekly_also_excludes(self):
         tools = build_unified_tool_list(
             include_supervisor_tools=True,
-            include_skill_tools=False,
+            include_create_skill=False,
             trigger="consolidation:weekly",
         )
         names = _tool_names(tools)
@@ -49,7 +49,7 @@ class TestConsolidationToolFilter:
 
     def test_consolidation_keeps_memory_tools(self):
         tools = build_unified_tool_list(
-            include_skill_tools=False,
+            include_create_skill=False,
             trigger="consolidation:daily",
         )
         names = _tool_names(tools)
@@ -60,7 +60,7 @@ class TestConsolidationToolFilter:
     def test_empty_trigger_includes_all(self):
         tools = build_unified_tool_list(
             include_supervisor_tools=True,
-            include_skill_tools=False,
+            include_create_skill=False,
             trigger="",
         )
         names = _tool_names(tools)

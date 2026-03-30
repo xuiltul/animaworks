@@ -10,6 +10,7 @@ Tests the complete A2 loop with:
 - Parallel tool_call execution
 - JSON parse error handling
 """
+
 from __future__ import annotations
 
 import sys
@@ -32,8 +33,7 @@ def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "test"
     d.mkdir(parents=True)
     (d / "permissions.md").write_text(
-        "## 外部ツール\n- chatwork: OK\n- slack: OK\n"
-        "## ファイル操作\n## コマンド実行\n",
+        "## 外部ツール\n- chatwork: OK\n- slack: OK\n## ファイル操作\n## コマンド実行\n",
         encoding="utf-8",
     )
     (d / "identity.md").write_text("# Test Anima", encoding="utf-8")
@@ -57,11 +57,9 @@ def model_config() -> ModelConfig:
 @pytest.fixture
 def memory(anima_dir: Path) -> MagicMock:
     from core.memory import MemoryManager
+
     m = MagicMock(spec=MemoryManager)
-    m.read_permissions.return_value = (
-        "## 外部ツール\n- chatwork: OK\n- slack: OK\n"
-        "## ファイル操作\n## コマンド実行\n"
-    )
+    m.read_permissions.return_value = "## 外部ツール\n- chatwork: OK\n- slack: OK\n## ファイル操作\n## コマンド実行\n"
     m.search_memory_text.return_value = []
     m.anima_dir = anima_dir
     return m
@@ -69,8 +67,9 @@ def memory(anima_dir: Path) -> MagicMock:
 
 @pytest.fixture
 def executor(model_config, anima_dir, memory):
-    from core.tooling.handler import ToolHandler
     from core.execution.litellm_loop import LiteLLMExecutor
+    from core.tooling.handler import ToolHandler
+
     th = ToolHandler(
         anima_dir=anima_dir,
         memory=memory,
@@ -122,7 +121,8 @@ class TestSearchCodeE2E:
     async def test_search_code_in_loop(self, executor, anima_dir):
         """LLM calls search_code → gets results → responds."""
         (anima_dir / "test_file.py").write_text(
-            "def calculate():\n    return 42\n", encoding="utf-8",
+            "def calculate():\n    return 42\n",
+            encoding="utf-8",
         )
 
         tc = make_tool_call("search_code", {"pattern": "calculate"}, "call_001")
@@ -229,9 +229,9 @@ class TestBaseToolCount:
     """Verify the base tool set matches the unified design spec."""
 
     def test_base_tool_count(self, executor):
-        """Base tools should be 17 (CC 8 + AW-essential 9, no notification/supervisor)."""
+        """Base tools should be 18 (CC 8 + AW-essential 10, no notification/supervisor)."""
         tools = executor._build_base_tools()
-        assert len(tools) == 17
+        assert len(tools) == 18
         names = {t["function"]["name"] for t in tools}
         # CC built-in tools (8)
         assert "Read" in names
@@ -251,9 +251,11 @@ class TestBaseToolCount:
         # AW-essential: task management
         assert "submit_tasks" in names
         assert "update_task" in names
-        # AW-essential: skill
-        assert "skill" in names
+        # AW-essential: create_skill
+        assert "create_skill" in names
         # AW-essential: planning
         assert "todo_write" in names
+        # AW-essential: completion gate
+        assert "completion_gate" in names
         # Mode B only — must NOT be in Mode A
         assert "use_tool" not in names

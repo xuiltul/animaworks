@@ -97,6 +97,12 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
         "core/tooling/",
         "core/memory/task_queue.py",
     ],
+    "common_knowledge/operations/task-delegation-guide.md": [
+        "core/tooling/handler_delegation.py",
+        "core/memory/task_queue.py",
+        "core/_anima_heartbeat.py",
+        "core/execution/_sdk_hooks.py",
+    ],
     "common_knowledge/operations/heartbeat-cron-guide.md": [
         "core/background.py",
         "core/schedule_parser.py",
@@ -105,6 +111,13 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
     "common_knowledge/operations/background-tasks.md": [
         "core/background.py",
         "core/supervisor/pending_executor.py",
+    ],
+    "common_knowledge/operations/completion-gate-guide.md": [
+        "core/execution/_completion_gate.py",
+        "core/execution/_sdk_hooks.py",
+        "core/execution/_sdk_options.py",
+        "core/tooling/schemas/completion_gate.py",
+        "core/i18n/strings/tooling.py",
     ],
     "common_knowledge/operations/mode-s-auth-guide.md": [
         "core/execution/agent_sdk.py",
@@ -136,6 +149,7 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "common_knowledge/anatomy/memory-system.md": [
         "core/memory/",
+        "core/memory/bm25.py",
         "core/memory/priming.py",
         "core/memory/consolidation.py",
         "core/memory/forgetting.py",
@@ -181,7 +195,6 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
     ],
     "common_skills/skill-creator/SKILL.md": [
         "core/tooling/skill_creator.py",
-        "core/tooling/skill_tool.py",
         "core/memory/skill_metadata.py",
     ],
     "common_skills/skill-creator/references/description_guide.md": [

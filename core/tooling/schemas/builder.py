@@ -23,7 +23,7 @@ from core.tooling.schemas.memory import (
 )
 from core.tooling.schemas.notification import _notification_tools
 from core.tooling.schemas.session_todo import _session_todo_tools
-from core.tooling.schemas.skill import DISCOVERY_TOOLS, TOOL_MANAGEMENT_TOOLS, USE_TOOL, _skill_tools
+from core.tooling.schemas.skill import DISCOVERY_TOOLS, TOOL_MANAGEMENT_TOOLS, USE_TOOL, _create_skill_schemas
 from core.tooling.schemas.supervisor import (
     _background_task_tools,
     _check_permissions_tools,
@@ -51,10 +51,7 @@ def build_tool_list(
     include_submit_tasks: bool = False,
     include_background_task_tools: bool = False,
     include_vault_tools: bool = False,
-    include_skill_tools: bool = False,
-    skill_metas: list[Any] | None = None,
-    common_skill_metas: list[Any] | None = None,
-    procedure_metas: list[Any] | None = None,
+    include_create_skill: bool = False,
     external_schemas: list[dict[str, Any]] | None = None,
     trigger: str = "",
 ) -> list[dict[str, Any]]:
@@ -73,10 +70,7 @@ def build_tool_list(
         include_submit_tasks: Include submit_tasks DAG batch submission tool.
         include_background_task_tools: Include background task check/list tools.
         include_vault_tools: Include credential vault tools (get/store/list).
-        include_skill_tools: Include skill on-demand loading tool.
-        skill_metas: Personal skill metadata for dynamic description generation.
-        common_skill_metas: Common skill metadata for dynamic description generation.
-        procedure_metas: Procedure metadata for dynamic description generation.
+        include_create_skill: Include create_skill tool.
         external_schemas: Additional tool schemas in canonical format.
         trigger: Execution trigger (e.g. ``"consolidation:daily"``).
 
@@ -122,21 +116,8 @@ def build_tool_list(
 
     tools = apply_db_descriptions(tools)
 
-    # Skill tool description is dynamically generated — append AFTER
-    # apply_db_descriptions to prevent DB overwrite of <available_skills>.
-    if include_skill_tools:
-        from core.tooling.skill_tool import build_skill_tool_description
-
-        desc = build_skill_tool_description(
-            skill_metas or [],
-            common_skill_metas or [],
-            procedure_metas or [],
-        )
-        skill_schemas = _skill_tools()
-        skill_tool_schema = {**skill_schemas[0], "description": desc}
-        tools.append(skill_tool_schema)
-        for st in skill_schemas[1:]:
-            tools.append(st)
+    if include_create_skill:
+        tools.extend(_create_skill_schemas())
     return tools
 
 
@@ -144,10 +125,7 @@ def build_unified_tool_list(
     *,
     include_notification_tools: bool = False,
     include_supervisor_tools: bool = False,
-    include_skill_tools: bool = True,
-    skill_metas: list[Any] | None = None,
-    common_skill_metas: list[Any] | None = None,
-    procedure_metas: list[Any] | None = None,
+    include_create_skill: bool = True,
     trigger: str = "",
 ) -> list[dict[str, Any]]:
     """Build the unified 18-tool list (Claude Code-compatible 8 + AW-essential 10).
@@ -159,10 +137,7 @@ def build_unified_tool_list(
     Args:
         include_notification_tools: Include call_human (when HumanNotifier is configured).
         include_supervisor_tools: Include delegate_task (when Anima has subordinates).
-        include_skill_tools: Include skill tool (default True).
-        skill_metas: Personal skill metadata for dynamic description.
-        common_skill_metas: Common skill metadata for dynamic description.
-        procedure_metas: Procedure metadata for dynamic description.
+        include_create_skill: Include create_skill tool (default True).
         trigger: Execution trigger (e.g. ``"consolidation:daily"``).
             When the trigger starts with ``consolidation:``, delegation and
             messaging tools are excluded.
@@ -209,18 +184,15 @@ def build_unified_tool_list(
     # AW-essential: session todo (planning aid for Mode A)
     tools.extend(_session_todo_tools())
 
+    # completion_gate: pre-completion verification (applicable triggers only)
+    if not is_consolidation:
+        from core.tooling.schemas.completion_gate import _completion_gate_tools
+
+        tools.extend(_completion_gate_tools())
+
     tools = apply_db_descriptions(tools)
 
-    # AW-essential: skill (always present, appended AFTER apply_db_descriptions)
-    if include_skill_tools:
-        from core.tooling.skill_tool import build_skill_tool_description
-
-        desc = build_skill_tool_description(
-            skill_metas or [],
-            common_skill_metas or [],
-            procedure_metas or [],
-        )
-        skill_schemas = _skill_tools()
-        tools.append({**skill_schemas[0], "description": desc})
+    if include_create_skill:
+        tools.extend(_create_skill_schemas())
 
     return tools

@@ -21,7 +21,6 @@ from core.tooling.schemas import (
     to_litellm_format,
 )
 
-
 # ── Canonical schema structure ─────────────────────────────────
 
 
@@ -41,6 +40,8 @@ class TestMemoryTools:
         schema = next(t for t in MEMORY_TOOLS if t["name"] == "search_memory")
         scope_enum = schema["parameters"]["properties"]["scope"]["enum"]
         assert "common_knowledge" in scope_enum
+        assert "skills" in scope_enum
+        assert "activity_log" in scope_enum
         # Also verify other expected values are still present
         assert "knowledge" in scope_enum
         assert "episodes" in scope_enum
@@ -315,8 +316,10 @@ class TestLoadExternalSchemas:
             }
         ]
 
-        with patch.dict(core.tools.TOOL_MODULES, {"web_search": "core.tools.web_search"}, clear=True), \
-             patch("importlib.import_module", return_value=mock_mod):
+        with (
+            patch.dict(core.tools.TOOL_MODULES, {"web_search": "core.tools.web_search"}, clear=True),
+            patch("importlib.import_module", return_value=mock_mod),
+        ):
             result = load_external_schemas(["web_search"])
 
         assert len(result) == 1
@@ -329,15 +332,19 @@ class TestLoadExternalSchemas:
     def test_handles_module_without_get_tool_schemas(self):
         mock_mod = MagicMock(spec=[])  # No get_tool_schemas attribute
 
-        with patch.dict(core.tools.TOOL_MODULES, {"web_search": "core.tools.web_search"}, clear=True), \
-             patch("importlib.import_module", return_value=mock_mod):
+        with (
+            patch.dict(core.tools.TOOL_MODULES, {"web_search": "core.tools.web_search"}, clear=True),
+            patch("importlib.import_module", return_value=mock_mod),
+        ):
             result = load_external_schemas(["web_search"])
 
         assert result == []
 
     def test_handles_import_error(self):
-        with patch.dict(core.tools.TOOL_MODULES, {"web_search": "core.tools.web_search"}, clear=True), \
-             patch("importlib.import_module", side_effect=ImportError("no module")):
+        with (
+            patch.dict(core.tools.TOOL_MODULES, {"web_search": "core.tools.web_search"}, clear=True),
+            patch("importlib.import_module", side_effect=ImportError("no module")),
+        ):
             result = load_external_schemas(["web_search"])
 
         assert result == []
@@ -358,8 +365,10 @@ class TestLoadExternalSchemas:
             }
         ]
 
-        with patch.dict(core.tools.TOOL_MODULES, {"test": "core.tools.test"}, clear=True), \
-             patch("importlib.import_module", return_value=mock_mod):
+        with (
+            patch.dict(core.tools.TOOL_MODULES, {"test": "core.tools.test"}, clear=True),
+            patch("importlib.import_module", return_value=mock_mod),
+        ):
             result = load_external_schemas(["test"])
 
         assert len(result) == 1

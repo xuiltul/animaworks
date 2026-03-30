@@ -7,6 +7,71 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-03-30
+
+### Added
+
+#### Memory & Search
+- `search_memory` に `activity_log` スコープを追加 — 直近3日間の行動ログをBM25キーワード検索可能に。`scope="all"` 使用時はベクトル検索結果とRRF（Reciprocal Rank Fusion）で統合
+- `search_memory` に `skills` スコープを追加 — スキル・共通スキルをベクトル検索可能に
+- 人間フィードバック・好み情報の `write_memory_file` 自動保存を強制化
+
+#### Completion & Quality
+- `completion_gate` ツールを全実行モード（S/A/B/C/D/G）に追加 — 最終回答前の完了チェックリスト検証
+- Mode S: Agent SDK Stop hook による直接チェックリスト注入
+- Mode A: マーカーファイル方式で未呼び出し時に1回リトライ強制
+
+#### Consolidation
+- 2-phase multipass consolidation — tool_result全文を活用した高精度エピソード抽出 + エラートレース分析
+- Phase A: activity_logを時間チャンク分割 → LLM one-shotでエピソード抽出 → マージ・重複除去
+- Phase B: エラートレース分析（error + failed tool_result 収集・要約）→ 知識抽出・procedure自動生成
+
+#### Organization & Delegation
+- 委譲タスクのPriming表示 + 部下からの自動同期（`sync_delegated`）
+- スーパーバイザーの `state/plans/` 読み取りアクセスを許可
+- cross-Anima 書き込み境界ガイダンスをプロンプト・common_knowledgeに追加
+
+#### External Integrations
+- Discord連携ツール追加（REST API v10）— メッセージ送受信・チャネル操作
+- Slackユーザーメンション解決をインジェスト時に実行 + システムアノテーション付与 + intent="question" 即時トリガー最適化
+- `call_human` スレッド返信時の intent='question' 自動設定
+
+#### Assets & UI
+- Animaアセットにアイコン追加・個別再生成・fullbodyアップロード対応 (#141)
+- セッション境界での `current_state.md` 自動アーカイブ (#143)
+
+#### Templates & Documentation
+- team-designテンプレート追加・machine関連ドキュメントを `operations/machine/` に統合
+- machine-tool-usageをロールベースワークフローガイドに再構成
+- skill-creatorを Use-when ガイド + `lint_skill.py` で刷新
+
+### Changed
+- `skill` ツールを廃止し `read_memory_file` に統合 — スキルカタログはシステムプロンプトに直接表示、`read_memory_file(path="common_skills/.../SKILL.md")` で全文取得
+- Priming Channel D（スキルマッチ）を削除 — スキル情報はシステムプロンプト内カタログに移行
+- `common_skills/` 全スキル説明を Use-when パターンに移行（ja/en/ko）
+- `read_memory_file` に `common_skills/` パス解決を追加
+- `delegate_task` スキーマに自己完結型の指示ルールをインライン化
+- Claude組込みの CronCreate/Delete/List ツールを拒否リストに追加
+- アセットルート強化・パイプラインドキュメント整合・コーディング規約修正
+
+### Fixed
+- POSIX cron `day_of_week` 番号（0=日曜）とAPScheduler（0=月曜）の互換性問題を修正
+- `cron.md` パーサーのフォーマット許容性向上（よくある書式ミスに耐性）
+- ローカル `file://` 画像パスおよび絶対パスの解決を修正
+- ChromaDB `InternalError` を `query()` でキャッチしHTTP 500を防止
+- RAGメタデータの非整数 `version`/`count` フィールドに対するガード追加
+- テーブル要素のフォスターペアレンティングによるチャットレイアウト崩れを修正
+- `data-*` 属性のエスケープを属性安全方式に変更しDOM破損を防止
+- `reply_routing` のサイレント例外をデバッグログに置換
+- 古い `current_task.md` が `current_state.md` 存在時に自動削除されない問題を修正
+- 韓国語プロンプトのフォーマット修正
+
+### Security
+- `litellm>=1.82.6` をピン留め — サプライチェーン攻撃バージョンの排除
+
+### Migration
+- `v062_skill_removal_and_activity_log`: テンプレート全同期（common_knowledge, prompts, reference, common_skills）+ DB tool_descriptions/guides再同期 + 旧 `skill` ツール記述削除
+
 ## [0.6.1] - 2026-03-21
 
 ### Fixed
@@ -1198,7 +1263,8 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/xuiltul/animaworks/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/xuiltul/animaworks/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/xuiltul/animaworks/compare/v0.5.5...v0.6.0
 [0.4.3]: https://github.com/xuiltul/animaworks/compare/v0.4.2...v0.4.3

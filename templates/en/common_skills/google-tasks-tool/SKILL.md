@@ -1,8 +1,8 @@
 ---
 name: google-tasks-tool
 description: >-
-  Google Tasks integration. List, create, and update task lists and tasks. OAuth2.
-  "Google Tasks" "tasks" "TODO" "task list"
+  Google Tasks integration for listing task lists and tasks and creating or updating tasks via OAuth2.
+  Use when: fetching TODO lists, adding tasks, marking items complete, or switching task lists.
 tags: [tasks, google, todo, external]
 ---
 

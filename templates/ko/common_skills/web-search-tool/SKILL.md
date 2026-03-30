@@ -1,8 +1,8 @@
 ---
 name: web-search-tool
 description: >-
-  웹 검색 도구. Brave Search API를 사용하여 인터넷을 검색합니다.
-  "검색" "웹 검색" "찾아보기" "Brave"
+  웹 검색 도구. Brave Search API로 공개 인터넷 정보를 검색한다.
+  Use when: 최신 뉴스 조사, 문서 검색, 사실 확인, 검색 결과 목록이 필요할 때.
 tags: [search, web, external]
 ---
 

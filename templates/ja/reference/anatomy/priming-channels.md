@@ -3,6 +3,8 @@
 PrimingEngine が実行する全チャネルの詳細仕様。
 バジェット、検索ソース、フィルタリング、動的調整を含む。
 
+並列取得は **5 チャネル**（A / B / C / E / F）である。C0（important_knowledge）は Channel C と同一パイプライン内の補助ブロック。旧 Distilled Knowledge に相当した Channel D や「6 チャネル」表記は廃止済み。
+
 ---
 
 ## チャネル一覧
@@ -13,7 +15,6 @@ PrimingEngine が実行する全チャネルの詳細仕様。
 | B: recent_activity | 1300 | `activity_log/` + shared channels | trusted |
 | C: related_knowledge | 1200 | RAG ベクトル検索（knowledge + common_knowledge） | medium / untrusted |
 | C0: important_knowledge | 300 | `[IMPORTANT]` タグ付きチャンク | medium |
-| D: skill_match | 200 | 3段階マッチング（keyword → vocab → vector） | trusted |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
 | F: episodes | 500 | RAG ベクトル検索（episodes/） | medium |
 
@@ -23,6 +24,8 @@ PrimingEngine が実行する全チャネルの詳細仕様。
 |------|-----------|--------|-------|
 | Recent outbound | 上限なし（最大3件） | activity_log（直近2時間、`channel_post` / `message_sent`） | trusted |
 | Pending human notifications | 500 | `human_notify` イベント（直近24時間） | trusted |
+
+スキル・手続きの本文は Priming では注入されない。システムプロンプトのスキルカタログに示されたパス（例: `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`, `procedures/baz.md`）を `read_memory_file` で読み込む。
 
 ---
 
@@ -42,6 +45,8 @@ PrimingEngine が実行する全チャネルの詳細仕様。
 
 - **ソース**: `activity_log/{date}.jsonl` + 共有チャネルの最新投稿
 - **バジェット**: 1300トークン
+
+**Priming 注入と明示検索の違い**: Channel B は **自動**でバジェット内に要約注入する。過去の行動ログを **キーワードで広く探す** 用途は `search_memory(scope="activity_log")`（BM25。`scope="all"` では activity_log BM25 を RRF でベクトル結果と統合）。注入は予算・フィルタ制約あり、ツール検索はクエリ主導で別物。
 
 ### トリガー別フィルタリング
 
@@ -80,17 +85,6 @@ RAG ベクトル検索で関連知識を注入する。
 - **対象**: `knowledge/` 内の `[IMPORTANT]` タグ付きチャンク
 - **注入形式**: 概要ポインタのみ（全文ではない）。詳細は `read_memory_file` で取得
 - **用途**: 重要な業務ルール・判断基準の確実な想起
-
----
-
-## Channel D: skill_match
-
-メッセージに関連するスキル名を注入する。
-
-- **バジェット**: 200トークン
-- **マッチング**: 3段階（keyword → vocab → vector）
-- **返却**: スキル名のみ（最大5件）。全文は `skill` ツールで取得（段階開示）
-- **対象**: 個人 `skills/` + `common_skills/`
 
 ---
 

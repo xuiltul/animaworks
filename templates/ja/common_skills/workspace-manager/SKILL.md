@@ -1,8 +1,8 @@
 ---
 name: workspace-manager
 description: >-
-  ワークスペース（作業ディレクトリ）の登録・一覧・削除・割り当てを行う。
-  「ワークスペース」「作業ディレクトリ」「プロジェクト登録」
+  ワークスペース（作業ディレクトリ）の登録・一覧・削除・割り当てを設定する。
+  Use when: プロジェクトパスをAnimaに紐付け、エイリアス管理、作業ディレクトリの切り替えが必要なとき。
 tags: [workspace, directory, project, management]
 ---
 

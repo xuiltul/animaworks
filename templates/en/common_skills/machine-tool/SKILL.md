@@ -1,9 +1,8 @@
 ---
 name: machine-tool
 description: >-
-  Delegate tasks to external agent CLIs (machine tools). Offload heavy work like
-  code changes, investigation, and analysis to external agents.
-  "machine" "machine tool" "external agent"
+  Delegates work to external agent CLIs (machine tools) for large code changes, investigation, or analysis.
+  Use when: offloading implementation via the machine command, heavy refactors, or batched agent runs.
 tags: [machine, agent, external, delegation]
 ---
 

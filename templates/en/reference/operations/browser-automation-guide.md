@@ -26,10 +26,10 @@ npm install -g agent-browser && agent-browser install --with-deps
 
 ## Usage
 
-The `agent-browser` skill contains the full command reference:
+Read the full `agent-browser` common skill for the command reference:
 
 ```
-skill(skill_name="agent-browser")
+read_memory_file(path="common_skills/agent-browser/SKILL.md")
 ```
 
 ### Basic Flow
@@ -65,4 +65,4 @@ Reference in response text:
 ![Screenshot](attachments/screenshot.png)
 ```
 
-See `skill(skill_name="image-posting")` for details.
+See `read_memory_file(path="common_skills/image-posting/SKILL.md")` for details.

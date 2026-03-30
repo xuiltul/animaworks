@@ -124,11 +124,24 @@ def _strip_outer_quotes(val: str) -> str:
     return val
 
 
+def _strip_inline_comment(val: str) -> str:
+    """Strip trailing inline comment (e.g. ``'value  # comment'`` -> ``'value'``).
+
+    Only strips when ``#`` is preceded by whitespace, so values like
+    ``echo#nocomment`` are preserved.
+    """
+    return re.sub(r"\s+#.*$", "", val)
+
+
 def _parse_section(name: str, lines: list[str]) -> CronTask:
     """Parse a single cron task section from its body lines.
 
     Extracts ``schedule:``, ``type:``, ``command:``, ``tool:``, ``args:``
     directives.  All remaining non-directive lines form the task description.
+
+    Format tolerance:
+        - YAML list prefix ``- `` is stripped (e.g. ``- schedule:`` -> ``schedule:``)
+        - Inline comments ``# ...`` after directive values are stripped
     """
     schedule = ""
     task_type = "llm"
@@ -144,16 +157,21 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
         line = lines[i]
         stripped = line.strip()
 
+        # Strip YAML list prefix (e.g. "- schedule:" -> "schedule:")
+        if stripped.startswith("- "):
+            stripped = stripped[2:]
+
         if stripped.startswith("schedule:"):
-            schedule = stripped[len("schedule:") :].strip()
+            schedule = _strip_inline_comment(stripped[len("schedule:") :].strip())
+            schedule = _strip_outer_quotes(schedule)
         elif stripped.startswith("type:"):
-            task_type = stripped[5:].strip()
+            task_type = _strip_inline_comment(stripped[5:].strip())
         elif stripped.startswith("command:"):
-            command = stripped[8:].strip()
+            command = _strip_inline_comment(stripped[8:].strip())
         elif stripped.startswith("tool:"):
-            tool = stripped[5:].strip()
+            tool = _strip_inline_comment(stripped[5:].strip())
         elif stripped.startswith("skip_pattern:"):
-            val = stripped[len("skip_pattern:") :].strip()
+            val = _strip_inline_comment(stripped[len("skip_pattern:") :].strip())
             val = _strip_outer_quotes(val)
             if val:
                 try:
@@ -162,7 +180,7 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
                 except re.error as e:
                     logger.warning("Invalid skip_pattern for task %s: %s", name, e)
         elif stripped.startswith("trigger_heartbeat:"):
-            val = stripped.split(":", 1)[1].strip().lower()
+            val = _strip_inline_comment(stripped.split(":", 1)[1].strip()).lower()
             trigger_heartbeat = val not in ("false", "no", "0")
         elif stripped.startswith("args:"):
             # Parse YAML args block (indented lines following "args:")
@@ -214,6 +232,54 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
     )
 
 
+def _posix_dow_to_apsched(dow: str) -> str:
+    """Convert POSIX cron day_of_week field to APScheduler CronTrigger format.
+
+    POSIX cron uses 0/7=Sunday, 1=Monday, ..., 6=Saturday.
+    APScheduler CronTrigger uses ISO 8601: 0=Monday, 1=Tuesday, ..., 6=Sunday.
+    Conversion formula: apscheduler_value = (posix_value - 1) % 7
+
+    Handles:
+    - Wildcard: ``*`` → ``*`` (no change)
+    - Single values: ``1`` → ``0``, ``4`` → ``3``
+    - Comma-separated: ``1,4`` → ``0,3``
+    - Ranges: ``1-5`` → ``0-4``
+    - Step with wildcard base: ``*/2`` → ``*/2`` (no day conversion)
+    - Step with range base: ``1-5/2`` → ``0-4/2``
+
+    Args:
+        dow: The day_of_week field string from a POSIX cron expression.
+
+    Returns:
+        Equivalent day_of_week string in APScheduler numbering.
+    """
+    if dow == "*":
+        return dow
+
+    result_parts: list[str] = []
+    for part in dow.split(","):
+        if "/" in part:
+            base, step = part.split("/", 1)
+            if base == "*":
+                result_parts.append(part)  # */n — no day index conversion needed
+            elif "-" in base:
+                start, end = base.split("-", 1)
+                new_start = str((int(start) - 1) % 7)
+                new_end = str((int(end) - 1) % 7)
+                result_parts.append(f"{new_start}-{new_end}/{step}")
+            else:
+                result_parts.append(f"{(int(base) - 1) % 7}/{step}")
+        elif "-" in part:
+            start, end = part.split("-", 1)
+            new_start = str((int(start) - 1) % 7)
+            new_end = str((int(end) - 1) % 7)
+            result_parts.append(f"{new_start}-{new_end}")
+        else:
+            result_parts.append(str((int(part) - 1) % 7))
+
+    return ",".join(result_parts)
+
+
 def parse_schedule(schedule: str) -> CronTrigger | None:
     """Parse a standard 5-field cron expression into an APScheduler CronTrigger.
 
@@ -239,12 +305,16 @@ def parse_schedule(schedule: str) -> CronTrigger | None:
         return None
 
     try:
+        # Convert POSIX day_of_week (0/7=Sun, 1=Mon … 6=Sat) to APScheduler's
+        # ISO 8601 format (0=Mon … 6=Sun) so that e.g. "1,4" (Mon+Thu) fires
+        # on Monday and Thursday, not Tuesday and Friday.
+        apsched_dow = _posix_dow_to_apsched(parts[4])
         return CronTrigger(
             minute=parts[0],
             hour=parts[1],
             day=parts[2],
             month=parts[3],
-            day_of_week=parts[4],
+            day_of_week=apsched_dow,
         )
     except Exception as e:
         logger.warning("Failed to create CronTrigger from '%s': %s", s, e)

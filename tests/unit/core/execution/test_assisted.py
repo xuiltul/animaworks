@@ -333,7 +333,7 @@ class TestBuildToolSchemas:
         executor = self._make_executor(_anima_dir)
         names = executor._known_tools
         for tool in ("search_memory", "read_memory_file", "write_memory_file",
-                     "send_message", "post_channel", "skill"):
+                     "send_message", "post_channel", "create_skill"):
             assert tool in names, f"{tool} missing from Mode B known_tools"
 
 

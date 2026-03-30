@@ -118,3 +118,30 @@ submit_tasks(batch_id="deploy-20260301", tasks=[
 
 完了したタスクの結果は `state/task_results/{task_id}.json` に保存される。
 依存タスクには先行タスクの結果要約が自動的にコンテキストとして注入される。
+
+## 委譲タスクの追跡
+
+`task_tracker` ツールで委譲したタスクの進捗を確認できる。
+部下側の task_queue.jsonl から最新ステータスを突き合わせて返す。
+
+```
+task_tracker()                     # アクティブな委譲タスク一覧（デフォルト）
+task_tracker(status="all")         # 完了済み含む全タスク
+task_tracker(status="completed")   # 完了済みのみ
+```
+
+| status | 意味 |
+|--------|------|
+| `active` | 進行中（done/cancelled/failed 以外）。デフォルト |
+| `all` | 全件 |
+| `completed` | 完了済み（done/cancelled/failed）のみ |
+
+### 自動同期（sync_delegated）
+
+Heartbeat 完了後に自動実行される。部下のタスクキューで以下の状態変化を検出し、上司側の追跡エントリ（`delegated` ステータス）を自動更新する:
+
+- 部下側が `done` or `cancelled` → 上司側を `done` に更新
+- 部下側が `failed` → 上司側を `failed` に更新
+- アーカイブ済みタスクも検索対象（`task_queue_archive.jsonl`）
+
+手動で `task_tracker` を呼ぶ必要はないが、Heartbeat 間の即時確認には引き続き `task_tracker` が有用。

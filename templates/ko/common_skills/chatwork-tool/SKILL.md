@@ -1,8 +1,8 @@
 ---
 name: chatwork-tool
 description: >-
-  Chatwork 연동 도구. 메시지 송신/수신, 검색, 미회신 확인, 룸 목록 조회.
-  "Chatwork" "CW" "미회신" "룸" "멘션"
+  Chatwork 연동 도구. 메시지 송수신·검색·미회신 확인·룸 목록을 수행한다.
+  Use when: Chatwork로 메시지 전송, 룸 목록, 미회신 확인, 채팅 검색, 멘션 대응이 필요할 때.
 tags: [communication, chatwork, external]
 ---
 

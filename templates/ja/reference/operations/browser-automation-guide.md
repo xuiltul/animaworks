@@ -26,10 +26,10 @@ npm install -g agent-browser && agent-browser install --with-deps
 
 ## 使い方
 
-スキル `agent-browser` に全コマンドリファレンスがある:
+共通スキル `agent-browser` の全文を読むと全コマンドリファレンスがある:
 
 ```
-skill(skill_name="agent-browser")
+read_memory_file(path="common_skills/agent-browser/SKILL.md")
 ```
 
 ### 基本フロー
@@ -65,4 +65,4 @@ agent-browser screenshot ~/.animaworks/animas/{自分の名前}/attachments/scre
 ![スクリーンショット](attachments/screenshot.png)
 ```
 
-詳細は `skill(skill_name="image-posting")` を参照。
+詳細は `read_memory_file(path="common_skills/image-posting/SKILL.md")` を参照。

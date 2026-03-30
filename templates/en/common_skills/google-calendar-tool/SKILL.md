@@ -1,9 +1,8 @@
 ---
 name: google-calendar-tool
 description: >-
-  Google Calendar integration tool. List upcoming events and create new events.
-  OAuth2 authentication for direct Calendar API access.
-  "calendar" "schedule" "google calendar" "event" "appointment"
+  Google Calendar integration tool for listing and creating events via OAuth2 Calendar API access.
+  Use when: checking upcoming events, creating appointments, or updating your schedule.
 tags: [calendar, google, schedule, external]
 ---
 

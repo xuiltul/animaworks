@@ -29,6 +29,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.i18n import t
 from core.time_utils import ensure_aware, now_iso, now_local
 
 logger = logging.getLogger("animaworks.consolidation")
@@ -270,6 +271,97 @@ class ConsolidationEngine:
             logger.debug("Failed to collect resolved events", exc_info=True)
             return []
 
+    # ── Error Pattern Collection ─────────────────────────────
+
+    _ERROR_CHAR_BUDGET = 3_000
+    _ERROR_ENTRY_LIMIT = 50
+
+    def _collect_error_entries(self, hours: int = 24) -> str:
+        """Collect error and failed tool_result entries for pattern analysis.
+
+        Extracts ``error`` events and ``tool_result`` entries with
+        ``result_status == "fail"`` from the activity log, formatted for
+        injection into the daily consolidation prompt.
+
+        Args:
+            hours: Number of hours to look back (default 24).
+
+        Returns:
+            Formatted error summary string.  Returns a placeholder
+            message when no errors are found.
+        """
+        try:
+            from core.memory.activity import ActivityLogger
+
+            activity = ActivityLogger(self.anima_dir)
+            entries = activity.recent(
+                days=max(1, (hours + 23) // 24),
+                limit=200,
+                types=["error", "tool_result"],
+            )
+        except Exception:
+            logger.debug("Failed to collect error entries", exc_info=True)
+            return t("consolidation.no_errors")
+
+        if not entries:
+            return t("consolidation.no_errors")
+
+        cutoff = now_local() - timedelta(hours=hours)
+        lines: list[str] = []
+        total_chars = 0
+        count = 0
+
+        for entry in entries:
+            try:
+                ts = ensure_aware(datetime.fromisoformat(entry.ts))
+                if ts < cutoff:
+                    continue
+            except (ValueError, TypeError):
+                pass
+
+            line = self._format_error_entry(entry)
+            if line is None:
+                continue
+
+            if total_chars + len(line) + 1 > self._ERROR_CHAR_BUDGET:
+                break
+            lines.append(line)
+            total_chars += len(line) + 1
+            count += 1
+            if count >= self._ERROR_ENTRY_LIMIT:
+                break
+
+        if not lines:
+            return t("consolidation.no_errors")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_error_entry(entry: Any) -> str | None:
+        """Format a single error or failed tool_result entry.
+
+        Returns:
+            Formatted line, or ``None`` if the entry should be skipped.
+        """
+        ts_short = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
+        meta = entry.meta or {}
+
+        if entry.type == "error":
+            phase = meta.get("phase", "unknown")
+            error_text = meta.get("error", "") or entry.summary or ""
+            if len(error_text) > 120:
+                error_text = error_text[:120] + "..."
+            return f"[{ts_short}] ERR phase={phase}: {error_text}"
+
+        if entry.type == "tool_result":
+            if meta.get("result_status") != "fail":
+                return None
+            tool_name = entry.tool or "unknown"
+            err_hint = (entry.content or entry.summary or "")[:100]
+            return f"[{ts_short}] FAIL tool={tool_name}: {err_hint}"
+
+        return None
+
     # ── Reflection Extraction ──────────────────────────────────
 
     @staticmethod
@@ -308,12 +400,321 @@ class ConsolidationEngine:
     _COMM_TYPES = frozenset(
         {
             "message_received",
+            "message_sent",
             "response_sent",
+            "human_notify",
             "heartbeat_reflection",
             "channel_post",
             "error",
         }
     )
+
+    _EXCLUDED_TOOL_NAMES = frozenset(
+        {
+            "read_memory_file",
+            "search_memory",
+            "ToolSearch",
+        }
+    )
+    _EXCLUDED_TOOL_PREFIXES = ("mcp__aw__",)
+
+    _OVERHEAD_TOKENS = 25_000  # system prompt + template overhead
+    _CONTEXT_RATIO = 0.80
+    _CHARS_PER_TOKEN = 3
+
+    # ── Activity log budget & full collection ───────────────────
+
+    @staticmethod
+    def compute_activity_budget(model: str) -> int:
+        """Compute character budget for activity log based on model context window.
+
+        Uses 80% of context window minus overhead for prompt templates.
+        """
+        from core.prompt.context import resolve_context_window
+
+        ctx = resolve_context_window(model)
+        budget_tokens = int(ctx * ConsolidationEngine._CONTEXT_RATIO)
+        available = max(budget_tokens - ConsolidationEngine._OVERHEAD_TOKENS, 10_000)
+        return available * ConsolidationEngine._CHARS_PER_TOKEN
+
+    @staticmethod
+    def _is_excluded_tool(entry: Any) -> bool:
+        """Check if a tool_result/tool_use entry should be excluded."""
+        tool = getattr(entry, "tool", None) or ""
+        if tool in ConsolidationEngine._EXCLUDED_TOOL_NAMES:
+            return True
+        return any(tool.startswith(prefix) for prefix in ConsolidationEngine._EXCLUDED_TOOL_PREFIXES)
+
+    @staticmethod
+    def _format_entry_full(entry: Any) -> str:
+        """Format an activity entry with full content for consolidation.
+
+        Unlike _format_tool_entries (meta-only), this includes the actual
+        content of tool results, messages, etc.
+        """
+        ts_short = entry.ts[11:16] if len(entry.ts) >= 16 else entry.ts
+        meta = entry.meta or {}
+
+        # Build context parts
+        parts: list[str] = []
+        if entry.from_person:
+            parts.append(f"from:{entry.from_person}")
+        if entry.to_person:
+            parts.append(f"to:{entry.to_person}")
+        if entry.channel:
+            parts.append(f"#{entry.channel}")
+        ctx = f" ({', '.join(parts)})" if parts else ""
+
+        type_labels = {
+            "message_received": "MSG_IN",
+            "response_sent": "RESPONSE",
+            "message_sent": "MSG_OUT",
+            "human_notify": "NOTIFY",
+            "heartbeat_reflection": "HB_REFLECT",
+            "channel_post": "CHANNEL",
+            "error": "ERROR",
+            "tool_result": "TOOL_RESULT",
+            "tool_use": "TOOL_USE",
+            "cron_executed": "CRON",
+            "memory_write": "MEM_WRITE",
+            "heartbeat_start": "HB_START",
+            "heartbeat_end": "HB_END",
+            "consolidation_start": "CONSOL_START",
+            "consolidation_end": "CONSOL_END",
+        }
+        label = type_labels.get(entry.type, entry.type.upper())
+
+        # For tool entries, include tool name
+        tool_name = entry.tool or ""
+        if tool_name and entry.type in ("tool_result", "tool_use"):
+            label = f"{label}:{tool_name}"
+
+        # Build status suffix for tool_result
+        status_suffix = ""
+        if entry.type == "tool_result":
+            status = meta.get("result_status", "ok")
+            if status == "fail":
+                status_suffix = " [FAIL]"
+
+        # Content: prefer summary for brief context, fall back to content
+        summary = entry.summary or ""
+        content = entry.content or ""
+
+        # For tool_result, content is the actual result — include it
+        if entry.type == "tool_result" and content:
+            text = content
+        elif summary and content:
+            text = f"{summary}\n{content}" if len(summary) < 200 else summary
+        elif summary:
+            text = summary
+        elif content:
+            text = content
+        else:
+            text = "(no content)"
+
+        header = f"[{ts_short}] {label}{status_suffix}{ctx}"
+
+        # If text is short, put on same line
+        if len(text) <= 200 and "\n" not in text:
+            return f"{header}: {text}"
+
+        # For longer content, use indented block
+        indented = "\n".join(f"  {line}" for line in text.split("\n"))
+        return f"{header}:\n{indented}"
+
+    def collect_activity_chunks(
+        self,
+        hours: int = 24,
+        model: str | None = None,
+    ) -> list[str]:
+        """Collect activity entries and split into budget-sized chunks.
+
+        Returns a list of formatted text chunks, each within the model's
+        budget. Chunks are split at natural hour boundaries when possible.
+
+        Args:
+            hours: Number of hours to look back.
+            model: Model name for budget calculation. Uses consolidation
+                model from config if not provided.
+
+        Returns:
+            List of formatted activity text chunks. Empty list if no entries.
+        """
+        if model is None:
+            from core.config import load_config
+
+            cfg = load_config()
+            model = cfg.consolidation.llm_model
+
+        budget = self.compute_activity_budget(model)
+
+        try:
+            from core.memory.activity import ActivityLogger
+
+            activity = ActivityLogger(self.anima_dir)
+
+            # Load all entries (no type filter, high limit)
+            entries = activity.recent(
+                days=max(1, (hours + 23) // 24),
+                limit=10_000,
+            )
+        except Exception:
+            logger.debug("Failed to collect activity entries", exc_info=True)
+            return []
+
+        if not entries:
+            return []
+
+        # Filter by time cutoff
+        cutoff = now_local() - timedelta(hours=hours)
+        filtered: list = []
+        for e in entries:
+            try:
+                ts = ensure_aware(datetime.fromisoformat(e.ts))
+                if ts >= cutoff:
+                    filtered.append(e)
+            except (ValueError, TypeError):
+                filtered.append(e)
+
+        if not filtered:
+            return []
+
+        # Apply exclusion list
+        included: list = []
+        for e in filtered:
+            if e.type in ("tool_result", "tool_use") and self._is_excluded_tool(e):
+                continue
+            # Skip tool_use for mcp__aw__ (duplicate with tool_result)
+            if e.type == "tool_use":
+                tool = getattr(e, "tool", None) or ""
+                for prefix in self._EXCLUDED_TOOL_PREFIXES:
+                    if tool.startswith(prefix):
+                        break
+                else:
+                    included.append(e)
+                continue
+            included.append(e)
+
+        if not included:
+            return []
+
+        # Format all entries — use date+hour key for cross-day correctness
+        formatted_entries: list[tuple[str, str]] = []  # (date_hour_key, formatted_text)
+        for e in included:
+            text = self._format_entry_full(e)
+            date_hour = e.ts[:13] if len(e.ts) >= 13 else "0000-00-00T00"
+            formatted_entries.append((date_hour, text))
+
+        # Split into budget-sized chunks at hour boundaries
+        return self._split_into_chunks(formatted_entries, budget)
+
+    @staticmethod
+    def _split_into_chunks(
+        entries: list[tuple[str, str]],
+        budget: int,
+    ) -> list[str]:
+        """Split formatted entries into budget-sized chunks.
+
+        Tries to break at hour boundaries for natural segmentation.
+        """
+        if not entries:
+            return []
+
+        chunks: list[str] = []
+        current_lines: list[str] = []
+        current_size = 0
+        current_hour = entries[0][0]
+
+        # Buffer for entries in the current hour
+        hour_buffer: list[str] = []
+        hour_buffer_size = 0
+
+        for hour_key, text in entries:
+            entry_size = len(text) + 1  # +1 for newline
+
+            if hour_key != current_hour:
+                # Hour boundary — check if we should start a new chunk
+                if current_size + hour_buffer_size > budget and current_lines:
+                    # Flush current chunk, start new one with buffer
+                    chunks.append("\n".join(current_lines))
+                    current_lines = list(hour_buffer)
+                    current_size = hour_buffer_size
+                else:
+                    # Add buffer to current chunk
+                    current_lines.extend(hour_buffer)
+                    current_size += hour_buffer_size
+
+                hour_buffer = []
+                hour_buffer_size = 0
+                current_hour = hour_key
+
+            # If single entry exceeds budget, truncate it
+            if entry_size > budget:
+                text = text[: budget - 100] + "\n  ... (truncated)"
+                entry_size = len(text) + 1
+
+            hour_buffer.append(text)
+            hour_buffer_size += entry_size
+
+        # Flush remaining hour buffer
+        if current_size + hour_buffer_size > budget and current_lines:
+            chunks.append("\n".join(current_lines))
+            current_lines = list(hour_buffer)
+        else:
+            current_lines.extend(hour_buffer)
+
+        if current_lines:
+            chunks.append("\n".join(current_lines))
+
+        return chunks
+
+    @staticmethod
+    def merge_timeline_parts(parts: list[str]) -> str:
+        """Merge multiple structured timeline parts into a single episode.
+
+        Concatenates timeline parts in order, deduplicating any repeated
+        section headers (## HH:MM-HH:MM Title) that might appear at
+        chunk boundaries.
+        """
+        if not parts:
+            return ""
+        if len(parts) == 1:
+            return parts[0]
+
+        seen_headers: set[str] = set()
+        merged_lines: list[str] = []
+
+        for part in parts:
+            for line in part.split("\n"):
+                # Detect markdown ## headers for dedup
+                stripped = line.strip()
+                if stripped.startswith("## "):
+                    if stripped in seen_headers:
+                        continue
+                    seen_headers.add(stripped)
+                merged_lines.append(line)
+
+        return "\n".join(merged_lines)
+
+    def defrag_recent_episodes(self, days: int = 3) -> list[Path]:
+        """Identify recent episode files that need restructuring.
+
+        Returns paths to episode files from the past N days that exist
+        and could benefit from defragmentation.
+
+        .. note::
+            This is a discovery helper only. The actual defrag rewriting
+            (converting old free-form episodes into structured timelines)
+            is not yet wired into the consolidation pipeline.
+        """
+        today = now_local().date()
+        targets: list[Path] = []
+        for offset in range(days):
+            target_date = today - timedelta(days=offset)
+            for ep_file in sorted(self.episodes_dir.glob(f"{target_date}*.md")):
+                if ep_file.exists() and ep_file.stat().st_size > 0:
+                    targets.append(ep_file)
+        return targets
 
     def _collect_activity_entries(self, hours: int = 24) -> str:
         """Collect recent activity log entries for consolidation input.
@@ -414,7 +815,9 @@ class ConsolidationEngine:
 
         type_map: dict[str, str] = {
             "message_received": "MSG<",
+            "message_sent": "MSG>",
             "response_sent": "RESP>",
+            "human_notify": "NOTIFY",
             "heartbeat_reflection": "HB",
             "channel_post": "CH.W",
             "error": "ERR",

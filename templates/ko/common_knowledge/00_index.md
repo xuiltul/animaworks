@@ -46,6 +46,9 @@ AnimaWorks의 모든 Anima가 공유하는 레퍼런스 문서 목차입니다.
 | 문제 | 참조 |
 |------|------|
 | 도구 사용법이나 호출 방법을 모르겠다 | `operations/tool-usage-overview.md` |
+| machine 도구 사용법을 모르겠다 | `operations/machine/tool-usage.md` |
+| 내 역할에서 machine 워크플로를 알고 싶다 | `operations/machine/workflow-{pdm,engineer,reviewer,tester}.md` |
+| 목적별로 팀(역할·핸드오프)을 설계하고 싶다 | `team-design/guide.md` |
 | 모델 선택이나 변경 방법을 모르겠다 | `reference/operations/model-guide.md` (→ reference) |
 | Mode S의 인증 방식을 변경하고 싶다 | `reference/operations/mode-s-auth-guide.md` (→ reference) |
 | 음성 채팅 설정이나 사용법을 모르겠다 | `reference/operations/voice-chat-guide.md` (→ reference) |
@@ -127,6 +130,25 @@ AnimaWorks의 모든 Anima가 공유하는 레퍼런스 문서 목차입니다.
 | `mode-s-auth-guide.md` | → `reference/operations/mode-s-auth-guide.md`로 이동. Mode S 인증 모드 설정 가이드 |
 | `voice-chat-guide.md` | → `reference/operations/voice-chat-guide.md`로 이동. 음성 채팅 가이드 |
 
+### operations/machine/ — machine 도구 워크플로
+
+| 파일 | 개요 |
+|------|------|
+| `tool-usage.md` | machine 도구 사용 가이드(공통 원칙·메타 패턴·상태·레이트 제한) |
+| `workflow-pdm.md` | machine 워크플로 — PdM(조사→계획서) ※현재 영문 |
+| `workflow-engineer.md` | machine 워크플로 — Engineer(구체화→구현) ※현재 영문 |
+| `workflow-reviewer.md` | machine 워크플로 — Reviewer(리뷰→메타 리뷰) ※현재 영문 |
+| `workflow-tester.md` | machine 워크플로 — Tester(테스트 설계→실행→결과) ※현재 영문 |
+
+### team-design/ — 목적별 팀 설계
+
+| 파일 | 개요 |
+|------|------|
+| `guide.md` | Anima 팀 설계 기본 원칙(역할 분리·핸드오프·스케일·겸임) |
+| `development/team.md` | 개발 풀 팀 — 4역할(PdM·Engineer·Reviewer·Tester)·핸드오프·스케일링 |
+
+역할별 템플릿: `team-design/development/{pdm,engineer,reviewer,tester}/` — `injection.template.md`, `machine.md`, `checklist.md`
+
 ### security/ — 보안
 
 | 파일 | 개요 |
@@ -182,6 +204,12 @@ AnimaWorks의 모든 Anima가 공유하는 레퍼런스 문서 목차입니다.
 | 실행 모드, S-mode, A-mode, B-mode, C-mode | `operations/tool-usage-overview.md` |
 | 백그라운드, submit, 장시간 도구 | `operations/background-tasks.md` |
 | 워크스페이스, workspace, 작업 디렉토리, working_directory | `operations/workspace-guide.md` |
+| machine, machine run, 외부 에이전트, 계획서 | `operations/machine/tool-usage.md` |
+| 조사, investigation, PdM, plan.md | `operations/machine/workflow-pdm.md` |
+| impl-plan, 구체화, 구현 계획 | `operations/machine/workflow-engineer.md` |
+| 리뷰, review, 메타 리뷰 | `operations/machine/workflow-reviewer.md` |
+| 테스트, test, E2E, 테스터 | `operations/machine/workflow-tester.md` |
+| 팀 설계, 역할 분리, 개발 팀, PdM, 핸드오프 | `team-design/guide.md`, `team-design/development/team.md` |
 | 모델, models.json, credential, set-model, 컨텍스트 윈도우 | `reference/operations/model-guide.md` |
 | background_model, 백그라운드 모델, 비용 최적화 | `reference/operations/model-guide.md` |
 | Mode S, 인증, API 직접, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |

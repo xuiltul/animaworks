@@ -159,7 +159,7 @@ class TestPrimeMemoriesWithActivity:
             {"ts": now.isoformat(), "from": "kotoha", "text": "Test msg", "source": "anima"},
         ])
 
-        # Patch channels A/C/D to avoid real filesystem / RAG dependency
+        # Patch channels A/C to avoid real filesystem / RAG dependency
         async def _stub_a(self, name):
             return ""
 
@@ -169,13 +169,9 @@ class TestPrimeMemoriesWithActivity:
         async def _stub_c(self, kw, **kwargs):
             return ("", "")
 
-        async def _stub_d(self, msg, kw, channel="chat"):
-            return []
-
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_a_sender_profile", _stub_a)
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_b_recent_activity", _stub_b)
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_c_related_knowledge", _stub_c)
-        monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_d_skill_match", _stub_d)
 
         engine = PrimingEngine(anima_dir, shared_dir=shared_dir)
         result = await engine.prime_memories("hello", sender_name="taka")
@@ -188,15 +184,12 @@ class TestPrimeMemoriesWithActivity:
             {"ts": now.isoformat(), "from": "kotoha", "text": "Fallback msg", "source": "anima"},
         ])
 
-        # Stub A/C/D, but let B run its real fallback logic
+        # Stub A/C, but let B run its real fallback logic
         async def _stub_a(self, name):
             return ""
 
         async def _stub_c(self, kw, **kwargs):
             return ("", "")
-
-        async def _stub_d(self, msg, kw, channel="chat"):
-            return []
 
         # Stub _channel_b to simulate the fallback path returning old channel data
         async def _stub_b_fallback(self, sender_name, keywords, *, channel=""):
@@ -205,7 +198,6 @@ class TestPrimeMemoriesWithActivity:
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_a_sender_profile", _stub_a)
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_b_recent_activity", _stub_b_fallback)
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_c_related_knowledge", _stub_c)
-        monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_d_skill_match", _stub_d)
 
         engine = PrimingEngine(anima_dir, shared_dir=shared_dir)
         result = await engine.prime_memories("hello", sender_name="taka")

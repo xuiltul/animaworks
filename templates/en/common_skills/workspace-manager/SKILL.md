@@ -1,8 +1,8 @@
 ---
 name: workspace-manager
 description: >-
-  Register, list, remove, and assign workspaces (project directories).
-  "workspace" "working directory" "project registration"
+  Registers, lists, removes, and assigns workspaces (project directories) for Anima work.
+  Use when: binding project paths to Anima, managing aliases, or switching workspace roots.
 tags: [workspace, directory, project, management]
 ---
 

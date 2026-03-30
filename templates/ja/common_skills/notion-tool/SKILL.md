@@ -1,8 +1,8 @@
 ---
 name: notion-tool
 description: >-
-  Notion連携ツール。ページ・データベースの検索・取得・作成・更新。
-  「Notion」「ノーション」「ページ作成」「データベース」
+  Notion連携ツール。ページ・データベースの検索・取得・作成・更新をAPIで行う。
+  Use when: Notionページ編集、データベース行の追加、ワークスペースの検索・取得が必要なとき。
 tags: [productivity, notion, external]
 ---
 

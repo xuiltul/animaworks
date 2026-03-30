@@ -34,6 +34,7 @@ from core.execution._sdk_hooks import (
     _build_post_tool_hook,
     _build_pre_compact_hook,
     _build_pre_tool_hook,
+    _build_stop_hook,
 )
 from core.execution._sdk_session import (
     _PROMPT_FILE_THRESHOLD,
@@ -427,6 +428,16 @@ class SDKOptionsMixin:
                         HookMatcher(
                             matcher="Write|Edit",
                             hooks=[_build_post_tool_hook(self._anima_dir)],
+                        )
+                    ],
+                    "Stop": [
+                        HookMatcher(
+                            hooks=[
+                                _build_stop_hook(
+                                    self._anima_dir,
+                                    session_stats=session_stats,
+                                )
+                            ],
                         )
                     ],
                 },

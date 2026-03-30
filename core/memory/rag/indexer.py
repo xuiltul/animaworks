@@ -768,7 +768,11 @@ class MemoryIndexer:
         if fm:
             for field in ("success_count", "failure_count", "version"):
                 if field in fm:
-                    metadata[field] = int(fm[field])
+                    try:
+                        metadata[field] = int(fm[field])
+                    except (ValueError, TypeError):
+                        # Skip non-integer values (e.g. "archived_2026-03-28")
+                        pass
             if "confidence" in fm:
                 try:
                     metadata["confidence"] = float(fm["confidence"])

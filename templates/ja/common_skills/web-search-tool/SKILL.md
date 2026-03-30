@@ -1,8 +1,8 @@
 ---
 name: web-search-tool
 description: >-
-  Web検索ツール。Brave Search APIを使用してインターネットを検索する。
-  「検索」「ウェブ検索」「Web検索」「調べる」「ググる」「Brave」
+  Web検索ツール。Brave Search APIでインターネット上の情報を検索する。
+  Use when: 最新ニュース調査、技術ドキュメント検索、事実確認、検索結果一覧の取得が必要なとき。
 tags: [search, web, external]
 ---
 

@@ -1,11 +1,8 @@
 ---
 name: subordinate-management
 description: >-
-  Process management for subordinate Anima: pause, resume, model change, background model change, restart,
-  task delegation, status confirmation, and auditing.
-  "pause", "stop", "resume", "wake", "disable", "enable",
-  "change model", "background model", "restart", "delegate task", "check subordinate status",
-  "pause", "resume", "process management", "stop subordinate", "dashboard", "audit"
+  Supervisor tools for subordinate Anima: disable/enable, model changes, restart, delegation, state reads, and audits.
+  Use when: pausing a subordinate, changing main or background models, restarting processes, delegating tasks, or org dashboards.
 ---
 
 # Skill: Subordinate Management (Supervisor Tools)
@@ -34,6 +31,8 @@ Supervisor tools automatically enabled for Anima that have subordinates. Most to
 | Tool | Purpose |
 |------|---------|
 | `task_tracker` | Track progress of tasks delegated via `delegate_task` from the subordinate's queue (`status`: all / active / completed; default: active) |
+
+**Auto-sync (`sync_delegated`)**: After each heartbeat completes, the framework may scan subordinates' task queues and automatically update the supervisor's tracking entries to done/failed when delegated work completes or fails (archived tasks are included in the search). You do not have to call `task_tracker` for every sync; status tends to align around the next heartbeat cycle.
 
 ## Important: disable_subordinate vs send_message
 

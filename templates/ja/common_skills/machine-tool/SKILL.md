@@ -1,8 +1,8 @@
 ---
 name: machine-tool
 description: >-
-  外部エージェントCLI（工作機械）にタスクを委託。コード変更・調査・分析など重い作業を
-  外部エージェントに丸投げできる。「machine」「工作機械」「外部エージェント」
+  外部エージェントCLI（工作機械）へタスクを委託し、大規模なコード変更・調査・分析を外部に任せる。
+  Use when: machineコマンドで別エージェントに実装依頼、リファクタ・調査の丸投げ、重いバッチ実行が必要なとき。
 tags: [machine, agent, external, delegation]
 ---
 

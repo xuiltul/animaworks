@@ -296,6 +296,7 @@ For details on the memory system, see `anatomy/memory-system.md`.
 
 Chronological record of all actions (`{date}.jsonl`). Automatically records message send/receive, tool usage, Heartbeat, errors, etc.
 Used by Priming as the source for injecting recent activity into the system prompt.
+You can also search it explicitly with `search_memory(query="...", scope="activity_log")` (BM25 over the unified log).
 
 ### transcripts/ — Conversation Records
 

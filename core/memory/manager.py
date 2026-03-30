@@ -96,10 +96,14 @@ class MemoryManager:
             except OSError:
                 logger.warning("Failed to migrate %s to %s", old_task, new_state, exc_info=True)
         elif old_task.exists() and new_state.exists():
-            logger.warning(
-                "Both current_task.md and current_state.md exist in %s; using current_state.md",
-                self.state_dir,
-            )
+            try:
+                old_task.unlink()
+                logger.info("Removed stale current_task.md from %s", self.state_dir)
+            except OSError:
+                logger.warning(
+                    "Both current_task.md and current_state.md exist in %s; using current_state.md",
+                    self.state_dir,
+                )
 
     def _migrate_pending_to_state(self) -> None:
         """One-time migration: merge pending.md into current_state.md."""

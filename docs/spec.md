@@ -983,7 +983,7 @@ Internal tools provided by the framework. Combines Claude Code–compatible tool
 
 | Tool | Description |
 |------|-------------|
-| `search_memory` | Archive memory search (scope: knowledge/episodes/procedures/common_knowledge/all) |
+| `search_memory` | Archive memory search (scope: knowledge/episodes/procedures/common_knowledge/activity_log/all) |
 | `read_memory_file` | Read a memory file |
 | `write_memory_file` | Write a memory file |
 | `archive_memory_file` | Archive a memory file |

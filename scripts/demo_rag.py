@@ -207,7 +207,6 @@ async def demo_priming_integration(anima_dir: Path) -> None:
         logger.info("    - Sender profile: %d chars", len(result.sender_profile))
         logger.info("    - Recent episodes: %d chars", len(result.recent_episodes))
         logger.info("    - Related knowledge: %d chars", len(result.related_knowledge))
-        logger.info("    - Matched skills: %s", result.matched_skills)
 
         if result.related_knowledge:
             logger.info("  Related knowledge preview:")

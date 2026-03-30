@@ -1,13 +1,8 @@
 ---
 name: subagent-cli
 description: >-
-  外部AIエージェントCLI(codex exec, cursor-agent -p)をBash経由でサブエージェントとして
-  非対話モードで実行するスキル。複雑なコーディングタスク・コードレビュー・
-  マルチファイル変更を委譲する際の実行手順・オプション・出力処理を提供する。
-  Mode S/C/D/G/A/BでBash権限がある場合に適用。Mode C/D/G（codex/* / cursor/* / gemini/*）の場合はフレームワークが
-  各エンジンを直接実行するため、対応するCLIの手動呼び出しは原則不要。
-  「サブエージェント」「codex」「cursor-agent」「コード書いて」「実装して」
-  「コードレビュー」「リファクタリング」
+  外部AIエージェントCLIをBashで非対話実行するスキル。codex execやcursor-agentでコーディング作業を委譲する手順を提供する。
+  Use when: 複雑な実装の委譲、コードレビュー、複数ファイルの一括変更、Bashからサブエージェントを起動するとき。
 ---
 
 # subagent-cli

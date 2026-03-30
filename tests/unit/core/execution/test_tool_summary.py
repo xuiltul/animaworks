@@ -53,8 +53,8 @@ class TestSummarizeToolArgs:
     def test_x_search(self):
         assert summarize_tool_args("x_search", {"query": "tweet"}) == "tweet"
 
-    def test_skill(self):
-        assert summarize_tool_args("skill", {"name": "greet"}) == "greet"
+    def test_create_skill(self):
+        assert summarize_tool_args("create_skill", {"skill_name": "greet"}) == "greet"
 
     def test_search_memory(self):
         assert summarize_tool_args("search_memory", {"query": "hello"}) == "hello"

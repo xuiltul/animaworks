@@ -42,6 +42,7 @@ Try to resolve the issue yourself using the steps below. Stop as soon as any ste
    ```
    - Check whether you have encountered the same problem before
    - Check whether `procedures/` contains remediation steps
+   - To recall **recent actions** (e.g. a tool result or message from earlier in the session), use `search_memory(query="...", scope="activity_log")` in addition to `scope="all"` (which merges vector hits with activity_log BM25 via RRF)
 
 2. **Search shared knowledge**
    ```

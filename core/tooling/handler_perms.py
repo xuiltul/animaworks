@@ -193,7 +193,7 @@ class PermissionsMixin:
                 if resolved == desc_state:
                     return None
 
-        # Supervisor can read any descendant's state/pending/ directory
+        # Supervisor can read any descendant's state/pending/ and state/plans/ directories
         if not write:
             for desc_state_dir in self._descendant_state_dirs:
                 if resolved.is_relative_to(desc_state_dir):

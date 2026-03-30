@@ -1,8 +1,8 @@
 ---
 name: chatwork-tool
 description: >-
-  Chatwork integration tool. Send/receive messages, search, check unreplied, list rooms.
-  "chatwork" "CW" "unreplied" "room" "mention"
+  Chatwork integration tool for send/receive messages, search, unreplied checks, and room listing.
+  Use when: posting to Chatwork, listing rooms, checking unreplied threads, searching messages, or handling mentions.
 tags: [communication, chatwork, external]
 ---
 

@@ -17,6 +17,7 @@ from core.tooling.schemas.builder import (
     build_unified_tool_list,
 )
 from core.tooling.schemas.channel import _channel_tools
+from core.tooling.schemas.completion_gate import _completion_gate_tools
 from core.tooling.schemas.converters import (
     apply_db_descriptions,
     to_anthropic_format,
@@ -42,7 +43,7 @@ from core.tooling.schemas.skill import (
     DISCOVERY_TOOLS,
     TOOL_MANAGEMENT_TOOLS,
     USE_TOOL,
-    _skill_tools,
+    _create_skill_schemas,
 )
 from core.tooling.schemas.supervisor import (
     _background_task_tools,
@@ -69,10 +70,11 @@ __all__ = [
     "_CONSOLIDATION_BLOCKED_TOOLS",
     "_background_task_tools",
     "_channel_tools",
+    "_completion_gate_tools",
     "_check_permissions_tools",
     "_notification_tools",
     "_normalise_schema",
-    "_skill_tools",
+    "_create_skill_schemas",
     "_supervisor_tools",
     "_task_tools",
     "_vault_tools",

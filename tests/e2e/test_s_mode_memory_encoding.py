@@ -631,15 +631,19 @@ class TestActivityLogConsolidation:
             "to include activity log in consolidation input"
         )
 
-    def test_consolidation_prompt_includes_activity_log(self) -> None:
-        """Verify run_consolidation passes activity_log_summary to prompt."""
+    def test_consolidation_uses_2phase_pipeline(self) -> None:
+        """Verify daily consolidation uses Phase A + Phase B pipeline."""
         import core.anima as anima_module
 
         source = inspect.getsource(
-            anima_module.DigitalAnima.run_consolidation,
+            anima_module.DigitalAnima._run_daily_consolidation,
         )
 
-        assert "activity_log_summary" in source, (
-            "run_consolidation should pass activity_log_summary to the "
-            "consolidation prompt template"
+        assert "collect_activity_chunks" in source, (
+            "_run_daily_consolidation should use collect_activity_chunks "
+            "for Phase A episode extraction"
+        )
+        assert "one_shot_completion" in source, (
+            "_run_daily_consolidation should use one_shot_completion "
+            "for Phase A (no tool loop)"
         )

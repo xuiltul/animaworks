@@ -84,8 +84,20 @@ class TestResolveSearchTypesProcedures:
 
 class TestResolveSearchTypesAll:
     def test_resolve_search_types_all(self) -> None:
-        """scope='all' -> ['knowledge', 'episodes', 'procedures', 'conversation_summary']."""
-        assert RAGMemorySearch._resolve_search_types("all") == ["knowledge", "episodes", "procedures", "conversation_summary"]
+        """scope='all' -> includes knowledge, episodes, procedures, skills, conversation_summary."""
+        assert RAGMemorySearch._resolve_search_types("all") == [
+            "knowledge",
+            "episodes",
+            "procedures",
+            "skills",
+            "conversation_summary",
+        ]
+
+
+class TestResolveSearchTypesSkills:
+    def test_resolve_search_types_skills(self) -> None:
+        """scope='skills' -> ['skills']."""
+        assert RAGMemorySearch._resolve_search_types("skills") == ["skills"]
 
 
 class TestResolveSearchTypesCommonKnowledge:

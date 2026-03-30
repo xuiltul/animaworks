@@ -245,7 +245,14 @@ Typical cases:
 
 **AnimaWorks implementation**: Dense vector search, temporal decay, importance boost, and graph spreading activation. Default `config.rag.enable_spreading_activation` is **True** (`RAGConfig` in `core/config/schemas.py`). `MemoryRetriever.search(..., enable_spreading_activation=None)` reads config and disables spread only on config load failure. Applicable types: `spreading_memory_types` (default `knowledge`, `episodes`).
 
-Early design used BM25 + vector with RRF; evaluation showed multilingual dense vector search alone beats keyword search, so retrieval is **vector similarity only**.
+Indexed long-term stores (`knowledge`, `episodes`, `procedures`, `common_knowledge`) are retrieved with dense vectors and optional graph spread (below). **`search_memory` extends this:**
+
+- **`activity_log` scope:** BM25 keyword search over the **last 3 days** of unified activity JSONL (the operational timeline), not vector similarity.
+- **`all` scope:** fuses vector hits with `activity_log` BM25 results using **Reciprocal Rank Fusion (RRF, k=60)**.
+
+Together, these let Animas recall **recent tool outcomes** (e.g. email or messaging snippets) that have not yet been consolidated into long-term memory.
+
+Early experiments paired BM25 with vectors for the main corpus; multilingual dense search won there, so per-scope RAG for those directories remains **vector-first**. Keyword retrieval is reserved for the short `activity_log` window where freshness and lexical overlap matter.
 
 | Search signal | Method | Brain analog |
 |---|---|---|

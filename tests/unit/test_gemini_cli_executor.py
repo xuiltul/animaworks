@@ -502,9 +502,9 @@ class TestExecuteStreaming:
         events = [
             {
                 "type": "tool_use",
-                "tool_name": "mcp_aw_skill",
+                "tool_name": "mcp_aw_create_skill",
                 "tool_id": "t1",
-                "parameters": {"name": "test"},
+                "parameters": {"skill_name": "test"},
                 "timestamp": "2026-03-20T00:00:01Z",
             },
             {
@@ -530,7 +530,7 @@ class TestExecuteStreaming:
         tool_starts = [e for e in collected if e["type"] == "tool_start"]
         tool_ends = [e for e in collected if e["type"] == "tool_end"]
         assert len(tool_starts) == 1
-        assert tool_starts[0]["tool_name"] == "skill"
+        assert tool_starts[0]["tool_name"] == "create_skill"
         assert len(tool_ends) == 1
         assert tool_ends[0]["result"] == "skill content"
 

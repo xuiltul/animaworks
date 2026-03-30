@@ -198,7 +198,8 @@ send_message(
 | `episodes` | 과거 행동 로그 | "언제 무엇을 했는지"의 사실 확인 |
 | `procedures` | 절차서 | "어떻게 하는지"의 절차 확인 |
 | `common_knowledge` | 전체 Anima 공유 지식 | 조직 규칙, 시스템 가이드 |
-| `all` | 위 모두 | 키워드 존재 확인, 넓은 범위 검색 |
+| `activity_log` | 최근 3일간 활동 로그 (BM25 키워드 검색) | "방금 읽은 메일", "직전 검색 결과" 등 최근 행동 회상 |
+| `all` | 위 모두 (벡터 검색 + activity_log BM25를 RRF로 통합) | 키워드 존재 확인, 넓은 범위 검색 |
 
 ---
 
@@ -269,7 +270,7 @@ send_message(
 ### 대처 절차
 
 1. **스킬로 도구 사용법을 확인합니다**
-   - `skill` 도구에 스킬명을 지정하여 절차 전문을 가져옵니다. 스킬 목록은 도구 설명의 `<available_skills>` 블록에 표시됩니다
+   - `read_memory_file`로 시스템 프롬프트의 스킬 카탈로그에 표시된 경로(예: `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`)를 지정하여 절차 전문을 가져옵니다
    - B-mode에서 외부 도구가 허가된 경우, `Bash: animaworks-tool <도구> <서브커맨드>`로 호출 가능합니다
 
 2. **권한을 확인합니다**
@@ -285,11 +286,11 @@ send_message(
 
 4. **S-mode (Claude Agent SDK / MCP)의 경우**
    - 내장 도구는 접두사 없이 사용 가능합니다 (예: `send_message`). 찾을 수 없는 경우 프로세스 재시작이 필요합니다
-   - 외부 도구는 `skill` 도구로 CLI 사용법을 확인하고, **Bash** 경유로 `animaworks-tool <도구> <서브커맨드>`를 실행합니다
+   - 외부 도구는 `read_memory_file`로 스킬 본문을 읽어 CLI 사용법을 확인하고, **Bash** 경유로 `animaworks-tool <도구> <서브커맨드>`를 실행합니다
    - 장시간 도구(이미지 생성, 로컬 LLM 등)는 `animaworks-tool submit`으로 비동기 실행합니다
 
 5. **A-mode (LiteLLM)의 경우**
-   - 외부 도구는 `skill`로 사용법을 확인하고, **Bash** 경유로 `animaworks-tool <도구> <서브커맨드>`를 실행합니다
+   - 외부 도구는 `read_memory_file`로 스킬 본문을 읽어 사용법을 확인하고, **Bash** 경유로 `animaworks-tool <도구> <서브커맨드>`를 실행합니다
 
 6. **도구가 에러를 반환하는 경우**
    - 에러 메시지를 정확히 기록합니다

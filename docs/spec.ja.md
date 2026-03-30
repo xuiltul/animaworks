@@ -978,7 +978,7 @@ Group 6: メタ設定
 
 | ツール | 説明 |
 |--------|------|
-| `search_memory` | 書庫型記憶の検索（scope: knowledge/episodes/procedures/common_knowledge/all） |
+| `search_memory` | 書庫型記憶の検索（scope: knowledge/episodes/procedures/common_knowledge/activity_log/all） |
 | `read_memory_file` | 記憶ファイルの読み取り |
 | `write_memory_file` | 記憶ファイルの書き込み |
 | `archive_memory_file` | 記憶ファイルのアーカイブ |

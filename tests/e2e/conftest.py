@@ -8,13 +8,31 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
 from core.agent import AgentCore
+from core.anima import DigitalAnima
 from core.memory import MemoryManager
 from core.messenger import Messenger
-from core.anima import DigitalAnima
+
+
+@pytest.fixture(autouse=True)
+def _bypass_completion_gate():
+    """Disable completion_gate enforcement for all e2e tests.
+
+    E2E tests mock LLM responses with a fixed number of side effects.
+    completion_gate injects an extra retry loop iteration when the gate
+    is not called, causing StopIteration on the mock.  Since e2e tests
+    test specific agent behaviors (not completion_gate itself), bypass
+    enforcement globally here.  Unit-level gate tests live in tests/unit/.
+    """
+    with patch(
+        "core.execution.litellm_loop.completion_gate_applies_to_trigger",
+        return_value=False,
+    ):
+        yield
 
 
 @pytest.fixture

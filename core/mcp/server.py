@@ -21,8 +21,6 @@ in the Claude Agent SDK tool namespace.
 """
 
 import asyncio
-import contextlib
-import io
 import json
 import logging
 import os
@@ -67,8 +65,10 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "delegate_task",
         "submit_tasks",
         "update_task",
-        # AW-essential: skill/CLI manual
-        "skill",
+        # AW-essential: skill authoring
+        "create_skill",
+        # Mode S: pre-completion verification
+        "completion_gate",
     }
 )
 
@@ -158,9 +158,9 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         _background_task_tools,
         _channel_tools,
         _check_permissions_tools,
-        load_external_schemas_by_category,
+        _completion_gate_tools,
+        _create_skill_schemas,
         _notification_tools,
-        _skill_tools,
         _submit_tasks_tools,
         _supervisor_tools,
         _task_tools,
@@ -170,33 +170,20 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
     all_schemas: list[dict[str, Any]] = [
         *MEMORY_TOOLS,
         *_channel_tools(),
+        *_completion_gate_tools(),
         *_task_tools(),
         *_notification_tools(),
         *PROCEDURE_TOOLS,
         *KNOWLEDGE_TOOLS,
         *_supervisor_tools(),
-        *_skill_tools(),
+        *_create_skill_schemas(),
         *_submit_tasks_tools(),
         *_background_task_tools(),
         *_vault_tools(),
         *_check_permissions_tools(),
     ]
 
-    external_schemas: list[dict[str, Any]] = []
-    anima_dir_env = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
-    if anima_dir_env:
-        anima_dir = Path(anima_dir_env).resolve()
-        if anima_dir.is_dir():
-            try:
-                permitted = _load_permitted_categories(anima_dir)
-                external_schemas = load_external_schemas_by_category(permitted)
-            except Exception:
-                logger.debug("Failed to load external MCP schemas", exc_info=True)
-
-    if external_schemas:
-        all_schemas.extend(external_schemas)
-
-    exposed = frozenset({*_EXPOSED_TOOL_NAMES, *(schema["name"] for schema in external_schemas)})
+    exposed = _EXPOSED_TOOL_NAMES
 
     # Apply DB description overrides
     from core.tooling.schemas import apply_db_descriptions
@@ -208,18 +195,12 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         if schema["name"] in exposed:
             _TOOL_SCHEMAS[schema["name"]] = schema.get("parameters", {})
 
-    # Generate dynamic description for the skill tool
-    _skill_description = _build_skill_description()
-
     tools: list[Tool] = []
     for schema in all_schemas:
         name = schema["name"]
         if name not in exposed:
             continue
         desc = schema.get("description", "")
-        # Override skill tool description with dynamic content
-        if name == "skill" and _skill_description:
-            desc = _skill_description
         input_schema = schema.get("parameters", {"type": "object", "properties": {}})
         input_schema = _relax_integer_types(input_schema)
         tools.append(
@@ -237,70 +218,6 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         logger.warning("MCP tool schemas missing for: %s", ", ".join(sorted(missing)))
 
     return tools, exposed
-
-
-def _call_handler_quietly(
-    handler: Any,
-    name: str,
-    arguments: dict[str, Any],
-) -> str:
-    """Call ToolHandler while suppressing stray stdout.
-
-    MCP uses stdout exclusively for JSON-RPC frames. Some third-party libraries
-    invoked by tools (for example, first-load embedding model progress) emit
-    diagnostic output directly to stdout, which corrupts the MCP transport and
-    causes tool timeouts. Capture stdout here and keep it out of the protocol.
-    """
-    stdout_buf = io.StringIO()
-    with contextlib.redirect_stdout(stdout_buf):
-        result = handler.handle(name, arguments)
-    stray_stdout = stdout_buf.getvalue().strip()
-    if stray_stdout:
-        logger.warning(
-            "Suppressed stray stdout from MCP tool '%s' (%d chars)",
-            name,
-            len(stray_stdout),
-        )
-    return result
-
-
-def _build_skill_description() -> str:
-    """Build dynamic skill tool description from available skills.
-
-    Called once at MCP server startup.  Returns empty string on failure
-    (the static empty description from SKILL_TOOLS will be used instead).
-    """
-    try:
-        anima_dir_env = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
-        if not anima_dir_env:
-            return ""
-
-        anima_dir = Path(anima_dir_env).resolve()
-        if not anima_dir.is_dir():
-            return ""
-
-        from core.memory.skill_metadata import SkillMetadataService
-        from core.paths import get_common_skills_dir
-        from core.tooling.skill_tool import build_skill_tool_description
-
-        svc = SkillMetadataService(
-            skills_dir=anima_dir / "skills",
-            common_skills_dir=get_common_skills_dir(),
-        )
-        skill_metas = svc.list_skill_metas()
-        common_metas = svc.list_common_skill_metas()
-
-        # Procedures use the same SkillMetadataService extraction
-        procedures_dir = anima_dir / "procedures"
-        procedure_metas = []
-        if procedures_dir.is_dir():
-            procedure_metas = [SkillMetadataService.extract_skill_meta(f) for f in sorted(procedures_dir.glob("*.md"))]
-
-        return build_skill_tool_description(skill_metas, common_metas, procedure_metas)
-
-    except Exception:
-        logger.debug("Failed to build skill description for MCP", exc_info=True)
-        return ""
 
 
 # Build once at import time.  DB descriptions are baked in at this point;
@@ -392,12 +309,9 @@ def _make_on_complete_callback(anima_dir: Path) -> Any:
 
 # ── Lazy ToolHandler initialisation ──────────────────────
 
-import threading
-
 _tool_handler: Any = None  # core.tooling.handler.ToolHandler | None
 _init_error: str | None = None
 _is_supervisor: bool | None = None
-_handler_lock = threading.Lock()
 
 
 def _has_subordinates_for_anima() -> bool:
@@ -449,9 +363,6 @@ def _get_tool_handler() -> Any:
 
     Lazy initialisation keeps MCP server startup fast.  If initialisation
     fails the error is cached so subsequent calls return immediately.
-
-    Thread-safe: uses double-checked locking so concurrent callers
-    (warmup thread + asyncio.to_thread tool call) don't race.
     """
     global _tool_handler, _init_error
 
@@ -460,110 +371,103 @@ def _get_tool_handler() -> Any:
     if _init_error is not None:
         return None
 
-    with _handler_lock:
-        # Re-check after acquiring lock (another thread may have finished init)
-        if _tool_handler is not None:
-            return _tool_handler
-        if _init_error is not None:
+    try:
+        anima_dir_env = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
+        if not anima_dir_env:
+            _init_error = "ANIMAWORKS_ANIMA_DIR environment variable is not set"
+            logger.error(_init_error)
             return None
 
+        anima_dir = Path(anima_dir_env).resolve()
+        if not anima_dir.is_dir():
+            _init_error = f"ANIMAWORKS_ANIMA_DIR does not exist: {anima_dir}"
+            logger.error(_init_error)
+            return None
+
+        # ── MemoryManager ──
+        from core.memory import MemoryManager
+
+        memory = MemoryManager(anima_dir)
+
+        # ── Messenger ──
+        from core.messenger import Messenger
+        from core.paths import get_shared_dir
+
+        shared_dir = get_shared_dir()
+        messenger = Messenger(shared_dir=shared_dir, anima_name=anima_dir.name)
+
+        # ── HumanNotifier (optional) ──
+        human_notifier = None
         try:
-            anima_dir_env = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
-            if not anima_dir_env:
-                _init_error = "ANIMAWORKS_ANIMA_DIR environment variable is not set"
-                logger.error(_init_error)
-                return None
+            from core.config.models import load_config
+            from core.notification.notifier import HumanNotifier
 
-            anima_dir = Path(anima_dir_env).resolve()
-            if not anima_dir.is_dir():
-                _init_error = f"ANIMAWORKS_ANIMA_DIR does not exist: {anima_dir}"
-                logger.error(_init_error)
-                return None
+            config = load_config()
+            human_notifier = HumanNotifier.from_config(config.human_notification)
+            if human_notifier.channel_count == 0:
+                human_notifier = None
+        except Exception:
+            logger.debug("HumanNotifier init skipped", exc_info=True)
 
-            # ── MemoryManager ──
-            from core.memory import MemoryManager
-
-            memory = MemoryManager(anima_dir)
-
-            # ── Messenger ──
-            from core.messenger import Messenger
-            from core.paths import get_shared_dir
-
-            shared_dir = get_shared_dir()
-            messenger = Messenger(shared_dir=shared_dir, anima_name=anima_dir.name)
-
-            # ── HumanNotifier (optional) ──
-            human_notifier = None
-            try:
-                from core.config.models import load_config
-                from core.notification.notifier import HumanNotifier
-
-                config = load_config()
-                human_notifier = HumanNotifier.from_config(config.human_notification)
-                if human_notifier.channel_count == 0:
-                    human_notifier = None
-            except Exception:
-                logger.debug("HumanNotifier init skipped", exc_info=True)
-
-            # ── Tool registry and personal tools (filesystem discovery) ──
-            tool_registry: list[str] = []
-            personal_tools: dict[str, str] = {}
-            try:
-                from core.tools import (
-                    discover_common_tools,
-                    discover_personal_tools,
-                )
-
-                permitted = _load_permitted_categories(anima_dir)
-                tool_registry = sorted(permitted)
-                common = discover_common_tools()
-                personal = discover_personal_tools(anima_dir)
-                personal_tools = {**common, **personal}
-            except Exception:
-                logger.debug("Tool discovery failed", exc_info=True)
-
-            # ── ToolHandler ──
-            from core.tooling.handler import ToolHandler
-
-            # Check debug_superuser flag from status.json
-            _superuser = False
-            _status_path = anima_dir / "status.json"
-            if _status_path.is_file():
-                try:
-                    import json as _json_mod
-
-                    _su_data = _json_mod.loads(_status_path.read_text(encoding="utf-8"))
-                    _superuser = bool(_su_data.get("debug_superuser"))
-                except (ValueError, OSError):
-                    pass
-
-            # ── BackgroundTaskManager ──
-            bg_manager = _build_background_manager(anima_dir)
-
-            _tool_handler = ToolHandler(
-                anima_dir=anima_dir,
-                memory=memory,
-                messenger=messenger,
-                tool_registry=tool_registry,
-                personal_tools=personal_tools,
-                on_message_sent=None,
-                on_schedule_changed=None,
-                human_notifier=human_notifier,
-                background_manager=bg_manager,
-                superuser=_superuser,
+        # ── Tool registry and personal tools (filesystem discovery) ──
+        tool_registry: list[str] = []
+        personal_tools: dict[str, str] = {}
+        try:
+            from core.tools import (
+                discover_common_tools,
+                discover_personal_tools,
             )
 
-            logger.info(
-                "ToolHandler initialised for anima '%s' (%s)",
-                anima_dir.name,
-                anima_dir,
-            )
-            return _tool_handler
+            permitted = _load_permitted_categories(anima_dir)
+            tool_registry = sorted(permitted)
+            common = discover_common_tools()
+            personal = discover_personal_tools(anima_dir)
+            personal_tools = {**common, **personal}
+        except Exception:
+            logger.debug("Tool discovery failed", exc_info=True)
 
-        except Exception as exc:
-            _init_error = f"ToolHandler initialisation failed: {exc}"
-            logger.exception(_init_error)
-            return None
+        # ── ToolHandler ──
+        from core.tooling.handler import ToolHandler
+
+        # Check debug_superuser flag from status.json
+        _superuser = False
+        _status_path = anima_dir / "status.json"
+        if _status_path.is_file():
+            try:
+                import json as _json_mod
+
+                _su_data = _json_mod.loads(_status_path.read_text(encoding="utf-8"))
+                _superuser = bool(_su_data.get("debug_superuser"))
+            except (ValueError, OSError):
+                pass
+
+        # ── BackgroundTaskManager ──
+        bg_manager = _build_background_manager(anima_dir)
+
+        _tool_handler = ToolHandler(
+            anima_dir=anima_dir,
+            memory=memory,
+            messenger=messenger,
+            tool_registry=tool_registry,
+            personal_tools=personal_tools,
+            on_message_sent=None,
+            on_schedule_changed=None,
+            human_notifier=human_notifier,
+            background_manager=bg_manager,
+            superuser=_superuser,
+        )
+
+        logger.info(
+            "ToolHandler initialised for anima '%s' (%s)",
+            anima_dir.name,
+            anima_dir,
+        )
+        return _tool_handler
+
+    except Exception as exc:
+        _init_error = f"ToolHandler initialisation failed: {exc}"
+        logger.exception(_init_error)
+        return None
 
 
 # ── Trust boundary labeling ───────────────────────────────
@@ -671,18 +575,12 @@ async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextCon
 
     coerced_args = _coerce_integers(dict(arguments or {}), name)
 
-    import time as _time
-
-    _t0 = _time.monotonic()
     try:
-        result = await asyncio.to_thread(_call_handler_quietly, handler, name, coerced_args)
-        _elapsed = _time.monotonic() - _t0
-        logger.info("Tool '%s' completed in %.1fs", name, _elapsed)
+        result = await asyncio.to_thread(handler.handle, name, coerced_args)
         wrapped = _wrap_result(name, result)
         return [TextContent(type="text", text=wrapped)]
     except Exception as exc:
-        _elapsed = _time.monotonic() - _t0
-        logger.exception("Unhandled error calling tool '%s' after %.1fs", name, _elapsed)
+        logger.exception("Unhandled error calling tool '%s'", name)
         return [
             TextContent(
                 type="text",
@@ -701,47 +599,9 @@ async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextCon
 # ── Entry point ──────────────────────────────────────────
 
 
-def _warmup_handler() -> None:
-    """Pre-initialise ToolHandler and embedding model in background.
-
-    Runs in a thread so the MCP server can respond to ``initialize``
-    and ``tools/list`` immediately while the heavy work happens in
-    parallel.  By the time the first ``tools/call`` arrives the
-    handler (and ideally the embedding model) is already warm.
-    """
-    import time as _time
-
-    _t0 = _time.monotonic()
-    try:
-        handler = _get_tool_handler()
-        _elapsed = _time.monotonic() - _t0
-        if handler is None:
-            logger.warning("Warmup: ToolHandler init failed (%.1fs)", _elapsed)
-            return
-        logger.info("Warmup: ToolHandler ready (%.1fs)", _elapsed)
-
-        # Trigger RAG indexer + embedding model load with a cheap query
-        _t1 = _time.monotonic()
-        try:
-            stdout_buf = io.StringIO()
-            with contextlib.redirect_stdout(stdout_buf):
-                handler.handle("search_memory", {"query": "warmup", "scope": "knowledge"})
-            logger.info("Warmup: search_memory ready (%.1fs)", _time.monotonic() - _t1)
-        except Exception:
-            logger.info("Warmup: search_memory pre-load skipped (%.1fs)", _time.monotonic() - _t1)
-    except Exception:
-        logger.warning("Warmup failed (%.1fs)", _time.monotonic() - _t0, exc_info=True)
-
-
 async def main() -> None:
     """Run the MCP stdio server."""
     logger.info("AnimaWorks MCP server starting (name=aw)")
-
-    # Start heavy initialisation in background thread so MCP
-    # handshake (initialize / tools/list) completes without delay.
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _warmup_handler)
-
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,

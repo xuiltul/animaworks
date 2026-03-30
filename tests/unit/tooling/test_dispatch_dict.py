@@ -92,7 +92,6 @@ EXPECTED_BUILTIN_TOOLS = frozenset(
         "backlog_task",
         "update_task",
         "list_tasks",
-        "skill",
         "create_skill",
         "submit_tasks",
         "manage_channel",
@@ -103,6 +102,7 @@ EXPECTED_BUILTIN_TOOLS = frozenset(
         "vault_store",
         "vault_list",
         "todo_write",
+        "completion_gate",
     }
 )
 

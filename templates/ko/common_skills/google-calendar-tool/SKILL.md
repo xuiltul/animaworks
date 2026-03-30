@@ -1,8 +1,8 @@
 ---
 name: google-calendar-tool
 description: >-
-  Google Calendar 연동 도구. 일정 목록 조회 및 일정 추가. OAuth2 인증으로 Calendar API에 직접 접근.
-  "캘린더" "일정" "스케줄" "Google Calendar" "이벤트"
+  Google Calendar 연동 도구. 일정 목록·생성을 OAuth2 Calendar API로 수행한다.
+  Use when: 일정 확인, 새 이벤트 생성, 스케줄 변경·동기화가 필요할 때.
 tags: [calendar, google, schedule, external]
 ---
 

@@ -21,7 +21,6 @@ from core.memory.priming import (
     channel_a,
     channel_b,
     channel_c,
-    channel_d,
     channel_e,
     channel_f,
     outbound,

@@ -224,28 +224,6 @@ class SkillsToolsMixin:
 
         return result
 
-    # ── Skill tool handler ────────────────────────────────────
-
-    def _handle_skill(self, args: dict[str, Any]) -> str:
-        """Handle skill tool invocation — load and return skill content."""
-        from core.paths import get_common_skills_dir
-        from core.tooling.skill_tool import load_and_render_skill
-
-        skill_name = args.get("skill_name", "")
-        context = args.get("context", "")
-
-        if not skill_name:
-            return t("handler.skill_name_required")
-
-        return load_and_render_skill(
-            skill_name=skill_name,
-            anima_dir=self._anima_dir,
-            skills_dir=self._anima_dir / "skills",
-            common_skills_dir=get_common_skills_dir(),
-            procedures_dir=self._anima_dir / "procedures",
-            context=context,
-        )
-
     def _handle_create_skill(self, args: dict[str, Any]) -> str:
         """Handle create_skill tool — create skill directory structure."""
         from core.paths import get_common_skills_dir

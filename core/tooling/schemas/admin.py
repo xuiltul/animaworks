@@ -24,7 +24,7 @@ _AW_CORE_NAMES: frozenset[str] = frozenset(
         "ping_subordinate",
         "submit_tasks",
         "update_task",
-        "skill",
+        "create_skill",
     }
 )
 

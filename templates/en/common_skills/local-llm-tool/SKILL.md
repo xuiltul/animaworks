@@ -1,8 +1,8 @@
 ---
 name: local-llm-tool
 description: >-
-  Local LLM execution tool. Text generation and chat via Ollama/vLLM.
-  "local LLM" "ollama" "text generation" "local model"
+  Local LLM execution tool for text generation and chat through Ollama or vLLM endpoints.
+  Use when: running on-prem inference, calling a local GPU model, or summarizing with a self-hosted LLM.
 tags: [llm, local, ollama, external]
 ---
 

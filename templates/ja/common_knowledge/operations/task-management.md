@@ -113,6 +113,8 @@ Bash: animaworks-tool task list --status failed
 
 Priming 表示では、人間由来タスク（source=human）に 🔴 HIGH マーカー、30分以上更新されていないタスクに ⚠️ STALE、期限超過タスクに 🔴 OVERDUE マーカーが付く。
 
+委譲タスク（`delegated`）は Priming の Channel E に専用セクションとして表示される。部下のタスクキューからライブステータス（⏳進行中/✅完了/❌失敗/🚫キャンセル等）を取得して最大5件まで表示する。また、Heartbeat 完了後に `sync_delegated` が自動実行され、部下のキューで完了・失敗したタスクを検出して上司側の追跡エントリを自動更新する（`done` / `failed`）。
+
 ## current_state.md の使い方
 
 `current_state.md` はワーキングメモリとして、今の状態・観察・計画・ブロッカーを記録するファイル。

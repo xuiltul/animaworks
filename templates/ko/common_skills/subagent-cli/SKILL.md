@@ -1,13 +1,8 @@
 ---
 name: subagent-cli
 description: >-
-  외부 AI 에이전트 CLI(codex exec, cursor-agent -p)를 Bash를 통해 서브에이전트로
-  비대화 모드에서 실행하는 스킬. 복잡한 코딩 태스크, 코드 리뷰,
-  다중 파일 변경 위임 시 실행 절차, 옵션, 출력 처리를 제공합니다.
-  Mode S/A/B에서 Bash 권한이 있는 경우에 적용. Mode C(codex/*)인 경우
-  프레임워크가 Codex를 직접 실행하므로 codex exec 호출이 불필요합니다.
-  "서브에이전트", "codex", "cursor-agent", "코드 작성", "구현",
-  "코드 리뷰", "리팩터링"
+  외부 AI 에이전트 CLI를 Bash로 비대화 실행하는 스킬. codex exec·cursor-agent로 코딩 작업을 위임한다.
+  Use when: 복잡한 구현 위임, 코드 리뷰, 다중 파일 변경, Bash에서 서브에이전트 시작이 필요할 때.
 ---
 
 # subagent-cli

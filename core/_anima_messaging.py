@@ -25,7 +25,7 @@ from core.exceptions import (
 )
 from core.execution._sanitize import ORIGIN_HUMAN, ORIGIN_SYSTEM
 from core.i18n import t
-from core.image_artifacts import extract_image_artifacts_from_tool_records
+from core.image_artifacts import extract_image_artifacts_from_tool_records, resolve_local_image_paths
 from core.memory.conversation import ConversationMemory, ToolRecord
 from core.response_normalize import normalize_user_facing_response_text
 from core.memory.streaming_journal import StreamingJournal
@@ -283,8 +283,16 @@ class MessagingMixin:
                         tool_names=[r.tool_name for r in tool_records if r.tool_name] or None,
                     )
 
+                    # Resolve local absolute/file:// image paths → attachments/
+                    result.summary, local_artifacts = resolve_local_image_paths(
+                        result.summary,
+                        self.anima_dir,
+                    )
+
                     # Activity log: response sent (with thinking text if present)
                     response_artifacts = extract_image_artifacts_from_tool_records(result.tool_call_records)
+                    remaining = max(0, 5 - len(response_artifacts))
+                    response_artifacts.extend(local_artifacts[:remaining])
                     resp_meta: dict[str, Any] = {"thread_id": thread_id}
                     if result.thinking_text:
                         resp_meta["thinking_text"] = result.thinking_text
@@ -528,10 +536,19 @@ class MessagingMixin:
                             # Record assistant response with tool records
                             cycle_result = chunk.get("cycle_result", {})
                             summary = normalize_user_facing_response_text(cycle_result.get("summary", ""))
+
+                            # Resolve local absolute/file:// image paths → attachments/
+                            summary, local_artifacts = resolve_local_image_paths(
+                                summary,
+                                self.anima_dir,
+                            )
                             cycle_result["summary"] = summary
+
                             response_artifacts = extract_image_artifacts_from_tool_records(
                                 cycle_result.get("tool_call_records", [])
                             )
+                            remaining = max(0, 5 - len(response_artifacts))
+                            response_artifacts.extend(local_artifacts[:remaining])
                             if response_artifacts:
                                 cycle_result["images"] = response_artifacts
                             tool_records = [ToolRecord.from_dict(r) for r in cycle_result.get("tool_call_records", [])]

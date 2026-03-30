@@ -127,20 +127,20 @@ search_memory(query="SSL証明書 更新", scope="procedures")
 **実行可能な手順書・ツール使用ガイド**。「特技」に相当する。
 
 - 個人スキル（`skills/`）と共通スキル（`common_skills/`）がある
-- Priming（Channel D）が、個人 `skills/`・`common_skills/`・**個人 `procedures/`** のメタデータ（説明文ベース）に対し、キーワード／語彙／ベクトルの **3段階マッチ**で候補を出し、**名前のみ**を自動表示する（段階開示。最大5件）
-- 詳細が必要なときは `skill` ツールで全文を取得する
+- システムプロンプトのスキルカタログに、個人 `skills/`・`common_skills/`・`procedures/` 等のパスが一覧表示される（例: `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`, `procedures/baz.md`）
+- 詳細が必要なときは `read_memory_file(path="...")` で全文を取得する
 - **ベクトルストア上は常に忘却対象外**（`skills` / `shared_users` 型は保護）
 
 ### スキルの確認
 
 ```
-skill(name="newstaff")  # スキルの全文を取得
+read_memory_file(path="skills/newstaff/SKILL.md")  # スキルの全文を取得
 ```
 
 ### スキルの作成
 
 ```
-create_skill(name="deploy-procedure", description="本番デプロイ手順", content="...")
+create_skill(skill_name="deploy-procedure", description="本番デプロイ手順", body="...")
 ```
 
 ---
@@ -149,7 +149,7 @@ create_skill(name="deploy-procedure", description="本番デプロイ手順", co
 
 ### Priming（自動想起）
 
-あなたが会話を始めるたびに、Priming エンジンが **6 チャネル（A〜F）** で関連記憶を並列検索し、システムプロンプトに注入する。実装では **C0（重要知識）** が先に取り、注入時には **Channel C の本文と連結**される（見た目は 1 つの「関連知識」ブロックになることが多い）。
+あなたが会話を始めるたびに、Priming エンジンが **5 チャネル（A, B, C/C0, E, F）** で関連記憶を並列検索し、システムプロンプトに注入する。実装では **C0（重要知識）** が先に取り、注入時には **Channel C の本文と連結**される（見た目は 1 つの「関連知識」ブロックになることが多い）。
 
 | チャネル | 何を検索するか | 既定のチャネル別バジェット（トークン目安）※ |
 |---------|--------------|--------------------------------|
@@ -157,9 +157,10 @@ create_skill(name="deploy-procedure", description="本番デプロイ手順", co
 | B: 直近の活動 | 統一アクティビティログ（タイムライン）＋共有チャネル等の補助 | 1300 |
 | C0: 重要知識 | `[IMPORTANT]` タグ付き knowledge の**概要ポインタのみ**（ベクトルストア上の専用一覧取得） | 500 |
 | C: 関連知識 | RAG（dense）で個人 knowledge + 共有 common_knowledge を検索 | 1000 |
-| D: スキル／手続きマッチ | 個人スキル・共通スキル・**個人手続き**の名前（説明文ベース3段階） | 200 |
-| E: 保留タスク | タスクキュー要約 + 実行中の並列タスク +（あれば）overflow inbox のファイル名一覧 | 500 |
+| E: 保留タスク | タスクキュー要約 + 実行中の並列タスク + 委譲タスク状況 +（あれば）overflow inbox のファイル名一覧 | 500 |
 | F: エピソード | RAG で episodes を検索 | 800 |
+
+スキル・手続きのパス一覧はシステムプロンプトのスキルカタログ（`<available_skills>`、Group 4に注入）に載り、本文は `read_memory_file` で読み込む。スキルの意味的検索は `search_memory(scope="skills")` も利用可能。
 
 ※ `config.json` の `priming` で挨拶・質問・依頼・heartbeat 用の上限や `heartbeat_context_pct` を変えられる。`dynamic_budget` が有効なときは、メッセージ種別・heartbeat では `max(budget_heartbeat, context_window × heartbeat_context_pct)` などで全体トークン上限が変わり、各チャネルはその比率で縮む。**dynamic_budget が無効なとき**の Priming 全体の既定上限はコード上 **約2000トークン相当**（チャネル別バジェットの合計を基準に縮小割当）。
 
@@ -183,10 +184,17 @@ Priming は自動で動くため、明示的な操作は不要。
 
 **本番の統合作業（エピソード要約・知識への抽出・矛盾チェック等）は、Anima 自身がツールループで実行する**（`run_consolidation`）。`ConsolidationEngine` は主に前処理（エピソード・解決イベントの収集）と後処理（RAG 再構築・忘却の呼び出し）を担う。
 
+日次統合は **2フェーズマルチパス方式**:
+
+| フェーズ | 処理内容 |
+|---------|---------|
+| **Phase A: エピソード抽出** | activity_logの直近24時間分を時間チャンクに分割（モデルのコンテキストウィンドウに応じたサイズ）→ 各チャンクをLLM one-shotで処理（**tool_result全文**を含むため、旧方式のメタのみと比べ高精度）→ タイムラインヘッダの重複除去後マージ → `episodes/{date}.md` に書き出し |
+| **Phase B: 知識抽出** | Phase Aの結果 + **エラートレース分析**（直近24時間のerror/failed tool_resultを収集、最大50件・3000文字）をAnimaのツールループで処理 → knowledge抽出、procedure自動生成（エラーパターンから `source: "error_trace_analysis"` 付き） |
+
 | 頻度 | 処理の流れ（概要） |
 |------|-------------------|
-| **日次** | 直近24時間のエピソード数が閾値以上なら `run_consolidation(daily)` → 続けて **Synaptic downscaling**（メタデータのみ）→ **RAG インデックス再構築** |
-| **週次** | `run_consolidation(weekly)` → **Neurogenesis reorganization**（低活性チャンク同士の LLM マージ）→ **RAG 再構築** |
+| **日次** | 直近24時間のエピソード数が閾値以上なら **Phase A → Phase B** → 続けて **Synaptic downscaling**（メタデータのみ）→ **RAG インデックス再構築** |
+| **週次** | `run_consolidation(weekly)`（単一フェーズ、Phase Aなし） → **Neurogenesis reorganization**（低活性チャンク同士の LLM マージ）→ **RAG 再構築** |
 | **月次** | **Complete forgetting**（低活性が長期続いたチャンクの削除・アーカイブ）と手続きアーカイブ整理 → **RAG 再構築**（Anima ループは走らない） |
 
 日次は設定で無効化・エピソード閾値・`max_turns` を変えられる。実行が極端に短い場合はリトライがスケジュールされる。
@@ -231,7 +239,9 @@ Priming は自動で動くため、明示的な操作は不要。
 | `episodes` | 過去の行動ログ | 「前にこれやったことあるかな？」 |
 | `procedures` | 手順書 | 「この作業の手順は？」 |
 | `common_knowledge` | 共有リファレンス | 「フレームワークの仕様は？」 |
-| `all` | 上記すべて | 「とにかく関連情報を全部探したい」 |
+| `skills` | スキル・共通スキル（ベクトル検索） | 「この作業に使えるスキルは？」 |
+| `activity_log` | 直近の行動ログ（ツール実行結果・メッセージ等） | 「さっき読んだメールの内容」「先ほどの検索結果」 |
+| `all` | 上記すべて（ベクトル検索 + activity_log BM25をRRFで統合） | 幅広く検索したい場合 |
 
 ---
 

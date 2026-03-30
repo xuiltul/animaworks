@@ -47,7 +47,8 @@ When an Anima calls `search_memory(query="...", scope="common_knowledge")`, it p
 
 - **Keyword search**: Text scan of .md files in `~/.animaworks/common_knowledge/`
 - **Vector search**: Searches `shared_common_knowledge` collection
-- **Scope**: `"common_knowledge"` for targeted search, `"all"` (default) also includes it
+- **Scope**: `knowledge` / `episodes` / `procedures` / `common_knowledge` / `skills` / `activity_log` / `all`. Use `"common_knowledge"` for targeted search; `"all"` (default) also includes it
+- **`scope="all"`**: Merges vector results with **activity_log BM25** hits using **RRF** (reciprocal rank fusion), so broad searches also surface recent unified activity log entries alongside indexed memory chunks
 
 ### Examples
 ```
@@ -102,7 +103,7 @@ For `memory_type="common_knowledge"`, uses the same **Markdown heading split** s
 | Item | common_knowledge | reference |
 |------|-----------------|-----------|
 | RAG Index | Indexed (`shared_common_knowledge`) | **Not indexed** |
-| `search_memory` | Searchable via scope="common_knowledge" / "all" | Not searchable |
+| `search_memory` | Searchable via `knowledge`, `episodes`, `procedures`, `common_knowledge`, `skills`, `activity_log`, `all` (`reference/` not indexed) | Not searchable |
 | Priming Channel C | Fragments auto-displayed | Not displayed |
 | `read_memory_file` | Read/write allowed | **Read-only** |
 | Purpose | Everyday practical guides & decision criteria | Detailed technical reference |

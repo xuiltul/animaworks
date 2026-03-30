@@ -11,7 +11,7 @@ All memory is in `{anima_dir}/`. You can only write to your own directory and `c
 | `state/` | Current state | What you are doing now | Update as needed (`pending/` via `submit_tasks`) |
 
 Knowledge: {knowledge_count} files | Procedures: {procedure_count} files
-Use the skill tool to list available skills and procedures.
+Skill and procedure paths appear in the system prompt skill catalog; load bodies with `read_memory_file`.
 
 Shared users: {shared_users_list}
 

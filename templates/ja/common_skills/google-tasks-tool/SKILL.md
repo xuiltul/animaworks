@@ -1,8 +1,8 @@
 ---
 name: google-tasks-tool
 description: >-
-  Google Tasks 連携ツール。タスクリスト・タスクの一覧・追加・更新。OAuth2認証。
-  「Google Tasks」「タスク」「TODO」「タスクリスト」
+  Google Tasks連携ツール。タスクリストとタスクの一覧・追加・更新をOAuth2で行う。
+  Use when: TODO一覧取得、タスク追加、完了更新、タスクリスト切り替えが必要なとき。
 tags: [tasks, google, todo, external]
 ---
 

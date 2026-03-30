@@ -1,13 +1,8 @@
 ---
 name: subagent-cli
 description: >-
-  Skill for running external AI agent CLIs (codex exec, cursor-agent -p) as subagents
-  via Bash in non-interactive mode. Provides execution procedure, options, and output
-  handling when delegating complex coding tasks, code review, or multi-file changes.
-  Applies when Bash permission is available in Mode S/C/D/G/A/B. In Mode C/D/G (codex/* / cursor/* / gemini/*), the
-  framework runs each engine directly, so manually invoking the matching CLI is usually unnecessary.
-  "subagent", "codex", "cursor-agent", "write code", "implement",
-  "code review", "refactoring"
+  Runs external AI agent CLIs via Bash in non-interactive mode. Delegates coding with codex exec or cursor-agent.
+  Use when: offloading complex implementation, code review, multi-file edits, or spawning a subagent from Bash.
 ---
 
 # subagent-cli

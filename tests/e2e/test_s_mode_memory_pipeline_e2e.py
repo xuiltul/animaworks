@@ -17,6 +17,7 @@ activity_log consolidation input) integrate correctly.
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -411,44 +412,38 @@ class TestActivityLogToConsolidationPromptPipeline:
             "Collected output should contain content from the entries"
         )
 
-    def test_consolidation_prompt_has_activity_log_placeholder(self):
-        """The consolidation instruction template contains the
-        {activity_log_summary} placeholder.
-        """
+    def test_consolidation_prompt_renders_episodes_summary(self):
+        """Phase B consolidation_instruction template renders episodes_summary."""
         from core.paths import load_prompt
 
-        # Load the template with dummy values to verify it renders
         prompt = load_prompt(
             "memory/consolidation_instruction",
             anima_name="test-anima",
-            episodes_summary="(テストエピソード)",
+            episodes_summary="## 09:00-10:00 テスト作業\n- 09:05 テスト回答を送信",
             resolved_events_summary="",
-            activity_log_summary="[10:00] response_sent: テスト回答",
             reflections_summary="",
+            knowledge_files_list="(なし)",
+            merge_candidates="(なし)",
+            error_patterns_summary="（エラーなし）",
         )
 
-        assert "アクティビティログ" in prompt, (
-            "Template should contain the activity log section header"
-        )
         assert "テスト回答" in prompt, (
-            "Template should render the activity_log_summary content"
+            "Template should render the episodes_summary content"
         )
 
-    def test_activity_log_to_consolidation_prompt_render(self, tmp_path):
-        """End-to-end: activity log -> collect -> render into prompt template.
+    def test_activity_log_to_episode_extraction(self, tmp_path):
+        """E2E: activity log -> collect_activity_chunks -> formatted output.
 
-        Pipeline:
+        Pipeline (Phase A preparation):
         1. Write activity log entries
-        2. Collect via ConsolidationEngine
-        3. Render into consolidation_instruction template
-        4. Verify the prompt contains the activity data
+        2. Collect via ConsolidationEngine.collect_activity_chunks
+        3. Verify chunks contain activity data with full content
         """
         anima_dir = tmp_path / "animas" / "test-prompt-render"
         anima_dir.mkdir(parents=True)
         (anima_dir / "episodes").mkdir()
         (anima_dir / "knowledge").mkdir()
 
-        # Write realistic activity entries
         activity = ActivityLogger(anima_dir)
         activity.log(
             "message_received",
@@ -459,6 +454,7 @@ class TestActivityLogToConsolidationPromptPipeline:
         activity.log(
             "tool_result",
             tool="aws_collector",
+            content="EC2 instance i-12345 running",
             summary="EC2 describe-instances実行",
             meta={"result_status": "ok", "result_bytes": 512},
         )
@@ -469,31 +465,20 @@ class TestActivityLogToConsolidationPromptPipeline:
             summary="EC2起動完了を報告",
         )
 
-        # Collect activity entries
         engine = ConsolidationEngine(anima_dir, "test-prompt-render")
-        activity_summary = engine._collect_activity_entries(hours=24)
-        assert activity_summary, "Collection should return non-empty string"
+        with patch("core.memory.consolidation.ConsolidationEngine.compute_activity_budget", return_value=500_000):
+            chunks = engine.collect_activity_chunks(hours=24)
 
-        # Render into the full consolidation prompt
-        from core.paths import load_prompt
-
-        prompt = load_prompt(
-            "memory/consolidation_instruction",
-            anima_name="test-prompt-render",
-            episodes_summary="(テストエピソード)",
-            resolved_events_summary="",
-            activity_log_summary=activity_summary,
-            reflections_summary="",
+        assert chunks, "Should produce at least one chunk"
+        combined = "\n".join(chunks)
+        assert "EC2" in combined, (
+            "Chunks should contain activity content about EC2"
         )
-
-        assert "test-prompt-render" in prompt, (
-            "Prompt should contain the anima name"
+        assert "aws_collector" in combined, (
+            "Chunks should include tool name from tool_result"
         )
-        assert "EC2" in prompt or "ec2" in prompt.lower(), (
-            "Prompt should contain activity content about EC2"
-        )
-        assert "aws_collector" in prompt, (
-            "Prompt should contain tool_result from activity log"
+        assert "i-12345" in combined, (
+            "Chunks should include full tool_result content"
         )
 
     def test_empty_activity_log_produces_empty_string(self, tmp_path):

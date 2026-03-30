@@ -113,6 +113,8 @@ Bash: animaworks-tool task list --status failed
 
 In Priming, human-origin tasks (`source=human`) get a 🔴 HIGH marker, tasks not updated for 30+ minutes get a ⚠️ STALE marker, and overdue tasks get a 🔴 OVERDUE marker.
 
+Delegated tasks (`delegated`) appear in a dedicated section within Priming Channel E. Live status is fetched from the subordinate's task queue (⏳ in progress / ✅ done / ❌ failed / 🚫 cancelled, etc.) showing up to 5 items. Additionally, `sync_delegated` runs automatically after each Heartbeat, detecting completed or failed tasks in subordinates' queues and auto-updating the supervisor's tracking entries (`done` / `failed`).
+
 ## Using current_state.md
 
 `current_state.md` is working memory for your current state, observations, plans, and blockers.

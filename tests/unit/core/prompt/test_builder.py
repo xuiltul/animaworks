@@ -260,7 +260,7 @@ class TestBuildSystemPrompt:
             assert "I am Alice" in result
 
     def test_skills_not_in_system_prompt(self, tmp_path, data_dir):
-        """Skills are not listed in memory_guide — they live in the skill tool description."""
+        """Skills are not listed in memory_guide — they appear in skill_catalog section."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
@@ -298,8 +298,9 @@ class TestBuildSystemPrompt:
             result = build_system_prompt(memory)
             prompt = result.system_prompt
             assert "スキルと手順書" not in prompt
-            assert "- coding: Write code" not in prompt
-            assert "- deploy" not in prompt
+            assert "skills/coding/SKILL.md: Write code" in prompt
+            assert "common_skills/deploy/SKILL.md" in prompt
+            assert "<available_skills>" in prompt
 
     def test_memory_guide_uses_counts(self, tmp_path, data_dir):
         """memory_guide receives knowledge/procedure counts, not file name lists."""

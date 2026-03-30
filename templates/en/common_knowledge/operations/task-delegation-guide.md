@@ -118,3 +118,30 @@ submit_tasks(batch_id="deploy-20260301", tasks=[
 
 Completed task results are saved to `state/task_results/{task_id}.json`.
 Predecessor result summaries are automatically injected as context for dependent tasks.
+
+## Tracking Delegated Tasks
+
+Use `task_tracker` to check delegated task progress.
+It cross-checks the latest status from the subordinate's `task_queue.jsonl`.
+
+```
+task_tracker()                     # Active delegated tasks (default)
+task_tracker(status="all")         # All including completed
+task_tracker(status="completed")   # Completed only
+```
+
+| status | Meaning |
+|--------|---------|
+| `active` | In progress (anything other than done/cancelled/failed). Default |
+| `all` | Everything |
+| `completed` | Only done/cancelled/failed |
+
+### Auto-sync (sync_delegated)
+
+Runs automatically after each Heartbeat. Detects the following state changes in subordinate task queues and auto-updates the supervisor's tracking entries (`delegated` status):
+
+- Subordinate `done` or `cancelled` → supervisor entry updated to `done`
+- Subordinate `failed` → supervisor entry updated to `failed`
+- Archived tasks are also searched (`task_queue_archive.jsonl`)
+
+There is no need to manually call `task_tracker`, but it remains useful for immediate checks between Heartbeats.

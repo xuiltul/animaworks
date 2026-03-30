@@ -1,8 +1,8 @@
 ---
 name: notion-tool
 description: >-
-  Notion 연동 도구. 페이지 및 데이터베이스의 검색, 조회, 생성, 업데이트.
-  "Notion" "페이지 생성" "데이터베이스"
+  Notion 연동 도구. 페이지·데이터베이스 검색·조회·생성·갱신을 API로 수행한다.
+  Use when: Notion 페이지 편집, 데이터베이스 행 추가, 워크스페이스 검색이 필요할 때.
 tags: [productivity, notion, external]
 ---
 

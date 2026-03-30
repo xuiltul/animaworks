@@ -1,8 +1,8 @@
 ---
 name: discord-tool
 description: >-
-  Discord連携ツール。メッセージ送信・取得・検索・サーバー(ギルド)一覧・チャンネル一覧・リアクション。
-  「Discord」「ディスコード」「サーバー」「ギルド」「チャンネル」「リアクション」
+  Discord連携ツール。メッセージ送受信・検索・ギルド・チャンネル一覧・リアクションを行う。
+  Use when: Discordでメッセージ送信、チャンネル一覧、サーバー内検索、リアクション、スレッド確認が必要なとき。
 tags: [communication, discord, external]
 ---
 

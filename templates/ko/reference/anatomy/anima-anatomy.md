@@ -296,6 +296,7 @@ TaskExec이 완료한 태스크의 결과 요약을 저장하는 디렉토리입
 
 모든 행동의 시계열 기록(`{date}.jsonl`)입니다. 메시지 송수신, 도구 사용, Heartbeat, 오류 등을 자동 기록합니다.
 Priming이 최근 활동을 시스템 프롬프트에 주입하는 소스로 사용합니다.
+명시적으로 검색하려면 `search_memory(query="...", scope="activity_log")`를 사용합니다 (`scope="all"`에도 activity_log BM25가 RRF로 포함됨).
 
 ### transcripts/ — 대화 기록
 

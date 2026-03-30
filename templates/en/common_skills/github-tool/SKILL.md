@@ -1,8 +1,8 @@
 ---
 name: github-tool
 description: >-
-  GitHub integration tool. List/create issues and PRs. gh CLI wrapper.
-  "github" "issue" "PR" "pull request" "repository"
+  GitHub integration tool for listing and creating issues and PRs via the gh CLI wrapper.
+  Use when: creating or listing issues or pull requests, or checking repository work on GitHub.
 tags: [development, github, external]
 ---
 

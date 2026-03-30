@@ -484,6 +484,34 @@ def step_common_skills_resync(data_dir: Path, dry_run: bool, verbose: bool) -> S
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
+def step_skill_description_use_when_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Resync common_skills/ to migrate descriptions to Use-when pattern."""
+    details: list[str] = []
+    try:
+        from core.paths import TEMPLATES_DIR, _get_locale
+
+        locale = _get_locale()
+        for loc in (locale, "en", "ja"):
+            candidate = TEMPLATES_DIR / loc / "common_skills"
+            if candidate.exists():
+                src = candidate
+                break
+        else:
+            return StepResult(changed=0, skipped=1, details=["No common_skills template found"])
+        dst = data_dir / "common_skills"
+        count = _count_copytree_files(src, dst)
+        if dry_run:
+            details.append(f"Would copy {count} file(s) to common_skills/ (Use-when migration)")
+            return StepResult(changed=count, skipped=0, details=details)
+        dst.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        details.append(f"Copied {count} file(s) to common_skills/ (Use-when migration)")
+        return StepResult(changed=count, skipped=0, details=details)
+    except Exception as exc:
+        logger.exception("step_skill_description_use_when_resync failed")
+        return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
 def step_reference_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Overwrite reference/ from templates."""
     details: list[str] = []
@@ -826,6 +854,107 @@ def step_cross_anima_write_guidance(data_dir: Path, dry_run: bool, verbose: bool
     return StepResult(changed=total, skipped=0, details=details)
 
 
+# Pre-rename paths under common_knowledge/operations/ (en/ja templates moved
+# these files into operations/machine/ in 2026-03).
+_STALE_MACHINE_DOC_PATHS: tuple[str, ...] = (
+    "operations/machine-tool-usage.md",
+    "operations/machine-workflow-engineer.md",
+    "operations/machine-workflow-pdm.md",
+    "operations/machine-workflow-reviewer.md",
+    "operations/machine-workflow-tester.md",
+)
+
+
+def step_common_knowledge_team_design_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Deploy team-design templates, machine/ layout, and updated 00_index.
+
+    Re-runs common_knowledge template sync so new paths (team-design/, etc.)
+    appear in ~/.animaworks/common_knowledge/. Removes obsolete flat
+    machine-*.md files under operations/ left from older template layouts.
+    """
+    details: list[str] = []
+    total = 0
+
+    r_ck = step_common_knowledge_resync(data_dir, dry_run, verbose)
+    total += r_ck.changed
+    details.extend(r_ck.details)
+
+    ck_root = data_dir / "common_knowledge"
+    removed = 0
+    for rel in _STALE_MACHINE_DOC_PATHS:
+        path = ck_root / rel
+        if not path.is_file():
+            continue
+        if dry_run:
+            details.append(f"Would remove stale {rel}")
+        else:
+            path.unlink()
+            details.append(f"Removed stale {rel}")
+        removed += 1
+    total += removed
+
+    return StepResult(changed=total, skipped=0, details=details)
+
+
+def step_v062_skill_removal_and_activity_log(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """v0.6.2: Resync templates + DB for skill tool removal, activity_log scope, completion_gate.
+
+    Covers:
+    - common_knowledge/ resync (Channel D removal, skill→read_memory_file, activity_log scope)
+    - prompts/ resync (2-phase consolidation, episode_extraction.md, memory_guide)
+    - reference/ resync (Channel D removal, priming-channels)
+    - DB system_sections resync from prompts/
+    - DB tool_descriptions/guides resync (search_memory update, skill removal, completion_gate)
+    - DB stale 'skill' tool description cleanup
+    """
+    details: list[str] = []
+    total = 0
+
+    for resync_fn in (
+        step_common_knowledge_resync,
+        step_common_skills_resync,
+        step_prompt_resync,
+        step_reference_resync,
+        step_system_sections_resync,
+        step_tool_descriptions_resync,
+    ):
+        r = resync_fn(data_dir, dry_run, verbose)
+        total += r.changed
+        details.extend(r.details)
+
+    # Remove stale 'skill' tool description from DB
+    try:
+        from core.tooling.prompt_db import ToolPromptStore
+
+        tool_db_path = data_dir / "tool_prompts.sqlite3"
+        if tool_db_path.exists():
+            stale_tool_names = ["skill"]
+            if dry_run:
+                details.append(f"Would remove stale tool descriptions: {stale_tool_names}")
+                total += 1
+            else:
+                store = ToolPromptStore(tool_db_path)
+                conn = store._connect()
+                removed = 0
+                try:
+                    for name in stale_tool_names:
+                        cur = conn.execute(
+                            "DELETE FROM tool_descriptions WHERE name = ?",
+                            (name,),
+                        )
+                        removed += cur.rowcount
+                    conn.commit()
+                finally:
+                    conn.close()
+                if removed:
+                    details.append(f"Removed {removed} stale tool description(s): {stale_tool_names}")
+                    total += removed
+    except Exception as exc:
+        logger.warning("v062: stale skill description cleanup failed: %s", exc)
+
+    return StepResult(changed=total, skipped=0, details=details)
+
+
 # ── Category 5: Version tracking ────────────────────────────────
 
 
@@ -906,6 +1035,24 @@ def register_all_steps(runner: Any) -> None:
             "Deploy cross-Anima write boundary guidance to prompts + common_knowledge",
             "template_sync",
             step_cross_anima_write_guidance,
+        ),
+        MigrationStep(
+            "common_knowledge_team_design_resync",
+            "Resync common_knowledge (team-design + operations/machine layout)",
+            "template_sync",
+            step_common_knowledge_team_design_resync,
+        ),
+        MigrationStep(
+            "skill_description_use_when_resync",
+            "Resync common_skills/ with Use-when descriptions",
+            "template_sync",
+            step_skill_description_use_when_resync,
+        ),
+        MigrationStep(
+            "v062_skill_removal_and_activity_log",
+            "v0.6.2: Skill tool removal + activity_log scope + completion_gate",
+            "template_sync",
+            step_v062_skill_removal_and_activity_log,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

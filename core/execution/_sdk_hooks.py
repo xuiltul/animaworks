@@ -8,8 +8,8 @@ from __future__ import annotations
 # See LICENSE for the full license text.
 
 
-"""Mode S PreToolUse / PreCompact hook factories, subordinate path management,
-and task-to-pending interception.
+"""Mode S PreToolUse / PreCompact / Stop hook factories, subordinate path
+management, and task-to-pending interception.
 
 Depends on ``_sdk_security``, ``_sdk_stream``, and ``_sdk_session`` within
 this package.  ``claude_agent_sdk.types`` is imported at function scope
@@ -859,6 +859,57 @@ def _build_post_tool_hook(anima_dir: Path) -> Callable:
         return {"async_": True}
 
     return _post_tool_hook
+
+
+# ── Stop hook: completion gate (Mode S) ────────────────────────
+
+from core.execution._completion_gate import (
+    cleanup_gate_marker as _cleanup_gate_marker,
+)
+from core.execution._completion_gate import (
+    completion_gate_applies_to_trigger as _completion_gate_applies_to_trigger,
+)
+
+
+def _build_stop_hook(
+    anima_dir: Path,
+    *,
+    session_stats: dict[str, Any] | None = None,
+) -> Callable:
+    """Build a Stop hook that injects the pre-completion checklist directly.
+
+    On the first stop attempt for a gated trigger (chat, task, cron), the hook
+    returns ``decision="block"`` with the checklist as ``reason``.  The SDK
+    injects the reason into the model's context and forces it to continue.
+    On the second attempt (``stop_hook_active=True``), the hook allows the stop.
+
+    No ``completion_gate`` tool call is required — the hook itself is the gate.
+    """
+    from claude_agent_sdk.types import HookContext, SyncHookJSONOutput
+
+    async def _stop_hook(
+        input_data: dict[str, Any],
+        tool_use_id: str | None,
+        context: HookContext,
+    ) -> SyncHookJSONOutput | dict[str, Any]:
+        stop_hook_active = bool(input_data.get("stop_hook_active", False))
+        if stop_hook_active:
+            _cleanup_gate_marker(anima_dir)
+            return {}
+
+        trigger = (session_stats or {}).get("trigger")
+
+        if not _completion_gate_applies_to_trigger(trigger):
+            return {}
+
+        from core.i18n import t
+
+        return SyncHookJSONOutput(
+            decision="block",
+            reason=t("completion_gate.checklist"),
+        )
+
+    return _stop_hook
 
 
 async def _update_knowledge_frontmatter(path: Path) -> None:

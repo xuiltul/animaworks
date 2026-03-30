@@ -1,8 +1,8 @@
 ---
 name: transcribe-tool
 description: >-
-  音声文字起こしツール。Whisperモデルで音声ファイルをテキストに変換。LLM後処理オプション付き。
-  「文字起こし」「transcribe」「音声認識」「Whisper」「STT」
+  音声文字起こしツール。Whisperで音声ファイルをテキスト化し、必要に応じLLM後処理する。
+  Use when: 会議録音の転写、ポッドキャストの書き起こし、音声ファイルからテキスト抽出が必要なとき。
 tags: [audio, transcription, whisper, external]
 ---
 

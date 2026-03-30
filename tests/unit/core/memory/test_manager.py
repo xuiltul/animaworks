@@ -115,17 +115,18 @@ class TestCurrentStateMigration:
         assert (anima_dir / "state" / "current_state.md").exists()
         assert "working" in mm.read_current_state()
 
-    def test_uses_current_state_when_both_exist(self, anima_dir, data_dir, caplog):
-        """When both exist → current_state.md is used (warning logged)."""
+    def test_removes_old_file_when_both_exist(self, anima_dir, data_dir):
+        """When both exist → current_task.md is auto-deleted, current_state.md is used."""
         (anima_dir / "state").mkdir(parents=True, exist_ok=True)
-        (anima_dir / "state" / "current_task.md").write_text("status: old", encoding="utf-8")
+        old_path = anima_dir / "state" / "current_task.md"
+        old_path.write_text("status: old", encoding="utf-8")
         (anima_dir / "state" / "current_state.md").write_text("status: new\ntask: preferred", encoding="utf-8")
 
         mm = MemoryManager(anima_dir)
 
+        assert not old_path.exists(), "stale current_task.md should have been deleted"
         assert "new" in mm.read_current_state()
         assert "preferred" in mm.read_current_state()
-        assert "Both current_task.md and current_state.md" in caplog.text
 
     def test_returns_idle_when_neither_exists(self, anima_dir, data_dir):
         """When neither exists → read_current_state() returns 'status: idle'."""

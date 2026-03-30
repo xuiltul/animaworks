@@ -25,6 +25,16 @@ from tests.helpers.mocks import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _bypass_completion_gate():
+    """Disable completion_gate enforcement so tests don't need extra mock responses."""
+    with patch(
+        "core.execution.litellm_loop.completion_gate_applies_to_trigger",
+        return_value=False,
+    ):
+        yield
+
+
 # ── litellm sys.modules mock ─────────────────────────────────
 
 

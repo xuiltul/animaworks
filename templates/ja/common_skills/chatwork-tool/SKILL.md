@@ -1,8 +1,8 @@
 ---
 name: chatwork-tool
 description: >-
-  Chatwork連携ツール。メッセージ送信・受信・検索・未返信確認・ルーム一覧取得を行う。
-  「チャットワーク」「Chatwork」「CW」「未返信」「ルーム」「メンション」
+  Chatwork連携ツール。メッセージ送受信・検索・未返信確認・ルーム一覧を行う。
+  Use when: Chatworkでメッセージ送信、ルーム一覧取得、未返信確認、チャット検索、メンション対応が必要なとき。
 tags: [communication, chatwork, external]
 ---
 

@@ -1,8 +1,8 @@
 ---
 name: aws-collector-tool
 description: >-
-  AWS 인프라 모니터링 도구. ECS 상태 확인, CloudWatch 에러 로그 취득, 메트릭스 취득.
-  "AWS" "ECS" "CloudWatch" "인프라" "메트릭스" "로그"
+  AWS 인프라 정보 수집 도구. ECS 상태·CloudWatch 로그·메트릭스를 가져온다.
+  Use when: ECS 상태 확인, CloudWatch 오류 로그 조사, 메트릭스 조회, AWS 리소스 모니터링이 필요할 때.
 tags: [infrastructure, aws, monitoring, external]
 ---
 

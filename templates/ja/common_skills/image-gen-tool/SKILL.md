@@ -1,9 +1,8 @@
 ---
 name: image-gen-tool
 description: >-
-  画像・3Dモデル生成ツール。キャラクター立ち絵・バストアップ・ちびキャラ・3Dモデル生成。
-  NovelAI/Flux/Meshy対応。
-  「画像生成」「立ち絵」「バストアップ」「ちびキャラ」「3Dモデル」「アバター」
+  画像・3Dモデル生成ツール。NovelAI・Flux・Meshyで立ち絵・バストアップ・ちび・3Dモデルを生成する。
+  Use when: イラスト生成、キャラクター画像作成、3Dモデル・Meshy出力、画像パイプライン実行が必要なとき。
 tags: [image, 3d, generation, external]
 ---
 

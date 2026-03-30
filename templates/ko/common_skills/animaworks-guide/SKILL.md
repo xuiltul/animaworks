@@ -1,18 +1,8 @@
 ---
 name: animaworks-guide
 description: >-
-  animaworks 커맨드 및 CLI 완전 레퍼런스.
-  서버 조작(start/stop/restart/status/reset), 채팅 및 메시징(chat/send/board),
-  Anima 관리(list/info/create/enable/disable/delete/restart/set-model/set-role/reload/audit),
-  모델 정보(models list/info/show), heartbeat/cron, 로그/비용,
-  태스크 관리(task add/update/list), 설정 관리(config get/set/list),
-  RAG 인덱스 관리(index), 에셋 조작(optimize-assets/remake-assets),
-  animaworks-tool 외부 도구 실행,
-  백그라운드 태스크 확인(check_background_task/list_background_tasks).
-  "커맨드", "사용법", "CLI", "animaworks", "시작", "중지", "재시작", "전송",
-  "Anima 생성", "역할 변경", "모델 변경", "상태 확인",
-  "모델 목록", "모델 정보", "로그", "비용", "태스크", "설정",
-  "백그라운드 태스크", "태스크 상태"
+  animaworks CLI 완전 레퍼런스. 서버·Anima·모델·태스크·설정·RAG·에셋·외부 도구 호출 구문을 정리한다.
+  Use when: 서브커맨드 확인, 서버 시작·중지, Anima 생성·모델 변경·태스크·로그·설정·인덱스 조작이 필요할 때.
 ---
 
 # AnimaWorks CLI 완전 레퍼런스

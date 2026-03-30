@@ -301,6 +301,41 @@ class TestMigrationSteps:
         result = step_task_delegation_to_common_knowledge(data_dir, dry_run=False, verbose=True)
         assert result.changed >= 0
 
+    def test_step_common_knowledge_team_design_removes_stale_machine_docs(self, data_dir: Path) -> None:
+        from core.migrations.registry import StepResult
+        from core.migrations.steps import step_common_knowledge_team_design_resync
+
+        ops = data_dir / "common_knowledge" / "operations"
+        ops.mkdir(parents=True)
+        stale = ops / "machine-tool-usage.md"
+        stale.write_text("legacy", encoding="utf-8")
+
+        with patch(
+            "core.migrations.steps.step_common_knowledge_resync",
+            return_value=StepResult(changed=0, skipped=0, details=[]),
+        ):
+            result = step_common_knowledge_team_design_resync(data_dir, dry_run=False, verbose=True)
+        assert not stale.exists()
+        assert result.changed >= 1
+        assert any("Removed stale" in d for d in result.details)
+
+    def test_step_common_knowledge_team_design_dry_run_keeps_stale(self, data_dir: Path) -> None:
+        from core.migrations.registry import StepResult
+        from core.migrations.steps import step_common_knowledge_team_design_resync
+
+        ops = data_dir / "common_knowledge" / "operations"
+        ops.mkdir(parents=True)
+        stale = ops / "machine-workflow-tester.md"
+        stale.write_text("legacy", encoding="utf-8")
+
+        with patch(
+            "core.migrations.steps.step_common_knowledge_resync",
+            return_value=StepResult(changed=0, skipped=0, details=[]),
+        ):
+            result = step_common_knowledge_team_design_resync(data_dir, dry_run=True, verbose=True)
+        assert stale.exists()
+        assert any("Would remove stale" in d for d in result.details)
+
 
 # ── CLI tests ───────────────────────────────────────────────
 

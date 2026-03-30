@@ -13,7 +13,6 @@ PrimingEngine이 실행하는 전체 채널의 상세 사양입니다.
 | B: recent_activity | 1300 | `activity_log/` + shared channels | trusted |
 | C: related_knowledge | 1200 | RAG 벡터 검색 (knowledge + common_knowledge) | medium / untrusted |
 | C0: important_knowledge | 300 | `[IMPORTANT]` 태그가 지정된 청크 | medium |
-| D: skill_match | 200 | 3단계 매칭 (keyword → vocab → vector) | trusted |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
 | F: episodes | 500 | RAG 벡터 검색 (episodes/) | medium |
 
@@ -23,6 +22,8 @@ PrimingEngine이 실행하는 전체 채널의 상세 사양입니다.
 |------|------|------|-------|
 | Recent outbound | 제한 없음 (최대 3건) | activity_log (최근 2시간, `channel_post` / `message_sent`) | trusted |
 | Pending human notifications | 500 | `human_notify` 이벤트 (최근 24시간) | trusted |
+
+스킬·절차 본문은 Priming으로 주입되지 않습니다. 시스템 프롬프트의 스킬 카탈로그에 표시된 경로(예: `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`, `procedures/baz.md`)를 `read_memory_file`로 읽습니다.
 
 ---
 
@@ -42,6 +43,7 @@ PrimingEngine이 실행하는 전체 채널의 상세 사양입니다.
 
 - **소스**: `activity_log/{date}.jsonl` + 공유 채널의 최신 게시물
 - **버짓**: 1300 토큰
+- **Priming vs 명시 검색**: Channel B는 자동 주입이며 예산(1300 토큰)으로 요약된 타임라인만 제공합니다. 활동 로그 전체에서 키워드로 찾고 싶을 때는 `search_memory(query="...", scope="activity_log")`를 사용하세요 (`scope="all"`은 벡터+RAG와 activity_log BM25를 RRF로 통합).
 
 ### 트리거별 필터링
 
@@ -80,17 +82,6 @@ RAG 벡터 검색으로 관련 지식을 주입합니다.
 - **대상**: `knowledge/` 내 `[IMPORTANT]` 태그가 지정된 청크
 - **주입 형식**: 요약 포인터만 (전문 아님). 상세는 `read_memory_file`로 조회
 - **용도**: 중요한 비즈니스 규칙과 판단 기준의 확실한 회상
-
----
-
-## Channel D: skill_match
-
-메시지와 관련된 스킬 이름을 주입합니다.
-
-- **버짓**: 200 토큰
-- **매칭**: 3단계 (keyword → vocab → vector)
-- **반환**: 스킬 이름만 (최대 5건). 전문은 `skill` 도구로 조회 (단계적 공개)
-- **대상**: 개인 `skills/` + `common_skills/`
 
 ---
 

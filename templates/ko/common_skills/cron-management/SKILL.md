@@ -1,10 +1,8 @@
 ---
 name: cron-management
 description: >-
-  cron.md를 올바른 형식으로 읽고 쓰기 위한 스킬.
-  Cron 태스크의 추가, 변경, 삭제 시 반드시 이 스킬의 절차를 따르세요.
-  "cron 설정", "cron 태스크", "스케줄 설정", "정기 태스크", "cron.md",
-  "cron 추가", "cron 업데이트", "cron 삭제", "정기 실행", "예약 작업"
+  cron.md를 올바른 형식으로 읽고 쓰는 스킬. 정기 태스크 추가·수정·삭제 절차를 제공한다.
+  Use when: cron.md 편집, cron 식 추가, LLM·커맨드형 작업 추가·삭제, 정기 작업 점검이 필요할 때.
 ---
 
 ## cron.md 구조

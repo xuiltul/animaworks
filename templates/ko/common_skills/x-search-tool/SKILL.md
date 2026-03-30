@@ -1,8 +1,8 @@
 ---
 name: x-search-tool
 description: >-
-  X (Twitter) 검색 도구. 키워드 검색 및 사용자 트윗 조회.
-  "X" "Twitter" "트윗" "포스트" "SNS 검색"
+  X(Twitter) 검색 도구. 키워드 검색과 지정 계정 트윗 조회를 수행한다.
+  Use when: X에서 주제 검색, 특정 계정 타임라인, 트렌드·게시물 파악이 필요할 때.
 tags: [search, x, twitter, external]
 ---
 

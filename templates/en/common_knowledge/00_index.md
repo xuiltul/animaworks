@@ -36,6 +36,7 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | Problem | Reference |
 |---------|-----------|
 | Don't know how to manage tasks | `operations/task-management.md` |
+| Want to know how completion_gate verification works | `operations/completion-gate-guide.md` |
 | Want to use the task board (human-facing dashboard) | `operations/task-board-guide.md` |
 | Don't know how to configure Heartbeat or cron | `operations/heartbeat-cron-guide.md` |
 | Don't know how to run long-running tools | `operations/background-tasks.md` |
@@ -47,6 +48,9 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | Problem | Reference |
 |---------|-----------|
 | Don't know how to use or call tools | `operations/tool-usage-overview.md` |
+| Don't know how to use the machine tool | `operations/machine/tool-usage.md` |
+| Want to know the machine workflow for my role | `operations/machine/workflow-{pdm,engineer,reviewer,tester}.md` |
+| Want to design a team by purpose (roles, handoffs) | `team-design/guide.md` |
 | Don't know how to choose or change models | `reference/operations/model-guide.md` (→ reference) |
 | Want to change Mode S authentication method | `reference/operations/mode-s-auth-guide.md` (→ reference) |
 | Don't know how to set up or use voice chat | `reference/operations/voice-chat-guide.md` (→ reference) |
@@ -123,11 +127,31 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | `task-board-guide.md` | Task board (human-facing dashboard) — structure and operational guidelines |
 | `heartbeat-cron-guide.md` | Scheduling and running Heartbeat and cron (how Heartbeat works, cron definitions, self-updates) |
 | `tool-usage-overview.md` | Tool usage overview (S/C/D/G/A/B mode tool sets, internal/external tools, how to call them) |
+| `completion-gate-guide.md` | Pre-completion verification guide (completion_gate concepts, per-mode behavior, trigger rules) |
 | `background-tasks.md` | Background task guide (using submit, when to use it, how to get results) |
 | `workspace-guide.md` | Workspace guide (concept, registration, tool usage, troubleshooting) |
 | `model-guide.md` | → Moved to `reference/operations/model-guide.md`. Model selection and configuration |
 | `mode-s-auth-guide.md` | → Moved to `reference/operations/mode-s-auth-guide.md`. Mode S authentication guide |
 | `voice-chat-guide.md` | → Moved to `reference/operations/voice-chat-guide.md`. Voice chat guide |
+
+### operations/machine/ — Machine Tool Workflows
+
+| File | Description |
+|------|-------------|
+| `tool-usage.md` | Machine tool usage guide (common principles, meta-pattern, status management, rate limits) |
+| `workflow-pdm.md` | Machine workflow — PdM (investigation -> plan creation) |
+| `workflow-engineer.md` | Machine workflow — Engineer (concretization -> implementation -> verification) |
+| `workflow-reviewer.md` | Machine workflow — Reviewer (review -> meta-review) |
+| `workflow-tester.md` | Machine workflow — Tester (test design -> execution -> result verification) |
+
+### team-design/ — Team design (by purpose)
+
+| File | Description |
+|------|-------------|
+| `guide.md` | Core principles for designing Anima teams (role separation, handoffs, scaling, combining roles) |
+| `development/team.md` | Development full team — four roles (PdM, Engineer, Reviewer, Tester), handoff chain, scaling |
+
+Per-role templates under `team-design/development/{pdm,engineer,reviewer,tester}/`: `injection.template.md`, `machine.md`, `checklist.md`.
 
 ### security/ — Security
 
@@ -175,9 +199,11 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | role, responsibility, speciality, specialty | `organization/roles.md` |
 | hierarchy, communication path, org_dashboard, ping_subordinate | `organization/hierarchy-rules.md` |
 | delegate_task, task delegation, task_tracker | `organization/hierarchy-rules.md`, `operations/task-management.md` |
+| sync_delegated, delegation sync, auto-sync | `operations/task-management.md`, `operations/task-delegation-guide.md` |
 | task, current_state, pending, progress, priority | `operations/task-management.md` |
 | task queue, submit_tasks, update_task, TaskExec, animaworks-tool task list | `operations/task-management.md` |
 | task board, dashboard, human-facing | `operations/task-board-guide.md` |
+| completion_gate, pre-completion verification, Stop hook | `operations/completion-gate-guide.md` |
 | config, status.json, SSoT, reload, settings | `reference/operations/project-setup.md` |
 | Heartbeat, heartbeat, periodic check | `operations/heartbeat-cron-guide.md` |
 | cron, schedule, scheduled task | `operations/heartbeat-cron-guide.md` |
@@ -185,6 +211,12 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | execution mode, S-mode, C-mode, D-mode, G-mode, A-mode, B-mode | `operations/tool-usage-overview.md` |
 | background, submit, long-running tool | `operations/background-tasks.md` |
 | workspace, working_directory, project directory | `operations/workspace-guide.md` |
+| machine, machine run, external agent, plan document | `operations/machine/tool-usage.md` |
+| investigation, PdM, plan.md | `operations/machine/workflow-pdm.md` |
+| impl-plan, concretization, implementation plan | `operations/machine/workflow-engineer.md` |
+| review, meta-review, code review | `operations/machine/workflow-reviewer.md` |
+| test, E2E, tester, test cases | `operations/machine/workflow-tester.md` |
+| team design, role separation, development team, PdM, handoff | `team-design/guide.md`, `team-design/development/team.md` |
 | model, models.json, credential, set-model, context window | `reference/operations/model-guide.md` |
 | background_model, background model, cost optimization | `reference/operations/model-guide.md` |
 | Mode S, authentication, API direct, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |
@@ -195,7 +227,10 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | permissions.json, bootstrap, heartbeat.md, cron.md | `reference/anatomy/anima-anatomy.md` |
 | memory, episodes, knowledge, procedures, skills | `anatomy/memory-system.md` |
 | Priming, RAG, Consolidation, Forgetting | `anatomy/memory-system.md` |
+| consolidation, 2-phase, multipass, error trace | `anatomy/memory-system.md` |
 | search_memory, write_memory_file, memory search | `anatomy/memory-system.md` |
+| skills, skill search, common_skills, search_memory scope="skills" | `anatomy/memory-system.md`, `operations/tool-usage-overview.md` |
+| activity_log, BM25, RRF, recent log search | `anatomy/memory-system.md`, `troubleshooting/common-issues.md` |
 | prompt injection, trust, untrusted, boundary tag | `security/prompt-injection-awareness.md` |
 | error, problem, not working, permission, blocked command | `troubleshooting/common-issues.md` |
 | flowchart, decision, unsure, urgent, security | `troubleshooting/escalation-flowchart.md` |

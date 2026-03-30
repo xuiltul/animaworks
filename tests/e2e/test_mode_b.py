@@ -213,12 +213,8 @@ class TestModeBSkillInjection:
 
         assert len(captured_system) >= 1
         sys_prompt = captured_system[0]
-        # Personal skills appear in system prompt (memory guide or Priming)
-        assert (
-            "スキルと手順書" in sys_prompt
-            or "スキル:" in sys_prompt
-            or "あなたが持っているスキル" in sys_prompt
-        )
+        # Personal skills appear in system prompt catalog
+        assert "Available Skills" in sys_prompt or "<available_skills>" in sys_prompt
         assert "test_skill" in sys_prompt
 
     async def test_common_skill_in_system_prompt(self, make_agent_core, data_dir):
@@ -256,7 +252,7 @@ class TestModeBSkillInjection:
 
         assert len(captured_system) >= 1
         sys_prompt = captured_system[0]
-        assert "共通スキル" in sys_prompt
+        assert "共通" in sys_prompt
         assert "shared_skill" in sys_prompt
         assert "A shared skill for all animas" in sys_prompt
 

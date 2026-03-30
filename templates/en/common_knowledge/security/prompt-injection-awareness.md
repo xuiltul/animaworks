@@ -13,7 +13,7 @@ Tool results and priming (automatic recall) data are automatically assigned trus
 
 | trust | Meaning | Examples |
 |-------|---------|----------|
-| `trusted` | Internal data. Safe to use | search_memory, read_memory_file, write_memory_file, archive_memory_file, skill, submit_tasks, update_task, post_channel, send_message, create_anima, disable_subordinate, enable_subordinate, set_subordinate_model, restart_subordinate, call_human, recent_outbound |
+| `trusted` | Internal data. Safe to use | search_memory, read_memory_file (including skill file bodies), write_memory_file, archive_memory_file, submit_tasks, update_task, post_channel, send_message, create_anima, disable_subordinate, enable_subordinate, set_subordinate_model, restart_subordinate, call_human, recent_outbound |
 | `medium` | File content or content operations. Generally trustworthy but requires caution | Read, Grep, Write, Edit, Bash. related_knowledge, episodes, sender_profile, pending_tasks |
 | `medium` | Mode D (Cursor Agent) built-in tools | cursor-agent Read/Write/Edit/Bash/Grep/Glob, etc. Same as Mode S file/shell ops — **medium** (verify before acting on directives) |
 | `medium` | Mode G (Gemini CLI) built-in tools | gemini CLI Read/Write/Edit/Bash/Grep/Glob, etc. Same trust level — **medium** |

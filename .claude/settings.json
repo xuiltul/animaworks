@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "CronCreate",
+      "CronDelete",
+      "CronList"
+    ]
+  }
+}

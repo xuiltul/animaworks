@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "animaworks"
-version = "0.6.1"
+version = "0.6.2"
 description = "AnimaWorks - Digital Anima Framework with library-type memory"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -34,6 +34,7 @@ dependencies = [
     "PyNaCl>=1.5.0",
     "tzlocal>=5.0",
     "psutil>=5.9.0",
+    "rank-bm25>=0.2",
 ]
 
 [project.optional-dependencies]
