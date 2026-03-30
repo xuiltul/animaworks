@@ -130,6 +130,21 @@ def register_anima_in_config(
             supervisor,
         )
 
+    # Ensure .env has Slack token slots for this Anima
+    try:
+        from core.config.env_slots import ensure_slack_env_slots
+
+        if ensure_slack_env_slots(anima_name):
+            logger.warning(
+                "[%s] Slack tokens not configured — edit .env to add "
+                "SLACK_BOT_TOKEN__%s and SLACK_APP_TOKEN__%s",
+                anima_name,
+                anima_name,
+                anima_name,
+            )
+    except Exception:
+        logger.debug("Failed to ensure Slack env slots for '%s'", anima_name, exc_info=True)
+
 
 def unregister_anima_from_config(
     data_dir: Path,

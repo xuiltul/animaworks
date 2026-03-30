@@ -219,16 +219,51 @@ async def _startup_animas_background(app: FastAPI) -> None:
         # Reconcile missing anima assets (fallback for failed bootstrap)
         asyncio.create_task(_reconcile_assets_at_startup(app.state.animas_dir))
 
+        # ── Slack: ensure .env slots + warn about missing tokens ──
+        try:
+            from core.config.env_slots import check_missing_slack_tokens, ensure_all_anima_slots
+
+            ensure_all_anima_slots()
+            missing = check_missing_slack_tokens()
+            if missing:
+                logger.warning(
+                    "Slack tokens missing for: %s — edit .env and restart",
+                    ", ".join(missing),
+                )
+        except Exception:
+            logger.debug("Slack env slot check failed", exc_info=True)
+
         # ── Slack Socket Mode ─────────────────────────────────
         try:
             from server.slack_socket import SlackSocketModeManager
 
             socket_manager = SlackSocketModeManager()
-            await socket_manager.start()
+            await asyncio.wait_for(socket_manager.start(), timeout=30)
             app.state.slack_socket_manager = socket_manager
-        except Exception:
-            logger.exception("Slack Socket Mode startup failed")
+        except asyncio.TimeoutError:
+            logger.error("Slack Socket Mode startup timed out (30s)")
             app.state.slack_socket_manager = None
+        except Exception as exc:
+            logger.error(
+                "Slack Socket Mode startup failed: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+            app.state.slack_socket_manager = None
+
+        # ── Slack channel → board sync (initial) ──────────────
+        if app.state.slack_socket_manager is not None:
+            try:
+                from server.slack_channel_sync import SlackChannelSync
+
+                channel_sync = SlackChannelSync()
+                await channel_sync.sync(app.state.slack_socket_manager)
+                app.state.slack_channel_sync = channel_sync
+            except Exception:
+                logger.debug("Initial Slack channel sync failed", exc_info=True)
+                app.state.slack_channel_sync = None
+        else:
+            app.state.slack_channel_sync = None
 
         # ── ConfigReloadManager ───────────────────────────────
         from server.reload_manager import ConfigReloadManager
@@ -365,6 +400,26 @@ async def lifespan(app: FastAPI):
             IntervalTrigger(minutes=5),
             id="global_permissions_integrity",
             name="System: Global Permissions Integrity Check",
+            replace_existing=True,
+        )
+
+        # ── Slack channel → board periodic resync ─────────
+        async def _slack_channel_resync() -> None:
+            try:
+                sync = getattr(app.state, "slack_channel_sync", None)
+                mgr = getattr(app.state, "slack_socket_manager", None)
+                if sync is not None and mgr is not None:
+                    await sync.sync(mgr)
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.debug("Periodic Slack channel sync failed", exc_info=True)
+
+        msg_log_scheduler.add_job(
+            _slack_channel_resync,
+            IntervalTrigger(minutes=5),
+            id="slack_channel_sync",
+            name="System: Slack Channel → Board Sync",
             replace_existing=True,
         )
 

@@ -72,13 +72,31 @@ def _truncate_with_thread_ctx(
     return ctx_part + body_part[:body_budget]
 
 
+def _is_auto_response_enabled(source: str) -> bool:
+    """Check if auto_response is enabled for the given external platform."""
+    try:
+        from core.config.models import load_config
+
+        cfg = load_config()
+        channel_cfg = getattr(cfg.external_messaging, source, None)
+        if channel_cfg is not None:
+            return getattr(channel_cfg, "auto_response", False)
+    except Exception:
+        pass
+    return False
+
+
 def _build_reply_instruction(m: Any) -> str:
     """Build platform-specific reply instruction metadata for external messages.
 
-    Returns a formatted ``[reply_instruction: ...]`` line that the LLM can
-    copy-paste to reply via the correct platform, channel, and thread.
+    When ``auto_response`` is enabled for the platform, returns an
+    ``[auto_reply: ...]`` notice so the LLM knows it does NOT need to
+    call tool functions to reply.  Otherwise returns a ``[reply_instruction: ...]``
+    line with the manual tool command.
     """
     if m.source == "slack":
+        if _is_auto_response_enabled("slack"):
+            return "  [auto_reply: Slack返信は自動送信されます。slack_channel_postを呼ぶ必要はありません]"
         mention = f"<@{m.external_user_id}> " if m.external_user_id else ""
         cmd = f"animaworks-tool slack send '{m.external_channel_id}' '{mention}{{返信内容}}'"
         thread_id = m.external_thread_ts or m.source_message_id
@@ -432,6 +450,24 @@ class InboxMixin:
                             summary=accumulated_text[:200] if accumulated_text else "",
                             meta={"trigger": "inbox"},
                         )
+
+                    # ── Auto-response: post LLM response back to Slack ──
+                    if accumulated_text.strip() and _is_auto_response_enabled("slack"):
+                        try:
+                            from core.outbound_auto import SlackAutoResponder
+
+                            auto_responder = SlackAutoResponder()
+                            await auto_responder.on_inbox_response(
+                                anima_name=self.name,
+                                response_text=accumulated_text,
+                                inbox_items=inbox_result.inbox_items,
+                            )
+                        except Exception:
+                            logger.debug(
+                                "[%s] SlackAutoResponder failed",
+                                self.name,
+                                exc_info=True,
+                            )
 
                     # Archive processed messages — but NOT when the LLM
                     # returned nothing (e.g. SDK empty response due to API

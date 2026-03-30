@@ -302,6 +302,8 @@ class ExternalMessagingChannelConfig(BaseModel):
     anima_mapping: dict[str, str] = {}  # channel_id → anima_name
     default_anima: str = ""  # fallback anima for unmapped channels
     app_id_mapping: dict[str, str] = {}  # api_app_id → anima_name (per-Anima webhook routing)
+    auto_response: bool = True  # auto-post LLM responses back to originating platform
+    board_mapping: dict[str, str] = {}  # channel_id → animaworks_board_name (auto-populated)
 
 
 class ExternalMessagingConfig(BaseModel):
