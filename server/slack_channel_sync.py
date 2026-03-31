@@ -86,7 +86,7 @@ async def _list_public_channels(token: str) -> list[dict[str, Any]]:
 
 
 async def _join_channel_if_needed(
-    token: str, channel_id: str, channel_name: str
+    token: str, channel_id: str, channel_name: str, *, bot_label: str = "",
 ) -> bool:
     """Join a Slack channel if the bot is not already a member.
 
@@ -101,14 +101,18 @@ async def _join_channel_if_needed(
         data = resp.json()
         if data.get("ok"):
             logger.info(
-                "Bot joined Slack channel #%s (%s)", channel_name, channel_id
+                "Bot %s joined Slack channel #%s (%s)",
+                bot_label, channel_name, channel_id,
             )
             return True
         error = data.get("error", "unknown")
         if error == "already_in_channel":
             return False
-        logger.warning("Failed to join #%s: %s", channel_name, error)
+        logger.warning(
+            "Bot %s failed to join #%s: %s", bot_label, channel_name, error,
+        )
         return False
+
 
 
 async def _create_channel(token: str, name: str) -> dict[str, Any] | None:
@@ -281,6 +285,7 @@ class SlackChannelSync:
         )
 
         channel_ids_to_join: list[tuple[str, str]] = []  # (ch_id, ch_name) — public only
+        private_channel_names: list[str] = []  # for logging only
         slack_channel_names: set[str] = set()
 
         for ch in channels:
@@ -299,8 +304,9 @@ class SlackChannelSync:
                 new_boards += 1
 
             self.board_mapping[ch_id] = board_name
-            # Only auto-join public channels; private channels require manual invite
-            if not is_private:
+            if is_private:
+                private_channel_names.append(ch_name)
+            else:
                 channel_ids_to_join.append((ch_id, ch_name))
 
         # ── Phase 2: Reverse sync (AnimaWorks boards -> Slack channels) ──
@@ -334,7 +340,9 @@ class SlackChannelSync:
                     exc_info=True,
                 )
 
-        # ── Phase 3: Auto-join ALL per-Anima bots to all channels ──
+        # ── Phase 3: Auto-join per-Anima bots to public channels ──
+        # Private channels are intentionally skipped — membership is
+        # managed manually via Slack ``/invite`` to respect access control.
         total_joins = 0
         for anima_name, app in manager._app_map.items():
             if anima_name == "__shared__":
@@ -344,7 +352,9 @@ class SlackChannelSync:
                 continue
             for ch_id, ch_name in channel_ids_to_join:
                 try:
-                    joined = await _join_channel_if_needed(token, ch_id, ch_name)
+                    joined = await _join_channel_if_needed(
+                        token, ch_id, ch_name, bot_label=anima_name,
+                    )
                     if joined:
                         total_joins += 1
                 except Exception:
@@ -357,6 +367,14 @@ class SlackChannelSync:
 
         # Persist mapping to config
         self._update_config_mapping()
+
+        if private_channel_names:
+            logger.info(
+                "SlackChannelSync: %d private channel(s) mapped but not auto-joined "
+                "(use /invite in Slack to add bots): %s",
+                len(private_channel_names),
+                ", ".join(f"#{n}" for n in private_channel_names),
+            )
 
         logger.info(
             "SlackChannelSync: %d mapping(s), %d new board(s), %d new Slack channel(s), %d bot join(s)",
