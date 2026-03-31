@@ -654,7 +654,9 @@ async function _showDetail(name) {
   `;
 
   document.getElementById("animasBackBtn").addEventListener("click", () => {
-    window.location.hash = "#/animas";
+    _viewMode = "list";
+    _selectedName = null;
+    _renderList();
   });
 
   const content = document.getElementById("animasDetailContent");
