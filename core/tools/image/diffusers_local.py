@@ -308,6 +308,63 @@ class LocalDiffusersClient:
         return image.convert("RGB")
 
     @staticmethod
+    def _crop_to_face(image: Any) -> Any:
+        """Detect face via OpenCV Haar cascade and crop tightly around it.
+
+        Returns the cropped face region (with margin) or the original image
+        if detection fails.  This prevents background/clothing from leaking
+        into IP-Adapter embeddings.
+        """
+        try:
+            import cv2
+            import numpy as np
+
+            arr = np.array(image)
+            gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+            cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_frontalface_default.xml",
+            )
+            faces = cascade.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30),
+            )
+            if len(faces) == 0:
+                logger.info("No face detected in reference — using full image")
+                return image
+
+            # Pick the largest face
+            x, y, w, h = max(faces, key=lambda r: r[2] * r[3])
+            # Expand by 50% for forehead/chin/cheek margin
+            margin = int(max(w, h) * 0.5)
+            ih, iw = arr.shape[:2]
+            x1, y1 = max(0, x - margin), max(0, y - margin)
+            x2, y2 = min(iw, x + w + margin), min(ih, y + h + margin)
+            # Make square (IP-Adapter expects square input)
+            side = max(x2 - x1, y2 - y1)
+            cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+            x1 = max(0, cx - side // 2)
+            y1 = max(0, cy - side // 2)
+            x2 = min(iw, x1 + side)
+            y2 = min(ih, y1 + side)
+            # Adjust if clamped
+            if x2 - x1 < side:
+                x1 = max(0, x2 - side)
+            if y2 - y1 < side:
+                y1 = max(0, y2 - side)
+
+            cropped = image.crop((x1, y1, x2, y2))
+            logger.info(
+                "Face detected: crop (%d,%d)-(%d,%d) from %dx%d",
+                x1, y1, x2, y2, iw, ih,
+            )
+            return cropped
+        except ImportError:
+            logger.debug("OpenCV not available — skipping face crop")
+            return image
+        except Exception:
+            logger.warning("Face detection failed — using full image", exc_info=True)
+            return image
+
+    @staticmethod
     def _make_generator(seed: int | None) -> Any:
         if seed is None:
             return None
@@ -471,7 +528,7 @@ class LocalDiffusersClient:
                     getattr(self._config, "ip_adapter_scale", 0.6),
                 )
                 pipe.set_ip_adapter_scale(ip_scale)
-                face_img = self._read_image(face_reference_image)
+                face_img = self._crop_to_face(self._read_image(face_reference_image))
                 common_kwargs["ip_adapter_image"] = face_img
                 logger.info("Generating with IP-Adapter face reference (scale=%.2f)", ip_scale)
 
@@ -499,7 +556,7 @@ class LocalDiffusersClient:
                     face_strength, (1 - face_strength) * 100,
                 )
                 pipe = self._load_img2img_pipeline()
-                reference = self._read_image(face_reference_image).resize((width, height))
+                reference = self._crop_to_face(self._read_image(face_reference_image)).resize((width, height))
                 result = pipe(
                     **common_kwargs,
                     image=reference,
