@@ -972,6 +972,18 @@ def create_animas_router() -> APIRouter:
                     encoding="utf-8",
                 )
 
+                # Register in config.json + auto-create .env Slack token slots
+                try:
+                    from core.config.anima_registry import register_anima_in_config
+
+                    register_anima_in_config(
+                        animas_dir.parent,  # data_dir
+                        name,
+                        supervisor=status.get("supervisor"),
+                    )
+                except Exception:
+                    logger.debug("register_anima_in_config failed for '%s'", name, exc_info=True)
+
                 created.append({"name": name, "displayName": display_name, "roleId": role_id, "isLead": member_is_lead})
                 logger.info("Deployed team member '%s' as anima '%s' (role=%s)", display_name, name, role_id)
 
