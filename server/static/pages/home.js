@@ -176,7 +176,7 @@ function _calcTimePct(resetAt, windowSeconds) {
     : new Date(resetAt).getTime();
   if (isNaN(resetMs)) return null;
   const remainingSec = (resetMs - Date.now()) / 1000;
-  if (remainingSec <= 0) return 0;
+  if (remainingSec <= 0) return 100;
   const pct = (remainingSec / windowSeconds) * 100;
   return Math.min(pct, 100);
 }

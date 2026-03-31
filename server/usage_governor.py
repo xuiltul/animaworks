@@ -480,12 +480,32 @@ class UsageGovernor:
 
     async def _tick(self, policy: dict[str, Any]) -> None:
         """Single governor check cycle."""
-        from server.routes.usage_routes import _fetch_claude_usage, _fetch_openai_usage
+        from server.routes.usage_routes import (
+            _fetch_claude_usage,
+            _fetch_openai_usage,
+            _relogin_claude,
+        )
 
         usage_data = {
             "claude": _fetch_claude_usage(),
             "openai": _fetch_openai_usage(),
         }
+
+        # Auto-recovery: if Claude fetch failed with recoverable error,
+        # try token refresh / relogin then retry
+        claude_error = usage_data.get("claude", {}).get("error", "")
+        if claude_error in ("rate_limited", "unauthorized", "no_credentials"):
+            logger.info("Governor: Claude usage fetch failed (%s), attempting relogin", claude_error)
+            relogin_result, _status = _relogin_claude()
+            if relogin_result.get("success"):
+                logger.info("Governor: relogin succeeded, retrying usage fetch")
+                usage_data["claude"] = _fetch_claude_usage(skip_cache=True)
+            else:
+                logger.warning(
+                    "Governor: relogin failed — %s",
+                    relogin_result.get("message", "unknown"),
+                )
+
         self._state.last_check = time.time()
         self._state.last_usage = usage_data
 
