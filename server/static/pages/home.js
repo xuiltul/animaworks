@@ -242,8 +242,14 @@ function _usageForecast(utilization, resetAt, windowSeconds) {
 }
 
 function _renderUsageBar(label, utilization, resetAt, windowSeconds) {
-  const remaining = Math.max(0, 100 - utilization);
-  const resetStr = resetAt ? _resetToJst(resetAt) : "";
+  const resetMs = resetAt
+    ? (typeof resetAt === "number" ? (resetAt < 1e12 ? resetAt * 1000 : resetAt) : new Date(resetAt).getTime())
+    : 0;
+  const resetInPast = resetMs > 0 && resetMs <= Date.now();
+  // Window already reset — treat as fully available
+  const effectiveUtil = resetInPast ? 0 : utilization;
+  const remaining = Math.max(0, 100 - effectiveUtil);
+  const resetStr = resetInPast ? "" : (resetAt ? _resetToJst(resetAt) : "");
   const color = _remainingColor(remaining);
 
   // Time-proportional marker — shown on ALL windows (5h and 7d)
@@ -263,7 +269,7 @@ function _renderUsageBar(label, utilization, resetAt, windowSeconds) {
 
   // Forecast: Runway + 着地予測
   let forecastHtml = "";
-  const fc = _usageForecast(utilization, resetAt, windowSeconds);
+  const fc = resetInPast ? null : _usageForecast(utilization, resetAt, windowSeconds);
   if (fc) {
     forecastHtml = `<div class="usage-forecast">`;
     forecastHtml += `<span class="usage-forecast-item"><span class="usage-forecast-label">Runway</span> ${fc.runway}`;
@@ -284,8 +290,8 @@ function _renderUsageBar(label, utilization, resetAt, windowSeconds) {
         <div class="usage-bar-fill" style="width:${remaining}%;background:${color}"></div>
         ${markerHtml}
       </div>
-      ${forecastHtml}
-      ${resetStr ? `<div class="usage-reset">${t("home.usage_reset")}: ${escapeHtml(resetStr)}</div>` : ""}
+      ${forecastHtml || `<div class="usage-forecast">&nbsp;</div>`}
+      ${resetStr ? `<div class="usage-reset">${t("home.usage_reset")}: ${escapeHtml(resetStr)}</div>` : `<div class="usage-reset">&nbsp;</div>`}
     </div>
   `;
 }
