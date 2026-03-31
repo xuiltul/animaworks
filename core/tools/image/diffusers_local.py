@@ -25,6 +25,108 @@ _ASPECT_SIZES: dict[str, tuple[int, int]] = {
 _PIPELINE_CACHE: dict[tuple[str, str, str, str], Any] = {}
 _IP_ADAPTER_LOADED: set[tuple[str, str, str, str]] = set()
 
+# ── SCRFD face detection via onnxruntime (cv2-free) ──────────
+
+_SCRFD_SESSION: Any | None = None
+_SCRFD_INIT_ATTEMPTED: bool = False
+
+
+def _get_scrfd_session() -> Any | None:
+    """Lazy-load SCRFD face detection ONNX session."""
+    global _SCRFD_SESSION, _SCRFD_INIT_ATTEMPTED  # noqa: PLW0603
+    if _SCRFD_INIT_ATTEMPTED:
+        return _SCRFD_SESSION
+    _SCRFD_INIT_ATTEMPTED = True
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        logger.debug("onnxruntime not available — SCRFD face detection disabled")
+        return None
+    repo_id = "DIAMONIK7777/antelopev2"
+    cache_dir = _HF_CACHE_ROOT / ("models--" + repo_id.replace("/", "--"))
+    snapshots_dir = cache_dir / "snapshots"
+    if not snapshots_dir.is_dir():
+        logger.info("SCRFD model not in HF cache — SCRFD disabled")
+        return None
+    path: str | None = None
+    for snap in sorted(snapshots_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        candidate = snap / "scrfd_10g_bnkps.onnx"
+        if candidate.is_file():
+            path = str(candidate)
+            break
+    if path is None:
+        logger.info("scrfd_10g_bnkps.onnx not found — SCRFD disabled")
+        return None
+    _SCRFD_SESSION = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+    logger.info("SCRFD face detection model loaded: %s", path)
+    return _SCRFD_SESSION
+
+
+def _scrfd_detect_largest(image_rgb: Any) -> tuple[int, int, int, int] | None:
+    """Detect the largest face in an RGB numpy array via SCRFD.
+
+    Returns ``(x1, y1, x2, y2)`` or ``None`` if no face found.
+    """
+    session = _get_scrfd_session()
+    if session is None:
+        return None
+    try:
+        import numpy as np
+
+        h0, w0 = image_rgb.shape[:2]
+        target = 640
+        scale = min(target / h0, target / w0)
+        nw, nh = int(w0 * scale), int(h0 * scale)
+
+        # Resize using PIL to avoid cv2 dependency
+        image_cls, _ = _import_pil()
+        pil_img = image_cls.fromarray(image_rgb)
+        resized = np.array(pil_img.resize((nw, nh), image_cls.BILINEAR))
+
+        padded = np.zeros((target, target, 3), dtype=np.uint8)
+        padded[:nh, :nw] = resized
+
+        blob = (padded.astype(np.float32) - 127.5) / 128.0
+        blob = blob.transpose(2, 0, 1)[np.newaxis]
+
+        outputs = session.run(None, {session.get_inputs()[0].name: blob})
+
+        # SCRFD outputs: [scores, bboxes, kps] × 3 strides (8, 16, 32)
+        best_box: tuple[int, int, int, int] | None = None
+        best_area = 0
+        threshold = 0.5
+        strides = [8, 16, 32]
+
+        for idx, stride in enumerate(strides):
+            scores = outputs[idx * 3]
+            bboxes = outputs[idx * 3 + 1]
+            feat_w = target // stride
+
+            for i in range(scores.shape[1]):
+                if scores[0, i, 0] < threshold:
+                    continue
+                anchor_y = (i // feat_w) * stride
+                anchor_x = (i % feat_w) * stride
+
+                x1 = int((anchor_x - bboxes[0, i, 0] * stride) / scale)
+                y1 = int((anchor_y - bboxes[0, i, 1] * stride) / scale)
+                x2 = int((anchor_x + bboxes[0, i, 2] * stride) / scale)
+                y2 = int((anchor_y + bboxes[0, i, 3] * stride) / scale)
+
+                x1, y1 = max(0, x1), max(0, y1)
+                x2, y2 = min(w0, x2), min(h0, y2)
+                area = (x2 - x1) * (y2 - y1)
+                if area > best_area:
+                    best_area = area
+                    best_box = (x1, y1, x2, y2)
+
+        if best_box is not None:
+            logger.info("SCRFD detected face at (%d,%d)-(%d,%d)", *best_box)
+        return best_box
+    except Exception:
+        logger.warning("SCRFD detection failed", exc_info=True)
+        return None
+
 
 def _import_torch() -> Any:
     try:
@@ -308,61 +410,87 @@ class LocalDiffusersClient:
         return image.convert("RGB")
 
     @staticmethod
-    def _crop_to_face(image: Any) -> Any:
-        """Detect face via OpenCV Haar cascade and crop tightly around it.
+    def _pad_to_size(image: Any, width: int, height: int) -> Any:
+        """Resize image to fit within width x height, then pad to exact size.
 
-        Returns the cropped face region (with margin) or the original image
-        if detection fails.  This prevents background/clothing from leaking
-        into IP-Adapter embeddings.
+        Preserves aspect ratio by fitting image within the target dimensions
+        and centering it on a neutral background.
         """
-        try:
-            import cv2
-            import numpy as np
+        image_cls, _ = _import_pil()
+        img = image.copy()
+        img.thumbnail((width, height), image_cls.LANCZOS)
+        # Center on neutral background
+        bg = image_cls.new("RGB", (width, height), (128, 128, 128))
+        offset_x = (width - img.width) // 2
+        offset_y = (height - img.height) // 2
+        bg.paste(img, (offset_x, offset_y))
+        return bg
 
-            arr = np.array(image)
-            gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
-            cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + "haarcascade_frontalface_default.xml",
-            )
-            faces = cascade.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30),
-            )
-            if len(faces) == 0:
-                logger.info("No face detected in reference — using full image")
-                return image
+    @staticmethod
+    def _crop_to_face(image: Any) -> Any:
+        """Detect face via SCRFD (onnxruntime) and crop tightly around it.
 
-            # Pick the largest face
-            x, y, w, h = max(faces, key=lambda r: r[2] * r[3])
-            # Expand by 50% for forehead/chin/cheek margin
-            margin = int(max(w, h) * 0.5)
-            ih, iw = arr.shape[:2]
-            x1, y1 = max(0, x - margin), max(0, y - margin)
-            x2, y2 = min(iw, x + w + margin), min(ih, y + h + margin)
-            # Make square (IP-Adapter expects square input)
-            side = max(x2 - x1, y2 - y1)
-            cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-            x1 = max(0, cx - side // 2)
-            y1 = max(0, cy - side // 2)
-            x2 = min(iw, x1 + side)
-            y2 = min(ih, y1 + side)
-            # Adjust if clamped
-            if x2 - x1 < side:
-                x1 = max(0, x2 - side)
-            if y2 - y1 < side:
-                y1 = max(0, y2 - side)
+        Falls back to OpenCV Haar cascade if SCRFD model is unavailable,
+        and returns the original image if no detector works.
+        This prevents background/clothing from leaking into IP-Adapter
+        embeddings.
+        """
+        import numpy as np
 
-            cropped = image.crop((x1, y1, x2, y2))
-            logger.info(
-                "Face detected: crop (%d,%d)-(%d,%d) from %dx%d",
-                x1, y1, x2, y2, iw, ih,
-            )
-            return cropped
-        except ImportError:
-            logger.debug("OpenCV not available — skipping face crop")
+        arr = np.array(image)
+        ih, iw = arr.shape[:2]
+
+        # ── Try SCRFD (onnxruntime) first — no cv2 dependency ────
+        face_box = _scrfd_detect_largest(arr)
+
+        # ── Fallback: OpenCV Haar cascade ────
+        if face_box is None:
+            try:
+                import cv2
+
+                gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+                cascade = cv2.CascadeClassifier(
+                    cv2.data.haarcascades + "haarcascade_frontalface_default.xml",
+                )
+                faces = cascade.detectMultiScale(
+                    gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30),
+                )
+                if len(faces) > 0:
+                    bx, by, bw, bh = max(faces, key=lambda r: r[2] * r[3])
+                    face_box = (bx, by, bx + bw, by + bh)
+            except ImportError:
+                logger.debug("OpenCV not available — skipping Haar fallback")
+            except Exception:
+                logger.debug("Haar cascade failed", exc_info=True)
+
+        if face_box is None:
+            logger.info("No face detected in reference — using full image")
             return image
-        except Exception:
-            logger.warning("Face detection failed — using full image", exc_info=True)
-            return image
+
+        x1, y1, x2, y2 = face_box
+        # Expand by 50% for forehead/chin/cheek margin
+        w, h = x2 - x1, y2 - y1
+        margin = int(max(w, h) * 0.5)
+        x1, y1 = max(0, x1 - margin), max(0, y1 - margin)
+        x2, y2 = min(iw, x2 + margin), min(ih, y2 + margin)
+        # Make square (IP-Adapter expects square input)
+        side = max(x2 - x1, y2 - y1)
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        x1 = max(0, cx - side // 2)
+        y1 = max(0, cy - side // 2)
+        x2 = min(iw, x1 + side)
+        y2 = min(ih, y1 + side)
+        if x2 - x1 < side:
+            x1 = max(0, x2 - side)
+        if y2 - y1 < side:
+            y1 = max(0, y2 - side)
+
+        cropped = image.crop((x1, y1, x2, y2))
+        logger.info(
+            "Face detected: crop (%d,%d)-(%d,%d) from %dx%d",
+            x1, y1, x2, y2, iw, ih,
+        )
+        return cropped
 
     @staticmethod
     def _make_generator(seed: int | None) -> Any:
@@ -399,6 +527,12 @@ class LocalDiffusersClient:
         # Try local cache first, then auto-download if not found.
         for attempt, local_only in enumerate((self._local_files_only, False)):
             try:
+                # Reset attention processors to default before loading IP-Adapter
+                # to avoid SlicedAttnProcessor compatibility issues with diffusers.
+                try:
+                    pipe.unet.set_default_attn_processor()
+                except Exception:
+                    pass
                 pipe.load_ip_adapter(
                     ip_model,
                     subfolder=subfolder,
@@ -556,7 +690,9 @@ class LocalDiffusersClient:
                     face_strength, (1 - face_strength) * 100,
                 )
                 pipe = self._load_img2img_pipeline()
-                reference = self._crop_to_face(self._read_image(face_reference_image)).resize((width, height))
+                face_crop = self._crop_to_face(self._read_image(face_reference_image))
+                # Pad to target aspect ratio instead of stretching to avoid distortion
+                reference = self._pad_to_size(face_crop, width, height)
                 result = pipe(
                     **common_kwargs,
                     image=reference,

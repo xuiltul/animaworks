@@ -394,15 +394,22 @@ class ImageGenPipeline:
                         raise RuntimeError("No image generation API key configured. Set NOVELAI_TOKEN or FAL_KEY.")
 
                     # ── A: Load style reference for Vibe Transfer ──
-                    # Direct vibe_image parameter takes precedence over config
-                    effective_vibe: bytes | None = vibe_image
-                    if effective_vibe is None and self._config.style_reference:
-                        style_path = Path(self._config.style_reference).expanduser()
-                        if style_path.exists():
-                            effective_vibe = style_path.read_bytes()
-                            logger.debug("Loaded style reference: %s", style_path)
-                        else:
-                            logger.warning("Style reference not found: %s", style_path)
+                    # Direct vibe_image parameter takes precedence over config.
+                    # When face_reference_image is provided, skip vibe transfer
+                    # entirely to avoid existing style (clothing/background)
+                    # bleeding into the face-referenced generation.
+                    effective_vibe: bytes | None = None
+                    if face_reference_image is not None:
+                        logger.debug("Skipping vibe transfer — face reference takes priority")
+                    else:
+                        effective_vibe = vibe_image
+                        if effective_vibe is None and self._config.style_reference:
+                            style_path = Path(self._config.style_reference).expanduser()
+                            if style_path.exists():
+                                effective_vibe = style_path.read_bytes()
+                                logger.debug("Loaded style reference: %s", style_path)
+                            else:
+                                logger.warning("Style reference not found: %s", style_path)
 
                     effective_vibe_strength = vibe_strength if vibe_strength is not None else self._config.vibe_strength
                     effective_vibe_info = (
