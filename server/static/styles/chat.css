@@ -1140,6 +1140,25 @@
   cursor: pointer;
 }
 
+/* --- KaTeX math inside chat bubbles --- */
+.chat-bubble .katex-display {
+  margin: 0.6em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.chat-bubble .katex {
+  font-size: 1.05em;
+}
+.bg-session-message .katex-display {
+  margin: 0.4em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.bg-session-message .katex {
+  font-size: 0.95em;
+}
+
 .chat-bubble.thinking {
   margin-right: auto;
   background: var(--aw-color-warning-bg);

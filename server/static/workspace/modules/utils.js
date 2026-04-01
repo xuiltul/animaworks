@@ -20,13 +20,56 @@ export function stripEmotionTag(text) {
 }
 
 /**
+ * Render LaTeX math via KaTeX, returning HTML string.
+ * Returns the original string unchanged if KaTeX is not loaded.
+ */
+function _renderKatex(latex, displayMode) {
+  if (typeof katex === "undefined") return displayMode ? `$$${latex}$$` : `$${latex}$`;
+  try {
+    return katex.renderToString(latex, { throwOnError: false, displayMode, output: "htmlAndMathml" });
+  } catch {
+    return displayMode ? `$$${latex}$$` : `$${latex}$`;
+  }
+}
+
+/**
+ * Extract math expressions before escapeHtml to preserve backslashes.
+ * Returns { text, restore(html) }.
+ */
+function _extractMath(text) {
+  const placeholders = [];
+  let idx = 0;
+  const PH = "\x00MATH";
+  let out = text.replace(/\$\$([\s\S]+?)\$\$/g, (_m, expr) => {
+    const key = `${PH}${idx++}\x00`;
+    placeholders.push({ key, html: _renderKatex(expr.trim(), true) });
+    return key;
+  });
+  out = out.replace(/(?<!\$)\$(?!\$)(.+?)\$(?!\$)/g, (_m, expr) => {
+    const key = `${PH}${idx++}\x00`;
+    placeholders.push({ key, html: _renderKatex(expr.trim(), false) });
+    return key;
+  });
+  return {
+    text: out,
+    restore(html) {
+      for (const { key, html: ph } of placeholders) {
+        html = html.replaceAll(key, ph);
+      }
+      return html;
+    },
+  };
+}
+
+/**
  * Lightweight Markdown → HTML renderer.
  * Escapes HTML first, then applies safe transforms.
  */
 export function renderSimpleMarkdown(text, animaName) {
   if (!text) return "";
 
-  let html = escapeHtml(stripEmotionTag(text));
+  const math = _extractMath(stripEmotionTag(text));
+  let html = escapeHtml(math.text);
 
   // Fenced code blocks: ```lang\n...\n```
   html = html.replace(/```([\w:.\-/]*)\n([\s\S]*?)```/g, (_m, lang, code) => {
@@ -123,7 +166,7 @@ export function renderSimpleMarkdown(text, animaName) {
     (_m, pre, heading, table, nl) => (pre || heading || table ? (pre || heading || table) : nl ? "<br>" : "")
   );
 
-  return html;
+  return math.restore(html);
 }
 
 /**

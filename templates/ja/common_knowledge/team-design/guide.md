@@ -135,5 +135,9 @@ plan.md (status: approved) → delegate_task で Engineer に渡す
 | テンプレート | パス | 概要 |
 |-------------|------|------|
 | 開発フルチーム | `team-design/development/team.md` | PdM + Engineer + Reviewer + Tester の4ロール構成 |
+| 法務フルチーム | `team-design/legal/team.md` | Director + Verifier + Researcher の3ロール構成 |
+| 財務フルチーム | `team-design/finance/team.md` | Director + Auditor + Analyst + Collector の4ロール構成 |
+| トレーディングフルチーム | `team-design/trading/team.md` | Director + Analyst + Engineer + Auditor の4ロール構成 |
+| 営業・マーケティングフルチーム | `team-design/sales-marketing/team.md` | Director + Creator + SDR + Researcher の4ロール構成 |
 
 > 新しいチームテンプレートを追加する場合は、同じ構造（`team.md` + ロール別ディレクトリ）で `team-design/{チーム名}/` に配置する。

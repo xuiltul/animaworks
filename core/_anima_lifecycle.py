@@ -49,6 +49,38 @@ def _format_merge_candidates(candidates: list[tuple[str, str, float]]) -> str:
     return "\n".join(lines)
 
 
+_PROVIDER_ENV_MAP: dict[str, str] = {
+    "gemini": "GEMINI_API_KEY",
+    "google": "GEMINI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+}
+
+
+def _resolve_consolidation_credential(consolidation_model: str, cfg: Any) -> dict[str, Any]:
+    """Resolve credential fields for the given consolidation model.
+
+    Returns a dict with keys: api_key, api_base_url, api_key_env, extra_keys.
+    These can be used to temporarily override ModelConfig credential fields so
+    that consolidation LLM calls reach the correct provider endpoint.
+    """
+    parts = consolidation_model.split("/", 1)
+    provider = parts[0].lower() if len(parts) > 1 else ""
+    cred = cfg.credentials.get(provider) if provider else None
+    api_key = cred.api_key if cred else None
+    api_base_url = (cred.base_url if cred else None) or None
+    api_key_env = _PROVIDER_ENV_MAP.get(provider, "ANTHROPIC_API_KEY")
+    extra_keys: dict[str, str] = {}
+    if cred and hasattr(cred, "keys") and cred.keys:
+        extra_keys = dict(cred.keys)
+    return {
+        "api_key": api_key,
+        "api_base_url": api_base_url,
+        "api_key_env": api_key_env,
+        "extra_keys": extra_keys,
+    }
+
+
 class LifecycleMixin:
     """Mixin: heartbeat orchestration, memory consolidation, cron task execution."""
 
@@ -428,10 +460,22 @@ class LifecycleMixin:
             consolidation_model,
         )
 
-        # Temporarily override model to consolidation model for Phase B
+        # Temporarily override model AND credential to consolidation model for Phase B.
+        # Animas that use a non-Anthropic credential (e.g. vllm-local for qwen3)
+        # must also switch api_key/api_base_url so the call reaches the correct
+        # provider endpoint instead of the local LLM proxy.
         _orig_model = self.model_config.model
+        _orig_api_key = self.model_config.api_key
+        _orig_api_base_url = self.model_config.api_base_url
+        _orig_api_key_env = self.model_config.api_key_env
+        _orig_extra_keys = self.model_config.extra_keys
+        _cred_override = _resolve_consolidation_credential(consolidation_model, cfg)
         try:
             self.model_config.model = consolidation_model
+            self.model_config.api_key = _cred_override["api_key"]
+            self.model_config.api_base_url = _cred_override["api_base_url"]
+            self.model_config.api_key_env = _cred_override["api_key_env"]
+            self.model_config.extra_keys = _cred_override["extra_keys"]
             result = await self.agent.run_cycle(
                 prompt,
                 trigger="consolidation:daily",
@@ -440,6 +484,10 @@ class LifecycleMixin:
             )
         finally:
             self.model_config.model = _orig_model
+            self.model_config.api_key = _orig_api_key
+            self.model_config.api_base_url = _orig_api_base_url
+            self.model_config.api_key_env = _orig_api_key_env
+            self.model_config.extra_keys = _orig_extra_keys
 
         elapsed_ms = int((_time.monotonic() - start_mono) * 1000)
         return CycleResult(
@@ -482,9 +530,19 @@ class LifecycleMixin:
             total_knowledge_count=len(knowledge_files),
         )
 
+        # Temporarily override model AND credential (same rationale as daily consolidation).
         _orig_model = self.model_config.model
+        _orig_api_key = self.model_config.api_key
+        _orig_api_base_url = self.model_config.api_base_url
+        _orig_api_key_env = self.model_config.api_key_env
+        _orig_extra_keys = self.model_config.extra_keys
+        _cred_override = _resolve_consolidation_credential(consolidation_model, cfg)
         try:
             self.model_config.model = consolidation_model
+            self.model_config.api_key = _cred_override["api_key"]
+            self.model_config.api_base_url = _cred_override["api_base_url"]
+            self.model_config.api_key_env = _cred_override["api_key_env"]
+            self.model_config.extra_keys = _cred_override["extra_keys"]
             result = await self.agent.run_cycle(
                 prompt,
                 trigger="consolidation:weekly",
@@ -493,6 +551,10 @@ class LifecycleMixin:
             )
         finally:
             self.model_config.model = _orig_model
+            self.model_config.api_key = _orig_api_key
+            self.model_config.api_base_url = _orig_api_base_url
+            self.model_config.api_key_env = _orig_api_key_env
+            self.model_config.extra_keys = _orig_extra_keys
 
         elapsed_ms = int((_time.monotonic() - start_mono) * 1000)
         return CycleResult(

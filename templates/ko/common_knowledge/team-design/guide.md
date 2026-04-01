@@ -129,5 +129,9 @@ plan.md (status: approved) → delegate_task로 Engineer에게
 | 템플릿 | 경로 | 개요 |
 |--------|------|------|
 | 개발 풀 팀 | `team-design/development/team.md` | PdM + Engineer + Reviewer + Tester 4역할 |
+| 법무 풀 팀 | `team-design/legal/team.md` | Legal Director + Legal Verifier + Precedent Researcher 3역할 |
+| 재무 풀 팀 | `team-design/finance/team.md` | Finance Director + Financial Auditor + Data Analyst + Market Data Collector 4역할 |
+| 트레이딩 풀 팀 | `team-design/trading/team.md` | Strategy Director + Market Analyst + Trading Engineer + Risk Auditor 4역할 |
+| 영업·마케팅 풀 팀 | `team-design/sales-marketing/team.md` | Director + Marketing Creator + SDR + Market Researcher 4역할 |
 
 > 새 템플릿을 추가할 때는 같은 구조(`team.md` + 역할별 디렉터리)로 `team-design/{팀 이름}/`에 둔다.

@@ -51,6 +51,10 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 | Don't know how to use the machine tool | `operations/machine/tool-usage.md` |
 | Want to know the machine workflow for my role | `operations/machine/workflow-{pdm,engineer,reviewer,tester}.md` |
 | Want to design a team by purpose (roles, handoffs) | `team-design/guide.md` |
+| Want to set up a legal team (contract review, audit, verification) | `team-design/legal/team.md` |
+| Want to set up a finance team (analysis, audit, data extraction, market data) | `team-design/finance/team.md` |
+| Want to set up a trading team (strategy, market analysis, bot execution, risk audit) | `team-design/trading/team.md` |
+| Want to set up a sales & marketing team (content production, lead development, pipeline management) | `team-design/sales-marketing/team.md` |
 | Don't know how to choose or change models | `reference/operations/model-guide.md` (→ reference) |
 | Want to change Mode S authentication method | `reference/operations/mode-s-auth-guide.md` (→ reference) |
 | Don't know how to set up or use voice chat | `reference/operations/voice-chat-guide.md` (→ reference) |
@@ -150,8 +154,20 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 |------|-------------|
 | `guide.md` | Core principles for designing Anima teams (role separation, handoffs, scaling, combining roles) |
 | `development/team.md` | Development full team — four roles (PdM, Engineer, Reviewer, Tester), handoff chain, scaling |
+| `legal/team.md` | Legal full team — three roles (Legal Director, Legal Verifier, Precedent Researcher), handoff chain, carry-forward tracker, scaling |
+| `finance/team.md` | Finance full team — four roles (Finance Director, Financial Auditor, Data Analyst, Market Data Collector), handoff chain, Variance Tracker, scaling |
+| `trading/team.md` | Trading full team — four roles (Strategy Director, Market Analyst, Trading Engineer, Risk Auditor), handoff chain, Performance Tracker, Ops Issue Tracker, scaling |
+| `sales-marketing/team.md` | Sales & Marketing full team — four roles (Director, Marketing Creator, SDR, Market Researcher), Campaign Pipeline Tracker, Deal Pipeline Tracker, two execution modes, scaling |
 
 Per-role templates under `team-design/development/{pdm,engineer,reviewer,tester}/`: `injection.template.md`, `machine.md`, `checklist.md`.
+
+Per-role templates under `team-design/legal/{director,verifier,researcher}/`: `injection.template.md`, `checklist.md`, and `machine.md` for Director and Verifier.
+
+Per-role templates under `team-design/finance/{director,auditor,analyst,collector}/`: `injection.template.md`, `checklist.md`, and `machine.md` for Director and Auditor.
+
+Per-role templates under `team-design/trading/{director,analyst,engineer,auditor}/`: `injection.template.md`, `machine.md`, `checklist.md`.
+
+Per-role templates under `team-design/sales-marketing/{director,creator,sdr,researcher}/`: `injection.template.md`, `machine.md` (except researcher), `checklist.md`.
 
 ### security/ — Security
 
@@ -217,6 +233,10 @@ Per-role templates under `team-design/development/{pdm,engineer,reviewer,tester}
 | review, meta-review, code review | `operations/machine/workflow-reviewer.md` |
 | test, E2E, tester, test cases | `operations/machine/workflow-tester.md` |
 | team design, role separation, development team, PdM, handoff | `team-design/guide.md`, `team-design/development/team.md` |
+| legal, contract, risk, audit, verification, carry-forward, optimism bias | `team-design/legal/team.md` |
+| finance, Variance Tracker, Data Lineage, silent drop, financial analysis, trial balance, consolidated analysis | `team-design/finance/team.md` |
+| trading, trading team, strategy-plan, backtest, Performance Tracker, Ops Issue Tracker, P&L verification, ops health, carry-forward, optimism bias | `team-design/trading/team.md` |
+| sales, marketing, content, lead, nurturing, BANT, pipeline, campaign tracker, deal tracker, SDR, Brand Voice | `team-design/sales-marketing/team.md` |
 | model, models.json, credential, set-model, context window | `reference/operations/model-guide.md` |
 | background_model, background model, cost optimization | `reference/operations/model-guide.md` |
 | Mode S, authentication, API direct, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |

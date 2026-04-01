@@ -128,5 +128,9 @@ When to scale up:
 | Template | Path | Summary |
 |----------|------|---------|
 | Development full team | `team-design/development/team.md` | Four roles: PdM + Engineer + Reviewer + Tester |
+| Legal full team | `team-design/legal/team.md` | Three roles: Legal Director + Legal Verifier + Precedent Researcher |
+| Finance full team | `team-design/finance/team.md` | Four roles: Finance Director + Financial Auditor + Data Analyst + Market Data Collector |
+| Trading full team | `team-design/trading/team.md` | Four roles: Strategy Director + Market Analyst + Trading Engineer + Risk Auditor |
+| Sales & Marketing full team | `team-design/sales-marketing/team.md` | Four roles: Director + Marketing Creator + SDR + Market Researcher |
 
 > To add a template, use the same layout (`team.md` + per-role directories) under `team-design/{team_name}/`.

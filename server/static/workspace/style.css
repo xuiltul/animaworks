@@ -762,6 +762,16 @@ html, body {
   white-space: pre;
 }
 
+/* ── KaTeX math in chat bubbles ────────────────────── */
+.chat-bubble .katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.chat-bubble .katex {
+  font-size: 1.05em;
+}
+
 /* ── Streaming Thinking Preview ────────────────────── */
 
 .thinking-inline-preview {

@@ -49,6 +49,10 @@ AnimaWorks의 모든 Anima가 공유하는 레퍼런스 문서 목차입니다.
 | machine 도구 사용법을 모르겠다 | `operations/machine/tool-usage.md` |
 | 내 역할에서 machine 워크플로를 알고 싶다 | `operations/machine/workflow-{pdm,engineer,reviewer,tester}.md` |
 | 목적별로 팀(역할·핸드오프)을 설계하고 싶다 | `team-design/guide.md` |
+| 법무 팀(계약·감사·검증) 역할과 핸드오프를 알고 싶다 | `team-design/legal/team.md` |
+| 재무 팀(분석·감사·데이터·시장 데이터) 역할과 핸드오프를 알고 싶다 | `team-design/finance/team.md` |
+| 트레이딩 팀(전략·분석·엔지니어링·리스크) 역할과 핸드오프를 알고 싶다 | `team-design/trading/team.md` |
+| 영업·마케팅 팀(콘텐츠 제작·리드 개발·파이프라인 관리) 역할과 핸드오프를 알고 싶다 | `team-design/sales-marketing/team.md` |
 | 모델 선택이나 변경 방법을 모르겠다 | `reference/operations/model-guide.md` (→ reference) |
 | Mode S의 인증 방식을 변경하고 싶다 | `reference/operations/mode-s-auth-guide.md` (→ reference) |
 | 음성 채팅 설정이나 사용법을 모르겠다 | `reference/operations/voice-chat-guide.md` (→ reference) |
@@ -146,8 +150,20 @@ AnimaWorks의 모든 Anima가 공유하는 레퍼런스 문서 목차입니다.
 |------|------|
 | `guide.md` | Anima 팀 설계 기본 원칙(역할 분리·핸드오프·스케일·겸임) |
 | `development/team.md` | 개발 풀 팀 — 4역할(PdM·Engineer·Reviewer·Tester)·핸드오프·스케일링 |
+| `legal/team.md` | 법무 풀 팀 — 3역할(Director·Verifier·Researcher)·carry-forward tracker·핸드오프 |
+| `finance/team.md` | 재무 풀 팀 — 4역할(Finance Director·Financial Auditor·Data Analyst·Market Data Collector)·Variance Tracker·핸드오프 |
+| `trading/team.md` | 트레이딩 풀 팀 — 4역할(Strategy Director·Market Analyst·Trading Engineer·Risk Auditor)·Performance/Ops Tracker·핸드오프 |
+| `sales-marketing/team.md` | 영업·마케팅 풀 팀 — 4역할(Director·Marketing Creator·SDR·Market Researcher)·Campaign Pipeline Tracker·Deal Pipeline Tracker·2실행 모드·스케일링 |
 
 역할별 템플릿: `team-design/development/{pdm,engineer,reviewer,tester}/` — `injection.template.md`, `machine.md`, `checklist.md`
+
+역할별 템플릿: `team-design/legal/{director,verifier,researcher}/` — `injection.template.md`, `machine.md`(researcher 제외), `checklist.md`
+
+역할별 템플릿: `team-design/finance/{director,auditor,analyst,collector}/` — `injection.template.md`, `machine.md`(analyst·collector 제외), `checklist.md`
+
+역할별 템플릿: `team-design/trading/{director,analyst,engineer,auditor}/` — `injection.template.md`, `machine.md`, `checklist.md`
+
+역할별 템플릿: `team-design/sales-marketing/{director,creator,sdr,researcher}/` — `injection.template.md`, `machine.md`(researcher 제외), `checklist.md`
 
 ### security/ — 보안
 
@@ -210,6 +226,10 @@ AnimaWorks의 모든 Anima가 공유하는 레퍼런스 문서 목차입니다.
 | 리뷰, review, 메타 리뷰 | `operations/machine/workflow-reviewer.md` |
 | 테스트, test, E2E, 테스터 | `operations/machine/workflow-tester.md` |
 | 팀 설계, 역할 분리, 개발 팀, PdM, 핸드오프 | `team-design/guide.md`, `team-design/development/team.md` |
+| 법무, 계약, 리스크, 감사, 검증, carry-forward, 낙관적 편향 | `team-design/legal/team.md` |
+| 재무, 분석, Variance Tracker, Data Lineage, silent drop, Financial Auditor, Finance Director, Data Analyst, Market Data Collector | `team-design/finance/team.md` |
+| 트레이딩, 전략, 백테스트, bot, P&L, 드로다운, Performance Tracker, Ops Issue Tracker, Strategy Director, Market Analyst, Trading Engineer, Risk Auditor, carry-forward | `team-design/trading/team.md` |
+| 영업, 마케팅, 콘텐츠, 리드, 너처링, BANT, 파이프라인, campaign tracker, deal tracker, SDR, Brand Voice | `team-design/sales-marketing/team.md` |
 | 모델, models.json, credential, set-model, 컨텍스트 윈도우 | `reference/operations/model-guide.md` |
 | background_model, 백그라운드 모델, 비용 최적화 | `reference/operations/model-guide.md` |
 | Mode S, 인증, API 직접, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |

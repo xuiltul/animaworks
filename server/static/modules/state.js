@@ -80,6 +80,16 @@ export function statusClass(status) {
   return "status-offline";
 }
 
+// ── KaTeX integration ────────────────────────
+let _katexInitialized = false;
+function _ensureKatex() {
+  if (_katexInitialized) return;
+  if (typeof markedKatex !== "undefined") {
+    marked.use(markedKatex({ throwOnError: false, output: "htmlAndMathml" }));
+  }
+  _katexInitialized = true;
+}
+
 const _markedRenderer = new marked.Renderer();
 const _origLinkRenderer = _markedRenderer.link.bind(_markedRenderer);
 _markedRenderer.link = function (token) {
@@ -147,6 +157,7 @@ function _ensureClosedTags(html) {
 }
 
 export function renderMarkdown(text, animaName) {
+  _ensureKatex();
   _mdAnimaCtx = animaName || null;
   try {
     return _ensureClosedTags(marked.parse(text, _markedOptions));
@@ -159,6 +170,7 @@ export function renderMarkdown(text, animaName) {
 
 export function renderSafeMarkdown(text) {
   if (!text) return "";
+  _ensureKatex();
   try {
     return _ensureClosedTags(marked.parse(escapeHtml(text), _markedOptions));
   } catch {
