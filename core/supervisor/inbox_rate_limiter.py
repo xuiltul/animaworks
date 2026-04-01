@@ -15,12 +15,25 @@ import time
 from typing import TYPE_CHECKING
 
 from core.config.models import load_config
+from core.schemas import EXTERNAL_PLATFORM_SOURCES
 
 if TYPE_CHECKING:
     from core.anima import DigitalAnima
     from core.supervisor.scheduler_manager import SchedulerManager
 
 logger = logging.getLogger(__name__)
+
+
+def _is_immediately_actionable_intent(intent: str, source: str, actionable_intents: list[str]) -> bool:
+    """Return True when an inbox message should wake the anima immediately.
+
+    Internal delegation DMs are treated as actionable even though they are not
+    listed in config.json, because delegated work should not wait for the next
+    scheduled heartbeat.
+    """
+    if intent in actionable_intents:
+        return True
+    return intent == "delegation" and source not in {"human", *EXTERNAL_PLATFORM_SOURCES}
 
 
 class InboxRateLimiter:
@@ -196,12 +209,17 @@ class InboxRateLimiter:
         # ── Intent-based trigger filtering ──
         # Only trigger immediate heartbeat for actionable messages or human messages.
         # Non-actionable messages (ack, thanks, FYI) wait for the scheduled heartbeat.
-        from core.schemas import EXTERNAL_PLATFORM_SOURCES
-
         cfg = load_config()
         has_human = any(m.source == "human" for m in inbox_messages)
         has_external_directed = any(m.source in EXTERNAL_PLATFORM_SOURCES and m.intent for m in inbox_messages)
-        has_actionable = any(m.intent in cfg.heartbeat.actionable_intents for m in inbox_messages)
+        has_actionable = any(
+            _is_immediately_actionable_intent(
+                m.intent,
+                m.source,
+                cfg.heartbeat.actionable_intents,
+            )
+            for m in inbox_messages
+        )
         if not has_human and not has_external_directed and not has_actionable:
             logger.info(
                 "Intent filter: %s — no actionable messages, deferring to scheduled heartbeat",

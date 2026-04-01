@@ -118,6 +118,125 @@ class TestSlackSocketModeManagerStop:
 class TestSlackSocketModeManagerHandlers:
     """Tests for message handler registration and routing."""
 
+    @patch("core.notification.reply_routing.route_thread_reply", return_value=False)
+    @patch("server.slack_socket._load_alias_user_ids", return_value=set())
+    @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda text, token: text)
+    @patch("server.slack_socket._route_to_board")
+    @patch("server.slack_socket.load_config")
+    @patch("server.slack_socket.get_data_dir")
+    @patch("server.slack_socket.Messenger")
+    async def test_default_anima_does_not_steal_other_bot_mentions(
+        self,
+        mock_messenger_cls,
+        mock_get_data_dir,
+        mock_config,
+        mock_route_to_board,
+        mock_resolve_mentions,
+        mock_alias_ids,
+        mock_route_thread_reply,
+        tmp_path,
+    ):
+        """Default anima should not receive channel messages mentioning another bot."""
+        from server.slack_socket import SlackSocketModeManager
+
+        mock_get_data_dir.return_value = tmp_path
+        slack_cfg = MagicMock(default_anima="sakura")
+        mock_config.return_value = MagicMock(
+            external_messaging=MagicMock(slack=slack_cfg),
+        )
+
+        captured_handlers: dict[str, list] = {}
+        mock_app = MagicMock()
+
+        def _capture_event(event_type):
+            def decorator(func):
+                captured_handlers.setdefault(event_type, []).append(func)
+                return func
+            return decorator
+
+        mock_app.event = _capture_event
+
+        mgr = SlackSocketModeManager()
+        mgr._bot_user_ids = {
+            "sakura": "U_SAKURA",
+            "ayane": "U_AYANE",
+            "__shared__": "U_SHARED",
+        }
+
+        with patch.object(mgr, "_get_per_anima_credential", return_value="fake_token"):
+            mgr._register_per_anima_handler(mock_app, "sakura", "U_SAKURA")
+
+        handler_fn = captured_handlers["message"][-1]
+        event = {
+            "channel": "C_FINANCE",
+            "user": "U_USER",
+            "text": "<@U_AYANE> where is the file?",
+            "ts": "123.456",
+        }
+        await handler_fn(event=event, say=AsyncMock())
+
+        mock_messenger_cls.assert_not_called()
+        mock_route_to_board.assert_not_called()
+
+    @patch("core.notification.reply_routing.route_thread_reply", return_value=False)
+    @patch("server.slack_socket._load_alias_user_ids", return_value=set())
+    @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda text, token: text)
+    @patch("server.slack_socket._route_to_board")
+    @patch("server.slack_socket.load_config")
+    @patch("server.slack_socket.get_data_dir")
+    @patch("server.slack_socket.Messenger")
+    async def test_shared_handler_skips_per_anima_mentions(
+        self,
+        mock_messenger_cls,
+        mock_get_data_dir,
+        mock_config,
+        mock_route_to_board,
+        mock_resolve_mentions,
+        mock_alias_ids,
+        mock_route_thread_reply,
+        tmp_path,
+    ):
+        """Shared default route should not consume messages for a per-Anima bot mention."""
+        from server.slack_socket import SlackSocketModeManager
+
+        mock_get_data_dir.return_value = tmp_path
+        slack_cfg = MagicMock(anima_mapping={}, default_anima="sakura")
+        mock_config.return_value = MagicMock(
+            external_messaging=MagicMock(slack=slack_cfg),
+        )
+
+        captured_handlers: dict[str, list] = {}
+        mock_app = MagicMock()
+
+        def _capture_event(event_type):
+            def decorator(func):
+                captured_handlers.setdefault(event_type, []).append(func)
+                return func
+            return decorator
+
+        mock_app.event = _capture_event
+
+        mgr = SlackSocketModeManager()
+        mgr._bot_user_ids = {
+            "sakura": "U_SAKURA",
+            "ayane": "U_AYANE",
+            "__shared__": "U_SHARED",
+        }
+
+        mgr._register_shared_handler(mock_app, "U_SHARED")
+
+        handler_fn = captured_handlers["message"][-1]
+        event = {
+            "channel": "C_FINANCE",
+            "user": "U_USER",
+            "text": "<@U_AYANE> please respond",
+            "ts": "123.789",
+        }
+        await handler_fn(event=event, say=AsyncMock())
+
+        mock_messenger_cls.assert_not_called()
+        mock_route_to_board.assert_not_called()
+
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
     @patch("server.slack_socket.AsyncSocketModeHandler")
@@ -156,14 +275,13 @@ class TestSlackSocketModeManagerHandlers:
             return decorator
 
         mock_async_app.event = _capture_event
-        mock_app_cls.return_value = mock_async_app
-        mock_handler_cls.return_value = AsyncMock()
 
         mock_messenger = MagicMock()
         mock_messenger_cls.return_value = mock_messenger
 
         mgr = SlackSocketModeManager()
-        await mgr.start()
+        mgr._bot_user_ids = {"__shared__": "U_SHARED"}
+        mgr._register_shared_handler(mock_async_app, "U_SHARED")
 
         # Verify "message" event handler was registered
         assert "message" in captured_handlers
@@ -186,6 +304,7 @@ class TestSlackSocketModeManagerHandlers:
         assert call_kwargs["source_message_id"] == "1234567890.123456"
         assert call_kwargs["external_user_id"] == "U_USER_123"
         assert call_kwargs["external_channel_id"] == "C_TEST_CHAN"
+        assert call_kwargs["intent"] == "question"
 
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
@@ -455,14 +574,13 @@ class TestUnhandledEventSuppression:
             return decorator
 
         mock_async_app.event = _capture_event
-        mock_app_cls.return_value = mock_async_app
-        mock_handler_cls.return_value = AsyncMock()
 
         mock_messenger = MagicMock()
         mock_messenger_cls.return_value = mock_messenger
 
         mgr = SlackSocketModeManager()
-        await mgr.start()
+        mgr._bot_user_ids = {"__shared__": "U_SHARED"}
+        mgr._register_shared_handler(mock_async_app, "U_SHARED")
 
         assert "message" in captured_handlers
         handler_fn = captured_handlers["message"][0]

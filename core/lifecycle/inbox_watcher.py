@@ -15,6 +15,13 @@ from core.schemas import EXTERNAL_PLATFORM_SOURCES
 logger = logging.getLogger("animaworks.lifecycle")
 
 
+def _is_immediately_actionable_intent(intent: str, source: str, actionable_intents: list[str]) -> bool:
+    """Return True when an inbox message should trigger immediate processing."""
+    if intent in actionable_intents:
+        return True
+    return intent == "delegation" and source not in {"human", *EXTERNAL_PLATFORM_SOURCES}
+
+
 class InboxWatcherMixin:
     """Mixin providing inbox polling and message-triggered heartbeat logic."""
 
@@ -121,7 +128,14 @@ class InboxWatcherMixin:
         # Non-actionable messages (ack, thanks, FYI) wait for the scheduled heartbeat.
         has_human = any(m.source == "human" for m in inbox_messages)
         has_external_directed = any(m.source in EXTERNAL_PLATFORM_SOURCES and m.intent for m in inbox_messages)
-        has_actionable = any(m.intent in self._actionable_intents for m in inbox_messages)
+        has_actionable = any(
+            _is_immediately_actionable_intent(
+                m.intent,
+                m.source,
+                self._actionable_intents,
+            )
+            for m in inbox_messages
+        )
         if not has_human and not has_external_directed and not has_actionable:
             logger.info(
                 "Intent filter: %s — no actionable messages, deferring to scheduled heartbeat",

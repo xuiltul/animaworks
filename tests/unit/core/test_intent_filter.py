@@ -8,8 +8,8 @@ Non-actionable messages (empty intent, ack, FYI) are deferred to the scheduled
 heartbeat.  Actionable messages (report, question) and human-source
 messages trigger an immediate heartbeat.
 
-Note: intent='delegation' was deprecated and removed from actionable_intents.
-Tasks should be delegated via the delegate_task tool instead.
+Internal delegation DMs are still treated as immediate/actionable so delegated
+work starts promptly without waiting for the next scheduled heartbeat.
 """
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
@@ -114,15 +114,15 @@ class TestLifecycleIntentFilter:
     process_inbox_message() instead of run_heartbeat().
     """
 
-    async def test_lifecycle_delegation_does_not_trigger_inbox(self):
-        """Message with intent='delegation' should NOT trigger inbox (deprecated)."""
+    async def test_lifecycle_internal_delegation_triggers_inbox(self):
+        """Internal delegation DMs should trigger inbox processing immediately."""
         messages = [_make_message(intent="delegation")]
         lm = _setup_lifecycle(messages)
 
         with patch("core.lifecycle.load_config", return_value=_default_config()):
             await lm._message_triggered_heartbeat("alice")
 
-        lm.animas["alice"].process_inbox_message.assert_not_called()
+        lm.animas["alice"].process_inbox_message.assert_called_once()
         assert "alice" not in lm._pending_triggers
 
     async def test_lifecycle_report_triggers_inbox(self):
@@ -249,8 +249,8 @@ class TestLifecycleIntentFilter:
 class TestLimiterIntentFilter:
     """Intent filtering in InboxRateLimiter.message_triggered_inbox."""
 
-    async def test_limiter_delegation_does_not_trigger_inbox(self):
-        """Message with intent='delegation' should NOT trigger inbox (deprecated)."""
+    async def test_limiter_internal_delegation_triggers_inbox(self):
+        """Internal delegation DMs should trigger inbox processing immediately."""
         messages = [_make_message(intent="delegation")]
         limiter = _make_limiter(messages)
 
@@ -260,7 +260,21 @@ class TestLimiterIntentFilter:
         ):
             await limiter.message_triggered_inbox()
 
-        limiter._anima.process_inbox_message.assert_not_called()
+        limiter._anima.process_inbox_message.assert_called_once()
+        assert limiter._pending_trigger is False
+
+    async def test_limiter_external_delegation_with_intent_triggers_inbox(self):
+        """External platform messages with an explicit intent still trigger immediately."""
+        messages = [_make_message(intent="delegation", source="slack")]
+        limiter = _make_limiter(messages)
+
+        with patch(
+            "core.supervisor.inbox_rate_limiter.load_config",
+            return_value=_default_config(),
+        ):
+            await limiter.message_triggered_inbox()
+
+        limiter._anima.process_inbox_message.assert_called_once()
         assert limiter._pending_trigger is False
 
     async def test_limiter_empty_intent_skips_inbox(self):

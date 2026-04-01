@@ -139,6 +139,23 @@ def _detect_mention_intent(
     return ""
 
 
+def _mentions_registered_bot(
+    text: str,
+    bot_user_ids: dict[str, str],
+    *,
+    exclude_names: set[str] | None = None,
+) -> bool:
+    """Return True when text mentions any registered bot user ID."""
+    raw = text or ""
+    excluded = exclude_names or set()
+    for name, uid in bot_user_ids.items():
+        if name in excluded or not uid:
+            continue
+        if f"<@{uid}>" in raw:
+            return True
+    return False
+
+
 def _load_alias_user_ids() -> set[str]:
     """Load Slack user IDs from config user_aliases for mention detection."""
     try:
@@ -541,6 +558,11 @@ class SlackSocketModeManager:
             channel_id = event.get("channel", "")
             thread_ts = event.get("thread_ts", "")
             is_dm = channel_id.startswith("D")
+            mentioned_other_registered_bot = _mentions_registered_bot(
+                text,
+                all_bot_uids,
+                exclude_names={anima_name, "__shared__"},
+            )
 
             alias_ids = _load_alias_user_ids()
             mention_intent = _detect_mention_intent(text, bot_user_id, alias_ids)
@@ -557,7 +579,7 @@ class SlackSocketModeManager:
             # Channel without mention: only if this anima is the default_anima
             # (e.g. sakura as COO — the primary responder for all channels).
             is_default = False
-            if not is_dm and not mention_intent:
+            if not is_dm and not mention_intent and not mentioned_other_registered_bot:
                 try:
                     cfg = load_config()
                     is_default = (anima_name == cfg.external_messaging.slack.default_anima)
@@ -703,6 +725,20 @@ class SlackSocketModeManager:
 
             text = event.get("text", "")
             thread_ts = event.get("thread_ts", "")
+            mentioned_per_anima_bot = _mentions_registered_bot(
+                text,
+                all_bot_uids,
+                exclude_names={"__shared__"},
+            )
+
+            # Let the explicitly mentioned per-Anima bot handle this channel
+            # message so the shared default route does not steal it.
+            if channel_id and not channel_id.startswith("D") and mentioned_per_anima_bot:
+                logger.debug(
+                    "Shared Slack handler skipped due to per-Anima bot mention: channel=%s",
+                    channel_id,
+                )
+                return
 
             alias_ids = _load_alias_user_ids()
             mention_intent = _detect_mention_intent(text, bot_user_id, alias_ids)
@@ -721,7 +757,10 @@ class SlackSocketModeManager:
             has_mention = bool(mention_intent)
             annotation = _build_slack_annotation(channel_id, has_mention)
             annotated = annotation + text
-            intent = mention_intent or _detect_slack_intent(annotated, channel_id, bot_user_id)
+            # Shared-handler delivery already means this message was targeted by
+            # channel mapping or default_anima selection, so treat it as
+            # actionable even when it is not an explicit @mention/DM.
+            intent = mention_intent or _detect_slack_intent(annotated, channel_id, bot_user_id) or "question"
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)
