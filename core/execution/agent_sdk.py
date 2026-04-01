@@ -130,6 +130,26 @@ logger = logging.getLogger("animaworks.execution.agent_sdk")
 __all__ = ["AgentSDKExecutor", "StreamDisconnectedError"]
 
 
+def _detect_sdk_auth_failure(text: str) -> str | None:
+    """Return auth failure text when Claude Code surfaced a 401 auth error."""
+    body = (text or "").strip()
+    if not body:
+        return None
+
+    folded = body.casefold()
+    auth_markers = (
+        "failed to authenticate",
+        "invalid authentication credentials",
+        "authentication_error",
+        "not authenticated",
+    )
+    if not any(marker in folded for marker in auth_markers):
+        return None
+    if not any(marker in folded for marker in ("401", "api error", "unauthorized", "auth")):
+        return None
+    return body
+
+
 # ── AgentSDKExecutor ─────────────────────────────────────────
 
 
@@ -170,6 +190,10 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             "hb_soft_warned": False,
             "hb_soft_timeout": self._hb_soft_timeout_s,
         }
+
+    def _should_retry_sdk_auth_failure(self) -> bool:
+        """Return True when auth failures should trigger a fresh-session retry."""
+        return (self._model_config.mode_s_auth or "max") == "max"
 
     # ── Blocking execution ───────────────────────────────────
 
@@ -310,11 +334,14 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             thread_id=thread_id,
         )
 
-        try:
-            logger.info("ClaudeSDKClient connecting (blocking mode, resume=%s)", session_id_to_resume)
-            async with ClaudeSDKClient(options=options) as client:
+        async def _run_blocking_client(run_options, *, log_label: str) -> ResultMessage | None:
+            logger.info("ClaudeSDKClient connecting (%s, resume=%s)", log_label, getattr(run_options, "resume", None))
+            async with ClaudeSDKClient(options=run_options) as client:
                 logger.info("ClaudeSDKClient connected")
-                result_message = await self._process_blocking_messages(client, **_msg_args)
+                return await self._process_blocking_messages(client, **_msg_args)
+
+        try:
+            result_message = await _run_blocking_client(options, log_label="blocking mode")
             logger.debug("ClaudeSDKClient disconnected")
         except (ProcessError, ClaudeSDKError) as e:
             if session_id_to_resume:
@@ -323,9 +350,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                 options, tfs = self._build_sdk_options(system_prompt, _max_turns, _cw, session_stats, resume=None)
                 _prompt_files.extend(tfs)
                 try:
-                    async with ClaudeSDKClient(options=options) as client:
-                        logger.info("ClaudeSDKClient connected (fresh session retry)")
-                        result_message = await self._process_blocking_messages(client, **_msg_args)
+                    result_message = await _run_blocking_client(options, log_label="blocking mode fresh session retry")
                 except Exception as retry_exc:
                     logger.exception("Agent SDK execution error (fresh session retry)")
                     return ExecutionResult(
@@ -347,6 +372,38 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         finally:
             _cleanup_tool_outputs(self._anima_dir)
             _cleanup_prompt_files(_prompt_files)
+
+        auth_failure = _detect_sdk_auth_failure("\n".join(response_text))
+        if auth_failure and self._should_retry_sdk_auth_failure():
+            logger.warning("Claude SDK returned auth failure text; retrying fresh session once")
+            response_text.clear()
+            pending_records.clear()
+            result_message = None
+            usage_acc = TokenUsage()
+            _msg_args["usage_acc"] = usage_acc
+            if session_type in _RESUMABLE_SESSION_TYPES:
+                _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
+            retry_options, retry_files = self._build_sdk_options(
+                system_prompt,
+                _max_turns,
+                _cw,
+                session_stats,
+                resume=None,
+            )
+            try:
+                result_message = await _run_blocking_client(
+                    retry_options,
+                    log_label="blocking mode auth failure retry",
+                )
+            except Exception as retry_exc:
+                logger.exception("Agent SDK auth failure retry failed")
+                return ExecutionResult(
+                    text=f"[Agent SDK Error: {retry_exc}]",
+                    tool_call_records=[],
+                )
+            finally:
+                _cleanup_tool_outputs(self._anima_dir)
+                _cleanup_prompt_files(retry_files)
 
         all_tool_records = _finalize_pending_records(pending_records)
         replied_to = self._read_replied_to_file()
@@ -408,6 +465,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             check_interrupted=self._check_interrupted,
             thread_id=thread_id,
         )
+        emitted_text_delta = False
 
         async def _fresh_session() -> AsyncGenerator[dict[str, Any], None]:
             fresh_opts, tfs = self._build_sdk_options(
@@ -433,29 +491,41 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                     partial_text="\n".join(state.response_text),
                 ) from exc
 
+        async def _run_stream_options(run_options, *, resume_guard: bool) -> AsyncGenerator[dict[str, Any], None]:
+            nonlocal emitted_text_delta
+            async with ClaudeSDKClient(options=run_options) as client:
+                logger.info("ClaudeSDKClient connected")
+                gen = process_stream_messages(client, ctx, state)
+                if resume_guard:
+                    try:
+                        first = await asyncio.wait_for(gen.__anext__(), timeout=RESUME_TIMEOUT_SEC)
+                    except TimeoutError:
+                        logger.warning("Resume timed out (session_id=%s)", session_id_to_resume)
+                        await gen.aclose()
+                        _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
+                        raise
+                    except StopAsyncIteration:
+                        logger.warning("Resume stream empty (session_id=%s)", session_id_to_resume)
+                        _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
+                        raise
+                    else:
+                        if first.get("type") == "text_delta":
+                            emitted_text_delta = True
+                        yield first
+                async for ev in gen:
+                    if ev.get("type") == "text_delta":
+                        emitted_text_delta = True
+                    yield ev
+
         try:
             logger.info("ClaudeSDKClient connecting (streaming, resume=%s)", session_id_to_resume)
             if session_id_to_resume:
                 fell_back = False
                 try:
-                    async with ClaudeSDKClient(options=options) as client:
-                        logger.info("ClaudeSDKClient connected")
-                        gen = process_stream_messages(client, ctx, state)
-                        try:
-                            first = await asyncio.wait_for(gen.__anext__(), timeout=RESUME_TIMEOUT_SEC)
-                        except TimeoutError:
-                            logger.warning("Resume timed out (session_id=%s)", session_id_to_resume)
-                            await gen.aclose()
-                            _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
-                            fell_back = True
-                        except StopAsyncIteration:
-                            logger.warning("Resume stream empty (session_id=%s)", session_id_to_resume)
-                            _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
-                            fell_back = True
-                        else:
-                            yield first
-                            async for ev in gen:
-                                yield ev
+                    async for ev in _run_stream_options(options, resume_guard=True):
+                        yield ev
+                except (TimeoutError, StopAsyncIteration):
+                    fell_back = True
                 except (ProcessError, ClaudeSDKError) as e:
                     logger.warning("SDK resume failed (session_id=%s): %s", session_id_to_resume, e)
                     _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
@@ -464,10 +534,8 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                     async for ev in _fresh_session():
                         yield ev
             else:
-                async with ClaudeSDKClient(options=options) as client:
-                    logger.info("ClaudeSDKClient connected")
-                    async for ev in process_stream_messages(client, ctx, state):
-                        yield ev
+                async for ev in _run_stream_options(options, resume_guard=False):
+                    yield ev
             logger.debug("ClaudeSDKClient disconnected")
         except BaseException as e:
             if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
@@ -480,6 +548,30 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         finally:
             _cleanup_tool_outputs(self._anima_dir)
             _cleanup_prompt_files(_prompt_files)
+
+        auth_failure = _detect_sdk_auth_failure("\n".join(state.response_text))
+        if auth_failure and self._should_retry_sdk_auth_failure() and not emitted_text_delta:
+            logger.warning("Claude SDK returned auth failure text during streaming; retrying fresh session once")
+            if session_type in _RESUMABLE_SESSION_TYPES:
+                _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
+            state = StreamingState(usage_acc=TokenUsage())
+            ctx = StreamingContext(
+                prompt=prompt,
+                images=images,
+                session_stats=session_stats,
+                tracker=tracker,
+                session_type=session_type,
+                model=self._model_config.model,
+                anima_dir=self._anima_dir,
+                cw_overrides=self._resolve_cw_overrides(),
+                check_interrupted=self._check_interrupted,
+                thread_id=thread_id,
+            )
+            emitted_text_delta = False
+            async for ev in _fresh_session():
+                if ev.get("type") == "text_delta":
+                    emitted_text_delta = True
+                yield ev
 
         all_tool_records = _finalize_pending_records(state.pending_records)
         full_text = "\n".join(state.response_text) or "(no response)"

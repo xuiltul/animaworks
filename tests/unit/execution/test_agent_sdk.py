@@ -6,8 +6,11 @@
 from __future__ import annotations
 
 import os
+import sys
+from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,9 +18,56 @@ pytestmark = pytest.mark.asyncio
 
 from core.schemas import ModelConfig
 from tests.helpers.mocks import (
+    MockAssistantMessage,
+    MockClaudeSDKClient,
+    MockResultMessage,
+    MockStreamEvent,
+    MockTextBlock,
+    MockToolResultBlock,
+    MockUserMessage,
     patch_agent_sdk,
     patch_agent_sdk_streaming,
 )
+
+
+@contextmanager
+def _patch_agent_sdk_sequences(message_sequences: list[list[Any]]):
+    """Patch claude_agent_sdk so each client uses the next message sequence."""
+    sequence_iter = iter(message_sequences)
+
+    def _client_factory(**kwargs: Any) -> MockClaudeSDKClient:
+        return MockClaudeSDKClient(messages=next(sequence_iter), **kwargs)
+
+    mock_module = MagicMock()
+    mock_module.ClaudeSDKClient = _client_factory
+    mock_module.AssistantMessage = MockAssistantMessage
+    mock_module.ResultMessage = MockResultMessage
+    mock_module.TextBlock = MockTextBlock
+    mock_module.ToolUseBlock = MagicMock
+    mock_module.ToolResultBlock = MockToolResultBlock
+    mock_module.UserMessage = MockUserMessage
+    mock_module.SystemMessage = MagicMock
+    mock_module.ClaudeAgentOptions = MagicMock
+    mock_module.HookMatcher = MagicMock
+    mock_module.ClaudeSDKError = Exception
+    mock_module.ProcessError = Exception
+
+    mock_types = MagicMock()
+    mock_types.StreamEvent = MockStreamEvent
+    mock_module.types = mock_types
+
+    saved_modules = {}
+    for key in ["claude_agent_sdk", "claude_agent_sdk.types"]:
+        saved_modules[key] = sys.modules.get(key)
+        sys.modules[key] = mock_types if key == "claude_agent_sdk.types" else mock_module
+    try:
+        yield
+    finally:
+        for key, saved in saved_modules.items():
+            if saved is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = saved
 
 
 # ── Fixtures ──────────────────────────────────────────────────
@@ -193,6 +243,49 @@ class TestAgentSDKExecutor:
             # Empty text blocks produce "(no response)"
             # Actually empty string joined would be "", then or "(no response)"
             assert result.text == "(no response)" or result.text == ""
+
+    async def test_execute_retries_max_auth_failure_once(self, model_config, anima_dir):
+        auth_text = (
+            'Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"Invalid authentication credentials"}}'
+        )
+        first_messages = [
+            MockAssistantMessage([MockTextBlock(auth_text)]),
+            MockResultMessage(usage={"input_tokens": 10, "output_tokens": 5}),
+        ]
+        second_messages = [
+            MockAssistantMessage([MockTextBlock("Recovered response")]),
+            MockResultMessage(usage={"input_tokens": 12, "output_tokens": 6}),
+        ]
+
+        with _patch_agent_sdk_sequences([first_messages, second_messages]):
+            from core.execution.agent_sdk import AgentSDKExecutor
+
+            executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+            result = await executor.execute("test", system_prompt="sys")
+
+        assert result.text == "Recovered response"
+
+    async def test_execute_does_not_retry_api_auth_failure(self, anima_dir):
+        auth_text = (
+            'Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"Invalid authentication credentials"}}'
+        )
+        config = ModelConfig(
+            model="claude-sonnet-4-6",
+            api_key="sk-test",
+            mode_s_auth="api",
+        )
+        first_messages = [
+            MockAssistantMessage([MockTextBlock(auth_text)]),
+            MockResultMessage(usage={"input_tokens": 10, "output_tokens": 5}),
+        ]
+
+        with _patch_agent_sdk_sequences([first_messages]):
+            from core.execution.agent_sdk import AgentSDKExecutor
+
+            executor = AgentSDKExecutor(model_config=config, anima_dir=anima_dir)
+            result = await executor.execute("test", system_prompt="sys")
+
+        assert auth_text in result.text
 
     async def test_execute_with_tracker(self, model_config, anima_dir):
         from core.prompt.context import ContextTracker
@@ -454,6 +547,48 @@ class TestAgentSDKExecutorStreaming:
         done_events = [e for e in events if e["type"] == "done"]
         assert len(done_events) == 1
         assert done_events[0]["full_text"] == "reply from completed message"
+
+    async def test_streaming_retries_max_auth_failure_without_text_deltas(
+        self, model_config, anima_dir,
+    ):
+        from core.prompt.context import ContextTracker
+
+        auth_text = (
+            'Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"Invalid authentication credentials"}}'
+        )
+        first_messages = [
+            MockAssistantMessage([MockTextBlock(auth_text)]),
+            MockResultMessage(usage={"input_tokens": 10, "output_tokens": 5}),
+        ]
+        second_messages = [
+            MockStreamEvent(
+                {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": "Recovered"},
+                    "index": 0,
+                }
+            ),
+            MockAssistantMessage([MockTextBlock("Recovered")]),
+            MockResultMessage(usage={"input_tokens": 12, "output_tokens": 6}),
+        ]
+
+        tracker = ContextTracker(model="claude-sonnet-4-6")
+
+        with _patch_agent_sdk_sequences([first_messages, second_messages]):
+            from core.execution.agent_sdk import AgentSDKExecutor
+
+            executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+            events = []
+            async for event in executor.execute_streaming(
+                system_prompt="sys",
+                prompt="test",
+                tracker=tracker,
+            ):
+                events.append(event)
+
+        done_events = [e for e in events if e["type"] == "done"]
+        assert len(done_events) == 1
+        assert done_events[0]["full_text"] == "Recovered"
 
 
 # ── Image input (multimodal) ──────────────────────────────────
