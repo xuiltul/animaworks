@@ -7,6 +7,24 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-04-02
+
+### Added
+
+#### UI
+- Dashboard・Workspaceチャットに KaTeX 数式レンダリングを追加（KaTeX 0.16.44 + marked-katex-extension 5.1.7）
+
+#### Templates & Documentation
+- `anatomy/essentials.md` を追加 — AnimaWorks全体像を1ページで俯瞰するガイド（実行パス、Heartbeat/Cron、マシン、チーム設計、記憶、コスト最適化）。`[IMPORTANT]` マーカーでRAG優先ブースト（ja/en/ko）
+- `00_index.md` に「Start Here」セクション追加、`common_knowledge_hint.md` にessentials.md参照を追加
+- team-designテンプレートを大幅拡充 — 法務（Legal）・財務（Finance）・トレーディング（Trading）・営業＆マーケティング（Sales & Marketing）・COO・経営企画（Corporate Planning）・カスタマーサクセス（Customer Success）・インフラ（Infrastructure）・秘書（Secretary）の9チーム追加（ja/en/ko、各ロールの injection/machine/checklist 付き）
+- `org-chart-template.md` 追加 — 組織図テンプレート
+- `team-design/guide.md` を新チームパターンで更新
+
+### Fixed
+- TaskExec誤完了を防止 — error/cancel/expired状態の検出、cancelled/expiredセンチネル値の正しいキューステータスへのマッピング、ストリーミングエラーチャンクの追跡、serial batchの `failed_dependency` パスでの `_sync_task_queue` 呼び出し漏れ、fuzzyマッチの最小文字数チェック（8文字）を追加 (#145)
+- 非Anthropicクレデンシャル使用Animaでconsolidation時にモデルだけ上書きしAPIキー/ベースURLが元のまま残る問題を修正 — `_resolve_consolidation_credential()` でプロバイダ別クレデンシャルを正しく解決
+
 ## [0.6.2] - 2026-03-30
 
 ### Added
