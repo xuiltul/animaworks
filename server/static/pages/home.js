@@ -19,7 +19,10 @@ export function render(container) {
 
     <div class="usage-panel-header">
       <span></span>
-      <button class="btn-secondary usage-refresh-btn" id="usageRefreshBtn">&#x21BB; Refresh</button>
+      <div class="usage-panel-actions">
+        <span class="usage-last-updated" id="usageLastUpdated">${t("home.ext_last_updated")}: --:--:--</span>
+        <button class="btn-secondary usage-refresh-btn" id="usageRefreshBtn">&#x21BB; Refresh</button>
+      </div>
     </div>
     <div class="usage-panel" id="homeUsagePanel">
       <div class="usage-card" id="usageCardClaude">
@@ -136,6 +139,25 @@ async function _loadAll() {
 }
 
 // ── Usage Panel ────────────────────────────
+
+function _formatUsageFetchTime(value) {
+  if (value === null || value === undefined || value === "") return "--:--:--";
+  let ms;
+  if (typeof value === "number") {
+    ms = value < 1e12 ? value * 1000 : value;
+  } else {
+    ms = new Date(value).getTime();
+  }
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return "--:--:--";
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function _updateUsageLastUpdated(value) {
+  const el = document.getElementById("usageLastUpdated");
+  if (!el) return;
+  el.textContent = `${t("home.ext_last_updated")}: ${_formatUsageFetchTime(value)}`;
+}
 
 function _resetToJst(value) {
   if (!value) return "";
@@ -477,6 +499,7 @@ async function _loadUsage(forceRefresh = false) {
     if (data.claude) _renderClaudeUsage(data.claude);
     if (data.openai) _renderOpenaiUsage(data.openai);
     _renderGovernor(data.governor);
+    _updateUsageLastUpdated(data.snapshot_cached_at ?? data.cached_at ?? Date.now());
   } catch (err) {
     const claudeEl = document.getElementById("usageClaudeBody");
     const openaiEl = document.getElementById("usageOpenaiBody");
