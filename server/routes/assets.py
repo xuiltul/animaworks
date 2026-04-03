@@ -980,17 +980,23 @@ def create_assets_router() -> APIRouter:
                 source_path = assets_dir / output_filename
                 if source_path.exists():
                     generated_bytes = source_path.read_bytes()
-                    await _emit_ready(generated_bytes)
 
-                    # Restore the canonical avatar to its pre-generation state so
-                    # that retry requests re-downloading face_reference_url (which
-                    # may point to the avatar file) always get the original image,
-                    # not the freshly generated one.  Without this, each retry
-                    # feeds the previous output as input → progressive degradation.
+                    # Restore the canonical avatar BEFORE emitting the preview
+                    # notification.  The WebSocket message triggers the UI to
+                    # display the result, and the user may click Retry immediately.
+                    # That retry request re-downloads face_reference_url, which may
+                    # point to the avatar file — restoring first ensures it always
+                    # gets the original image, not the freshly generated one.
                     original_avatar = backup_dir / output_filename
                     if original_avatar.exists():
                         source_path.write_bytes(original_avatar.read_bytes())
-                        logger.debug("Restored canonical avatar from backup after preview")
+                        logger.info("Restored canonical avatar from backup after preview")
+                    else:
+                        logger.debug(
+                            "No original avatar in backup — skipping restore (%s)", original_avatar
+                        )
+
+                    await _emit_ready(generated_bytes)
 
             except Exception as exc:
                 logger.exception("Background fullbody generation failed for %s", name)
