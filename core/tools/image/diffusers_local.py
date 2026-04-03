@@ -467,8 +467,16 @@ class LocalDiffusersClient:
                 logger.debug("Haar cascade failed", exc_info=True)
 
         if face_box is None:
-            logger.info("No face detected in reference — using full image")
-            return image
+            # Fall back to upper-center square crop instead of full image.
+            # Passing a full-body image to IP-Adapter yields poor face embeddings
+            # and can create a degradation feedback loop on retry.
+            crop_size = min(iw, int(ih * 0.55))
+            left = (iw - crop_size) // 2
+            logger.info(
+                "No face detected — using upper-centre crop %dx%d from %dx%d",
+                crop_size, crop_size, iw, ih,
+            )
+            return image.crop((left, 0, left + crop_size, crop_size))
 
         x1, y1, x2, y2 = face_box
         # Expand by 50% for forehead/chin/cheek margin
@@ -737,7 +745,16 @@ class LocalDiffusersClient:
             pipe = self._load_text2img_pipeline()
             result = pipe(**common_kwargs, width=width, height=height)
 
-        return self._to_png_bytes(result.images[0])
+        png_bytes = self._to_png_bytes(result.images[0])
+        # Free intermediate tensors so VRAM doesn't accumulate across retries.
+        del result
+        try:
+            import torch as _torch
+            if _torch.cuda.is_available():
+                _torch.cuda.empty_cache()
+        except Exception:
+            pass
+        return png_bytes
 
     def _run_img2img_pipeline(
         self,
