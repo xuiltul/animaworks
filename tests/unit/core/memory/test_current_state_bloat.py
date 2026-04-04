@@ -199,8 +199,8 @@ class TestUpdateStateFromSummary:
 # ── Heartbeat prompt (cleanup instruction removed) ─────────────
 
 
-class TestHeartbeatPromptNoCleanup:
-    """Heartbeat prompt no longer injects cleanup instructions."""
+class TestHeartbeatPromptCleanup:
+    """Heartbeat prompt injects cleanup instruction when current_state exceeds threshold."""
 
     @pytest.fixture
     def mock_heartbeat_mixin(self, anima_dir):
@@ -209,6 +209,7 @@ class TestHeartbeatPromptNoCleanup:
         mixin = MagicMock(spec=HeartbeatMixin)
         mixin.name = "test-bloat"
         mixin.anima_dir = anima_dir
+        mixin._CURRENT_STATE_CLEANUP_THRESHOLD = HeartbeatMixin._CURRENT_STATE_CLEANUP_THRESHOLD
 
         memory_mock = MagicMock()
         mixin.memory = memory_mock
@@ -216,8 +217,8 @@ class TestHeartbeatPromptNoCleanup:
         return mixin
 
     @pytest.mark.asyncio
-    async def test_no_cleanup_even_when_large(self, mock_heartbeat_mixin):
-        """No cleanup instruction even for a very large current_state."""
+    async def test_cleanup_injected_when_large(self, mock_heartbeat_mixin):
+        """Cleanup instruction is injected when current_state exceeds threshold."""
         from core._anima_heartbeat import HeartbeatMixin
 
         big_state = "x" * 10000
@@ -229,11 +230,11 @@ class TestHeartbeatPromptNoCleanup:
             parts = await HeartbeatMixin._build_heartbeat_prompt(mock_heartbeat_mixin)
 
         cleanup_parts = [p for p in parts if "圧縮" in p or "cleanup" in p]
-        assert len(cleanup_parts) == 0
+        assert len(cleanup_parts) >= 1
 
     @pytest.mark.asyncio
-    async def test_prompt_contains_heartbeat_only(self, mock_heartbeat_mixin):
-        """Prompt parts contain only heartbeat header and background context."""
+    async def test_no_cleanup_when_small(self, mock_heartbeat_mixin):
+        """No cleanup instruction when current_state is below threshold."""
         from core._anima_heartbeat import HeartbeatMixin
 
         mock_heartbeat_mixin.memory.read_current_state.return_value = "x" * 500
