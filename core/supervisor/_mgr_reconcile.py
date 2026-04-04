@@ -121,17 +121,20 @@ class ReconcileMixin:
         running = set(self.processes.keys())
 
         # Governor-suspended animas — must not be auto-restarted by reconciliation.
-        # Read directly from the persisted state file (no app coupling).
+        # Only read state when Governor is enabled.
         governor_suspended: set[str] = set()
         try:
-            from core.paths import get_data_dir
+            from core.config.models import load_config as _lc_rec
 
-            _gov_state_path = get_data_dir() / "usage_governor_state.json"
-            if _gov_state_path.is_file():
-                import json as _json
+            if _lc_rec().server.usage_governor.enabled:
+                from core.paths import get_data_dir
 
-                _gov_data = _json.loads(_gov_state_path.read_text("utf-8"))
-                governor_suspended = set(_gov_data.get("suspended_animas", []))
+                _gov_state_path = get_data_dir() / "usage_governor_state.json"
+                if _gov_state_path.is_file():
+                    import json as _json
+
+                    _gov_data = _json.loads(_gov_state_path.read_text("utf-8"))
+                    governor_suspended = set(_gov_data.get("suspended_animas", []))
         except Exception:
             pass
 

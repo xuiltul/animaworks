@@ -200,7 +200,7 @@ class TestUpdateStateFromSummary:
 
 
 class TestHeartbeatPromptCleanup:
-    """Heartbeat prompt injects cleanup instruction when current_state exceeds threshold."""
+    """Heartbeat cleanup injection only when heartbeat.current_state_max_chars > 0."""
 
     @pytest.fixture
     def mock_heartbeat_mixin(self, anima_dir):
@@ -217,20 +217,21 @@ class TestHeartbeatPromptCleanup:
         return mixin
 
     @pytest.mark.asyncio
-    async def test_cleanup_injected_when_large(self, mock_heartbeat_mixin):
-        """Cleanup instruction is injected when current_state exceeds threshold."""
+    async def test_no_cleanup_even_when_large(self, mock_heartbeat_mixin):
+        """No cleanup instruction when max_chars is 0 (default disabled)."""
         from core._anima_heartbeat import HeartbeatMixin
 
         big_state = "x" * 10000
         mock_heartbeat_mixin.memory.read_current_state.return_value = big_state
         mock_heartbeat_mixin.memory.read_heartbeat_config.return_value = None
         mock_heartbeat_mixin._build_background_context_parts = MagicMock(return_value=[])
+        mock_heartbeat_mixin._get_current_state_max_chars = MagicMock(return_value=0)
 
         with patch("core._anima_heartbeat.load_prompt", return_value="heartbeat prompt"):
             parts = await HeartbeatMixin._build_heartbeat_prompt(mock_heartbeat_mixin)
 
         cleanup_parts = [p for p in parts if "圧縮" in p or "cleanup" in p]
-        assert len(cleanup_parts) >= 1
+        assert len(cleanup_parts) == 0
 
     @pytest.mark.asyncio
     async def test_no_cleanup_when_small(self, mock_heartbeat_mixin):
@@ -240,6 +241,7 @@ class TestHeartbeatPromptCleanup:
         mock_heartbeat_mixin.memory.read_current_state.return_value = "x" * 500
         mock_heartbeat_mixin.memory.read_heartbeat_config.return_value = None
         mock_heartbeat_mixin._build_background_context_parts = MagicMock(return_value=["bg context"])
+        mock_heartbeat_mixin._get_current_state_max_chars = MagicMock(return_value=0)
 
         with patch("core._anima_heartbeat.load_prompt", return_value="heartbeat prompt"):
             parts = await HeartbeatMixin._build_heartbeat_prompt(mock_heartbeat_mixin)

@@ -147,9 +147,10 @@ class ContextMixin:
 
                 _keep = _lc().server.ollama_keep_alive
             except Exception:
-                _keep = "5m"
-            kwargs.setdefault("extra_body", {})
-            kwargs["extra_body"]["keep_alive"] = _keep
+                _keep = ""
+            if _keep:
+                kwargs.setdefault("extra_body", {})
+                kwargs["extra_body"]["keep_alive"] = _keep
         # ── Repetition penalty parameters ──
         from core.config.models import resolve_penalties
 

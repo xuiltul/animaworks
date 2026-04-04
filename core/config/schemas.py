@@ -123,6 +123,7 @@ class LocalLLMConfig(BaseModel):
 
     base_url: str = DEFAULT_LOCAL_LLM_BASE_URL
     default_model: str = DEFAULT_LOCAL_LLM_MODEL
+    auto_apply_presets: bool = False
     presets: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_LOCAL_LLM_PRESETS))
     role_presets: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_LOCAL_LLM_ROLE_PRESETS))
 
@@ -302,7 +303,7 @@ class ExternalMessagingChannelConfig(BaseModel):
     anima_mapping: dict[str, str] = {}  # channel_id → anima_name
     default_anima: str = ""  # fallback anima for unmapped channels
     app_id_mapping: dict[str, str] = {}  # api_app_id → anima_name (per-Anima webhook routing)
-    auto_response: bool = True  # auto-post LLM responses back to originating platform
+    auto_response: bool = False  # auto-post LLM responses back to originating platform
     board_mapping: dict[str, str] = {}  # channel_id → animaworks_board_name (auto-populated)
 
 
@@ -333,10 +334,17 @@ class MediaProxyConfig(BaseModel):
     rate_limit_window_s: int = 60
 
 
+class UsageGovernorConfig(BaseModel):
+    """Usage Governor settings (server-side quota enforcement)."""
+
+    enabled: bool = False
+
+
 class ServerConfig(BaseModel):
     """Server runtime configuration."""
 
     session_ttl_days: int | None = 7  # None = unlimited
+    usage_governor: UsageGovernorConfig = UsageGovernorConfig()
     ipc_stream_timeout: int = 60  # per-chunk timeout in seconds
     keepalive_interval: int = 30  # keep-alive emission interval in seconds
     max_streaming_duration: int = 1800  # max streaming duration before hang (seconds)
@@ -345,8 +353,10 @@ class ServerConfig(BaseModel):
     stream_retry_max: int = 3  # max automatic retries on stream disconnect
     stream_retry_delay_s: float = 5.0  # delay between retries (seconds)
     llm_num_retries: int = 3  # retries for LLM API calls (429/5xx/network)
-    ollama_keep_alive: str = "5m"  # Ollama model keep-alive after a request (e.g. "5m", "0", "1h")
-    ollama_total_timeout: int = 7200  # Hard upper bound (seconds) on a single Ollama generation call (default: 2h)
+    ollama_keep_alive: str = (
+        ""  # Ollama model keep-alive after a request (e.g. "5m", "0", "1h"); empty = Ollama default
+    )
+    ollama_total_timeout: int = 0  # Hard upper bound (seconds) on a single Ollama generation call; 0 = unlimited
     media_proxy: MediaProxyConfig = MediaProxyConfig()
 
     @model_validator(mode="after")
@@ -427,6 +437,11 @@ class HeartbeatConfig(BaseModel):
     interval_minutes: int = Field(
         default=30, ge=1, le=1440
     )  # heartbeat interval (config-driven, not parsed from heartbeat.md)
+    current_state_max_chars: int = Field(
+        default=0,
+        ge=0,
+        description="Max chars for current_state.md before trim; 0 = disabled",
+    )
     soft_timeout_seconds: int = Field(
         default=300,
         ge=30,

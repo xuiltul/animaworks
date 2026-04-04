@@ -314,101 +314,32 @@ class HeartbeatMixin:
                 exc_info=True,
             )
 
-        # ── Usage Governor context for COO ──
-        try:
-            from core.paths import get_data_dir
-            from server.usage_governor import load_policy
-
-            policy = load_policy(get_data_dir())
-            coo_name = policy.get("coo_anima", "sakura")
-            if self.name == coo_name and policy.get("enabled", True):
-                usage_ctx = self._build_usage_context()
-                if usage_ctx:
-                    parts.append(usage_ctx)
-        except Exception:
-            logger.debug("[%s] Failed to inject usage context", self.name, exc_info=True)
-
         return parts
 
-    def _build_usage_context(self) -> str | None:
-        """Build usage status context for the COO anima."""
+    def _get_current_state_max_chars(self) -> int:
         try:
-            from core.paths import get_animas_dir, get_data_dir
-            from server.routes.usage_routes import _fetch_claude_usage, _fetch_openai_usage
-            from server.usage_governor import _classify_animas
+            from core.config.models import load_config
 
-            claude = _fetch_claude_usage()
-            openai = _fetch_openai_usage()
-
-            lines = ["## Provider Usage Status (自動取得)"]
-
-            # Claude
-            if claude.get("error"):
-                lines.append(f"- Claude: {claude.get('message', claude['error'])}")
-            else:
-                for key in ("five_hour", "seven_day"):
-                    w = claude.get(key)
-                    if w:
-                        lines.append(f"- Claude {key}: remaining {w['remaining']:.0f}%")
-
-            # OpenAI
-            if openai.get("error"):
-                lines.append(f"- OpenAI: {openai.get('message', openai['error'])}")
-            else:
-                skip = {"provider"}
-                for key, w in openai.items():
-                    if key in skip or not isinstance(w, dict) or "remaining" not in w:
-                        continue
-                    lines.append(f"- OpenAI {key}: remaining {w['remaining']:.0f}%")
-
-            # Governor state
-            from server.usage_governor import GovernorState
-
-            data_dir = get_data_dir()
-            state = GovernorState(data_dir / "usage_governor_state.json")
-            if state.suspended_animas:
-                lines.append(f"\n**Governor制御中**: {', '.join(state.suspended_animas)} を一時停止中")
-                lines.append(f"理由: {state.reason}")
-
-            # Anima-provider mapping
-            animas_dir = get_animas_dir()
-            try:
-                all_names = [d.name for d in animas_dir.iterdir() if (d / "status.json").is_file()]
-                groups = _classify_animas(animas_dir, all_names)
-                mapping_lines = []
-                for prov, names in sorted(groups.items()):
-                    mapping_lines.append(f"  {prov}: {', '.join(names)}")
-                if mapping_lines:
-                    lines.append("\nAnima provider分類:")
-                    lines.extend(mapping_lines)
-            except Exception:
-                pass
-
-            lines.append(
-                "\nCOOとして、上記の使用状況を踏まえて各Animaへの作業配分を最適化してください。"
-                "残量が少ないプロバイダーを使うAnimaの作業を減らし、余裕のあるプロバイダーのAnimaに振り分けてください。"
-            )
-
-            return "\n".join(lines)
+            return load_config().heartbeat.current_state_max_chars
         except Exception:
-            logger.debug("[%s] Failed to build usage context", self.name, exc_info=True)
-            return None
-
-    _CURRENT_STATE_CLEANUP_THRESHOLD = 3000
+            return 0
 
     def _enforce_state_size_limit(self) -> None:
-        """Hard-trim current_state.md if it exceeds the cleanup threshold.
+        """Hard-trim current_state.md if it exceeds the configured threshold.
 
         Called after heartbeat completion.  Overflow content is archived
         into today's episode file for traceability.
+        Disabled when ``heartbeat.current_state_max_chars`` is 0 (default).
         """
-        state = self.memory.read_current_state()
-        if len(state) <= self._CURRENT_STATE_CLEANUP_THRESHOLD:
+        max_chars = self._get_current_state_max_chars()
+        if max_chars <= 0:
             return
-        threshold = self._CURRENT_STATE_CLEANUP_THRESHOLD
-        trimmed = state[-threshold:]
+        state = self.memory.read_current_state()
+        if len(state) <= max_chars:
+            return
+        trimmed = state[-max_chars:]
         first_nl = trimmed.find("\n")
-        if first_nl != -1 and first_nl < threshold * 0.2:
+        if first_nl != -1 and first_nl < max_chars * 0.2:
             trimmed = trimmed[first_nl + 1 :]
         overflow = state[: len(state) - len(trimmed)]
         self.memory.append_episode(f"## current_state.md overflow archived\n\n{overflow}")
@@ -431,22 +362,24 @@ class HeartbeatMixin:
         checklist = hb_config or load_prompt("heartbeat_default_checklist")
         parts = [load_prompt("heartbeat", checklist=checklist)]
 
-        state = self.memory.read_current_state()
-        state_len = len(state)
-        if state_len > self._CURRENT_STATE_CLEANUP_THRESHOLD:
-            parts.append(
-                t(
-                    "heartbeat.current_state_cleanup_required",
-                    current_chars=state_len,
-                    max_chars=self._CURRENT_STATE_CLEANUP_THRESHOLD,
+        _max_chars = self._get_current_state_max_chars()
+        if _max_chars > 0:
+            state = self.memory.read_current_state()
+            state_len = len(state)
+            if state_len > _max_chars:
+                parts.append(
+                    t(
+                        "heartbeat.current_state_cleanup_required",
+                        current_chars=state_len,
+                        max_chars=_max_chars,
+                    )
                 )
-            )
-            logger.info(
-                "[%s] current_state.md exceeds threshold (%d > %d), injecting cleanup instruction",
-                self.name,
-                state_len,
-                self._CURRENT_STATE_CLEANUP_THRESHOLD,
-            )
+                logger.info(
+                    "[%s] current_state.md exceeds threshold (%d > %d), injecting cleanup instruction",
+                    self.name,
+                    state_len,
+                    _max_chars,
+                )
 
         parts.extend(self._build_background_context_parts())
 

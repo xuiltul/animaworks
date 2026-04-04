@@ -183,24 +183,26 @@ async def _startup_animas_background(app: FastAPI) -> None:
         except Exception:
             logger.exception("Frontmatter migration failed (non-fatal)")
 
-        # Exclude governor-suspended animas from startup.
-        # The governor will resume them automatically when usage recovers.
+        # Exclude governor-suspended animas from startup (only when Governor is enabled).
         _gov_excluded: set[str] = set()
         try:
-            import json as _json
+            from core.config.models import load_config as _lc_gov
 
-            from core.paths import get_data_dir as _get_dd
+            if _lc_gov().server.usage_governor.enabled:
+                import json as _json
 
-            _gsp = _get_dd() / "usage_governor_state.json"
-            if _gsp.is_file():
-                _gsd = _json.loads(_gsp.read_text("utf-8"))
-                _gov_excluded = set(_gsd.get("suspended_animas", []))
-                if _gov_excluded:
-                    logger.info(
-                        "Startup: skipping %d governor-suspended animas: %s",
-                        len(_gov_excluded),
-                        ", ".join(sorted(_gov_excluded)),
-                    )
+                from core.paths import get_data_dir as _get_dd
+
+                _gsp = _get_dd() / "usage_governor_state.json"
+                if _gsp.is_file():
+                    _gsd = _json.loads(_gsp.read_text("utf-8"))
+                    _gov_excluded = set(_gsd.get("suspended_animas", []))
+                    if _gov_excluded:
+                        logger.info(
+                            "Startup: skipping %d governor-suspended animas: %s",
+                            len(_gov_excluded),
+                            ", ".join(sorted(_gov_excluded)),
+                        )
         except Exception:
             logger.debug("Failed to read governor state at startup", exc_info=True)
 
@@ -445,12 +447,17 @@ async def lifespan(app: FastAPI):
         )
 
         # ── Usage Governor (throttles cloud-provider animas based on quota) ──
-        from core.paths import get_data_dir
-        from server.usage_governor import UsageGovernor
+        from core.config.models import load_config as _load_cfg_gov
 
-        governor = UsageGovernor(app, get_data_dir(), app.state.animas_dir)
-        app.state.usage_governor = governor
-        await governor.start()
+        if _load_cfg_gov().server.usage_governor.enabled:
+            from core.paths import get_data_dir
+            from server.usage_governor import UsageGovernor
+
+            governor = UsageGovernor(app, get_data_dir(), app.state.animas_dir)
+            app.state.usage_governor = governor
+            await governor.start()
+        else:
+            logger.info("Usage Governor is disabled (server.usage_governor.enabled=false)")
 
         logger.info("Server started (anima processes launching in background)")
     else:
