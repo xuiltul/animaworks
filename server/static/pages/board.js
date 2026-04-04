@@ -453,10 +453,15 @@ async function _renderChannelMembers(channelName, metaEl) {
   const allAnimas = [...new Set(_discordChannels.flatMap(c => c.members || []))].sort();
 
   function _render() {
-    const tags = members.map(m =>
-      `<span style="display:inline-flex;align-items:center;gap:0.2rem;background:var(--color-primary-light,#e8f0fe);color:var(--color-primary,#0066cc);border-radius:10px;padding:0.1rem 0.5rem;font-size:0.75rem;">` +
-      `${escapeHtml(m)}<button class="board-member-rm" data-name="${escapeHtml(m)}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#666);font-size:0.75rem;padding:0;line-height:1;">✕</button></span>`
-    ).join(" ");
+    const tags = members.map((m, i) => {
+      const isLead = i === 0;
+      const bg = isLead ? "var(--color-warning-light,#fff3cd)" : "var(--color-primary-light,#e8f0fe)";
+      const fg = isLead ? "var(--color-warning-dark,#856404)" : "var(--color-primary,#0066cc)";
+      const star = isLead ? "★ " : "";
+      const leadBtn = !isLead ? `<button class="board-member-lead" data-name="${escapeHtml(m)}" title="${t("board.members_set_lead")}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#aaa);font-size:0.7rem;padding:0;line-height:1;">☆</button>` : "";
+      return `<span style="display:inline-flex;align-items:center;gap:0.2rem;background:${bg};color:${fg};border-radius:10px;padding:0.1rem 0.5rem;font-size:0.75rem;">` +
+        `${star}${escapeHtml(m)}${leadBtn}<button class="board-member-rm" data-name="${escapeHtml(m)}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#666);font-size:0.75rem;padding:0;line-height:1;">✕</button></span>`;
+    }).join(" ");
 
     // Animas not in this channel
     const available = allAnimas.filter(a => !members.includes(a));
@@ -475,6 +480,21 @@ async function _renderChannelMembers(channelName, metaEl) {
         ch.members = [...members];
         await _saveMembership(ch.id, members);
         _render();
+      });
+    });
+
+    // Bind lead buttons (☆ -> promote to first position)
+    metaEl.querySelectorAll(".board-member-lead").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const nm = btn.dataset.name;
+        const idx = members.indexOf(nm);
+        if (idx > 0) {
+          members.splice(idx, 1);
+          members.unshift(nm);
+          ch.members = [...members];
+          await _saveMembership(ch.id, members);
+          _render();
+        }
       });
     });
 

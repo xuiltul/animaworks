@@ -160,6 +160,7 @@
   "board.members": "メンバー",
   "board.members_add": "追加",
   "board.members_none": "メンバー未設定",
+  "board.members_set_lead": "チャンネル責任者に設定",
   "board.dm_filter_all": "すべて",
   "board.dm_filter_title": "Animaで絞り込み",
   "board.dm_none": "DMなし",

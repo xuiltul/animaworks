@@ -160,6 +160,7 @@
   "board.members": "Members",
   "board.members_add": "Add",
   "board.members_none": "No members assigned",
+  "board.members_set_lead": "Set as channel lead",
   "board.dm_filter_all": "All",
   "board.dm_filter_title": "Filter by Anima",
   "board.dm_none": "No DMs",
