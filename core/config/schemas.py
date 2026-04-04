@@ -123,6 +123,7 @@ class LocalLLMConfig(BaseModel):
 
     base_url: str = DEFAULT_LOCAL_LLM_BASE_URL
     default_model: str = DEFAULT_LOCAL_LLM_MODEL
+    auto_apply_presets: bool = False
     presets: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_LOCAL_LLM_PRESETS))
     role_presets: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_LOCAL_LLM_ROLE_PRESETS))
 

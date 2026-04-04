@@ -34,6 +34,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.i18n import t
+
 logger = logging.getLogger("animaworks.usage_governor")
 
 # Map anima credential values to policy provider keys
@@ -640,15 +642,62 @@ class UsageGovernor:
                 logger.warning("Governor: failed to resume %s", name, exc_info=True)
 
         # Suspend animas that should be stopped.
-        # Check ALL targets (not just newly added ones) because after a
-        # server restart the supervisor may have re-launched animas that
-        # the governor had previously suspended.
+        newly_suspended = target_suspended - currently_suspended
         for name in target_suspended:
             try:
                 if name in supervisor.processes:
                     await supervisor.stop_anima(name)
                     logger.info("Governor: suspended anima %s", name)
+                    if name in newly_suspended:
+                        await self._notify_supervisor(name, self._state.reason)
             except Exception:
                 logger.warning("Governor: failed to suspend %s", name, exc_info=True)
 
         self._state.suspended_animas = sorted(target_suspended)
+
+    async def _notify_supervisor(self, anima_name: str, reason: str) -> None:
+        """Notify the suspended anima's supervisor (or human if top-level)."""
+        try:
+            import json as _json
+
+            status_path = self._animas_dir / anima_name / "status.json"
+            if not status_path.is_file():
+                return
+            status = _json.loads(status_path.read_text("utf-8"))
+            supervisor_name = status.get("supervisor")
+
+            if supervisor_name:
+                sup_status_path = self._animas_dir / supervisor_name / "status.json"
+                sup_enabled = False
+                if sup_status_path.is_file():
+                    sup_data = _json.loads(sup_status_path.read_text("utf-8"))
+                    sup_enabled = sup_data.get("enabled", False)
+
+                if sup_enabled:
+                    from core.messenger import Messenger
+
+                    messenger = Messenger(self._animas_dir)
+                    await messenger.send(
+                        from_person="system",
+                        to=supervisor_name,
+                        content=t(
+                            "governor.supervisor_notify",
+                            anima=anima_name,
+                            reason=reason,
+                        ),
+                        intent="report",
+                    )
+                    logger.info("Governor: notified supervisor %s about %s suspension", supervisor_name, anima_name)
+                    return
+
+            from core.config.models import load_config as _lc_hn
+            from core.notification.notifier import HumanNotifier
+
+            cfg = _lc_hn()
+            notifier = HumanNotifier.from_config(cfg.human_notification)
+            if notifier.channel_count > 0:
+                msg = t("governor.human_notify", anima=anima_name, reason=reason)
+                await notifier.notify(subject="Governor Alert", body=msg, anima_name=anima_name)
+            logger.info("Governor: notified human about %s suspension (no active supervisor)", anima_name)
+        except Exception:
+            logger.warning("Failed to notify supervisor for %s", anima_name, exc_info=True)

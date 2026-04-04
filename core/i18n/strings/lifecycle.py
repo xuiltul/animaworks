@@ -42,4 +42,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "cron.mdの「{task_name}」の指示に従って処理してください。",
         "en": "Follow the instructions for '{task_name}' in cron.md.",
     },
+    "governor.supervisor_notify": {
+        "ja": "[Governor] {anima} をクォータ超過により一時停止しました。理由: {reason}",
+        "en": "[Governor] {anima} has been suspended due to quota limit. Reason: {reason}",
+    },
+    "governor.human_notify": {
+        "ja": "Governor: {anima} がクォータ超過で停止されました。理由: {reason}",
+        "en": "Governor: {anima} suspended due to quota. Reason: {reason}",
+    },
 }

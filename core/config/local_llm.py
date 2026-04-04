@@ -62,8 +62,13 @@ def apply_local_llm_role_to_status(status_data: dict[str, Any], config: Any, rol
 
 
 def apply_local_llm_presets_to_animas(animas_dir: Path, config: Any) -> list[str]:
-    """Apply role-based local LLM model settings to all animas with status.json."""
+    """Apply role-based local LLM model settings to all animas with status.json.
+
+    Guarded by ``config.local_llm.auto_apply_presets`` (default False).
+    """
     updated: list[str] = []
+    if not getattr(config.local_llm, "auto_apply_presets", False):
+        return updated
     if not animas_dir.exists():
         return updated
 
