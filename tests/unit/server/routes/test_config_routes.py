@@ -321,6 +321,7 @@ class TestLocalLLMSettings:
         config = AnimaWorksConfig()
         config.credentials["ollama"] = CredentialConfig(type="ollama", base_url="http://127.0.0.1:11434")
         config.anima_defaults.credential = "ollama"
+        config.local_llm.auto_apply_presets = True
         animas_dir = tmp_path / "animas"
         engineer_dir = animas_dir / "alice"
         engineer_dir.mkdir(parents=True)
@@ -448,7 +449,7 @@ class TestInitStatus:
         assert data["api_keys"]["google"] is False
         # New checks array - API key checks
         checks = data["checks"]
-        anthropic_check = next(c for c in checks if c["label"] == "Anthropic APIキー")
+        anthropic_check = next(c for c in checks if c["label"] == "Anthropic APIキー / サブスクリプション認証")
         assert anthropic_check["ok"] is True
         openai_check = next(c for c in checks if c["label"] == "OpenAI APIキー / Codex Login")
         assert openai_check["ok"] is True
@@ -520,7 +521,7 @@ class TestInitStatus:
             "設定ファイル",
             "Anima登録",
             "共有ディレクトリ",
-            "Anthropic APIキー",
+            "Anthropic APIキー / サブスクリプション認証",
             "OpenAI APIキー / Codex Login",
             "Google APIキー",
             "初期化完了",

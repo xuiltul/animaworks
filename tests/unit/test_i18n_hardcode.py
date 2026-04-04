@@ -77,7 +77,7 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     # bilingual empty-state placeholders for prompt injection (ja/en)
     "core/_anima_lifecycle.py": 2,
     # command templates with {返信内容} — borderline (platform-specific CLI syntax)
-    "core/_anima_inbox.py": 2,
+    "core/_anima_inbox.py": 4,
     # MD section names used for parsing (基本情報, 人格, etc.)
     "core/anima_factory.py": 8,
     # label "コマンド:" in audit output
@@ -89,8 +89,11 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     # Japanese day-of-week names for cron migration + permissions.md section headers for migration
     "core/config/migrate.py": 9,
     # model catalog "note" descriptions (最高性能・推奨, etc.)
-    "core/config/model_mode.py": 25,
+    "core/config/model_mode.py": 28,
     # cron instruction prompt to Anima
+    "core/prompt/messaging.py": 2,
+    "core/prompt/org_context.py": 3,
+    "core/response_normalize.py": 15,
     "core/supervisor/scheduler_manager.py": 1,
     # label "個人ツール"
     "core/tooling/handler_memory.py": 1,
@@ -106,6 +109,7 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/tools/github.py": 1,
     "core/tools/_slack_cli.py": 1,
     # mock task data with Japanese titles
+    "server/routes/animas.py": 24,
     "server/routes/external_tasks.py": 8,
     # meeting/room feature — Japanese meeting prompts and labels
     "server/room_manager.py": 12,

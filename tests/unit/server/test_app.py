@@ -184,6 +184,7 @@ class TestLifespan:
         mock_app.state.shared_dir = MagicMock()
         mock_app.state.stream_registry = StreamRegistry()
         mock_app.state.slack_socket_manager = None  # prevent await on auto-generated MagicMock
+        mock_app.state.usage_governor = None
 
         mock_scheduler = MagicMock()
         mock_scheduler_cls.return_value = mock_scheduler

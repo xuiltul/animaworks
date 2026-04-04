@@ -50,6 +50,8 @@ def _create_anima(anima_dir, shared_dir, **extra_patches):
     # Ensure run dir exists for replied_to file
     (anima_dir / "run").mkdir(parents=True, exist_ok=True)
 
+    dp._get_current_state_max_chars = MagicMock(return_value=0)
+
     mocks = {
         "agent": MockAgent,
         "memory_manager": MockMM,

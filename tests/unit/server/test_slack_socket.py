@@ -182,6 +182,7 @@ class TestSlackSocketModeManagerHandlers:
     @patch("server.slack_socket._load_alias_user_ids", return_value=set())
     @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda text, token: text)
     @patch("server.slack_socket._route_to_board")
+    @patch("server.slack_socket.get_credential", return_value="xoxb-fake")
     @patch("server.slack_socket.load_config")
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
@@ -190,6 +191,7 @@ class TestSlackSocketModeManagerHandlers:
         mock_messenger_cls,
         mock_get_data_dir,
         mock_config,
+        mock_get_credential,
         mock_route_to_board,
         mock_resolve_mentions,
         mock_alias_ids,

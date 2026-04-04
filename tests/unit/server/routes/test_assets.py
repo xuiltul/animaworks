@@ -282,7 +282,7 @@ class TestGenerateAssets:
         assert resp.json()["status"] == "done"
 
     @patch("core.tools.image_gen.ImageGenPipeline")
-    @patch("core.config.load_config")
+    @patch("core.config.models.load_config")
     async def test_generate_uses_global_image_backend(self, mock_load_config, mock_pipeline_cls, tmp_path):
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()

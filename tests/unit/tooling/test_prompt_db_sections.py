@@ -225,7 +225,7 @@ class TestDefaultGuides:
 
     def test_s_mcp_guide_prefers_direct_tools(self) -> None:
         guide = get_default_guide("s_mcp")
-        assert "slack_channel_post" in guide
-        assert "directly" in guide
+        assert "post_channel" in guide
+        assert "send_message" in guide
+        assert "delegate_task" in guide
         assert "animaworks-tool" in guide
-        assert "only when no equivalent dedicated tool is available" in guide

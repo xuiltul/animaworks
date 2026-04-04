@@ -336,25 +336,28 @@ class TestDefaultData:
                 assert "{data_dir}" not in entry
                 assert "{name}" not in entry
 
-    def test_non_s_guide_mentions_windows_and_actual_tool_names(self) -> None:
+    def test_non_s_guide_mentions_unified_tools_and_cc_aliases(self) -> None:
         ja = DEFAULT_GUIDES["non_s"]["ja"]
         en = DEFAULT_GUIDES["non_s"]["en"]
 
-        assert "ネイティブWindows環境" in ja
-        assert "**execute_command**" in ja
-        assert "**read_file**" in ja
+        assert "Claude Code-compatible" in ja
+        assert "**Bash**" in ja
+        assert "**Read**" in ja
         assert "animaworks-tool <tool> <subcommand> [args]" in ja
-        assert "You are running on native Windows" in en
-        assert "**execute_command**" in en
-        assert "**read_file**" in en
+        assert "18ツール" in ja
+        assert "18 tools" in en
+        assert "**Bash**" in en
+        assert "**Read**" in en
 
-    def test_s_mcp_guide_avoids_bash_cli_prefix(self) -> None:
+    def test_s_mcp_guide_documents_builtin_and_cli_tools(self) -> None:
         ja = DEFAULT_GUIDES["s_mcp"]["ja"]
         en = DEFAULT_GUIDES["s_mcp"]["en"]
 
-        assert "Linuxコンテナ" in ja or "ネイティブ環境" in ja
-        assert "Bash: animaworks-tool" not in ja
+        assert "Claude Code" in ja
+        assert "WebSearch" in ja and "WebFetch" in ja
         assert "animaworks-tool --help" in ja
-        assert "Linux container" in en or "native environment" in en
-        assert "Bash: animaworks-tool" not in en
+        assert "Bash: animaworks-tool" in ja
+        assert "Claude Code" in en
+        assert "WebSearch" in en
         assert "animaworks-tool --help" in en
+        assert "Bash: animaworks-tool" in en

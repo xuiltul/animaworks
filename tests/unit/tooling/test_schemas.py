@@ -109,7 +109,12 @@ class TestFileTools:
 class TestSearchTools:
     def test_search_tools_is_list(self):
         assert isinstance(SEARCH_TOOLS, list)
-        assert len(SEARCH_TOOLS) == 3
+        assert len(SEARCH_TOOLS) == 4
+
+    def test_web_search_schema(self):
+        schema = next(t for t in SEARCH_TOOLS if t["name"] == "web_search")
+        assert "query" in schema["parameters"]["properties"]
+        assert "query" in schema["parameters"]["required"]
 
     def test_search_code_schema(self):
         schema = next(t for t in SEARCH_TOOLS if t["name"] == "search_code")
@@ -278,8 +283,10 @@ class TestBuildToolList:
             include_tool_management=True,
         )
         names = [t["name"] for t in result]
-        # 5 memory + 4 channel (incl. manage_channel) + 1 report_procedure_outcome + 1 report_knowledge_outcome + 1 check_permissions + 4 file + 3 search + 1 use_tool + 2 tool_management = 22
-        assert len(result) == 22
+        # 5 memory + 4 channel (incl. manage_channel) + 1 report_procedure_outcome
+        # + 1 report_knowledge_outcome + 1 check_permissions + 4 file + 4 search
+        # (web_search, web_fetch, search_code, list_directory) + 1 use_tool + 2 tool_management = 23
+        assert len(result) == 23
         assert "search_code" in names
         assert "list_directory" in names
         assert "use_tool" in names

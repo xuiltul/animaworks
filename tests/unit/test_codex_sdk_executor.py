@@ -9,6 +9,7 @@ All tests use mocks — no Codex CLI binary or API key required.
 """
 
 import asyncio
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,21 +21,21 @@ from core.execution.codex_sdk import (
     CodexSDKExecutor,
     _clear_thread_id,
     _codex_item_tool_name,
-    _default_path_env,
     _default_home_dir,
+    _default_path_env,
     _event_idle_timeout_seconds,
     _extract_item_text,
     _extract_tool_records,
     _get_thread_id,
+    _is_desktop_extension_codex,
     _item_to_tool_record,
     _load_thread_id,
     _patch_codex_exec_stream_limit,
     _resolve_codex_model,
-    _is_desktop_extension_codex,
-    _stderr_contains_fatal_signal,
+    _save_thread_id,
     _should_cli_exec_fallback,
     _should_prefer_cli_exec,
-    _save_thread_id,
+    _stderr_contains_fatal_signal,
     _usage_to_dict,
     clear_codex_thread_ids,
 )
@@ -345,22 +346,35 @@ class TestExecutorInit:
         assert "PYTHONPATH" in env
 
     def test_default_path_env_prepends_embedded_codex(self):
+        if os.name == "nt":
+            codex_exe = r"C:\Tools\codex.exe"
+            base_path = r"C:\Windows\System32"
+        else:
+            codex_exe = "/opt/codex/bin/codex"
+            base_path = "/usr/bin"
         with (
-            patch("core.execution.codex_sdk.get_codex_executable", return_value=r"C:\Tools\codex.exe"),
-            patch.dict("os.environ", {"PATH": r"C:\Windows\System32"}, clear=True),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value=codex_exe),
+            patch.dict("os.environ", {"PATH": base_path}, clear=True),
         ):
             value = _default_path_env()
-        assert value.startswith(r"C:\Tools")
+        parts = value.split(os.pathsep)
+        assert parts[0] == str(Path(codex_exe).resolve().parent)
 
     def test_default_path_env_includes_launcher_python_dir(self):
+        if os.name == "nt":
+            py_exe = r"E:\OneDriveBiz\Tools\General\animaworks\.venv\Scripts\python.exe"
+            base_path = r"C:\Windows\System32"
+        else:
+            py_exe = "/home/user/proj/.venv/bin/python3"
+            base_path = "/usr/bin"
         with (
             patch("core.execution.codex_sdk.get_codex_executable", return_value=None),
-            patch("core.execution.codex_sdk.sys.executable", r"E:\OneDriveBiz\Tools\General\animaworks\.venv\Scripts\python.exe"),
-            patch.dict("os.environ", {"PATH": r"C:\Windows\System32"}, clear=True),
+            patch("core.execution.codex_sdk.sys.executable", py_exe),
+            patch.dict("os.environ", {"PATH": base_path}, clear=True),
         ):
             value = _default_path_env()
-        parts = value.split(";")
-        assert r"E:\OneDriveBiz\Tools\General\animaworks\.venv\Scripts" in parts
+        parts = value.split(os.pathsep)
+        assert str(Path(py_exe).resolve().parent) in parts
 
     def test_create_codex_client_passes_executable_override(self, executor):
         fake_client = MagicMock()

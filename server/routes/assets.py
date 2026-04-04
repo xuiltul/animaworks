@@ -3,13 +3,14 @@ from __future__ import annotations
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
+import hashlib
 import logging
 import re
 from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, field_validator
 
 from server.events import emit
@@ -406,10 +407,21 @@ def create_assets_router() -> APIRouter:
         suffix = file_path.suffix.lower()
         content_type = _ASSET_CONTENT_TYPES.get(suffix, "application/octet-stream")
 
+        stat = file_path.stat()
+        etag_src = f"{file_path}:{stat.st_size}:{stat.st_mtime_ns}"
+        etag = f'"{hashlib.md5(etag_src.encode()).hexdigest()}"'  # noqa: S324
+
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match == etag:
+            return Response(
+                status_code=304,
+                headers={"ETag": etag, "Cache-Control": "public, max-age=3600"},
+            )
+
         return FileResponse(
             file_path,
             media_type=content_type,
-            headers={"Cache-Control": "no-store"},
+            headers={"Cache-Control": "public, max-age=3600", "ETag": etag},
         )
 
     @router.api_route("/animas/{name}/attachments/{filename}", methods=["GET", "HEAD"])

@@ -36,11 +36,11 @@ async def test_tick_keeps_suspended_anima_when_usage_fetch_fails(tmp_path, monke
 
     monkeypatch.setattr(
         "server.routes.usage_routes._fetch_claude_usage",
-        lambda: {"error": "unauthorized", "message": "expired"},
+        lambda **kwargs: {"error": "unauthorized", "message": "expired"},
     )
     monkeypatch.setattr(
         "server.routes.usage_routes._fetch_openai_usage",
-        lambda: {"provider": "openai"},
+        lambda **kwargs: {"provider": "openai"},
     )
 
     await governor._tick(DEFAULT_POLICY)
@@ -69,11 +69,11 @@ async def test_tick_only_keeps_suspended_animas_for_provider_with_fetch_failure(
 
     monkeypatch.setattr(
         "server.routes.usage_routes._fetch_claude_usage",
-        lambda: {"error": "rate_limited", "message": "retry shortly"},
+        lambda **kwargs: {"error": "rate_limited", "message": "retry shortly"},
     )
     monkeypatch.setattr(
         "server.routes.usage_routes._fetch_openai_usage",
-        lambda: {
+        lambda **kwargs: {
             "provider": "openai",
             "5h": {
                 "remaining": 80,

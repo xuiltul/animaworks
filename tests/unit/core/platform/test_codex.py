@@ -26,7 +26,10 @@ class TestDefaultHomeDir:
 class TestCodexLoginAvailability:
     def test_returns_false_when_auth_missing(self, tmp_path: Path):
         codex.get_codex_executable.cache_clear()
-        with patch("core.platform.codex.default_home_dir", return_value=str(tmp_path)):
+        with (
+            patch("core.platform.codex.default_home_dir", return_value=str(tmp_path)),
+            patch("core.platform.codex._run_codex_command", return_value=None),
+        ):
             assert codex.is_codex_login_available() is False
 
     def test_returns_true_for_valid_auth_file(self, tmp_path: Path):
@@ -45,7 +48,10 @@ class TestCodexLoginAvailability:
         auth_path.parent.mkdir(parents=True)
         auth_path.write_text("{not-json", encoding="utf-8")
 
-        with patch("core.platform.codex.default_home_dir", return_value=str(tmp_path)):
+        with (
+            patch("core.platform.codex.default_home_dir", return_value=str(tmp_path)),
+            patch("core.platform.codex._run_codex_command", return_value=None),
+        ):
             assert codex.is_codex_login_available() is False
 
     def test_finds_embedded_codex_executable(self, tmp_path: Path):

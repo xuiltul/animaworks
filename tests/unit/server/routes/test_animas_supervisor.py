@@ -78,6 +78,10 @@ def _create_app(
 
     if anima_names is not None:
         app.state.anima_names = anima_names
+        for n in anima_names:
+            d = animas_dir / n
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "identity.md").write_text(f"# {n}", encoding="utf-8")
 
     # Patch load_config used inside the animas route
     if config_animas is not None:
