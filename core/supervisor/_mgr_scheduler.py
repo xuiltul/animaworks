@@ -313,7 +313,7 @@ class SchedulerMixin:
                 response = await handle.send_request(
                     "run_consolidation",
                     {"consolidation_type": "daily", "max_turns": max_turns},
-                    timeout=600.0,
+                    timeout=1800.0,
                 )
 
                 if response.error:
@@ -409,7 +409,7 @@ class SchedulerMixin:
                 response = await handle.send_request(
                     "run_consolidation",
                     {"consolidation_type": "weekly", "max_turns": max_turns},
-                    timeout=600.0,
+                    timeout=1800.0,
                 )
 
                 if response.error:
