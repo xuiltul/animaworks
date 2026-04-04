@@ -1,0 +1,19 @@
+=== git ops ===
+
+$ git status --short
+?? _git_ops.py
+?? _git_ops_output_mirror.txt
+[exit 0]
+
+$ git diff --stat
+[exit 0]
+
+$ git log --oneline -5
+4d4a041e fix: repair unit test suite — mock mismatches, stale baselines, asset caching
+f3043130 fix: repair pyproject.toml section ordering and PEP 639 compliance
+33dceb5e feat: add PyPI publishing workflow with Trusted Publishing
+614cb476 fix: drop obsolete _CURRENT_STATE_CLEANUP_THRESHOLD from heartbeat tests
+cbd96c9a Merge issue-20260404-pr149-safe-defaults: safe defaults, configurable thresholds, design fixes (#153 #154 #155)
+[exit 0]
+
+$ git add -A
