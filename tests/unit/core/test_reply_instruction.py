@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -15,7 +16,7 @@ Covers:
 """
 
 from dataclasses import dataclass
-
+from unittest.mock import patch
 
 from core._anima_inbox import _build_reply_instruction
 
@@ -31,6 +32,10 @@ class _FakeMsg:
     external_thread_ts: str = ""
 
 
+_MOCK_AUTO_OFF = patch("core._anima_inbox._is_auto_response_enabled", return_value=False)
+_MOCK_AUTO_ON = patch("core._anima_inbox._is_auto_response_enabled", return_value=True)
+
+
 class TestBuildReplyInstructionSlack:
     """Slack reply instruction generation."""
 
@@ -42,7 +47,8 @@ class TestBuildReplyInstructionSlack:
             source_message_id="1234567890.123456",
             external_user_id="U99999",
         )
-        result = _build_reply_instruction(msg)
+        with _MOCK_AUTO_OFF:
+            result = _build_reply_instruction(msg)
         assert "[reply_instruction:" in result
         assert "use tool slack_channel_post" in result
         assert 'channel_id="C12345"' in result
@@ -57,7 +63,8 @@ class TestBuildReplyInstructionSlack:
             source_message_id="1234567890.123456",
             external_user_id="",
         )
-        result = _build_reply_instruction(msg)
+        with _MOCK_AUTO_OFF:
+            result = _build_reply_instruction(msg)
         assert "<@" not in result
         assert 'thread_ts="1234567890.123456"' in result
         assert 'channel_id="C12345"' in result
@@ -70,7 +77,8 @@ class TestBuildReplyInstructionSlack:
             source_message_id="",
             external_user_id="U99999",
         )
-        result = _build_reply_instruction(msg)
+        with _MOCK_AUTO_OFF:
+            result = _build_reply_instruction(msg)
         assert "thread_ts=" not in result
         assert 'text="<@U99999> {返信内容}"' in result
         assert 'channel_id="C12345"' in result
@@ -83,11 +91,25 @@ class TestBuildReplyInstructionSlack:
             source_message_id="",
             external_user_id="",
         )
-        result = _build_reply_instruction(msg)
+        with _MOCK_AUTO_OFF:
+            result = _build_reply_instruction(msg)
         assert "[reply_instruction:" in result
         assert 'channel_id="C12345"' in result
         assert "<@" not in result
         assert "thread_ts=" not in result
+
+    def test_auto_response_enabled(self):
+        """When auto_response is enabled, returns auto_reply annotation."""
+        msg = _FakeMsg(
+            source="slack",
+            external_channel_id="C12345",
+            source_message_id="1234567890.123456",
+            external_user_id="U99999",
+        )
+        with _MOCK_AUTO_ON:
+            result = _build_reply_instruction(msg)
+        assert "[auto_reply:" in result
+        assert "[reply_instruction:" not in result
 
 
 class TestBuildReplyInstructionChatwork:
@@ -128,7 +150,8 @@ class TestBuildReplyInstructionEdgeCases:
             source_message_id="ts123",
             external_user_id="U123",
         )
-        result = _build_reply_instruction(msg)
+        with _MOCK_AUTO_OFF:
+            result = _build_reply_instruction(msg)
         assert "[reply_instruction:" in result
         assert "slack_channel_post" in result
 
@@ -140,6 +163,7 @@ class TestBuildReplyInstructionEdgeCases:
             source_message_id="ts1",
             external_user_id="U1",
         )
-        result = _build_reply_instruction(msg)
+        with _MOCK_AUTO_OFF:
+            result = _build_reply_instruction(msg)
         assert result.startswith("  [reply_instruction: ")
         assert result.endswith("]")
