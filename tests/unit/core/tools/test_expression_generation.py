@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -27,11 +28,10 @@ import pytest
 from core.config.models import ImageGenConfig
 from core.schemas import VALID_EMOTIONS
 from core.tools.image_gen import (
-    ImageGenPipeline,
     _EXPRESSION_GUIDANCE,
     _EXPRESSION_PROMPTS,
+    ImageGenPipeline,
 )
-
 
 # ── Fixtures ────────────────────────────────────────────────────────
 
@@ -153,32 +153,32 @@ class TestExpressionGuidance:
         assert set(_EXPRESSION_GUIDANCE.keys()) == VALID_EMOTIONS
 
     def test_neutral_guidance_value(self):
-        """Neutral guidance_scale should be 4.0."""
-        assert _EXPRESSION_GUIDANCE["neutral"] == 4.0
+        """Neutral guidance_scale should be 3.5."""
+        assert _EXPRESSION_GUIDANCE["neutral"] == 3.5
 
     def test_smile_guidance_value(self):
-        """Smile guidance_scale should be 5.0."""
-        assert _EXPRESSION_GUIDANCE["smile"] == 5.0
+        """Smile guidance_scale should be 4.0."""
+        assert _EXPRESSION_GUIDANCE["smile"] == 4.0
 
     def test_laugh_guidance_value(self):
-        """Laugh guidance_scale should be 5.0."""
-        assert _EXPRESSION_GUIDANCE["laugh"] == 5.0
+        """Laugh guidance_scale should be 4.5."""
+        assert _EXPRESSION_GUIDANCE["laugh"] == 4.5
 
     def test_troubled_guidance_value(self):
-        """Troubled guidance_scale should be 5.5."""
-        assert _EXPRESSION_GUIDANCE["troubled"] == 5.5
+        """Troubled guidance_scale should be 4.5."""
+        assert _EXPRESSION_GUIDANCE["troubled"] == 4.5
 
     def test_surprised_guidance_value(self):
-        """Surprised guidance_scale should be 5.0."""
-        assert _EXPRESSION_GUIDANCE["surprised"] == 5.0
+        """Surprised guidance_scale should be 4.0."""
+        assert _EXPRESSION_GUIDANCE["surprised"] == 4.0
 
     def test_thinking_guidance_value(self):
-        """Thinking guidance_scale should be 5.0."""
-        assert _EXPRESSION_GUIDANCE["thinking"] == 5.0
+        """Thinking guidance_scale should be 4.0."""
+        assert _EXPRESSION_GUIDANCE["thinking"] == 4.0
 
     def test_embarrassed_guidance_value(self):
-        """Embarrassed guidance_scale should be 5.5."""
-        assert _EXPRESSION_GUIDANCE["embarrassed"] == 5.5
+        """Embarrassed guidance_scale should be 4.5."""
+        assert _EXPRESSION_GUIDANCE["embarrassed"] == 4.5
 
     def test_all_guidance_values_are_floats(self):
         """All guidance_scale values must be float type."""
@@ -195,13 +195,13 @@ class TestExpressionGuidance:
             )
 
     @pytest.mark.parametrize("expression,expected", [
-        ("neutral", 4.0),
-        ("smile", 5.0),
-        ("laugh", 5.0),
-        ("troubled", 5.5),
-        ("surprised", 5.0),
-        ("thinking", 5.0),
-        ("embarrassed", 5.5),
+        ("neutral", 3.5),
+        ("smile", 4.0),
+        ("laugh", 4.5),
+        ("troubled", 4.5),
+        ("surprised", 4.0),
+        ("thinking", 4.0),
+        ("embarrassed", 4.5),
     ])
     def test_guidance_values_parametrized(self, expression: str, expected: float):
         """Verify each expression's guidance_scale matches the expected value."""
@@ -233,9 +233,9 @@ class TestGenerateBustupExpression:
 
         mock_client.generate_from_reference.assert_called_once()
         call_kwargs = mock_client.generate_from_reference.call_args
-        assert call_kwargs.kwargs.get("guidance_scale") == 5.0 or \
-            call_kwargs[1].get("guidance_scale") == 5.0, (
-            "guidance_scale for 'smile' should be 5.0"
+        assert call_kwargs.kwargs.get("guidance_scale") == 4.0 or \
+            call_kwargs[1].get("guidance_scale") == 4.0, (
+            "guidance_scale for 'smile' should be 4.0"
         )
 
     @patch("core.tools.image_gen.FluxKontextClient")
@@ -243,7 +243,7 @@ class TestGenerateBustupExpression:
         self, mock_kontext_cls: MagicMock, pipeline: ImageGenPipeline,
         fake_image_bytes: bytes,
     ):
-        """Neutral expression should use guidance_scale=4.0."""
+        """Neutral expression should use guidance_scale=3.5."""
         mock_client = MagicMock()
         mock_client.generate_from_reference.return_value = b"RESULT_PNG"
         mock_kontext_cls.return_value = mock_client
@@ -259,14 +259,14 @@ class TestGenerateBustupExpression:
             call_kwargs.kwargs.get("guidance_scale")
             or call_kwargs[1].get("guidance_scale")
         )
-        assert actual_guidance == 4.0
+        assert actual_guidance == 3.5
 
     @patch("core.tools.image_gen.FluxKontextClient")
     def test_guidance_scale_for_laugh(
         self, mock_kontext_cls: MagicMock, pipeline: ImageGenPipeline,
         fake_image_bytes: bytes,
     ):
-        """Laugh expression should use guidance_scale=5.0."""
+        """Laugh expression should use guidance_scale=4.5."""
         mock_client = MagicMock()
         mock_client.generate_from_reference.return_value = b"RESULT_PNG"
         mock_kontext_cls.return_value = mock_client
@@ -282,7 +282,7 @@ class TestGenerateBustupExpression:
             call_kwargs.kwargs.get("guidance_scale")
             or call_kwargs[1].get("guidance_scale")
         )
-        assert actual_guidance == 5.0
+        assert actual_guidance == 4.5
 
     @pytest.mark.parametrize("expression", list(VALID_EMOTIONS))
     @patch("core.tools.image_gen.FluxKontextClient")
