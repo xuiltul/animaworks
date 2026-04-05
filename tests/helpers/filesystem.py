@@ -35,6 +35,10 @@ DEFAULT_TEST_CONFIG: dict[str, Any] = {
         "conversation_history_threshold": 0.30,
     },
     "animas": {},
+    "external_messaging": {
+        "slack": {"enabled": True},
+        "chatwork": {"enabled": True},
+    },
 }
 
 # Subdirectories required inside each anima directory.
