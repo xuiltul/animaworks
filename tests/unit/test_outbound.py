@@ -94,6 +94,12 @@ class TestResolveRecipient:
         assert result.channel == "chatwork"
         assert result.chatwork_room_id == "12345"
 
+    def test_discord_prefix(self, known_animas, empty_config):
+        result = resolve_recipient("discord:123456789012345678", known_animas, empty_config)
+        assert result.is_internal is False
+        assert result.channel == "discord"
+        assert result.discord_user_id == "123456789012345678"
+
     def test_bare_slack_user_id(self, known_animas, empty_config):
         result = resolve_recipient("U0TEST000001", known_animas, empty_config)
         assert result.is_internal is False
@@ -169,6 +175,24 @@ class TestResolveFromAlias:
         with pytest.raises(RecipientNotFoundError, match="no contact info"):
             _resolve_from_alias("user", alias_cfg, "slack")
 
+    def test_preferred_discord(self):
+        alias_cfg = UserAliasConfig(discord_user_id="D123", slack_user_id="U123")
+        result = _resolve_from_alias("user", alias_cfg, "discord")
+        assert result.channel == "discord"
+        assert result.discord_user_id == "D123"
+
+    def test_discord_fallback_after_slack_chatwork(self):
+        """Discord should be last in fallback order."""
+        alias_cfg = UserAliasConfig(discord_user_id="D123")
+        result = _resolve_from_alias("user", alias_cfg, "slack")
+        assert result.channel == "discord"
+
+    def test_slack_preferred_over_discord_in_fallback(self):
+        """When preferred is chatwork (unavailable), Slack beats Discord."""
+        alias_cfg = UserAliasConfig(slack_user_id="U1", discord_user_id="D1")
+        result = _resolve_from_alias("user", alias_cfg, "chatwork")
+        assert result.channel == "slack"
+
 
 # ── TestBuildChannelOrder ────────────────────────────────
 
@@ -200,6 +224,21 @@ class TestBuildChannelOrder:
         order = _build_channel_order(r)
         assert order == ["slack"]
         assert len(order) == 1
+
+    def test_discord_fallback_order(self):
+        """Discord appears after Slack and Chatwork in fallback."""
+        r = ResolvedRecipient(
+            is_internal=False, name="x", channel="discord",
+            slack_user_id="U1", chatwork_room_id="R1", discord_user_id="D1",
+        )
+        assert _build_channel_order(r) == ["discord", "slack", "chatwork"]
+
+    def test_slack_primary_discord_fallback(self):
+        r = ResolvedRecipient(
+            is_internal=False, name="x", channel="slack",
+            slack_user_id="U1", discord_user_id="D1",
+        )
+        assert _build_channel_order(r) == ["slack", "discord"]
 
 
 # ── TestSendExternal ─────────────────────────────────────
@@ -279,6 +318,7 @@ class TestUserAliasConfig:
         cfg = UserAliasConfig()
         assert cfg.slack_user_id == ""
         assert cfg.chatwork_room_id == ""
+        assert cfg.discord_user_id == ""
 
     def test_round_trip(self):
         cfg = UserAliasConfig(slack_user_id="U123", chatwork_room_id="R456")

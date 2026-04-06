@@ -254,6 +254,38 @@ async def _startup_animas_background(app: FastAPI) -> None:
             )
             app.state.slack_socket_manager = None
 
+        # ── Discord Gateway ────────────────────────────────────
+        try:
+            from server.discord_gateway import DiscordGatewayManager
+
+            discord_manager = DiscordGatewayManager()
+            await asyncio.wait_for(discord_manager.start(), timeout=35)
+            app.state.discord_gateway_manager = discord_manager
+        except TimeoutError:
+            logger.error("Discord Gateway startup timed out (35s)")
+            app.state.discord_gateway_manager = None
+        except Exception as exc:
+            logger.error(
+                "Discord Gateway startup failed: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+            app.state.discord_gateway_manager = None
+
+        # ── Discord channel → board sync (initial) ───────────
+        if app.state.discord_gateway_manager is not None:
+            try:
+                from server.discord_channel_sync import DiscordChannelSync
+
+                discord_sync = DiscordChannelSync()
+                await discord_sync.sync(app.state.discord_gateway_manager)
+                app.state.discord_channel_sync = discord_sync
+            except Exception:
+                logger.warning("Initial Discord channel sync failed", exc_info=True)
+                app.state.discord_channel_sync = None
+        else:
+            app.state.discord_channel_sync = None
+
         # ── Slack channel → board sync (initial) ──────────────
         if app.state.slack_socket_manager is not None:
             try:
@@ -480,6 +512,8 @@ async def lifespan(app: FastAPI):
         await app.state.stream_registry.stop_cleanup_loop()
         if getattr(app.state, "slack_socket_manager", None):
             await app.state.slack_socket_manager.stop()
+        if getattr(app.state, "discord_gateway_manager", None):
+            await app.state.discord_gateway_manager.stop()
         governor = getattr(app.state, "usage_governor", None)
         if governor:
             await governor.stop()

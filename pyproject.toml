@@ -58,6 +58,7 @@ Changelog = "https://github.com/xuiltul/animaworks/blob/main/CHANGELOG.md"
 [project.optional-dependencies]
 claude = ["claude-agent-sdk>=0.1.40; platform_system != 'Windows'"]
 communication = ["requests>=2.31", "slack-sdk>=3.27", "slack-bolt>=1.21", "aiohttp>=3.9"]
+discord = ["discord.py>=2.3"]
 notification = ["line-bot-sdk>=3.0"]
 gmail = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.0", "google-auth-httplib2>=0.2"]
 transcribe = ["faster-whisper>=1.0"]

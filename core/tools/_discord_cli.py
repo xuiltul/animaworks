@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -135,14 +136,31 @@ def _run_cli_command(client: DiscordClient, args: argparse.Namespace) -> None:
     if args.command == "send":
         body = " ".join(args.message)
         reply_to = getattr(args, "reply_to", None)
-        response = client.send_message(
-            args.channel_id,
-            body,
-            reply_to=reply_to,
-        )
-        mid = response.get("id", "") if isinstance(response, dict) else ""
-        ch = response.get("channel_id", args.channel_id) if isinstance(response, dict) else args.channel_id
-        print(f"Sent (channel: {ch}, id: {mid})")
+
+        # Prefer webhook (Anima identity) over bot token (AnimaWorks identity)
+        anima_name = Path(os.environ.get("ANIMAWORKS_ANIMA_DIR", "")).name or ""
+        sent_via_webhook = False
+        if anima_name:
+            try:
+                from core.discord_webhooks import get_webhook_manager
+
+                wm = get_webhook_manager()
+                msg_id = wm.send_as_anima(args.channel_id, anima_name, body)
+                if msg_id:
+                    print(f"Sent via webhook (channel: {args.channel_id}, id: {msg_id})")
+                    sent_via_webhook = True
+            except Exception:
+                logging.debug("Webhook send failed, falling back to bot token", exc_info=True)
+
+        if not sent_via_webhook:
+            response = client.send_message(
+                args.channel_id,
+                body,
+                reply_to=reply_to,
+            )
+            mid = response.get("id", "") if isinstance(response, dict) else ""
+            ch = response.get("channel_id", args.channel_id) if isinstance(response, dict) else args.channel_id
+            print(f"Sent (channel: {ch}, id: {mid})")
         return
 
     # ── messages ─────────────────────────────────────────────

@@ -28,6 +28,7 @@ let _dmFilterAnima = "";     // "" = show all, else filter by participant name
 let _avatarCache = {};       // name -> url | null (null = no avatar)
 let _dmLoaded = false;       // DM list lazy-load flag
 let _lastMessageTs = "";     // newest message timestamp for incremental polling
+let _discordChannels = null; // Discord channel list (lazy-loaded)
 
 // ── DOM refs (local) ───────────────────────
 
@@ -47,6 +48,7 @@ export function render(container) {
   _sidebarCollapsed = false;
   _loadingMore = false;
   _hasMore = false;
+  _discordChannels = null;
   _currentOffset = 0;
   _dmLoaded = false;
   _lastMessageTs = "";
@@ -396,7 +398,10 @@ function _selectItem(type, name) {
   const metaEl = _$("boardHeaderMeta");
   if (type === "channel") {
     if (titleEl) titleEl.textContent = `# ${name}`;
-    if (metaEl) metaEl.textContent = "";
+    if (metaEl) {
+      metaEl.textContent = "";
+      _renderChannelMembers(name, metaEl);
+    }
   } else {
     const dmInfo = _dmPairs.find(d => d.pair === name);
     const participants = dmInfo ? (dmInfo.participants || []).join(" ↔ ") : name;
@@ -424,6 +429,102 @@ function _selectItem(type, name) {
 
   // Load messages
   _loadMessages(type, name, false);
+}
+
+// ── Channel Members UI ────────────────────
+
+async function _renderChannelMembers(channelName, metaEl) {
+  // Lazy-load Discord channel list
+  if (_discordChannels === null) {
+    try {
+      const dc = await api("/api/discord/channels");
+      _discordChannels = dc.channels || [];
+    } catch {
+      _discordChannels = [];
+    }
+  }
+  if (_discordChannels.length === 0) return;
+
+  // Find Discord channel by board mapping
+  const ch = _discordChannels.find(c => c.board === channelName || c.name === channelName);
+  if (!ch) return;
+
+  const members = ch.members || [];
+  const allAnimas = [...new Set(_discordChannels.flatMap(c => c.members || []))].sort();
+
+  function _render() {
+    const tags = members.map((m, i) => {
+      const isLead = i === 0;
+      const bg = isLead ? "var(--color-warning-light,#fff3cd)" : "var(--color-primary-light,#e8f0fe)";
+      const fg = isLead ? "var(--color-warning-dark,#856404)" : "var(--color-primary,#0066cc)";
+      const star = isLead ? "★ " : "";
+      const leadBtn = !isLead ? `<button class="board-member-lead" data-name="${escapeHtml(m)}" title="${t("board.members_set_lead")}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#aaa);font-size:0.7rem;padding:0;line-height:1;">☆</button>` : "";
+      return `<span style="display:inline-flex;align-items:center;gap:0.2rem;background:${bg};color:${fg};border-radius:10px;padding:0.1rem 0.5rem;font-size:0.75rem;">` +
+        `${star}${escapeHtml(m)}${leadBtn}<button class="board-member-rm" data-name="${escapeHtml(m)}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#666);font-size:0.75rem;padding:0;line-height:1;">✕</button></span>`;
+    }).join(" ");
+
+    // Animas not in this channel
+    const available = allAnimas.filter(a => !members.includes(a));
+    const addDropdown = available.length > 0
+      ? `<select id="boardMemberAdd" style="font-size:0.75rem;padding:0.1rem 0.3rem;border:1px solid var(--border,#ddd);border-radius:4px;background:var(--bg-secondary,#f9f9f9);color:var(--text-primary,#333);"><option value="">+ ${t("board.members_add")}</option>${available.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("")}</select>`
+      : "";
+
+    metaEl.innerHTML = `<span style="font-size:0.75rem;color:var(--text-secondary,#888);margin-right:0.3rem;">${t("board.members")}:</span>${tags || `<span style="font-size:0.75rem;color:var(--text-secondary,#888);">${t("board.members_none")}</span>`} ${addDropdown}`;
+
+    // Bind remove buttons
+    metaEl.querySelectorAll(".board-member-rm").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const nm = btn.dataset.name;
+        const idx = members.indexOf(nm);
+        if (idx !== -1) members.splice(idx, 1);
+        ch.members = [...members];
+        await _saveMembership(ch.id, members);
+        _render();
+      });
+    });
+
+    // Bind lead buttons (☆ -> promote to first position)
+    metaEl.querySelectorAll(".board-member-lead").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const nm = btn.dataset.name;
+        const idx = members.indexOf(nm);
+        if (idx > 0) {
+          members.splice(idx, 1);
+          members.unshift(nm);
+          ch.members = [...members];
+          await _saveMembership(ch.id, members);
+          _render();
+        }
+      });
+    });
+
+    // Bind add dropdown
+    const addSel = document.getElementById("boardMemberAdd");
+    if (addSel) {
+      addSel.addEventListener("change", async () => {
+        const val = addSel.value;
+        if (!val || members.includes(val)) { addSel.value = ""; return; }
+        members.push(val);
+        ch.members = [...members];
+        await _saveMembership(ch.id, members);
+        _render();
+      });
+    }
+  }
+
+  _render();
+}
+
+async function _saveMembership(channelId, members) {
+  try {
+    await fetch(`/api/discord/channel-members/${encodeURIComponent(channelId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ members }),
+    });
+  } catch (e) {
+    logger.error("Failed to save channel membership", e);
+  }
 }
 
 // ── Message Loading ────────────────────────

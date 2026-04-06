@@ -257,3 +257,105 @@ class DiscordClient:
             raise ToolConfigError(f"Multiple Discord channels matched '{name_or_id}': {names}. Use the channel ID.")
 
         raise ToolConfigError(f"Discord channel '{name_or_id}' not found in guild {guild_id}")
+
+    # ── Webhook management ────────────────────────────────────
+
+    def list_webhooks(self, channel_id: str) -> list[dict]:
+        """GET /channels/{channel_id}/webhooks — list channel webhooks."""
+        result = self._request("GET", f"/channels/{channel_id}/webhooks")
+        return result if isinstance(result, list) else []
+
+    def create_webhook(self, channel_id: str, name: str = "AnimaWorks") -> dict:
+        """POST /channels/{channel_id}/webhooks — create a webhook."""
+        result = self._request(
+            "POST",
+            f"/channels/{channel_id}/webhooks",
+            json={"name": name},
+        )
+        return result if isinstance(result, dict) else {}
+
+    def execute_webhook(
+        self,
+        webhook_id: str,
+        webhook_token: str,
+        content: str,
+        *,
+        username: str | None = None,
+        avatar_url: str | None = None,
+        thread_id: str | None = None,
+    ) -> dict:
+        """POST /webhooks/{id}/{token} — execute a webhook.
+
+        Uses the webhook token URL (no Bot Authorization needed).
+        Supports per-message ``username`` and ``avatar_url`` override.
+        """
+        body: dict[str, Any] = {"content": content[:DISCORD_MESSAGE_LIMIT]}
+        if username:
+            body["username"] = username
+        if avatar_url:
+            body["avatar_url"] = avatar_url
+        params: dict[str, str] = {"wait": "true"}
+        if thread_id:
+            params["thread_id"] = thread_id
+        # Webhook execute uses a different URL pattern — no Bot auth needed
+        client = self._ensure_http()
+        try:
+            response = client.request(
+                "POST",
+                f"/webhooks/{webhook_id}/{webhook_token}",
+                json=body,
+                params=params,
+            )
+            if response.status_code == 429:
+                message, code = self._parse_error_response(response)
+                retry_after = 1.0
+                try:
+                    data = response.json()
+                    if isinstance(data, dict) and "retry_after" in data:
+                        retry_after = float(data["retry_after"])
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    pass
+                raise DiscordAPIError(429, f"Rate limited ({retry_after}s)", code=code)
+            if response.status_code < 200 or response.status_code >= 300:
+                message, code = self._parse_error_response(response)
+                raise DiscordAPIError(response.status_code, message, code=code)
+            if not response.content:
+                return {}
+            return response.json()
+        except httpx.TimeoutException as exc:
+            raise DiscordAPIError(0, f"Webhook timeout: {exc}") from exc
+
+    # ── DM channel ────────────────────────────────────────────
+
+    def create_dm(self, user_id: str) -> dict:
+        """POST /users/@me/channels — open a DM channel with a user."""
+        result = self._request(
+            "POST",
+            "/users/@me/channels",
+            json={"recipient_id": user_id},
+        )
+        return result if isinstance(result, dict) else {}
+
+    # ── Guild channel management ──────────────────────────────
+
+    _CHANNEL_TYPE_CATEGORY = 4
+
+    def create_channel(
+        self,
+        guild_id: str,
+        name: str,
+        *,
+        channel_type: int = 0,
+        parent_id: str | None = None,
+    ) -> dict:
+        """POST /guilds/{guild_id}/channels — create a guild channel."""
+        body: dict[str, Any] = {"name": name, "type": channel_type}
+        if parent_id:
+            body["parent_id"] = parent_id
+        result = self._request("POST", f"/guilds/{guild_id}/channels", json=body)
+        return result if isinstance(result, dict) else {}
+
+    def get_guild_channels(self, guild_id: str) -> list[dict]:
+        """GET /guilds/{guild_id}/channels — all channels (including categories)."""
+        result = self._request("GET", f"/guilds/{guild_id}/channels")
+        return result if isinstance(result, list) else []

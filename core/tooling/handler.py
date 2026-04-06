@@ -148,6 +148,9 @@ class ToolHandler(
         # ── TaskExec CWD override ──
         self._task_cwd: Path | None = None
 
+        # ── Current trigger (set by caller before execution) ──
+        self._trigger: str = ""
+
         # ── Session trust tracking (security: min trust across all tools used) ──
         # 2 = trusted, 1 = medium, 0 = untrusted; default trusted (no tools used yet)
         self._min_trust_seen: int = 2
@@ -504,7 +507,7 @@ class ToolHandler(
             else:
                 # ── Background execution for eligible external tools ──
                 if self._background_manager and self._background_manager.is_eligible(name):
-                    ext_args = {**args, "anima_dir": str(self._anima_dir)}
+                    ext_args = {**args, "anima_dir": str(self._anima_dir), "_trigger": self._trigger}
                     task_id = self._background_manager.submit(
                         name,
                         ext_args,
@@ -519,7 +522,7 @@ class ToolHandler(
                         ensure_ascii=False,
                     )
                 else:
-                    ext_args = {**args, "anima_dir": str(self._anima_dir)}
+                    ext_args = {**args, "anima_dir": str(self._anima_dir), "_trigger": self._trigger}
                     result = self._external.dispatch(name, ext_args)
                     if result is None:
                         logger.warning("Unknown tool requested: %s", name)

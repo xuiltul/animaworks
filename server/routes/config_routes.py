@@ -534,4 +534,86 @@ def create_config_router() -> APIRouter:
         updated = apply_local_llm_presets_to_animas(get_animas_dir(), config)
         return {"updated": updated, "count": len(updated)}
 
+    # ── Discord channel membership ────────────────────────────
+
+    @router.get("/discord/channel-members")
+    async def get_discord_channel_members():
+        """Return all Discord channel membership mappings."""
+        config = load_config()
+        return config.external_messaging.discord.channel_members
+
+    @router.put("/discord/channel-members/{channel_id}")
+    async def put_discord_channel_members(channel_id: str, request: Request):
+        """Update Anima members for a Discord channel."""
+        body = await request.json()
+        members = body.get("members")
+        if not isinstance(members, list):
+            raise HTTPException(status_code=400, detail="members must be a list of anima names")
+        if not all(isinstance(m, str) and m.strip() for m in members):
+            raise HTTPException(status_code=400, detail="each member must be a non-empty string")
+
+        config = load_config()
+        known_animas = set(config.animas.keys())
+        unknown = [m for m in members if m not in known_animas]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"unknown anima(s): {', '.join(unknown)}")
+
+        members = [m.strip() for m in members]
+        if members:
+            config.external_messaging.discord.channel_members[channel_id] = members
+        else:
+            config.external_messaging.discord.channel_members.pop(channel_id, None)
+        save_config(config)
+
+        # Reload gateway routing if available
+        gw = getattr(request.app.state, "discord_gateway_manager", None)
+        if gw:
+            try:
+                gw.reload()
+            except Exception:
+                logger.debug("Discord gateway reload after member update failed", exc_info=True)
+
+        return {"channel_id": channel_id, "members": members}
+
+    @router.get("/discord/channels")
+    async def get_discord_channels():
+        """List Discord guild channels with membership info."""
+        config = load_config()
+        discord_cfg = config.external_messaging.discord
+        guild_id = discord_cfg.guild_id
+        if not guild_id:
+            return {"channels": [], "error": "guild_id not configured"}
+
+        try:
+            from core.tools._base import get_credential
+            from core.tools._discord_client import DiscordClient
+
+            token = get_credential("discord", "discord", env_var="DISCORD_BOT_TOKEN")
+            client = DiscordClient(token=token)
+            try:
+                raw_channels = client.get_guild_channels(guild_id)
+            finally:
+                client.close()
+        except Exception as exc:
+            logger.warning("Failed to fetch Discord channels: %s", exc)
+            return {"channels": [], "error": str(exc)}
+
+        channel_members = discord_cfg.channel_members
+        board_mapping = discord_cfg.board_mapping
+        channels = []
+        for ch in raw_channels:
+            if ch.get("type") != 0:  # text channels only
+                continue
+            ch_id = str(ch["id"])
+            channels.append(
+                {
+                    "id": ch_id,
+                    "name": ch.get("name", ""),
+                    "parent_id": str(ch.get("parent_id", "") or ""),
+                    "members": channel_members.get(ch_id, []),
+                    "board": board_mapping.get(ch_id, ""),
+                }
+            )
+        return {"channels": channels}
+
     return router

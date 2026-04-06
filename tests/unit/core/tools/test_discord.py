@@ -453,19 +453,23 @@ class TestDiscordDispatch:
             assert out == [{"id": "g"}]
             mock_inst.guilds.assert_called_once_with()
 
-    def test_dispatch_discord_channel_post(self) -> None:
-        with patch("core.tools.discord.DiscordClient") as MockClient:
-            mock_inst = MockClient.return_value
-            mock_inst.send_message.return_value = {"id": "mid"}
+    def test_dispatch_discord_channel_post_via_webhook(self) -> None:
+        with patch("core.discord_webhooks.get_webhook_manager") as mock_gwm:
+            mock_wm = mock_gwm.return_value
+            mock_wm.send_as_anima.return_value = "mid"
             result = dispatch(
                 "discord_channel_post",
-                {"channel_id": "ch1", "text": "hello **world**"},
+                {"channel_id": "ch1", "text": "hello **world**", "anima_dir": "/data/animas/sakura"},
             )
             assert result == {"status": "ok", "channel_id": "ch1", "message_id": "mid"}
-            mock_inst.send_message.assert_called_once()
-            args, kwargs = mock_inst.send_message.call_args
-            assert args[0] == "ch1"
-            assert args[1] == md_to_discord("hello **world**")
+            mock_wm.send_as_anima.assert_called_once()
+
+    def test_dispatch_discord_channel_post_blocked_during_inbox(self) -> None:
+        result = dispatch(
+            "discord_channel_post",
+            {"channel_id": "ch1", "text": "test", "_trigger": "inbox:user1"},
+        )
+        assert result["status"] == "blocked"
 
     def test_dispatch_unknown(self) -> None:
         with pytest.raises(ValueError, match="Unknown tool"):
@@ -475,6 +479,7 @@ class TestDiscordDispatch:
         schemas = get_tool_schemas()
         names = {s["name"] for s in schemas}
         assert "discord_channel_post" in names
+        assert "discord_unreplied" in names
 
     def test_execution_profile(self) -> None:
         assert "channel_post" in EXECUTION_PROFILE

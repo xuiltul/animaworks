@@ -22,9 +22,10 @@ logger = logging.getLogger("animaworks.tools")
 
 
 _ABCONFIG_CNCT_ENV_PATH = Path(r"E:\OneDriveBiz\Tools\abconfig\Cnct_Env.py")
-_ABCONFIG_SLACK_KEY_MAP = {
+_ABCONFIG_KEY_MAP = {
     "SLACK_BOT_TOKEN": "slack_bot_token",
     "SLACK_APP_TOKEN": "slack_app_token",
+    "DISCORD_BOT_TOKEN": "DISCORD_BOT_TOKEN",
 }
 
 
@@ -105,7 +106,7 @@ def get_credential(
             _log_resolved(credential_name, key_name, "shared/credentials.json", val)
             return val
 
-    # 4. Local abconfig bridge for Slack tokens
+    # 4. Local abconfig bridge (secrets_local.py)
     if env_var:
         val = _lookup_abconfig_credential(env_var)
         if val:
@@ -123,7 +124,7 @@ def get_credential(
     sources = [f"config.json credentials.{credential_name}.{key_name}"]
     if env_var:
         sources.append("vault.json")
-        if env_var in _ABCONFIG_SLACK_KEY_MAP:
+        if env_var in _ABCONFIG_KEY_MAP:
             sources.append(str(_ABCONFIG_CNCT_ENV_PATH))
         sources.append(f"environment variable {env_var}")
     raise ToolConfigError(
@@ -163,14 +164,13 @@ def _lookup_shared_credentials(key: str) -> str | None:
 
 
 def _lookup_abconfig_credential(key: str) -> str | None:
-    """Look up selected Slack keys from the local abconfig secrets file.
+    """Look up credential keys from the local abconfig secrets file.
 
     ``Cnct_Env.py`` imports heavy desktop/database dependencies, so we avoid
     importing it directly at server startup. Instead we treat its sibling
-    ``secrets_local.py`` as the source of truth for the Slack tokens exposed
-    there.
+    ``secrets_local.py`` as the source of truth for the tokens exposed there.
     """
-    attr_name = _ABCONFIG_SLACK_KEY_MAP.get(key)
+    attr_name = _ABCONFIG_KEY_MAP.get(key)
     if not attr_name:
         return None
 

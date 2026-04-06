@@ -121,6 +121,17 @@ def _is_auto_response_enabled() -> bool:
         return False
 
 
+def _is_auto_response_enabled_discord() -> bool:
+    """Check if Discord auto-response is enabled in config."""
+    try:
+        from core.config.models import load_config
+
+        cfg = load_config()
+        return cfg.external_messaging.discord.auto_response
+    except Exception:
+        return False
+
+
 def _build_reply_instruction(m: Any) -> str:
     """Build platform-specific reply instruction metadata for external messages.
 
@@ -144,6 +155,19 @@ def _build_reply_instruction(m: Any) -> str:
         ]
         if thread_id:
             parts.append(f'thread_ts="{thread_id}"')
+        return f"  [reply_instruction: {', '.join(parts)}]"
+
+    if m.source == "discord":
+        if _is_auto_response_enabled_discord():
+            return f"  [auto_reply: {t('discord.auto_reply_instruction')}]"
+
+        mention = f"<@{m.external_user_id}> " if m.external_user_id else ""
+        reply_placeholder = t("inbox.reply_placeholder")
+        parts = [
+            "use tool discord_channel_post with",
+            f'channel_id="{m.external_channel_id}"',
+            f'text="{mention}{reply_placeholder}"',
+        ]
         return f"  [reply_instruction: {', '.join(parts)}]"
 
     if m.source == "chatwork":
@@ -416,6 +440,7 @@ class InboxMixin:
 
                     _fanout_token = suppress_board_fanout.set(True) if has_board_mention else None
                     _session_token = self.agent._tool_handler.set_active_session_type("inbox")
+                    self.agent._tool_handler._trigger = trigger
 
                     # Set session origin from the most untrusted message
                     _batch_origins: list[str] = []
@@ -517,6 +542,26 @@ class InboxMixin:
                         except Exception:
                             logger.warning(
                                 "[%s] Slack auto-response failed",
+                                self.name,
+                                exc_info=True,
+                            )
+
+                    # ── Discord auto-response: post LLM reply back to Discord ──
+                    if accumulated_text.strip() and _is_auto_response_enabled_discord():
+                        try:
+                            from core.outbound_auto import DiscordAutoResponder
+
+                            _discord_auto = DiscordAutoResponder()
+                            _already_discord: set[str] = set()
+                            await _discord_auto.on_inbox_response(
+                                anima_name=self.name,
+                                response_text=accumulated_text,
+                                inbox_items=inbox_result.inbox_items,
+                                already_posted=_already_discord,
+                            )
+                        except Exception:
+                            logger.warning(
+                                "[%s] Discord auto-response failed",
                                 self.name,
                                 exc_info=True,
                             )

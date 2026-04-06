@@ -293,6 +293,7 @@ class UserAliasConfig(BaseModel):
 
     slack_user_id: str = ""
     chatwork_room_id: str = ""
+    discord_user_id: str = ""
 
 
 class ExternalMessagingChannelConfig(BaseModel):
@@ -305,15 +306,18 @@ class ExternalMessagingChannelConfig(BaseModel):
     app_id_mapping: dict[str, str] = {}  # api_app_id → anima_name (per-Anima webhook routing)
     auto_response: bool = False  # auto-post LLM responses back to originating platform
     board_mapping: dict[str, str] = {}  # channel_id → animaworks_board_name (auto-populated)
+    guild_id: str = ""  # Discord guild snowflake ID (Discord only)
+    channel_members: dict[str, list[str]] = {}  # channel_id → [anima_name, ...] (Discord only)
 
 
 class ExternalMessagingConfig(BaseModel):
     """Configuration for external messaging integration (inbound + outbound)."""
 
-    preferred_channel: str = "slack"  # "slack" | "chatwork"
+    preferred_channel: str = "slack"  # "slack" | "chatwork" | "discord"
     user_aliases: dict[str, UserAliasConfig] = {}  # alias → contact info
     slack: ExternalMessagingChannelConfig = ExternalMessagingChannelConfig()
     chatwork: ExternalMessagingChannelConfig = ExternalMessagingChannelConfig()
+    discord: ExternalMessagingChannelConfig = ExternalMessagingChannelConfig()
 
 
 class MediaProxyConfig(BaseModel):

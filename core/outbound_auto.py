@@ -213,6 +213,103 @@ class SlackAutoResponder:
             return ""
 
 
+class DiscordAutoResponder:
+    """Post-cycle hook: auto-send LLM responses back to originating Discord channels."""
+
+    async def on_inbox_response(
+        self,
+        anima_name: str,
+        response_text: str,
+        inbox_items: list[InboxItem],
+        *,
+        already_posted: set[str] | None = None,
+    ) -> list[str]:
+        """Post *response_text* to each Discord-sourced message's channel via webhook.
+
+        Returns list of Discord message IDs for successfully posted messages.
+        """
+        if not response_text or not response_text.strip():
+            return []
+
+        posted_keys = already_posted or set()
+        targets = self._collect_discord_targets(inbox_items, posted_keys)
+        if not targets:
+            return []
+
+        try:
+            from core.discord_webhooks import get_webhook_manager
+
+            wm = get_webhook_manager()
+        except Exception:
+            logger.warning("DiscordAutoResponder: webhook manager not available")
+            return []
+
+        from core.tools._discord_markdown import md_to_discord
+
+        discord_text = md_to_discord(response_text)
+
+        posted_ids: list[str] = []
+        for target in targets:
+            try:
+                mention = target.get("mention_prefix", "")
+                text = f"{mention}{discord_text}" if mention else discord_text
+                msg_id = wm.send_as_anima(
+                    target["channel_id"],
+                    anima_name,
+                    text,
+                )
+                if msg_id:
+                    posted_ids.append(msg_id)
+            except Exception:
+                logger.exception(
+                    "DiscordAutoResponder: failed to post to %s",
+                    target["channel_id"],
+                )
+
+        if posted_ids:
+            logger.info(
+                "DiscordAutoResponder: posted %d auto-response(s) for '%s'",
+                len(posted_ids),
+                anima_name,
+            )
+        return posted_ids
+
+    @staticmethod
+    def _collect_discord_targets(
+        inbox_items: list[InboxItem],
+        already_posted: set[str],
+    ) -> list[dict[str, str]]:
+        """Extract unique Discord targets from inbox items."""
+        seen: set[str] = set()
+        targets: list[dict[str, str]] = []
+        for item in inbox_items:
+            msg = item.msg
+            if getattr(msg, "source", "") != "discord":
+                continue
+            channel_id = getattr(msg, "external_channel_id", "")
+            if not channel_id:
+                continue
+            reference_id = getattr(msg, "external_thread_ts", "") or getattr(msg, "source_message_id", "")
+            dedup_key = f"{channel_id}:{reference_id}"
+            if dedup_key in seen or dedup_key in already_posted:
+                continue
+            seen.add(dedup_key)
+
+            mention = ""
+            ext_uid = getattr(msg, "external_user_id", "")
+            if ext_uid:
+                mention = f"<@{ext_uid}> "
+
+            targets.append(
+                {
+                    "channel_id": channel_id,
+                    "reference_id": reference_id,
+                    "mention_prefix": mention,
+                }
+            )
+        return targets
+
+
 class BoardSlackSync:
     """Sync AnimaWorks board posts back to mapped Slack channels."""
 

@@ -206,6 +206,7 @@ def _ensure_channels_registered() -> None:
     _builtins_registered = True
     # Import triggers @register_channel decorators
     import core.notification.channels.chatwork  # noqa: F401
+    import core.notification.channels.discord  # noqa: F401
     import core.notification.channels.line  # noqa: F401
     import core.notification.channels.ntfy  # noqa: F401
     import core.notification.channels.slack  # noqa: F401

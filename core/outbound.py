@@ -34,9 +34,10 @@ class ResolvedRecipient:
 
     is_internal: bool
     name: str  # original or normalized name
-    channel: str = ""  # "slack" | "chatwork" | "" (internal)
+    channel: str = ""  # "slack" | "chatwork" | "discord" | "" (internal)
     slack_user_id: str = ""
     chatwork_room_id: str = ""
+    discord_user_id: str = ""
     alias_used: str = ""  # the alias that matched (if any)
 
 
@@ -95,6 +96,17 @@ def resolve_recipient(
                 chatwork_room_id=room,
             )
 
+    # 4b. discord: prefix (snowflake user ID)
+    if lower.startswith("discord:"):
+        uid = raw[8:].strip()
+        if uid:
+            return ResolvedRecipient(
+                is_internal=False,
+                name=raw,
+                channel="discord",
+                discord_user_id=uid,
+            )
+
     # 5. Bare Slack user ID pattern
     if _SLACK_USER_ID_RE.match(raw):
         return ResolvedRecipient(
@@ -143,6 +155,14 @@ def _resolve_from_alias(
             chatwork_room_id=alias_cfg.chatwork_room_id,
             alias_used=alias,
         )
+    if channel == "discord" and alias_cfg.discord_user_id:
+        return ResolvedRecipient(
+            is_internal=False,
+            name=alias,
+            channel="discord",
+            discord_user_id=alias_cfg.discord_user_id,
+            alias_used=alias,
+        )
 
     # Preferred channel not available — fallback to any available channel
     if alias_cfg.slack_user_id:
@@ -161,10 +181,18 @@ def _resolve_from_alias(
             chatwork_room_id=alias_cfg.chatwork_room_id,
             alias_used=alias,
         )
+    if alias_cfg.discord_user_id:
+        return ResolvedRecipient(
+            is_internal=False,
+            name=alias,
+            channel="discord",
+            discord_user_id=alias_cfg.discord_user_id,
+            alias_used=alias,
+        )
 
     raise RecipientNotFoundError(
         f"User alias '{alias}' has no contact info for any channel. "
-        f"Configure slack_user_id or chatwork_room_id in external_messaging.user_aliases."
+        f"Configure discord_user_id, slack_user_id, or chatwork_room_id in external_messaging.user_aliases."
     )
 
 
@@ -189,7 +217,7 @@ def send_external(
                 "status": "error",
                 "error_type": "NoChannelConfigured",
                 "message": f"No external messaging channel configured for '{resolved.name}'. "
-                f"Set up slack or chatwork in config.json external_messaging.",
+                f"Set up slack, chatwork, or discord in config.json external_messaging.",
             },
             ensure_ascii=False,
         )
@@ -201,6 +229,8 @@ def send_external(
                 return _send_via_slack(resolved.slack_user_id, content, sender_name, anima_name)
             elif channel == "chatwork":
                 return _send_via_chatwork(resolved.chatwork_room_id, content, sender_name)
+            elif channel == "discord":
+                return _send_via_discord(resolved.discord_user_id, content, sender_name, anima_name)
             else:
                 last_error = f"Unknown channel: {channel}"
         except Exception as e:
@@ -224,11 +254,13 @@ def send_external(
 def _build_channel_order(resolved: ResolvedRecipient) -> list[str]:
     """Build ordered list of channels to try."""
     channels = [resolved.channel]
-    # Add fallback channels
+    # Add fallback channels (Slack > Chatwork > Discord to preserve existing behavior)
     if resolved.slack_user_id and "slack" not in channels:
         channels.append("slack")
     if resolved.chatwork_room_id and "chatwork" not in channels:
         channels.append("chatwork")
+    if resolved.discord_user_id and "discord" not in channels:
+        channels.append("discord")
     return channels
 
 
@@ -280,6 +312,45 @@ def _send_via_slack(user_id: str, content: str, sender_name: str, anima_name: st
             "channel": "slack",
             "recipient": user_id,
             "message": f"Message sent via Slack DM to {user_id}",
+        },
+        ensure_ascii=False,
+    )
+
+
+def _send_via_discord(user_id: str, content: str, sender_name: str, anima_name: str = "") -> str:
+    """Send a DM via Discord API using the bot token."""
+    from core.tools._base import get_credential
+    from core.tools._discord_client import DiscordClient
+    from core.tools._discord_markdown import md_to_discord
+
+    token = get_credential("discord", "discord", env_var="DISCORD_BOT_TOKEN")
+    client = DiscordClient(token=token)
+
+    # Open DM channel
+    dm = client.create_dm(user_id)
+    dm_channel_id = str(dm.get("id", ""))
+    if not dm_channel_id:
+        raise DeliveryError(f"Failed to open DM channel with Discord user {user_id}")
+
+    prefix = f"[{sender_name}] " if sender_name and not anima_name else ""
+    text = md_to_discord(f"{prefix}{content}")
+
+    # Send via bot (DMs don't support webhooks with custom identity)
+    result = client.send_message(dm_channel_id, text)
+    msg_id = result.get("id", "")
+
+    logger.info(
+        "External message sent via discord: user=%s msg_id=%s sender=%s",
+        user_id,
+        msg_id,
+        sender_name,
+    )
+    return json.dumps(
+        {
+            "status": "sent",
+            "channel": "discord",
+            "recipient": user_id,
+            "message": f"Message sent via Discord DM to {user_id}",
         },
         ensure_ascii=False,
     )

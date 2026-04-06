@@ -350,6 +350,103 @@ function _bindAliasesCard(name, initialAliases) {
   });
 }
 
+// ── Discord Channels Card ──────────────────
+
+function _discordChannelsCardHtml(discordChannels, animaName) {
+  if (!discordChannels || discordChannels.length === 0) {
+    return `
+      <div class="card" style="margin-bottom: 1.5rem;" id="discordChannelsCard">
+        <div class="card-header">${t("animas.discord_channels")}</div>
+        <div class="card-body">
+          <div style="color:var(--text-secondary,#888); font-size:0.85rem;">${t("animas.discord_channels_empty")}</div>
+        </div>
+      </div>
+    `;
+  }
+  const checkboxes = discordChannels.map(ch => {
+    const checked = (ch.members || []).includes(animaName) ? " checked" : "";
+    return `
+      <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; cursor:pointer;">
+        <input type="checkbox" class="discord-ch-check" data-channel-id="${escapeHtml(ch.id)}"${checked}>
+        <span style="color:var(--text-secondary,#888);">#</span>${escapeHtml(ch.name)}
+      </label>
+    `;
+  }).join("");
+
+  return `
+    <div class="card" style="margin-bottom: 1.5rem;" id="discordChannelsCard">
+      <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>${t("animas.discord_channels")}</span>
+        <div style="display:flex; gap:0.4rem; align-items:center;">
+          <span id="discordChStatus" style="font-size:0.75rem; color:var(--text-secondary,#888);"></span>
+          <button class="btn-primary" id="discordChSaveBtn" style="font-size:0.75rem; padding:0.15rem 0.5rem;">${t("animas.save")}</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="discordChList" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:0.3rem 1rem;">
+          ${checkboxes}
+        </div>
+        <div style="font-size:0.75rem; color:var(--text-secondary,#888); margin-top:0.5rem;">${t("animas.discord_channels_hint")}</div>
+      </div>
+    </div>
+  `;
+}
+
+function _bindDiscordChannelsCard(animaName, discordChannels) {
+  const saveBtn = document.getElementById("discordChSaveBtn");
+  const status = document.getElementById("discordChStatus");
+  if (!saveBtn) return;
+
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = t("animas.saving");
+    status.textContent = "";
+
+    // Build channel_id → members map from checkboxes
+    const updates = {};
+    document.querySelectorAll(".discord-ch-check").forEach(cb => {
+      const chId = cb.dataset.channelId;
+      const ch = discordChannels.find(c => c.id === chId);
+      if (!ch) return;
+      const members = [...(ch.members || [])];
+      const idx = members.indexOf(animaName);
+      if (cb.checked && idx === -1) members.push(animaName);
+      if (!cb.checked && idx !== -1) members.splice(idx, 1);
+      // Only update if changed
+      const orig = ch.members || [];
+      if (JSON.stringify(members.sort()) !== JSON.stringify([...orig].sort())) {
+        updates[chId] = members;
+      }
+    });
+
+    try {
+      const promises = Object.entries(updates).map(([chId, members]) =>
+        fetch(`/api/discord/channel-members/${encodeURIComponent(chId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ members }),
+        })
+      );
+      await Promise.all(promises);
+
+      // Update local state
+      for (const [chId, members] of Object.entries(updates)) {
+        const ch = discordChannels.find(c => c.id === chId);
+        if (ch) ch.members = members;
+      }
+
+      status.textContent = t("animas.saved");
+      status.style.color = "var(--color-success, #28a745)";
+      setTimeout(() => { status.textContent = ""; }, 3000);
+    } catch {
+      status.textContent = t("animas.save_failed");
+      status.style.color = "var(--color-danger, #dc3545)";
+    }
+    saveBtn.disabled = false;
+    saveBtn.textContent = t("animas.save");
+  });
+}
+
 // ── Permissions UI ─────────────────────────
 
 function _toolChecked(toolName, extTools) {
@@ -678,6 +775,8 @@ async function _showDetail(name) {
     try { memoryStats = await api(`/api/animas/${encodeURIComponent(name)}/memory/stats`); } catch { /* 404 ok */ }
     try { permissions = await api(`/api/animas/${encodeURIComponent(name)}/permissions`); } catch { /* 404 ok */ }
     try { const ar = await api(`/api/animas/${encodeURIComponent(name)}/aliases`); aliases = ar.aliases || []; } catch { /* 404 ok */ }
+    let discordChannels = [];
+    try { const dc = await api("/api/discord/channels"); discordChannels = dc.channels || []; } catch { /* not configured */ }
 
     let html = '<div class="card-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 1.5rem;">';
 
@@ -778,6 +877,11 @@ async function _showDetail(name) {
     // Aliases card
     html += _aliasesCardHtml(aliases);
 
+    // Discord channels card
+    if (discordChannels.length > 0) {
+      html += _discordChannelsCardHtml(discordChannels, name);
+    }
+
     // Permissions card
     html += _permissionsCardHtml(permissions, availableTools);
 
@@ -796,6 +900,11 @@ async function _showDetail(name) {
 
     // Bind aliases card
     _bindAliasesCard(name, aliases);
+
+    // Bind Discord channels card
+    if (discordChannels.length > 0) {
+      _bindDiscordChannelsCard(name, discordChannels);
+    }
 
     // Bind permissions card
     _bindPermissionsCard(name, permissions, availableTools);
