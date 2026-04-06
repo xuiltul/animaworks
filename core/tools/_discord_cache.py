@@ -193,6 +193,66 @@ class MessageCache(BaseMessageCache):
         )
         self.conn.commit()
 
+    # ── Unreplied detection ─────────────────────────────────
+
+    def find_unreplied(
+        self,
+        anima_name: str,
+        *,
+        channel_id: str | None = None,
+        limit: int = 10,
+        hours: int = 48,
+    ) -> list[dict]:
+        """Find messages mentioning *anima_name* that have no subsequent reply.
+
+        A message is considered "replied" if a message from the same Anima
+        (matched by ``users.display_name``) exists in the same channel with a
+        later timestamp.  Only messages from the last *hours* are considered.
+        """
+        cutoff = (datetime.now(JST) - timedelta(hours=hours)).isoformat()
+        anima_lower = anima_name.lower()
+
+        q = """
+            SELECT m.id, m.channel_id, m.author_id, m.content, m.timestamp
+            FROM messages m
+            LEFT JOIN users u ON m.author_id = u.id
+            WHERE m.content LIKE ?
+              AND LOWER(COALESCE(u.display_name, u.username, '')) != ?
+              AND m.timestamp > ?
+        """
+        params: list[str | int] = [f"%{anima_name}%", anima_lower, cutoff]
+        if channel_id:
+            q += " AND m.channel_id = ?"
+            params.append(channel_id)
+        q += " ORDER BY m.timestamp DESC LIMIT ?"
+        params.append(limit * 5)
+
+        candidates = self.conn.execute(q, params).fetchall()
+        if not candidates:
+            return []
+
+        unreplied: list[dict] = []
+        for row in candidates:
+            ch = row["channel_id"]
+            ts = row["timestamp"]
+            reply = self.conn.execute(
+                """
+                SELECT 1 FROM messages m2
+                JOIN users u2 ON m2.author_id = u2.id
+                WHERE m2.channel_id = ?
+                  AND m2.timestamp > ?
+                  AND LOWER(u2.display_name) = ?
+                LIMIT 1
+                """,
+                (ch, ts, anima_lower),
+            ).fetchone()
+            if reply is None:
+                unreplied.append(dict(row))
+            if len(unreplied) >= limit:
+                break
+
+        return unreplied
+
     # ── User name helpers (for CLI display) ────────────────
 
     def get_user_name_cache(self) -> dict[str, str]:

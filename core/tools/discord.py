@@ -260,21 +260,11 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
 
             channel_id = args.get("channel_id")
             limit = int(args.get("limit", 10))
-            results = cache.search(
+            return cache.find_unreplied(
                 anima_name,
                 channel_id=channel_id,
-                limit=limit * 3,  # oversample to filter
+                limit=limit,
             )
-            # Filter to messages that mention this anima but weren't sent by them
-            unreplied = []
-            for msg in results:
-                user_name = msg.get("user_name", "").lower()
-                content = msg.get("content", "").lower()
-                if anima_name.lower() in content and user_name != anima_name.lower():
-                    unreplied.append(msg)
-                if len(unreplied) >= limit:
-                    break
-            return unreplied
         finally:
             cache.close()
 

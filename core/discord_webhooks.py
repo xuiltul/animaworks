@@ -16,6 +16,7 @@ parameters make each Anima appear as a distinct identity.
 import json
 import logging
 import os
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -26,9 +27,9 @@ from core.tools._anima_icon_url import resolve_anima_icon_url
 from core.tools._base import get_credential
 from core.tools._discord_client import DiscordAPIError, DiscordClient
 
-logger = logging.getLogger("animaworks.discord_webhooks")
+from core.tools._discord_markdown import DISCORD_MESSAGE_LIMIT
 
-DISCORD_MESSAGE_LIMIT = 2000
+logger = logging.getLogger("animaworks.discord_webhooks")
 _WEBHOOK_NAME = "AnimaWorks"
 
 # Thread-to-Anima mapping TTL
@@ -228,8 +229,7 @@ class DiscordWebhookManager:
             p.parent.mkdir(parents=True, exist_ok=True)
             with self._lock:
                 snapshot = dict(self._webhooks)
-            p.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
-            os.chmod(p, 0o600)
+            _atomic_write_json(p, snapshot)
         except Exception:
             logger.debug("Failed to persist webhook cache", exc_info=True)
 
@@ -240,13 +240,28 @@ class DiscordWebhookManager:
             p.parent.mkdir(parents=True, exist_ok=True)
             with self._lock:
                 snapshot = dict(self._thread_map)
-            p.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
-            os.chmod(p, 0o600)
+            _atomic_write_json(p, snapshot)
         except Exception:
             logger.debug("Failed to persist thread map", exc_info=True)
 
 
 # ── Helpers ──────────────────────────────────────────────────
+
+
+def _atomic_write_json(path: Path, data: Any) -> None:
+    """Write JSON to *path* atomically via temp file + rename (mode 0o600)."""
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _split_message(content: str) -> list[str]:

@@ -20,9 +20,7 @@ import logging
 import re
 import threading
 import time
-from typing import Any
-
-import discord
+from typing import TYPE_CHECKING, Any
 
 from core.config.models import load_config
 from core.i18n import t
@@ -30,6 +28,9 @@ from core.messenger import Messenger
 from core.paths import get_data_dir, get_shared_dir
 from core.tools._base import get_credential
 from core.tools._discord_markdown import clean_discord_markup
+
+if TYPE_CHECKING:
+    import discord
 
 logger = logging.getLogger("animaworks.discord_gateway")
 
@@ -128,8 +129,8 @@ _THREAD_CTX_SUMMARY_LIMIT = 150
 
 
 async def _fetch_thread_context(
-    channel: discord.TextChannel | discord.DMChannel,
-    reference: discord.MessageReference,
+    channel: Any,
+    reference: Any,
 ) -> str:
     """Fetch Discord thread context for a reply message."""
     if reference.message_id is None:
@@ -165,15 +166,16 @@ class DiscordGatewayManager:
     """
 
     def __init__(self) -> None:
-        self._client: discord.Client | None = None
+        self._client: Any = None  # discord.Client (lazy import)
         self._bot_user_id: int = 0
         self._anima_name_re: re.Pattern[str] | None = None
         self._known_anima_names: set[str] = set()
+        self._alias_to_canonical: dict[str, str] = {}  # lowercase alias/name → canonical
         self._webhook_names: set[str] = set()
         self._started = False
 
     @property
-    def client(self) -> discord.Client | None:
+    def client(self) -> Any:
         return self._client
 
     async def start(self) -> None:
@@ -190,9 +192,15 @@ class DiscordGatewayManager:
             logger.error("DISCORD_BOT_TOKEN not configured — Discord Gateway cannot start")
             return
 
+        try:
+            import discord as _discord
+        except ImportError:
+            logger.error("discord.py is not installed — run: pip install 'animaworks[discord]'")
+            return
+
         self._build_anima_patterns()
 
-        intents = discord.Intents(
+        intents = _discord.Intents(
             guilds=True,
             guild_messages=True,
             dm_messages=True,
@@ -200,7 +208,7 @@ class DiscordGatewayManager:
             members=False,
         )
 
-        client = discord.Client(intents=intents)
+        client = _discord.Client(intents=intents)
         self._client = client
 
         @client.event
@@ -214,7 +222,7 @@ class DiscordGatewayManager:
                 )
 
         @client.event
-        async def on_message(message: discord.Message) -> None:
+        async def on_message(message: Any) -> None:
             await self._handle_message(message)
 
         # Start in background task (client.start is blocking)
@@ -233,14 +241,15 @@ class DiscordGatewayManager:
         self._started = True
         logger.info("Discord Gateway started")
 
-    async def _run_client(self, client: discord.Client, token: str) -> None:
+    async def _run_client(self, client: Any, token: str) -> None:
         """Run client.start in a way that doesn't block the event loop."""
         try:
             await client.start(token)
-        except discord.LoginFailure:
-            logger.error("Discord login failed — check DISCORD_BOT_TOKEN")
-        except Exception:
-            logger.exception("Discord Gateway connection error")
+        except Exception as exc:
+            if type(exc).__name__ == "LoginFailure":
+                logger.error("Discord login failed — check DISCORD_BOT_TOKEN")
+            else:
+                logger.exception("Discord Gateway connection error")
 
     async def stop(self) -> None:
         """Gracefully close the Discord Gateway connection."""
@@ -269,22 +278,22 @@ class DiscordGatewayManager:
     # ── Internal ─────────────────────────────────────────────
 
     def _build_anima_patterns(self) -> None:
-        """Build regex pattern for Anima name detection from config."""
+        """Build regex pattern and alias→canonical mapping from config."""
         try:
             cfg = load_config()
             anima_names: set[str] = set()
+            alias_map: dict[str, str] = {}
             for name in cfg.animas:
                 anima_names.add(name)
+                alias_map[name.lower()] = name
                 anima_cfg = cfg.animas[name]
                 for alias in anima_cfg.aliases:
                     anima_names.add(alias)
+                    alias_map[alias.lower()] = name
             self._known_anima_names = anima_names
+            self._alias_to_canonical = alias_map
             if anima_names:
                 escaped = [re.escape(n) for n in sorted(anima_names, key=len, reverse=True)]
-                # Match Anima names with flexible boundaries for both ASCII and
-                # Japanese text.  \b only works at ASCII boundaries, so we use
-                # lookaround for non-alphanumeric chars to support Japanese aliases
-                # like "さくら" in "今日はさくらに連絡".
                 self._anima_name_re = re.compile(
                     r"(?:^|\b|(?<=[^a-zA-Z0-9]))(" + "|".join(escaped) + r")(?:\b|(?=[^a-zA-Z0-9])|$)",
                     re.IGNORECASE,
@@ -295,34 +304,24 @@ class DiscordGatewayManager:
             logger.debug("Failed to build Anima name patterns", exc_info=True)
 
     def _resolve_canonical_name(self, matched: str) -> str | None:
-        """Resolve a matched name (possibly alias) to canonical Anima name."""
-        try:
-            cfg = load_config()
-            low = matched.lower()
-            # Direct match
-            for name in cfg.animas:
-                if name.lower() == low:
-                    return name
-            # Alias match
-            for name, acfg in cfg.animas.items():
-                for alias in acfg.aliases:
-                    if alias.lower() == low:
-                        return name
-        except Exception:
-            pass
-        return None
+        """Resolve a matched name (possibly alias) to canonical Anima name.
+
+        Uses the cached ``_alias_to_canonical`` mapping built by
+        ``_build_anima_patterns()`` — no config reload needed.
+        """
+        return self._alias_to_canonical.get(matched.lower())
 
     def _detect_target_anima(
         self,
         text: str,
         channel_id: str,
-        discord_cfg: Any = None,
+        discord_cfg: Any,
     ) -> str | None:
         """Detect which Anima a message is targeting.
 
         Returns canonical anima name or None.
         *discord_cfg* is the pre-loaded ``ExternalMessagingChannelConfig``
-        to avoid repeated ``load_config()`` calls per message.
+        (required — caller must supply it to avoid repeated config loads).
         """
         # 1. Anima name in message text
         if self._anima_name_re and text:
@@ -333,11 +332,6 @@ class DiscordGatewayManager:
                     return canonical
 
         # 2. Channel-member config (if only one member, route to them)
-        if discord_cfg is None:
-            try:
-                discord_cfg = load_config().external_messaging.discord
-            except Exception:
-                return None
         members = discord_cfg.channel_members.get(channel_id, [])
         if len(members) == 1:
             return members[0]
@@ -345,19 +339,14 @@ class DiscordGatewayManager:
         return None
 
     @staticmethod
-    def _is_anima_in_channel(anima_name: str, channel_id: str, discord_cfg: Any = None) -> bool:
+    def _is_anima_in_channel(anima_name: str, channel_id: str, discord_cfg: Any) -> bool:
         """Check if an Anima is configured as a member of a channel."""
-        if discord_cfg is None:
-            try:
-                discord_cfg = load_config().external_messaging.discord
-            except Exception:
-                return True
         members = discord_cfg.channel_members.get(channel_id, [])
         if not members:
             return True
         return anima_name in members
 
-    async def _handle_message(self, message: discord.Message) -> None:
+    async def _handle_message(self, message: Any) -> None:
         """Core message handler for all Discord events."""
         # Ignore own messages
         if message.author.id == self._bot_user_id:
