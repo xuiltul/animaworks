@@ -25,6 +25,7 @@ from typing import Any
 import discord
 
 from core.config.models import load_config
+from core.i18n import t
 from core.messenger import Messenger
 from core.paths import get_data_dir, get_shared_dir
 from core.tools._base import get_credential
@@ -117,8 +118,8 @@ def _build_discord_annotation(is_dm: bool, has_mention: bool) -> str:
     if is_dm:
         return "[discord:DM]\n"
     if has_mention:
-        return "[discord:channel — あなたがメンションされています]\n"
-    return "[discord:channel — あなたへの直接メンションはありません]\n"
+        return f"[discord:channel — {t('discord.annotation_mentioned')}]\n"
+    return f"[discord:channel — {t('discord.annotation_no_mention')}]\n"
 
 
 # ── Thread context ───────────────────────────────────────────
@@ -413,12 +414,23 @@ class DiscordGatewayManager:
         # Determine target Anima
         target_anima: str | None = None
 
-        if is_dm:
-            target_anima = self._detect_target_anima(cleaned_text, channel_id, discord_cfg)
-        else:
+        # 1. Thread reply mapping — route replies to the Anima that sent the parent
+        if reference_id:
+            try:
+                from core.discord_webhooks import get_webhook_manager
+
+                thread_anima = get_webhook_manager().lookup_thread_anima(reference_id)
+                if thread_anima:
+                    target_anima = thread_anima
+            except Exception:
+                logger.debug("Thread map lookup failed", exc_info=True)
+
+        # 2. Text/name detection and channel member routing
+        if target_anima is None:
             target_anima = self._detect_target_anima(cleaned_text, channel_id, discord_cfg)
 
-            if target_anima is None and bot_mentioned:
+        if target_anima is None and not is_dm:
+            if bot_mentioned:
                 target_anima = discord_cfg.default_anima or None
 
             # No mention, no name detected: route to channel lead

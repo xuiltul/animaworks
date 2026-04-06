@@ -23,6 +23,7 @@ The ``board_mapping`` (channel_id -> board_name) and ``channel_members``
 are persisted in config.json.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -74,6 +75,9 @@ class DiscordChannelSync:
     async def sync(self, gateway_manager: Any = None) -> dict[str, Any]:
         """Run full sync cycle: forward + reverse + DM channels.
 
+        All Discord REST calls are synchronous (httpx), so the heavy lifting
+        is offloaded to a thread to avoid blocking the asyncio event loop.
+
         Returns a summary dict with counts.
         """
         cfg = load_config()
@@ -86,12 +90,20 @@ class DiscordChannelSync:
             logger.warning("Discord channel sync: guild_id not configured")
             return {"status": "no_guild_id"}
 
+        return await asyncio.to_thread(self._sync_blocking, cfg, discord_cfg, guild_id)
+
+    def _sync_blocking(
+        self,
+        cfg: Any,
+        discord_cfg: Any,
+        guild_id: str,
+    ) -> dict[str, Any]:
+        """Synchronous sync body — runs in a worker thread."""
         client = self._ensure_client()
         shared_dir = get_shared_dir()
         channels_dir = shared_dir / "channels"
         channels_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get all guild channels
         try:
             all_channels = client.get_guild_channels(guild_id)
         except DiscordAPIError:
@@ -100,17 +112,15 @@ class DiscordChannelSync:
 
         text_channels = [ch for ch in all_channels if ch.get("type") == _CHANNEL_TYPE_TEXT]
 
-        # Current board_mapping
         board_mapping = dict(discord_cfg.board_mapping)
         channel_members = dict(discord_cfg.channel_members)
 
-        # ── Phase 1: Forward sync (Discord -> AnimaWorks boards) ��─
+        # ── Phase 1: Forward sync (Discord -> AnimaWorks boards) ──
         forward_created = 0
         for ch in text_channels:
             ch_id = str(ch["id"])
             ch_name = ch.get("name", "")
 
-            # Skip DM channels from board sync
             if ch_name.startswith(_DM_CHANNEL_PREFIX):
                 continue
 
@@ -126,7 +136,6 @@ class DiscordChannelSync:
                 forward_created += 1
                 logger.info("Created board '%s' from Discord channel #%s", board_name, ch_name)
 
-            # Update metadata
             meta = load_channel_meta(shared_dir, board_name)
             if meta is None:
                 meta = ChannelMeta(members=[])
@@ -146,14 +155,12 @@ class DiscordChannelSync:
 
             channel_name = _board_to_channel_name(board_name)
             if channel_name in existing_names:
-                # Already exists — just add mapping
                 for ch in text_channels:
                     if ch.get("name", "").lower() == channel_name:
                         board_mapping[str(ch["id"])] = board_name
                         break
                 continue
 
-            # Create channel
             try:
                 result = client.create_channel(guild_id, channel_name)
                 ch_id = str(result["id"])
@@ -180,7 +187,6 @@ class DiscordChannelSync:
             except Exception:
                 enabled_animas.append(name)
 
-        # Refresh channel list after potential creates
         try:
             all_channels = client.get_guild_channels(guild_id)
             text_channels = [ch for ch in all_channels if ch.get("type") == _CHANNEL_TYPE_TEXT]
@@ -192,19 +198,16 @@ class DiscordChannelSync:
         for anima_name in enabled_animas:
             dm_channel_name = f"{_DM_CHANNEL_PREFIX}{anima_name}"
             if dm_channel_name.lower() in existing_dm_names:
-                # Ensure channel_members is set
                 for ch in text_channels:
                     if ch.get("name", "").lower() == dm_channel_name.lower():
                         ch_id = str(ch["id"])
                         if ch_id not in channel_members or channel_members[ch_id] != [anima_name]:
                             channel_members[ch_id] = [anima_name]
-                        # Also add board mapping for DM channels
                         if ch_id not in board_mapping:
                             board_mapping[ch_id] = dm_channel_name
                         break
                 continue
 
-            # Create DM channel
             try:
                 result = client.create_channel(
                     guild_id,
@@ -217,7 +220,6 @@ class DiscordChannelSync:
                 dm_created += 1
                 logger.info("Created DM channel #%s for Anima '%s'", dm_channel_name, anima_name)
 
-                # Create the board file
                 board_file = channels_dir / f"{dm_channel_name}.jsonl"
                 if not board_file.exists():
                     board_file.touch()
@@ -255,7 +257,6 @@ class DiscordChannelSync:
             if ch.get("type") == _CHANNEL_TYPE_CATEGORY and ch.get("name", "").upper() == _DM_CATEGORY_NAME:
                 return str(ch["id"])
 
-        # Create category
         try:
             result = client.create_channel(
                 guild_id,

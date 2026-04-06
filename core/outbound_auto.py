@@ -257,7 +257,6 @@ class DiscordAutoResponder:
                     target["channel_id"],
                     anima_name,
                     text,
-                    reply_to=target.get("reference_id"),
                 )
                 if msg_id:
                     posted_ids.append(msg_id)

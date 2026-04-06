@@ -159,13 +159,14 @@ def _build_reply_instruction(m: Any) -> str:
 
     if m.source == "discord":
         if _is_auto_response_enabled_discord():
-            return "  [auto_reply: あなたの最終回答はDiscordに自動投稿されます。discord_channel_postを絶対に呼ばないでください。呼ぶと二重投稿になります]"
+            return f"  [auto_reply: {t('discord.auto_reply_instruction')}]"
 
         mention = f"<@{m.external_user_id}> " if m.external_user_id else ""
+        reply_placeholder = t("inbox.reply_placeholder")
         parts = [
             "use tool discord_channel_post with",
             f'channel_id="{m.external_channel_id}"',
-            f'text="{mention}{{返信内容}}"',
+            f'text="{mention}{reply_placeholder}"',
         ]
         return f"  [reply_instruction: {', '.join(parts)}]"
 

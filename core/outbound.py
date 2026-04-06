@@ -217,7 +217,7 @@ def send_external(
                 "status": "error",
                 "error_type": "NoChannelConfigured",
                 "message": f"No external messaging channel configured for '{resolved.name}'. "
-                f"Set up slack or chatwork in config.json external_messaging.",
+                f"Set up slack, chatwork, or discord in config.json external_messaging.",
             },
             ensure_ascii=False,
         )

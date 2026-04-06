@@ -14,6 +14,7 @@ def _merge_strings() -> dict[str, dict[str, str]]:
     from . import (
         communication,
         config,
+        discord,
         execution,
         handler,
         handler_ext,
@@ -43,6 +44,7 @@ def _merge_strings() -> dict[str, dict[str, str]]:
         config,
         lifecycle,
         communication,
+        discord,
         supervisor,
         server,
         room_manager,
