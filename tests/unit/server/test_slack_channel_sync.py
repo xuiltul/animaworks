@@ -117,3 +117,83 @@ async def test_sync_clears_tombstone_when_slack_channel_returns(
     assert meta.slack_sync_disabled is False
     assert meta.slack_deleted_at == ""
     assert sync.board_mapping == {"C999": "general"}
+
+
+@pytest.mark.asyncio
+async def test_sync_falls_back_to_available_bot_when_default_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When default_anima is not in app_map, fallback to any available bot."""
+    caplog.set_level("INFO", logger="animaworks.slack_channel_sync")
+    shared_dir = tmp_path / "shared"
+    channels_dir = shared_dir / "channels"
+    channels_dir.mkdir(parents=True)
+
+    cfg = SimpleNamespace(
+        external_messaging=SimpleNamespace(
+            slack=SimpleNamespace(default_anima="kotoha", board_mapping={}),
+        ),
+    )
+
+    monkeypatch.setattr("server.slack_channel_sync.get_shared_dir", lambda: shared_dir)
+    monkeypatch.setattr("server.slack_socket.SlackSocketModeManager", _FakeSlackManager)
+
+    list_channels_calls: list[str] = []
+
+    async def _list_public_channels(token: str):
+        list_channels_calls.append(token)
+        return [{"id": "C111", "name": "dev", "is_private": False}]
+
+    async def _join_channel_if_needed(*_args, **_kwargs):
+        return False
+
+    monkeypatch.setattr("server.slack_channel_sync._list_public_channels", _list_public_channels)
+    monkeypatch.setattr("server.slack_channel_sync._join_channel_if_needed", _join_channel_if_needed)
+    monkeypatch.setattr("core.config.models.load_config", lambda: cfg)
+    monkeypatch.setattr("core.config.models.save_config", lambda _updated: None)
+
+    # sakura is available but kotoha (default) is not
+    manager = _FakeSlackManager(
+        {"sakura": SimpleNamespace(client=SimpleNamespace(token="xoxb-sakura"))},
+    )
+    sync = SlackChannelSync()
+
+    await sync.sync(manager)
+
+    # Should have used sakura's token as fallback
+    assert list_channels_calls == ["xoxb-sakura"]
+    assert sync.board_mapping == {"C111": "dev"}
+    assert "falling back to 'sakura' for channel discovery" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_sync_returns_empty_when_no_bots_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When default_anima missing and no fallback bots exist, return empty mapping."""
+    shared_dir = tmp_path / "shared"
+    channels_dir = shared_dir / "channels"
+    channels_dir.mkdir(parents=True)
+
+    cfg = SimpleNamespace(
+        external_messaging=SimpleNamespace(
+            slack=SimpleNamespace(default_anima="kotoha", board_mapping={}),
+        ),
+    )
+
+    monkeypatch.setattr("server.slack_channel_sync.get_shared_dir", lambda: shared_dir)
+    monkeypatch.setattr("server.slack_socket.SlackSocketModeManager", _FakeSlackManager)
+    monkeypatch.setattr("core.config.models.load_config", lambda: cfg)
+
+    # No bots available at all (only __shared__ which is excluded)
+    manager = _FakeSlackManager({"__shared__": SimpleNamespace()})
+    sync = SlackChannelSync()
+
+    result = await sync.sync(manager)
+
+    assert result == {}
+    assert "no Slack bots available for channel discovery" in caplog.text

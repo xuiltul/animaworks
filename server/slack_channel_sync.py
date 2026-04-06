@@ -287,12 +287,27 @@ class SlackChannelSync:
         # Resolve discovery bot (default anima)
         discovery_app = manager._app_map.get(default_anima)
         if discovery_app is None:
-            logger.warning(
-                "SlackChannelSync: default anima '%s' not found in app_map (available: %s)",
-                default_anima,
-                [k for k in manager._app_map if k != "__shared__"],
-            )
-            return self.board_mapping
+            # Default anima not in app_map (likely missing Slack bot credentials).
+            # Fall back to any available anima bot for channel discovery.
+            available = [k for k in manager._app_map if k != "__shared__"]
+            if available:
+                fallback = available[0]
+                logger.info(
+                    "SlackChannelSync: default anima '%s' not in app_map, "
+                    "falling back to '%s' for channel discovery. "
+                    "Configure SLACK_BOT_TOKEN/SLACK_APP_TOKEN for '%s' to silence this.",
+                    default_anima,
+                    fallback,
+                    default_anima,
+                )
+                discovery_app = manager._app_map[fallback]
+            else:
+                logger.warning(
+                    "SlackChannelSync: no Slack bots available for channel discovery "
+                    "(default_anima='%s' not configured, no fallback)",
+                    default_anima,
+                )
+                return self.board_mapping
 
         discovery_token = discovery_app.client.token
         if not discovery_token:
