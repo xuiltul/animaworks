@@ -608,8 +608,7 @@ def build_system_prompt(
     _ss = _load_section_strings()
     _fs = _load_fallback_strings()
 
-    # Trigger flags (inbox is chat-equivalent for section gating; flag kept for clarity)
-    is_inbox = trigger.startswith("inbox:")  # noqa: F841
+    # Trigger flags — inbox is chat-equivalent (same sections as human chat)
     is_heartbeat = trigger == "heartbeat"
     is_cron = trigger.startswith("cron:")
     is_task = trigger.startswith("task:")
