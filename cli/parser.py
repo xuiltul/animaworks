@@ -541,12 +541,6 @@ def cli_main() -> None:
         default=None,
         help="Specific date (YYYY-MM-DD, 'today', or 'yesterday'). Shows only that day's activity",
     )
-    p_anima_audit.add_argument(
-        "--mode",
-        choices=["summary", "report"],
-        default="report",
-        help="Output mode: report (default, chronological timeline) or summary (statistics)",
-    )
     p_anima_audit.set_defaults(func=_lazy_anima_audit)
 
     # ── Logs ──────────────────────────────────────────────────

@@ -854,15 +854,11 @@ def _parse_date(raw: str | None) -> tuple[datetime, datetime] | None:
 
 def cmd_anima_audit(args: argparse.Namespace) -> None:
     """Audit a subordinate anima's recent activity."""
-    from collections import Counter
-
-    from core.memory.activity import ActivityLogger
     from core.paths import get_animas_dir
 
     name: str | None = args.anima
     audit_all: bool = getattr(args, "audit_all", False)
     days: int = max(1, min(getattr(args, "days", 1), 30))
-    mode = getattr(args, "mode", "report")
     since = _parse_since(getattr(args, "since", None))
     until: datetime | None = None
     hours = days * 24
@@ -878,153 +874,24 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
 
     animas_dir = get_animas_dir()
 
-    if mode == "report":
-        from core.memory.audit import AuditAggregator
-
-        if audit_all:
-            dirs = sorted([d for d in animas_dir.iterdir() if d.is_dir() and (d / "identity.md").exists()])
-            if not dirs:
-                print("No animas found.")
-                sys.exit(1)
-            print(AuditAggregator.generate_merged_timeline(dirs, hours=hours, since=since, until=until))
-        elif name:
-            anima_dir = animas_dir / name
-            if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
-                print(f"Error: Anima '{name}' not found")
-                sys.exit(1)
-            agg = AuditAggregator(anima_dir)
-            print(agg.generate_report(hours=hours, since=since, until=until))
-        return
+    from core.memory.audit import AuditAggregator
 
     if audit_all:
-        from core.memory.audit import AuditAggregator
-
         dirs = sorted([d for d in animas_dir.iterdir() if d.is_dir() and (d / "identity.md").exists()])
         if not dirs:
             print("No animas found.")
             sys.exit(1)
-        parts: list[str] = []
-        for d in dirs:
-            agg = AuditAggregator(d)
-            parts.append(agg.generate_summary(hours=hours, compact=True, since=since, until=until))
-        print("\n\n".join(parts))
+        print(AuditAggregator.generate_merged_timeline(dirs, hours=hours, since=since, until=until))
         return
 
-    anima_dir = animas_dir / name  # type: ignore[arg-type]
-
-    if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
-        print(f"Error: Anima '{name}' not found")
-        sys.exit(1)
-
-    # ── Overview ──
-    status_file = anima_dir / "status.json"
-    process_status = "unknown"
-    model_name = "unknown"
-    role = "-"
-    if status_file.exists():
-        try:
-            sdata = json.loads(status_file.read_text(encoding="utf-8"))
-            process_status = "enabled" if sdata.get("enabled", True) else "disabled"
-            model_name = sdata.get("model", "unknown")
-            role = sdata.get("role", "-")
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    print(f"=== Audit Report: {name} ===")
-    if date_range:
-        print(f"Period: {since.strftime('%Y-%m-%d')}")  # type: ignore[union-attr]
-    elif since:
-        print(f"Period: since {since.strftime('%H:%M')}")
-    else:
-        print(f"Period: last {days} day(s)")
-    print(f"Status: {process_status}")
-    print(f"Model: {model_name}")
-    print(f"Role: {role}")
-    print()
-
-    # ── Activity summary ──
-    al = ActivityLogger(anima_dir)
-    _ENTRY_LIMIT = 10_000
-    entries = al._load_entries(days=days, since=since, until=until)
-
-    print("--- Activity Summary ---")
-    if entries:
-        type_counts: Counter[str] = Counter()
-        for e in entries:
-            type_counts[e.type] += 1
-        print(f"Total events: {len(entries)}")
-        for etype, count in type_counts.most_common():
-            print(f"  {etype}: {count}")
-    else:
-        print("No activity found.")
-    print()
-
-    # ── Task status ──
-    print("--- Task Status ---")
-    state_file = anima_dir / "state" / "current_state.md"
-    if state_file.exists():
-        try:
-            state_text = state_file.read_text(encoding="utf-8").strip()
-            print(f"Current state: {state_text[:200] if state_text else '(none)'}")
-        except Exception:
-            print("Current state: (unreadable)")
-    else:
-        print("Current state: (none)")
-
-    try:
-        from core.memory.task_queue import TaskQueueManager
-
-        tqm = TaskQueueManager(anima_dir)
-        active = tqm.get_all_active()
-        done_tasks = tqm.list_tasks(status="done")
-        print(f"Active tasks: {len(active)}")
-        print(f"Completed tasks: {len(done_tasks)}")
-    except Exception:
-        print("Active tasks: 0")
-        print("Completed tasks: 0")
-    print()
-
-    # ── Errors ──
-    print("--- Errors ---")
-    error_entries = [e for e in entries if e.type == "error"]
-    print(f"Error count: {len(error_entries)}")
-    if error_entries:
-        for e in error_entries[-5:]:
-            summary = e.summary or (e.content[:100] if e.content else "")
-            print(f"  [{e.ts[:16]}] {summary}")
-    print()
-
-    # ── Tool usage ──
-    print("--- Tool Usage ---")
-    tool_entries = [e for e in entries if e.type == "tool_use" and e.tool]
-    if tool_entries:
-        tool_counts: Counter[str] = Counter()
-        for e in tool_entries:
-            tool_counts[e.tool] += 1
-        for tool, count in tool_counts.most_common(10):
-            print(f"  {tool}: {count}")
-    else:
-        print("No tool usage.")
-    print()
-
-    # ── Communication ──
-    print("--- Communication ---")
-    sent = [e for e in entries if e.type in ("message_sent", "dm_sent")]
-    received = [e for e in entries if e.type in ("message_received", "dm_received")]
-    if sent or received:
-        print(f"Messages sent: {len(sent)}")
-        print(f"Messages received: {len(received)}")
-        peer_sent: Counter[str] = Counter()
-        peer_recv: Counter[str] = Counter()
-        for e in sent:
-            peer_sent[e.to_person or "unknown"] += 1
-        for e in received:
-            peer_recv[e.from_person or "unknown"] += 1
-        all_peers = sorted(set(peer_sent) | set(peer_recv))
-        for peer in all_peers:
-            print(f"  {peer}: sent={peer_sent.get(peer, 0)}, received={peer_recv.get(peer, 0)}")
-    else:
-        print("No communication.")
+    if name:
+        anima_dir = animas_dir / name
+        if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
+            print(f"Error: Anima '{name}' not found")
+            sys.exit(1)
+        agg = AuditAggregator(anima_dir)
+        print(agg.generate_report(hours=hours, since=since, until=until))
+        return
 
 
 def cmd_anima_rename(args: argparse.Namespace) -> None:

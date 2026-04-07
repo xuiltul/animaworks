@@ -113,14 +113,12 @@ class TestAuditSubordinateSummary:
             "hinata": {"supervisor": "sakura"},
         })
         with p1, p2, p3:
-            result = handler.handle("audit_subordinate", {"name": "hinata", "mode": "summary"})
+            result = handler.handle("audit_subordinate", {"name": "hinata"})
 
         assert "hinata" in result
-        assert "監査サマリー" in result or "Audit Summary" in result
-        assert "ツール" in result or "Tools" in result
         assert "sakura" in result
 
-    def test_summary_shows_model_info(self, tmp_path):
+    def test_report_shows_model_info(self, tmp_path):
         handler = _make_handler(tmp_path, "sakura")
         _setup_subordinate(tmp_path, "hinata", supervisor="sakura", model="openai/gpt-4.1")
 
@@ -129,11 +127,11 @@ class TestAuditSubordinateSummary:
             "hinata": {"supervisor": "sakura"},
         })
         with p1, p2, p3:
-            result = handler.handle("audit_subordinate", {"name": "hinata", "mode": "summary"})
+            result = handler.handle("audit_subordinate", {"name": "hinata"})
 
         assert "openai/gpt-4.1" in result
 
-    def test_summary_no_activity_shows_zeros(self, tmp_path):
+    def test_report_no_activity(self, tmp_path):
         handler = _make_handler(tmp_path, "sakura")
         _setup_subordinate(tmp_path, "hinata", supervisor="sakura")
 
@@ -142,12 +140,11 @@ class TestAuditSubordinateSummary:
             "hinata": {"supervisor": "sakura"},
         })
         with p1, p2, p3:
-            result = handler.handle("audit_subordinate", {"name": "hinata", "mode": "summary"})
+            result = handler.handle("audit_subordinate", {"name": "hinata"})
 
         assert "hinata" in result
-        assert "0" in result
 
-    def test_summary_with_errors(self, tmp_path):
+    def test_report_with_errors(self, tmp_path):
         handler = _make_handler(tmp_path, "sakura")
         sub_dir = _setup_subordinate(tmp_path, "hinata", supervisor="sakura")
 
@@ -161,13 +158,12 @@ class TestAuditSubordinateSummary:
             "hinata": {"supervisor": "sakura"},
         })
         with p1, p2, p3:
-            result = handler.handle("audit_subordinate", {"name": "hinata", "mode": "summary"})
+            result = handler.handle("audit_subordinate", {"name": "hinata"})
 
         assert "API timeout" in result
         assert "Connection refused" in result
-        assert "エラー" in result or "Error" in result
 
-    def test_summary_communication_patterns(self, tmp_path):
+    def test_report_communication_patterns(self, tmp_path):
         handler = _make_handler(tmp_path, "sakura")
         sub_dir = _setup_subordinate(tmp_path, "hinata", supervisor="sakura")
 
@@ -181,7 +177,7 @@ class TestAuditSubordinateSummary:
             "hinata": {"supervisor": "sakura"},
         })
         with p1, p2, p3:
-            result = handler.handle("audit_subordinate", {"name": "hinata", "mode": "summary"})
+            result = handler.handle("audit_subordinate", {"name": "hinata"})
 
         assert "sakura" in result
         assert "rin" in result
@@ -537,7 +533,7 @@ class TestAuditSubordinateSince:
         })
         with p1, p2, p3:
             result = handler.handle("audit_subordinate", {
-                "name": "hinata", "mode": "summary", "since": "10:30",
+                "name": "hinata", "since": "10:30",
             })
 
         assert "10:30" in result

@@ -111,36 +111,6 @@ class TestAuditSubordinateE2E:
         })
         return handler, cfg, tmp_path
 
-    def test_default_mode_is_report(self, three_level):
-        """Default mode (no mode arg) returns timeline report, not summary."""
-        handler, cfg, tmp_path = three_level
-        with (
-            patch("core.config.models.load_config", return_value=cfg),
-            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch("core.paths.get_data_dir", return_value=tmp_path),
-        ):
-            result = handler.handle("audit_subordinate", {"name": "hinata"})
-
-        assert "hinata" in result
-        assert "行動レポート" in result or "Activity Report" in result
-        assert "24h" in result
-
-    def test_summary_single_target(self, three_level):
-        handler, cfg, tmp_path = three_level
-        with (
-            patch("core.config.models.load_config", return_value=cfg),
-            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch("core.paths.get_data_dir", return_value=tmp_path),
-        ):
-            result = handler.handle("audit_subordinate", {"name": "hinata", "mode": "summary"})
-
-        assert "hinata" in result
-        assert "監査サマリー" in result or "Audit Summary" in result
-        assert "24h" in result
-        assert "sakura" in result
-        assert "rin" in result
-        assert "github_pr_review" in result or "ツール" in result or "Tools" in result
-
     def test_report_single_target(self, three_level):
         handler, cfg, tmp_path = three_level
         with (
@@ -148,7 +118,7 @@ class TestAuditSubordinateE2E:
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
             patch("core.paths.get_data_dir", return_value=tmp_path),
         ):
-            result = handler.handle("audit_subordinate", {"name": "hinata", "mode": "report"})
+            result = handler.handle("audit_subordinate", {"name": "hinata"})
 
         assert "行動レポート" in result or "Activity Report" in result
         assert "🔄" in result  # heartbeat
@@ -166,7 +136,7 @@ class TestAuditSubordinateE2E:
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
             patch("core.paths.get_data_dir", return_value=tmp_path),
         ):
-            result = handler.handle("audit_subordinate", {"name": "rin", "mode": "report"})
+            result = handler.handle("audit_subordinate", {"name": "rin"})
 
         assert "rin" in result
         assert "TOP_SECRET" not in result
@@ -221,6 +191,6 @@ class TestAuditSubordinateE2E:
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
             patch("core.paths.get_data_dir", return_value=tmp_path),
         ):
-            result = handler.handle("audit_subordinate", {"name": "hinata", "mode": "summary"})
+            result = handler.handle("audit_subordinate", {"name": "hinata"})
 
-        assert "タスク" in result or "Tasks" in result
+        assert "hinata" in result
