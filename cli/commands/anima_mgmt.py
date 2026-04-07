@@ -819,6 +819,37 @@ def _parse_since(raw: str | None) -> datetime | None:
     return datetime.combine(now.date(), t_obj, tzinfo=now.tzinfo)
 
 
+def _parse_date(raw: str | None) -> tuple[datetime, datetime] | None:
+    """Parse ``--date`` into (since, until) as start/end of that day.
+
+    Accepts YYYY-MM-DD, 'today', or 'yesterday'.
+    Returns None if *raw* is falsy.
+    """
+    if not raw:
+        return None
+    from datetime import date as _date, time as _time, timedelta
+
+    from core.memory.activity import now_local
+
+    now = now_local()
+    val = raw.strip().lower()
+    if val == "today":
+        target = now.date()
+    elif val == "yesterday":
+        target = now.date() - timedelta(days=1)
+    else:
+        try:
+            target = _date.fromisoformat(val)
+        except ValueError:
+            print(f"Error: invalid --date format '{raw}' (expected YYYY-MM-DD, 'today', or 'yesterday')")
+            sys.exit(1)
+
+    tz = now.tzinfo
+    since = datetime.combine(target, _time(0, 0), tzinfo=tz)
+    until = datetime.combine(target, _time(23, 59, 59), tzinfo=tz)
+    return since, until
+
+
 def cmd_anima_audit(args: argparse.Namespace) -> None:
     """Audit a subordinate anima's recent activity."""
     from collections import Counter
@@ -831,7 +862,13 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
     days: int = max(1, min(getattr(args, "days", 1), 30))
     mode = getattr(args, "mode", "report")
     since = _parse_since(getattr(args, "since", None))
+    until: datetime | None = None
     hours = days * 24
+
+    date_range = _parse_date(getattr(args, "date", None))
+    if date_range:
+        since, until = date_range
+        hours = 24
 
     if not name and not audit_all:
         print("Error: specify an anima name or use --all")
@@ -847,14 +884,14 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
             if not dirs:
                 print("No animas found.")
                 sys.exit(1)
-            print(AuditAggregator.generate_merged_timeline(dirs, hours=hours, since=since))
+            print(AuditAggregator.generate_merged_timeline(dirs, hours=hours, since=since, until=until))
         elif name:
             anima_dir = animas_dir / name
             if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
                 print(f"Error: Anima '{name}' not found")
                 sys.exit(1)
             agg = AuditAggregator(anima_dir)
-            print(agg.generate_report(hours=hours, since=since))
+            print(agg.generate_report(hours=hours, since=since, until=until))
         return
 
     if audit_all:
@@ -867,7 +904,7 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
         parts: list[str] = []
         for d in dirs:
             agg = AuditAggregator(d)
-            parts.append(agg.generate_summary(hours=hours, compact=True, since=since))
+            parts.append(agg.generate_summary(hours=hours, compact=True, since=since, until=until))
         print("\n\n".join(parts))
         return
 
@@ -892,7 +929,9 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
             pass
 
     print(f"=== Audit Report: {name} ===")
-    if since:
+    if date_range:
+        print(f"Period: {since.strftime('%Y-%m-%d')}")  # type: ignore[union-attr]
+    elif since:
         print(f"Period: since {since.strftime('%H:%M')}")
     else:
         print(f"Period: last {days} day(s)")
@@ -904,7 +943,7 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
     # ── Activity summary ──
     al = ActivityLogger(anima_dir)
     _ENTRY_LIMIT = 10_000
-    entries = al._load_entries(days=days, since=since)
+    entries = al._load_entries(days=days, since=since, until=until)
 
     print("--- Activity Summary ---")
     if entries:

@@ -67,11 +67,11 @@ class AuditAggregator:
         self._anima_dir = anima_dir
         self._name = anima_dir.name
 
-    def _load_entries(self, hours: int, since: datetime | None = None) -> list[Any]:
+    def _load_entries(self, hours: int, since: datetime | None = None, until: datetime | None = None) -> list[Any]:
         from core.memory.activity import ActivityLogger
 
         al = ActivityLogger(self._anima_dir)
-        return al._load_entries(hours=hours, types=AUDIT_EVENT_TYPES, since=since)
+        return al._load_entries(hours=hours, types=AUDIT_EVENT_TYPES, since=since, until=until)
 
     def _get_status_info(self) -> tuple[str, str]:
         """Return (process_status, model_name) from status.json."""
@@ -135,9 +135,10 @@ class AuditAggregator:
         *,
         compact: bool = False,
         since: datetime | None = None,
+        until: datetime | None = None,
     ) -> str:
         """Generate a statistics summary for the audit period."""
-        entries = self._load_entries(hours, since=since)
+        entries = self._load_entries(hours, since=since, until=until)
         process_status, model_name = self._get_status_info()
 
         type_counts: Counter[str] = Counter()
@@ -232,13 +233,13 @@ class AuditAggregator:
 
     # ── Report mode ──────────────────────────────────────────
 
-    def generate_report(self, hours: int = 24, since: datetime | None = None) -> str:
+    def generate_report(self, hours: int = 24, since: datetime | None = None, until: datetime | None = None) -> str:
         """Generate a unified timeline report (日報形式).
 
         All non-tool_use events are displayed chronologically.
         tool_use events are aggregated into a summary at the bottom.
         """
-        entries = self._load_entries(hours, since=since)
+        entries = self._load_entries(hours, since=since, until=until)
         process_status, model_name = self._get_status_info()
 
         title = _audit_title("handler.audit_report_title", name=self._name, hours=hours, since=since)
@@ -310,6 +311,7 @@ class AuditAggregator:
         anima_dirs: list[Path],
         hours: int = 24,
         since: datetime | None = None,
+        until: datetime | None = None,
     ) -> str:
         """Generate a unified cross-anima timeline sorted chronologically.
 
@@ -326,7 +328,7 @@ class AuditAggregator:
         for anima_dir in anima_dirs:
             name = anima_dir.name
             al = ActivityLogger(anima_dir)
-            entries = al._load_entries(hours=hours, types=AUDIT_EVENT_TYPES, since=since)
+            entries = al._load_entries(hours=hours, types=AUDIT_EVENT_TYPES, since=since, until=until)
             per_anima_tool_counts[name] = Counter()
             for e in entries:
                 global_type_counts[e.type] += 1

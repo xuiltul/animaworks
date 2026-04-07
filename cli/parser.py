@@ -536,6 +536,12 @@ def cli_main() -> None:
         help="Start time in HH:MM format (today, JST). Overrides --days when specified",
     )
     p_anima_audit.add_argument(
+        "--date",
+        type=str,
+        default=None,
+        help="Specific date (YYYY-MM-DD, 'today', or 'yesterday'). Shows only that day's activity",
+    )
+    p_anima_audit.add_argument(
         "--mode",
         choices=["summary", "report"],
         default="report",

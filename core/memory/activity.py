@@ -254,6 +254,7 @@ class ActivityLogger(
         types: list[str] | None = None,
         involving: str | None = None,
         since: datetime | None = None,
+        until: datetime | None = None,
     ) -> list[ActivityEntry]:
         """Load all matching entries (no limit/offset).
 
@@ -266,6 +267,8 @@ class ActivityLogger(
                 *to_person*, or *channel* matches this value.
             since: If given, only include entries at or after this
                 timestamp.  Takes precedence over *hours*.
+            until: If given, only include entries at or before this
+                timestamp.  Used with *since* for date-range queries.
 
         Returns:
             Chronologically sorted list of all matching entries.
@@ -287,6 +290,10 @@ class ActivityLogger(
 
         for day_offset in range(scan_days):
             target = today - timedelta(days=day_offset)
+            if until is not None and target > until.date():
+                continue
+            if cutoff is not None and target < cutoff.date():
+                continue
             path = self._log_dir / f"{target.isoformat()}.jsonl"
             if not path.exists():
                 continue
@@ -320,12 +327,15 @@ class ActivityLogger(
                             raw["from_person"] = raw.pop("from")
                         if "to" in raw:
                             raw["to_person"] = raw.pop("to")
-                        if cutoff:
+                        if cutoff or until:
                             try:
                                 ts = datetime.fromisoformat(raw.get("ts", ""))
+                                tz_ref = (cutoff or until).tzinfo  # type: ignore[union-attr]
                                 if ts.tzinfo is None:
-                                    ts = ts.replace(tzinfo=cutoff.tzinfo)
-                                if ts < cutoff:
+                                    ts = ts.replace(tzinfo=tz_ref)
+                                if cutoff and ts < cutoff:
+                                    continue
+                                if until and ts > until:
                                     continue
                             except (ValueError, TypeError):
                                 logger.debug("Failed to parse timestamp for cutoff filtering", exc_info=True)
