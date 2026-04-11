@@ -32,7 +32,16 @@ export function defaultThreadLabel(threadId, lastTs, timeStr) {
  * @returns {{ updatedList: Array, newThreadId: string, newEntry: object }}
  */
 export function createThread(threadList, _animaName) {
-  const threadId = crypto.randomUUID().slice(0, 8);
+  // crypto.randomUUID requires secure context (HTTPS or localhost).
+  // Fall back to crypto.getRandomValues for HTTP + LAN IP access.
+  let threadId;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    threadId = crypto.randomUUID().slice(0, 8);
+  } else {
+    const arr = new Uint8Array(4);
+    crypto.getRandomValues(arr);
+    threadId = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+  }
   const newEntry = { id: threadId, label: t("thread.new"), unread: false };
   const updatedList = [...threadList, newEntry];
   return { updatedList, newThreadId: threadId, newEntry };
