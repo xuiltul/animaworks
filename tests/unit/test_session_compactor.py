@@ -23,6 +23,7 @@ from core.session_compactor import (
     _compact_mode_b,
     _compact_mode_c,
     _compact_mode_s,
+    _extract_recent_chat_context,
     run_idle_compaction,
 )
 
@@ -528,35 +529,216 @@ class TestModeSpecificCompaction:
             assert result is True
 
     @pytest.mark.asyncio
-    async def test_compact_mode_s_delegates_to_executor_compact_session(self, anima_dir: Path) -> None:
-        """_compact_mode_s calls executor.compact_session when available."""
+    async def test_compact_mode_s_saves_shortterm_and_clears_session(self, anima_dir: Path) -> None:
+        """_compact_mode_s extracts activity_log context, saves shortterm, clears session_id."""
+        from core.time_utils import now_local
+
+        log_dir = anima_dir / "activity_log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{now_local().date().isoformat()}.jsonl"
+
+        entries = [
+            {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Hello", "meta": {"from_type": "human", "thread_id": "default"}},
+            {"ts": "2026-04-13T12:00:10+09:00", "type": "tool_use", "tool": "Read", "content": "/tmp/test.md", "meta": {"args": {"path": "/tmp/test.md"}, "tool_use_id": "tu1"}},
+            {"ts": "2026-04-13T12:00:11+09:00", "type": "tool_result", "content": "file contents here", "meta": {"tool_use_id": "tu1", "is_error": False}},
+            {"ts": "2026-04-13T12:00:30+09:00", "type": "response_sent", "content": "I read the file for you.", "meta": {"thread_id": "default"}},
+        ]
+        log_file.write_text(
+            "\n".join(json.dumps(e, ensure_ascii=False) for e in entries),
+            encoding="utf-8",
+        )
+
+        session_file = anima_dir / "state" / "current_session_chat.json"
+        session_file.write_text(
+            json.dumps({"session_id": "sess-123", "timestamp": "2026-04-13T12:00:00Z"}),
+            encoding="utf-8",
+        )
+
+        anima = MagicMock()
+        anima.anima_dir = anima_dir
+        anima.name = "test"
+
+        result = await _compact_mode_s(anima, "default")
+
+        assert result is True
+        shortterm_json = anima_dir / "shortterm" / "chat" / "session_state.json"
+        assert shortterm_json.exists()
+
+        state = json.loads(shortterm_json.read_text(encoding="utf-8"))
+        assert "Hello" in state["accumulated_response"]
+        assert "I read the file" in state["accumulated_response"]
+        assert state["trigger"] == "idle_compaction"
+        assert len(state["tool_uses"]) > 0
+        assert not session_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_compact_mode_s_empty_log_clears_session_only(self, anima_dir: Path) -> None:
+        """_compact_mode_s with empty activity_log clears session without saving shortterm."""
+        session_file = anima_dir / "state" / "current_session_chat.json"
+        session_file.write_text(
+            json.dumps({"session_id": "sess-456", "timestamp": "2026-04-13T12:00:00Z"}),
+            encoding="utf-8",
+        )
+
+        anima = MagicMock()
+        anima.anima_dir = anima_dir
+        anima.name = "test"
+
+        result = await _compact_mode_s(anima, "default")
+
+        assert result is True
+        shortterm_json = anima_dir / "shortterm" / "chat" / "session_state.json"
+        assert not shortterm_json.exists()
+        assert not session_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_compact_mode_s_does_not_call_compact_sdk(self, anima_dir: Path) -> None:
+        """_compact_mode_s does NOT call executor.compact_session (no /compact API call)."""
         mock_executor = AsyncMock()
         mock_executor.compact_session = AsyncMock(return_value=True)
 
         anima = MagicMock()
         anima.anima_dir = anima_dir
+        anima.name = "test"
         anima.agent._executor = mock_executor
 
-        result = await _compact_mode_s(anima, "default")
+        await _compact_mode_s(anima, "default")
 
-        mock_executor.compact_session.assert_awaited_once_with(
-            anima_dir=anima_dir,
-            session_type="chat",
-            thread_id="default",
+        mock_executor.compact_session.assert_not_awaited()
+
+
+# ── _extract_recent_chat_context ──────────────────────────────────────────────
+
+
+class TestExtractRecentChatContext:
+    """Tests for activity_log based context extraction."""
+
+    @pytest.fixture
+    def anima_dir(self, tmp_path: Path) -> Path:
+        d = tmp_path / "animas" / "test"
+        d.mkdir(parents=True)
+        (d / "activity_log").mkdir(parents=True)
+        return d
+
+    def _write_log(self, anima_dir: Path, entries: list[dict]) -> None:
+        from core.time_utils import now_local
+
+        log_file = anima_dir / "activity_log" / f"{now_local().date().isoformat()}.jsonl"
+        log_file.write_text(
+            "\n".join(json.dumps(e, ensure_ascii=False) for e in entries),
+            encoding="utf-8",
         )
-        assert result is True
 
-    @pytest.mark.asyncio
-    async def test_compact_mode_s_returns_false_when_no_compact_session(self, anima_dir: Path) -> None:
-        """_compact_mode_s returns False when executor has no compact_session."""
-        mock_executor = MagicMock(spec=[])  # no compact_session attr
+    def test_empty_log_returns_empty_dict(self, anima_dir: Path) -> None:
+        """Empty or missing activity_log returns empty dict."""
+        result = _extract_recent_chat_context(anima_dir)
+        assert result == {}
 
-        anima = MagicMock()
-        anima.agent._executor = mock_executor
+    def test_extracts_user_assistant_rounds(self, anima_dir: Path) -> None:
+        """Extracts user/assistant message pairs."""
+        entries = [
+            {"ts": "2026-04-13T10:00:00+09:00", "type": "message_received", "content": "Question 1", "meta": {"from_type": "human"}},
+            {"ts": "2026-04-13T10:00:30+09:00", "type": "response_sent", "content": "Answer 1", "meta": {}},
+            {"ts": "2026-04-13T10:01:00+09:00", "type": "message_received", "content": "Question 2", "meta": {"from_type": "human"}},
+            {"ts": "2026-04-13T10:01:30+09:00", "type": "response_sent", "content": "Answer 2", "meta": {}},
+        ]
+        self._write_log(anima_dir, entries)
 
-        result = await _compact_mode_s(anima, "default")
+        result = _extract_recent_chat_context(anima_dir)
 
-        assert result is False
+        assert "Question 1" in result["accumulated_response"]
+        assert "Answer 1" in result["accumulated_response"]
+        assert "Question 2" in result["accumulated_response"]
+        assert "Answer 2" in result["accumulated_response"]
+        assert result["original_prompt"] == "Question 1"
+
+    def test_limits_to_3_rounds(self, anima_dir: Path) -> None:
+        """Only the most recent 3 user/assistant rounds are kept."""
+        entries = []
+        for i in range(5):
+            entries.append({"ts": f"2026-04-13T10:{i:02d}:00+09:00", "type": "message_received", "content": f"Q{i}", "meta": {"from_type": "human"}})
+            entries.append({"ts": f"2026-04-13T10:{i:02d}:30+09:00", "type": "response_sent", "content": f"A{i}", "meta": {}})
+        self._write_log(anima_dir, entries)
+
+        result = _extract_recent_chat_context(anima_dir)
+
+        assert "Q2" in result["accumulated_response"]
+        assert "Q3" in result["accumulated_response"]
+        assert "Q4" in result["accumulated_response"]
+        assert "Q0" not in result["accumulated_response"]
+        assert "Q1" not in result["accumulated_response"]
+
+    def test_extracts_tool_use_and_result(self, anima_dir: Path) -> None:
+        """Extracts tool_use and tool_result entries."""
+        entries = [
+            {"ts": "2026-04-13T10:00:00+09:00", "type": "message_received", "content": "Read file", "meta": {"from_type": "human"}},
+            {"ts": "2026-04-13T10:00:05+09:00", "type": "tool_use", "tool": "Read", "content": "/tmp/f.md", "meta": {"args": {"path": "/tmp/f.md"}, "tool_use_id": "tu1"}},
+            {"ts": "2026-04-13T10:00:06+09:00", "type": "tool_result", "content": "file content", "meta": {"tool_use_id": "tu1", "is_error": False}},
+            {"ts": "2026-04-13T10:00:30+09:00", "type": "response_sent", "content": "Done", "meta": {}},
+        ]
+        self._write_log(anima_dir, entries)
+
+        result = _extract_recent_chat_context(anima_dir)
+
+        assert len(result["tool_uses"]) >= 1
+        tool_names = [t.get("name", "") for t in result["tool_uses"]]
+        assert any("Read" in n for n in tool_names)
+
+    def test_limits_to_10_tool_entries(self, anima_dir: Path) -> None:
+        """Only the most recent 10 tool entries are kept."""
+        entries = [
+            {"ts": "2026-04-13T10:00:00+09:00", "type": "message_received", "content": "Go", "meta": {"from_type": "human"}},
+        ]
+        for i in range(15):
+            entries.append({"ts": f"2026-04-13T10:00:{i+1:02d}+09:00", "type": "tool_use", "tool": f"Tool{i}", "content": f"arg{i}", "meta": {"args": {}, "tool_use_id": f"tu{i}"}})
+        entries.append({"ts": "2026-04-13T10:01:00+09:00", "type": "response_sent", "content": "Done", "meta": {}})
+        self._write_log(anima_dir, entries)
+
+        result = _extract_recent_chat_context(anima_dir)
+
+        assert len(result["tool_uses"]) <= 10
+
+    def test_skips_non_human_messages(self, anima_dir: Path) -> None:
+        """Skips message_received entries that are not from humans (e.g. inbox)."""
+        entries = [
+            {"ts": "2026-04-13T10:00:00+09:00", "type": "message_received", "content": "From another anima", "meta": {"from_type": "anima"}},
+            {"ts": "2026-04-13T10:01:00+09:00", "type": "message_received", "content": "From human", "meta": {"from_type": "human"}},
+            {"ts": "2026-04-13T10:01:30+09:00", "type": "response_sent", "content": "Reply", "meta": {}},
+        ]
+        self._write_log(anima_dir, entries)
+
+        result = _extract_recent_chat_context(anima_dir)
+
+        assert "From another anima" not in result["accumulated_response"]
+        assert "From human" in result["accumulated_response"]
+
+    def test_skips_heartbeat_entries(self, anima_dir: Path) -> None:
+        """Heartbeat/cron entries are excluded from extraction."""
+        entries = [
+            {"ts": "2026-04-13T10:00:00+09:00", "type": "heartbeat_start", "content": "HB start", "meta": {}},
+            {"ts": "2026-04-13T10:00:30+09:00", "type": "heartbeat_end", "content": "HB end", "meta": {}},
+            {"ts": "2026-04-13T10:01:00+09:00", "type": "message_received", "content": "Hello", "meta": {"from_type": "human"}},
+            {"ts": "2026-04-13T10:01:30+09:00", "type": "response_sent", "content": "Hi", "meta": {}},
+        ]
+        self._write_log(anima_dir, entries)
+
+        result = _extract_recent_chat_context(anima_dir)
+
+        assert "HB start" not in result.get("accumulated_response", "")
+        assert "Hello" in result["accumulated_response"]
+
+    def test_trigger_and_notes_fields(self, anima_dir: Path) -> None:
+        """Result includes idle_compaction trigger and notes."""
+        entries = [
+            {"ts": "2026-04-13T10:00:00+09:00", "type": "message_received", "content": "Hi", "meta": {"from_type": "human"}},
+            {"ts": "2026-04-13T10:00:30+09:00", "type": "response_sent", "content": "Hello", "meta": {}},
+        ]
+        self._write_log(anima_dir, entries)
+
+        result = _extract_recent_chat_context(anima_dir)
+
+        assert result["trigger"] == "idle_compaction"
+        assert "activity_log" in result["notes"]
 
 
 # ── run_idle_compaction ───────────────────────────────────────────────────────

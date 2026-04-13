@@ -15,14 +15,30 @@ runs (SDK compact, conversation compress, shortterm save, etc.).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.anima import DigitalAnima
 
 logger = logging.getLogger("animaworks.session_compactor")
+
+# ── Activity-log extraction constants ─────────────────────
+_MAX_CONVERSATION_ROUNDS = 3
+_MAX_TOOL_ENTRIES = 10
+_CHAT_ENTRY_TYPES = frozenset(
+    {
+        "message_received",
+        "response_sent",
+        "tool_use",
+        "tool_result",
+    }
+)
+_TOOL_INPUT_TRUNCATE = 500
+_TOOL_RESULT_TRUNCATE = 500
 
 # LRU limit for _timers (same as conversation_locks).
 _MAX_TIMERS = 20
@@ -112,30 +128,185 @@ class SessionCompactor:
         self._timers.clear()
 
 
+# ── Activity-log based context extraction ─────────────────────
+
+
+def _extract_recent_chat_context(anima_dir: Path) -> dict[str, Any]:
+    """Extract recent chat context from today's activity_log.
+
+    Scans the current day's log file in reverse to collect the most
+    recent chat session entries:
+
+    - Up to ``_MAX_CONVERSATION_ROUNDS`` user/assistant exchange rounds
+    - Up to ``_MAX_TOOL_ENTRIES`` tool_use + tool_result pairs
+
+    Returns a dict with keys matching ``SessionState`` fields:
+    ``accumulated_response``, ``tool_uses``, ``original_prompt``,
+    ``timestamp``, ``trigger``, ``notes``.
+    """
+    from core.time_utils import now_local
+
+    log_dir = anima_dir / "activity_log"
+    today_file = log_dir / f"{now_local().date().isoformat()}.jsonl"
+
+    if not today_file.exists():
+        return {}
+
+    raw_entries: list[dict[str, Any]] = []
+    try:
+        with today_file.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                etype = entry.get("type") or entry.get("event", "")
+                if etype in _CHAT_ENTRY_TYPES:
+                    if etype == "message_received":
+                        from_type = (entry.get("meta") or {}).get("from_type", "")
+                        if from_type != "human":
+                            continue
+                    raw_entries.append(entry)
+    except OSError:
+        logger.warning("Failed to read activity log for context extraction", exc_info=True)
+        return {}
+
+    if not raw_entries:
+        return {}
+
+    user_messages: list[dict[str, str]] = []
+    assistant_messages: list[dict[str, str]] = []
+    tool_entries: list[dict[str, Any]] = []
+
+    for entry in reversed(raw_entries):
+        etype = entry.get("type") or entry.get("event", "")
+        ts = entry.get("ts") or entry.get("timestamp", "")
+
+        if etype == "message_received" and len(user_messages) < _MAX_CONVERSATION_ROUNDS:
+            content = entry.get("content", "")
+            user_messages.append({"ts": ts, "content": content})
+
+        elif etype == "response_sent" and len(assistant_messages) < _MAX_CONVERSATION_ROUNDS:
+            content = entry.get("content", "") or entry.get("summary", "")
+            assistant_messages.append({"ts": ts, "content": content})
+
+        elif etype == "tool_use" and len(tool_entries) < _MAX_TOOL_ENTRIES:
+            meta = entry.get("meta") or {}
+            tool_name = entry.get("tool", "")
+            args = meta.get("args", {})
+            tool_use_id = meta.get("tool_use_id", "")
+            tool_entries.append(
+                {
+                    "type": "tool_use",
+                    "tool_use_id": tool_use_id,
+                    "name": tool_name or entry.get("content", "")[:100],
+                    "input": str(args)[:_TOOL_INPUT_TRUNCATE]
+                    if args
+                    else entry.get("content", "")[:_TOOL_INPUT_TRUNCATE],
+                }
+            )
+
+        elif etype == "tool_result" and len(tool_entries) < _MAX_TOOL_ENTRIES:
+            meta = entry.get("meta") or {}
+            tool_use_id = meta.get("tool_use_id", "")
+            tool_entries.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "result": entry.get("content", "")[:_TOOL_RESULT_TRUNCATE],
+                    "is_error": meta.get("is_error", False),
+                }
+            )
+
+    user_messages.reverse()
+    assistant_messages.reverse()
+    tool_entries.reverse()
+
+    conversation_parts: list[str] = []
+    for u, a in zip(user_messages, assistant_messages, strict=False):
+        conversation_parts.append(f"user: {u['content']}")
+        conversation_parts.append(f"assistant: {a['content']}")
+    if len(user_messages) > len(assistant_messages):
+        for u in user_messages[len(assistant_messages) :]:
+            conversation_parts.append(f"user: {u['content']}")
+    elif len(assistant_messages) > len(user_messages):
+        for a in assistant_messages[len(user_messages) :]:
+            conversation_parts.append(f"assistant: {a['content']}")
+
+    tool_uses: list[dict[str, Any]] = []
+    pending_use: dict[str, Any] | None = None
+    for te in tool_entries:
+        if te["type"] == "tool_use":
+            if pending_use:
+                tool_uses.append(pending_use)
+            pending_use = {"name": te["name"], "input": te["input"]}
+        elif te["type"] == "tool_result":
+            if pending_use and te.get("tool_use_id") == pending_use.get("_tool_use_id", ""):
+                pending_use["result"] = te["result"]
+                tool_uses.append(pending_use)
+                pending_use = None
+            elif pending_use:
+                tool_uses.append(pending_use)
+                pending_use = None
+                tool_uses.append({"name": "tool_result", "input": "", "result": te["result"]})
+            else:
+                tool_uses.append({"name": "tool_result", "input": "", "result": te["result"]})
+    if pending_use:
+        tool_uses.append(pending_use)
+
+    original_prompt = user_messages[0]["content"] if user_messages else ""
+
+    return {
+        "accumulated_response": "\n".join(conversation_parts)[:8000],
+        "tool_uses": tool_uses[-_MAX_TOOL_ENTRIES:],
+        "original_prompt": original_prompt[:2000],
+        "timestamp": now_local().isoformat(),
+        "trigger": "idle_compaction",
+        "notes": "Auto-extracted from activity_log (session discarded)",
+    }
+
+
 # ── Mode-specific compaction ──────────────────────────────────
 
 
 async def _compact_mode_s(anima: DigitalAnima, thread_id: str) -> bool:
-    """Mode S: SDK compact_session (resume + /compact).
+    """Mode S: activity_log extraction → shortterm save → session_id clear.
 
-    Only chat sessions support idle compaction — background triggers
-    (heartbeat, cron, task, inbox) always start fresh and have no
-    session to compact.
+    Extracts recent chat context from the activity_log, saves it to
+    ShortTermMemory, and clears the SDK session_id. The next chat
+    starts as a fresh session with shortterm injected into the system
+    prompt via ``inject_shortterm``.
+
+    Does NOT send ``/compact`` to the SDK — the session is discarded,
+    not compacted, ensuring predictable post-compaction context size.
     """
-    from core.execution._sdk_session import SESSION_TYPE_CHAT
+    from core.execution._sdk_session import SESSION_TYPE_CHAT, _clear_session_id
+    from core.memory.shortterm import SessionState, ShortTermMemory
 
     logger.debug("_compact_mode_s: entry (anima=%s, thread=%s)", anima.name, thread_id)
-    executor = anima.agent._executor
-    if not hasattr(executor, "compact_session"):
-        logger.debug("_compact_mode_s: executor has no compact_session, skipping")
-        return False
-    result = await executor.compact_session(
-        anima_dir=anima.anima_dir,
-        session_type=SESSION_TYPE_CHAT,
-        thread_id=thread_id,
-    )
-    logger.debug("_compact_mode_s: exit (result=%s)", result)
-    return result
+
+    ctx = _extract_recent_chat_context(anima.anima_dir)
+
+    if ctx.get("accumulated_response") or ctx.get("tool_uses"):
+        shortterm = ShortTermMemory(anima.anima_dir, session_type="chat", thread_id=thread_id)
+        shortterm.save(
+            SessionState(
+                accumulated_response=ctx.get("accumulated_response", ""),
+                tool_uses=ctx.get("tool_uses", []),
+                original_prompt=ctx.get("original_prompt", ""),
+                timestamp=ctx.get("timestamp", ""),
+                trigger=ctx.get("trigger", "idle_compaction"),
+                notes=ctx.get("notes", ""),
+            )
+        )
+        logger.info("_compact_mode_s: shortterm saved from activity_log")
+
+    _clear_session_id(anima.anima_dir, SESSION_TYPE_CHAT, thread_id)
+    logger.info("_compact_mode_s: session_id cleared (anima=%s, thread=%s)", anima.name, thread_id)
+    return True
 
 
 async def _compact_mode_a(anima: DigitalAnima, thread_id: str) -> bool:
