@@ -70,6 +70,9 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     # Meta Llama 4 (Bedrock cross-region inference profiles)
     "meta.llama4-maverick": 1_000_000,
     "meta.llama4-scout": 1_000_000,
+    # Gemma 4 (native 256K but limited by vLLM config)
+    "gemma4": 8_192,
+    "gemma-4": 8_192,
     # Ollama / local (conservative defaults)
     "gemma3": 128_000,
     "llama3": 128_000,

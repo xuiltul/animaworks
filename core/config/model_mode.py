@@ -68,6 +68,7 @@ DEFAULT_MODEL_MODE_PATTERNS: dict[str, str] = {
     "ollama/glm-4.7*": "A",
     "ollama/glm-5*": "A",
     "ollama/minimax*": "A",
+    "ollama/gemma4*": "A",
     "ollama/kimi-k2*": "A",
     "ollama/gpt-oss*": "A",
     # ── B: No reliable tool_use ───────────────────────────
@@ -122,6 +123,7 @@ KNOWN_MODELS: list[dict[str, str]] = [
     {"name": "xai/grok-3-mini-beta", "mode": "A", "note": "軽量Grok"},
     # ── Ollama Local (Mode A: tool_use 対応) ─────────────────────────────────
     {"name": "ollama/qwen3.5:9b", "mode": "A", "note": "GDN hybrid 9B・高効率"},
+    {"name": "openai/gemma4-26b-a4b", "mode": "A", "note": "Gemma 4 26B MoE・vLLM"},
     {"name": "ollama/glm-4.7", "mode": "A", "note": "ローカル・tool_use対応"},
     {"name": "ollama/qwen3:14b", "mode": "A", "note": "ローカル中型"},
     {"name": "ollama/qwen3:32b", "mode": "A", "note": "ローカル大型"},

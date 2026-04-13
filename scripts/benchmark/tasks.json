@@ -33,7 +33,7 @@
       "expected_tools": ["read_memory_file"],
       "scoring": {
         "type": "response_contains_any",
-        "expected": ["qwen3.5", "glm-4.7", "qwen3-next", "sonnet", "claude"]
+        "expected": ["qwen3.5", "glm-4.7", "qwen3-next", "sonnet", "claude", "gemma", "gemma4", "gemma-4"]
       }
     },
     {
