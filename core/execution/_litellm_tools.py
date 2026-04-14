@@ -158,7 +158,7 @@ class ToolProcessingMixin:
 
     def _build_base_tools(self, *, trigger: str = "") -> list[dict[str, Any]]:
         """Build the base LiteLLM-format tool list (unified 18-tool schema)."""
-        compact = self._resolve_cw() < 8_192
+        compact = self._resolve_cw() <= 8_192
         canonical = build_unified_tool_list(
             include_notification_tools=self._tool_handler._human_notifier is not None,
             include_supervisor_tools=self._has_subordinates(),

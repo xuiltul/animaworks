@@ -39,8 +39,8 @@ class TestResolvePromptTier:
             (31_999, TIER_LIGHT),
             (16_000, TIER_LIGHT),
             (15_999, TIER_MINIMAL),
-            (8_192, TIER_MINIMAL),
-            (8_191, TIER_MICRO),
+            (8_193, TIER_MINIMAL),
+            (8_192, TIER_MICRO),
             (8_000, TIER_MICRO),
             (4_000, TIER_MICRO),
             (0, TIER_MICRO),
@@ -217,7 +217,7 @@ class TestTierPromptSizes:
             assert sizes[i] >= sizes[i + 1], f"T{i + 1} ({sizes[i]}) should be >= T{i + 2} ({sizes[i + 1]})"
 
     def test_micro_smaller_than_minimal(self, tmp_path, data_dir):
-        size_minimal = self._build_size(tmp_path, data_dir, 8_192, "min")
+        size_minimal = self._build_size(tmp_path, data_dir, 8_193, "min")
         size_micro = self._build_size(tmp_path, data_dir, 4_000, "micro")
         assert size_micro < size_minimal
 
@@ -264,7 +264,7 @@ class TestMicroTierSectionExclusion:
         assert "行動指針テスト" in result
 
     def test_minimal_includes_behavior_rules(self, tmp_path, data_dir):
-        result = self._build(tmp_path, data_dir, 8_192)
+        result = self._build(tmp_path, data_dir, 8_193)
         assert "[behavior_rules content]" in result
 
     def test_micro_group5_header_only(self, tmp_path, data_dir):

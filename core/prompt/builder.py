@@ -81,7 +81,7 @@ def resolve_prompt_tier(context_window: int) -> str:
         return TIER_STANDARD
     if context_window >= 16_000:
         return TIER_LIGHT
-    if context_window >= 8_192:
+    if context_window > 8_192:
         return TIER_MINIMAL
     return TIER_MICRO
 
