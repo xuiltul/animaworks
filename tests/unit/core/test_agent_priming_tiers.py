@@ -13,6 +13,7 @@ import pytest
 from core.prompt.builder import (
     TIER_FULL,
     TIER_LIGHT,
+    TIER_MICRO,
     TIER_MINIMAL,
     TIER_STANDARD,
 )
@@ -78,6 +79,32 @@ class TestPrimingTierMinimal:
             await agent._run_priming(
                 "hello", "message:human",
                 prompt_tier=TIER_MINIMAL,
+            )
+            mock_pe.assert_not_called()
+
+
+# ── T5 Micro: priming skipped (same as minimal) ──────────
+
+
+class TestPrimingTierMicro:
+    """T5 (< 8k): _run_priming must return ('', '') like minimal."""
+
+    @pytest.mark.asyncio
+    async def test_micro_returns_empty(self, tmp_path):
+        agent = _make_agent(tmp_path)
+        result = await agent._run_priming(
+            "hello", "message:human",
+            prompt_tier=TIER_MICRO,
+        )
+        assert result == ("", "")
+
+    @pytest.mark.asyncio
+    async def test_micro_does_not_call_priming_engine(self, tmp_path):
+        agent = _make_agent(tmp_path)
+        with patch("core.memory.priming.PrimingEngine") as mock_pe:
+            await agent._run_priming(
+                "hello", "message:human",
+                prompt_tier=TIER_MICRO,
             )
             mock_pe.assert_not_called()
 
