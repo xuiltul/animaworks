@@ -70,6 +70,7 @@ TIER_FULL = "full"
 TIER_STANDARD = "standard"
 TIER_LIGHT = "light"
 TIER_MINIMAL = "minimal"
+TIER_MICRO = "micro"
 
 
 def resolve_prompt_tier(context_window: int) -> str:
@@ -80,7 +81,9 @@ def resolve_prompt_tier(context_window: int) -> str:
         return TIER_STANDARD
     if context_window >= 16_000:
         return TIER_LIGHT
-    return TIER_MINIMAL
+    if context_window >= 8_192:
+        return TIER_MINIMAL
+    return TIER_MICRO
 
 
 def _build_emotion_instruction() -> str:
@@ -152,6 +155,8 @@ def _build_group1(
     is_task: bool,
     prompt_store: Any,
     _ss: dict[str, str],
+    *,
+    tier: str = TIER_FULL,
 ) -> list[SectionEntry]:
     """Group 1: Environment, identity, injection, time, behaviour rules."""
     out: list[SectionEntry] = []
@@ -162,20 +167,23 @@ def _build_group1(
 
     _add(_ss.get("group1_header", "# 1. Environment and Action Rules"), "group1_header", 1)
 
-    dw = _read_default_workspace(pd)
-    if dw:
-        _add(dw, "default_workspace", 2)
-
-    _env = prompt_store.get_section("environment") if prompt_store else None
-    if _env:
-        try:
-            _env = _env.format(data_dir=data_dir, anima_name=pd.name)
-        except (KeyError, IndexError):
-            pass
+    if tier == TIER_MICRO:
+        _add(f"Anima: {pd.name} | Data: {data_dir}", "environment", 1)
     else:
-        _env = load_prompt("environment", data_dir=data_dir, anima_name=pd.name)
-    if _env:
-        _add(_env, "environment", 2)
+        dw = _read_default_workspace(pd)
+        if dw:
+            _add(dw, "default_workspace", 2)
+
+        _env = prompt_store.get_section("environment") if prompt_store else None
+        if _env:
+            try:
+                _env = _env.format(data_dir=data_dir, anima_name=pd.name)
+            except (KeyError, IndexError):
+                pass
+        else:
+            _env = load_prompt("environment", data_dir=data_dir, anima_name=pd.name)
+        if _env:
+            _add(_env, "environment", 2)
 
     identity = memory.read_identity()
     if identity:
@@ -202,13 +210,14 @@ def _build_group1(
     current_time = now_local().strftime("%Y-%m-%d %H:%M (%Z)")
     _add(f"{_ss.get('current_time_label', '**Current time**:')} {current_time}", "current_time", 1)
 
-    _br = (prompt_store.get_section("behavior_rules") if prompt_store else None) or load_prompt("behavior_rules")
-    if _br:
-        _add(_br, "behavior_rules", 2)
+    if tier != TIER_MICRO:
+        _br = (prompt_store.get_section("behavior_rules") if prompt_store else None) or load_prompt("behavior_rules")
+        if _br:
+            _add(_br, "behavior_rules", 2)
 
-    _tdi = load_prompt("tool_data_interpretation")
-    if _tdi:
-        _add(_tdi, "tool_data_interpretation", 2)
+        _tdi = load_prompt("tool_data_interpretation")
+        if _tdi:
+            _add(_tdi, "tool_data_interpretation", 2)
 
     return out
 
@@ -509,6 +518,8 @@ def _build_group5(
     is_task: bool,
     _ss: dict[str, str],
     _fs: dict[str, str],
+    *,
+    tier: str = TIER_FULL,
 ) -> list[SectionEntry]:
     """Group 5: Org context, messaging, human notification."""
     out: list[SectionEntry] = []
@@ -518,6 +529,9 @@ def _build_group5(
             out.append(SectionEntry(id=sid, priority=pri, kind=kind, content=c))
 
     _add(_ss.get("group5_header", "# 5. Organization and Communication"), "group5_header", 1)
+
+    if tier == TIER_MICRO:
+        return out
 
     oc = _build_org_context(pd.name, other_animas, execution_mode)
     if oc:
@@ -546,6 +560,8 @@ def _build_group6(
     is_background_auto: bool,
     is_task: bool,
     _ss: dict[str, str],
+    *,
+    tier: str = TIER_FULL,
 ) -> list[SectionEntry]:
     """Group 6: Emotion, reflection, Codex response requirement."""
     out: list[SectionEntry] = []
@@ -555,6 +571,10 @@ def _build_group6(
             out.append(SectionEntry(id=sid, priority=pri, kind=kind, content=c))
 
     _add(_ss.get("group6_header", "# 6. Meta Settings"), "group6_header", 1)
+
+    if tier == TIER_MICRO:
+        return out
+
     if is_chat:
         ei = (prompt_store.get_section("emotion_instruction") if prompt_store else None) or EMOTION_INSTRUCTION
         if ei:
@@ -614,7 +634,7 @@ def build_system_prompt(
     permissions = memory.read_permissions()
 
     # Assemble sections from all 6 groups
-    sections = _build_group1(pd, data_dir, memory, is_task, prompt_store, _ss)
+    sections = _build_group1(pd, data_dir, memory, is_task, prompt_store, _ss, tier=tier)
     sections += _build_group2(memory, permissions, is_background_auto, is_task, _ss)
     sections += _build_group3(
         pd,
@@ -656,6 +676,7 @@ def build_system_prompt(
         is_task,
         _ss,
         _fs,
+        tier=tier,
     )
     sections += _build_group6(
         execution_mode,
@@ -664,6 +685,7 @@ def build_system_prompt(
         is_background_auto,
         is_task,
         _ss,
+        tier=tier,
     )
 
     # Budget allocation + Final assembly

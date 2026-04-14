@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from core.tooling.schemas.admin import _AW_CORE_NAMES, ADMIN_TOOLS, CC_TOOLS
 from core.tooling.schemas.builder import (
+    _COMPACT_COMM_TOOLS,
     _CONSOLIDATION_BLOCKED_TOOLS,
     build_tool_list,
     build_unified_tool_list,
@@ -67,6 +68,7 @@ __all__ = [
     "TOOL_MANAGEMENT_TOOLS",
     "USE_TOOL",
     "_AW_CORE_NAMES",
+    "_COMPACT_COMM_TOOLS",
     "_CONSOLIDATION_BLOCKED_TOOLS",
     "_background_task_tools",
     "_channel_tools",

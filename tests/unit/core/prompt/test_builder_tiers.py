@@ -13,6 +13,7 @@ import pytest
 from core.prompt.builder import (
     TIER_FULL,
     TIER_LIGHT,
+    TIER_MICRO,
     TIER_MINIMAL,
     TIER_STANDARD,
     BuildResult,
@@ -38,9 +39,11 @@ class TestResolvePromptTier:
             (31_999, TIER_LIGHT),
             (16_000, TIER_LIGHT),
             (15_999, TIER_MINIMAL),
-            (8_000, TIER_MINIMAL),
-            (4_000, TIER_MINIMAL),
-            (0, TIER_MINIMAL),
+            (8_192, TIER_MINIMAL),
+            (8_191, TIER_MICRO),
+            (8_000, TIER_MICRO),
+            (4_000, TIER_MICRO),
+            (0, TIER_MICRO),
         ],
     )
     def test_tier_boundaries(self, ctx_window: int, expected: str):
@@ -207,10 +210,67 @@ class TestTierPromptSizes:
     def test_monotonic_decrease(self, tmp_path, data_dir):
         """Prompt size should be monotonically non-increasing as context shrinks."""
         sizes = [
-            self._build_size(tmp_path, data_dir, cw, f"m{i}") for i, cw in enumerate([200_000, 64_000, 16_000, 8_000])
+            self._build_size(tmp_path, data_dir, cw, f"m{i}")
+            for i, cw in enumerate([200_000, 64_000, 16_000, 8_000, 4_000])
         ]
         for i in range(len(sizes) - 1):
             assert sizes[i] >= sizes[i + 1], f"T{i + 1} ({sizes[i]}) should be >= T{i + 2} ({sizes[i + 1]})"
+
+    def test_micro_smaller_than_minimal(self, tmp_path, data_dir):
+        size_minimal = self._build_size(tmp_path, data_dir, 8_192, "min")
+        size_micro = self._build_size(tmp_path, data_dir, 4_000, "micro")
+        assert size_micro < size_minimal
+
+
+class TestMicroTierSectionExclusion:
+    """Verify MICRO tier excludes heavy Group 1/5/6 sections."""
+
+    def _build(self, tmp_path: Path, data_dir: Path, context_window: int) -> BuildResult:
+        memory = _make_mock_memory(tmp_path, data_dir)
+
+        _call_count = {"n": 0}
+
+        def _load_prompt_section(name: str, *args: object, **kwargs: object) -> str:
+            _call_count["n"] += 1
+            if name == "environment":
+                return f"[env-full] data_dir={kwargs.get('data_dir','?')}"
+            if name == "behavior_rules":
+                return "[behavior_rules content]"
+            if name == "tool_data_interpretation":
+                return "[tool_data_interpretation content]"
+            return "section"
+
+        with patch("core.prompt.builder.load_prompt", side_effect=_load_prompt_section):
+            return build_system_prompt(
+                memory, execution_mode="a", context_window=context_window,
+            )
+
+    def test_micro_excludes_behavior_rules(self, tmp_path, data_dir):
+        result = self._build(tmp_path, data_dir, 4_000)
+        assert "[behavior_rules content]" not in result
+
+    def test_micro_excludes_tool_data_interpretation(self, tmp_path, data_dir):
+        result = self._build(tmp_path, data_dir, 4_000)
+        assert "[tool_data_interpretation content]" not in result
+
+    def test_micro_uses_compact_environment(self, tmp_path, data_dir):
+        result = self._build(tmp_path, data_dir, 4_000)
+        assert "Anima: test-anima" in result
+        assert "[env-full]" not in result
+
+    def test_micro_preserves_identity_injection(self, tmp_path, data_dir):
+        result = self._build(tmp_path, data_dir, 4_000)
+        assert "I am TestAnima" in result
+        assert "行動指針テスト" in result
+
+    def test_minimal_includes_behavior_rules(self, tmp_path, data_dir):
+        result = self._build(tmp_path, data_dir, 8_192)
+        assert "[behavior_rules content]" in result
+
+    def test_micro_group5_header_only(self, tmp_path, data_dir):
+        """MICRO should include Group 5 header but skip org_context and messaging."""
+        result = self._build(tmp_path, data_dir, 4_000)
+        assert "Organization" in result or "5." in result
 
 
 class TestDefaultContextWindowBackwardCompat:

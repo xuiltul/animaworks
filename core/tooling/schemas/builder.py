@@ -36,6 +36,12 @@ _CONSOLIDATION_BLOCKED_TOOLS: frozenset[str] = frozenset(
     {"delegate_task", "submit_tasks", "send_message", "post_channel"}
 )
 
+_COMPACT_COMM_TOOLS: frozenset[str] = frozenset({
+    "Read", "Write", "Edit", "Bash", "Grep", "Glob",
+    "search_memory", "read_memory_file", "write_memory_file",
+    "send_message", "post_channel", "completion_gate",
+})
+
 
 def build_tool_list(
     *,
@@ -127,6 +133,7 @@ def build_unified_tool_list(
     include_supervisor_tools: bool = False,
     include_create_skill: bool = True,
     trigger: str = "",
+    compact: bool = False,
 ) -> list[dict[str, Any]]:
     """Build the unified 18-tool list (Claude Code-compatible 8 + AW-essential 10).
 
@@ -141,6 +148,8 @@ def build_unified_tool_list(
         trigger: Execution trigger (e.g. ``"consolidation:daily"``).
             When the trigger starts with ``consolidation:``, delegation and
             messaging tools are excluded.
+        compact: When True, filter to the ``_COMPACT_COMM_TOOLS`` subset
+            (12 essential tools) for small context windows (<8K).
 
     Returns:
         Combined list in canonical format (up to 18 tools).
@@ -194,5 +203,8 @@ def build_unified_tool_list(
 
     if include_create_skill:
         tools.extend(_create_skill_schemas())
+
+    if compact:
+        tools = [t for t in tools if t["name"] in _COMPACT_COMM_TOOLS]
 
     return tools

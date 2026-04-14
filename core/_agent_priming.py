@@ -53,16 +53,16 @@ class PrimingMixin:
                 None = legacy (full Channel C), [] = all injected (skip C),
                 [...] = overflow files only for Channel C.
             prompt_tier: Prompt tier for budget control
-                ("full"/"standard"/"light"/"minimal").
+                ("full"/"standard"/"light"/"minimal"/"micro").
 
         Returns:
             Tuple of (priming_section, pending_human_notifications).
         """
         from core.memory.priming import PrimingEngine, format_priming_section
-        from core.prompt.builder import TIER_LIGHT, TIER_MINIMAL, TIER_STANDARD
+        from core.prompt.builder import TIER_LIGHT, TIER_MICRO, TIER_MINIMAL, TIER_STANDARD
 
-        if prompt_tier == TIER_MINIMAL:
-            logger.debug("Priming: skipped (tier=minimal)")
+        if prompt_tier in (TIER_MINIMAL, TIER_MICRO):
+            logger.debug("Priming: skipped (tier=%s)", prompt_tier)
             return ("", "")
 
         if trigger == "heartbeat" or trigger.startswith("consolidation:"):

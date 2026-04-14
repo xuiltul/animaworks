@@ -216,10 +216,12 @@ class AssistedExecutor(BaseExecutor):
 
     def _build_tool_schemas(self, *, trigger: str = "") -> list[dict[str, Any]]:
         """Build canonical tool schemas for text format generation (unified 18-tool schema)."""
+        compact = self._resolve_cw() < 8_192
         canonical = build_unified_tool_list(
             include_notification_tools=self._tool_handler._human_notifier is not None,
             include_supervisor_tools=self._has_subordinates(),
             trigger=trigger,
+            compact=compact,
         )
         return canonical
 
