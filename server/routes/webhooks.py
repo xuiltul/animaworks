@@ -189,15 +189,28 @@ def create_webhooks_router() -> APIRouter:
 
             from server.slack_socket import (
                 _build_slack_annotation,
+                _detect_external_addressees,
                 _detect_mention_intent,
                 _detect_slack_intent,
                 _fetch_thread_context,
                 _load_alias_user_ids,
+                _resolve_channel_name,
                 _resolve_slack_mentions,
             )
 
             alias_ids = _load_alias_user_ids()
             mention_intent = _detect_mention_intent(text, bot_user_id, alias_ids)
+
+            raw_text = text
+            bot_uid_set = set(_slack_bot_user_ids.values())
+            ext_addressees = await asyncio.to_thread(
+                _detect_external_addressees,
+                raw_text,
+                bot_uid_set,
+                alias_ids,
+                _token or "",
+            )
+            ch_name = await asyncio.to_thread(_resolve_channel_name, _token or "", channel_id)
 
             if thread_ts:
                 ctx = await asyncio.to_thread(_fetch_thread_context, _token or "", channel_id, thread_ts)
@@ -206,9 +219,14 @@ def create_webhooks_router() -> APIRouter:
 
             text = await asyncio.to_thread(_resolve_slack_mentions, text, _token or "")
             has_mention = bool(mention_intent)
-            annotation = _build_slack_annotation(channel_id, has_mention)
+            annotation = _build_slack_annotation(
+                channel_id,
+                has_mention,
+                channel_name=ch_name,
+                external_addressees=ext_addressees,
+            )
             text = annotation + text
-            intent = mention_intent or _detect_slack_intent(text, channel_id, bot_user_id)
+            intent = mention_intent or _detect_slack_intent(text, channel_id, bot_user_id) or "observe"
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)

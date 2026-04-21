@@ -141,8 +141,14 @@ def _build_reply_instruction(m: Any) -> str:
     When Slack ``auto_response`` is enabled, returns an ``[auto_reply: ...]``
     annotation instead, telling the LLM that the reply will be sent
     automatically and it should NOT call ``slack_channel_post``.
+
+    When intent is ``observe``, returns an observation-only annotation
+    discouraging the LLM from taking action.
     """
     if m.source == "slack":
+        if getattr(m, "intent", "") == "observe":
+            return f"  [{t('slack.observe_only_hint')}]"
+
         if _is_auto_response_enabled():
             return "  [auto_reply: Slack返信は自動送信されます。slack_channel_postを呼ぶ必要はありません]"
 

@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── SlackSocketModeManager ───────────────────────────────
 
 
@@ -54,9 +53,7 @@ class TestSlackSocketModeManagerStart:
     @patch("server.slack_socket.AsyncApp")
     @patch("server.slack_socket.get_credential")
     @patch("server.slack_socket.load_config")
-    async def test_start_connects_when_enabled(
-        self, mock_config, mock_cred, mock_app_cls, mock_handler_cls
-    ):
+    async def test_start_connects_when_enabled(self, mock_config, mock_cred, mock_app_cls, mock_handler_cls):
         """Connects when slack is enabled with socket mode."""
         from server.slack_socket import SlackSocketModeManager
 
@@ -93,9 +90,7 @@ class TestSlackSocketModeManagerStop:
     @patch("server.slack_socket.AsyncApp")
     @patch("server.slack_socket.get_credential")
     @patch("server.slack_socket.load_config")
-    async def test_stop_closes_handler(
-        self, mock_config, mock_cred, mock_app_cls, mock_handler_cls
-    ):
+    async def test_stop_closes_handler(self, mock_config, mock_cred, mock_app_cls, mock_handler_cls):
         """stop() calls close_async on the handler."""
         from server.slack_socket import SlackSocketModeManager
 
@@ -152,6 +147,7 @@ class TestSlackSocketModeManagerHandlers:
             def decorator(func):
                 captured_handlers.setdefault(event_type, []).append(func)
                 return func
+
             return decorator
 
         mock_app.event = _capture_event
@@ -214,6 +210,7 @@ class TestSlackSocketModeManagerHandlers:
             def decorator(func):
                 captured_handlers.setdefault(event_type, []).append(func)
                 return func
+
             return decorator
 
         mock_app.event = _capture_event
@@ -274,6 +271,7 @@ class TestSlackSocketModeManagerHandlers:
             def decorator(func):
                 captured_handlers.setdefault(event_type, []).append(func)
                 return func
+
             return decorator
 
         mock_async_app.event = _capture_event
@@ -306,7 +304,7 @@ class TestSlackSocketModeManagerHandlers:
         assert call_kwargs["source_message_id"] == "1234567890.123456"
         assert call_kwargs["external_user_id"] == "U_USER_123"
         assert call_kwargs["external_channel_id"] == "C_TEST_CHAN"
-        assert call_kwargs["intent"] == "question"
+        assert call_kwargs["intent"] == "observe"
 
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
@@ -341,6 +339,7 @@ class TestSlackSocketModeManagerHandlers:
             def decorator(func):
                 captured_handlers.setdefault(event_type, []).append(func)
                 return func
+
             return decorator
 
         mock_async_app.event = _capture_event
@@ -397,6 +396,7 @@ class TestSlackSocketModeManagerHandlers:
             def decorator(func):
                 captured_handlers.setdefault(event_type, []).append(func)
                 return func
+
             return decorator
 
         mock_async_app.event = _capture_event
@@ -453,7 +453,7 @@ class TestUnhandledEventSuppression:
         mock_async_app = MagicMock()
         captured_error_handler = []
         mock_async_app.error = lambda fn: captured_error_handler.append(fn) or fn
-        mock_async_app.event = lambda et: (lambda fn: fn)
+        mock_async_app.event = lambda et: lambda fn: fn
         mock_app_cls.return_value = mock_async_app
         mock_handler_cls.return_value = AsyncMock()
 
@@ -573,6 +573,7 @@ class TestUnhandledEventSuppression:
             def decorator(func):
                 captured_handlers.setdefault(event_type, []).append(func)
                 return func
+
             return decorator
 
         mock_async_app.event = _capture_event
@@ -596,6 +597,116 @@ class TestUnhandledEventSuppression:
         await handler_fn(event=event, say=AsyncMock())
 
         mock_messenger.receive_external.assert_called_once()
+
+
+# ── Slack annotation and addressee detection ──────────────
+
+
+class TestBuildSlackAnnotation:
+    """Tests for _build_slack_annotation with channel name and external addressees."""
+
+    def test_dm_annotation(self):
+        from server.slack_socket import _build_slack_annotation
+
+        result = _build_slack_annotation("D_DIRECT", False)
+        assert "[slack:DM]" in result
+
+    def test_channel_with_mention_includes_channel_name(self):
+        from server.slack_socket import _build_slack_annotation
+
+        result = _build_slack_annotation("C_TEST", True, channel_name="general")
+        assert "#general" in result
+        assert "メンションされています" in result or "mentioned" in result
+
+    def test_channel_no_mention_includes_channel_name(self):
+        from server.slack_socket import _build_slack_annotation
+
+        result = _build_slack_annotation("C_TEST", False, channel_name="aiシュライバーの作成")
+        assert "#aiシュライバーの作成" in result
+        assert "メンションはありません" in result or "no direct mention" in result
+
+    def test_external_addressees_warning(self):
+        from server.slack_socket import _build_slack_annotation
+
+        result = _build_slack_annotation(
+            "C_TEST",
+            False,
+            channel_name="dev",
+            external_addressees=["ホアン ティン (OMINEXT)"],
+        )
+        assert "@ホアン ティン (OMINEXT)" in result
+        assert "宛先注意" in result or "Addressee notice" in result
+
+    def test_external_addressees_not_shown_when_mentioned(self):
+        from server.slack_socket import _build_slack_annotation
+
+        result = _build_slack_annotation(
+            "C_TEST",
+            True,
+            channel_name="dev",
+            external_addressees=["someone"],
+        )
+        assert "宛先注意" not in result
+        assert "Addressee notice" not in result
+
+    def test_no_channel_name_still_works(self):
+        from server.slack_socket import _build_slack_annotation
+
+        result = _build_slack_annotation("C_TEST", False)
+        assert "[slack:channel" in result
+        assert "#" not in result.split("—")[0]
+
+
+class TestDetectExternalAddressees:
+    """Tests for _detect_external_addressees."""
+
+    def test_no_mentions_returns_empty(self):
+        from server.slack_socket import _detect_external_addressees
+
+        result = _detect_external_addressees("hello world", {"bot": "U_BOT"}, set())
+        assert result == []
+
+    def test_bot_mention_excluded(self):
+        from server.slack_socket import _detect_external_addressees
+
+        result = _detect_external_addressees(
+            "<@U_BOT> hello",
+            {"bot": "U_BOT"},
+            set(),
+        )
+        assert result == []
+
+    def test_alias_mention_excluded(self):
+        from server.slack_socket import _detect_external_addressees
+
+        result = _detect_external_addressees(
+            "<@U_ALIAS> hello",
+            {},
+            {"U_ALIAS"},
+        )
+        assert result == []
+
+    def test_external_mention_detected(self):
+        from server.slack_socket import _cache_user_name, _detect_external_addressees
+
+        _cache_user_name("UEXTERNAL1", "External Person")
+        result = _detect_external_addressees(
+            "<@UEXTERNAL1> please review",
+            {"bot": "UBOT123"},
+            {"UALIAS12"},
+        )
+        assert len(result) == 1
+        assert "External Person" in result[0]
+
+    def test_uncached_external_returns_uid_without_token(self):
+        from server.slack_socket import _detect_external_addressees
+
+        result = _detect_external_addressees(
+            "<@UUNKNOWN1> hi",
+            {},
+            set(),
+        )
+        assert result == ["UUNKNOWN1"]
 
 
 class TestExternalMessagingChannelConfigMode:

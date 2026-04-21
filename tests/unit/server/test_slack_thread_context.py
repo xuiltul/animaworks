@@ -7,8 +7,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
-
 # ── _fetch_thread_context ────────────────────────────────
 
 
@@ -93,6 +91,8 @@ class TestPerAnimaHandlerThreadInjection:
     @patch("server.slack_socket._build_slack_annotation", return_value="")
     @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda t, tok: t)
     @patch("server.slack_socket._fetch_thread_context", return_value="")
+    @patch("server.slack_socket._resolve_channel_name", return_value="")
+    @patch("server.slack_socket._detect_external_addressees", return_value=[])
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
     @patch("server.slack_socket.AsyncSocketModeHandler")
@@ -107,6 +107,8 @@ class TestPerAnimaHandlerThreadInjection:
         mock_handler_cls,
         mock_messenger_cls,
         mock_get_data_dir,
+        mock_ext_addr,
+        mock_ch_name,
         mock_fetch_ctx,
         mock_resolve,
         mock_annotation,
@@ -122,7 +124,7 @@ class TestPerAnimaHandlerThreadInjection:
 
         captured: dict[str, list] = {}
         mock_app = MagicMock()
-        mock_app.event = lambda t: (lambda f: captured.setdefault(t, []).append(f) or f)
+        mock_app.event = lambda t: lambda f: captured.setdefault(t, []).append(f) or f
         mock_app_cls.return_value = mock_app
         mock_handler_cls.return_value = AsyncMock()
         mock_messenger = MagicMock()
@@ -143,6 +145,8 @@ class TestPerAnimaHandlerThreadInjection:
     @patch("server.slack_socket._build_slack_annotation", return_value="")
     @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda t, tok: t)
     @patch("server.slack_socket._fetch_thread_context")
+    @patch("server.slack_socket._resolve_channel_name", return_value="")
+    @patch("server.slack_socket._detect_external_addressees", return_value=[])
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
     @patch("server.slack_socket.AsyncSocketModeHandler")
@@ -157,6 +161,8 @@ class TestPerAnimaHandlerThreadInjection:
         mock_handler_cls,
         mock_messenger_cls,
         mock_get_data_dir,
+        mock_ext_addr,
+        mock_ch_name,
         mock_fetch_ctx,
         mock_resolve,
         mock_annotation,
@@ -173,7 +179,7 @@ class TestPerAnimaHandlerThreadInjection:
 
         captured: dict[str, list] = {}
         mock_app = MagicMock()
-        mock_app.event = lambda t: (lambda f: captured.setdefault(t, []).append(f) or f)
+        mock_app.event = lambda t: lambda f: captured.setdefault(t, []).append(f) or f
         mock_app_cls.return_value = mock_app
         mock_handler_cls.return_value = AsyncMock()
         mock_messenger = MagicMock()
@@ -210,6 +216,8 @@ class TestSharedHandlerThreadInjection:
     @patch("server.slack_socket._build_slack_annotation", return_value="")
     @patch("server.slack_socket._resolve_slack_mentions", side_effect=lambda t, tok: t)
     @patch("server.slack_socket._fetch_thread_context")
+    @patch("server.slack_socket._resolve_channel_name", return_value="")
+    @patch("server.slack_socket._detect_external_addressees", return_value=[])
     @patch("server.slack_socket.get_data_dir")
     @patch("server.slack_socket.Messenger")
     @patch("server.slack_socket.AsyncSocketModeHandler")
@@ -224,6 +232,8 @@ class TestSharedHandlerThreadInjection:
         mock_handler_cls,
         mock_messenger_cls,
         mock_get_data_dir,
+        mock_ext_addr,
+        mock_ch_name,
         mock_fetch_ctx,
         mock_resolve,
         mock_annotation,
@@ -232,9 +242,7 @@ class TestSharedHandlerThreadInjection:
         """Shared message handler injects thread context for thread replies."""
         from server.slack_socket import SlackSocketModeManager
 
-        slack_cfg = MagicMock(
-            enabled=True, mode="socket", anima_mapping={"C1": "sakura"}, default_anima="sakura"
-        )
+        slack_cfg = MagicMock(enabled=True, mode="socket", anima_mapping={"C1": "sakura"}, default_anima="sakura")
         mock_config.return_value = MagicMock(external_messaging=MagicMock(slack=slack_cfg))
         mock_cred.return_value = "fake_token"
         mock_get_data_dir.return_value = tmp_path
@@ -242,7 +250,7 @@ class TestSharedHandlerThreadInjection:
 
         captured: dict[str, list] = {}
         mock_app = MagicMock()
-        mock_app.event = lambda t: (lambda f: captured.setdefault(t, []).append(f) or f)
+        mock_app.event = lambda t: lambda f: captured.setdefault(t, []).append(f) or f
         mock_app_cls.return_value = mock_app
         mock_handler_cls.return_value = AsyncMock()
         mock_messenger = MagicMock()
@@ -366,6 +374,24 @@ class TestBuildReplyInstruction:
         )
         result = _build_reply_instruction(m)
         assert "thread_ts=" not in result
+
+    def test_observe_intent_returns_observe_hint(self):
+        from core._anima_inbox import _build_reply_instruction
+        from core.schemas import Message
+
+        m = Message(
+            from_person="slack:U1",
+            to_person="sumire",
+            content="@someone please review",
+            source="slack",
+            source_message_id="1.0",
+            external_user_id="U1",
+            external_channel_id="C1",
+            intent="observe",
+        )
+        result = _build_reply_instruction(m)
+        assert "observe" in result
+        assert "slack_channel_post" not in result
 
     def test_chatwork_unaffected(self):
         from core._anima_inbox import _build_reply_instruction
