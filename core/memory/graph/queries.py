@@ -229,3 +229,53 @@ RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_n
        toString(r.valid_at) AS valid_at
 LIMIT $limit
 """
+
+# ── Community ──────────
+
+FETCH_ENTITIES_FOR_COMMUNITY = """
+MATCH (e:Entity)
+WHERE e.group_id = $group_id
+RETURN e.uuid AS uuid, e.name AS name, e.summary AS summary
+"""
+
+FETCH_EDGES_FOR_COMMUNITY = """
+MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
+WHERE r.group_id = $group_id
+  AND r.invalid_at IS NULL
+RETURN s.uuid AS source_uuid, t.uuid AS target_uuid, r.uuid AS edge_uuid
+"""
+
+DELETE_COMMUNITIES_BY_GROUP = """
+MATCH (c:Community)
+WHERE c.group_id = $group_id
+DETACH DELETE c
+"""
+
+CREATE_COMMUNITY = """
+CREATE (c:Community {
+  uuid: $uuid,
+  name: $name,
+  summary: $summary,
+  group_id: $group_id,
+  created_at: datetime($created_at)
+})
+RETURN c.uuid AS uuid
+"""
+
+CREATE_HAS_MEMBER = """
+MATCH (c:Community {uuid: $community_uuid}), (e:Entity {uuid: $entity_uuid})
+CREATE (c)-[:HAS_MEMBER]->(e)
+"""
+
+FIND_COMMUNITY_FOR_ENTITY = """
+MATCH (c:Community)-[:HAS_MEMBER]->(e:Entity {uuid: $entity_uuid})
+RETURN c.uuid AS community_uuid, c.name AS name, c.summary AS summary
+"""
+
+SEARCH_COMMUNITIES = """
+MATCH (c:Community)
+WHERE c.group_id = $group_id
+RETURN c.uuid AS uuid, c.name AS name, c.summary AS summary
+ORDER BY c.created_at DESC
+LIMIT $limit
+"""

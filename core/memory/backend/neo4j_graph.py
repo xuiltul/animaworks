@@ -369,6 +369,9 @@ class Neo4jGraphBackend(MemoryBackend):
         min_score: float = 0.0,
     ) -> list[RetrievedMemory]:
         """Retrieve memories using hybrid search (BM25 + Vector + BFS + reranker)."""
+        if scope == "community":
+            return await self._retrieve_communities(query, limit, min_score)
+
         driver = await self._ensure_driver()
 
         from core.memory.graph.search import HybridSearch
@@ -399,6 +402,9 @@ class Neo4jGraphBackend(MemoryBackend):
             elif scope == "episode":
                 content = r.get("content", "")
                 source = f"episode:{r.get('uuid', '')}"
+            elif scope == "community":
+                content = f"[{r.get('name', '')}] {r.get('summary', '')}"
+                source = f"community:{r.get('uuid', '')}"
             else:
                 content = f"{r.get('source_name', '')} → {r.get('target_name', '')}: {r.get('fact', '')}"
                 source = f"fact:{r.get('uuid', '')}"
@@ -413,6 +419,30 @@ class Neo4jGraphBackend(MemoryBackend):
                 )
             )
 
+        return memories
+
+    async def _retrieve_communities(self, query: str, limit: int, min_score: float) -> list[RetrievedMemory]:
+        """Retrieve communities by simple text match."""
+        driver = await self._ensure_driver()
+        from core.memory.graph.queries import SEARCH_COMMUNITIES
+
+        rows = await driver.execute_query(
+            SEARCH_COMMUNITIES,
+            {"group_id": self._group_id, "limit": limit},
+        )
+
+        memories: list[RetrievedMemory] = []
+        for r in rows:
+            content = f"[{r.get('name', '')}] {r.get('summary', '')}"
+            memories.append(
+                RetrievedMemory(
+                    content=content,
+                    score=1.0,
+                    source=f"community:{r.get('uuid', '')}",
+                    metadata={k: v for k, v in r.items() if isinstance(v, (str, int, float, bool))},
+                    trust="medium",
+                )
+            )
         return memories
 
     async def delete(self, source: str) -> None:

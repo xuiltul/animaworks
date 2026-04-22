@@ -92,3 +92,17 @@ If you are not confident, return an empty list.
 ```json
 {{"contradicted_uuids": ["UUID of contradicted fact", ...]}}
 ```"""
+
+# ── Community summarization ───────────────────────────────
+
+COMMUNITY_SYSTEM = "You are a group analysis agent. Assign a name and summary to a group of related entities."
+
+COMMUNITY_USER = """## Group Members
+{members}
+
+## Instructions
+Based on the common theme of the members above, assign a name and summary to this group.
+
+```json
+{{"name": "group name (short)", "summary": "1-2 sentence description of this group"}}
+```"""
