@@ -1,0 +1,26 @@
+# Neo4j development server for AnimaWorks memory backend.
+# Usage: docker compose -f docker-compose.neo4j.yml up -d
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: animaworks-neo4j
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt protocol
+    environment:
+      - NEO4J_AUTH=neo4j/animaworks
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "animaworks", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  neo4j_data:
+  neo4j_logs:

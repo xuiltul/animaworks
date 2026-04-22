@@ -41,6 +41,13 @@ def get_backend(
         return LegacyRAGBackend(anima_dir, **kwargs)
 
     if backend_type == "neo4j":
-        raise NotImplementedError("Neo4j backend will be available in Phase 1 (Issue #2)")
+        try:
+            from core.memory.backend.neo4j_graph import Neo4jGraphBackend
+        except ImportError:
+            raise ImportError(
+                "Neo4j backend requires the neo4j extra. Install with: pip install animaworks[neo4j]"
+            ) from None
+
+        return Neo4jGraphBackend(anima_dir, **kwargs)
 
     raise ValueError(f"Unknown memory backend: {backend_type}")

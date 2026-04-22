@@ -155,9 +155,11 @@ def test_registry_legacy(tmp_path: Path) -> None:
     assert isinstance(backend, LegacyRAGBackend)
 
 
-def test_registry_neo4j_raises(tmp_path: Path) -> None:
-    with pytest.raises(NotImplementedError):
-        get_backend("neo4j", tmp_path)
+def test_registry_neo4j_returns_backend(tmp_path: Path) -> None:
+    backend = get_backend("neo4j", tmp_path)
+    from core.memory.backend.neo4j_graph import Neo4jGraphBackend
+
+    assert isinstance(backend, Neo4jGraphBackend)
 
 
 def test_registry_unknown_raises(tmp_path: Path) -> None:

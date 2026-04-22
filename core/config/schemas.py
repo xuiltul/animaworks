@@ -213,10 +213,20 @@ class RAGConfig(BaseModel):
     skill_match_min_score: float = 0.75
 
 
+class Neo4jConfig(BaseModel):
+    """Neo4j connection settings."""
+
+    uri: str = "bolt://localhost:7687"
+    user: str = "neo4j"
+    password: str = "animaworks"
+    database: str = "neo4j"
+
+
 class MemoryConfig(BaseModel):
     """Configuration for memory backend selection."""
 
     backend: Literal["legacy", "neo4j"] = "legacy"
+    neo4j: Neo4jConfig = Neo4jConfig()
 
 
 class PromptConfig(BaseModel):
@@ -818,6 +828,7 @@ __all__ = [
     "MachineConfig",
     "MediaProxyConfig",
     "MemoryConfig",
+    "Neo4jConfig",
     "NotificationChannelConfig",
     "PrimingConfig",
     "PromptConfig",

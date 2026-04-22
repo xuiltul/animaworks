@@ -64,6 +64,7 @@ gmail = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.0", "google-a
 transcribe = ["faster-whisper>=1.0"]
 aws = ["boto3>=1.34"]
 rag = ["networkx>=3.0", "watchdog>=3.0.0"]
+neo4j = ["neo4j>=5.20.0"]
 codex = ["openai-codex-sdk>=0.1.11,<0.2"]
 all-tools = ["animaworks[claude,communication,gmail,transcribe,aws,rag,notification,codex]"]
 redis = ["redis>=5.0.0"]
