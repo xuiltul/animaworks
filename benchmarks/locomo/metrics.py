@@ -9,8 +9,6 @@ import string
 from collections import Counter
 from typing import Any
 
-import litellm
-
 try:
     from nltk.stem import PorterStemmer
 
@@ -210,6 +208,8 @@ async def llm_judge(
         reference=reference,
         prediction=prediction,
     )
+    import litellm  # noqa: PLC0415
+
     last_err: Exception | None = None
     for attempt in range(1, _JUDGE_RETRIES + 1):
         try:
@@ -233,6 +233,47 @@ async def llm_judge(
                 await asyncio.sleep(0.5 * (2 ** (attempt - 1)))
     if last_err is not None:
         logger.error("llm_judge failed after %s attempts: %s", _JUDGE_RETRIES, last_err)
+    return {"verdict": "error", "score": 0.0}
+
+
+def llm_judge_sync(
+    question: str,
+    reference: str,
+    prediction: str,
+    *,
+    model: str = "gpt-4o",
+) -> dict[str, Any]:
+    """Synchronous wrapper for :func:`llm_judge`; avoids per-call asyncio.run overhead.
+
+    Uses ``litellm.completion`` directly instead of creating an event loop.
+    """
+    import litellm as _litellm  # noqa: PLC0415
+
+    prompt = _LLM_JUDGE_TEMPLATE.format(
+        question=question,
+        reference=reference,
+        prediction=prediction,
+    )
+    last_err: Exception | None = None
+    for attempt in range(1, _JUDGE_RETRIES + 1):
+        try:
+            resp = _litellm.completion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+            )
+            content = (resp.choices[0].message.content or "").strip()
+            verdict, score = _parse_judge_verdict(content)
+            return {"verdict": verdict, "score": score}
+        except Exception as exc:  # noqa: BLE001
+            last_err = exc
+            logger.warning("llm_judge_sync attempt %s/%s failed: %s", attempt, _JUDGE_RETRIES, exc)
+            if attempt < _JUDGE_RETRIES:
+                import time  # noqa: PLC0415
+
+                time.sleep(0.5 * (2 ** (attempt - 1)))
+    if last_err is not None:
+        logger.error("llm_judge_sync failed after %s attempts: %s", _JUDGE_RETRIES, last_err)
     return {"verdict": "error", "score": 0.0}
 
 

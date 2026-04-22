@@ -171,7 +171,13 @@ def _episode_stem_for_sample(sample_id: str | int) -> str:
 
 
 class AnimaWorksLoCoMoAdapter:
-    """AnimaWorks RAG stack wired for LoCoMo in an isolated data directory."""
+    """AnimaWorks RAG stack wired for LoCoMo in an isolated data directory.
+
+    Warning:
+        NOT thread-safe. Uses ``os.environ["ANIMAWORKS_DATA_DIR"]`` override,
+        which is process-global. Only one adapter instance should be active per
+        process at a time.  For parallel benchmark runs, use separate processes.
+    """
 
     def __init__(self, search_mode: str = "vector", *, top_k: int = 5) -> None:
         """
@@ -192,6 +198,8 @@ class AnimaWorksLoCoMoAdapter:
         self._vector_store: Any = None
         self._indexer: Any = None
         self._retriever: Any = None
+        self._bm25_corpus: list[tuple[str, dict[str, Any]]] | None = None
+        self._bm25_index: Any = None
         # Deferred heavy init
         self._init_isolated_rag()
 
@@ -256,6 +264,8 @@ class AnimaWorksLoCoMoAdapter:
         if self._episodes_dir.exists():
             shutil.rmtree(self._episodes_dir)
         self._episodes_dir.mkdir(parents=True, exist_ok=True)
+        self._bm25_corpus = None
+        self._bm25_index = None
         meta = self._index_meta_path
         if meta.exists():
             try:
@@ -282,6 +292,8 @@ class AnimaWorksLoCoMoAdapter:
         file_path = self._episodes_dir / f"{stem}.md"
         file_path.write_text(md, encoding="utf-8")
         n = self._indexer.index_file(file_path, memory_type="episodes", force=True)
+        self._bm25_corpus = None
+        self._bm25_index = None
         return n
 
     def _retrieval_to_dicts(self, results: list[Any]) -> list[dict[str, Any]]:
@@ -335,8 +347,8 @@ class AnimaWorksLoCoMoAdapter:
         bm25_dicts = self._bm25_search(question, top_k=pool)
         return self._rrf_merge(vec_dicts, bm25_dicts, k=60)[: self._top_k]
 
-    def _bm25_search(self, query: str, top_k: int) -> list[dict[str, Any]]:
-        """BM25 keyword search on indexed episode documents (per-section chunks)."""
+    def _build_bm25_cache(self) -> None:
+        """Build BM25 index from episode files; cached until reset/ingest."""
         from rank_bm25 import BM25Okapi  # noqa: PLC0415
 
         assert self._episodes_dir is not None
@@ -349,20 +361,23 @@ class AnimaWorksLoCoMoAdapter:
             else:
                 segs = [raw] if raw.strip() else []
             for j, seg in enumerate(segs):
-                documents.append(
-                    (
-                        seg,
-                        {
-                            "source_file": p.name,
-                            "section": j,
-                        },
-                    ),
-                )
+                documents.append((seg, {"source_file": p.name, "section": j}))
+        self._bm25_corpus = documents
+        if documents:
+            tokenized = [_bm25_tokenize(doc) for doc, _ in documents]
+            self._bm25_index = BM25Okapi(tokenized) if any(tokenized) else None
+        else:
+            self._bm25_index = None
+
+    def _bm25_search(self, query: str, top_k: int) -> list[dict[str, Any]]:
+        """BM25 keyword search using cached index (built after ingest)."""
+        if self._bm25_corpus is None:
+            self._build_bm25_cache()
+        documents = self._bm25_corpus
         if not documents:
             return []
-        tokenized = [_bm25_tokenize(doc) for doc, _ in documents]
         qtok = _bm25_tokenize(query)
-        if not any(tokenized) or not qtok:
+        if not qtok or self._bm25_index is None:
             return [
                 {
                     "content": documents[0][0],
@@ -370,8 +385,7 @@ class AnimaWorksLoCoMoAdapter:
                     "metadata": {**documents[0][1], "search_method": "bm25_degenerate"},
                 }
             ][:1]
-        bm25 = BM25Okapi(tokenized)
-        scores = bm25.get_scores(qtok)
+        scores = self._bm25_index.get_scores(qtok)
         order = sorted(range(len(scores)), key=lambda i: float(scores[i]), reverse=True)[: top_k * 2]
         out: list[dict[str, Any]] = []
         for i in order:
@@ -483,13 +497,7 @@ class AnimaWorksLoCoMoAdapter:
             "Answer:"
         )
         messages = [{"role": "user", "content": user_prompt}]
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        if loop is not None and loop.is_running():
-            return self._complete_sync(messages, model)
-        return asyncio.run(self._complete_async(messages, model))
+        return self._complete_sync(messages, model)
 
     def cleanup(self) -> None:
         """Remove temp data directory and restore ``ANIMAWORKS_DATA_DIR``."""

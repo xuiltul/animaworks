@@ -94,6 +94,10 @@ results/
 └── 2026-04-22T10-30-00_scope_all.json
 ```
 
+## 制約事項
+
+- **スレッド安全性**: `AnimaWorksLoCoMoAdapter` はプロセスごとに1インスタンスのみ使用可能。`ANIMAWORKS_DATA_DIR` 環境変数を使用するため、マルチスレッドでの並行実行は不可。並列実行にはプロセス分離を使用すること。
+
 ## 設定情報
 
 - **Embedding**: `intfloat/multilingual-e5-small` (384次元)

@@ -3,7 +3,6 @@ from __future__ import annotations
 # AnimaWorks - Digital Anima Framework
 # LoCoMo benchmark CLI runner
 import argparse
-import asyncio
 import json
 import logging
 import sys
@@ -13,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.locomo.adapter import SEARCH_MODES, AnimaWorksLoCoMoAdapter, load_dataset
-from benchmarks.locomo.metrics import CATEGORY_NAMES, compute_summary, eval_by_category, llm_judge
+from benchmarks.locomo.metrics import CATEGORY_NAMES, compute_summary, eval_by_category, llm_judge_sync
 
 logger = logging.getLogger(__name__)
 
@@ -301,13 +300,11 @@ def run_benchmark(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                             judge_score: float | None = None
                             if bool(args.judge):
                                 try:
-                                    judge_result = asyncio.run(
-                                        llm_judge(
-                                            question,
-                                            answer,
-                                            prediction,
-                                            model=str(args.judge_model),
-                                        ),
+                                    judge_result = llm_judge_sync(
+                                        question,
+                                        answer,
+                                        prediction,
+                                        model=str(args.judge_model),
                                     )
                                     judge_score = float(judge_result["score"])
                                 except Exception as exc:
