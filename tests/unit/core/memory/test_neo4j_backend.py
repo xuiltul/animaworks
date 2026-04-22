@@ -58,19 +58,19 @@ class TestNeo4jGraphBackendStubs:
     """Test NotImplementedError stubs."""
 
     @pytest.mark.asyncio
-    async def test_ingest_file_raises(self, tmp_path):
+    async def test_ingest_file_returns_zero_on_missing(self, tmp_path):
         from core.memory.backend.neo4j_graph import Neo4jGraphBackend
 
         backend = Neo4jGraphBackend(tmp_path)
-        with pytest.raises(NotImplementedError, match="Issue #3"):
-            await backend.ingest_file(tmp_path / "test.md")
+        result = await backend.ingest_file(tmp_path / "nonexistent.md")
+        assert result == 0
 
     @pytest.mark.asyncio
-    async def test_ingest_text_raises(self, tmp_path):
+    async def test_ingest_text_needs_driver(self, tmp_path):
         from core.memory.backend.neo4j_graph import Neo4jGraphBackend
 
         backend = Neo4jGraphBackend(tmp_path)
-        with pytest.raises(NotImplementedError, match="Issue #3"):
+        with pytest.raises(Exception):
             await backend.ingest_text("hello", "test")
 
     @pytest.mark.asyncio
