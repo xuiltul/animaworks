@@ -447,12 +447,17 @@ class AnimaWorksLoCoMoAdapter:
         import litellm  # noqa: PLC0415
 
         last: Exception | None = None
+        extra: dict[str, Any] = {}
+        if "qwen" in model.lower():
+            extra["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
         for attempt in range(1, 4):
             try:
                 r = litellm.completion(
                     model=model,
                     messages=messages,
                     temperature=0.0,
+                    max_tokens=512,
+                    **extra,
                 )
                 ch = r.choices[0].message
                 return (ch.content or "").strip()
