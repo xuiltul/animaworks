@@ -367,6 +367,45 @@ class LegacyRAGBackend(MemoryBackend):
 
         return total
 
+    async def get_community_context(
+        self,
+        query: str,
+        limit: int = 3,
+    ) -> list[RetrievedMemory]:
+        """Legacy has no community concept — always empty."""
+        return []
+
+    async def get_recent_facts(
+        self,
+        query: str,
+        *,
+        hours: int = 24,
+        limit: int = 10,
+    ) -> list[RetrievedMemory]:
+        """Search recent activity_log via BM25 as a rough proxy for recent facts."""
+        try:
+            from core.memory.bm25 import search_activity_log
+
+            results = await asyncio.to_thread(
+                search_activity_log,
+                query,
+                self._anima_dir / "activity_log",
+                top_k=limit,
+            )
+            return [
+                RetrievedMemory(
+                    content=r.get("content", ""),
+                    score=float(r.get("score", 0.0)),
+                    source=r.get("source", "activity_log"),
+                    metadata={"search_method": "bm25_activity"},
+                    trust="medium",
+                )
+                for r in results
+            ]
+        except Exception:
+            logger.debug("get_recent_facts via BM25 failed", exc_info=True)
+            return []
+
     # ── Internal helpers ───────────────────────────────────────────────────
 
     async def _retrieve_via_search_text(

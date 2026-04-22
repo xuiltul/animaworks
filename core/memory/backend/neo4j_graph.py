@@ -445,6 +445,51 @@ class Neo4jGraphBackend(MemoryBackend):
             )
         return memories
 
+    async def get_community_context(
+        self,
+        query: str,
+        limit: int = 3,
+    ) -> list[RetrievedMemory]:
+        """Return community summaries from Neo4j."""
+        try:
+            return await self._retrieve_communities(query, limit, min_score=0.0)
+        except Exception:
+            logger.debug("get_community_context failed", exc_info=True)
+            return []
+
+    async def get_recent_facts(
+        self,
+        query: str,
+        *,
+        hours: int = 24,
+        limit: int = 10,
+    ) -> list[RetrievedMemory]:
+        """Return recently valid facts from Neo4j."""
+        try:
+            driver = await self._ensure_driver()
+            from datetime import timedelta
+
+            from core.memory.graph.queries import FIND_RECENT_FACTS
+
+            cutoff = (datetime.now(tz=UTC) - timedelta(hours=hours)).isoformat()
+            rows = await driver.execute_query(
+                FIND_RECENT_FACTS,
+                {"group_id": self._group_id, "since": cutoff, "limit": limit},
+            )
+            return [
+                RetrievedMemory(
+                    content=f"{r.get('source_name', '')} → {r.get('target_name', '')}: {r.get('fact', '')}",
+                    score=1.0,
+                    source=f"fact:{r.get('uuid', '')}",
+                    metadata={k: v for k, v in r.items() if isinstance(v, (str, int, float, bool))},
+                    trust="medium",
+                )
+                for r in rows
+            ]
+        except Exception:
+            logger.debug("get_recent_facts failed", exc_info=True)
+            return []
+
     async def delete(self, source: str) -> None:
         """Raise NotImplementedError until Issue #3."""
         raise NotImplementedError("Neo4j delete will be implemented in Issue #3")

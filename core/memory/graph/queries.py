@@ -279,3 +279,14 @@ RETURN c.uuid AS uuid, c.name AS name, c.summary AS summary
 ORDER BY c.created_at DESC
 LIMIT $limit
 """
+
+FIND_RECENT_FACTS = """
+MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
+WHERE r.group_id = $group_id
+  AND r.invalid_at IS NULL
+  AND r.created_at >= datetime($since)
+RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
+       toString(r.valid_at) AS valid_at, toString(r.created_at) AS created_at
+ORDER BY r.created_at DESC
+LIMIT $limit
+"""
