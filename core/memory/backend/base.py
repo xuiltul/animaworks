@@ -152,3 +152,29 @@ class MemoryBackend(ABC):
             Number of chunks re-indexed.  Default returns ``0``.
         """
         return 0
+
+    async def get_community_context(
+        self,
+        query: str,
+        limit: int = 3,
+    ) -> list[RetrievedMemory]:
+        """Return community summaries relevant to *query*.
+
+        Default returns empty list.  Neo4j backend overrides with
+        actual community search.
+        """
+        return []
+
+    async def get_recent_facts(
+        self,
+        query: str,
+        *,
+        hours: int = 24,
+        limit: int = 10,
+    ) -> list[RetrievedMemory]:
+        """Return recently created/valid facts matching *query*.
+
+        Default returns empty list.  Backends with temporal
+        awareness should override.
+        """
+        return []
