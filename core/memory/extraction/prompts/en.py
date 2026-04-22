@@ -71,3 +71,24 @@ If it is not a duplicate, or you are not confident, set duplicate_of_uuid to nul
 ```json
 {{"duplicate_of_uuid": "existing UUID or null", "merged_summary": "merged 1-2 sentence description"}}
 ```"""
+
+# ── Fact invalidation ─────────────────────────────────────
+
+INVALIDATE_SYSTEM = (
+    "You are a fact contradiction detection agent. Determine whether a new fact contradicts any existing facts."
+)
+
+INVALIDATE_USER = """## New Fact
+{new_fact}
+
+## Existing Facts (still valid)
+{existing_facts_json}
+
+## Instructions
+If the new fact contradicts any existing facts, return the UUIDs of the contradicted facts in a list.
+A contradiction means both facts cannot be true at the same time. Complementary information is NOT a contradiction.
+If you are not confident, return an empty list.
+
+```json
+{{"contradicted_uuids": ["UUID of contradicted fact", ...]}}
+```"""

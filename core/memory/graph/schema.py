@@ -27,6 +27,8 @@ CONSTRAINTS = [
 INDEXES = [
     "CREATE INDEX IF NOT EXISTS FOR (n:Entity) ON (n.group_id, n.name)",
     "CREATE INDEX IF NOT EXISTS FOR (n:Episode) ON (n.group_id, n.valid_at)",
+    # Temporal filter index for RELATES_TO edges
+    "CREATE INDEX IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON (r.valid_at)",
 ]
 
 # ── Fulltext indexes (may fail on older Neo4j) ──────────

@@ -218,12 +218,13 @@ class Neo4jGraphBackend(MemoryBackend):
                 if not src_uuid or not tgt_uuid:
                     continue
                 try:
+                    fact_uuid = str(uuid4())
                     await driver.execute_write(
                         CREATE_FACT,
                         {
                             "source_uuid": src_uuid,
                             "target_uuid": tgt_uuid,
-                            "uuid": str(uuid4()),
+                            "uuid": fact_uuid,
                             "fact": fact.fact,
                             "fact_embedding": [],
                             "group_id": self._group_id,
@@ -233,6 +234,20 @@ class Neo4jGraphBackend(MemoryBackend):
                         },
                     )
                     fact_count += 1
+
+                    try:
+                        invalidator = self._get_invalidator()
+                        invalidated = await invalidator.find_and_invalidate(
+                            new_fact_uuid=fact_uuid,
+                            source_entity_uuid=src_uuid,
+                            target_entity_uuid=tgt_uuid,
+                            new_fact_text=fact.fact,
+                            new_valid_at=fact.valid_at or now_str,
+                        )
+                        if invalidated:
+                            logger.info("Invalidated %d facts during ingest", len(invalidated))
+                    except Exception:
+                        logger.debug("Invalidation check failed", exc_info=True)
                 except Exception:
                     logger.warning("Fact creation failed: %s", fact.fact, exc_info=True)
 
@@ -285,6 +300,21 @@ class Neo4jGraphBackend(MemoryBackend):
         """Clear the session cache after an ingest batch."""
         if hasattr(self, "_resolver") and self._resolver is not None:
             self._resolver.clear_cache()
+
+    def _get_invalidator(self):  # noqa: ANN202 – lazy import avoids circular
+        """Create or return cached EdgeInvalidator."""
+        if not hasattr(self, "_invalidator") or self._invalidator is None:
+            from core.memory.extraction.invalidator import EdgeInvalidator
+
+            model = self._resolve_background_model()
+            locale = self._resolve_locale()
+            self._invalidator = EdgeInvalidator(
+                self._driver,
+                self._group_id,
+                model=model,
+                locale=locale,
+            )
+        return self._invalidator
 
     def _get_extractor(self):  # noqa: ANN202 – lazy import avoids circular
         """Create or return cached FactExtractor."""
