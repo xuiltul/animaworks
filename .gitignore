@@ -119,6 +119,10 @@ tests/evaluation/results/
 tests/unit/experiments/
 scripts/benchmark/results/
 
+# Benchmark data and results (large/generated)
+benchmarks/locomo/data/
+benchmarks/locomo/results/
+
 # SWE-bench evaluation
 swe/runtime/
 swe/results/
