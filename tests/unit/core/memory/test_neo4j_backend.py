@@ -74,12 +74,14 @@ class TestNeo4jGraphBackendStubs:
             await backend.ingest_text("hello", "test")
 
     @pytest.mark.asyncio
-    async def test_retrieve_raises(self, tmp_path):
+    async def test_retrieve_empty_query_returns_empty(self, tmp_path):
         from core.memory.backend.neo4j_graph import Neo4jGraphBackend
 
         backend = Neo4jGraphBackend(tmp_path)
-        with pytest.raises(NotImplementedError, match="Issue #6"):
-            await backend.retrieve("query", scope="knowledge")
+        backend._driver = AsyncMock()
+        backend._schema_ensured = True
+        result = await backend.retrieve("", scope="knowledge")
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_delete_raises(self, tmp_path):

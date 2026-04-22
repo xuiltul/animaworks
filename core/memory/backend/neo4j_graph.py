@@ -6,8 +6,8 @@ from __future__ import annotations
 
 """Neo4j-based memory backend following Graphiti architecture.
 
-Supports Episode/Entity/Fact ingestion via LLM extraction pipeline.
-retrieve/delete are still stubs (Issue #6).
+Supports Episode/Entity/Fact ingestion via LLM extraction pipeline
+and hybrid retrieval (BM25 + Vector + BFS + cross-encoder reranking).
 """
 
 import asyncio
@@ -31,8 +31,9 @@ logger = logging.getLogger(__name__)
 class Neo4jGraphBackend(MemoryBackend):
     """Neo4j-based memory backend with Episode/Entity/Fact ingestion.
 
-    Supports ingest_text/ingest_file via LLM extraction pipeline.
-    retrieve/delete are stubs until Issue #6.
+    Supports ingest_text/ingest_file via LLM extraction pipeline
+    and hybrid retrieval (BM25 + Vector + BFS + cross-encoder reranking).
+    delete is still a stub (Issue #3).
     """
 
     def __init__(
@@ -367,8 +368,52 @@ class Neo4jGraphBackend(MemoryBackend):
         limit: int = 10,
         min_score: float = 0.0,
     ) -> list[RetrievedMemory]:
-        """Raise NotImplementedError until Issue #6."""
-        raise NotImplementedError("Neo4j retrieve will be implemented in Issue #6")
+        """Retrieve memories using hybrid search (BM25 + Vector + BFS + reranker)."""
+        driver = await self._ensure_driver()
+
+        from core.memory.graph.search import HybridSearch
+
+        search = HybridSearch(driver, self._group_id)
+
+        try:
+            results = await search.search(
+                query,
+                scope=scope,
+                limit=limit,
+            )
+        except ValueError:
+            return []
+        except Exception:
+            logger.warning("Hybrid search failed", exc_info=True)
+            return []
+
+        memories: list[RetrievedMemory] = []
+        for r in results:
+            score = float(r.get("ce_score", r.get("rrf_score", r.get("score", 0.0))))
+            if score < min_score:
+                continue
+
+            if scope == "entity":
+                content = f"{r.get('name', '')}: {r.get('summary', '')}"
+                source = f"entity:{r.get('uuid', '')}"
+            elif scope == "episode":
+                content = r.get("content", "")
+                source = f"episode:{r.get('uuid', '')}"
+            else:
+                content = f"{r.get('source_name', '')} → {r.get('target_name', '')}: {r.get('fact', '')}"
+                source = f"fact:{r.get('uuid', '')}"
+
+            memories.append(
+                RetrievedMemory(
+                    content=content,
+                    score=score,
+                    source=source,
+                    metadata={k: v for k, v in r.items() if isinstance(v, (str, int, float, bool))},
+                    trust="medium",
+                )
+            )
+
+        return memories
 
     async def delete(self, source: str) -> None:
         """Raise NotImplementedError until Issue #3."""

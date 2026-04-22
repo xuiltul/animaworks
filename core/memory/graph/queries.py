@@ -176,3 +176,56 @@ RETURN r.uuid AS uuid, r.fact AS fact,
 ORDER BY r.valid_at DESC
 LIMIT $limit
 """
+
+# ── Hybrid Search queries ──────────
+
+VECTOR_SEARCH_FACTS = """
+CALL db.index.vector.queryRelationships('fact_embedding', $top_k, $embedding)
+YIELD relationship, score
+WHERE relationship.group_id = $group_id
+  AND (relationship.invalid_at IS NULL OR relationship.invalid_at > datetime($as_of_time))
+WITH relationship AS r, score,
+     startNode(relationship) AS s, endNode(relationship) AS t
+RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
+       toString(r.valid_at) AS valid_at, score
+"""
+
+VECTOR_SEARCH_ENTITIES = """
+CALL db.index.vector.queryNodes('entity_name_embedding', $top_k, $embedding)
+YIELD node, score
+WHERE node.group_id = $group_id
+RETURN node.uuid AS uuid, node.name AS name, node.summary AS summary,
+       node.entity_type AS entity_type, score
+"""
+
+FULLTEXT_SEARCH_FACTS = """
+CALL db.index.fulltext.queryRelationships('fact_fulltext', $query, {limit: $top_k})
+YIELD relationship, score
+WHERE relationship.group_id = $group_id
+  AND (relationship.invalid_at IS NULL OR relationship.invalid_at > datetime($as_of_time))
+WITH relationship AS r, score,
+     startNode(relationship) AS s, endNode(relationship) AS t
+RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
+       toString(r.valid_at) AS valid_at, score
+"""
+
+FULLTEXT_SEARCH_ENTITIES = """
+CALL db.index.fulltext.queryNodes('entity_name_fulltext', $query, {limit: $top_k})
+YIELD node, score
+WHERE node.group_id = $group_id
+RETURN node.uuid AS uuid, node.name AS name, node.summary AS summary,
+       node.entity_type AS entity_type, score
+"""
+
+BFS_FACTS_FROM_ENTITY = """
+MATCH (seed:Entity {uuid: $entity_uuid})-[:RELATES_TO*1..2]-(related:Entity)
+WHERE related.group_id = $group_id
+WITH DISTINCT related
+MATCH (related)-[r:RELATES_TO]-(other:Entity)
+WHERE r.group_id = $group_id
+  AND (r.invalid_at IS NULL OR r.invalid_at > datetime($as_of_time))
+WITH r, startNode(r) AS s, endNode(r) AS t
+RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
+       toString(r.valid_at) AS valid_at
+LIMIT $limit
+"""
