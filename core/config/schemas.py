@@ -213,6 +213,12 @@ class RAGConfig(BaseModel):
     skill_match_min_score: float = 0.75
 
 
+class MemoryConfig(BaseModel):
+    """Configuration for memory backend selection."""
+
+    backend: Literal["legacy", "neo4j"] = "legacy"
+
+
 class PromptConfig(BaseModel):
     """Configuration for system prompt building."""
 
@@ -753,6 +759,7 @@ class AnimaWorksConfig(BaseModel):
     animas: dict[str, AnimaModelConfig] = {}
     consolidation: ConsolidationConfig = ConsolidationConfig()
     rag: RAGConfig = RAGConfig()
+    memory: MemoryConfig = MemoryConfig()
     prompt: PromptConfig = PromptConfig()
     priming: PrimingConfig = PrimingConfig()
     image_gen: ImageGenConfig = ImageGenConfig()
@@ -810,6 +817,7 @@ __all__ = [
     "LocalLLMConfig",
     "MachineConfig",
     "MediaProxyConfig",
+    "MemoryConfig",
     "NotificationChannelConfig",
     "PrimingConfig",
     "PromptConfig",

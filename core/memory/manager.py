@@ -192,6 +192,37 @@ class MemoryManager:
         return self.__rag
 
     @property
+    def memory_backend(self):
+        """Return the active :class:`MemoryBackend` instance (lazy)."""
+        if not hasattr(self, "_memory_backend") or self._memory_backend is None:
+            self._init_memory_backend()
+        return self._memory_backend
+
+    def _init_memory_backend(self) -> None:
+        """Lazily create the MemoryBackend from config."""
+        try:
+            from core.config.models import load_config
+            from core.memory.backend.registry import get_backend
+
+            cfg = load_config()
+            backend_type = getattr(getattr(cfg, "memory", None), "backend", "legacy")
+            self._memory_backend = get_backend(
+                backend_type,
+                self.anima_dir,
+                common_knowledge_dir=self.common_knowledge_dir,
+                common_skills_dir=self.common_skills_dir,
+            )
+        except Exception:
+            logger.warning("Failed to init MemoryBackend, using legacy fallback", exc_info=True)
+            from core.memory.backend.legacy import LegacyRAGBackend
+
+            self._memory_backend = LegacyRAGBackend(
+                self.anima_dir,
+                common_knowledge_dir=self.common_knowledge_dir,
+                common_skills_dir=self.common_skills_dir,
+            )
+
+    @property
     def _frontmatter(self) -> FrontmatterService:
         if not hasattr(self, "_delegates_ready"):
             self._init_delegates()
