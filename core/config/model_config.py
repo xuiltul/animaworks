@@ -13,10 +13,11 @@ import fnmatch
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.config.model_mode import _match_models_json
 from core.config.schemas import AnimaWorksConfig
+from core.i18n import t
 
 if TYPE_CHECKING:
     from core.schemas import ModelConfig
@@ -202,6 +203,161 @@ def update_status_model(
     tmp.replace(status_path)
 
 
+# ── ModelFamily ──────────────────────────────────────────────────────
+
+
+def _model_family(model: str) -> str:
+    """Extract model family prefix.
+
+    ``claude-*`` → ``"claude"``, ``prefix/rest`` → ``prefix``,
+    anything else → the model string itself.
+    """
+    if model.startswith("claude-") or model == "claude":
+        return "claude"
+    if "/" in model:
+        return model.split("/", 1)[0]
+    return model
+
+
+_FAMILY_CREDENTIAL_MAP: dict[str, str] = {
+    "claude": "anthropic",
+    "openai": "openai",
+    "ollama": "ollama",
+    "google": "google",
+    "vertex_ai": "vertex_ai",
+    "gemini": "gemini",
+    "codex": "openai",
+    "bedrock": "anthropic",
+    "cursor": "anthropic",
+}
+
+
+# ── infer_mode_s_auth ────────────────────────────────────────────────
+
+
+def infer_mode_s_auth(
+    *,
+    mode: str,
+    credential_name: str,
+    config: AnimaWorksConfig,
+) -> str | None:
+    """Infer ``mode_s_auth`` value from credential type.
+
+    Returns ``None`` when *mode* is not ``"S"`` or no inference is possible.
+    """
+    if mode != "S":
+        return None
+    credential = config.credentials.get(credential_name)
+    cred_type = getattr(credential, "type", "") if credential is not None else ""
+    if cred_type == "claude_code_login":
+        return "max"
+    if cred_type == "api_key":
+        return "api"
+    return getattr(config.anima_defaults, "mode_s_auth", None)
+
+
+# ── smart_update_model ───────────────────────────────────────────────
+
+
+def smart_update_model(
+    anima_dir: Path,
+    *,
+    model: str,
+    credential: str | None = None,
+    config: AnimaWorksConfig | None = None,
+) -> dict[str, Any]:
+    """Update model with automatic resolution of execution_mode, credential, and related fields.
+
+    When the model family changes (e.g. ``ollama/*`` → ``claude-*``), credential,
+    thinking, and max_tokens are auto-adjusted.  ``execution_mode`` and
+    ``mode_s_auth`` are always resolved.
+
+    Args:
+        anima_dir: Path to the anima directory.
+        model: New model name.
+        credential: Explicit credential override (skips auto-inference).
+        config: AppConfig instance (lazy-loaded if None).
+
+    Returns:
+        Dict summarizing applied changes.
+    """
+    status_path = anima_dir / "status.json"
+    if not status_path.is_file():
+        raise FileNotFoundError(f"status.json not found: {status_path}")
+    data: dict[str, Any] = json.loads(status_path.read_text(encoding="utf-8"))
+
+    if config is None:
+        from core.config.io import load_config
+
+        config = load_config()
+
+    old_model = data.get("model", "")
+    old_family = _model_family(old_model)
+    new_family = _model_family(model)
+    family_changed = old_family != new_family
+
+    data["model"] = model
+
+    from core.config.model_mode import resolve_execution_mode
+
+    next_mode = resolve_execution_mode(config, model)
+    data["execution_mode"] = next_mode
+
+    # -- credential resolution --
+    if credential is not None:
+        old_cred = data.get("credential", "")
+        data["credential"] = credential
+    elif family_changed:
+        old_cred = data.get("credential", "")
+        mapped = _FAMILY_CREDENTIAL_MAP.get(new_family)
+        if mapped and mapped in config.credentials:
+            data["credential"] = mapped
+            logger.info(t("model_config.credential_auto_switch", old=old_cred, new=mapped))
+        else:
+            default_cred = getattr(config.anima_defaults, "credential", None)
+            if default_cred:
+                data["credential"] = default_cred
+                logger.info(t("model_config.credential_fallback_defaults", family=new_family, default=default_cred))
+            else:
+                logger.warning(t("model_config.credential_keep_current", current=old_cred))
+
+    # -- mode_s_auth resolution --
+    next_credential = data.get("credential", "")
+    if next_mode == "S" and next_credential:
+        inferred_auth = infer_mode_s_auth(mode=next_mode, credential_name=next_credential, config=config)
+        if inferred_auth:
+            data["mode_s_auth"] = inferred_auth
+        else:
+            data.pop("mode_s_auth", None)
+    else:
+        data.pop("mode_s_auth", None)
+
+    # -- clear stale overrides on family change --
+    cleared: list[str] = []
+    if family_changed and credential is None:
+        for field in ("thinking", "max_tokens"):
+            if field in data:
+                data.pop(field)
+                cleared.append(field)
+
+    # -- atomic write --
+    tmp = status_path.with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    tmp.replace(status_path)
+
+    return {
+        "model": model,
+        "credential": data.get("credential", ""),
+        "execution_mode": next_mode,
+        "mode_s_auth": data.get("mode_s_auth"),
+        "family_changed": family_changed,
+        "cleared_fields": cleared,
+    }
+
+
 __all__ = [
     "load_model_config",
     "resolve_penalties",
@@ -210,4 +366,7 @@ __all__ = [
     "_THINKING_MIN_MAX_TOKENS",
     "_match_model_max_tokens",
     "update_status_model",
+    "_model_family",
+    "infer_mode_s_auth",
+    "smart_update_model",
 ]

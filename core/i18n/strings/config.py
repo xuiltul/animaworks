@@ -235,6 +235,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "[デスクを訪問]",
         "en": "[Desk visit]",
     },
+    "model_config.credential_auto_switch": {
+        "ja": "モデルファミリー変更を検出: credential を '{old}' → '{new}' に自動切替しました",
+        "en": "Model family change detected: auto-switched credential from '{old}' to '{new}'",
+    },
+    "model_config.credential_fallback_defaults": {
+        "ja": "ファミリー '{family}' の credential が見つかりません。デフォルト '{default}' を使用します",
+        "en": "No credential found for family '{family}'. Using default '{default}'",
+    },
+    "model_config.credential_keep_current": {
+        "ja": "適切な credential を自動解決できません。現在の credential '{current}' を維持します",
+        "en": "Could not auto-resolve credential. Keeping current credential '{current}'",
+    },
     "config.anima_count_detail": {
         "ja": "{count}名",
         "en": "{count} anima(s)",

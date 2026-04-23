@@ -573,7 +573,7 @@ def cmd_anima_set_role(args: argparse.Namespace) -> None:
 
 def cmd_anima_set_model(args: argparse.Namespace) -> None:
     """Set an anima's model (updates status.json)."""
-    from core.config.models import update_status_model
+    from core.config.model_config import smart_update_model
     from core.paths import get_data_dir
 
     try:
@@ -601,9 +601,11 @@ def cmd_anima_set_model(args: argparse.Namespace) -> None:
                 except Exception:
                     continue
                 try:
-                    update_status_model(entry, model=model, credential=credential)
+                    result = smart_update_model(entry, model=model, credential=credential)
                     updated += 1
-                    print(f"  {entry.name}: model={model}")
+                    cred_info = f" credential={result['credential']}" if result.get("family_changed") else ""
+                    mode_info = f" mode={result['execution_mode']}"
+                    print(f"  {entry.name}: model={model}{cred_info}{mode_info}")
                 except Exception as e:
                     print(f"  {entry.name}: ERROR - {e}", file=sys.stderr)
             if updated == 0:
@@ -620,12 +622,14 @@ def cmd_anima_set_model(args: argparse.Namespace) -> None:
             if not anima_dir.exists():
                 print(f"Error: Anima '{args.anima}' not found")
                 sys.exit(1)
-            update_status_model(
+            result = smart_update_model(
                 anima_dir,
                 model=args.model,
                 credential=args.credential,
             )
-            print(f"Model updated to '{args.model}' for '{args.anima}'")
+            cred_info = f" (credential={result['credential']})" if result.get("family_changed") else ""
+            mode_info = f" [mode={result['execution_mode']}]"
+            print(f"Model updated to '{args.model}' for '{args.anima}'{cred_info}{mode_info}")
 
         if pid_file.exists():
             print("  Server is running. Restart animas to apply changes (animaworks anima restart <name>).")

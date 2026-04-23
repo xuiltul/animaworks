@@ -24,9 +24,11 @@ from core.config.model_config import (
     _THINKING_MIN_MAX_TOKENS,
     DEFAULT_MAX_TOKENS,
     _match_model_max_tokens,
+    infer_mode_s_auth,
     load_model_config,
     resolve_max_tokens,
     resolve_penalties,
+    smart_update_model,
     update_status_model,
 )
 

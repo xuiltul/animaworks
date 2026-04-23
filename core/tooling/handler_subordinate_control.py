@@ -134,7 +134,8 @@ class SubordinateControlMixin(OrgHelpersMixin):
 
     def _handle_set_subordinate_model(self, args: dict[str, Any]) -> str:
         """Change a subordinate anima's LLM model (updates status.json)."""
-        from core.config.models import KNOWN_MODELS, update_status_model
+        from core.config.model_config import smart_update_model
+        from core.config.models import KNOWN_MODELS
         from core.paths import get_data_dir
 
         target_name = resolve_anima_name(args.get("name", ""))
@@ -161,7 +162,7 @@ class SubordinateControlMixin(OrgHelpersMixin):
             warn_msg = "\n" + t("handler.model_warning", model=model)
 
         target_dir = get_data_dir() / "animas" / target_name
-        update_status_model(target_dir, model=model)
+        update_result = smart_update_model(target_dir, model=model)
 
         log_summary = t("handler.model_change_log", target_name=target_name, model=model)
         if reason:
@@ -181,10 +182,12 @@ class SubordinateControlMixin(OrgHelpersMixin):
             reason or "(none)",
         )
 
-        result = t("handler.model_changed", target_name=target_name, model=model)
+        result_msg = t("handler.model_changed", target_name=target_name, model=model)
+        if update_result.get("family_changed"):
+            result_msg += f"\n  credential: {update_result['credential']}, mode: {update_result['execution_mode']}"
         if reason:
-            result += "\n" + t("handler.reason_prefix", reason=reason)
-        return result + warn_msg
+            result_msg += "\n" + t("handler.reason_prefix", reason=reason)
+        return result_msg + warn_msg
 
     def _handle_set_subordinate_background_model(self, args: dict[str, Any]) -> str:
         """Change a subordinate's background model (heartbeat/cron)."""

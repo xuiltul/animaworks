@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from core.config.models import load_config, resolve_anima_config, resolve_execution_mode
+from core.config.models import load_config, resolve_anima_config
 
 logger = logging.getLogger("animaworks.routes.animas")
 
@@ -32,27 +32,6 @@ def _read_appearance(anima_dir: Path) -> dict | None:
         return data if data else None
     except (json.JSONDecodeError, OSError):
         return None
-
-
-def _infer_mode_s_auth(
-    *,
-    mode: str,
-    credential_name: str,
-    config: Any,
-) -> str | None:
-    """Infer per-anima Mode S auth from the selected credential."""
-    if mode != "S":
-        return None
-
-    credential = config.credentials.get(credential_name)
-    cred_type = getattr(credential, "type", "") if credential is not None else ""
-
-    if cred_type == "claude_code_login":
-        return "max"
-    if cred_type == "api_key":
-        return "api"
-
-    return getattr(config.anima_defaults, "mode_s_auth", None)
 
 
 def create_animas_router() -> APIRouter:
@@ -332,6 +311,8 @@ def create_animas_router() -> APIRouter:
     @router.put("/animas/{name}/model")
     async def update_anima_model(name: str, request: Request):
         """Update the model setting in status.json for an anima."""
+        from core.config.model_config import smart_update_model as _smart_update
+
         _validate_anima_name(name)
         animas_dir = request.app.state.animas_dir
         anima_dir = animas_dir / name
@@ -340,60 +321,32 @@ def create_animas_router() -> APIRouter:
 
         data = await request.json()
         model: str = data.get("model", "").strip()
-        credential: str = data.get("credential", "").strip()
+        credential: str = data.get("credential", "").strip() or None
 
         if not model:
             raise HTTPException(status_code=400, detail="model is required")
 
-        status_path = anima_dir / "status.json"
-        existing: dict[str, Any] = {}
-        if status_path.exists():
-            try:
-                existing = json.loads(status_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        config = load_config()
-        next_credential = credential or str(existing.get("credential", "")).strip()
-        next_mode = resolve_execution_mode(config, model)
-
-        existing["model"] = model
-        existing["execution_mode"] = next_mode
-        if credential:
-            existing["credential"] = credential
-        if next_mode == "S" and next_credential:
-            inferred_auth = _infer_mode_s_auth(
-                mode=next_mode,
-                credential_name=next_credential,
-                config=config,
-            )
-            if inferred_auth:
-                existing["mode_s_auth"] = inferred_auth
-            else:
-                existing.pop("mode_s_auth", None)
-        else:
-            existing.pop("mode_s_auth", None)
-
-        await asyncio.to_thread(
-            status_path.write_text,
-            json.dumps(existing, ensure_ascii=False, indent=2) + "\n",
-            "utf-8",
+        result = await asyncio.to_thread(
+            _smart_update,
+            anima_dir,
+            model=model,
+            credential=credential,
         )
         logger.info(
             "Updated model for anima '%s': model=%s credential=%s execution_mode=%s mode_s_auth=%s",
             name,
-            model,
-            next_credential,
-            next_mode,
-            existing.get("mode_s_auth"),
+            result["model"],
+            result["credential"],
+            result["execution_mode"],
+            result.get("mode_s_auth"),
         )
         return {
             "status": "ok",
             "name": name,
-            "model": model,
-            "credential": next_credential,
-            "execution_mode": next_mode,
-            "mode_s_auth": existing.get("mode_s_auth"),
+            "model": result["model"],
+            "credential": result["credential"],
+            "execution_mode": result["execution_mode"],
+            "mode_s_auth": result.get("mode_s_auth"),
         }
 
     # ── Aliases ──────────────────────────────────────────────
