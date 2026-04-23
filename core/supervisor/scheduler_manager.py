@@ -345,7 +345,7 @@ class SchedulerManager:
                 name=f"{self._anima_name}: {task.name}",
                 args=[task],
                 replace_existing=True,
-                misfire_grace_time=300,
+                misfire_grace_time=1800,
                 max_instances=1,
             )
             registered += 1
