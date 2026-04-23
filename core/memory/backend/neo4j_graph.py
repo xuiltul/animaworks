@@ -211,6 +211,7 @@ class Neo4jGraphBackend(MemoryBackend):
                             {
                                 "uuid": resolved.uuid,
                                 "name": resolved.name,
+                                "entity_type": ent.entity_type,
                                 "summary": resolved.summary,
                                 "group_id": self._group_id,
                                 "created_at": now_str,

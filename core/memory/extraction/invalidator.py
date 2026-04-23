@@ -105,7 +105,7 @@ class EdgeInvalidator:
             try:
                 await self._driver.execute_write(
                     INVALIDATE_FACT,
-                    {"uuid": fact_uuid, "invalid_at": new_valid_at},
+                    {"uuid": fact_uuid, "invalid_at": new_valid_at, "group_id": self._group_id},
                 )
                 invalidated.append(fact_uuid)
                 logger.info(
@@ -117,6 +117,21 @@ class EdgeInvalidator:
                 logger.warning("Failed to invalidate fact %s", fact_uuid, exc_info=True)
 
         return invalidated
+
+    async def expire_fact(self, fact_uuid: str, expired_at: str) -> bool:
+        """Mark a fact as expired (time-based lifecycle, distinct from contradiction)."""
+        from core.memory.graph.queries import EXPIRE_FACT
+
+        try:
+            await self._driver.execute_write(
+                EXPIRE_FACT,
+                {"uuid": fact_uuid, "expired_at": expired_at, "group_id": self._group_id},
+            )
+            logger.info("Expired fact %s at %s", fact_uuid, expired_at)
+            return True
+        except Exception:
+            logger.warning("Failed to expire fact %s", fact_uuid, exc_info=True)
+            return False
 
     # ── LLM judgment ──────────────────────────────────────
 

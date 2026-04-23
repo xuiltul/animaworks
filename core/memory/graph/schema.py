@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+SCHEMA_VERSION = 2
+
 # ── Constraints ──────────
 
 CONSTRAINTS = [
@@ -35,6 +37,7 @@ INDEXES = [
 
 ADVANCED_INDEXES = [
     "CREATE FULLTEXT INDEX entity_name_fulltext IF NOT EXISTS FOR (n:Entity) ON EACH [n.name, n.summary]",
+    "CREATE FULLTEXT INDEX fact_fulltext IF NOT EXISTS FOR ()-[r:RELATES_TO]-() ON EACH [r.fact]",
 ]
 
 # ── Vector indexes (Neo4j 5.13+) ──────────

@@ -43,6 +43,7 @@ CREATE_ENTITY = """
 CREATE (e:Entity {
   uuid: $uuid,
   name: $name,
+  entity_type: $entity_type,
   summary: $summary,
   group_id: $group_id,
   created_at: datetime($created_at),
@@ -147,6 +148,7 @@ DETACH DELETE e
 FIND_ACTIVE_FACTS_FOR_PAIR = """
 MATCH (s:Entity {uuid: $source_uuid})-[r:RELATES_TO]->(t:Entity {uuid: $target_uuid})
 WHERE r.invalid_at IS NULL
+  AND r.expired_at IS NULL
   AND r.uuid <> $new_fact_uuid
   AND r.valid_at <= datetime($new_valid_at)
 RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
@@ -155,6 +157,7 @@ RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
 FIND_ACTIVE_FACTS_FOR_PAIR_REVERSE = """
 MATCH (s:Entity {uuid: $target_uuid})-[r:RELATES_TO]->(t:Entity {uuid: $source_uuid})
 WHERE r.invalid_at IS NULL
+  AND r.expired_at IS NULL
   AND r.uuid <> $new_fact_uuid
   AND r.valid_at <= datetime($new_valid_at)
 RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
@@ -162,13 +165,21 @@ RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
 
 INVALIDATE_FACT = """
 MATCH ()-[r:RELATES_TO {uuid: $uuid}]->()
+WHERE r.group_id = $group_id
 SET r.invalid_at = datetime($invalid_at)
+"""
+
+EXPIRE_FACT = """
+MATCH ()-[r:RELATES_TO {uuid: $uuid}]->()
+WHERE r.group_id = $group_id
+SET r.expired_at = datetime($expired_at)
 """
 
 FIND_VALID_FACTS_BY_GROUP = """
 MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
 WHERE r.group_id = $group_id
   AND (r.invalid_at IS NULL OR r.invalid_at > datetime($as_of_time))
+  AND (r.expired_at IS NULL OR r.expired_at > datetime($as_of_time))
 RETURN r.uuid AS uuid, r.fact AS fact,
        s.name AS source_name, t.name AS target_name,
        toString(r.valid_at) AS valid_at,
@@ -184,6 +195,7 @@ CALL db.index.vector.queryRelationships('fact_embedding', $top_k, $embedding)
 YIELD relationship, score
 WHERE relationship.group_id = $group_id
   AND (relationship.invalid_at IS NULL OR relationship.invalid_at > datetime($as_of_time))
+  AND (relationship.expired_at IS NULL OR relationship.expired_at > datetime($as_of_time))
 WITH relationship AS r, score,
      startNode(relationship) AS s, endNode(relationship) AS t
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
@@ -203,6 +215,7 @@ CALL db.index.fulltext.queryRelationships('fact_fulltext', $query, {limit: $top_
 YIELD relationship, score
 WHERE relationship.group_id = $group_id
   AND (relationship.invalid_at IS NULL OR relationship.invalid_at > datetime($as_of_time))
+  AND (relationship.expired_at IS NULL OR relationship.expired_at > datetime($as_of_time))
 WITH relationship AS r, score,
      startNode(relationship) AS s, endNode(relationship) AS t
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
@@ -224,6 +237,7 @@ WITH DISTINCT related
 MATCH (related)-[r:RELATES_TO]-(other:Entity)
 WHERE r.group_id = $group_id
   AND (r.invalid_at IS NULL OR r.invalid_at > datetime($as_of_time))
+  AND (r.expired_at IS NULL OR r.expired_at > datetime($as_of_time))
 WITH r, startNode(r) AS s, endNode(r) AS t
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
        toString(r.valid_at) AS valid_at
@@ -284,6 +298,7 @@ FIND_RECENT_FACTS = """
 MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
 WHERE r.group_id = $group_id
   AND r.invalid_at IS NULL
+  AND r.expired_at IS NULL
   AND r.created_at >= datetime($since)
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
        toString(r.valid_at) AS valid_at, toString(r.created_at) AS created_at
