@@ -286,6 +286,13 @@ MATCH (c:Community)-[:HAS_MEMBER]->(e:Entity {uuid: $entity_uuid})
 RETURN c.uuid AS community_uuid, c.name AS name, c.summary AS summary
 """
 
+FIND_ENTITY_NEIGHBORS = """
+MATCH (e:Entity {uuid: $entity_uuid})-[:RELATES_TO]-(neighbor:Entity)
+WHERE neighbor.group_id = $group_id
+RETURN DISTINCT neighbor.uuid AS uuid
+LIMIT $limit
+"""
+
 SEARCH_COMMUNITIES = """
 MATCH (c:Community)
 WHERE c.group_id = $group_id

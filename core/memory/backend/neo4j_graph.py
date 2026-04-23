@@ -197,6 +197,7 @@ class Neo4jGraphBackend(MemoryBackend):
             # 4. Resolve + Create Entity nodes
             entity_count = 0
             entity_uuid_map: dict[str, str] = {}
+            new_entity_uuids: list[str] = []
             resolver = self._get_resolver()
 
             for idx, ent in enumerate(valid_entities):
@@ -218,6 +219,7 @@ class Neo4jGraphBackend(MemoryBackend):
                                 "name_embedding": emb,
                             },
                         )
+                        new_entity_uuids.append(resolved.uuid)
                         entity_count += 1
                     else:
                         from core.memory.graph.queries import UPDATE_ENTITY_SUMMARY
@@ -295,6 +297,14 @@ class Neo4jGraphBackend(MemoryBackend):
                 fact_count,
                 self._group_id,
             )
+
+            # 6. Dynamic community update for new entities
+            if new_entity_uuids:
+                try:
+                    await self._dynamic_community_update(driver, new_entity_uuids)
+                except Exception:
+                    logger.debug("Dynamic community update failed, continuing", exc_info=True)
+
             return total
 
     async def ingest_file(self, path: Path) -> int:
@@ -395,6 +405,39 @@ class Neo4jGraphBackend(MemoryBackend):
                 for i in range(0, len(section), max_chars):
                     result.append(section[i : i + max_chars])
         return result if result else [content]
+
+    async def _dynamic_community_update(
+        self,
+        driver: Neo4jDriver,
+        new_entity_uuids: list[str],
+    ) -> None:
+        """Assign newly created entities to existing communities via majority vote."""
+        try:
+            from core.memory.graph.community import CommunityDetector
+            from core.memory.graph.queries import FIND_ENTITY_NEIGHBORS
+
+            detector = CommunityDetector(
+                driver,
+                self._group_id,
+                model=self._resolve_background_model(),
+                locale=self._resolve_locale(),
+            )
+
+            for entity_uuid in new_entity_uuids:
+                try:
+                    rows = await driver.execute_query(
+                        FIND_ENTITY_NEIGHBORS,
+                        {"entity_uuid": entity_uuid, "group_id": self._group_id, "limit": 20},
+                    )
+                    neighbor_uuids = [r["uuid"] for r in rows if r.get("uuid")]
+                    if neighbor_uuids:
+                        assigned = await detector.dynamic_update(entity_uuid, neighbor_uuids)
+                        if assigned:
+                            logger.debug("Entity %s assigned to community %s", entity_uuid, assigned)
+                except Exception:
+                    logger.debug("Dynamic community update failed for %s", entity_uuid, exc_info=True)
+        except Exception:
+            logger.debug("Community module unavailable, skipping dynamic update", exc_info=True)
 
     async def retrieve(
         self,
