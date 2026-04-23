@@ -57,6 +57,7 @@ class Neo4jGraphBackend(MemoryBackend):
         self._schema_ensured = False
         self._ingest_semaphore = asyncio.Semaphore(2)
         self._extractor: object | None = None
+        self._embedding_available: bool | None = None
 
     # ── Driver lifecycle ───────────────────────────────────────────────────
 
@@ -121,6 +122,30 @@ class Neo4jGraphBackend(MemoryBackend):
             logger.warning("Neo4j stats failed", exc_info=True)
             return {"total_chunks": 0, "total_sources": 0}
 
+    # ── Embedding ──────────────────────────────────────────────────────────
+
+    async def _embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings using the shared singleton model.
+
+        Falls back to empty lists when sentence-transformers is unavailable
+        or embedding generation fails for any reason.
+        """
+        if not texts:
+            return []
+        if self._embedding_available is False:
+            return [[] for _ in texts]
+        try:
+            from core.memory.rag.singleton import generate_embeddings
+
+            result = await asyncio.to_thread(generate_embeddings, texts)
+            self._embedding_available = True
+            return result
+        except Exception:
+            if self._embedding_available is None:
+                logger.warning("Embedding generation unavailable, vectors will be empty", exc_info=True)
+            self._embedding_available = False
+            return [[] for _ in texts]
+
     # ── Ingest methods ──────────────────────────────────────────────────────
 
     async def ingest_text(self, text: str, source: str, metadata: dict | None = None) -> int:
@@ -164,16 +189,20 @@ class Neo4jGraphBackend(MemoryBackend):
                 logger.warning("Extraction failed, Episode-only fallback", exc_info=True)
                 return 1
 
-            # 3. Resolve + Create Entity nodes
+            # 3. Batch-generate entity embeddings
+            valid_entities = [e for e in entities if e.name.strip()]
+            entity_texts = [f"{e.name}: {e.summary}" for e in valid_entities]
+            entity_embeddings = await self._embed_texts(entity_texts)
+
+            # 4. Resolve + Create Entity nodes
             entity_count = 0
             entity_uuid_map: dict[str, str] = {}
             resolver = self._get_resolver()
 
-            for ent in entities:
-                if not ent.name.strip():
-                    continue
+            for idx, ent in enumerate(valid_entities):
+                emb = entity_embeddings[idx] if idx < len(entity_embeddings) else []
                 try:
-                    resolved = await resolver.resolve(ent, name_embedding=[])
+                    resolved = await resolver.resolve(ent, name_embedding=emb)
                     entity_uuid_map[ent.name] = resolved.uuid
 
                     if resolved.is_new:
@@ -185,7 +214,7 @@ class Neo4jGraphBackend(MemoryBackend):
                                 "summary": resolved.summary,
                                 "group_id": self._group_id,
                                 "created_at": now_str,
-                                "name_embedding": [],
+                                "name_embedding": emb,
                             },
                         )
                         entity_count += 1
@@ -212,12 +241,18 @@ class Neo4jGraphBackend(MemoryBackend):
                 except Exception:
                     logger.warning("Entity resolution/creation failed: %s", ent.name, exc_info=True)
 
+            # 5. Batch-generate fact embeddings
+            valid_facts = [
+                f for f in facts if entity_uuid_map.get(f.source_entity) and entity_uuid_map.get(f.target_entity)
+            ]
+            fact_texts = [f"{f.source_entity} → {f.target_entity}: {f.fact}" for f in valid_facts]
+            fact_embeddings = await self._embed_texts(fact_texts)
+
             fact_count = 0
-            for fact in facts:
-                src_uuid = entity_uuid_map.get(fact.source_entity)
-                tgt_uuid = entity_uuid_map.get(fact.target_entity)
-                if not src_uuid or not tgt_uuid:
-                    continue
+            for idx, fact in enumerate(valid_facts):
+                src_uuid = entity_uuid_map[fact.source_entity]
+                tgt_uuid = entity_uuid_map[fact.target_entity]
+                f_emb = fact_embeddings[idx] if idx < len(fact_embeddings) else []
                 try:
                     fact_uuid = str(uuid4())
                     await driver.execute_write(
@@ -227,7 +262,7 @@ class Neo4jGraphBackend(MemoryBackend):
                             "target_uuid": tgt_uuid,
                             "uuid": fact_uuid,
                             "fact": fact.fact,
-                            "fact_embedding": [],
+                            "fact_embedding": f_emb,
                             "group_id": self._group_id,
                             "created_at": now_str,
                             "valid_at": fact.valid_at or now_str,
@@ -374,6 +409,9 @@ class Neo4jGraphBackend(MemoryBackend):
 
         driver = await self._ensure_driver()
 
+        query_embeddings = await self._embed_texts([query])
+        query_embedding = query_embeddings[0] if query_embeddings else []
+
         from core.memory.graph.search import HybridSearch
 
         search = HybridSearch(driver, self._group_id)
@@ -383,6 +421,7 @@ class Neo4jGraphBackend(MemoryBackend):
                 query,
                 scope=scope,
                 limit=limit,
+                query_embedding=query_embedding,
             )
         except ValueError:
             return []
