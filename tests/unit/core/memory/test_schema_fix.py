@@ -148,12 +148,26 @@ class TestExpiredAtInQueries:
 
         assert "expired_at IS NULL" in FIND_RECENT_FACTS
 
-    def test_invalidate_unchanged(self) -> None:
-        """invalid_at logic should remain intact."""
+    def test_invalidate_uses_group_id(self) -> None:
         from core.memory.graph.queries import INVALIDATE_FACT
 
         assert "invalid_at" in INVALIDATE_FACT
-        assert "expired_at" not in INVALIDATE_FACT
+        assert "$group_id" in INVALIDATE_FACT
+
+    def test_bfs_filters_expired(self) -> None:
+        from core.memory.graph.queries import BFS_FACTS_FROM_ENTITY
+
+        assert "expired_at" in BFS_FACTS_FROM_ENTITY
+
+    def test_active_facts_pair_filters_expired(self) -> None:
+        from core.memory.graph.queries import FIND_ACTIVE_FACTS_FOR_PAIR
+
+        assert "expired_at IS NULL" in FIND_ACTIVE_FACTS_FOR_PAIR
+
+    def test_active_facts_pair_reverse_filters_expired(self) -> None:
+        from core.memory.graph.queries import FIND_ACTIVE_FACTS_FOR_PAIR_REVERSE
+
+        assert "expired_at IS NULL" in FIND_ACTIVE_FACTS_FOR_PAIR_REVERSE
 
 
 # ── TestExpireFactQuery ──────────────────────────────────────
@@ -171,9 +185,12 @@ class TestExpireFactQuery:
         from core.memory.graph.queries import EXPIRE_FACT, INVALIDATE_FACT
 
         assert "expired_at" in EXPIRE_FACT
-        assert "invalid_at" not in EXPIRE_FACT
         assert "invalid_at" in INVALIDATE_FACT
-        assert "expired_at" not in INVALIDATE_FACT
+
+    def test_expire_fact_has_group_id(self) -> None:
+        from core.memory.graph.queries import EXPIRE_FACT
+
+        assert "$group_id" in EXPIRE_FACT
 
 
 # ── TestEdgeInvalidatorExpireFact ────────────────────────────
@@ -200,6 +217,7 @@ class TestEdgeInvalidatorExpireFact:
         args = mock_driver.execute_write.call_args[0]
         assert args[1]["uuid"] == "fact-123"
         assert args[1]["expired_at"] == "2026-06-01T00:00:00"
+        assert args[1]["group_id"] == "test_group"
 
     @pytest.mark.asyncio
     async def test_expire_fact_failure_returns_false(self, invalidator, mock_driver: AsyncMock) -> None:

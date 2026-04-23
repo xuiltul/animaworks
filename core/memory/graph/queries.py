@@ -148,6 +148,7 @@ DETACH DELETE e
 FIND_ACTIVE_FACTS_FOR_PAIR = """
 MATCH (s:Entity {uuid: $source_uuid})-[r:RELATES_TO]->(t:Entity {uuid: $target_uuid})
 WHERE r.invalid_at IS NULL
+  AND r.expired_at IS NULL
   AND r.uuid <> $new_fact_uuid
   AND r.valid_at <= datetime($new_valid_at)
 RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
@@ -156,6 +157,7 @@ RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
 FIND_ACTIVE_FACTS_FOR_PAIR_REVERSE = """
 MATCH (s:Entity {uuid: $target_uuid})-[r:RELATES_TO]->(t:Entity {uuid: $source_uuid})
 WHERE r.invalid_at IS NULL
+  AND r.expired_at IS NULL
   AND r.uuid <> $new_fact_uuid
   AND r.valid_at <= datetime($new_valid_at)
 RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
@@ -163,11 +165,13 @@ RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
 
 INVALIDATE_FACT = """
 MATCH ()-[r:RELATES_TO {uuid: $uuid}]->()
+WHERE r.group_id = $group_id
 SET r.invalid_at = datetime($invalid_at)
 """
 
 EXPIRE_FACT = """
 MATCH ()-[r:RELATES_TO {uuid: $uuid}]->()
+WHERE r.group_id = $group_id
 SET r.expired_at = datetime($expired_at)
 """
 
@@ -233,6 +237,7 @@ WITH DISTINCT related
 MATCH (related)-[r:RELATES_TO]-(other:Entity)
 WHERE r.group_id = $group_id
   AND (r.invalid_at IS NULL OR r.invalid_at > datetime($as_of_time))
+  AND (r.expired_at IS NULL OR r.expired_at > datetime($as_of_time))
 WITH r, startNode(r) AS s, endNode(r) AS t
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
        toString(r.valid_at) AS valid_at

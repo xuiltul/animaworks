@@ -105,7 +105,7 @@ class EdgeInvalidator:
             try:
                 await self._driver.execute_write(
                     INVALIDATE_FACT,
-                    {"uuid": fact_uuid, "invalid_at": new_valid_at},
+                    {"uuid": fact_uuid, "invalid_at": new_valid_at, "group_id": self._group_id},
                 )
                 invalidated.append(fact_uuid)
                 logger.info(
@@ -125,7 +125,7 @@ class EdgeInvalidator:
         try:
             await self._driver.execute_write(
                 EXPIRE_FACT,
-                {"uuid": fact_uuid, "expired_at": expired_at},
+                {"uuid": fact_uuid, "expired_at": expired_at, "group_id": self._group_id},
             )
             logger.info("Expired fact %s at %s", fact_uuid, expired_at)
             return True
