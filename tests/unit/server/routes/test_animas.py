@@ -235,8 +235,8 @@ class TestUpdateAnimaModel:
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
         transport = ASGITransport(app=app)
-        with patch("server.routes.animas.load_config", return_value=MagicMock()), patch(
-            "server.routes.animas.resolve_execution_mode",
+        with patch("core.config.io.load_config", return_value=MagicMock()), patch(
+            "core.config.model_mode.resolve_execution_mode",
             return_value="C",
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -262,6 +262,10 @@ class TestUpdateAnimaModel:
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
         (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "status.json").write_text(
+            json.dumps({"model": "gpt-4", "credential": "openai"}),
+            encoding="utf-8",
+        )
 
         config = MagicMock()
         config.credentials = {"anthropic": MagicMock(type="claude_code_login")}
@@ -269,8 +273,8 @@ class TestUpdateAnimaModel:
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
         transport = ASGITransport(app=app)
-        with patch("server.routes.animas.load_config", return_value=config), patch(
-            "server.routes.animas.resolve_execution_mode",
+        with patch("core.config.io.load_config", return_value=config), patch(
+            "core.config.model_mode.resolve_execution_mode",
             return_value="S",
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -293,6 +297,10 @@ class TestUpdateAnimaModel:
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
         (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "status.json").write_text(
+            json.dumps({"model": "gpt-4", "credential": "openai"}),
+            encoding="utf-8",
+        )
 
         config = MagicMock()
         config.credentials = {"anthropic": MagicMock(type="api_key")}
@@ -300,8 +308,8 @@ class TestUpdateAnimaModel:
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
         transport = ASGITransport(app=app)
-        with patch("server.routes.animas.load_config", return_value=config), patch(
-            "server.routes.animas.resolve_execution_mode",
+        with patch("core.config.io.load_config", return_value=config), patch(
+            "core.config.model_mode.resolve_execution_mode",
             return_value="S",
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
