@@ -196,9 +196,10 @@ class TestIngestWithEmbeddings:
         with patch.object(backend, "_embed_texts", side_effect=track_embed):
             await backend.ingest_text("A B C relationships", "test")
 
-        assert len(embed_calls) == 2, f"Expected 2 batch calls, got {len(embed_calls)}"
-        assert len(embed_calls[0]) == 3  # 3 entities
-        assert len(embed_calls[1]) == 2  # 2 facts
+        assert len(embed_calls) == 3, f"Expected 3 batch calls, got {len(embed_calls)}"
+        assert len(embed_calls[0]) == 1  # 1 episode content
+        assert len(embed_calls[1]) == 3  # 3 entities
+        assert len(embed_calls[2]) == 2  # 2 facts
 
     async def test_embedding_failure_does_not_break_ingest(self, tmp_path: Path) -> None:
         backend, mock_driver = _make_backend(tmp_path)
