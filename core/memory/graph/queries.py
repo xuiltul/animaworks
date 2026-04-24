@@ -72,6 +72,7 @@ CREATE (s)-[r:RELATES_TO {
   uuid: $uuid,
   fact: $fact,
   fact_embedding: $fact_embedding,
+  edge_type: $edge_type,
   group_id: $group_id,
   created_at: datetime($created_at),
   valid_at: datetime($valid_at),
@@ -125,6 +126,7 @@ MATCH (old_entity:Entity {uuid: $old_uuid})-[old:RELATES_TO]->(target:Entity)
 MATCH (new_entity:Entity {uuid: $new_uuid})
 CREATE (new_entity)-[r:RELATES_TO {
   uuid: old.uuid, fact: old.fact, fact_embedding: old.fact_embedding,
+  edge_type: coalesce(old.edge_type, 'RELATES_TO'),
   group_id: old.group_id, created_at: old.created_at, valid_at: old.valid_at,
   invalid_at: old.invalid_at, expired_at: old.expired_at,
   source_episode_uuids: old.source_episode_uuids
@@ -137,6 +139,7 @@ MATCH (source:Entity)-[old:RELATES_TO]->(old_entity:Entity {uuid: $old_uuid})
 MATCH (new_entity:Entity {uuid: $new_uuid})
 CREATE (source)-[r:RELATES_TO {
   uuid: old.uuid, fact: old.fact, fact_embedding: old.fact_embedding,
+  edge_type: coalesce(old.edge_type, 'RELATES_TO'),
   group_id: old.group_id, created_at: old.created_at, valid_at: old.valid_at,
   invalid_at: old.invalid_at, expired_at: old.expired_at,
   source_episode_uuids: old.source_episode_uuids
@@ -157,7 +160,8 @@ WHERE r.invalid_at IS NULL
   AND r.expired_at IS NULL
   AND r.uuid <> $new_fact_uuid
   AND r.valid_at <= datetime($new_valid_at)
-RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
+RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at,
+       coalesce(r.edge_type, 'RELATES_TO') AS edge_type
 """
 
 FIND_ACTIVE_FACTS_FOR_PAIR_REVERSE = """
@@ -166,7 +170,8 @@ WHERE r.invalid_at IS NULL
   AND r.expired_at IS NULL
   AND r.uuid <> $new_fact_uuid
   AND r.valid_at <= datetime($new_valid_at)
-RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
+RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at,
+       coalesce(r.edge_type, 'RELATES_TO') AS edge_type
 """
 
 INVALIDATE_FACT = """
@@ -189,6 +194,7 @@ WHERE r.group_id = $group_id
 RETURN r.uuid AS uuid, r.fact AS fact,
        s.name AS source_name, t.name AS target_name,
        toString(r.valid_at) AS valid_at,
+       coalesce(r.edge_type, 'RELATES_TO') AS edge_type,
        r.group_id AS group_id
 ORDER BY r.valid_at DESC
 LIMIT $limit
@@ -206,7 +212,7 @@ WHERE relationship.group_id = $group_id
 WITH relationship AS r, score,
      startNode(relationship) AS s, endNode(relationship) AS t
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
-       toString(r.valid_at) AS valid_at, score
+       toString(r.valid_at) AS valid_at, coalesce(r.edge_type, 'RELATES_TO') AS edge_type, score
 """
 
 VECTOR_SEARCH_ENTITIES = """
@@ -237,7 +243,7 @@ WHERE relationship.group_id = $group_id
 WITH relationship AS r, score,
      startNode(relationship) AS s, endNode(relationship) AS t
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
-       toString(r.valid_at) AS valid_at, score
+       toString(r.valid_at) AS valid_at, coalesce(r.edge_type, 'RELATES_TO') AS edge_type, score
 """
 
 FULLTEXT_SEARCH_ENTITIES = """
@@ -260,7 +266,7 @@ WHERE r.group_id = $group_id
   AND (r.expired_at IS NULL OR r.expired_at > datetime($as_of_time))
 WITH r, startNode(r) AS s, endNode(r) AS t
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
-       toString(r.valid_at) AS valid_at
+       toString(r.valid_at) AS valid_at, coalesce(r.edge_type, 'RELATES_TO') AS edge_type
 LIMIT $limit
 """
 
@@ -283,7 +289,7 @@ WHERE r.group_id = $group_id
   AND (r.expired_at IS NULL OR r.expired_at > datetime($as_of_time))
 WITH r, startNode(r) AS s, endNode(r) AS t
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
-       toString(r.valid_at) AS valid_at
+       toString(r.valid_at) AS valid_at, coalesce(r.edge_type, 'RELATES_TO') AS edge_type
 LIMIT $limit
 """
 
@@ -301,7 +307,8 @@ FETCH_EDGES_FOR_COMMUNITY = """
 MATCH (s:Entity)-[r:RELATES_TO]->(t:Entity)
 WHERE r.group_id = $group_id
   AND r.invalid_at IS NULL
-RETURN s.uuid AS source_uuid, t.uuid AS target_uuid, r.uuid AS edge_uuid
+RETURN s.uuid AS source_uuid, t.uuid AS target_uuid, r.uuid AS edge_uuid,
+       coalesce(r.edge_type, 'RELATES_TO') AS edge_type
 """
 
 DELETE_COMMUNITIES_BY_GROUP = """
@@ -353,7 +360,8 @@ WHERE r.group_id = $group_id
   AND r.expired_at IS NULL
   AND r.created_at >= datetime($since)
 RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
-       toString(r.valid_at) AS valid_at, toString(r.created_at) AS created_at
+       toString(r.valid_at) AS valid_at, toString(r.created_at) AS created_at,
+       coalesce(r.edge_type, 'RELATES_TO') AS edge_type
 ORDER BY r.created_at DESC
 LIMIT $limit
 """

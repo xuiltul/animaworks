@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from core.memory.ontology.default import (
+    DEFAULT_EDGE_TYPE,
+    EDGE_TYPE_DESCRIPTIONS,
+    EDGE_TYPES,
     EntityExtractionResult,
     ExtractedEntity,
     ExtractedFact,
@@ -10,6 +13,9 @@ from core.memory.ontology.default import (
 )
 
 __all__ = [
+    "DEFAULT_EDGE_TYPE",
+    "EDGE_TYPE_DESCRIPTIONS",
+    "EDGE_TYPES",
     "ExtractedEntity",
     "ExtractedFact",
     "EntityExtractionResult",

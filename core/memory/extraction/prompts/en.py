@@ -39,13 +39,17 @@ FACT_USER = """## Text
 ## Extracted Entities
 {entities_json}
 
+## Edge Types (edge_type)
+Choose the most appropriate type from the list below. Use "RELATES_TO" if none fits.
+{edge_types_list}
+
 ## Instructions
 Extract relationships (facts) between the entities above and return them in the following JSON format. Return an empty list if no relationships are found.
 
 ```json
 {{
   "facts": [
-    {{"source_entity": "EntityA", "target_entity": "EntityB", "fact": "natural language description of relationship", "valid_at": "YYYY-MM-DDTHH:MM:SS or null"}}
+    {{"source_entity": "EntityA", "target_entity": "EntityB", "fact": "natural language description of relationship", "edge_type": "WORKS_AT", "valid_at": "YYYY-MM-DDTHH:MM:SS or null"}}
   ]
 }}
 ```"""

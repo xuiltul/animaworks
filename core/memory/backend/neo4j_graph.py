@@ -286,6 +286,7 @@ class Neo4jGraphBackend(MemoryBackend):
                             "uuid": fact_uuid,
                             "fact": fact.fact,
                             "fact_embedding": f_emb,
+                            "edge_type": getattr(fact, "edge_type", "RELATES_TO") or "RELATES_TO",
                             "group_id": self._group_id,
                             "created_at": now_str,
                             "valid_at": fact.valid_at or now_str,
@@ -466,6 +467,7 @@ class Neo4jGraphBackend(MemoryBackend):
         scope: str,
         limit: int = 10,
         min_score: float = 0.0,
+        edge_type_filter: str | None = None,
     ) -> list[RetrievedMemory]:
         """Retrieve memories using hybrid search (BM25 + Vector + BFS + reranker)."""
         if scope == "community":
@@ -486,6 +488,7 @@ class Neo4jGraphBackend(MemoryBackend):
                 scope=scope,
                 limit=limit,
                 query_embedding=query_embedding,
+                edge_type_filter=edge_type_filter,
             )
         except ValueError:
             return []
@@ -509,7 +512,8 @@ class Neo4jGraphBackend(MemoryBackend):
                 content = f"[{r.get('name', '')}] {r.get('summary', '')}"
                 source = f"community:{r.get('uuid', '')}"
             else:
-                content = f"{r.get('source_name', '')} → {r.get('target_name', '')}: {r.get('fact', '')}"
+                edge_label = r.get("edge_type", "RELATES_TO")
+                content = f"{r.get('source_name', '')} -[{edge_label}]-> {r.get('target_name', '')}: {r.get('fact', '')}"
                 source = f"fact:{r.get('uuid', '')}"
 
             memories.append(
@@ -581,7 +585,11 @@ class Neo4jGraphBackend(MemoryBackend):
             )
             return [
                 RetrievedMemory(
-                    content=f"{r.get('source_name', '')} → {r.get('target_name', '')}: {r.get('fact', '')}",
+                    content=(
+                        f"{r.get('source_name', '')} "
+                        f"-[{r.get('edge_type', 'RELATES_TO')}]-> "
+                        f"{r.get('target_name', '')}: {r.get('fact', '')}"
+                    ),
                     score=1.0,
                     source=f"fact:{r.get('uuid', '')}",
                     metadata={k: v for k, v in r.items() if isinstance(v, (str, int, float, bool))},

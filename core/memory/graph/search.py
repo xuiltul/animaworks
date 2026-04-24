@@ -48,6 +48,7 @@ class HybridSearch:
         limit: int = 10,
         as_of_time: str | None = None,
         query_embedding: list[float] | None = None,
+        edge_type_filter: str | None = None,
     ) -> list[dict]:
         """Execute hybrid search across 4 sources.
 
@@ -57,6 +58,8 @@ class HybridSearch:
             limit: Max results to return.
             as_of_time: ISO datetime for temporal filter (default: now).
             query_embedding: Pre-computed query embedding for vector search.
+            edge_type_filter: If set, only return facts with this edge_type.
+                Only applies when scope is "fact" or "all".
 
         Returns:
             List of result dicts sorted by relevance.
@@ -92,6 +95,12 @@ class HybridSearch:
 
         if not merged:
             return []
+
+        if edge_type_filter and scope in ("fact", "all"):
+            merged = [
+                r for r in merged
+                if r.get("edge_type", "RELATES_TO") == edge_type_filter
+            ]
 
         try:
             from core.memory.graph.reranker import get_reranker

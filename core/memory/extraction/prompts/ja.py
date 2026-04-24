@@ -40,13 +40,17 @@ FACT_USER = """## テキスト
 ## 抽出済みエンティティ
 {entities_json}
 
+## エッジ型（edge_type）
+以下の型から最も適切なものを選んでください。該当しない場合は "RELATES_TO" を使用してください。
+{edge_types_list}
+
 ## 指示
 上記エンティティ間の関係（事実）を抽出し、以下のJSON形式で返してください。関係が見つからない場合は空リストを返してください。
 
 ```json
 {{
   "facts": [
-    {{"source_entity": "エンティティA", "target_entity": "エンティティB", "fact": "AとBの関係を自然言語で記述", "valid_at": "YYYY-MM-DDTHH:MM:SS or null"}}
+    {{"source_entity": "エンティティA", "target_entity": "エンティティB", "fact": "AとBの関係を自然言語で記述", "edge_type": "WORKS_AT", "valid_at": "YYYY-MM-DDTHH:MM:SS or null"}}
   ]
 }}
 ```"""

@@ -15,6 +15,34 @@ logger = logging.getLogger(__name__)
 
 ENTITY_TYPES = Literal["Person", "Place", "Organization", "Concept", "Event", "Object", "Time"]
 
+EDGE_TYPES = Literal[
+    "WORKS_AT",
+    "LIVES_IN",
+    "KNOWS",
+    "PREFERS",
+    "SKILLED_IN",
+    "PARTICIPATED_IN",
+    "CREATED",
+    "REPORTED",
+    "DEPENDS_ON",
+    "RELATES_TO",
+]
+
+EDGE_TYPE_DESCRIPTIONS: dict[str, str] = {
+    "WORKS_AT": "Employment / affiliation",
+    "LIVES_IN": "Residence / location",
+    "KNOWS": "Personal acquaintance",
+    "PREFERS": "Preference / taste",
+    "SKILLED_IN": "Skill / ability",
+    "PARTICIPATED_IN": "Participation / involvement",
+    "CREATED": "Creation / authorship",
+    "REPORTED": "Report / notification",
+    "DEPENDS_ON": "Dependency",
+    "RELATES_TO": "General (fallback)",
+}
+
+DEFAULT_EDGE_TYPE: str = "RELATES_TO"
+
 # ── Entity models ──────────────────────────────────────────
 
 
@@ -33,6 +61,7 @@ class ExtractedFact(BaseModel):
     target_entity: str = Field(..., description="Target entity name")
     fact: str = Field(..., description="Natural language relationship description")
     valid_at: str | None = Field(default=None, description="ISO datetime when fact became true")
+    edge_type: str = Field(default="RELATES_TO", description="Relationship type from EDGE_TYPES")
 
 
 # ── Extraction results ────────────────────────────────────

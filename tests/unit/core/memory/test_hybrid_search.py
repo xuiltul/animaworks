@@ -329,9 +329,9 @@ class TestNeo4jRetrieve:
             result = await backend.retrieve("coffee", scope="fact")
 
         assert "Alice" in result[0].content
-        assert "→" in result[0].content
         assert "Coffee" in result[0].content
         assert "likes coffee" in result[0].content
+        assert "-[RELATES_TO]->" in result[0].content
 
     @pytest.mark.asyncio
     async def test_retrieve_entity_scope_formatting(self, tmp_path):
