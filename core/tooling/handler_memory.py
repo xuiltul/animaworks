@@ -215,9 +215,7 @@ class MemoryToolsMixin:
                         backend.retrieve(query, scope=neo4j_scope, limit=limit + offset),
                     ).result(timeout=30)
             else:
-                memories = asyncio.run(
-                    backend.retrieve(query, scope=neo4j_scope, limit=limit + offset)
-                )
+                memories = asyncio.run(backend.retrieve(query, scope=neo4j_scope, limit=limit + offset))
 
             if offset:
                 memories = memories[offset:]
@@ -233,10 +231,7 @@ class MemoryToolsMixin:
             total_tokens = len(header) // 4
 
             for i, mem in enumerate(memories):
-                entry = (
-                    f"\n[{offset + i + 1}] score={mem.score:.2f} | {mem.source}\n"
-                    f"{mem.content}\n"
-                )
+                entry = f"\n[{offset + i + 1}] score={mem.score:.2f} | {mem.source}\n{mem.content}\n"
                 entry_tokens = len(entry) // 4
                 if total_tokens + entry_tokens > max_tokens and i >= _SEARCH_MIN_RESULTS:
                     parts.append(f"\n... {len(memories) - i} more results truncated")
