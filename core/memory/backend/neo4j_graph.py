@@ -585,7 +585,11 @@ class Neo4jGraphBackend(MemoryBackend):
             )
             return [
                 RetrievedMemory(
-                    content=f"{r.get('source_name', '')} → {r.get('target_name', '')}: {r.get('fact', '')}",
+                    content=(
+                        f"{r.get('source_name', '')} "
+                        f"-[{r.get('edge_type', 'RELATES_TO')}]-> "
+                        f"{r.get('target_name', '')}: {r.get('fact', '')}"
+                    ),
                     score=1.0,
                     source=f"fact:{r.get('uuid', '')}",
                     metadata={k: v for k, v in r.items() if isinstance(v, (str, int, float, bool))},

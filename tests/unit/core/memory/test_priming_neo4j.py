@@ -200,7 +200,7 @@ class TestNeo4jRecentFacts:
         assert "Alice" in mem.content
         assert "React" in mem.content
         assert "works on frontend" in mem.content
-        assert "\u2192" in mem.content  # → arrow
+        assert "-[RELATES_TO]->" in mem.content
 
     @pytest.mark.skipif(not _HAS_RECENT_FACTS, reason="get_recent_facts override pending")
     async def test_neo4j_recent_facts_empty(self, neo4j_backend) -> None:

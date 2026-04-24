@@ -160,7 +160,8 @@ WHERE r.invalid_at IS NULL
   AND r.expired_at IS NULL
   AND r.uuid <> $new_fact_uuid
   AND r.valid_at <= datetime($new_valid_at)
-RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
+RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at,
+       coalesce(r.edge_type, 'RELATES_TO') AS edge_type
 """
 
 FIND_ACTIVE_FACTS_FOR_PAIR_REVERSE = """
@@ -169,7 +170,8 @@ WHERE r.invalid_at IS NULL
   AND r.expired_at IS NULL
   AND r.uuid <> $new_fact_uuid
   AND r.valid_at <= datetime($new_valid_at)
-RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at
+RETURN r.uuid AS uuid, r.fact AS fact, toString(r.valid_at) AS valid_at,
+       coalesce(r.edge_type, 'RELATES_TO') AS edge_type
 """
 
 INVALIDATE_FACT = """
