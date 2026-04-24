@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # ── Constraints ──────────
 
@@ -59,6 +59,17 @@ VECTOR_INDEXES = [
         "query": (
             "CREATE VECTOR INDEX fact_embedding IF NOT EXISTS "
             "FOR ()-[r:RELATES_TO]-() ON r.fact_embedding "
+            "OPTIONS {indexConfig: {"
+            "`vector.dimensions`: 384, "
+            "`vector.similarity_function`: 'cosine'"
+            "}}"
+        ),
+    },
+    {
+        "name": "episode_content_embedding",
+        "query": (
+            "CREATE VECTOR INDEX episode_content_embedding IF NOT EXISTS "
+            "FOR (n:Episode) ON n.content_embedding "
             "OPTIONS {indexConfig: {"
             "`vector.dimensions`: 384, "
             "`vector.similarity_function`: 'cosine'"

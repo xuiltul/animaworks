@@ -218,6 +218,15 @@ RETURN node.uuid AS uuid, node.name AS name, node.summary AS summary,
        node.entity_type AS entity_type, score
 """
 
+VECTOR_SEARCH_EPISODES = """
+CALL db.index.vector.queryNodes('episode_content_embedding', $top_k, $embedding)
+YIELD node, score
+WHERE node.group_id = $group_id
+  AND node.deleted_at IS NULL
+RETURN node.uuid AS uuid, node.content AS content, node.source AS source,
+       toString(node.valid_at) AS valid_at, score
+"""
+
 FULLTEXT_SEARCH_FACTS = """
 CALL db.index.fulltext.queryRelationships('fact_fulltext', $query, {limit: $top_k})
 YIELD relationship, score
@@ -254,6 +263,30 @@ RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_n
        toString(r.valid_at) AS valid_at
 LIMIT $limit
 """
+
+
+def bfs_facts_query(max_depth: int = 2) -> str:
+    """Generate BFS query with variable path depth.
+
+    Neo4j Cypher does not support parameterized variable-length paths,
+    so we generate the query string with the depth baked in.
+    """
+    depth = max(1, min(max_depth, 5))
+    return f"""
+MATCH (seed:Entity {{uuid: $entity_uuid}})-[:RELATES_TO*1..{depth}]-(related:Entity)
+WHERE related.group_id = $group_id
+WITH DISTINCT related
+MATCH (related)-[r:RELATES_TO]-(other:Entity)
+WHERE r.group_id = $group_id
+  AND r.deleted_at IS NULL
+  AND (r.invalid_at IS NULL OR r.invalid_at > datetime($as_of_time))
+  AND (r.expired_at IS NULL OR r.expired_at > datetime($as_of_time))
+WITH r, startNode(r) AS s, endNode(r) AS t
+RETURN r.uuid AS uuid, r.fact AS fact, s.name AS source_name, t.name AS target_name,
+       toString(r.valid_at) AS valid_at
+LIMIT $limit
+"""
+
 
 # ── Community ──────────
 

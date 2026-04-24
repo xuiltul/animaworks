@@ -190,6 +190,17 @@ class Neo4jGraphBackend(MemoryBackend):
                 },
             )
 
+            # Generate episode embedding for vector search
+            ep_embeddings = await self._embed_texts([text[:2000]])
+            if ep_embeddings and ep_embeddings[0]:
+                try:
+                    await driver.execute_write(
+                        "MATCH (e:Episode {uuid: $uuid}) SET e.content_embedding = $embedding",
+                        {"uuid": episode_uuid, "embedding": ep_embeddings[0]},
+                    )
+                except Exception:
+                    logger.debug("Episode embedding update failed", exc_info=True)
+
             try:
                 extractor = self._get_extractor()
                 entities = await extractor.extract_entities(text)
