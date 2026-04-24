@@ -232,6 +232,54 @@ def _parse_section(name: str, lines: list[str]) -> CronTask:
     )
 
 
+def _posix_range_to_iso_values(start: int, end: int, step: int = 1) -> list[int]:
+    """Expand a POSIX DOW range to a list of ISO APScheduler values.
+
+    POSIX values in [start, end] (inclusive) are sampled by *step* and each
+    converted via ``(posix - 1) % 7`` to the ISO numbering used by APScheduler.
+
+    Args:
+        start: First POSIX day value (0/7=Sun, 1=Mon, …, 6=Sat).
+        end:   Last POSIX day value (inclusive).
+        step:  Step size (default 1).
+
+    Returns:
+        Ordered list of ISO day values in the same order as the POSIX range.
+    """
+    return [(x - 1) % 7 for x in range(start, end + 1, step)]
+
+
+def _iso_values_to_parts(values: list[int]) -> list[str]:
+    """Compress a list of consecutive ISO DOW values into range-notation parts.
+
+    Runs of consecutive integers (diff == 1) are collapsed to ``"a-b"``;
+    isolated values are emitted as plain strings.
+
+    Args:
+        values: Ordered list of ISO day integers.
+
+    Returns:
+        List of string parts ready to be joined with commas.
+    """
+    if not values:
+        return []
+
+    parts: list[str] = []
+    group_start = values[0]
+    prev = values[0]
+
+    for v in values[1:]:
+        if v == prev + 1:
+            prev = v
+        else:
+            parts.append(str(group_start) if prev == group_start else f"{group_start}-{prev}")
+            group_start = v
+            prev = v
+
+    parts.append(str(group_start) if prev == group_start else f"{group_start}-{prev}")
+    return parts
+
+
 def _posix_dow_to_apsched(dow: str) -> str:
     """Convert POSIX cron day_of_week field to APScheduler CronTrigger format.
 
@@ -239,13 +287,18 @@ def _posix_dow_to_apsched(dow: str) -> str:
     APScheduler CronTrigger uses ISO 8601: 0=Monday, 1=Tuesday, ..., 6=Sunday.
     Conversion formula: apscheduler_value = (posix_value - 1) % 7
 
+    Ranges that cross Sunday (POSIX 0) are expanded to individual ISO values
+    and re-compressed with range notation so that APScheduler never receives an
+    invalid ``start > end`` range (e.g. POSIX ``"0-4"`` → ISO ``"6,0-3"``).
+
     Handles:
     - Wildcard: ``*`` → ``*`` (no change)
     - Single values: ``1`` → ``0``, ``4`` → ``3``
     - Comma-separated: ``1,4`` → ``0,3``
-    - Ranges: ``1-5`` → ``0-4``
+    - Ranges (non-wrapping): ``1-5`` → ``0-4``
+    - Ranges (Sunday-wrapping): ``0-4`` → ``6,0-3``
     - Step with wildcard base: ``*/2`` → ``*/2`` (no day conversion)
-    - Step with range base: ``1-5/2`` → ``0-4/2``
+    - Step with range base: ``1-5/2`` → ``0-4/2`` (wrapping case: expanded)
 
     Args:
         dow: The day_of_week field string from a POSIX cron expression.
@@ -264,16 +317,21 @@ def _posix_dow_to_apsched(dow: str) -> str:
                 result_parts.append(part)  # */n — no day index conversion needed
             elif "-" in base:
                 start, end = base.split("-", 1)
-                new_start = str((int(start) - 1) % 7)
-                new_end = str((int(end) - 1) % 7)
-                result_parts.append(f"{new_start}-{new_end}/{step}")
+                iso_values = _posix_range_to_iso_values(int(start), int(end), int(step))
+                result_parts.extend(_iso_values_to_parts(iso_values))
             else:
                 result_parts.append(f"{(int(base) - 1) % 7}/{step}")
         elif "-" in part:
             start, end = part.split("-", 1)
-            new_start = str((int(start) - 1) % 7)
-            new_end = str((int(end) - 1) % 7)
-            result_parts.append(f"{new_start}-{new_end}")
+            iso_values = _posix_range_to_iso_values(int(start), int(end))
+            new_start_int = (int(start) - 1) % 7
+            new_end_int = (int(end) - 1) % 7
+            if new_start_int <= new_end_int:
+                # No wrap-around: keep compact range notation
+                result_parts.append(f"{new_start_int}-{new_end_int}")
+            else:
+                # Wrap-around (e.g. 0-4 → 6,0-3): expand and re-compress
+                result_parts.extend(_iso_values_to_parts(iso_values))
         else:
             result_parts.append(str((int(part) - 1) % 7))
 
