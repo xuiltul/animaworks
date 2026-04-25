@@ -116,8 +116,8 @@ class MemoryMigrator:
 
         try:
             await backend.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("backend.close() failed (ignored): %s", e)
 
         return stats
 
