@@ -513,3 +513,13 @@ Heartbeat/cron query text is built from recent `[REFLECTION]` blocks in `activit
 
 - **Cause**: Wrong Anima name, or that Anima has not been created
 - **Fix**: Confirm with your supervisor. Org structure: `reference/organization/structure.md`
+
+### SEGV After venv Rebuild
+
+- **Cause**: When chromadb, torch, or sentence-transformers receive a major version bump, existing vectordb (HNSW segments) may become incompatible, causing SEGV on read. ChromaDB 1.5.x Rust bindings crash with SEGV instead of raising a Python exception on corrupt indexes (chromadb #6852, #6949, #6979)
+- **Fix**: Always rebuild vectordb after rebuilding the venv
+  1. Stop the server
+  2. Delete `~/.animaworks/vectordb/` and each `~/.animaworks/animas/*/vectordb/` (back up first if desired)
+  3. Delete `~/.animaworks/index_meta.json`
+  4. Start the server (auto re-indexing runs on startup)
+- **Prevention**: After package updates, check if chromadb, torch, or sentence-transformers versions changed. If so, rebuild vectordb

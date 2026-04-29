@@ -513,3 +513,13 @@ send_message(
 
 - **原因**: Anima名の間違い、またはそのAnimaがまだ作成されていない
 - **対処**: 上司に確認する。組織構造は `reference/organization/structure.md` を参照
+
+### venv再構築後にSEGVが多発する
+
+- **原因**: ChromaDB や PyTorch のメジャーバージョンが上がると、既存の vectordb（HNSW セグメント）と互換性がなくなり、読み取り時に SEGV（Segmentation Fault）が発生する。ChromaDB 1.5.x の Rust バインディングは破損したインデックスに対して Python 例外ではなく SEGV を起こす既知問題がある（chromadb #6852, #6949, #6979）
+- **対処**: venv を再構築したら vectordb も必ず全再構築する
+  1. サーバーを停止する
+  2. `~/.animaworks/vectordb/` と各 `~/.animaworks/animas/*/vectordb/` を削除（またはバックアップ後削除）
+  3. `~/.animaworks/index_meta.json` を削除
+  4. サーバーを起動する（起動時に自動で再インデックスされる）
+- **予防**: パッケージ更新時は chromadb・torch・sentence-transformers のバージョン変更を確認し、変更があれば vectordb を再構築する
