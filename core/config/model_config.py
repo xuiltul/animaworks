@@ -171,6 +171,7 @@ def update_status_model(
     credential: str | None = None,
     background_model: str | None | object = _SENTINEL,
     background_credential: str | None | object = _SENTINEL,
+    memory_backend: str | None | object = _SENTINEL,
 ) -> None:
     """Update model/credential in an anima's status.json (atomic write).
 
@@ -195,6 +196,11 @@ def update_status_model(
             data["background_credential"] = background_credential
         else:
             data.pop("background_credential", None)
+    if memory_backend is not _SENTINEL:
+        if memory_backend:
+            data["memory_backend"] = memory_backend
+        else:
+            data.pop("memory_backend", None)
     tmp = status_path.with_suffix(".tmp")
     tmp.write_text(
         json.dumps(data, indent=2, ensure_ascii=False) + "\n",

@@ -51,3 +51,32 @@ def get_backend(
         return Neo4jGraphBackend(anima_dir, **kwargs)
 
     raise ValueError(f"Unknown memory backend: {backend_type}")
+
+
+def resolve_backend_type(anima_dir: Path) -> str:
+    """Resolve memory backend type: per-anima status.json → global config → 'legacy'.
+
+    Resolution order:
+        1. ``status.json`` field ``memory_backend`` (per-anima override)
+        2. Global ``config.json`` field ``memory.backend``
+        3. Default ``"legacy"``
+    """
+    import json
+
+    status_path = anima_dir / "status.json"
+    if status_path.is_file():
+        try:
+            data = json.loads(status_path.read_text(encoding="utf-8"))
+            per_anima = data.get("memory_backend")
+            if per_anima:
+                return per_anima
+        except Exception:
+            logger.debug("Failed to read memory_backend from status.json", exc_info=True)
+
+    try:
+        from core.config.models import load_config
+
+        cfg = load_config()
+        return getattr(getattr(cfg, "memory", None), "backend", "legacy")
+    except Exception:
+        return "legacy"

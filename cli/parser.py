@@ -439,6 +439,13 @@ def cli_main() -> None:
     p_bg.add_argument("--clear", action="store_true", help="Remove background model override")
     p_bg.set_defaults(func=_lazy_anima_set_background_model)
 
+    # anima set-memory-backend
+    p_mb = anima_sub.add_parser("set-memory-backend", help="Set per-anima memory backend")
+    p_mb.add_argument("anima", nargs="?", default=None, help="Anima name")
+    p_mb.add_argument("backend", nargs="?", default=None, help="Backend type (legacy/neo4j)")
+    p_mb.add_argument("--clear", action="store_true", help="Remove per-anima override (use global)")
+    p_mb.set_defaults(func=_lazy_anima_set_memory_backend)
+
     # anima set-outbound-limit
     p_set_outbound = anima_sub.add_parser(
         "set-outbound-limit",
@@ -848,6 +855,12 @@ def _lazy_anima_set_background_model(args: argparse.Namespace) -> None:
     from cli.commands.anima_mgmt import cmd_anima_set_background_model
 
     cmd_anima_set_background_model(args)
+
+
+def _lazy_anima_set_memory_backend(args: argparse.Namespace) -> None:
+    from cli.commands.anima_mgmt import cmd_anima_set_memory_backend
+
+    cmd_anima_set_memory_backend(args)
 
 
 def _lazy_anima_set_outbound_limit(args: argparse.Namespace) -> None:

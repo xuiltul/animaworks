@@ -754,6 +754,52 @@ def cmd_anima_set_background_model(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_anima_set_memory_backend(args: argparse.Namespace) -> None:
+    """Set an anima's memory backend (updates status.json)."""
+    from core.config.model_config import update_status_model
+    from core.paths import get_data_dir
+
+    try:
+        data_dir = get_data_dir()
+        animas_dir = data_dir / "animas"
+        pid_file = data_dir / "server.pid"
+
+        if args.clear:
+            if not args.anima:
+                print("Error: anima name is required (e.g. animaworks anima set-memory-backend hinata --clear)")
+                sys.exit(1)
+            anima_dir = animas_dir / args.anima
+            if not anima_dir.exists():
+                print(f"Error: Anima '{args.anima}' not found")
+                sys.exit(1)
+            update_status_model(anima_dir, memory_backend="")
+            print(f"Memory backend cleared for '{args.anima}' (will use global config)")
+        else:
+            if not args.anima or not args.backend:
+                print(
+                    "Error: anima name and backend are required (e.g. animaworks anima set-memory-backend hinata neo4j)"
+                )
+                sys.exit(1)
+            if args.backend not in ("legacy", "neo4j"):
+                print(f"Error: backend must be 'legacy' or 'neo4j', got '{args.backend}'")
+                sys.exit(1)
+            anima_dir = animas_dir / args.anima
+            if not anima_dir.exists():
+                print(f"Error: Anima '{args.anima}' not found")
+                sys.exit(1)
+            update_status_model(anima_dir, memory_backend=args.backend)
+            print(f"Memory backend set to '{args.backend}' for '{args.anima}'")
+
+        if pid_file.exists():
+            print("  Server is running. Restart the anima to apply (animaworks anima restart <name>).")
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_anima_set_outbound_limit(args: argparse.Namespace) -> None:
     """Set or clear per-Anima outbound message limits in status.json."""
     from core.i18n import t

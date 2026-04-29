@@ -900,15 +900,15 @@ class MessagingMixin:
         import asyncio
 
         try:
+            from core.memory.backend.registry import resolve_backend_type
+
+            if resolve_backend_type(self.memory.anima_dir) != "neo4j":
+                return
             from core.config.models import load_config
 
             cfg = load_config()
             mem_cfg = getattr(cfg, "memory", None)
-            if not mem_cfg:
-                return
-            if getattr(mem_cfg, "backend", "legacy") != "neo4j":
-                return
-            if not getattr(mem_cfg, "neo4j_realtime_ingest", False):
+            if not mem_cfg or not getattr(mem_cfg, "neo4j_realtime_ingest", False):
                 return
 
             text = f"[{from_person} → {self.name}]\n{response_text}"

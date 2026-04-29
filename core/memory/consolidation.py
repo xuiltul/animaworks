@@ -1103,10 +1103,9 @@ class ConsolidationEngine:
         stats: dict[str, int] = {"episodes": 0, "knowledge": 0, "errors": 0}
 
         try:
-            from core.config.models import load_config
+            from core.memory.backend.registry import resolve_backend_type
 
-            cfg = load_config()
-            backend_type = getattr(getattr(cfg, "memory", None), "backend", "legacy")
+            backend_type = resolve_backend_type(self.anima_dir)
             if backend_type != "neo4j":
                 return stats
         except Exception:
