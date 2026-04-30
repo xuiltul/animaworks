@@ -448,8 +448,10 @@ class Messenger:
             types_filter = ["message_sent", "message_received"]
 
         scan_days = 30
+        scan_limit_multiplier = 4
         if hours is not None and hours > 0:
             scan_days = max(1, (hours // 24) + 1)
+            scan_limit_multiplier = 10
 
         # New source: unified activity log
         try:
@@ -460,7 +462,7 @@ class Messenger:
                 activity = ActivityLogger(anima_dir)
                 recent = activity.recent(
                     days=scan_days,
-                    limit=limit * 4,
+                    limit=limit * scan_limit_multiplier,
                     types=types_filter,
                     involving=peer,
                 )
@@ -500,20 +502,25 @@ class Messenger:
 
         # Apply hours filter
         if hours is not None and hours > 0:
-            from datetime import UTC, datetime, timedelta
+            from datetime import datetime, timedelta
 
-            cutoff = datetime.now(tz=UTC) - timedelta(hours=hours)
+            from core.time_utils import now_local
+
+            cutoff = now_local() - timedelta(hours=hours)
             filtered: list[dict] = []
             for e in entries:
                 try:
                     ts_str = e.get("ts", "")
                     ts_dt = datetime.fromisoformat(ts_str)
                     if ts_dt.tzinfo is None:
-                        ts_dt = ts_dt.replace(tzinfo=UTC)
+                        from core.time_utils import get_app_timezone
+
+                        ts_dt = ts_dt.replace(tzinfo=get_app_timezone())
                     if ts_dt >= cutoff:
                         filtered.append(e)
                 except (ValueError, TypeError):
-                    filtered.append(e)
+                    logger.debug("Skipping entry with unparseable timestamp: %s", e.get("ts"))
+                    continue
             entries = filtered
 
         # Apply keyword filter

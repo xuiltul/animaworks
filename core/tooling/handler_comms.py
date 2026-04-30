@@ -199,20 +199,33 @@ class CommsToolsMixin:
         """Build behavioral feedback showing recent send history to the same recipient.
 
         Returns a short summary of how many messages were sent to *to* in the
-        last 24 hours plus the most recent 3 summaries.  Returns empty string
-        on any failure or when count is 0.
+        last 24 hours (rolling window) plus the most recent 3 summaries.
+        Returns empty string on any failure or when count is 0.
         """
         try:
+            from datetime import datetime, timedelta
+
             from core.memory.activity import ActivityLogger
+            from core.time_utils import ensure_aware, now_local
 
             activity = ActivityLogger(self._anima_dir)
             entries = activity.recent(
-                days=1,
-                limit=200,
+                days=2,
+                limit=500,
                 types=["message_sent"],
                 involving=to,
             )
-            sent_entries = [e for e in entries if (getattr(e, "to_person", None) or "") == to]
+            cutoff = now_local() - timedelta(hours=24)
+            sent_entries = []
+            for e in entries:
+                if (getattr(e, "to_person", None) or "") != to:
+                    continue
+                try:
+                    ts_dt = ensure_aware(datetime.fromisoformat(e.ts))
+                    if ts_dt >= cutoff:
+                        sent_entries.append(e)
+                except (ValueError, TypeError):
+                    continue
             count = len(sent_entries)
             if count == 0:
                 return ""
@@ -227,6 +240,7 @@ class CommsToolsMixin:
                 lines.append(f"  {ts_short} {preview}")
             return "\n".join(lines)
         except Exception:
+            logger.debug("Failed to build send feedback for %s", to, exc_info=True)
             return ""
 
     # ── Channel tool handlers ────────────────────────────────
