@@ -230,7 +230,7 @@ class TestPrimingEngineChannelG:
 
         engine = PrimingEngine(tmp_path)
 
-        with patch("core.config.models.load_config", side_effect=RuntimeError("no config")):
+        with patch("core.memory.backend.registry.resolve_backend_type", side_effect=RuntimeError("no config")):
             result1 = engine._get_memory_backend()
             result2 = engine._get_memory_backend()
 
