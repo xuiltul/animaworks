@@ -183,12 +183,28 @@ class EntityResolver:
     # ── Step 2: MinHash filter ─────────────────────────────
 
     def _filter_by_jaccard(self, entity: ExtractedEntity, candidates: list[dict]) -> list[dict]:
-        """Filter candidates by MinHash Jaccard similarity."""
+        """Filter candidates by MinHash Jaccard similarity.
+
+        High-confidence vector matches (score >= 0.70) bypass the Jaccard
+        threshold so that cross-script duplicates (e.g. さくら vs sakura)
+        are not lost before the LLM judgment step.
+        """
         from core.memory.extraction.minhash import text_similarity
 
+        _VECTOR_BYPASS_SCORE = 0.70
+
         entity_text = f"{entity.name} {entity.summary}"
+        entity_name_lower = entity.name.lower().strip()
         filtered = []
         for c in candidates:
+            vector_score = float(c.get("score", 0.0))
+            cand_name_lower = c.get("name", "").lower().strip()
+
+            if cand_name_lower == entity_name_lower or vector_score >= _VECTOR_BYPASS_SCORE:
+                c["jaccard_score"] = 1.0 if cand_name_lower == entity_name_lower else vector_score
+                filtered.append(c)
+                continue
+
             cand_text = f"{c.get('name', '')} {c.get('summary', '')}"
             sim = text_similarity(entity_text, cand_text)
             if sim >= self._jaccard_threshold:
