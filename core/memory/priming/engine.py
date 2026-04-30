@@ -154,17 +154,18 @@ class PrimingEngine:
         return self._get_or_create_retriever()
 
     def _get_memory_backend(self):
-        """Return lazy-initialized MemoryBackend from config."""
+        """Return lazy-initialized MemoryBackend from config.
+
+        Resolution: per-anima status.json → global config → 'legacy'.
+        """
         if self._memory_backend is not None:
             return self._memory_backend
         if self._memory_backend_init_failed:
             return None
         try:
-            from core.config.models import load_config
-            from core.memory.backend.registry import get_backend
+            from core.memory.backend.registry import get_backend, resolve_backend_type
 
-            cfg = load_config()
-            backend_type = getattr(getattr(cfg, "memory", None), "backend", "legacy")
+            backend_type = resolve_backend_type(self.anima_dir)
             self._memory_backend = get_backend(backend_type, self.anima_dir)
             return self._memory_backend
         except Exception:

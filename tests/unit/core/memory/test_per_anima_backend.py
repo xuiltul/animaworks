@@ -135,8 +135,6 @@ class TestMemoryManagerBackendInit:
             mock_get.assert_called_once_with(
                 "neo4j",
                 tmp_path,
-                common_knowledge_dir=mm.common_knowledge_dir,
-                common_skills_dir=mm.common_skills_dir,
             )
 
 

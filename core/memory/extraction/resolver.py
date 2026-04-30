@@ -48,6 +48,7 @@ class EntityResolver:
         vector_top_k: int = 10,
         vector_min_score: float = 0.5,
         jaccard_threshold: float = 0.4,
+        llm_extra: dict[str, object] | None = None,
     ) -> None:
         self._driver = driver
         self._group_id = group_id
@@ -56,6 +57,7 @@ class EntityResolver:
         self._vector_top_k = vector_top_k
         self._vector_min_score = vector_min_score
         self._jaccard_threshold = jaccard_threshold
+        self._llm_extra = llm_extra or {}
         self._session_cache: dict[str, ResolvedEntity] = {}
 
     def clear_cache(self) -> None:
@@ -222,6 +224,8 @@ class EntityResolver:
             candidates_json=candidates_json,
         )
 
+        extra = dict(self._llm_extra)
+        effective_timeout = extra.pop("timeout", 30)
         response = await litellm.acompletion(
             model=self._model,
             messages=[
@@ -230,7 +234,8 @@ class EntityResolver:
             ],
             temperature=0.0,
             max_tokens=512,
-            timeout=30,
+            timeout=effective_timeout,
+            **extra,
         )
 
         text = response.choices[0].message.content or ""

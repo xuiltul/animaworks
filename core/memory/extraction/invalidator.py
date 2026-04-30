@@ -32,11 +32,13 @@ class EdgeInvalidator:
         *,
         model: str = "claude-sonnet-4-6",
         locale: str = "ja",
+        llm_extra: dict[str, object] | None = None,
     ) -> None:
         self._driver = driver
         self._group_id = group_id
         self._model = model
         self._locale = locale
+        self._llm_extra = llm_extra or {}
 
     async def find_and_invalidate(
         self,
@@ -161,6 +163,8 @@ class EdgeInvalidator:
             existing_facts_json=candidates_json,
         )
 
+        extra = dict(self._llm_extra)
+        effective_timeout = extra.pop("timeout", 30)
         response = await litellm.acompletion(
             model=self._model,
             messages=[
@@ -169,7 +173,8 @@ class EdgeInvalidator:
             ],
             temperature=0.0,
             max_tokens=512,
-            timeout=30,
+            timeout=effective_timeout,
+            **extra,
         )
 
         text = response.choices[0].message.content or ""

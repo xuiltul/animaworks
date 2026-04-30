@@ -69,7 +69,7 @@ class TestNeo4jGraphBackendStubs:
     async def test_ingest_text_needs_driver(self, tmp_path):
         from core.memory.backend.neo4j_graph import Neo4jGraphBackend
 
-        backend = Neo4jGraphBackend(tmp_path)
+        backend = Neo4jGraphBackend(tmp_path, uri="bolt://localhost:19999")
         with pytest.raises(Exception):
             await backend.ingest_text("hello", "test")
 

@@ -354,13 +354,14 @@ class Neo4jGraphBackend(MemoryBackend):
         if not hasattr(self, "_resolver") or self._resolver is None:
             from core.memory.extraction.resolver import EntityResolver
 
-            model = self._resolve_background_model()
+            model, llm_extra = self._resolve_extraction_config()
             locale = self._resolve_locale()
             self._resolver = EntityResolver(
                 self._driver,
                 self._group_id,
                 model=model,
                 locale=locale,
+                llm_extra=llm_extra,
             )
         return self._resolver
 
@@ -374,36 +375,69 @@ class Neo4jGraphBackend(MemoryBackend):
         if not hasattr(self, "_invalidator") or self._invalidator is None:
             from core.memory.extraction.invalidator import EdgeInvalidator
 
-            model = self._resolve_background_model()
+            model, llm_extra = self._resolve_extraction_config()
             locale = self._resolve_locale()
             self._invalidator = EdgeInvalidator(
                 self._driver,
                 self._group_id,
                 model=model,
                 locale=locale,
+                llm_extra=llm_extra,
             )
         return self._invalidator
 
     def _get_extractor(self):  # noqa: ANN202 – lazy import avoids circular
         """Create or return cached FactExtractor."""
         if self._extractor is None:
-            model = self._resolve_background_model()
+            model, llm_extra = self._resolve_extraction_config()
             locale = self._resolve_locale()
             from core.memory.extraction.extractor import FactExtractor
 
-            self._extractor = FactExtractor(model=model, locale=locale)
+            self._extractor = FactExtractor(model=model, locale=locale, llm_extra=llm_extra)
         return self._extractor
 
-    @staticmethod
-    def _resolve_background_model() -> str:
-        """Resolve the background model for extraction."""
+    def _resolve_extraction_config(self) -> tuple[str, dict[str, str]]:
+        """Resolve the model and LLM kwargs for extraction.
+
+        Returns:
+            ``(model_name, llm_extra)`` where *llm_extra* may contain
+            ``api_base`` and ``api_key`` for custom endpoints (e.g. vLLM).
+
+        Resolution order for model:
+            1. Per-anima status.json ``extraction_model``
+            2. Per-anima status.json ``background_model``
+            3. Global config ``anima_defaults.background_model``
+            4. Global config ``anima_defaults.model``
+            5. Fallback: ``claude-sonnet-4-6``
+        """
+        import json
+
+        llm_extra: dict[str, object] = {}
+        try:
+            status_path = self._anima_dir / "status.json"
+            if status_path.is_file():
+                data = json.loads(status_path.read_text(encoding="utf-8"))
+                if data.get("extraction_api_base"):
+                    llm_extra["api_base"] = data["extraction_api_base"]
+                if data.get("extraction_api_key"):
+                    llm_extra["api_key"] = data["extraction_api_key"]
+                if data.get("extraction_extra_body"):
+                    llm_extra["extra_body"] = data["extraction_extra_body"]
+                if data.get("extraction_timeout"):
+                    llm_extra["timeout"] = data["extraction_timeout"]
+                if data.get("extraction_model"):
+                    return data["extraction_model"], llm_extra
+                if data.get("background_model"):
+                    return data["background_model"], llm_extra
+        except Exception:
+            pass
         try:
             from core.config.models import load_config
 
             cfg = load_config()
-            return cfg.anima_defaults.background_model or cfg.anima_defaults.model
+            return (cfg.anima_defaults.background_model or cfg.anima_defaults.model), llm_extra
         except Exception:
-            return "claude-sonnet-4-6"
+            return "claude-sonnet-4-6", llm_extra
 
     @staticmethod
     def _resolve_locale() -> str:

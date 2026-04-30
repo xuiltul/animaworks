@@ -18,7 +18,7 @@ RETURN labels(n)[0] AS label, count(n) AS cnt
 
 COUNT_EDGES_BY_GROUP = """
 MATCH ()-[r]->()
-WHERE r.group_id = $group_id OR (EXISTS(r.group_id) = false)
+WHERE r.group_id = $group_id OR r.group_id IS NULL
 RETURN type(r) AS rel_type, count(r) AS cnt
 """
 
