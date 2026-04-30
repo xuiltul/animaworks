@@ -64,6 +64,22 @@ def _write_shared_hash(meta_path: Path, key: str, value: str) -> None:
     )
 
 
+def _shared_collection_exists(vector_store, collection_name: str) -> bool:
+    """Return True if *collection_name* exists in *vector_store*.
+
+    Used to verify shared collections (``shared_common_knowledge`` /
+    ``shared_common_skills``) before short-circuiting on hash match.
+    Returns ``True`` on listing failure (be conservative — preserve
+    legacy behavior on transient errors rather than triggering full
+    re-indexing across all animas).
+    """
+    try:
+        return collection_name in vector_store.list_collections()
+    except Exception as exc:
+        logger.debug("Failed to list collections for existence check: %s", exc)
+        return True
+
+
 # ── RAGMemorySearch ───────────────────────────────────────
 
 
@@ -164,7 +180,10 @@ class RAGMemorySearch:
     def _ensure_shared_knowledge_indexed(self, vector_store) -> None:
         """Index common_knowledge/ into ``shared_common_knowledge`` collection.
 
-        Skips re-indexing when the directory hash matches the stored value.
+        Skips re-indexing when the directory hash matches the stored value
+        AND the target collection still exists in the vector store.  When
+        the collection is missing (e.g. vectordb was wiped), forces a full
+        re-index so it gets recreated.
         """
         ck_dir = self._common_knowledge_dir
         if not ck_dir.is_dir() or not any(ck_dir.rglob("*.md")):
@@ -174,9 +193,16 @@ class RAGMemorySearch:
         meta_path = self._anima_dir / "index_meta.json"
         current_hash = _compute_dir_hash(ck_dir, "*.md")
         stored_hash = _read_shared_hash(meta_path, "shared_common_knowledge_hash")
+        force = False
         if current_hash == stored_hash:
-            logger.debug("common_knowledge unchanged (hash match), skipping")
-            return
+            # Verify the shared collection still exists in this anima's
+            # vector store; if missing, fall through with force=True so
+            # the collection gets recreated.
+            if _shared_collection_exists(vector_store, "shared_common_knowledge"):
+                logger.debug("common_knowledge unchanged (hash match), skipping")
+                return
+            logger.info("shared_common_knowledge collection missing despite tracked hash, forcing re-index")
+            force = True
 
         try:
             from core.memory.rag import MemoryIndexer
@@ -190,7 +216,7 @@ class RAGMemorySearch:
                 collection_prefix="shared",
                 embedding_model=self._indexer.embedding_model if self._indexer else None,
             )
-            indexed = shared_indexer.index_directory(ck_dir, "common_knowledge")
+            indexed = shared_indexer.index_directory(ck_dir, "common_knowledge", force=force)
             _write_shared_hash(meta_path, "shared_common_knowledge_hash", current_hash)
             if indexed > 0:
                 logger.info(
@@ -203,7 +229,10 @@ class RAGMemorySearch:
     def _ensure_shared_skills_indexed(self, vector_store) -> None:
         """Index common_skills/ into ``shared_common_skills`` collection.
 
-        Skips re-indexing when the directory hash matches the stored value.
+        Skips re-indexing when the directory hash matches the stored value
+        AND the target collection still exists in the vector store.  When
+        the collection is missing (e.g. vectordb was wiped), forces a full
+        re-index so it gets recreated.
         """
         cs_dir = self._common_skills_dir
         if not cs_dir.is_dir() or not any(cs_dir.rglob("SKILL.md")):
@@ -213,9 +242,13 @@ class RAGMemorySearch:
         meta_path = self._anima_dir / "index_meta.json"
         current_hash = _compute_dir_hash(cs_dir, "SKILL.md")
         stored_hash = _read_shared_hash(meta_path, "shared_common_skills_hash")
+        force = False
         if current_hash == stored_hash:
-            logger.debug("common_skills unchanged (hash match), skipping")
-            return
+            if _shared_collection_exists(vector_store, "shared_common_skills"):
+                logger.debug("common_skills unchanged (hash match), skipping")
+                return
+            logger.info("shared_common_skills collection missing despite tracked hash, forcing re-index")
+            force = True
 
         try:
             from core.memory.rag import MemoryIndexer
@@ -229,7 +262,7 @@ class RAGMemorySearch:
                 collection_prefix="shared",
                 embedding_model=self._indexer.embedding_model if self._indexer else None,
             )
-            indexed = shared_indexer.index_directory(cs_dir, "common_skills")
+            indexed = shared_indexer.index_directory(cs_dir, "common_skills", force=force)
             _write_shared_hash(meta_path, "shared_common_skills_hash", current_hash)
             if indexed > 0:
                 logger.info(

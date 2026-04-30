@@ -226,8 +226,24 @@ class SystemCronsMixin:
                 for label, src_dir, glob, meta_key in shared_sources:
                     current_hash = _compute_dir_hash(src_dir, glob)
                     stored_hash = _read_shared_hash(meta_path, meta_key)
+                    shared_collection = f"shared_{label}"
+                    force = False
                     if current_hash == stored_hash:
-                        continue
+                        # Verify collection still exists in this anima's
+                        # vectordb before short-circuiting (recovery from
+                        # wiped/recreated vectordb).
+                        try:
+                            existing = vector_store.list_collections()
+                        except Exception:
+                            existing = None
+                        if existing is None or shared_collection in existing:
+                            continue
+                        logger.info(
+                            "%s: collection '%s' missing despite tracked hash, forcing re-index",
+                            anima_name,
+                            shared_collection,
+                        )
+                        force = True
                     shared_indexer = MemoryIndexer(
                         vector_store,
                         anima_name="shared",
@@ -239,6 +255,7 @@ class SystemCronsMixin:
                         shared_indexer.index_directory,
                         src_dir,
                         label,
+                        force,
                     )
                     total_chunks += chunks
                     _write_shared_hash(meta_path, meta_key, current_hash)

@@ -105,6 +105,47 @@ class MemoryIndexer:
         self.meta_path = anima_dir / INDEX_META_FILE
         self.index_meta = self._load_index_meta()
 
+        # Cache of collection names known to exist in the vector store.
+        # Populated lazily by ``_collection_exists()`` so that hash-based
+        # skip optimization can verify the collection still exists before
+        # short-circuiting (recovery from a wiped/recreated vectordb).
+        self._known_collections: set[str] | None = None
+
+    def _collection_exists(self, name: str) -> bool:
+        """Return True if *name* is present in the vector store.
+
+        Lazily populates ``self._known_collections`` from
+        ``vector_store.list_collections()`` on first access.  Subsequent
+        calls reuse the cache; callers add to the cache after successful
+        ``create_collection()`` / ``upsert()`` to avoid repeated listing.
+
+        Returns ``True`` on listing failure to preserve legacy behavior
+        (skip when uncertain).
+        """
+        if self._known_collections is None:
+            try:
+                self._known_collections = set(self.vector_store.list_collections())
+            except Exception as exc:
+                logger.debug("Failed to list collections for cache: %s", exc)
+                # Be conservative: assume it exists rather than triggering
+                # spurious re-indexing of every file on a transient error.
+                return True
+        return name in self._known_collections
+
+    def _mark_collection_known(self, name: str) -> None:
+        """Record that *name* is present in the vector store.
+
+        Called after successful ``create_collection()`` / ``upsert()`` so
+        that subsequent ``_collection_exists()`` checks do not need to
+        re-list collections.
+        """
+        if self._known_collections is None:
+            try:
+                self._known_collections = set(self.vector_store.list_collections())
+            except Exception:
+                self._known_collections = set()
+        self._known_collections.add(name)
+
     def _init_embedding_model(self) -> None:
         """Initialize sentence-transformers model via process-level singleton."""
         from core.memory.rag.singleton import get_embedding_model
@@ -201,11 +242,23 @@ class MemoryIndexer:
         # Check if file has changed
         file_hash = self._compute_file_hash(file_path)
         file_key = str(file_path.relative_to(self.anima_dir))
+        collection_name = f"{self.collection_prefix}_{memory_type}"
 
         if not force and file_key in self.index_meta:
             if self.index_meta[file_key].get("hash") == file_hash:
-                logger.debug("File unchanged, skipping: %s", file_path)
-                return 0
+                # Verify the collection still exists in the vector store
+                # before short-circuiting.  If the vectordb was wiped or
+                # recreated since the last index, the meta hash would
+                # otherwise cause us to silently skip and the collection
+                # would never be re-created.
+                if self._collection_exists(collection_name):
+                    logger.debug("File unchanged, skipping: %s", file_path)
+                    return 0
+                logger.info(
+                    "Collection '%s' missing despite tracked hash, forcing re-index of %s",
+                    collection_name,
+                    file_path,
+                )
 
         logger.info("Indexing file: %s (type=%s)", file_path, memory_type)
 
@@ -239,11 +292,12 @@ class MemoryIndexer:
             for i, chunk in enumerate(chunks)
         ]
 
-        collection_name = f"{self.collection_prefix}_{memory_type}"
         self.vector_store.create_collection(collection_name)
         if not self.vector_store.upsert(collection_name, documents):
             logger.warning("Upsert failed for %s, skipping index_meta update", file_path)
             return 0
+
+        self._mark_collection_known(collection_name)
 
         self.index_meta[file_key] = {
             "hash": file_hash,
@@ -334,10 +388,18 @@ class MemoryIndexer:
         # Check if content has changed via hash
         content_hash = hashlib.sha256(summary.encode("utf-8")).hexdigest()
         meta_key = "conversation_summary"
+        collection_name = f"{self.collection_prefix}_conversation_summary"
         if not force and meta_key in self.index_meta:
             if self.index_meta[meta_key].get("hash") == content_hash:
-                logger.debug("compressed_summary unchanged, skipping")
-                return 0
+                # Verify the collection still exists; force re-index if
+                # the vectordb was wiped/recreated.
+                if self._collection_exists(collection_name):
+                    logger.debug("compressed_summary unchanged, skipping")
+                    return 0
+                logger.info(
+                    "Collection '%s' missing despite tracked hash, forcing re-index of conversation_summary",
+                    collection_name,
+                )
 
         logger.info("Indexing compressed_summary for %s", anima_name)
 
@@ -355,7 +417,6 @@ class MemoryIndexer:
         # Build documents and upsert
         from core.memory.rag.store import Document
 
-        collection_name = f"{self.collection_prefix}_conversation_summary"
         self.vector_store.create_collection(collection_name)
 
         documents = [
@@ -370,6 +431,8 @@ class MemoryIndexer:
         if not self.vector_store.upsert(collection_name, documents):
             logger.warning("Upsert failed for conversation_summary, skipping index_meta update")
             return 0
+
+        self._mark_collection_known(collection_name)
 
         self.index_meta[meta_key] = {
             "hash": content_hash,

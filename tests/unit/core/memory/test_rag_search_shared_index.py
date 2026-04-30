@@ -19,7 +19,6 @@ from core.memory.rag_search import (
     _write_shared_hash,
 )
 
-
 # ── _compute_dir_hash ─────────────────────────────────────
 
 
@@ -178,7 +177,9 @@ class TestEnsureSharedKnowledgeChangeDetection:
         assert not meta.exists()
 
     def test_indexes_on_first_call(
-        self, rag: RAGMemorySearch, common_knowledge_dir: Path,
+        self,
+        rag: RAGMemorySearch,
+        common_knowledge_dir: Path,
     ) -> None:
         """First call with files → indexes and writes hash."""
         (common_knowledge_dir / "guide.md").write_text("# Guide")
@@ -198,11 +199,16 @@ class TestEnsureSharedKnowledgeChangeDetection:
         assert stored is not None
 
     def test_skips_on_second_call_unchanged(
-        self, rag: RAGMemorySearch, common_knowledge_dir: Path,
+        self,
+        rag: RAGMemorySearch,
+        common_knowledge_dir: Path,
     ) -> None:
-        """Second call with same files → skips (hash match)."""
+        """Second call with same files → skips (hash match + collection exists)."""
         (common_knowledge_dir / "guide.md").write_text("# Guide")
         mock_vs = MagicMock()
+        # Simulate the shared collection existing in the vector store
+        # so the existence check after hash match also passes.
+        mock_vs.list_collections.return_value = ["shared_common_knowledge"]
         rag._indexer = MagicMock()
 
         with patch("core.memory.rag.MemoryIndexer") as MockIdx:
@@ -218,7 +224,9 @@ class TestEnsureSharedKnowledgeChangeDetection:
             MockIdx.assert_not_called()
 
     def test_re_indexes_after_file_change(
-        self, rag: RAGMemorySearch, common_knowledge_dir: Path,
+        self,
+        rag: RAGMemorySearch,
+        common_knowledge_dir: Path,
     ) -> None:
         """After a file is modified, re-indexing occurs."""
         f = common_knowledge_dir / "guide.md"
@@ -241,6 +249,50 @@ class TestEnsureSharedKnowledgeChangeDetection:
             rag._ensure_shared_knowledge_indexed(mock_vs)
             MockIdx.assert_called_once()
 
+    def test_re_indexes_when_collection_missing(
+        self,
+        rag: RAGMemorySearch,
+        common_knowledge_dir: Path,
+    ) -> None:
+        """Hash unchanged but collection missing in vectordb → force re-index.
+
+        Recovery scenario: vectordb was wiped/recreated since the last
+        index, leaving the per-anima index_meta.json hash stale.  The
+        framework must detect the missing collection and force re-index
+        with ``force=True`` so it gets recreated.
+        """
+        (common_knowledge_dir / "guide.md").write_text("# Guide")
+        mock_vs = MagicMock()
+        # First call: no collection yet, should index normally
+        mock_vs.list_collections.return_value = []
+        rag._indexer = MagicMock()
+
+        with patch("core.memory.rag.MemoryIndexer") as MockIdx:
+            mock_shared = MagicMock()
+            mock_shared.index_directory.return_value = 5
+            MockIdx.return_value = mock_shared
+
+            rag._ensure_shared_knowledge_indexed(mock_vs)
+            assert MockIdx.call_count == 1
+            # Verify hash was stored
+            meta_path = rag._anima_dir / "index_meta.json"
+            stored = _read_shared_hash(meta_path, "shared_common_knowledge_hash")
+            assert stored is not None
+
+            MockIdx.reset_mock()
+            mock_shared.reset_mock()
+
+            # Second call: hash matches but collection STILL missing
+            # (simulating a vectordb wipe between calls).
+            # → must force re-index so collection is recreated.
+            rag._ensure_shared_knowledge_indexed(mock_vs)
+            assert MockIdx.call_count == 1
+            mock_shared.index_directory.assert_called_once_with(
+                common_knowledge_dir,
+                "common_knowledge",
+                force=True,
+            )
+
 
 class TestEnsureSharedSkillsChangeDetection:
     """Verify that _ensure_shared_skills_indexed uses hash-based skip."""
@@ -254,7 +306,9 @@ class TestEnsureSharedSkillsChangeDetection:
         assert not meta.exists()
 
     def test_indexes_on_first_call(
-        self, rag: RAGMemorySearch, common_skills_dir: Path,
+        self,
+        rag: RAGMemorySearch,
+        common_skills_dir: Path,
     ) -> None:
         """First call with SKILL.md files → indexes and writes hash."""
         skill_dir = common_skills_dir / "deploy"
@@ -275,13 +329,16 @@ class TestEnsureSharedSkillsChangeDetection:
         assert stored is not None
 
     def test_skips_on_second_call_unchanged(
-        self, rag: RAGMemorySearch, common_skills_dir: Path,
+        self,
+        rag: RAGMemorySearch,
+        common_skills_dir: Path,
     ) -> None:
-        """Second call with same files → skips."""
+        """Second call with same files → skips (hash match + collection exists)."""
         skill_dir = common_skills_dir / "deploy"
         skill_dir.mkdir()
         (skill_dir / "SKILL.md").write_text("# Deploy")
         mock_vs = MagicMock()
+        mock_vs.list_collections.return_value = ["shared_common_skills"]
         rag._indexer = MagicMock()
 
         with patch("core.memory.rag.MemoryIndexer") as MockIdx:
@@ -294,6 +351,38 @@ class TestEnsureSharedSkillsChangeDetection:
 
             rag._ensure_shared_skills_indexed(mock_vs)
             MockIdx.assert_not_called()
+
+    def test_re_indexes_when_collection_missing(
+        self,
+        rag: RAGMemorySearch,
+        common_skills_dir: Path,
+    ) -> None:
+        """Hash unchanged but shared_common_skills missing → force re-index.
+
+        Recovery scenario for skills mirror of the knowledge case.
+        """
+        skill_dir = common_skills_dir / "deploy"
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text("# Deploy")
+        mock_vs = MagicMock()
+        mock_vs.list_collections.return_value = []
+        rag._indexer = MagicMock()
+
+        with patch("core.memory.rag.MemoryIndexer") as MockIdx:
+            mock_shared = MagicMock()
+            mock_shared.index_directory.return_value = 2
+            MockIdx.return_value = mock_shared
+
+            rag._ensure_shared_skills_indexed(mock_vs)
+            MockIdx.reset_mock()
+            mock_shared.reset_mock()
+
+            rag._ensure_shared_skills_indexed(mock_vs)
+            mock_shared.index_directory.assert_called_once_with(
+                common_skills_dir,
+                "common_skills",
+                force=True,
+            )
 
 
 # ── _get_indexer calls _check_shared_collections ──────────
