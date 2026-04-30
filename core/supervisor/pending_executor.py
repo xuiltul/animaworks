@@ -809,8 +809,8 @@ class PendingTaskExecutor:
                         result_summary = (
                             _entry.summary or accumulated_text[:500] or t("pending_executor.task_completed")
                         )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("pending_executor: failed to check task queue for task %s: %s", task_id, e)
 
             if not _queue_done:
                 raise TaskExecError(f"Task {task_id} encountered streaming error: {error_message}")

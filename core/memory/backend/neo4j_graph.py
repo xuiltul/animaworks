@@ -448,8 +448,8 @@ class Neo4jGraphBackend(MemoryBackend):
                     return data["extraction_model"], llm_extra
                 if data.get("background_model"):
                     return data["background_model"], llm_extra
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("neo4j_graph: failed to read status.json for extraction config: %s", e)
         try:
             from core.config.models import load_config
 
