@@ -106,12 +106,15 @@ class FactExtractor:
         self,
         content: str,
         entities: list[ExtractedEntity],
+        *,
+        reference_time: str | None = None,
     ) -> list[ExtractedFact]:
         """Extract facts (relationships) between entities using LLM.
 
         Args:
             content: Original text.
             entities: Previously extracted entities.
+            reference_time: ISO timestamp for temporal grounding; defaults to now.
 
         Returns:
             List of extracted facts. Empty list on failure.
@@ -129,7 +132,7 @@ class FactExtractor:
             content=content,
             entities_json=entities_json,
             edge_types_list=edge_types_list,
-            reference_time=now_iso(),
+            reference_time=reference_time or now_iso(),
         )
 
         try:

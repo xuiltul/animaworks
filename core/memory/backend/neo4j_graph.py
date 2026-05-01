@@ -204,7 +204,8 @@ class Neo4jGraphBackend(MemoryBackend):
             try:
                 extractor = self._get_extractor()
                 entities = await extractor.extract_entities(text)
-                facts = await extractor.extract_facts(text, entities)
+                episode_valid_at = (metadata or {}).get("valid_at")
+                facts = await extractor.extract_facts(text, entities, reference_time=episode_valid_at)
             except Exception:
                 logger.warning("Extraction failed, Episode-only fallback", exc_info=True)
                 return 1

@@ -27,6 +27,32 @@ ANIMA_NAME = "locomo_bench"
 SEARCH_MODES: tuple[str, ...] = ("vector", "vector_graph", "scope_all")
 _SESSION_RE = re.compile(r"^session_(\d+)$")
 
+_ANSWER_SYSTEM = (
+    "You are an expert assistant answering questions about past conversations "
+    "based on the provided context."
+)
+
+_ANSWER_TEMPLATE = """# INSTRUCTIONS:
+1. Carefully analyze all provided memories
+2. Pay special attention to timestamps (event_time) to determine when events occurred
+3. If memories contain contradictory information, prioritize the most recent memory
+4. Always convert relative time references (yesterday, last week, next month) to specific dates using the event_time timestamps
+5. Timestamps represent the actual time the event occurred, not when it was mentioned
+6. When multiple items are asked for, answer with a comma-separated list of short phrases
+7. If the context supports a reasonable inference, provide your best answer — only say "No information available." when the context has absolutely no relevant information
+8. Keep your answer as brief and direct as possible — a short phrase or sentence
+
+Example:
+Memory: (event_time: 2023-05-08T13:56:00) I went to the vet yesterday.
+Question: When did I go to the vet?
+Answer: 7 May 2023
+
+Context:
+{context}
+
+Question: {question}
+Answer:"""
+
 # ── Dependency checks ──────────
 
 
@@ -61,6 +87,29 @@ except ImportError:
     def _bm25_tokenize(text: str) -> list[str]:
         """Simple word token fallback if core not on path."""
         return re.findall(r"[\w]+", text, flags=re.UNICODE)[:2000]
+
+# ── LLM helpers ──────────
+
+
+def _resolve_llm_kwargs(model: str) -> dict[str, Any]:
+    """Resolve api_base and extra kwargs from AnimaWorks credentials."""
+    kwargs: dict[str, Any] = {}
+    if "qwen" in model.lower():
+        kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+    try:
+        cfg_path = Path("~/.animaworks/config.json").expanduser()
+        if cfg_path.is_file():
+            creds = json.loads(cfg_path.read_text(encoding="utf-8")).get("credentials", {})
+            for _name, cred in creds.items():
+                base_url = cred.get("base_url")
+                if base_url and "vllm" in _name.lower():
+                    kwargs["api_base"] = base_url
+                    kwargs["api_key"] = cred.get("api_key") or "dummy"
+                    break
+    except Exception:
+        pass
+    return kwargs
+
 
 # ── load_dataset ──────────
 
@@ -447,9 +496,7 @@ class AnimaWorksLoCoMoAdapter:
         import litellm  # noqa: PLC0415
 
         last: Exception | None = None
-        extra: dict[str, Any] = {}
-        if "qwen" in model.lower():
-            extra["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+        extra: dict[str, Any] = _resolve_llm_kwargs(model)
         for attempt in range(1, 4):
             try:
                 r = litellm.completion(
@@ -499,14 +546,11 @@ class AnimaWorksLoCoMoAdapter:
             if t:
                 parts.append(f"[{i}] {t}")
         ctx_joined = "\n\n".join(parts)
-        user_prompt = (
-            "Based on the following conversation excerpts, answer the question concisely.\n"
-            'If the information is not available in the context, say "No information available."\n\n'
-            f"Context:\n{ctx_joined}\n\n"
-            f"Question: {question}\n\n"
-            "Answer:"
-        )
-        messages = [{"role": "user", "content": user_prompt}]
+        user_content = _ANSWER_TEMPLATE.format(context=ctx_joined, question=question)
+        messages = [
+            {"role": "system", "content": _ANSWER_SYSTEM},
+            {"role": "user", "content": user_content},
+        ]
         return self._complete_sync(messages, model)
 
     def cleanup(self) -> None:

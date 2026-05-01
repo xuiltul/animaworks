@@ -265,6 +265,14 @@ def run_benchmark(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
                     for j, qa in enumerate(qa_list):
                         if not isinstance(qa, dict):
                             continue
+                        # Skip adversarial questions if --exclude-cat5
+                        if getattr(args, "exclude_cat5", False):
+                            try:
+                                cat = int(qa.get("category", 0) or 0)
+                            except (TypeError, ValueError):
+                                cat = 0
+                            if cat == 5:
+                                continue
                         try:
                             question = str(qa.get("question", "") or "")
                             answer = str(qa.get("answer", "") or "")
@@ -395,10 +403,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--top-k",
         type=int,
-        default=5,
+        default=10,
         dest="top_k",
         metavar="K",
-        help="retrieval top-k (default: 5)",
+        help="retrieval top-k (default: 10)",
+    )
+    p.add_argument(
+        "--exclude-cat5",
+        action="store_true",
+        dest="exclude_cat5",
+        help="exclude adversarial (category 5) questions from evaluation",
     )
     p.add_argument(
         "--judge",
