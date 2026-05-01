@@ -861,7 +861,7 @@ class MemoryIndexer:
             except (ValueError, TypeError):
                 pass
         if "valid_at" not in metadata:
-            metadata["valid_at"] = float(stat.st_ctime)
+            metadata["valid_at"] = float(stat.st_mtime)
 
         if fm.get("summary"):
             metadata["summary"] = str(fm["summary"])[:200]
