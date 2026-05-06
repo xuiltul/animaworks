@@ -163,7 +163,7 @@ class Neo4jLoCoMoAdapter:
     def _run(self, coro: Any) -> Any:
         """Run async coroutine on the persistent event loop."""
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=300)
+        return future.result(timeout=900)
 
     def reset(self) -> None:
         """Clear all benchmark data from Neo4j for this group_id."""
