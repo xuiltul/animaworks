@@ -7,10 +7,13 @@ from __future__ import annotations
 
 from apscheduler.triggers.cron import CronTrigger
 
+import pytest
+
 from core.schedule_parser import (
     parse_heartbeat_config,
     parse_cron_md,
     parse_schedule,
+    _posix_dow_to_apsched,
 )
 
 
@@ -160,3 +163,81 @@ class TestParseSchedule:
         """Old Japanese format is not supported by the new parser."""
         trigger = parse_schedule("毎日 9:00 JST")
         assert trigger is None
+
+    def test_sunday_start_range_does_not_raise(self):
+        """parse_schedule('30 17 * * 0-4') must not raise ValueError.
+
+        Regression test for the wrap-around bug: POSIX '0-4' (Sun-Thu) was
+        naively converted to APScheduler '6-3' which is an invalid range.
+        """
+        trigger = parse_schedule("30 17 * * 0-4")
+        assert trigger is not None
+        assert isinstance(trigger, CronTrigger)
+
+
+class TestPosixDowToApsched:
+    """Unit tests for _posix_dow_to_apsched() conversion logic."""
+
+    def test_wildcard_passthrough(self):
+        assert _posix_dow_to_apsched("*") == "*"
+
+    def test_single_value(self):
+        """POSIX 4 (Thu) → ISO 3."""
+        assert _posix_dow_to_apsched("4") == "3"
+
+    def test_single_value_monday(self):
+        """POSIX 1 (Mon) → ISO 0."""
+        assert _posix_dow_to_apsched("1") == "0"
+
+    def test_single_value_sunday_posix0(self):
+        """POSIX 0 (Sun) → ISO 6."""
+        assert _posix_dow_to_apsched("0") == "6"
+
+    def test_single_value_sunday_posix7(self):
+        """POSIX 7 (Sun alias) → ISO 6."""
+        assert _posix_dow_to_apsched("7") == "6"
+
+    def test_comma_separated(self):
+        """POSIX '1,4' (Mon,Thu) → ISO '0,3'."""
+        assert _posix_dow_to_apsched("1,4") == "0,3"
+
+    def test_normal_range_no_wrap(self):
+        """POSIX '1-5' (Mon–Fri) → ISO '0-4' (no wrap-around)."""
+        assert _posix_dow_to_apsched("1-5") == "0-4"
+
+    def test_sunday_start_range(self):
+        """POSIX '0-4' (Sun–Thu) → ISO '6,0-3' (wrap-around fix).
+
+        This is the primary regression test for the bug introduced in commit
+        020367d9: previously '0-4' produced '6-3' which raises ValueError in
+        APScheduler because the minimum of a range must not exceed the maximum.
+        """
+        assert _posix_dow_to_apsched("0-4") == "6,0-3"
+
+    def test_full_week_range(self):
+        """POSIX '0-6' (all days) → APScheduler representation covering all days."""
+        result = _posix_dow_to_apsched("0-6")
+        # '6,0-5' covers all 7 ISO days; verify APScheduler accepts it
+        trigger = parse_schedule(f"0 9 * * {result}")
+        assert trigger is not None
+
+    def test_range_ending_at_sunday(self):
+        """POSIX '5-7' (Fri–Sun) → ISO '4-6' (consecutive, no wrap)."""
+        assert _posix_dow_to_apsched("5-7") == "4-6"
+
+    def test_step_normal_range(self):
+        """POSIX '1-5/2' (Mon,Wed,Fri) → ISO values without wrap."""
+        result = _posix_dow_to_apsched("1-5/2")
+        # POSIX [1,3,5] → ISO [0,2,4]; no consecutive pairs → individual values
+        assert result == "0,2,4"
+
+    @pytest.mark.parametrize("expr", [
+        "30 17 * * 0-4",   # sec's broken schedule — the main bug
+        "0 9 * * 0",       # Sunday only
+        "0 9 * * 0-6",     # All days via full POSIX range
+        "0 9 * * 5-7",     # Fri–Sun via POSIX 5-7
+    ])
+    def test_parse_schedule_accepts_sunday_ranges(self, expr: str):
+        """parse_schedule must return a valid CronTrigger for Sunday-containing ranges."""
+        trigger = parse_schedule(expr)
+        assert trigger is not None, f"parse_schedule({expr!r}) returned None"
