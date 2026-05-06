@@ -114,6 +114,28 @@ class TestFindServerPidByProcess:
         assert _find_server_pid_by_process() == 12345
         mock_find.assert_called_once()
 
+    @patch("cli.commands.server.find_first_matching_pid", return_value=None)
+    def test_excludes_restart_helper_pid_from_env(self, mock_find, monkeypatch):
+        """Restart helper PID from env var is added to exclude set."""
+        from cli.commands.server import _find_server_pid_by_process
+
+        monkeypatch.setenv("_ANIMAWORKS_RESTART_HELPER_PID", "77777")
+        _find_server_pid_by_process()
+
+        _, kwargs = mock_find.call_args
+        assert 77777 in kwargs["exclude_pids"]
+
+    @patch("cli.commands.server.find_first_matching_pid", return_value=None)
+    def test_ignores_invalid_restart_helper_pid(self, mock_find, monkeypatch):
+        """Invalid env var value is silently ignored."""
+        from cli.commands.server import _find_server_pid_by_process
+
+        monkeypatch.setenv("_ANIMAWORKS_RESTART_HELPER_PID", "not-a-pid")
+        _find_server_pid_by_process()
+
+        _, kwargs = mock_find.call_args
+        assert all(isinstance(p, int) for p in kwargs["exclude_pids"])
+
 
 # ── _stop_server ─────────────────────────────────────────
 

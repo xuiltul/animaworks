@@ -91,6 +91,12 @@ def _find_server_pid_by_process(
     excluded = {os.getpid(), os.getppid()}
     if extra_exclude_pids:
         excluded |= extra_exclude_pids
+    helper_pid_str = os.environ.get("_ANIMAWORKS_RESTART_HELPER_PID")
+    if helper_pid_str:
+        try:
+            excluded.add(int(helper_pid_str))
+        except ValueError:
+            pass
     return find_first_matching_pid(
         _SERVER_CMD_MARKERS,
         exclude_pids=excluded,
@@ -579,6 +585,7 @@ time.sleep(0.5)
 # Phase 3: Start new server with retries
 check_host = "127.0.0.1" if host == "0.0.0.0" else host
 cmd = [sys.executable, "-m", "cli", "start", "--host", host, "--port", str(port)]
+os.environ["_ANIMAWORKS_RESTART_HELPER_PID"] = str(os.getpid())
 
 for attempt in range(1, MAX_RETRIES + 1):
     _log(f"Starting server (attempt {{attempt}}/{{MAX_RETRIES}})...")
