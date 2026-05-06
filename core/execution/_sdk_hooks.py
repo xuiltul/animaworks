@@ -473,11 +473,10 @@ def _build_pre_tool_hook(
     """Build a PreToolUse hook with security checks, output guards, and tool logging.
 
     When *session_stats* is provided the hook also performs mid-session
-    context budget observation.  If the estimated token usage leaves fewer
-    than ``max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY`` tokens free, the
-    hook logs the observation for monitoring but does NOT return
-    ``continue_=False`` — the SDK's built-in auto-compact handles
-    context management.
+    context budget observation and compaction-blocked detection.  If
+    ``compaction_blocked`` is set by the PreCompact hook, this hook
+    returns ``continue_=False`` to end the session and trigger AnimaWorks
+    session chaining via ``force_chain``.
     """
     from claude_agent_sdk.types import (
         HookContext,
@@ -534,7 +533,18 @@ def _build_pre_tool_hook(
                     )
                 )
 
-        # ── Context budget observation (SDK auto-compact handles limits) ──
+        # ── Compaction blocked — end session for AnimaWorks chaining ──
+        if session_stats is not None and session_stats.get("compaction_blocked"):
+            session_stats["compaction_blocked"] = False
+            session_stats["force_chain"] = True
+            logger.info(
+                "Compaction was blocked by PreCompact — ending session for "
+                "AnimaWorks session chaining (anima=%s)",
+                anima_dir.name,
+            )
+            return SyncHookJSONOutput(continue_=False)
+
+        # ── Context budget observation ──
         if session_stats is not None:
             session_stats["tool_call_count"] += 1
             estimated_tokens = (
@@ -803,13 +813,28 @@ def _build_pre_tool_hook(
     return _pre_tool_hook
 
 
-def _build_pre_compact_hook(anima_dir: Path) -> Callable:
-    """Build a PreCompact hook that logs whenever SDK auto-compact fires.
+def _build_pre_compact_hook(
+    anima_dir: Path,
+    *,
+    session_stats: dict[str, Any] | None = None,
+    context_window: int = 200_000,
+) -> Callable:
+    """Build a PreCompact hook that blocks SDK auto-compact.
 
-    This hook is called by the Claude Code subprocess before it summarises and
-    compresses the conversation history.  We record the event to the activity
-    log so that compaction history is visible in the Anima's timeline.
+    Blocks automatic compaction and sets ``compaction_blocked`` flag in
+    *session_stats* so the next PreToolUse hook returns ``continue_=False``,
+    triggering AnimaWorks session chaining instead of SDK's built-in
+    context summarization.
+
+    Manual compaction (trigger="manual") is excluded via matcher="auto"
+    in _sdk_options.py and always allowed through.
+
+    Safety valve: if estimated context exceeds 95% of context_window,
+    compaction is allowed through (Recovery case -- blocking would fail
+    the API request).
     """
+    _RECOVERY_THRESHOLD = 0.95
+
     from claude_agent_sdk.types import HookContext, SyncHookJSONOutput
 
     async def _pre_compact_hook(
@@ -823,21 +848,51 @@ def _build_pre_compact_hook(anima_dir: Path) -> Callable:
             trigger,
             anima_dir.name,
         )
-        try:
-            from core.memory.activity import ActivityLogger
 
-            activity = ActivityLogger(anima_dir)
-            activity.log(
-                event_type="tool_use",
-                content=f"SDK context compaction ({trigger})",
-                summary=f"auto-compact:{trigger}",
-                meta={"trigger": trigger},
+        if session_stats is not None:
+            estimated_tokens = (
+                session_stats["system_prompt_tokens"]
+                + session_stats["user_prompt_tokens"]
+                + session_stats["total_result_bytes"] // CHARS_PER_TOKEN
             )
-        except Exception:
-            logger.debug("Failed to write compaction activity log", exc_info=True)
-        return SyncHookJSONOutput()
+            if estimated_tokens > context_window * _RECOVERY_THRESHOLD:
+                logger.warning(
+                    "Context near limit (%.1f%%) \u2014 allowing SDK compaction as recovery",
+                    estimated_tokens / context_window * 100,
+                )
+                _log_compaction_event(anima_dir, trigger, blocked=False)
+                return SyncHookJSONOutput()
+
+        if session_stats is not None:
+            session_stats["compaction_blocked"] = True
+        logger.info(
+            "Blocking SDK auto-compact for %s \u2014 AnimaWorks session chaining will handle",
+            anima_dir.name,
+        )
+        _log_compaction_event(anima_dir, trigger, blocked=True)
+        return SyncHookJSONOutput(
+            decision="block",
+            reason="AnimaWorks session chaining handles context management. Session will end on next tool call.",
+        )
 
     return _pre_compact_hook
+
+
+def _log_compaction_event(anima_dir: Path, trigger: str, *, blocked: bool) -> None:
+    """Record compaction event to activity log."""
+    try:
+        from core.memory.activity import ActivityLogger
+
+        activity = ActivityLogger(anima_dir)
+        action = "blocked" if blocked else "allowed"
+        activity.log(
+            event_type="tool_use",
+            content=f"SDK context compaction ({trigger}) \u2014 {action}",
+            summary=f"auto-compact:{trigger}:{action}",
+            meta={"trigger": trigger, "blocked": blocked},
+        )
+    except Exception:
+        logger.debug("Failed to write compaction activity log", exc_info=True)
 
 
 # ── PostToolUse: knowledge frontmatter ──────────────────

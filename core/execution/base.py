@@ -465,8 +465,8 @@ class ExecutionResult:
         tool_call_records: Tool calls made during this execution session.
         force_chain: When True, AgentCore should force session chaining
             regardless of the ContextTracker state.  Set by the S executor
-            when mid-session context auto-compact triggers via PreToolUse
-            ``continue_=False``.
+            when PreCompact blocks SDK auto-compact and the subsequent
+            PreToolUse returns ``continue_=False``.
         usage: Token usage for this session.  Populated by each executor.
     """
 

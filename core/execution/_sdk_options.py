@@ -439,8 +439,14 @@ class SDKOptionsMixin:
                         ],
                         "PreCompact": [
                             HookMatcher(
-                                matcher=".*",
-                                hooks=[_build_pre_compact_hook(self._anima_dir)],
+                                matcher="auto",
+                                hooks=[
+                                    _build_pre_compact_hook(
+                                        self._anima_dir,
+                                        session_stats=session_stats,
+                                        context_window=_cw,
+                                    )
+                                ],
                             )
                         ],
                         "PostToolUse": [
