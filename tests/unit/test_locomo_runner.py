@@ -22,7 +22,7 @@ class TestArgParser:
         args = p.parse_args([])
         assert args.mode == "all"
         assert args.conversations == 10
-        assert args.top_k == 5
+        assert args.top_k == 10
         assert args.judge is False
         assert args.judge_model == "gpt-4o"
         assert args.answer_model == "gpt-4o-mini"
