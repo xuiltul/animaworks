@@ -648,8 +648,7 @@ def _build_pre_tool_hook(
             session_stats["compaction_blocked"] = False
             session_stats["force_chain"] = True
             logger.info(
-                "Compaction was blocked by PreCompact — ending session for "
-                "AnimaWorks session chaining (anima=%s)",
+                "Compaction was blocked by PreCompact — ending session for AnimaWorks session chaining (anima=%s)",
                 anima_dir.name,
             )
             return SyncHookJSONOutput(continue_=False)

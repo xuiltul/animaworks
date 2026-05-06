@@ -591,10 +591,11 @@ class InboxMixin:
                                 _rc = json.loads(_rc_path.read_text(encoding="utf-8"))
                         except Exception:
                             pass
-                        _all_exhausted = all(
-                            _rc.get(item.path.name, 0) > _MAX_INBOX_RETRIES
-                            for item in inbox_result.inbox_items
-                        ) if inbox_result.inbox_items else False
+                        _all_exhausted = (
+                            all(_rc.get(item.path.name, 0) > _MAX_INBOX_RETRIES for item in inbox_result.inbox_items)
+                            if inbox_result.inbox_items
+                            else False
+                        )
                         if _all_exhausted:
                             logger.warning(
                                 "[%s] Empty LLM response for inbox — all %d messages exceeded "

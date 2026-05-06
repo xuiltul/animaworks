@@ -286,9 +286,7 @@ class MemoryRetriever:
             raw_triggers = metadata.get("trigger_tools")
             if raw_triggers is None:
                 continue
-            trigger_parts = [
-                p.strip().lower() for p in str(raw_triggers).split(",") if p.strip()
-            ]
+            trigger_parts = [p.strip().lower() for p in str(raw_triggers).split(",") if p.strip()]
             if tool_lower not in trigger_parts:
                 continue
             if score < min_score:
