@@ -208,6 +208,15 @@ async def _startup_animas_background(app: FastAPI) -> None:
 
         _names_to_start = [n for n in app.state.anima_names if n not in _gov_excluded]
 
+        # ── Ensure infrastructure services (Neo4j, etc.) ──────────
+        try:
+            from core.infra import ensure_infra_services
+            from core.paths import PROJECT_DIR
+
+            await ensure_infra_services(app.state.animas_dir, _names_to_start, PROJECT_DIR)
+        except Exception:
+            logger.warning("Infrastructure service check failed", exc_info=True)
+
         # Start anima processes (parallel internally)
         await app.state.supervisor.start_all(_names_to_start)
 
@@ -750,9 +759,7 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     async def _serve_index():
-        html = _index_raw.replace("__AW_VERSION__", _app_version).replace(
-            "__AW_BASE__", _base_path
-        )
+        html = _index_raw.replace("__AW_VERSION__", _app_version).replace("__AW_BASE__", _base_path)
         return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
     # ── Versioned static file route ───────────────────────
