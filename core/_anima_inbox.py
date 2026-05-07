@@ -589,8 +589,8 @@ class InboxMixin:
                         try:
                             if _rc_path.exists():
                                 _rc = json.loads(_rc_path.read_text(encoding="utf-8"))
-                        except Exception:
-                            pass
+                        except (json.JSONDecodeError, OSError):
+                            logger.warning("[%s] Failed to read inbox_read_counts.json, using empty counts", self.name)
                         _all_exhausted = (
                             all(_rc.get(item.path.name, 0) > _MAX_INBOX_RETRIES for item in inbox_result.inbox_items)
                             if inbox_result.inbox_items
