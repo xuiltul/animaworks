@@ -753,14 +753,14 @@ let _kpiTasks = "-";
 
 async function _loadKpiStats() {
   try {
-    const resp = await fetch(`${basePath}/api/activity/recent?hours=1&limit=200");
+    const resp = await fetch(`${basePath}/api/activity/recent?hours=1&limit=200`);
     if (resp.ok) {
       const data = await resp.json();
       _kpiEventsH = String((data.events ?? []).length);
     }
   } catch { /* ignore */ }
   try {
-    const resp = await fetch(`${basePath}/api/tasks/summary");
+    const resp = await fetch(`${basePath}/api/tasks/summary`);
     if (resp.ok) {
       const data = await resp.json();
       _kpiTasks = String(data.total_active || 0);
@@ -844,7 +844,7 @@ async function _loadInitialStreams(animas) {
 
 async function _fetchActiveGroups() {
   try {
-    const resp = await fetch(`${basePath}/api/activity/recent?grouped=true&hours=1&group_limit=50");
+    const resp = await fetch(`${basePath}/api/activity/recent?grouped=true&hours=1&group_limit=50`);
     if (!resp.ok) return [];
     const data = await resp.json();
     return (data.groups ?? []).filter(g => g.is_open);

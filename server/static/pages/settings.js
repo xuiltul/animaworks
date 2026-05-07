@@ -198,7 +198,7 @@ async function _onModeChange(mode, container) {
   localStorage.removeItem("aw-workspace-view");
 
   try {
-    await fetch(`${basePath}/api/settings/display-mode", {
+    await fetch(`${basePath}/api/settings/display-mode`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode }),
@@ -222,7 +222,7 @@ async function _initActivityLevel(container) {
   let level = 100;
   let fromApi = false;
   try {
-    const res = await fetch(`${basePath}/api/settings/activity-level");
+    const res = await fetch(`${basePath}/api/settings/activity-level`);
     if (res.ok) {
       const data = await res.json();
       level = data.activity_level || 100;
@@ -310,7 +310,7 @@ function _updatePresetButtons(container, level) {
 async function _setActivityLevel(level, container) {
   _cacheActivityState(level, null);
   try {
-    const res = await fetch(`${basePath}/api/settings/activity-level", {
+    const res = await fetch(`${basePath}/api/settings/activity-level`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ activity_level: level }),
@@ -412,7 +412,7 @@ async function _saveNightMode(container, revertOnFail) {
   _cacheActivityState(dayLevel, schedule);
 
   try {
-    const res = await fetch(`${basePath}/api/settings/activity-schedule", {
+    const res = await fetch(`${basePath}/api/settings/activity-schedule`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ activity_schedule: schedule }),
@@ -442,7 +442,7 @@ async function _clearNightMode(container) {
   _cacheActivityState(curLevel, []);
 
   try {
-    const res = await fetch(`${basePath}/api/settings/activity-schedule", {
+    const res = await fetch(`${basePath}/api/settings/activity-schedule`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ activity_schedule: [] }),

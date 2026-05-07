@@ -144,7 +144,7 @@ export async function completeSetup(data) {
   }
 
   try {
-    const res = await fetch(`${basePath}/api/setup/complete", {
+    const res = await fetch(`${basePath}/api/setup/complete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

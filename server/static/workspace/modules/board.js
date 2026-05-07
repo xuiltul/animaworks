@@ -76,8 +76,8 @@ async function loadBoardChannelList() {
 
   try {
     const [chRes, dmRes] = await Promise.all([
-      fetch(`${basePath}/api/channels"),
-      fetch(`${basePath}/api/dm"),
+      fetch(`${basePath}/api/channels`),
+      fetch(`${basePath}/api/dm`),
     ]);
 
     _boardChannels = chRes.ok ? await chRes.json() : [];

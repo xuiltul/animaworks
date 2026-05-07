@@ -65,7 +65,7 @@ export function initLanguageStep(el) {
 
 async function detectLocale() {
   try {
-    const res = await fetch(`${basePath}/api/setup/detect-locale");
+    const res = await fetch(`${basePath}/api/setup/detect-locale`);
     if (res.ok) {
       const data = await res.json();
       if (data.detected && LANGUAGES.some((l) => l.code === data.detected)) {

@@ -292,7 +292,7 @@ async function _loadAuthSettings() {
 
         try {
           const curPwEl = document.getElementById("currentPassword");
-          const res = await fetch(`${basePath}/api/users/me/password", {
+          const res = await fetch(`${basePath}/api/users/me/password`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
@@ -353,7 +353,7 @@ async function _loadAuthSettings() {
         const result = document.getElementById("addUserResult");
 
         try {
-          const res = await fetch(`${basePath}/api/users", {
+          const res = await fetch(`${basePath}/api/users`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
@@ -473,7 +473,7 @@ async function _loadAnthropicAuthSettings() {
       }
 
       try {
-        const saveRes = await fetch(`${basePath}/api/settings/anthropic-auth", {
+        const saveRes = await fetch(`${basePath}/api/settings/anthropic-auth`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
@@ -626,7 +626,7 @@ async function _loadOpenAIAuthSettings() {
 
       try {
         // Save directly (PUT endpoint validates internally)
-        const saveRes = await fetch(`${basePath}/api/settings/openai-auth", {
+        const saveRes = await fetch(`${basePath}/api/settings/openai-auth`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
@@ -750,7 +750,7 @@ async function _loadLocalLLMSettings() {
       };
 
       try {
-        const saveRes = await fetch(`${basePath}/api/settings/local-llm", {
+        const saveRes = await fetch(`${basePath}/api/settings/local-llm`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
@@ -781,7 +781,7 @@ async function _loadLocalLLMSettings() {
     applyButton?.addEventListener("click", async () => {
       const result = document.getElementById("localLlmResult");
       try {
-        const res = await fetch(`${basePath}/api/settings/local-llm/apply-role-presets", {
+        const res = await fetch(`${basePath}/api/settings/local-llm/apply-role-presets`, {
           method: "POST",
           credentials: "same-origin",
         });

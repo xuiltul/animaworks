@@ -55,7 +55,7 @@ export function initEnvironmentStep(el) {
 
 async function fetchEnvironment() {
   try {
-    const res = await fetch(`${basePath}/api/setup/environment");
+    const res = await fetch(`${basePath}/api/setup/environment`);
     if (res.ok) {
       const data = await res.json();
       envData = { ...envData, ...data };
@@ -574,7 +574,7 @@ async function validateApiKey() {
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
 
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key", {
+    const res = await fetch(`${basePath}/api/setup/validate-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: selectedProvider, auth_mode: openaiAuthMode, api_key: apiKey }),
@@ -600,7 +600,7 @@ async function validateCodexLogin() {
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
 
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key", {
+    const res = await fetch(`${basePath}/api/setup/validate-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: "openai", auth_mode: "codex_login" }),
@@ -627,7 +627,7 @@ async function startCodexBrowserLogin() {
   infoEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
 
   try {
-    const res = await fetch(`${basePath}/api/setup/codex/device-login", {
+    const res = await fetch(`${basePath}/api/setup/codex/device-login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
@@ -650,7 +650,7 @@ async function validateClaudeCodeLogin() {
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
 
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key", {
+    const res = await fetch(`${basePath}/api/setup/validate-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: "anthropic", auth_mode: "claude_code_login" }),
@@ -674,7 +674,7 @@ async function validateCursorAgent() {
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
 
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key", {
+    const res = await fetch(`${basePath}/api/setup/validate-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: "cursor_agent" }),
@@ -701,7 +701,7 @@ async function validateGeminiCli() {
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
 
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key", {
+    const res = await fetch(`${basePath}/api/setup/validate-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: "gemini_cli" }),
@@ -726,7 +726,7 @@ async function validateOllamaUrl() {
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
 
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key", {
+    const res = await fetch(`${basePath}/api/setup/validate-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: "ollama", ollama_url: ollamaUrl }),
@@ -749,7 +749,7 @@ async function validateImageKey(key) {
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
 
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key", {
+    const res = await fetch(`${basePath}/api/setup/validate-key`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: key, api_key: imageKeys[key] }),
