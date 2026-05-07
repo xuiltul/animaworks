@@ -221,6 +221,30 @@ class TestStopHookCompletionGate:
         result = await hook(_stop_input(stop_hook_active=False), None, {})
         assert _decision_from(result) == "block"
 
+    @pytest.mark.asyncio
+    async def test_stop_hook_allows_after_prior_block(self, anima_dir: Path):
+        """Second stop passes even without stop_hook_active (prevents infinite loop)."""
+        from core.execution._sdk_hooks import _build_stop_hook
+
+        hook = _build_stop_hook(anima_dir, session_stats={"trigger": "chat"})
+        r1 = await hook(_stop_input(stop_hook_active=False), None, {})
+        assert _decision_from(r1) == "block"
+
+        r2 = await hook(_stop_input(stop_hook_active=False), None, {})
+        assert _decision_from(r2) is None
+
+    @pytest.mark.asyncio
+    async def test_stop_hook_stays_open_after_prior_block(self, anima_dir: Path):
+        """Third+ stop also passes — once blocked, the gate stays open for the session."""
+        from core.execution._sdk_hooks import _build_stop_hook
+
+        hook = _build_stop_hook(anima_dir, session_stats={"trigger": "chat"})
+        await hook(_stop_input(stop_hook_active=False), None, {})
+        await hook(_stop_input(stop_hook_active=False), None, {})
+
+        r3 = await hook(_stop_input(stop_hook_active=False), None, {})
+        assert _decision_from(r3) is None
+
 
 # ── MCP tool list (Mode S) ──────────────────────────────────
 

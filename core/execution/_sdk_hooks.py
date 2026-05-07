@@ -1053,19 +1053,27 @@ def _build_stop_hook(
     On the first stop attempt for a gated trigger (chat, task, cron), the hook
     returns ``decision="block"`` with the checklist as ``reason``.  The SDK
     injects the reason into the model's context and forces it to continue.
-    On the second attempt (``stop_hook_active=True``), the hook allows the stop.
+    On the second attempt (``stop_hook_active=True`` **or** the hook already
+    blocked once), the hook allows the stop.
+
+    The internal ``_blocked`` flag prevents infinite blocking when the SDK
+    does not set ``stop_hook_active=True`` on subsequent stop attempts.
 
     No ``completion_gate`` tool call is required — the hook itself is the gate.
     """
     from claude_agent_sdk.types import HookContext, SyncHookJSONOutput
+
+    _blocked = False
 
     async def _stop_hook(
         input_data: dict[str, Any],
         tool_use_id: str | None,
         context: HookContext,
     ) -> SyncHookJSONOutput | dict[str, Any]:
+        nonlocal _blocked
+
         stop_hook_active = bool(input_data.get("stop_hook_active", False))
-        if stop_hook_active:
+        if stop_hook_active or _blocked:
             _cleanup_gate_marker(anima_dir)
             return {}
 
@@ -1074,6 +1082,7 @@ def _build_stop_hook(
         if not _completion_gate_applies_to_trigger(trigger):
             return {}
 
+        _blocked = True
         from core.i18n import t
 
         return SyncHookJSONOutput(
