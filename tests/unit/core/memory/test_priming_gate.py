@@ -159,7 +159,9 @@ def test_format_priming_section_collapses_pointer_mode() -> None:
 
 def test_format_priming_section_marks_evidence_mode() -> None:
     result = PrimingResult(related_knowledge="RAW_EVIDENCE_PAYLOAD")
-    result.gate_plan = build_priming_plan("前に話した件の根拠を教えて", "chat", "", build_candidates_from_result(result))
+    result.gate_plan = build_priming_plan(
+        "前に話した件の根拠を教えて", "chat", "", build_candidates_from_result(result)
+    )
 
     formatted = format_priming_section(result)
 

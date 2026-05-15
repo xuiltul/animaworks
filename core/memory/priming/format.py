@@ -15,7 +15,6 @@ from typing import Any
 from core.i18n import t
 from core.memory.priming.result import PrimingResult
 
-
 _POINTER_RE = re.compile(r'read_memory_file\(path="([^"]+)"\)')
 
 
@@ -197,9 +196,7 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
     if result.episodes:
         parts.append(t("priming.episodes_header"))
         parts.append("")
-        parts.append(
-            _wrap_priming_for_mode(result, "episodes", "episodes", result.episodes, trust="medium")
-        )
+        parts.append(_wrap_priming_for_mode(result, "episodes", "episodes", result.episodes, trust="medium"))
         parts.append("")
 
     if result.pending_tasks:
