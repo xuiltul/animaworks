@@ -232,8 +232,13 @@ def test_github_source_uses_https_fallback_when_gh_missing(tmp_path: Path) -> No
 def test_github_source_uses_gh_clone_when_available(tmp_path: Path) -> None:
     def _fake_run(cmd, **kwargs):
         if cmd[:3] == ["gh", "repo", "clone"]:
+            assert "--filter=blob:none" in cmd
+            assert "--sparse" in cmd
             checkout = Path(cmd[4])
             _write_source_skill(checkout / "path" / "to", "gh-clone")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        if len(cmd) >= 6 and cmd[0] == "git" and cmd[1] == "-C" and cmd[3:6] == ["sparse-checkout", "set", "--no-cone"]:
+            assert cmd[-3:] == ["set", "--no-cone", "path/to/gh-clone"]
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         if cmd[:3] == ["git", "rev-parse", "HEAD"]:
             return subprocess.CompletedProcess(cmd, 0, stdout="abc123\n", stderr="")
@@ -248,6 +253,37 @@ def test_github_source_uses_gh_clone_when_available(tmp_path: Path) -> None:
     assert result.status == "installed"
     entry = json.loads((tmp_path / "shared" / "skill_hub_lock.jsonl").read_text(encoding="utf-8"))
     assert entry["resolved_commit"] == "abc123"
+
+
+def test_local_source_rejects_oversized_bundle_before_copy(tmp_path: Path) -> None:
+    from core.skills.guard import MAX_SKILL_FILE_SIZE
+    from core.skills.sources.local import stage_local_source
+
+    source = tmp_path / "src" / "oversized"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("---\nname: oversized\n---\n\n# Oversized\n", encoding="utf-8")
+    (source / "large.txt").write_bytes(b"x" * (MAX_SKILL_FILE_SIZE + 1))
+
+    with pytest.raises(ValueError, match="file exceeds limit"):
+        stage_local_source(str(source), tmp_path / "stage")
+
+    assert not (tmp_path / "stage" / "skill").exists()
+
+
+def test_local_source_rejects_too_many_files_before_copy(tmp_path: Path) -> None:
+    from core.skills.guard import MAX_FILES_PER_SKILL
+    from core.skills.sources.local import stage_local_source
+
+    source = tmp_path / "src" / "too-many"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("---\nname: too-many\n---\n\n# Too Many\n", encoding="utf-8")
+    for idx in range(MAX_FILES_PER_SKILL):
+        (source / f"extra-{idx}.txt").write_text("x", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="file count exceeds limit"):
+        stage_local_source(str(source), tmp_path / "stage")
+
+    assert not (tmp_path / "stage" / "skill").exists()
 
 
 def test_source_adapters_reject_invalid_inputs(tmp_path: Path) -> None:

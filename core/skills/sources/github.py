@@ -21,7 +21,24 @@ def stage_github_source(source: str, staging_root: Path) -> tuple[Path, str | No
     if shutil.which("gh"):
         checkout = staging_root / "repo"
         subprocess.run(
-            ["gh", "repo", "clone", f"{owner}/{repo}", str(checkout), "--", "--depth", "1"],
+            [
+                "gh",
+                "repo",
+                "clone",
+                f"{owner}/{repo}",
+                str(checkout),
+                "--",
+                "--depth",
+                "1",
+                "--filter=blob:none",
+                "--sparse",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(checkout), "sparse-checkout", "set", "--no-cone", repo_path],
             check=True,
             capture_output=True,
             text=True,
