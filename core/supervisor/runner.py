@@ -793,10 +793,15 @@ class AnimaRunner:
             raise AnimaNotRunningError("Anima not initialized")
 
         scheduler = self._scheduler_mgr.scheduler if self._scheduler_mgr else None
+        bootstrap_status = self.anima.bootstrap_state
         return {
             "status": self.anima.primary_status,
             "active_label": self.anima.primary_task or None,
             "needs_bootstrap": self.anima.needs_bootstrap,
+            "bootstrap_state": bootstrap_status,
+            "needs_user_input": bootstrap_status.get("needs_user_input", False),
+            "needs_repair": bootstrap_status.get("needs_repair", False),
+            "needs_background_bootstrap": bootstrap_status.get("needs_background_bootstrap", False),
             "scheduler_running": scheduler.running if scheduler else False,
             "scheduler_jobs": len(scheduler.get_jobs()) if scheduler else 0,
         }

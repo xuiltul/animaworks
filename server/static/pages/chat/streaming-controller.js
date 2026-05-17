@@ -272,6 +272,17 @@ export function createStreamingController(ctx) {
     }
 
     const currentAnima = state.animas.find(p => p.name === name);
+    if (currentAnima?.needs_repair || currentAnima?.bootstrap_state?.state === "needs_repair") {
+      const msgs = $("chatPageMessages");
+      if (msgs) {
+        const el = document.createElement("div");
+        el.className = "chat-bubble assistant";
+        el.textContent = t("chat.bootstrap_needs_repair");
+        msgs.appendChild(el);
+        msgs.scrollTop = msgs.scrollHeight;
+      }
+      return;
+    }
     if (currentAnima?.status === "bootstrapping" || currentAnima?.bootstrapping) {
       const msgs = $("chatPageMessages");
       if (msgs) {

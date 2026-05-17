@@ -215,10 +215,18 @@ export function createPaneHost(rootContainer) {
         anima.status = "error";
         anima.bootstrapping = false;
         anima._bootstrapFailed = "failed";
+        anima.bootstrap_state = data.bootstrap_state || anima.bootstrap_state;
+      } else if (bsStatus === "needs_repair") {
+        anima.status = "error";
+        anima.bootstrapping = false;
+        anima.needs_repair = true;
+        anima.bootstrap_state = data.bootstrap_state || anima.bootstrap_state;
       } else if (bsStatus === "max_retries_exceeded") {
         anima.status = "error";
         anima.bootstrapping = false;
         anima._bootstrapFailed = "max_retries";
+        anima.needs_repair = true;
+        anima.bootstrap_state = data.bootstrap_state || anima.bootstrap_state;
       }
 
       if (name === ctx.state.selectedAnima && bsStatus !== "completed") {

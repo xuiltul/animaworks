@@ -311,6 +311,112 @@ def cmd_anima_permissions(args: argparse.Namespace) -> None:
             print(f"\n{t('cli.permissions_file_path', path=str(md_path))} (legacy, will migrate on load)")
 
 
+def _disable_anima_for_repair(name: str, data_dir: Path, gateway_url: str) -> bool:
+    """Disable a running anima through the server before mutating runtime files."""
+    pid_file = data_dir / "server.pid"
+    if not pid_file.exists():
+        return False
+
+    import requests
+
+    try:
+        response = requests.post(
+            f"{gateway_url}/api/animas/{name}/disable",
+            timeout=10,
+        )
+        response.raise_for_status()
+    except Exception as exc:
+        print(f"Error: Server is running, but anima '{name}' could not be stopped: {exc}")
+        sys.exit(1)
+    return True
+
+
+def _suggest_bootstrap_action(status: dict) -> str:
+    state = status.get("state")
+    if status.get("needs_background_bootstrap"):
+        return "Start the server or run background bootstrap after verifying character_sheet.md."
+    if status.get("needs_user_input"):
+        return "Open chat and answer the initial character setup question."
+    if state == "needs_repair":
+        return "Run repair-bootstrap --retry, or --fresh if the runtime should be reset."
+    if state == "failed":
+        return "Run repair-bootstrap --retry after checking the last_error."
+    return "No action required."
+
+
+def _print_bootstrap_status(name: str, status: dict) -> None:
+    print(f"Anima: {name}")
+    print(f"State: {status.get('state', 'unknown')}")
+    if status.get("mode"):
+        print(f"Mode: {status['mode']}")
+    if status.get("reason"):
+        print(f"Reason: {status['reason']}")
+    if status.get("last_error"):
+        print(f"Last error: {status['last_error']}")
+    errors = status.get("validation_errors") or []
+    if errors:
+        print("Validation errors:")
+        for error in errors:
+            print(f"  - {error}")
+    print(f"Needs user input: {bool(status.get('needs_user_input'))}")
+    print(f"Needs repair: {bool(status.get('needs_repair'))}")
+    print(f"Needs background bootstrap: {bool(status.get('needs_background_bootstrap'))}")
+    print(f"Suggested action: {_suggest_bootstrap_action(status)}")
+
+
+def cmd_anima_repair_bootstrap(args: argparse.Namespace) -> None:
+    """Inspect or repair a first-run bootstrap runtime state."""
+    from core.bootstrap_state import (
+        get_bootstrap_status,
+        repair_bootstrap_fresh,
+        repair_bootstrap_retry,
+    )
+    from core.paths import get_animas_dir, get_data_dir
+
+    name: str = args.anima
+    data_dir = get_data_dir()
+    animas_dir = get_animas_dir()
+    anima_dir = animas_dir / name
+
+    if not anima_dir.exists():
+        print(f"Error: Anima '{name}' not found")
+        sys.exit(1)
+
+    if args.status:
+        _print_bootstrap_status(name, get_bootstrap_status(anima_dir))
+        return
+
+    gateway_url = getattr(args, "gateway_url", None) or "http://localhost:18500"
+    stopped_via_server = _disable_anima_for_repair(name, data_dir, gateway_url)
+
+    if args.retry:
+        status = repair_bootstrap_retry(
+            anima_dir,
+            retry_counts_file=animas_dir / ".bootstrap_retries.json",
+        )
+        print(f"Prepared bootstrap retry for anima '{name}'.")
+        if stopped_via_server:
+            print("Anima was disabled through the running server before repair.")
+        _print_bootstrap_status(name, status)
+        return
+
+    if args.fresh:
+        new_dir, archive_path = repair_bootstrap_fresh(
+            animas_dir,
+            name,
+            archive_root=data_dir / "archive",
+        )
+        print(f"Archived previous runtime to: {archive_path}")
+        print(f"Recreated blank anima at: {new_dir}")
+        if stopped_via_server:
+            print("Anima was disabled through the running server before repair.")
+        _print_bootstrap_status(name, get_bootstrap_status(new_dir))
+        return
+
+    print("Error: choose one of --status, --retry, or --fresh")
+    sys.exit(1)
+
+
 def cmd_anima_delete(args: argparse.Namespace) -> None:
     """Delete an anima with optional archive."""
     import requests

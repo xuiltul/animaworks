@@ -73,6 +73,8 @@ def supervisor(supervisor_dirs, mock_ws_manager) -> ProcessSupervisor:
 def _make_mock_handle(
     anima_name: str,
     needs_bootstrap: bool = True,
+    needs_background_bootstrap: bool | None = None,
+    bootstrap_state: dict | None = None,
     bootstrap_delay: float = 0.0,
 ) -> MagicMock:
     """Create a mock ProcessHandle that simulates IPC responses.
@@ -96,9 +98,14 @@ def _make_mock_handle(
 
     async def _send_request(method: str, params: dict, timeout: float = 60.0) -> IPCResponse:
         if method == "get_status":
+            status_result = {"needs_bootstrap": needs_bootstrap, "status": "running"}
+            if needs_background_bootstrap is not None:
+                status_result["needs_background_bootstrap"] = needs_background_bootstrap
+            if bootstrap_state is not None:
+                status_result["bootstrap_state"] = bootstrap_state
             return IPCResponse(
                 id="status_check",
-                result={"needs_bootstrap": needs_bootstrap, "status": "running"},
+                result=status_result,
             )
         if method == "run_bootstrap":
             if bootstrap_delay > 0:
@@ -286,6 +293,70 @@ class TestBootstrapLifecycle:
         assert len(bootstrap_calls) == 0
 
         # No anima.bootstrap events should have been broadcast
+        bootstrap_events = [
+            call.args[0]
+            for call in mock_ws_manager.broadcast.call_args_list
+            if call.args[0].get("type") == "anima.bootstrap"
+        ]
+        assert len(bootstrap_events) == 0
+
+    async def test_stale_running_character_sheet_state_retries_background_bootstrap(
+        self,
+        supervisor: ProcessSupervisor,
+    ):
+        """A stale running state from a crashed worker should not block retry."""
+        bootstrap_started = asyncio.Event()
+        bootstrap_proceed = asyncio.Event()
+        mock_handle = _make_mock_handle(
+            "kiri",
+            needs_bootstrap=True,
+            needs_background_bootstrap=False,
+            bootstrap_state={"state": "running", "mode": "character_sheet"},
+        )
+        original_side_effect = mock_handle.send_request.side_effect
+
+        async def _controlled_send_request(method, params, timeout=60.0):
+            if method == "run_bootstrap":
+                bootstrap_started.set()
+                await bootstrap_proceed.wait()
+                return IPCResponse(id="bootstrap", result={"duration_ms": 1234, "status": "completed"})
+            return await original_side_effect(method, params, timeout)
+
+        mock_handle.send_request = AsyncMock(side_effect=_controlled_send_request)
+
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
+        ):
+            await supervisor.start_anima("kiri")
+
+        await asyncio.wait_for(bootstrap_started.wait(), timeout=2.0)
+        bootstrap_proceed.set()
+        await asyncio.sleep(0.1)
+
+    async def test_pending_user_input_does_not_launch_background_bootstrap(
+        self,
+        supervisor: ProcessSupervisor,
+        mock_ws_manager: MagicMock,
+    ):
+        """Blank interactive bootstrap is chat-capable and must not auto-run."""
+        mock_handle = _make_mock_handle(
+            "midori",
+            needs_bootstrap=True,
+            needs_background_bootstrap=False,
+        )
+
+        with patch(
+            "core.supervisor.manager.ProcessHandle",
+            return_value=mock_handle,
+        ):
+            await supervisor.start_anima("midori")
+
+        await asyncio.sleep(0.1)
+
+        assert supervisor.is_bootstrapping("midori") is False
+        bootstrap_calls = [call for call in mock_handle.send_request.call_args_list if call.args[0] == "run_bootstrap"]
+        assert len(bootstrap_calls) == 0
         bootstrap_events = [
             call.args[0]
             for call in mock_ws_manager.broadcast.call_args_list

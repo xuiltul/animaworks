@@ -194,14 +194,27 @@ function handleWsMessage(raw) {
           if (existing) {
             existing.status = "error";
             existing.bootstrapping = false;
+            existing.bootstrap_state = data.bootstrap_state || existing.bootstrap_state;
           }
           renderAnimaDropdown();
           addActivity("system", animaName, t("websocket.bootstrap_failed"));
+        } else if (bsStatus === "needs_repair") {
+          const existing = state.animas.find((p) => p.name === animaName);
+          if (existing) {
+            existing.status = "error";
+            existing.bootstrapping = false;
+            existing.needs_repair = true;
+            existing.bootstrap_state = data.bootstrap_state || existing.bootstrap_state;
+          }
+          renderAnimaDropdown();
+          addActivity("system", animaName, t("websocket.bootstrap_needs_repair"));
         } else if (bsStatus === "max_retries_exceeded") {
           const existing = state.animas.find((p) => p.name === animaName);
           if (existing) {
             existing.status = "error";
             existing.bootstrapping = false;
+            existing.needs_repair = true;
+            existing.bootstrap_state = data.bootstrap_state || existing.bootstrap_state;
           }
           renderAnimaDropdown();
           addActivity("system", animaName, t("websocket.bootstrap_max_retries"));

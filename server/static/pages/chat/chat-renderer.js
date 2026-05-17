@@ -95,6 +95,16 @@ export function createChatRenderer(ctx) {
   function renderBootstrapProgress(container, anima) {
     const status = anima?.status;
 
+    if (anima?.needs_repair || anima?.bootstrap_state?.state === "needs_repair") {
+      container.innerHTML = `
+        <div class="bootstrap-progress bootstrap-progress--error">
+          <div class="bootstrap-progress-avatar">${_avatarHtml(anima)}</div>
+          <div class="bootstrap-progress-step">${t("chat.bootstrap_needs_repair")}</div>
+        </div>`;
+      _clearBootstrapInterval();
+      return;
+    }
+
     if (status === "starting" || status === "not_found") {
       container.innerHTML = `
         <div class="bootstrap-progress">
@@ -226,7 +236,8 @@ export function createChatRenderer(ctx) {
     const currentAnima = isMeeting ? null : state.animas.find(a => a.name === name);
     const animaStatus = currentAnima?.status;
 
-    if (!isMeeting && (animaStatus === "bootstrapping" || animaStatus === "starting" || animaStatus === "not_found"
+    if (!isMeeting && (currentAnima?.needs_repair || currentAnima?.bootstrap_state?.state === "needs_repair"
+        || animaStatus === "bootstrapping" || animaStatus === "starting" || animaStatus === "not_found"
         || (animaStatus === "error" && currentAnima?._bootstrapFailed))) {
       renderBootstrapProgress(messagesEl, currentAnima);
       return;

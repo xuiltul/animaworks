@@ -367,7 +367,31 @@ class DigitalAnima(
     @property
     def needs_bootstrap(self) -> bool:
         """True if this anima has not completed the first-run bootstrap."""
-        return (self.anima_dir / "bootstrap.md").exists()
+        from core.bootstrap_state import get_bootstrap_status
+
+        return bool(get_bootstrap_status(self.anima_dir).get("needs_bootstrap"))
+
+    @property
+    def bootstrap_state(self) -> dict[str, Any]:
+        """Return state-aware first-run bootstrap lifecycle information."""
+        from core.bootstrap_state import get_bootstrap_status
+
+        return get_bootstrap_status(self.anima_dir)
+
+    @property
+    def needs_user_input(self) -> bool:
+        """True when interactive bootstrap is waiting for the user's first input."""
+        return bool(self.bootstrap_state.get("needs_user_input"))
+
+    @property
+    def needs_repair(self) -> bool:
+        """True when bootstrap artifacts indicate manual or CLI repair is needed."""
+        return bool(self.bootstrap_state.get("needs_repair"))
+
+    @property
+    def needs_background_bootstrap(self) -> bool:
+        """True when a character-sheet bootstrap can safely run in background."""
+        return bool(self.bootstrap_state.get("needs_background_bootstrap"))
 
     @property
     def primary_status(self) -> str:

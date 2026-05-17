@@ -46,6 +46,7 @@ def _create_anima_dir(
     d = animas_dir / name
     d.mkdir(parents=True, exist_ok=True)
     (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
+    (d / "injection.md").write_text(f"# {name} role", encoding="utf-8")
     (d / "status.json").write_text(
         json.dumps({"enabled": enabled}), encoding="utf-8"
     )

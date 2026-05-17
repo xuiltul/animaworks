@@ -737,12 +737,24 @@ def _place_bootstrap(anima_dir: Path) -> None:
     """Copy the bootstrap template into the anima directory if needed."""
     if not _should_create_bootstrap(anima_dir):
         logger.debug("Skipping bootstrap for %s (identity already defined)", anima_dir)
+        try:
+            from core.bootstrap_state import initialize_bootstrap_state
+
+            initialize_bootstrap_state(anima_dir)
+        except Exception:
+            logger.debug("Failed to initialize bootstrap state for %s", anima_dir, exc_info=True)
         return
 
     bootstrap_tpl = BOOTSTRAP_TEMPLATE
     if bootstrap_tpl.exists():
         shutil.copy2(bootstrap_tpl, anima_dir / "bootstrap.md")
         logger.debug("Placed bootstrap.md in %s", anima_dir)
+    try:
+        from core.bootstrap_state import initialize_bootstrap_state
+
+        initialize_bootstrap_state(anima_dir)
+    except Exception:
+        logger.debug("Failed to initialize bootstrap state for %s", anima_dir, exc_info=True)
 
 
 def validate_anima_name(name: str) -> str | None:
