@@ -125,6 +125,10 @@ def test_collect_reference_rewrite_changes_covers_allowed_metadata_paths(tmp_pat
         json.dumps({"skill_pointer": "old-skill"}),
         encoding="utf-8",
     )
+    (anima_dir / "state" / "goal_state.jsonl").write_text(
+        json.dumps({"event_type": "set", "payload": {"skills": ["old-skill"]}}) + "\n",
+        encoding="utf-8",
+    )
     (anima_dir / "state" / "activity_log.jsonl").write_text(
         json.dumps({"skill_pointer": "old-skill"}) + "\n",
         encoding="utf-8",
@@ -136,6 +140,7 @@ def test_collect_reference_rewrite_changes_covers_allowed_metadata_paths(tmp_pat
     assert {change.path for change in changes} == {
         "cron.md",
         "goals/rollout.yaml",
+        "state/goal_state.jsonl",
         "state/task_queue.jsonl",
         "state/taskboard.json",
     }

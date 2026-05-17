@@ -119,6 +119,7 @@ def _candidate_files(anima_dir: Path) -> list[Path]:
         path
         for path in [
             state_dir / "task_queue.jsonl",
+            state_dir / "goal_state.jsonl",
             state_dir / "taskboard.json",
             state_dir / "taskboard.jsonl",
             state_dir / "taskboard.yaml",

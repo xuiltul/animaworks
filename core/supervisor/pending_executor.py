@@ -244,6 +244,88 @@ class PendingTaskExecutor:
             )
             return None
 
+    async def _handle_goal_completion(self, task_desc: dict[str, Any], result_summary: str) -> None:
+        """Run persistent-goal judging after a TaskExec task has completed."""
+        task_id = task_desc.get("task_id", "")
+        if not task_id:
+            return
+        try:
+            from core.goals import GoalJudge, GoalManager
+            from core.memory.task_queue import TaskQueueManager
+
+            entry = TaskQueueManager(self._anima_dir).get_task_by_id(task_id)
+            meta = entry.meta if entry is not None else {}
+            goal_id = str(meta.get("goal_id") or task_desc.get("goal_id") or "").strip()
+            if not goal_id:
+                return
+
+            manager = GoalManager(self._anima_dir)
+            state = manager.get_goal(goal_id)
+            if state is None or state.status != "active":
+                return
+
+            judge = GoalJudge(
+                self._anima_dir,
+                judge_fn=getattr(self, "_goal_judge_fn", None),
+            )
+            judgment = await judge.judge(
+                state,
+                task_id=task_id,
+                result_summaries=[result_summary],
+                verification_output=str(task_desc.get("verification_output") or ""),
+            )
+            updated = manager.record_judgment(
+                goal_id,
+                judgment,
+                result_summary=result_summary,
+                actor="goal_judge",
+            )
+            if updated is None or updated.last_judgment is None:
+                return
+
+            actual = updated.last_judgment
+            if actual.verdict == "done":
+                manager.mark_done_activity(updated)
+                return
+            if actual.verdict == "blocked":
+                manager.mark_blocked_activity(updated)
+                await self._notify_goal_blocked(updated)
+                return
+            if actual.verdict == "continue":
+                continuation = manager.enqueue_continuation(
+                    goal_id,
+                    actual,
+                    source_task_desc=task_desc,
+                    result_summary=result_summary,
+                    respect_human_priority=True,
+                )
+                if continuation is not None:
+                    self.wake()
+        except Exception:
+            logger.warning(
+                "[%s] Goal completion hook failed for task %s",
+                self._anima_name,
+                task_id,
+                exc_info=True,
+            )
+
+    async def _notify_goal_blocked(self, state: Any) -> None:
+        """Best-effort human notification for blocked persistent goals."""
+        try:
+            agent = getattr(self._anima, "agent", None)
+            notifier = getattr(agent, "human_notifier", None)
+            if notifier is None:
+                return
+            reason = state.blocked_reason or (state.last_judgment.reason if state.last_judgment else "")
+            await notifier.notify(
+                f"Goal blocked: {state.title or state.goal_id}",
+                reason or state.objective,
+                "high",
+                anima_name=self._anima_name,
+            )
+        except Exception:
+            logger.debug("[%s] Goal blocked notification failed", self._anima_name, exc_info=True)
+
     def _pending_json_age_hours(
         self,
         task_desc: dict[str, Any],
@@ -881,6 +963,8 @@ class PendingTaskExecutor:
                 self._save_task_result(task_id, result)
                 status, summary = _classify_task_result(result)
                 self._sync_task_queue(task_id, status, summary=summary)
+                if status == "done":
+                    await self._handle_goal_completion(task_desc, result)
                 return result
             finally:
                 self._anima._active_parallel_tasks.pop(task_id, None)
@@ -897,6 +981,8 @@ class PendingTaskExecutor:
         self._save_task_result(task_id, result)
         status, summary = _classify_task_result(result)
         self._sync_task_queue(task_id, status, summary=summary)
+        if status == "done":
+            await self._handle_goal_completion(task_desc, result)
         return result
 
     async def _run_llm_task(
@@ -1285,6 +1371,8 @@ class PendingTaskExecutor:
                     result = await self._run_llm_task(task_desc)
                     status, summary = _classify_task_result(result)
                     self._sync_task_queue(task_id, status, summary=summary)
+                    if status == "done":
+                        await self._handle_goal_completion(task_desc, result)
                 finally:
                     self._anima._status_slots["background"] = "idle"
                     self._anima._task_slots["background"] = ""
