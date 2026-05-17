@@ -259,6 +259,11 @@ def cli_main() -> None:
 
     register_skills_command(sub)
 
+    # ── External Agent Import ─────────────────────────────
+    from cli.commands.import_cmd import register_import_command
+
+    register_import_command(sub)
+
     # ── Config ────────────────────────────────────────────
     from core.config.cli import (
         cmd_config_dispatch,
