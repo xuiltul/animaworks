@@ -15,7 +15,7 @@ import logging
 import re
 import zlib
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -411,6 +411,37 @@ class SchedulerManager:
             max_instances=1,
         )
 
+    @staticmethod
+    def _any_cron_expected_in_window(
+        cron_jobs: list[Any],
+        window_start: datetime,
+        now: datetime,
+    ) -> bool:
+        """Whether any cron job was scheduled to fire within (window_start, now].
+
+        Long-period cron (e.g. ``0 10 * * 1,4``) produces no execution during
+        the health window by design.  Using the APScheduler trigger to find the
+        next fire at-or-after *window_start* lets us distinguish "nothing was
+        supposed to run" from "something was supposed to run but didn't".
+        """
+        for job in cron_jobs:
+            try:
+                trigger = getattr(job, "trigger", None)
+                if trigger is None:
+                    continue
+                next_fire = trigger.get_next_fire_time(None, window_start)
+                if next_fire is not None and next_fire <= now:
+                    return True
+            except Exception:
+                logger.debug(
+                    "Failed to compute expected fire time for job %s",
+                    getattr(job, "id", "?"),
+                    exc_info=True,
+                )
+                # Conservative: preserve legacy behavior (warn if no execution).
+                return True
+        return False
+
     async def _cron_health_tick(self) -> None:
         """Compare registered cron jobs against actual execution count."""
         if not self._anima or not self.scheduler:
@@ -424,6 +455,13 @@ class SchedulerManager:
                 if j.id.startswith(cron_job_prefix) and not j.id.endswith("_health")
             ]
             if not cron_jobs:
+                return
+
+            # Only treat a missing execution as unhealthy when at least one
+            # cron was actually expected to fire inside the health window.
+            now = now_local()
+            window_start = now - timedelta(hours=_HEALTH_CHECK_HOURS)
+            if not self._any_cron_expected_in_window(cron_jobs, window_start, now):
                 return
 
             entries = self._anima._activity._load_entries(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,6 +10,7 @@ import pytest
 
 from core.schemas import CronTask
 from core.supervisor.scheduler_manager import SchedulerManager
+from core.time_utils import now_local
 
 
 @pytest.fixture
@@ -41,6 +43,14 @@ def _make_task(name: str, schedule: str = "") -> CronTask:
     return CronTask(name=name, schedule=schedule, type="llm", description="")
 
 
+def _job_with_next_fire(job_id: str, next_fire):
+    """MagicMock cron job whose trigger reports *next_fire* as the next firing."""
+    job = MagicMock()
+    job.id = job_id
+    job.trigger.get_next_fire_time.return_value = next_fire
+    return job
+
+
 # ── Layer 1: _check_cron_parse_health ─────────────────────────
 
 
@@ -54,21 +64,15 @@ class TestCheckCronParseHealth:
         scheduler_mgr._check_cron_parse_health("schedule: 0 9 * * *", tasks, registered=1)
         assert _notif_files(tmp_path) == []
 
-    def test_all_schedules_invalid(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    def test_all_schedules_invalid(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         tasks = [_make_task("t1", "bad"), _make_task("t2", "also bad")]
-        scheduler_mgr._check_cron_parse_health(
-            "## t1\nschedule: bad\n## t2\nschedule: also bad", tasks, registered=0
-        )
+        scheduler_mgr._check_cron_parse_health("## t1\nschedule: bad\n## t2\nschedule: also bad", tasks, registered=0)
         files = _notif_files(tmp_path)
         assert len(files) == 1
         content = files[0].read_text(encoding="utf-8")
         assert "2" in content  # task_count=2
 
-    def test_indented_schedule_detected(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    def test_indented_schedule_detected(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         raw = "```yaml\n  schedule: 0 9 * * *\n```"
         tasks = [_make_task("t1")]
         scheduler_mgr._check_cron_parse_health(raw, tasks, registered=0)
@@ -89,9 +93,7 @@ class TestCheckCronParseHealth:
         content = files[0].read_text(encoding="utf-8")
         assert "schedule:" in content
 
-    def test_multiple_issues_combined_in_single_file(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    def test_multiple_issues_combined_in_single_file(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         """All-invalid + indented should produce exactly one file."""
         raw = "## t1\n  schedule: bad"
         tasks = [_make_task("t1", "bad")]
@@ -99,17 +101,13 @@ class TestCheckCronParseHealth:
         files = _notif_files(tmp_path)
         assert len(files) == 1
 
-    def test_unrecognized_schedule_no_tasks(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    def test_unrecognized_schedule_no_tasks(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         raw = 'schedule: "0 9 * * *"'
         scheduler_mgr._check_cron_parse_health(raw, tasks=[], registered=0)
         files = _notif_files(tmp_path)
         assert len(files) == 1
 
-    def test_empty_config_no_notification(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    def test_empty_config_no_notification(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         scheduler_mgr._check_cron_parse_health("", tasks=[], registered=0)
         assert _notif_files(tmp_path) == []
 
@@ -120,9 +118,7 @@ class TestCheckCronParseHealth:
 class TestSetupCronTasksHealthIntegration:
     """_setup_cron_tasks invokes _check_cron_parse_health."""
 
-    def test_invalid_cron_triggers_notification(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    def test_invalid_cron_triggers_notification(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         scheduler_mgr._anima.memory.read_cron_config.return_value = (
             "## My Task\nschedule: INVALID\ntype: llm\nDo something\n"
         )
@@ -137,9 +133,7 @@ class TestSetupCronTasksHealthIntegration:
         content = files[0].read_text(encoding="utf-8")
         assert "1" in content  # 1 task defined
 
-    def test_valid_cron_no_notification(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    def test_valid_cron_no_notification(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         scheduler_mgr._anima.memory.read_cron_config.return_value = (
             "## My Task\nschedule: 0 9 * * *\ntype: llm\nDo something\n"
         )
@@ -159,14 +153,13 @@ class TestCronHealthTick:
     """Layer 2 — periodic health check every 3 hours."""
 
     @pytest.mark.asyncio
-    async def test_no_execution_triggers_notification(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    async def test_no_execution_triggers_notification(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
+        # Cron was expected to fire inside the health window (1h ago) but
+        # activity_log shows no executions → warning expected.
+        in_window = now_local() - timedelta(hours=1)
         mock_scheduler = MagicMock()
-        job_cron = MagicMock()
-        job_cron.id = "test_anima_cron_0"
-        job_health = MagicMock()
-        job_health.id = "test_anima_cron_health"
+        job_cron = _job_with_next_fire("test_anima_cron_0", in_window)
+        job_health = _job_with_next_fire("test_anima_cron_health", None)
         mock_scheduler.get_jobs.return_value = [job_cron, job_health]
         scheduler_mgr.scheduler = mock_scheduler
 
@@ -180,12 +173,31 @@ class TestCronHealthTick:
         assert "1" in content  # 1 cron job (health job excluded)
 
     @pytest.mark.asyncio
-    async def test_with_executions_no_notification(
+    async def test_long_period_cron_outside_window_no_notification(
         self, scheduler_mgr: SchedulerManager, tmp_path: Path
     ) -> None:
+        # Cron's next fire is days in the future (e.g. weekly cron evaluated
+        # on an off-day) — nothing was supposed to run, so silence is healthy.
+        out_of_window = now_local() + timedelta(days=2)
         mock_scheduler = MagicMock()
-        job = MagicMock()
-        job.id = "test_anima_cron_0"
+        job_cron = _job_with_next_fire("test_anima_cron_0", out_of_window)
+        mock_scheduler.get_jobs.return_value = [job_cron]
+        scheduler_mgr.scheduler = mock_scheduler
+
+        load_entries = MagicMock(return_value=[])
+        scheduler_mgr._anima._activity._load_entries = load_entries
+
+        await scheduler_mgr._cron_health_tick()
+
+        assert _notif_files(tmp_path) == []
+        # Short-circuit before reading activity_log
+        load_entries.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_with_executions_no_notification(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
+        in_window = now_local() - timedelta(hours=1)
+        mock_scheduler = MagicMock()
+        job = _job_with_next_fire("test_anima_cron_0", in_window)
         mock_scheduler.get_jobs.return_value = [job]
         scheduler_mgr.scheduler = mock_scheduler
 
@@ -197,9 +209,7 @@ class TestCronHealthTick:
         assert _notif_files(tmp_path) == []
 
     @pytest.mark.asyncio
-    async def test_no_cron_jobs_no_notification(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    async def test_no_cron_jobs_no_notification(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         mock_scheduler = MagicMock()
         mock_scheduler.get_jobs.return_value = []
         scheduler_mgr.scheduler = mock_scheduler
@@ -209,12 +219,9 @@ class TestCronHealthTick:
         assert _notif_files(tmp_path) == []
 
     @pytest.mark.asyncio
-    async def test_health_job_excluded_from_count(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    async def test_health_job_excluded_from_count(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         mock_scheduler = MagicMock()
-        job_health = MagicMock()
-        job_health.id = "test_anima_cron_health"
+        job_health = _job_with_next_fire("test_anima_cron_health", None)
         mock_scheduler.get_jobs.return_value = [job_health]
         scheduler_mgr.scheduler = mock_scheduler
 
@@ -223,22 +230,53 @@ class TestCronHealthTick:
         assert _notif_files(tmp_path) == []
 
     @pytest.mark.asyncio
-    async def test_activity_error_handled_gracefully(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    async def test_activity_error_handled_gracefully(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
+        in_window = now_local() - timedelta(hours=1)
         mock_scheduler = MagicMock()
-        job = MagicMock()
-        job.id = "test_anima_cron_0"
+        job = _job_with_next_fire("test_anima_cron_0", in_window)
         mock_scheduler.get_jobs.return_value = [job]
         scheduler_mgr.scheduler = mock_scheduler
 
-        scheduler_mgr._anima._activity._load_entries = MagicMock(
-            side_effect=RuntimeError("disk error")
-        )
+        scheduler_mgr._anima._activity._load_entries = MagicMock(side_effect=RuntimeError("disk error"))
 
         await scheduler_mgr._cron_health_tick()
 
         assert _notif_files(tmp_path) == []
+
+
+# ── _any_cron_expected_in_window ──────────────────────────────
+
+
+class TestAnyCronExpectedInWindow:
+    """Unit coverage for the expected-fire window gate."""
+
+    def test_fire_inside_window(self) -> None:
+        now = now_local()
+        ws = now - timedelta(hours=3)
+        job = _job_with_next_fire("c0", now - timedelta(hours=1))
+        assert SchedulerManager._any_cron_expected_in_window([job], ws, now) is True
+
+    def test_fire_outside_window(self) -> None:
+        now = now_local()
+        ws = now - timedelta(hours=3)
+        job = _job_with_next_fire("c0", now + timedelta(days=2))
+        assert SchedulerManager._any_cron_expected_in_window([job], ws, now) is False
+
+    def test_mixed_jobs_any_match(self) -> None:
+        now = now_local()
+        ws = now - timedelta(hours=3)
+        far = _job_with_next_fire("c0", now + timedelta(days=2))
+        near = _job_with_next_fire("c1", now - timedelta(minutes=30))
+        assert SchedulerManager._any_cron_expected_in_window([far, near], ws, now) is True
+
+    def test_trigger_error_is_conservative(self) -> None:
+        now = now_local()
+        ws = now - timedelta(hours=3)
+        job = MagicMock()
+        job.id = "c0"
+        job.trigger.get_next_fire_time.side_effect = RuntimeError("boom")
+        # Falls back to legacy behavior: assume a fire was expected.
+        assert SchedulerManager._any_cron_expected_in_window([job], ws, now) is True
 
 
 # ── _setup_cron_health_check ──────────────────────────────────
@@ -271,9 +309,7 @@ class TestSetupCronHealthCheck:
 
 
 class TestWriteCronHealthNotification:
-    def test_creates_md_file(
-        self, scheduler_mgr: SchedulerManager, tmp_path: Path
-    ) -> None:
+    def test_creates_md_file(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         scheduler_mgr._write_cron_health_notification("Test warning message")
 
         files = _notif_files(tmp_path)
@@ -282,9 +318,7 @@ class TestWriteCronHealthNotification:
         assert "Test warning message" in content
         assert "⚠️" in content
 
-    def test_write_failure_does_not_raise(
-        self, scheduler_mgr: SchedulerManager
-    ) -> None:
+    def test_write_failure_does_not_raise(self, scheduler_mgr: SchedulerManager) -> None:
         scheduler_mgr._anima_dir = Path("/nonexistent/path/should/fail")
         scheduler_mgr._write_cron_health_notification("msg")
 
@@ -293,16 +327,12 @@ class TestWriteCronHealthNotification:
 
 
 class TestReloadScheduleIncludesHealthCheck:
-    def test_reload_calls_health_check_setup(
-        self, scheduler_mgr: SchedulerManager
-    ) -> None:
+    def test_reload_calls_health_check_setup(self, scheduler_mgr: SchedulerManager) -> None:
         mock_scheduler = MagicMock()
         mock_scheduler.get_jobs.return_value = []
         scheduler_mgr.scheduler = mock_scheduler
 
-        with patch.object(
-            scheduler_mgr, "_setup_cron_health_check"
-        ) as mock_health:
+        with patch.object(scheduler_mgr, "_setup_cron_health_check") as mock_health:
             scheduler_mgr.reload_schedule("test_anima")
 
         mock_health.assert_called_once()
