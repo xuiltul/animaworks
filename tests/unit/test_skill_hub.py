@@ -155,6 +155,22 @@ def test_replace_failure_keeps_existing_active_skill(tmp_path: Path) -> None:
     assert [item["name"] for item in hub.list_skills(target="common")] == ["rollback-me"]
 
 
+def test_replace_lock_failure_restores_existing_active_skill(tmp_path: Path) -> None:
+    first = _write_source_skill(tmp_path / "src1", "lock-rollback", body="First body.")
+    second = _write_source_skill(tmp_path / "src2", "lock-rollback", body="Second body.")
+    hub = SkillHub(data_dir=tmp_path)
+    installed = hub.install(str(first), target="common")
+
+    with (
+        patch.object(hub, "_append_lock", side_effect=RuntimeError("lock failed")),
+        pytest.raises(RuntimeError, match="lock failed"),
+    ):
+        hub.install(str(second), target="common", replace=True)
+
+    assert "First body" in (tmp_path / installed.installed_path).read_text(encoding="utf-8")
+    assert [item["name"] for item in hub.list_skills(target="common")] == ["lock-rollback"]
+
+
 def test_url_source_installs_single_skill_file(tmp_path: Path) -> None:
     class _Response:
         def __enter__(self):
@@ -323,6 +339,36 @@ def test_warn_quarantine_cannot_be_promoted_with_approval(tmp_path: Path) -> Non
     assert result.scan_verdict == "warn"
     assert not (tmp_path / "common_skills" / "community" / "warn-promote").exists()
     assert (tmp_path / "common_skills" / "quarantine" / "warn-promote" / "SKILL.md").is_file()
+
+
+def test_promote_lock_failure_keeps_quarantine_and_no_active_skill(tmp_path: Path) -> None:
+    source = _write_source_skill(tmp_path / "src", "promote-lock")
+    hub = SkillHub(data_dir=tmp_path)
+    hub.install(str(source), target="common", quarantine=True)
+
+    with (
+        patch.object(hub, "_append_lock", side_effect=RuntimeError("lock failed")),
+        pytest.raises(RuntimeError, match="lock failed"),
+    ):
+        hub.promote_quarantine("promote-lock", target="common", approval_id="approval-1")
+
+    assert not (tmp_path / "common_skills" / "community" / "promote-lock").exists()
+    assert (tmp_path / "common_skills" / "quarantine" / "promote-lock" / "SKILL.md").is_file()
+
+
+def test_remove_lock_failure_restores_skill(tmp_path: Path) -> None:
+    source = _write_source_skill(tmp_path / "src", "remove-lock")
+    hub = SkillHub(data_dir=tmp_path)
+    installed = hub.install(str(source), target="common")
+
+    with (
+        patch.object(hub, "_append_lock", side_effect=RuntimeError("lock failed")),
+        pytest.raises(RuntimeError, match="lock failed"),
+    ):
+        hub.remove("remove-lock", target="common")
+
+    assert (tmp_path / installed.installed_path).is_file()
+    assert [item["name"] for item in hub.list_skills(target="common")] == ["remove-lock"]
 
 
 def test_personal_quarantine_skill_name_is_reserved(tmp_path: Path) -> None:

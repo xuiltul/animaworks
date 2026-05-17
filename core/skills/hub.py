@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,7 @@ import yaml
 from core.memory.frontmatter import parse_frontmatter
 from core.paths import get_data_dir
 from core.skills.guard import SkillScanner
+from core.skills.hub_storage import activate_destination, pending_destination, removed_destination, rollback_activation
 from core.skills.loader import load_skill_metadata
 from core.skills.models import ScanResult, SkillBundle, SkillHubLockEntry, SkillScanVerdict, SkillTrustLevel
 from core.skills.promotion_utils import safe_skill_name, scan_security_metadata
@@ -39,19 +40,7 @@ class SkillHubResult:
     size_violations: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "status": self.status,
-            "skill_name": self.skill_name,
-            "target": self.target,
-            "message": self.message,
-            "installed_path": self.installed_path,
-            "backup_path": self.backup_path,
-            "scan_verdict": self.scan_verdict,
-            "decision": self.decision,
-            "reason": self.reason,
-            "findings": self.findings,
-            "size_violations": self.size_violations,
-        }
+        return asdict(self)
 
 
 @dataclass(slots=True)
@@ -143,7 +132,9 @@ class SkillHub:
                     size_violations=scan.size_violations,
                 )
 
-            prepared = self._pending_destination(paths, skill_name)
+            prepared = pending_destination(paths, skill_name)
+            backup_path = None
+            activated = False
             try:
                 self._install_staged_bundle(
                     Path(bundle.staging_path),
@@ -153,18 +144,21 @@ class SkillHub:
                     scan=scan,
                     source=bundle,
                 )
-                backup_path = self._activate_destination(prepared, destination, replace=replace, paths=paths)
+                backup_path = activate_destination(prepared, destination, replace=replace, paths=paths)
+                activated = True
+                self._append_lock(
+                    paths,
+                    action="quarantine" if quarantine else "install",
+                    skill_name=skill_name,
+                    source=bundle,
+                    scan=scan,
+                    installed_path=installed_path,
+                )
             except Exception:
                 shutil.rmtree(prepared, ignore_errors=True)
+                if activated:
+                    rollback_activation(destination, backup_path, paths)
                 raise
-            self._append_lock(
-                paths,
-                action="quarantine" if quarantine else "install",
-                skill_name=skill_name,
-                source=bundle,
-                scan=scan,
-                installed_path=installed_path,
-            )
             return SkillHubResult(
                 status="quarantine" if quarantine else "installed",
                 skill_name=skill_name,
@@ -204,8 +198,16 @@ class SkillHub:
             skill_dir = root / name
             if skill_dir.is_dir():
                 installed_path = paths.rel(skill_dir / "SKILL.md")
-                shutil.rmtree(skill_dir)
-                self._append_lock(paths, action="remove", skill_name=name, installed_path=installed_path)
+                removed = removed_destination(paths, name)
+                removed.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(skill_dir), str(removed))
+                try:
+                    self._append_lock(paths, action="remove", skill_name=name, installed_path=installed_path)
+                except Exception:
+                    if not skill_dir.exists():
+                        shutil.move(str(removed), str(skill_dir))
+                    raise
+                shutil.rmtree(removed, ignore_errors=True)
                 return SkillHubResult(
                     status="removed",
                     skill_name=name,
@@ -241,17 +243,22 @@ class SkillHub:
         if decision is False:
             return self._blocked_result(name, paths.target, scan, decision, reason)
         destination = paths.active_skill_dir(name)
-        prepared = self._pending_destination(paths, name)
+        prepared = pending_destination(paths, name)
+        backup_path = None
+        activated = False
         try:
             _copy_tree(source_dir, prepared)
             self._rewrite_skill_metadata(prepared / "SKILL.md", name, trust, scan, approval_id=approval_id)
-            backup_path = self._activate_destination(prepared, destination, replace=replace, paths=paths)
+            backup_path = activate_destination(prepared, destination, replace=replace, paths=paths)
+            activated = True
+            installed_path = paths.rel(destination / "SKILL.md")
+            self._append_lock(paths, action="promote", skill_name=name, scan=scan, installed_path=installed_path)
         except Exception:
             shutil.rmtree(prepared, ignore_errors=True)
+            if activated:
+                rollback_activation(destination, backup_path, paths)
             raise
-        shutil.rmtree(source_dir)
-        installed_path = paths.rel(destination / "SKILL.md")
-        self._append_lock(paths, action="promote", skill_name=name, scan=scan, installed_path=installed_path)
+        shutil.rmtree(source_dir, ignore_errors=True)
         return SkillHubResult(
             status="promoted",
             skill_name=name,
@@ -359,36 +366,6 @@ class SkillHub:
         frontmatter = yaml.dump(meta, allow_unicode=True, default_flow_style=False, sort_keys=False).strip()
         skill_md.write_text(f"---\n{frontmatter}\n---\n\n{body.lstrip()}", encoding="utf-8")
 
-    def _pending_destination(self, paths: _TargetPaths, skill_name: str) -> Path:
-        return paths.backup_dir / "pending" / f"{skill_name}.install-{_stamp()}"
-
-    def _activate_destination(
-        self,
-        prepared: Path,
-        destination: Path,
-        *,
-        replace: bool,
-        paths: _TargetPaths,
-    ) -> str | None:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if not destination.exists():
-            shutil.move(str(prepared), str(destination))
-            return None
-        if not replace:
-            shutil.rmtree(prepared, ignore_errors=True)
-            raise FileExistsError(f"Skill already exists: {destination}")
-
-        backup = paths.backup_dir / f"{destination.name}.backup-{_stamp()}"
-        backup.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(destination), str(backup))
-        try:
-            shutil.move(str(prepared), str(destination))
-        except Exception:
-            if not destination.exists() and backup.exists():
-                shutil.move(str(backup), str(destination))
-            raise
-        return paths.rel(backup / "SKILL.md")
-
     def _append_lock(
         self,
         paths: _TargetPaths,
@@ -465,10 +442,6 @@ def _copy_tree(source: Path, destination: Path) -> None:
     if destination.exists():
         raise FileExistsError(f"Destination already exists: {destination}")
     shutil.copytree(source, destination, symlinks=False)
-
-
-def _stamp() -> str:
-    return now_iso().replace(":", "").replace("+", "_").replace("-", "").replace(".", "")
 
 
 def _safe_anima_name(value: str) -> str:
