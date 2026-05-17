@@ -159,10 +159,7 @@ def _apply_flags(anima_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
     has_blocking_artifact = any(path.exists() for path in _bootstrap_artifacts(anima_dir))
 
     payload["needs_user_input"] = (
-        state == STATE_PENDING_USER_INPUT
-        and has_bootstrap
-        and not has_character_sheet
-        and not has_blocking_artifact
+        state == STATE_PENDING_USER_INPUT and has_bootstrap and not has_character_sheet and not has_blocking_artifact
     )
     payload["needs_repair"] = state == STATE_NEEDS_REPAIR
     payload["needs_background_bootstrap"] = (

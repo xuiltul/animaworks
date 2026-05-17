@@ -25,7 +25,9 @@ from core.goals.models import GoalJudgment, GoalState
 
 logger = logging.getLogger("animaworks.goals.judge")
 
-JudgeFn = Callable[[str, dict[str, Any]], GoalJudgment | dict[str, Any] | str | Awaitable[GoalJudgment | dict[str, Any] | str]]
+JudgeFn = Callable[
+    [str, dict[str, Any]], GoalJudgment | dict[str, Any] | str | Awaitable[GoalJudgment | dict[str, Any] | str]
+]
 
 _VALID_VERDICTS: set[str] = {"done", "continue", "blocked"}
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -197,8 +199,8 @@ def _render_prompt(payload: dict[str, Any]) -> str:
     return (
         "Judge this goal using only the supplied evidence.\n"
         "Allowed verdicts: done, continue, blocked.\n"
-        "JSON schema: {\"verdict\":\"done|continue|blocked\",\"reason\":\"...\","
-        "\"continuation_prompt\":\"only when verdict is continue\"}\n\n"
+        'JSON schema: {"verdict":"done|continue|blocked","reason":"...",'
+        '"continuation_prompt":"only when verdict is continue"}\n\n'
         f"{json.dumps(payload, ensure_ascii=False, indent=2)}"
     )
 

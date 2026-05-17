@@ -209,10 +209,7 @@ class ProcedureToSkillConverter:
             raise FileExistsError(f"Quarantine skill already exists: {quarantine_skill_dir}")
         candidate = self.candidate_from_path(source_path)
         if enforce_policy and candidate is not None and not candidate.eligible:
-            raise ValueError(
-                "Procedure is not eligible for skill promotion: "
-                + ", ".join(candidate.reasons)
-            )
+            raise ValueError("Procedure is not eligible for skill promotion: " + ", ".join(candidate.reasons))
 
         meta = self._build_skill_metadata(
             skill_name=final_skill_name,
@@ -309,13 +306,9 @@ class ProcedureToSkillConverter:
         if not approval_callback_id:
             raise SkillPromotionApprovalRequiredError("approval_callback_id is required")
         if not stored_callback_id:
-            raise SkillPromotionApprovalRequiredError(
-                "Quarantine skill has no registered approval_callback_id"
-            )
+            raise SkillPromotionApprovalRequiredError("Quarantine skill has no registered approval_callback_id")
         if stored_callback_id != approval_callback_id:
-            raise SkillPromotionApprovalMismatchError(
-                "approval_callback_id does not match quarantine skill metadata"
-            )
+            raise SkillPromotionApprovalMismatchError("approval_callback_id does not match quarantine skill metadata")
         approval = verify_skill_promotion_approval(
             approval_callback_id,
             owner_anima=self._owner_anima,
@@ -417,7 +410,9 @@ class ProcedureToSkillConverter:
             or procedure_metadata.get("negative_phrases")
             or procedure_metadata.get("do_not_use_when")
         )
-        domains = as_list(overrides.get("domains") or procedure_metadata.get("domains") or procedure_metadata.get("tags"))
+        domains = as_list(
+            overrides.get("domains") or procedure_metadata.get("domains") or procedure_metadata.get("tags")
+        )
         if not domains:
             domains = ["general"]
         tags = as_list(overrides.get("tags") or procedure_metadata.get("tags"))

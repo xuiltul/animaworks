@@ -637,8 +637,7 @@ class LifecycleMixin:
 
                     # Record cron execution result
                     rejection_dicts = [
-                        {"ref": rejection.ref, "reason": rejection.reason}
-                        for rejection in cron_skill_rejections
+                        {"ref": rejection.ref, "reason": rejection.reason} for rejection in cron_skill_rejections
                     ]
                     warning_dicts = [
                         {

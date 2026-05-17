@@ -22,7 +22,9 @@ def register_import_command(subparsers: argparse._SubParsersAction) -> None:
     hermes = sub.add_parser("hermes", help="Import Hermes Agent data")
     _common_args(hermes)
     hermes.add_argument("--common-skills", action="store_true", help="Import skills into common_skills/community")
-    hermes.add_argument("--target-anima", default=None, help="Target anima for personal skills, usage, tasks, and drafts")
+    hermes.add_argument(
+        "--target-anima", default=None, help="Target anima for personal skills, usage, tasks, and drafts"
+    )
     hermes.set_defaults(func=cmd_import_hermes)
 
     openclaw = sub.add_parser("openclaw", help="Import OpenClaw data")
@@ -36,7 +38,9 @@ def _common_args(parser: argparse.ArgumentParser) -> None:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="Preview without changing the runtime filesystem")
     mode.add_argument("--apply", action="store_true", help="Apply importable items and write migration report")
-    parser.add_argument("--replace", action="store_true", help="Replace existing generated targets after backup manifest")
+    parser.add_argument(
+        "--replace", action="store_true", help="Replace existing generated targets after backup manifest"
+    )
     parser.add_argument("--json", action="store_true", dest="json_output", help="Output JSON instead of Markdown")
 
 

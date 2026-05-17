@@ -108,7 +108,9 @@ def _migrate_skills(
         fp = source_fingerprint("hermes_skill", skill_dir, target_path)
         if fp in seen and not options.replace:
             report.add_item(
-                MigrationItem("hermes_skill", str(skill_dir), target_path, "skill_import", "skipped", fp, "already imported")
+                MigrationItem(
+                    "hermes_skill", str(skill_dir), target_path, "skill_import", "skipped", fp, "already imported"
+                )
             )
             continue
 
@@ -185,7 +187,9 @@ def _migrate_usage(
         report.add_warning(f"usage_missing_from_source:{len(missing)} skills")
 
     for index, event in enumerate(events):
-        fp = source_fingerprint("hermes_usage", usage_path, target_path, extra=f"{index}:{event['skill_name']}:{event['event_type']}")
+        fp = source_fingerprint(
+            "hermes_usage", usage_path, target_path, extra=f"{index}:{event['skill_name']}:{event['event_type']}"
+        )
         if fp in seen and not options.replace:
             report.add_item(MigrationItem("hermes_usage", str(usage_path), target_path, "usage_import", "skipped", fp))
             continue
@@ -235,7 +239,9 @@ def _migrate_hub_lock(
         skill_name = str(raw.get("skill_name") or raw.get("name") or raw.get("id") or "unknown")
         fp = source_fingerprint("hermes_hub_lock", lock_path, target_path, extra=f"{index}:{skill_name}")
         if fp in seen and not options.replace:
-            report.add_item(MigrationItem("hermes_hub_lock", str(lock_path), target_path, "hub_lock_import", "skipped", fp))
+            report.add_item(
+                MigrationItem("hermes_hub_lock", str(lock_path), target_path, "hub_lock_import", "skipped", fp)
+            )
             continue
         entry = {
             "ts": raw.get("ts") or raw.get("created_at") or now_iso(),
@@ -490,7 +496,9 @@ def _hermes_skill_names(source: Path) -> set[str]:
     skills_dir = source / "skills"
     if not skills_dir.is_dir():
         return set()
-    return {p.name for p in skills_dir.iterdir() if p.is_dir() and not p.name.startswith(".") and (p / "SKILL.md").is_file()}
+    return {
+        p.name for p in skills_dir.iterdir() if p.is_dir() and not p.name.startswith(".") and (p / "SKILL.md").is_file()
+    }
 
 
 def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:

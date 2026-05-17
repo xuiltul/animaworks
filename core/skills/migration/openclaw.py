@@ -166,7 +166,9 @@ def _propose_tasks(
         body += provenance_header("openclaw", path, report.batch_id)
         body += redact_credentials(path.read_text(encoding="utf-8")) + "\n\n"
     source_for_fingerprint = existing[0]
-    _write_item(source_for_fingerprint, target, body, "taskboard_import_proposal", options, report, import_lock_path, seen)
+    _write_item(
+        source_for_fingerprint, target, body, "taskboard_import_proposal", options, report, import_lock_path, seen
+    )
 
 
 def _write_item(

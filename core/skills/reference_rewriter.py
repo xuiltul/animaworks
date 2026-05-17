@@ -110,9 +110,7 @@ def _candidate_files(anima_dir: Path) -> list[Path]:
     goals_dir = anima_dir / "goals"
     if goals_dir.is_dir():
         candidates.extend(
-            path
-            for path in goals_dir.rglob("*")
-            if path.suffix.lower() in {".md", ".json", ".jsonl", ".yaml", ".yml"}
+            path for path in goals_dir.rglob("*") if path.suffix.lower() in {".md", ".json", ".jsonl", ".yaml", ".yml"}
         )
     state_dir = anima_dir / "state"
     candidates.extend(

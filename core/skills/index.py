@@ -270,9 +270,7 @@ class SkillIndex:
             )
 
         matches = [
-            meta
-            for meta in entries
-            if meta.name == value or (meta.path is not None and meta.path.parent.name == value)
+            meta for meta in entries if meta.name == value or (meta.path is not None and meta.path.parent.name == value)
         ]
         if len(matches) > 1:
             logger.warning(

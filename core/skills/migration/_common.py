@@ -15,7 +15,9 @@ from typing import Any
 from core.time_utils import now_iso
 
 _SECRET_PATTERNS = [
-    re.compile(r"(?i)['\"]?\b(api[_-]?key|token|secret|password)\b['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9._~+\-/=]{8,})['\"]?"),
+    re.compile(
+        r"(?i)['\"]?\b(api[_-]?key|token|secret|password)\b['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9._~+\-/=]{8,})['\"]?"
+    ),
     re.compile(r"\b(sk-[A-Za-z0-9]{8,})\b"),
 ]
 
@@ -70,7 +72,9 @@ def load_import_lock(path: Path) -> set[str]:
     return fingerprints
 
 
-def append_import_lock(path: Path, *, fingerprint: str, source_system: str, action: str, target_path: str, batch_id: str) -> None:
+def append_import_lock(
+    path: Path, *, fingerprint: str, source_system: str, action: str, target_path: str, batch_id: str
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     entry = {
         "ts": now_iso(),

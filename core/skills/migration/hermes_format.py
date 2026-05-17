@@ -131,7 +131,9 @@ def _counter_usage_event(
     import_time: str,
     index: int,
 ) -> dict[str, Any]:
-    ts = str(record.get(f"{event_type.value}_at") or record.get("last_used_at") or record.get("created_at") or import_time)
+    ts = str(
+        record.get(f"{event_type.value}_at") or record.get("last_used_at") or record.get("created_at") or import_time
+    )
     notes = "source_usage_completeness:sparse"
     if ts == import_time:
         notes = _join_notes(notes, "imported_without_original_timestamp")

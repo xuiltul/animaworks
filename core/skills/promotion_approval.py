@@ -70,20 +70,14 @@ def verify_skill_promotion_approval(
 
     resolved = run_coroutine_sync(get_interaction_router().lookup_resolved(callback_id))
     if resolved is None:
-        raise SkillPromotionApprovalRequiredError(
-            "Human approval has not been resolved for this skill promotion"
-        )
+        raise SkillPromotionApprovalRequiredError("Human approval has not been resolved for this skill promotion")
 
     req, approval_result = resolved
     expected_name = str(req.metadata.get("skill_name") or "")
     if req.category != "skill_promotion" or req.anima_name != owner_anima or expected_name != skill_name:
-        raise SkillPromotionApprovalMismatchError(
-            "approval_callback_id does not match this skill promotion"
-        )
+        raise SkillPromotionApprovalMismatchError("approval_callback_id does not match this skill promotion")
     if approval_result.decision.lower() not in {"approve", "approved", "yes"}:
-        raise SkillPromotionApprovalRejectedError(
-            f"Skill promotion was not approved: {approval_result.decision}"
-        )
+        raise SkillPromotionApprovalRejectedError(f"Skill promotion was not approved: {approval_result.decision}")
     return VerifiedSkillPromotionApproval(
         actor=approval_result.actor,
         source=approval_result.source,

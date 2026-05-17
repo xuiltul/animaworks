@@ -119,9 +119,7 @@ class SkillRouter:
             return []
 
         records = [
-            _SkillRecord.from_metadata(meta, include_body=self.include_body)
-            for meta in skills
-            if _router_visible(meta)
+            _SkillRecord.from_metadata(meta, include_body=self.include_body) for meta in skills if _router_visible(meta)
         ]
         if not records:
             return []

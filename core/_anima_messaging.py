@@ -228,8 +228,8 @@ class MessagingMixin:
             )
 
         logger.info("[%s] run_bootstrap START", self.name)
-        from core.tooling.handler import active_session_type
         from core.bootstrap_state import finalize_bootstrap_run, mark_bootstrap_failed, mark_bootstrap_running
+        from core.tooling.handler import active_session_type
 
         try:
             async with self._get_thread_lock("default"):

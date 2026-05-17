@@ -245,10 +245,14 @@ class SkillCurator:
             patch_count = stats.patch_count if stats else meta.patch_count
             total = success + failure
             if total and failure / total >= 0.7:
-                suggestions.append(LifecycleSuggestion(meta.name, SkillLifecycleState.review, "failure_rate_high", failure / total))
+                suggestions.append(
+                    LifecycleSuggestion(meta.name, SkillLifecycleState.review, "failure_rate_high", failure / total)
+                )
                 continue
             if patch_count >= 5:
-                suggestions.append(LifecycleSuggestion(meta.name, SkillLifecycleState.review, "patch_count_consolidation", patch_count))
+                suggestions.append(
+                    LifecycleSuggestion(meta.name, SkillLifecycleState.review, "patch_count_consolidation", patch_count)
+                )
                 continue
             if meta.pinned or meta.protected:
                 continue
@@ -257,7 +261,9 @@ class SkillCurator:
                 continue
             age_days = (now - last_used.astimezone(UTC)).days
             if age_days >= archive_days:
-                suggestions.append(LifecycleSuggestion(meta.name, SkillLifecycleState.archived, "unused_180d", age_days))
+                suggestions.append(
+                    LifecycleSuggestion(meta.name, SkillLifecycleState.archived, "unused_180d", age_days)
+                )
             elif age_days >= stale_days:
                 suggestions.append(LifecycleSuggestion(meta.name, SkillLifecycleState.stale, "unused_90d", age_days))
         return suggestions
@@ -355,7 +361,9 @@ class SkillCurator:
                 return meta
         return None
 
-    def _create_reference_rewrite_proposal(self, skill_name: str, *, absorbed_into: str | None, actor: str) -> str | None:
+    def _create_reference_rewrite_proposal(
+        self, skill_name: str, *, absorbed_into: str | None, actor: str
+    ) -> str | None:
         from core.skills.reference_rewriter import generate_reference_rewrite_proposal
 
         proposal = generate_reference_rewrite_proposal(

@@ -498,11 +498,16 @@ class ProcessSupervisor(HealthMixin, ReconcileMixin, SchedulerMixin):
                 return
 
             result_status = str(result.get("status") or result.get("action") or "")
-            if bootstrap_status and bootstrap_status.get("state") != "completed" and result_status not in {
-                "completed",
-                "complete",
-                "success",
-            }:
+            if (
+                bootstrap_status
+                and bootstrap_status.get("state") != "completed"
+                and result_status
+                not in {
+                    "completed",
+                    "complete",
+                    "success",
+                }
+            ):
                 logger.error(
                     "Bootstrap did not complete for %s: result=%s state=%s",
                     anima_name,
