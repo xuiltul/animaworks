@@ -392,12 +392,7 @@ def test_cron_skill_context_rejects_quarantined_skill_refs(tmp_path: Path) -> No
     nested_dir = anima_dir / "skills" / "quarantine" / "nested-draft"
     nested_dir.mkdir(parents=True)
     (nested_dir / "SKILL.md").write_text(
-        "---\n"
-        "name: nested-draft\n"
-        "description: Quarantine draft\n"
-        "trust_level: quarantine\n"
-        "---\n\n"
-        "# Nested Draft\n",
+        "---\nname: nested-draft\ndescription: Quarantine draft\ntrust_level: quarantine\n---\n\n# Nested Draft\n",
         encoding="utf-8",
     )
 
