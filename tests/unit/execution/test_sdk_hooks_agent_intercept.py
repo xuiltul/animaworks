@@ -363,6 +363,9 @@ class TestSubmitTasksInterceptDenyReason:
         assert reason.startswith("SUCCESS")
         assert "DUPLICATE" in reason
         assert "re-submit" in reason.lower() or "Do NOT" in reason
+        assert "STOP working on the submitted task(s) in this conversation" in reason
+        assert "Do not use Read/Edit/Bash/update_task" in reason
+        assert "Proceed with your current conversation." not in reason
 
     @pytest.mark.asyncio
     async def test_submit_tasks_intercept_error_reason(self, anima_dir: Path):

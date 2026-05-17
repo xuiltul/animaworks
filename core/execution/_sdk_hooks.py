@@ -804,7 +804,10 @@ def _build_pre_tool_hook(
                     f"These tasks are NOT sent to any subordinate. "
                     f"Do NOT re-submit the same tasks via any method — "
                     f"doing so WILL cause DUPLICATE execution. "
-                    f"Proceed with your current conversation."
+                    f"STOP working on the submitted task(s) in this conversation. "
+                    f"Do not use Read/Edit/Bash/update_task or other tools to complete those same task(s) here. "
+                    f"Your next response should only acknowledge that the task(s) were queued, "
+                    f"unless you are doing unrelated work."
                 )
 
             return SyncHookJSONOutput(
