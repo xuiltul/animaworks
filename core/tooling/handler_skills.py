@@ -327,6 +327,12 @@ class SkillsToolsMixin:
 
         return result
 
+    def _handle_promote_procedure_to_skill(self, args: dict[str, Any]) -> str:
+        """Create or approve a reviewed skill generated from a procedure."""
+        from core.tooling.skill_promotion_tool import handle_promote_procedure_to_skill
+
+        return handle_promote_procedure_to_skill(self, args)
+
     def _scan_created_skill(self, skill_dir: Path, trust_level: str | None) -> str:
         """Run security scan on a newly created skill and persist results."""
         from datetime import datetime

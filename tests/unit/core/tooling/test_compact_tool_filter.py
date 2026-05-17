@@ -37,7 +37,7 @@ class TestCompactToolFilter:
     def test_compact_excludes_heavy_tools(self):
         tools = build_unified_tool_list(compact=True, include_create_skill=False)
         names = _tool_names(tools)
-        for excluded in ["submit_tasks", "update_task", "session_todo", "create_skill"]:
+        for excluded in ["submit_tasks", "update_task", "session_todo", "create_skill", "promote_procedure_to_skill"]:
             assert excluded not in names, f"{excluded} should be excluded in compact mode"
 
     def test_non_compact_returns_more_tools(self):

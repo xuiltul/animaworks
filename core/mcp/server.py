@@ -70,6 +70,7 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "update_task",
         # AW-essential: skill authoring
         "create_skill",
+        "promote_procedure_to_skill",
         # Mode S: pre-completion verification
         "completion_gate",
     }

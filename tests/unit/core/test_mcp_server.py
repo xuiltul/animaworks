@@ -12,12 +12,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from mcp.types import TextContent, Tool
 
-
 # ── Expected internal tool names (fixed set) ─────────────────────────
 
 EXPECTED_INTERNAL_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        # AW-essential 10 tools (unified architecture)
+        # AW-essential tools (unified architecture)
         "search_memory",
         "read_memory_file",
         "write_memory_file",
@@ -28,6 +27,7 @@ EXPECTED_INTERNAL_TOOL_NAMES: frozenset[str] = frozenset(
         "submit_tasks",
         "update_task",
         "create_skill",
+        "promote_procedure_to_skill",
     }
 )
 
@@ -39,14 +39,14 @@ class TestMcpToolSchemas:
     """Tests for the static MCP_TOOLS list built at import time."""
 
     def test_mcp_tools_includes_all_internal(self) -> None:
-        """MCP_TOOLS includes at least all 10 AW-essential tools."""
+        """MCP_TOOLS includes at least all AW-essential tools."""
         from core.mcp.server import MCP_TOOLS
 
         actual_names = {t.name for t in MCP_TOOLS}
         assert actual_names >= EXPECTED_INTERNAL_TOOL_NAMES
 
     def test_all_expected_internal_tool_names_present(self) -> None:
-        """All 10 AW-essential tool names are present in MCP_TOOLS."""
+        """All AW-essential tool names are present in MCP_TOOLS."""
         from core.mcp.server import MCP_TOOLS
 
         actual_names = {t.name for t in MCP_TOOLS}
@@ -125,7 +125,7 @@ class TestListToolsHandler:
     async def test_filters_supervisor_tools_when_non_supervisor(self) -> None:
         """list_tools() excludes supervisor tools when Anima has no subordinates."""
         import core.mcp.server as mcp_mod
-        from core.mcp.server import MCP_TOOLS, _SUPERVISOR_TOOL_NAMES, list_tools
+        from core.mcp.server import _SUPERVISOR_TOOL_NAMES, MCP_TOOLS, list_tools
 
         with patch.object(mcp_mod, "_is_supervisor", False):
             result = await list_tools()
@@ -260,6 +260,7 @@ class TestCallToolHandler:
         with patch.object(mcp_mod, "_get_tool_handler", return_value=mock_handler):
             result = await mcp_mod.call_tool("send_message", None)
 
+        assert result
         mock_handler.handle.assert_called_once_with("send_message", {})
 
 
@@ -356,6 +357,9 @@ class TestGetToolHandler:
         monkeypatch.setenv("ANIMAWORKS_ANIMA_DIR", str(anima_dir))
 
         # Patch MemoryManager to explode so we never reach ToolHandler
+        # We need to patch the import inside _get_tool_handler.
+        # The function does `from core.memory import MemoryManager`,
+        # so patching the name in the server module after import.
         with (
             patch(
                 "core.mcp.server.MemoryManager",
@@ -363,15 +367,12 @@ class TestGetToolHandler:
                 create=True,
             ),
             patch.dict("sys.modules", {}, clear=False),
-        ):
-            # We need to patch the import inside _get_tool_handler.
-            # The function does `from core.memory import MemoryManager`,
-            # so patching the name in the server module after import.
-            with patch(
+            patch(
                 "core.memory.MemoryManager",
                 side_effect=RuntimeError("memory init failed"),
-            ):
-                result = mcp_mod._get_tool_handler()
+            ),
+        ):
+            result = mcp_mod._get_tool_handler()
 
         assert result is None
         assert mcp_mod._init_error is not None
@@ -401,7 +402,7 @@ class TestGetToolHandler:
             patch("core.paths.get_shared_dir", return_value=mock_shared_dir),
             patch("core.messenger.Messenger", return_value=mock_messenger),
             patch("core.tooling.handler.ToolHandler", return_value=mock_tool_handler) as mock_th_cls,
-            patch("core.config.models.load_config") as mock_load_config,
+            patch("core.config.models.load_config"),
             patch("core.notification.notifier.HumanNotifier") as mock_hn_cls,
             patch("core.tools.TOOL_MODULES", {"web_search": None}),
             patch("core.tools.discover_common_tools", return_value={}),

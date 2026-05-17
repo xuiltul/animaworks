@@ -79,6 +79,7 @@ TOOL_TRUST_LEVELS: dict[str, str] = {
     "write_memory_file": "trusted",
     "archive_memory_file": "trusted",
     "create_skill": "trusted",
+    "promote_procedure_to_skill": "trusted",
     "list_directory": "trusted",
     "report_procedure_outcome": "trusted",
     "report_knowledge_outcome": "trusted",

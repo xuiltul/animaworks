@@ -95,6 +95,57 @@ class TestSkillCatalogE2E:
         assert "skills/cron-management/SKILL.md" in prompt
         assert "common_skills/animaworks-guide/SKILL.md" in prompt
 
+    def test_background_prompt_excludes_human_approval_skills(self, tmp_path: Path):
+        """Cron/background prompts do not expose skills that require separate human approval."""
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        safe_skill_dir = anima_dir / "skills" / "daily-report"
+        safe_skill_dir.mkdir(parents=True)
+        (safe_skill_dir / "SKILL.md").write_text(
+            "---\nname: daily-report\ndescription: Safe daily report drafting\n---\n\nBody",
+            encoding="utf-8",
+        )
+
+        risky_skill_dir = anima_dir / "skills" / "send-status"
+        risky_skill_dir.mkdir(parents=True)
+        (risky_skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: send-status\n"
+            "description: Send status to an external channel\n"
+            "risk:\n"
+            "  external_send: true\n"
+            "  requires_human_approval: true\n"
+            "---\n\n"
+            "Body",
+            encoding="utf-8",
+        )
+
+        common_skills_dir = tmp_path / "common_skills"
+        common_skills_dir.mkdir(parents=True)
+        memory = _make_mock_memory(anima_dir, tmp_path)
+        settings = SimpleNamespace(enabled=False, top_k=5, min_score=1.15, include_body=True)
+
+        def _build(trigger: str = "") -> str:
+            with (
+                patch("core.paths.get_common_skills_dir", return_value=common_skills_dir),
+                patch("core.prompt.builder._load_skill_catalog_router_settings", return_value=settings),
+                patch("core.prompt.builder.load_prompt", side_effect=_fake_load_prompt),
+                patch("core.prompt.builder._build_org_context", return_value=""),
+                patch("core.prompt.builder._discover_other_animas", return_value=[]),
+                patch("core.prompt.builder._build_messaging_section", return_value=""),
+            ):
+                return build_system_prompt(memory, message="send status", trigger=trigger).system_prompt
+
+        chat_prompt = _build()
+        assert "skills/send-status/SKILL.md" in chat_prompt
+        assert "human-approval" in chat_prompt
+
+        cron_prompt = _build("cron:daily")
+        assert "skills/daily-report/SKILL.md" in cron_prompt
+        assert "skills/send-status/SKILL.md" not in cron_prompt
+        assert "human-approval" not in cron_prompt
+
     def test_skill_catalog_router_flag_limits_prompt_to_matches(self, tmp_path: Path):
         """When enabled, the skill catalog lists routed candidates instead of every skill."""
         anima_dir = tmp_path / "animas" / "alice"
@@ -150,10 +201,11 @@ class TestSkillCatalogE2E:
         assert "common_skills/image-gen-tool/SKILL.md" not in prompt
 
     def test_create_skill_in_build_tool_list(self, tmp_path: Path) -> None:
-        """build_tool_list with include_create_skill=True adds create_skill only."""
+        """build_tool_list with include_create_skill=True adds skill creation tools."""
         tools = build_tool_list(include_create_skill=True)
         names = {x["name"] for x in tools}
         assert "create_skill" in names
+        assert "promote_procedure_to_skill" in names
         assert "skill" not in names
         create = next(x for x in tools if x["name"] == "create_skill")
         assert create["name"] == "create_skill"

@@ -35,6 +35,12 @@ from core.skills.models import (
     SkillUsageStats,
     ThreatPattern,
 )
+from core.skills.promotion import (
+    ProcedurePromotionCandidate,
+    ProcedureToSkillConverter,
+    PromotionPolicy,
+    SkillPromotionResult,
+)
 from core.skills.router import SkillRouteCandidate, SkillRouter
 from core.skills.usage import SkillUsageTracker
 
@@ -43,6 +49,7 @@ __all__ = [
     "ScanResult",
     "SkillIndex",
     "SkillMetadata",
+    "SkillPromotionResult",
     "SkillRouteCandidate",
     "SkillRouter",
     "SkillRiskMetadata",
@@ -57,6 +64,9 @@ __all__ = [
     "SkillUsageStats",
     "SkillUsageTracker",
     "ThreatPattern",
+    "ProcedurePromotionCandidate",
+    "ProcedureToSkillConverter",
+    "PromotionPolicy",
     "is_skill_blocked",
     "load_skill_body",
     "load_skill_document",

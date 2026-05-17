@@ -821,6 +821,19 @@ def _format_permissions_for_prompt(config: PermissionsConfig, anima_name: str) -
 # ── Main Config ─────────────────────────────────────────────────────────────
 
 
+class SkillPromotionConfig(BaseModel):
+    success_count_threshold: int = Field(default=3, ge=1)
+    confidence_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    failure_count_max: int = Field(default=1, ge=0)
+    last_used_within_days: int = Field(default=180, ge=1)
+    auto_activate: bool = False
+    require_approval_on_warn: bool = True
+
+
+class SkillsConfig(BaseModel):
+    promotion: SkillPromotionConfig = SkillPromotionConfig()
+
+
 class AnimaWorksConfig(BaseModel):
     version: int = 1
     setup_complete: bool = False
@@ -835,6 +848,7 @@ class AnimaWorksConfig(BaseModel):
     consolidation: ConsolidationConfig = ConsolidationConfig()
     rag: RAGConfig = RAGConfig()
     memory: MemoryConfig = MemoryConfig()
+    skills: SkillsConfig = SkillsConfig()
     prompt: PromptConfig = PromptConfig()
     priming: PrimingConfig = PrimingConfig()
     image_gen: ImageGenConfig = ImageGenConfig()
@@ -903,6 +917,8 @@ __all__ = [
     "RAGConfig",
     "ROLE_OUTBOUND_DEFAULTS",
     "ServerConfig",
+    "SkillPromotionConfig",
+    "SkillsConfig",
     "StyleBertVits2Config",
     "SystemConfig",
     "UIConfig",

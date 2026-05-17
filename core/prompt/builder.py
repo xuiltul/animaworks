@@ -424,10 +424,24 @@ def _format_skill_catalog_line(
         labels.append(procedure_label)
     elif bool(getattr(meta, "is_common", False)):
         labels.append(common_label)
+    risk = getattr(meta, "risk", None)
+    if bool(getattr(risk, "requires_human_approval", False)):
+        labels.append("human-approval")
     if match_confidence:
         labels.append(f"match={match_confidence}")
     label_text = f" ({', '.join(labels)})" if labels else ""
     return f"- {path}{label_text}{_format_trust_tag(meta)}: {desc}"
+
+
+def _requires_human_approval(meta: Any) -> bool:
+    risk = getattr(meta, "risk", None)
+    if isinstance(risk, dict):
+        return bool(risk.get("requires_human_approval", False))
+    return bool(getattr(risk, "requires_human_approval", False))
+
+
+def _skill_visible_in_prompt_context(meta: Any, *, is_background_auto: bool) -> bool:
+    return not (is_background_auto and _requires_human_approval(meta))
 
 
 def _build_group4(
@@ -439,6 +453,7 @@ def _build_group4(
     skill_index: Any,
     prompt_store: Any,
     is_heartbeat: bool,
+    is_background_auto: bool,
     is_task: bool,
     tool_registry: list[str] | None,
     personal_tools: dict[str, str] | None,
@@ -573,14 +588,18 @@ def _build_group4(
             _add(et, "external_tools", 2)
 
     # ── Skill catalog (Agent Skills standard) ───
-    # Uses SkillIndex which automatically excludes blocked/quarantine skills
-    # and supports nested common_skills directories.
+    # Uses SkillIndex which excludes blocked/quarantine skills. Background
+    # automation also excludes skills that need separate human approval.
     if not is_heartbeat:
         _DESC_LIMIT = 250
         common_label = t("skill.label_common")
         procedure_label = t("skill.label_procedure")
         settings = _load_skill_catalog_router_settings()
-        all_skills = list(skill_index.all_skills)
+        all_skills = [
+            meta
+            for meta in skill_index.all_skills
+            if _skill_visible_in_prompt_context(meta, is_background_auto=is_background_auto)
+        ]
         catalog_entries: list[str] = []
 
         if settings.enabled and message.strip():
@@ -801,6 +820,7 @@ def build_system_prompt(
         skill_index,
         prompt_store,
         is_heartbeat,
+        is_background_auto,
         is_task,
         tool_registry,
         personal_tools,

@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -169,7 +169,7 @@ class TestToTextFormat:
         assert "**refresh_tools**" in result
         # No args line for parameterless tool
         lines = result.split("\n")
-        refresh_idx = next(i for i, l in enumerate(lines) if "refresh_tools" in l)
+        refresh_idx = next(i for i, line in enumerate(lines) if "refresh_tools" in line)
         # Next line should NOT be an args line (or should be another tool/end)
         if refresh_idx + 1 < len(lines):
             assert "引数:" not in lines[refresh_idx + 1]

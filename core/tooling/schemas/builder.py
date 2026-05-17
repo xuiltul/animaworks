@@ -213,7 +213,7 @@ def build_unified_tool_list(
     tools = apply_db_descriptions(tools)
 
     if include_create_skill:
-        tools.extend(_create_skill_schemas())
+        tools.extend(t for t in _create_skill_schemas() if t["name"] == "create_skill")
 
     if compact:
         tools = [t for t in tools if t["name"] in _COMPACT_COMM_TOOLS]

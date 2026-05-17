@@ -219,6 +219,25 @@ class InteractionRouter:
                 return None
             return req
 
+    async def lookup_resolved(self, callback_id: str) -> tuple[InteractionRequest, InteractionResult] | None:
+        """Return a resolved request and result, or ``None`` if it is not approved yet."""
+        async with self._lock:
+            data = self._read_all_entries()
+            entry = data.get("entries", {}).get(callback_id)
+            if entry is None or not entry.get("resolved"):
+                return None
+            req_blob = entry.get("request")
+            result_blob = entry.get("result")
+            if not isinstance(req_blob, dict) or not isinstance(result_blob, dict):
+                return None
+            try:
+                req = self._parse_request(req_blob)
+                result = InteractionResult.model_validate(result_blob)
+            except Exception:
+                logger.exception("Failed to parse resolved interaction callback_id=%s", callback_id)
+                return None
+            return req, result
+
     async def resolve(
         self,
         callback_id: str,

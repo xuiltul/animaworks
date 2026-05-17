@@ -94,6 +94,8 @@ from core.config.schemas import (
     PromptConfig,
     RAGConfig,
     ServerConfig,
+    SkillPromotionConfig,
+    SkillsConfig,
     StyleBertVits2Config,
     SystemConfig,
     ToolCreationPermission,

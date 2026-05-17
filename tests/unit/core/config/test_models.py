@@ -25,6 +25,8 @@ from core.config.models import (
     LocalLLMConfig,
     PermissionsConfig,
     RAGConfig,
+    SkillPromotionConfig,
+    SkillsConfig,
     SystemConfig,
     ToolCreationPermission,
     WorkerSystemConfig,
@@ -111,6 +113,11 @@ class TestAnimaWorksConfig:
         assert config.animas == {}
         assert config.local_llm.default_model == DEFAULT_LOCAL_LLM_MODEL
         assert config.prompt.skill_catalog_router_enabled is True
+        assert isinstance(config.skills, SkillsConfig)
+        assert isinstance(config.skills.promotion, SkillPromotionConfig)
+        assert config.skills.promotion.success_count_threshold == 3
+        assert config.skills.promotion.confidence_threshold == 0.8
+        assert config.skills.promotion.auto_activate is False
 
     def test_roundtrip_json(self):
         config = AnimaWorksConfig()

@@ -253,6 +253,7 @@ class ToolHandler(
             "report_procedure_outcome": self._handle_report_procedure_outcome,
             "report_knowledge_outcome": self._handle_report_knowledge_outcome,
             "create_skill": self._handle_create_skill,
+            "promote_procedure_to_skill": self._handle_promote_procedure_to_skill,
             "backlog_task": self._handle_backlog_task,
             "update_task": self._handle_update_task,
             "list_tasks": self._handle_list_tasks,

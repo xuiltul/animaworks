@@ -163,4 +163,75 @@ def _create_skill_schemas() -> list[dict[str, Any]]:
                 "required": ["skill_name", "description", "body"],
             },
         },
+        {
+            "name": "promote_procedure_to_skill",
+            "description": (
+                "Generate a reviewed skill draft from a successful procedure, "
+                "or approve an existing quarantine draft. Drafts are written to "
+                "skills/quarantine/<skill_name>/SKILL.md and require explicit "
+                "human approval before activation."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["draft", "approve"],
+                        "description": "draft creates a quarantine SKILL.md; approve activates a reviewed draft.",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Procedure path under procedures/ for action=draft, e.g. procedures/deploy.md.",
+                    },
+                    "skill_name": {
+                        "type": "string",
+                        "description": "Optional draft name for action=draft; required quarantine skill name for action=approve.",
+                    },
+                    "approved_by": {
+                        "type": "string",
+                        "description": "Deprecated. Approval actor is read from the resolved interactive approval.",
+                    },
+                    "approval_callback_id": {
+                        "type": "string",
+                        "description": "Resolved interactive approval callback_id required for action=approve.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional replacement skill description for action=draft.",
+                    },
+                    "use_when": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Routing use-when phrases for the generated skill.",
+                    },
+                    "trigger_phrases": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Trigger phrases for the generated skill.",
+                    },
+                    "negative_phrases": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Phrases that should suppress routing to the generated skill.",
+                    },
+                    "domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Required routing domains for the generated skill.",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional tags for the generated skill.",
+                    },
+                    "risk": {
+                        "type": "object",
+                        "description": (
+                            "Optional risk metadata. external_send, destructive, or open_world "
+                            "keep requires_human_approval=true after activation."
+                        ),
+                    },
+                },
+            },
+        },
     ]
