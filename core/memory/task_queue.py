@@ -121,6 +121,16 @@ def _is_overdue(deadline: str, now: datetime) -> bool:
         return False
 
 
+def _metadata_expired(expires_at: str | None) -> bool:
+    """Return True when a TaskBoard metadata expiry timestamp is in the past."""
+    if not expires_at:
+        return False
+    try:
+        return now_local() >= ensure_aware(datetime.fromisoformat(expires_at))
+    except (ValueError, TypeError):
+        return False
+
+
 class TaskQueueManager:
     """Manages a persistent task queue backed by JSONL.
 
@@ -445,6 +455,42 @@ class TaskQueueManager:
     def get_task_by_id(self, task_id: str) -> TaskEntry | None:
         """Look up a single task by its ID."""
         return self._load_all().get(task_id)
+
+    def get_active_goal_task(self, goal_id: str) -> TaskEntry | None:
+        """Return an active task linked to a persistent goal, ignoring suppressed board rows.
+
+        Archived, tombstoned, and expired TaskBoard metadata do not block goal
+        continuation; snoozed/active pending work still counts as an existing
+        continuation to avoid duplicate tasks.
+        """
+        if not goal_id:
+            return None
+        for task in self.load_active_tasks().values():
+            if task.meta.get("goal_id") != goal_id:
+                continue
+            if self._goal_task_suppressed_by_taskboard(task.task_id):
+                continue
+            return task
+        return None
+
+    def _goal_task_suppressed_by_taskboard(self, task_id: str) -> bool:
+        try:
+            from core.taskboard.models import AttentionVisibility
+            from core.taskboard.store import TaskBoardStore
+
+            metadata = TaskBoardStore().get_metadata(self.anima_dir.name, task_id)
+            if metadata is None:
+                return False
+            if _metadata_expired(metadata.expires_at):
+                return True
+            return metadata.visibility in {
+                AttentionVisibility.ARCHIVED,
+                AttentionVisibility.TOMBSTONED,
+                AttentionVisibility.EXPIRED,
+            }
+        except Exception:
+            logger.debug("TaskBoard metadata check failed for goal task %s", task_id, exc_info=True)
+            return False
 
     # ── Formatting ───────────────────────────────────────────
 

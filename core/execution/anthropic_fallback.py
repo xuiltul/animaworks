@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager as _acm
 from dataclasses import asdict
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -52,11 +52,13 @@ from core.memory.shortterm import ShortTermMemory
 from core.prompt.builder import build_system_prompt
 from core.prompt.context import ContextTracker
 from core.schemas import ImageData, ModelConfig
-from core.tooling.handler import ToolHandler
 from core.tooling.schemas import (
     build_tool_list,
     to_anthropic_format,
 )
+
+if TYPE_CHECKING:
+    from core.tooling.handler import ToolHandler
 
 logger = logging.getLogger("animaworks.execution.anthropic_fallback")
 

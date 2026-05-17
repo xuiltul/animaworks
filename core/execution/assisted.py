@@ -31,7 +31,7 @@ import re
 from collections.abc import AsyncGenerator
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.exceptions import (
     AnimaWorksError,
@@ -60,8 +60,10 @@ from core.memory.shortterm import ShortTermMemory
 from core.messenger import Messenger
 from core.prompt.context import ContextTracker
 from core.schemas import ImageData, ModelConfig
-from core.tooling.handler import ToolHandler
 from core.tooling.schemas import build_unified_tool_list, to_text_format
+
+if TYPE_CHECKING:
+    from core.tooling.handler import ToolHandler
 
 logger = logging.getLogger("animaworks.execution.assisted")
 

@@ -27,7 +27,7 @@ import logging
 from collections.abc import AsyncGenerator
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.exceptions import ConfigError, LLMAPIError, ToolExecutionError  # noqa: F401
 from core.execution._completion_gate import (
@@ -69,7 +69,9 @@ from core.memory.shortterm import ShortTermMemory
 from core.prompt.builder import build_system_prompt
 from core.prompt.context import ContextTracker
 from core.schemas import ImageData, ModelConfig
-from core.tooling.handler import ToolHandler
+
+if TYPE_CHECKING:
+    from core.tooling.handler import ToolHandler
 
 logger = logging.getLogger("animaworks.execution.litellm_loop")
 

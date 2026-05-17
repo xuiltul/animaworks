@@ -68,6 +68,7 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "delegate_task",
         "submit_tasks",
         "update_task",
+        "goal",
         # AW-essential: skill authoring
         "create_skill",
         "promote_procedure_to_skill",
@@ -172,6 +173,7 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         _completion_gate_tools,
         _create_skill_schemas,
         _curator_skill_schemas,
+        _goal_tools,
         _notification_tools,
         _submit_tasks_tools,
         _supervisor_tools,
@@ -184,6 +186,7 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         *_channel_tools(),
         *_completion_gate_tools(),
         *_task_tools(),
+        *_goal_tools(),
         *_notification_tools(),
         *PROCEDURE_TOOLS,
         *KNOWLEDGE_TOOLS,

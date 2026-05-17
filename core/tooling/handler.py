@@ -64,6 +64,7 @@ from core.tooling.handler_base import (  # noqa: F401
 # ── Import Mixins ──
 from core.tooling.handler_comms import CommsToolsMixin
 from core.tooling.handler_files import FileToolsMixin
+from core.tooling.handler_goals import GoalsToolsMixin
 from core.tooling.handler_memory import MemoryToolsMixin
 from core.tooling.handler_org import OrgToolsMixin
 from core.tooling.handler_perms import PermissionsMixin
@@ -95,6 +96,7 @@ class ToolHandler(
     CommsToolsMixin,
     OrgToolsMixin,
     SkillsToolsMixin,
+    GoalsToolsMixin,
     FileToolsMixin,
     PermissionsMixin,
 ):
@@ -261,6 +263,7 @@ class ToolHandler(
             "unblock_skill": self._handle_unblock_skill,
             "delete_skill": self._handle_delete_skill,
             "set_skill_lifecycle": self._handle_set_skill_lifecycle,
+            "goal": self._handle_goal,
             "backlog_task": self._handle_backlog_task,
             "update_task": self._handle_update_task,
             "list_tasks": self._handle_list_tasks,
