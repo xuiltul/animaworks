@@ -113,9 +113,7 @@ class DigitalAnima(
         self._background_lock = asyncio.Lock()
         # AgentCore carries mutable executor/tool state, so each execution lane
         # gets its own AgentCore and its own preparation/use lock.
-        self._agent_session_locks: dict[str, asyncio.Lock] = {
-            lane: asyncio.Lock() for lane in self._AGENT_LANES
-        }
+        self._agent_session_locks: dict[str, asyncio.Lock] = {lane: asyncio.Lock() for lane in self._AGENT_LANES}
         # Backward-compatible alias for legacy chat-only call sites/tests.
         self._agent_session_lock = self._agent_session_locks["chat"]
         self._cron_idle = asyncio.Event()
