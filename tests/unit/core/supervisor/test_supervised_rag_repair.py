@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -27,6 +28,13 @@ def _create_anima(sup, name: str = "sora") -> Path:
     anima_dir = sup.animas_dir / name
     (anima_dir / "state").mkdir(parents=True, exist_ok=True)
     (anima_dir / "vectordb").mkdir(exist_ok=True)
+    return anima_dir
+
+
+def _create_enabled_anima(sup, name: str = "sora") -> Path:
+    anima_dir = _create_anima(sup, name)
+    (anima_dir / "identity.md").write_text(f"# {name}\n", encoding="utf-8")
+    (anima_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
     return anima_dir
 
 
@@ -167,6 +175,38 @@ async def test_poll_requested_rag_repairs_starts_one_supervised_task(tmp_path: P
     await asyncio.wait_for(started.wait(), timeout=1)
 
     assert calls == [("sora", "sqlite_malformed")]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_start_anima_during_rag_repair(tmp_path: Path) -> None:
+    sup = _make_supervisor(tmp_path)
+    _create_enabled_anima(sup)
+    sup._rag_repairs_in_progress.add("sora")
+    sup.start_anima = AsyncMock()
+
+    with patch.object(sup, "_reconcile_assets", new_callable=AsyncMock):
+        await sup._reconcile()
+
+    sup.start_anima.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_defers_restart_requested_during_rag_repair(tmp_path: Path) -> None:
+    sup = _make_supervisor(tmp_path)
+    anima_dir = _create_enabled_anima(sup)
+    (anima_dir / "status.json").write_text(
+        json.dumps({"enabled": True, "restart_requested": True}),
+        encoding="utf-8",
+    )
+    sup._rag_repairs_in_progress.add("sora")
+    sup.restart_anima = AsyncMock()
+
+    with patch.object(sup, "_reconcile_assets", new_callable=AsyncMock):
+        await sup._reconcile()
+
+    sup.restart_anima.assert_not_called()
+    status = json.loads((anima_dir / "status.json").read_text(encoding="utf-8"))
+    assert status["restart_requested"] is True
 
 
 @pytest.mark.asyncio

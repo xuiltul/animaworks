@@ -95,6 +95,7 @@ class ReconcileMixin:
         running = set(self.processes.keys())
 
         # restart_requested フラグチェック
+        rag_repairs_in_progress: set[str] = getattr(self, "_rag_repairs_in_progress", set())
         for name in list(on_disk.keys()):
             anima_dir = self.animas_dir / name
             status_file = anima_dir / "status.json"
@@ -103,6 +104,9 @@ class ReconcileMixin:
             except (json.JSONDecodeError, OSError):
                 continue
             if not status.get("restart_requested"):
+                continue
+            if name in rag_repairs_in_progress:
+                logger.info("Reconciliation: deferring restart for %s (RAG repair in progress)", name)
                 continue
             # Clear flag to prevent re-trigger
             status.pop("restart_requested", None)
@@ -156,6 +160,9 @@ class ReconcileMixin:
                 if name in self._bootstrapping:
                     logger.debug("Reconciliation: skipping %s (bootstrap in progress)", name)
                     continue
+                if name in rag_repairs_in_progress:
+                    logger.debug("Reconciliation: skipping %s (RAG repair in progress)", name)
+                    continue
                 # Safety margin: avoid spawning a process right after it was
                 # stopped — the health-check restart path may already be
                 # starting a new instance, and a race here causes DUPLICATE
@@ -196,6 +203,9 @@ class ReconcileMixin:
                 if name in self._bootstrapping:
                     logger.info("Reconciliation: deferring stop for %s (bootstrap in progress)", name)
                     continue
+                if name in rag_repairs_in_progress:
+                    logger.info("Reconciliation: deferring stop for %s (RAG repair in progress)", name)
+                    continue
                 logger.info(
                     "Reconciliation: stopping anima %s (disabled)",
                     name,
@@ -217,6 +227,9 @@ class ReconcileMixin:
             if name not in on_disk and name not in on_disk_incomplete:
                 if name in self._bootstrapping:
                     logger.info("Reconciliation: deferring stop for %s (bootstrap in progress)", name)
+                    continue
+                if name in rag_repairs_in_progress:
+                    logger.info("Reconciliation: deferring stop for %s (RAG repair in progress)", name)
                     continue
                 logger.info(
                     "Reconciliation: stopping anima %s (removed from disk)",
