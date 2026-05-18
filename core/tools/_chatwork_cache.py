@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -17,7 +18,12 @@ from core.tools._chatwork_client import JST
 
 # ── Constants ──────────────────────────────────────────────
 
-DEFAULT_CACHE_DIR = Path.home() / ".animaworks" / "cache" / "chatwork"
+# Cache directory for Chatwork message cache.
+# Can be overridden via ANIMAWORKS_CHATWORK_CACHE_DIR environment variable.
+# This allows TaskExec/Codex sandbox environments to redirect cache writes
+# to a writable location (e.g. /tmp/animaworks-cache/chatwork).
+_DEFAULT_CACHE_DIR = Path.home() / ".animaworks" / "cache" / "chatwork"
+DEFAULT_CACHE_DIR = Path(os.environ.get("ANIMAWORKS_CHATWORK_CACHE_DIR", str(_DEFAULT_CACHE_DIR)))
 
 _CHATWORK_SCHEMA_SQL = """\
 CREATE TABLE IF NOT EXISTS rooms (

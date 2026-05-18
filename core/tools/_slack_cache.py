@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -16,7 +17,12 @@ from core.tools._cache import BaseMessageCache
 from core.tools._slack_client import JST
 from core.tools._slack_markdown import format_slack_ts
 
-DEFAULT_CACHE_DIR = Path.home() / ".animaworks" / "cache" / "slack"
+# Cache directory for Slack message cache.
+# Can be overridden via ANIMAWORKS_SLACK_CACHE_DIR environment variable.
+# This allows TaskExec/Codex sandbox environments to redirect cache writes
+# to a writable location (e.g. /tmp/animaworks-cache/slack).
+_DEFAULT_CACHE_DIR = Path.home() / ".animaworks" / "cache" / "slack"
+DEFAULT_CACHE_DIR = Path(os.environ.get("ANIMAWORKS_SLACK_CACHE_DIR", str(_DEFAULT_CACHE_DIR)))
 
 _SLACK_SCHEMA_SQL = """\
 CREATE TABLE IF NOT EXISTS channels (
