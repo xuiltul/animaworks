@@ -114,7 +114,9 @@ class VectorWorkerManager:
             data = resp.json()
         except ValueError:
             data = {"detail": resp.text}
-        return VectorWorkerResponse(status_code=resp.status_code, data=data if isinstance(data, dict) else {"data": data})
+        return VectorWorkerResponse(
+            status_code=resp.status_code, data=data if isinstance(data, dict) else {"data": data}
+        )
 
     async def _ensure_running(self, *, payload: dict[str, Any] | None = None) -> None:
         if self._is_running():

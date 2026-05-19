@@ -45,9 +45,7 @@ _ANIMA_PATTERNS = (
     re.compile(r"\banima(?:_name)?=([A-Za-z0-9_.:-]+)"),
     re.compile(r"\banima(?:_name)? ['\"]([^'\"]+)['\"]"),
 )
-_TIMESTAMP_RE = re.compile(
-    r"(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)"
-)
+_TIMESTAMP_RE = re.compile(r"(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)")
 _KNOWN_CORRUPTION_REASONS = {
     "chroma_error_finding_id",
     "sqlite_malformed",
@@ -240,9 +238,7 @@ class RAGRepairService:
                     suspects.update(owner for owner in owners if owner in repairable_set)
                 elif "chromadb_rust_bindings" in line.lower() or "native_segfault" in line.lower():
                     suspects.update(
-                        anima_name
-                        for anima_name in repairable
-                        if (animas_dir / anima_name / "vectordb").exists()
+                        anima_name for anima_name in repairable if (animas_dir / anima_name / "vectordb").exists()
                     )
 
         return [name for name in repairable if name in suspects]

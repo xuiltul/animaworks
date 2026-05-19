@@ -505,9 +505,7 @@ def repair_bootstrap_complete(anima_dir: Path, *, retry_counts_file: Path | None
     timestamp = now_local().strftime("%Y%m%d_%H%M%S")
     for artifact in _bootstrap_artifacts(anima_dir):
         if artifact.exists():
-            archived_bootstrap.append(
-                str(_archive_named_file(anima_dir, artifact, f"{artifact.name}.{timestamp}"))
-            )
+            archived_bootstrap.append(str(_archive_named_file(anima_dir, artifact, f"{artifact.name}.{timestamp}")))
 
     character_sheet = anima_dir / "character_sheet.md"
     archived_character_sheet = ""

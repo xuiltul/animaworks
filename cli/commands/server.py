@@ -395,7 +395,9 @@ def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
         if not suspects and force_all_vectordb:
             animas_dir = get_animas_dir()
             suspects = [
-                name for name in service.list_repairable_animas(animas_dir=animas_dir) if (animas_dir / name / "vectordb").exists()
+                name
+                for name in service.list_repairable_animas(animas_dir=animas_dir)
+                if (animas_dir / name / "vectordb").exists()
             ]
             reason = "startup_unclean_exit_preflight"
         if not suspects:
