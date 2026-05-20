@@ -2,14 +2,15 @@
 """E2E verification of [IMPORTANT] tag across RAG indexer → retriever → forgetting → priming."""
 from __future__ import annotations
 
+import atexit
 import asyncio
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.paths import get_animas_dir, get_anima_vectordb_dir
-from core.memory.rag.store import ChromaVectorStore
+from core.paths import get_animas_dir
+from core.memory.rag.singleton import get_vector_store
 from core.memory.rag.indexer import MemoryIndexer
 from core.memory.rag.retriever import MemoryRetriever, WEIGHT_IMPORTANCE
 from core.memory.forgetting import ForgettingEngine
@@ -28,12 +29,19 @@ def step_header(n: int, title: str) -> None:
 def main() -> None:
     anima_dir = get_animas_dir() / ANIMA_NAME
     shared_dir = anima_dir.parent.parent / "shared"
-    vdb_dir = get_anima_vectordb_dir(ANIMA_NAME)
     knowledge_dir = anima_dir / "knowledge"
 
     # ── Step 1: Re-index ──
     step_header(1, "RAG Re-indexing (force=True)")
-    store = ChromaVectorStore(persist_dir=vdb_dir)
+    from core.memory.rag.vector_worker_client import start_temporary_vector_worker
+
+    worker = start_temporary_vector_worker()
+    atexit.register(worker.stop)
+    store = get_vector_store(ANIMA_NAME)
+    if store is None:
+        print("  ❌ Vector worker unavailable")
+        worker.stop()
+        return
     indexer = MemoryIndexer(store, ANIMA_NAME, anima_dir)
     total = indexer.index_directory(knowledge_dir, "knowledge", force=True)
     print(f"  Indexed {total} chunks from knowledge/")
@@ -41,8 +49,12 @@ def main() -> None:
     # ── Step 2: Verify metadata ──
     step_header(2, "Verify importance metadata on indexed chunks")
     coll_name = f"{ANIMA_NAME}_knowledge"
-    coll = store.client.get_or_create_collection(name=coll_name)
-    data = coll.get(include=["metadatas", "documents"])
+    chunks = store.get_by_metadata(coll_name, {}, limit=100000)
+    data = {
+        "ids": [chunk.document.id for chunk in chunks],
+        "documents": [chunk.document.content for chunk in chunks],
+        "metadatas": [chunk.document.metadata for chunk in chunks],
+    }
 
     important_chunks: list[tuple[str, str]] = []
     normal_chunks: list[str] = []
@@ -175,7 +187,8 @@ def main() -> None:
     print(f"  Step 3 (Boost):       {'✅' if boosted_found else '❌'} +{WEIGHT_IMPORTANCE} score boost")
     print(f"  Step 4 (Forgetting):  {'✅' if protected_count > 0 else '❌'} {protected_count} protected")
     print("  Step 5 (Priming):     (see above)")
-    print()
+    atexit.unregister(worker.stop)
+    worker.stop()
 
 
 if __name__ == "__main__":

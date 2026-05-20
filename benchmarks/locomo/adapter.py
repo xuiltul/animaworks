@@ -276,6 +276,7 @@ class AnimaWorksLoCoMoAdapter:
         self._anima_dir: Path | None = None
         self._episodes_dir: Path | None = None
         self._vector_store: Any = None
+        self._temp_worker: Any = None
         self._indexer: Any = None
         self._retriever: Any = None
         self._bm25_corpus: list[tuple[str, dict[str, Any]]] | None = None
@@ -287,8 +288,8 @@ class AnimaWorksLoCoMoAdapter:
         """Create temp data dir, env override, and RAG components."""
         from core.memory.rag.indexer import MemoryIndexer  # noqa: PLC0415
         from core.memory.rag.retriever import MemoryRetriever  # noqa: PLC0415
-        from core.memory.rag.singleton import get_embedding_model  # noqa: PLC0415
-        from core.memory.rag.store import ChromaVectorStore  # noqa: PLC0415
+        from core.memory.rag.singleton import get_embedding_model, get_vector_store  # noqa: PLC0415
+        from core.memory.rag.vector_worker_client import start_temporary_vector_worker  # noqa: PLC0415
 
         self._previous_animaworks_data = os.environ.get("ANIMAWORKS_DATA_DIR")
         real_data_dir = Path(os.environ.get("ANIMAWORKS_DATA_DIR", "~/.animaworks")).expanduser().resolve()
@@ -309,12 +310,14 @@ class AnimaWorksLoCoMoAdapter:
         if real_models.is_dir() and not tmp_models.exists():
             tmp_models.symlink_to(real_models)
 
-        vdir = self._anima_dir / "vectordb"
-        vdir.mkdir(parents=True, exist_ok=True)
+        (self._anima_dir / "vectordb").mkdir(parents=True, exist_ok=True)
         try:
-            self._vector_store = ChromaVectorStore(persist_dir=vdir)
+            self._temp_worker = start_temporary_vector_worker(log_dir=Path(self._temp_dir) / "logs")
+            self._vector_store = get_vector_store(ANIMA_NAME)
+            if self._vector_store is None:
+                raise RuntimeError("vector worker unavailable")
         except Exception as e:
-            logger.error("ChromaVectorStore init failed: %s", e)
+            logger.error("Vector worker store init failed: %s", e)
             raise
         try:
             emb = get_embedding_model()
@@ -586,6 +589,13 @@ class AnimaWorksLoCoMoAdapter:
 
     def cleanup(self) -> None:
         """Remove temp data directory and restore ``ANIMAWORKS_DATA_DIR``."""
+        temp_worker = getattr(self, "_temp_worker", None)
+        if temp_worker is not None:
+            try:
+                temp_worker.stop()
+            except Exception as e:
+                logger.warning("Failed to stop temporary vector worker: %s", e)
+            self._temp_worker = None
         if self._temp_dir and Path(self._temp_dir).exists():
             try:
                 shutil.rmtree(self._temp_dir, ignore_errors=False)

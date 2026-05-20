@@ -34,6 +34,25 @@ class VectorWorkerUnavailable(RuntimeError):
     """Raised when the vector worker cannot serve a request."""
 
 
+@dataclass
+class TemporaryVectorWorker:
+    """Synchronous handle for one-shot CLI worker isolation."""
+
+    manager: VectorWorkerManager
+    previous_vector_url: str | None
+    had_previous_vector_url: bool
+
+    def stop(self) -> None:
+        """Stop the temporary worker and restore the caller's vector URL."""
+        try:
+            asyncio.run(self.manager.stop())
+        finally:
+            if self.had_previous_vector_url and self.previous_vector_url is not None:
+                os.environ["ANIMAWORKS_VECTOR_URL"] = self.previous_vector_url
+            else:
+                os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
+
+
 class VectorWorkerManager:
     """Starts, stops, and proxies requests to the isolated vector worker."""
 
@@ -144,6 +163,7 @@ class VectorWorkerManager:
         log_file = open(log_path, "a", encoding="utf-8")  # noqa: SIM115
         env = os.environ.copy()
         env.pop("ANIMAWORKS_VECTOR_URL", None)
+        env["ANIMAWORKS_ALLOW_DIRECT_CHROMA"] = "1"
         cmd = [
             sys.executable,
             "-m",
@@ -217,3 +237,37 @@ def _choose_free_port(host: str) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind((bind_host, 0))
         return int(sock.getsockname()[1])
+
+
+def start_temporary_vector_worker(
+    *,
+    config: Any | None = None,
+    log_dir: Path | None = None,
+) -> TemporaryVectorWorker:
+    """Start a short-lived vector worker and point this process at it."""
+    if config is None:
+        from core.config import load_config
+
+        config = load_config()
+    if log_dir is None:
+        from core.paths import get_data_dir
+
+        log_dir = get_data_dir() / "logs"
+
+    manager = VectorWorkerManager.from_config(config, log_dir=log_dir)
+    if not manager.enabled:
+        raise VectorWorkerUnavailable("vector worker disabled")
+
+    asyncio.run(manager._ensure_running(payload={}))  # noqa: SLF001
+    if manager.base_url is None:
+        raise VectorWorkerUnavailable("vector worker did not provide a base URL")
+
+    had_previous = "ANIMAWORKS_VECTOR_URL" in os.environ
+    previous = os.environ.get("ANIMAWORKS_VECTOR_URL")
+    os.environ["ANIMAWORKS_VECTOR_URL"] = manager.base_url
+    logger.info("Using temporary vector worker: pid=%s url=%s", getattr(manager.process, "pid", None), manager.base_url)
+    return TemporaryVectorWorker(
+        manager=manager,
+        previous_vector_url=previous,
+        had_previous_vector_url=had_previous,
+    )

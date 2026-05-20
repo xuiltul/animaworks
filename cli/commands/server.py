@@ -432,6 +432,39 @@ def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
         logger.exception("RAG startup preflight failed unexpectedly; continuing server startup")
 
 
+def _run_rag_startup_preflight_via_worker(*, force_all_vectordb: bool = False) -> None:
+    """Run startup RAG repair with ChromaDB isolated in a temporary worker."""
+    try:
+        from core.config import load_config
+
+        config = load_config()
+        if not config.setup_complete:
+            _run_rag_startup_preflight(force_all_vectordb=force_all_vectordb)
+            return
+
+        rag = config.rag
+        if not bool(getattr(rag, "repair_enabled", True)):
+            return
+        if not bool(getattr(rag, "startup_repair_preflight_enabled", True)):
+            return
+
+        from core.memory.rag.vector_worker_client import start_temporary_vector_worker
+        from core.paths import get_data_dir
+
+        worker = start_temporary_vector_worker(
+            config=config,
+            log_dir=get_data_dir() / "logs",
+        )
+    except Exception:
+        logger.exception("RAG startup preflight vector worker unavailable; continuing server startup")
+        return
+
+    try:
+        _run_rag_startup_preflight(force_all_vectordb=force_all_vectordb)
+    finally:
+        worker.stop()
+
+
 def _start_foreground(args: argparse.Namespace) -> None:
     """Run the server in the foreground (blocking, with log output)."""
     _pin_native_threads()
@@ -465,7 +498,7 @@ def _start_foreground(args: argparse.Namespace) -> None:
         print(f"Killed {orphan_count} orphan runner process(es) from previous server.")
 
     ensure_runtime_dir()
-    _run_rag_startup_preflight(force_all_vectordb=unclean_previous_exit)
+    _run_rag_startup_preflight_via_worker(force_all_vectordb=unclean_previous_exit)
     _write_pid_file()
     atexit.register(_remove_pid_file)
     _start_pid_watchdog()

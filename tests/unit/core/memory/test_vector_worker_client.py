@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from core.memory.rag.vector_worker_client import VectorWorkerManager
+from core.memory.rag.vector_worker_client import VectorWorkerManager, start_temporary_vector_worker
 
 
 class _ExitedProcess:
@@ -45,3 +46,48 @@ def test_vector_worker_config_defaults_do_not_direct_fallback(tmp_path: Path) ->
     )
 
     assert manager.fallback_direct is False
+
+
+def test_vector_worker_subprocess_env_allows_direct_chroma(tmp_path: Path) -> None:
+    manager = VectorWorkerManager(
+        enabled=True,
+        host="127.0.0.1",
+        port=12345,
+        log_dir=tmp_path,
+    )
+
+    async def fake_wait() -> None:
+        return None
+
+    with (
+        patch("subprocess.Popen") as popen,
+        patch.object(manager, "_wait_until_healthy", side_effect=fake_wait),
+    ):
+        import asyncio
+
+        asyncio.run(manager._start_process())  # noqa: SLF001
+
+    env = popen.call_args.kwargs["env"]
+    assert env["ANIMAWORKS_ALLOW_DIRECT_CHROMA"] == "1"
+    assert "ANIMAWORKS_VECTOR_URL" not in env
+
+
+def test_start_temporary_vector_worker_sets_and_restores_vector_url(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ANIMAWORKS_VECTOR_URL", "http://previous/vector")
+
+    async def fake_ensure_running(self, *, payload=None) -> None:
+        self.base_url = "http://127.0.0.1:45678"
+
+    with (
+        patch.object(VectorWorkerManager, "_ensure_running", new=fake_ensure_running),
+        patch.object(VectorWorkerManager, "stop", new=AsyncMock()),
+    ):
+        worker = start_temporary_vector_worker(
+            config=SimpleNamespace(rag=SimpleNamespace(vector_worker_enabled=True)),
+            log_dir=tmp_path,
+        )
+
+        assert os.environ["ANIMAWORKS_VECTOR_URL"] == "http://127.0.0.1:45678"
+        worker.stop()
+
+    assert os.environ["ANIMAWORKS_VECTOR_URL"] == "http://previous/vector"

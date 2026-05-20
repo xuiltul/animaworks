@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import concurrent.futures
 import logging
+import os
 from typing import Any
 
 from fastapi import FastAPI
@@ -104,6 +105,11 @@ def _search_results_payload(results) -> dict[str, Any]:
 
 
 def create_app() -> FastAPI:
+    os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
+    from core.memory.rag.direct_access import enable_direct_chroma_for_process
+
+    enable_direct_chroma_for_process()
+
     app = FastAPI(title="AnimaWorks Vector Worker")
 
     @app.get("/health")

@@ -1188,7 +1188,11 @@ def cmd_anima_rename(args: argparse.Namespace) -> None:
             print(f"  Updated status.json for {status_updated} anima(s) with supervisor reference")
 
         # ── RAG: cleanup old collections ──
-        _cleanup_rag_collections(new_dir, old_name)
+        _cleanup_rag_collections(
+            new_dir,
+            old_name,
+            vector_url=f"{gateway_url}/api/internal/vector" if server_running else None,
+        )
         print("  Cleared RAG index (will re-index on next startup)")
 
         # ── Server: reload + restart ──
@@ -1249,26 +1253,50 @@ def _rename_dm_logs(shared_dir: Path, old_name: str, new_name: str) -> int:
     return count
 
 
-def _cleanup_rag_collections(anima_dir: Path, old_name: str) -> None:
+def _cleanup_rag_collections(anima_dir: Path, old_name: str, *, vector_url: str | None = None) -> None:
     """Delete old RAG collections and reset index_meta for re-indexing."""
+    import os
+
     index_meta = anima_dir / "index_meta.json"
     if index_meta.exists():
         index_meta.write_text("{}\n", encoding="utf-8")
 
-    try:
-        from core.memory.rag.store import ChromaVectorStore
+    vectordb_dir = anima_dir / "vectordb"
+    if not vectordb_dir.is_dir():
+        return
 
-        vectordb_dir = anima_dir / "vectordb"
-        if vectordb_dir.is_dir():
-            store = ChromaVectorStore(persist_dir=vectordb_dir)
-            for suffix in ("knowledge", "episodes", "procedures", "skills", "common_knowledge", "conversation_summary"):
-                collection_name = f"{old_name}_{suffix}"
-                try:
-                    store.delete_collection(collection_name)
-                except Exception:
-                    pass
+    previous_url_present = "ANIMAWORKS_VECTOR_URL" in os.environ
+    previous_url = os.environ.get("ANIMAWORKS_VECTOR_URL")
+    temp_worker = None
+    try:
+        if vector_url:
+            os.environ["ANIMAWORKS_VECTOR_URL"] = vector_url
+        elif not os.environ.get("ANIMAWORKS_VECTOR_URL"):
+            from core.memory.rag.vector_worker_client import start_temporary_vector_worker
+
+            temp_worker = start_temporary_vector_worker()
+
+        from core.memory.rag.singleton import get_vector_store
+
+        store = get_vector_store(anima_dir.name)
+        if store is None:
+            logger.warning("RAG cleanup skipped for %s: vector worker unavailable", anima_dir.name)
+            return
+        for suffix in ("knowledge", "episodes", "procedures", "skills", "common_knowledge", "conversation_summary"):
+            collection_name = f"{old_name}_{suffix}"
+            try:
+                store.delete_collection(collection_name)
+            except Exception:
+                logger.debug("Failed to delete stale RAG collection %s", collection_name, exc_info=True)
     except Exception:
-        pass
+        logger.warning("RAG collection cleanup failed for renamed anima %s", anima_dir.name, exc_info=True)
+    finally:
+        if temp_worker is not None:
+            temp_worker.stop()
+        elif previous_url_present and previous_url is not None:
+            os.environ["ANIMAWORKS_VECTOR_URL"] = previous_url
+        else:
+            os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
 
 
 def cmd_anima_list(args: argparse.Namespace) -> None:

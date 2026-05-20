@@ -78,6 +78,12 @@ def _reset_app_timezone():
 
 
 @pytest.fixture(autouse=True)
+def _allow_direct_chroma_for_tests(monkeypatch: pytest.MonkeyPatch):
+    """Allow low-level Chroma tests to instantiate the guarded store explicitly."""
+    monkeypatch.setenv("ANIMAWORKS_ALLOW_DIRECT_CHROMA", "1")
+
+
+@pytest.fixture(autouse=True)
 def _restore_load_auth():
     """Restore server.app.load_auth after tests that monkey-patch it.
 
