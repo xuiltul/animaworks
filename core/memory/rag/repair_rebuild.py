@@ -7,6 +7,7 @@ from __future__ import annotations
 """Quarantine and reindex helpers for RAG auto-repair."""
 
 import logging
+import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,6 +46,8 @@ def full_reindex(anima_name: str, *, include_shared: bool) -> int:
     from core.paths import get_animas_dir, get_common_knowledge_dir, get_common_skills_dir, get_data_dir
 
     anima_dir = get_animas_dir() / anima_name
+    if not os.environ.get("ANIMAWORKS_VECTOR_URL"):
+        raise RuntimeError("RAG reindex requires ANIMAWORKS_VECTOR_URL; run it through the vector worker")
     vector_store = get_vector_store(anima_name)
     if vector_store is None:
         raise RuntimeError(f"Vector store unavailable for {anima_name}")

@@ -14,6 +14,7 @@ This script demonstrates:
 
 import asyncio
 import logging
+import os
 import tempfile
 from pathlib import Path
 
@@ -125,16 +126,17 @@ def demo_indexing(anima_dir: Path) -> None:
 
     try:
         from core.memory.rag import MemoryIndexer
-        from core.memory.rag.store import ChromaVectorStore
+        from core.memory.rag.singleton import get_vector_store
     except ImportError as e:
         logger.error("RAG dependencies not installed: %s", e)
         logger.error("Run: pip install 'animaworks[rag]'")
         return
 
     # Initialize vector store
-    vectordb_dir = anima_dir / "vectordb"
-    vectordb_dir.mkdir(parents=True, exist_ok=True)
-    vector_store = ChromaVectorStore(persist_dir=vectordb_dir)
+    vector_store = get_vector_store("demo_anima")
+    if vector_store is None:
+        logger.error("Vector worker unavailable")
+        return
 
     # Initialize indexer
     indexer = MemoryIndexer(vector_store, "demo_anima", anima_dir)
@@ -222,47 +224,65 @@ def main() -> None:
 
     # Create temporary directory
     with tempfile.TemporaryDirectory() as tmpdir:
-        anima_dir = Path(tmpdir) / "demo_anima"
-        anima_dir.mkdir()
+        previous_data_dir = os.environ.get("ANIMAWORKS_DATA_DIR")
+        os.environ["ANIMAWORKS_DATA_DIR"] = tmpdir
+        anima_dir = Path(tmpdir) / "animas" / "demo_anima"
+        anima_dir.mkdir(parents=True)
 
-        # Step 1: Create sample memories
-        create_sample_memories(anima_dir)
+        from core.memory.rag.vector_worker_client import start_temporary_vector_worker
 
-        # Step 2: Index memories
-        components = demo_indexing(anima_dir)
-        if not components:
-            return
+        worker = start_temporary_vector_worker(log_dir=Path(tmpdir) / "logs")
+        try:
+            _run_demo(anima_dir)
+        finally:
+            worker.stop()
+            if previous_data_dir is not None:
+                os.environ["ANIMAWORKS_DATA_DIR"] = previous_data_dir
+            else:
+                os.environ.pop("ANIMAWORKS_DATA_DIR", None)
 
-        vector_store, indexer = components
-        knowledge_dir = anima_dir / "knowledge"
 
-        # Step 3: Demonstrate vector search
+def _run_demo(anima_dir: Path) -> None:
+    """Run the demo against a worker-backed vector store."""
+
+    # Step 1: Create sample memories
+    create_sample_memories(anima_dir)
+
+    # Step 2: Index memories
+    components = demo_indexing(anima_dir)
+    if not components:
+        return
+
+    vector_store, indexer = components
+    knowledge_dir = anima_dir / "knowledge"
+
+    # Step 3: Demonstrate vector search
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("STEP 2: Dense Vector Search")
+    logger.info("=" * 70)
+
+    queries = [
+        "山田さんからの緊急依頼への対応方法",
+        "Slack通知設定",
+        "デプロイ手順",
+    ]
+
+    for query in queries:
         logger.info("")
-        logger.info("=" * 70)
-        logger.info("STEP 2: Dense Vector Search")
-        logger.info("=" * 70)
+        logger.info("-" * 70)
+        logger.info("Query: %s", query)
+        logger.info("-" * 70)
 
-        queries = [
-            "山田さんからの緊急依頼への対応方法",
-            "Slack通知設定",
-            "デプロイ手順",
-        ]
+        demo_vector_search(vector_store, indexer, knowledge_dir, query)
 
-        for query in queries:
-            logger.info("")
-            logger.info("-" * 70)
-            logger.info("Query: %s", query)
-            logger.info("-" * 70)
+    # Step 4: Priming integration
+    asyncio.run(demo_priming_integration(anima_dir))
 
-            demo_vector_search(vector_store, indexer, knowledge_dir, query)
-
-        # Step 4: Priming integration
-        asyncio.run(demo_priming_integration(anima_dir))
-
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("Demo complete!")
-        logger.info("=" * 70)
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("Demo complete!")
+    logger.info("=" * 70)
 
 
 if __name__ == "__main__":

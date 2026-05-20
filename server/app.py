@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import os
 import re
 import time
 import uuid
@@ -543,11 +544,20 @@ async def lifespan(app: FastAPI):
         app.state.msg_log_scheduler = msg_log_scheduler
 
         vector_worker = getattr(app.state, "vector_worker", None)
+        previous_vector_url_present = "ANIMAWORKS_VECTOR_URL" in os.environ
+        previous_vector_url = os.environ.get("ANIMAWORKS_VECTOR_URL")
+        app.state._previous_vector_url_present = previous_vector_url_present
+        app.state._previous_vector_url = previous_vector_url
         await _call_optional_async(vector_worker, "start")
+        vector_worker_url = getattr(vector_worker, "base_url", None)
+        if isinstance(vector_worker_url, str) and vector_worker_url:
+            os.environ["ANIMAWORKS_VECTOR_URL"] = vector_worker_url
+            logger.info("Server RAG vector access routed through vector worker: %s", vector_worker_url)
 
-        # ── URLs for child processes (NOT set in server's own os.environ) ─
+        # ── URLs for child processes ─
         # ProcessSupervisor passes these to child processes via subprocess.Popen(env=).
-        # Child processes use HTTP for embed/vector instead of loading ChromaDB locally.
+        # Child processes use the server internal API; the server itself uses
+        # the vector worker base URL set above.
         _embed_config = load_config()
         _server_port = getattr(_embed_config.server, "port", 18500)
         app.state.child_env_urls = {
@@ -604,6 +614,12 @@ async def lifespan(app: FastAPI):
         await app.state.supervisor.shutdown_all()
         vector_worker = getattr(app.state, "vector_worker", None)
         await _call_optional_async(vector_worker, "stop")
+        if getattr(app.state, "_previous_vector_url_present", False):
+            previous = getattr(app.state, "_previous_vector_url", None)
+            if previous is not None:
+                os.environ["ANIMAWORKS_VECTOR_URL"] = previous
+        else:
+            os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
         if hasattr(app.state, "msg_log_scheduler"):
             app.state.msg_log_scheduler.shutdown(wait=False)
     logger.info("Server stopped")

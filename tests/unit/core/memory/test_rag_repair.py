@@ -265,6 +265,7 @@ def test_repair_quarantines_vectordb_and_reindexes(data_dir: Path, monkeypatch):
             return 1
 
     monkeypatch.setattr("core.memory.rag.MemoryIndexer", FakeIndexer)
+    monkeypatch.setenv("ANIMAWORKS_VECTOR_URL", "http://worker")
     monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name=None: object())
 
     service = RAGRepairService(enabled=True, threshold=2, window_minutes=5, cooldown_minutes=60)
@@ -315,6 +316,7 @@ def test_repair_reindexes_shared_collections_when_requested(data_dir: Path, monk
             return 0
 
     monkeypatch.setattr("core.memory.rag.MemoryIndexer", FakeIndexer)
+    monkeypatch.setenv("ANIMAWORKS_VECTOR_URL", "http://worker")
     monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name=None: object())
 
     result = RAGRepairService(enabled=True).repair_anima(

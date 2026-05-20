@@ -7,9 +7,11 @@ from __future__ import annotations
 """Index command - build or rebuild RAG vector indexes."""
 
 import argparse
+import atexit
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 from core.paths import get_data_dir
 
@@ -48,6 +50,27 @@ def _setup_server_delegation() -> bool:
         pid,
     )
     return True
+
+
+def _setup_offline_vector_worker_if_needed(server_mode: bool) -> Any | None:
+    """Start a temporary vector worker when no server delegation exists."""
+    if server_mode or os.environ.get("ANIMAWORKS_VECTOR_URL"):
+        return None
+    from core.memory.rag.vector_worker_client import start_temporary_vector_worker
+
+    worker = start_temporary_vector_worker()
+    atexit.register(worker.stop)
+    return worker
+
+
+def _stop_offline_vector_worker(worker: Any | None) -> None:
+    if worker is None:
+        return
+    try:
+        atexit.unregister(worker.stop)
+    except Exception:
+        pass
+    worker.stop()
 
 
 def setup_index_command(subparsers: argparse._SubParsersAction) -> None:
@@ -226,7 +249,6 @@ def index_command(args: argparse.Namespace) -> None:
         from core.memory.rag import MemoryIndexer
         from core.memory.rag.repair import is_repair_locked
         from core.memory.rag.singleton import get_vector_store
-        from core.memory.rag.store import ChromaVectorStore
     except ImportError:
         logger.error("RAG dependencies not installed. Run: pip install 'animaworks[rag]'")
         return
@@ -240,6 +262,7 @@ def index_command(args: argparse.Namespace) -> None:
         return
 
     server_mode = _setup_server_delegation()
+    temp_worker = _setup_offline_vector_worker_if_needed(server_mode)
 
     current_model = _check_model_change(base_dir, args.full)
     logger.info("Embedding model: %s", current_model)
@@ -248,12 +271,14 @@ def index_command(args: argparse.Namespace) -> None:
         anima_dirs = [animas_dir / args.anima]
         if not anima_dirs[0].is_dir():
             logger.error("Anima not found: %s", args.anima)
+            _stop_offline_vector_worker(temp_worker)
             return
     else:
         anima_dirs = [p for p in sorted(animas_dir.iterdir()) if p.is_dir()]
 
     if not anima_dirs:
         logger.warning("No animas found to index")
+        _stop_offline_vector_worker(temp_worker)
         return
 
     include_shared = args.shared or (not args.anima)
@@ -273,17 +298,6 @@ def index_command(args: argparse.Namespace) -> None:
         if vector_store is None:
             logger.warning("Vector store unavailable for %s, skipping", anima_name)
             continue
-
-        if not server_mode and isinstance(vector_store, ChromaVectorStore):
-            if not args.full and not args.dry_run:
-                l2_colls = vector_store.needs_cosine_migration()
-                if l2_colls:
-                    logger.warning(
-                        "%s: collections using L2 distance detected: %s. "
-                        "Run 'animaworks index --full' to migrate to cosine similarity.",
-                        anima_name,
-                        ", ".join(l2_colls),
-                    )
 
         if args.full and not args.dry_run:
             logger.info(
@@ -381,3 +395,4 @@ def index_command(args: argparse.Namespace) -> None:
     else:
         logger.info("Indexing complete: %d total chunks indexed", total_chunks)
         _save_global_index_meta(base_dir, current_model)
+    _stop_offline_vector_worker(temp_worker)

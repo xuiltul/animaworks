@@ -33,21 +33,24 @@ _BATCH_LIMIT = 1000
 _lock = threading.Lock()
 _native_ops_lock = threading.Lock()
 _vector_stores: dict[str | None, VectorStore | None] = {}
-_http_stores: dict[str | None, HttpVectorStore] = {}
+_http_stores: dict[tuple[str, str | None], HttpVectorStore] = {}
 _embedding_model: SentenceTransformer | None = None
 _embedding_model_name: str | None = None
 _init_failed: bool = False
+_direct_disabled_warned: bool = False
 
 
 def _get_http_store(base_url: str, anima_name: str | None) -> HttpVectorStore:
     """Return cached HttpVectorStore for the given base_url and anima_name."""
-    if anima_name not in _http_stores:
+    normalized_url = base_url.rstrip("/")
+    key = (normalized_url, anima_name)
+    if key not in _http_stores:
         with _lock:
-            if anima_name not in _http_stores:
+            if key not in _http_stores:
                 from core.memory.rag.http_store import HttpVectorStore
 
-                _http_stores[anima_name] = HttpVectorStore(base_url=base_url, anima_name=anima_name)
-    return _http_stores[anima_name]
+                _http_stores[key] = HttpVectorStore(base_url=normalized_url, anima_name=anima_name)
+    return _http_stores[key]
 
 
 def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
@@ -66,11 +69,21 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
         or ``None`` if ChromaDB failed to initialize
         (e.g., Python 3.14 + pydantic.v1 incompatibility).
     """
-    global _init_failed
+    global _direct_disabled_warned, _init_failed
 
     vector_url = os.environ.get("ANIMAWORKS_VECTOR_URL")
     if vector_url:
         return _get_http_store(vector_url, anima_name)
+
+    from core.memory.rag.direct_access import direct_chroma_allowed
+
+    if not direct_chroma_allowed():
+        if not _direct_disabled_warned:
+            logger.warning(
+                "Vector store unavailable: direct ChromaDB access is disabled outside the vector worker"
+            )
+            _direct_disabled_warned = True
+        return None
 
     # Fast path: already known to be broken — skip without locking
     if _init_failed:
@@ -82,7 +95,7 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
                 return None
             if anima_name not in _vector_stores:
                 try:
-                    from core.memory.rag.store import ChromaVectorStore
+                    from core.memory.rag.store import create_chroma_vector_store
 
                     if anima_name:
                         from core.paths import get_anima_vectordb_dir
@@ -90,7 +103,7 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
                         persist_dir = get_anima_vectordb_dir(anima_name)
                     else:
                         persist_dir = None  # ChromaVectorStore defaults to ~/.animaworks/vectordb
-                    store = ChromaVectorStore(persist_dir=persist_dir)
+                    store = create_chroma_vector_store(persist_dir=persist_dir)
                     store.anima_name = anima_name
                     _vector_stores[anima_name] = store
                 except Exception as exc:
@@ -230,8 +243,17 @@ def reset_vector_store(anima_name: str | None = None) -> None:
     global _init_failed
 
     with _lock:
-        for cache in (_vector_stores, _http_stores):
-            store = cache.pop(anima_name, None)
+        store = _vector_stores.pop(anima_name, None)
+        close = getattr(store, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                logger.debug("Failed to close vector store for %s", anima_name, exc_info=True)
+
+        http_keys = [key for key in _http_stores if key[1] == anima_name]
+        for key in http_keys:
+            store = _http_stores.pop(key, None)
             close = getattr(store, "close", None)
             if callable(close):
                 try:
@@ -303,10 +325,11 @@ def get_embedding_model_name() -> str:
 
 def _reset_for_testing():
     """Reset singletons for test isolation."""
-    global _embedding_model, _embedding_model_name, _init_failed
+    global _direct_disabled_warned, _embedding_model, _embedding_model_name, _init_failed
     with _lock:
         _vector_stores.clear()
         _http_stores.clear()
         _embedding_model = None
         _embedding_model_name = None
         _init_failed = False
+        _direct_disabled_warned = False

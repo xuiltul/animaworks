@@ -153,6 +153,10 @@ class ChromaVectorStore(VectorStore):
                         (defaults to ~/.animaworks/vectordb)
             anima_name: Owner anima for repair signal attribution.
         """
+        from core.memory.rag.direct_access import require_direct_chroma_allowed
+
+        require_direct_chroma_allowed()
+
         import chromadb
 
         if persist_dir is None:
@@ -450,3 +454,14 @@ class ChromaVectorStore(VectorStore):
             else:
                 serialized[key] = value
         return serialized
+
+
+def create_chroma_vector_store(
+    *,
+    persist_dir: Path | None = None,
+    anima_name: str | None = None,
+) -> ChromaVectorStore:
+    """Create a guarded direct Chroma vector store."""
+    if anima_name is None:
+        return ChromaVectorStore(persist_dir=persist_dir)
+    return ChromaVectorStore(persist_dir=persist_dir, anima_name=anima_name)
