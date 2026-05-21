@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.execution._sanitize import ORIGIN_HUMAN, ORIGIN_SYSTEM
 from core.skills.models import SkillUsageEventType
 from core.skills.usage import SkillUsageTracker
 from core.tooling.handler import ToolHandler
@@ -139,6 +140,53 @@ class TestCreateSkillUsageEvent:
 
         assert "Invalid" in result or "無効" in result
         assert not (anima_dir / "state" / "skill_usage.jsonl").exists()
+
+
+class TestTrustSkillTool:
+    def test_trust_skill_rejects_system_origin(self, tmp_path: Path):
+        anima_dir = tmp_path / "alice"
+        (anima_dir / "state").mkdir(parents=True)
+        memory = MagicMock()
+        memory.read_permissions.return_value = ""
+        handler = ToolHandler(anima_dir=anima_dir, memory=memory, messenger=None, tool_registry=[])
+        handler.set_session_origin(ORIGIN_SYSTEM)
+        handler._trigger = "consolidation:daily"
+
+        result = handler.handle("trust_skill", {"ref": "writer"})
+
+        assert "PermissionDenied" in result
+        assert "human-origin" in result
+
+    def test_trust_skill_promotes_probation_skill_for_human_origin(self, tmp_path: Path):
+        anima_dir = tmp_path / "alice"
+        common_dir = tmp_path / "common_skills"
+        common_dir.mkdir()
+        skill_dir = anima_dir / "skills" / "writer"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\n"
+            "name: writer\n"
+            "description: Writer skill\n"
+            "trust_level: community\n"
+            "promotion_status: probation\n"
+            "skill_policy:\n"
+            "  use_mode: candidate_hint\n"
+            "  injection: pointer_preferred\n"
+            "---\n\n"
+            "# Writer\n",
+            encoding="utf-8",
+        )
+        memory = MagicMock()
+        memory.read_permissions.return_value = ""
+        handler = ToolHandler(anima_dir=anima_dir, memory=memory, messenger=None, tool_registry=[])
+        handler.set_session_origin(ORIGIN_HUMAN)
+        handler._trigger = "message:user"
+
+        with patch("core.paths.get_common_skills_dir", return_value=common_dir):
+            result = handler.handle("trust_skill", {"ref": "writer"})
+
+        assert '"status": "trusted"' in result
+        assert "trust_level: trusted" in (skill_dir / "SKILL.md").read_text(encoding="utf-8")
 
 
 class TestViewEventDetection:

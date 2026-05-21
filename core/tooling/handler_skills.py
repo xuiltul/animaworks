@@ -347,6 +347,10 @@ class SkillsToolsMixin:
     def _handle_trust_skill(self, args: dict[str, Any]) -> str:
         """Promote a safe skill to trusted operating guidance."""
         from core.skills.trust import promote_skill_to_trusted
+        from core.skills.trust_gate import trust_skill_enabled_for_context
+
+        if not trust_skill_enabled_for_context(self._trigger, self._session_origin):
+            return _error_result("PermissionDenied", "trust_skill requires an explicit human-origin session")
 
         ref = str(args.get("ref") or args.get("skill_name") or "").strip()
         if not ref:

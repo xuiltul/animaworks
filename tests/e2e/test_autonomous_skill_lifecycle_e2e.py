@@ -76,6 +76,42 @@ def test_autonomous_learner_skips_risky_procedure(tmp_path: Path) -> None:
     assert not (anima_dir / "skills" / "send-helper").exists()
 
 
+def test_autonomous_learner_skips_private_or_billing_risk(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "mei"
+    anima_dir.mkdir(parents=True)
+    common_dir = tmp_path / "common_skills"
+    common_dir.mkdir()
+    _write_procedure(
+        anima_dir,
+        "billing-helper",
+        extra="risk:\n  billing: true\n  private-data: true\n",
+    )
+
+    result = AutonomousSkillLearner(anima_dir, common_skills_dir=common_dir).run()
+
+    assert result.created == []
+    assert result.skipped[0].reason == "risk_billing"
+    assert not (anima_dir / "skills" / "billing-helper").exists()
+
+
+def test_autonomous_learner_records_ineligible_candidate_reason(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "mei"
+    anima_dir.mkdir(parents=True)
+    common_dir = tmp_path / "common_skills"
+    common_dir.mkdir()
+    _write_procedure(
+        anima_dir,
+        "too-new",
+        extra="success_count: 1\nconfidence: 0.5\n",
+    )
+
+    result = AutonomousSkillLearner(anima_dir, common_skills_dir=common_dir).run()
+
+    assert result.created == []
+    assert "success_count_below_threshold" in result.skipped[0].reason
+    assert "confidence_below_threshold" in result.skipped[0].reason
+
+
 def test_autonomous_learner_blocks_dangerous_candidate(tmp_path: Path) -> None:
     anima_dir = tmp_path / "animas" / "mei"
     anima_dir.mkdir(parents=True)

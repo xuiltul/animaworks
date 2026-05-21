@@ -64,8 +64,13 @@ class AutonomousSkillLearner:
         """Create all currently eligible low-risk probation skills."""
         result = AutoSkillLearnResult()
         existing = self._existing_skills()
-        for candidate in self.converter.find_candidates(eligible_only=True):
+        for candidate in self.converter.find_candidates(eligible_only=False):
             procedure_rel = str(candidate.path.relative_to(self.anima_dir))
+            if not candidate.eligible:
+                skip = AutoSkillSkip(candidate.name, procedure_rel, ",".join(candidate.reasons) or "ineligible")
+                self._record_skip(skip)
+                result.skipped.append(skip)
+                continue
             duplicate = self._duplicate_for(candidate.name, candidate.metadata, existing)
             if duplicate is not None:
                 skip = AutoSkillSkip(candidate.name, procedure_rel, "duplicate_skill", duplicate.name)
@@ -117,7 +122,17 @@ class AutonomousSkillLearner:
 
     def _risk_skip_reason(self, metadata: dict[str, Any]) -> str | None:
         risk = normalise_risk(metadata.get("risk") or {})
-        for risk_field in ("destructive", "external_send", "open_world", "requires_human_approval"):
+        for risk_field in (
+            "destructive",
+            "external_send",
+            "handles_untrusted_data",
+            "open_world",
+            "credential",
+            "production",
+            "billing",
+            "private_data",
+            "requires_human_approval",
+        ):
             if risk.get(risk_field):
                 return f"risk_{risk_field}"
         return None

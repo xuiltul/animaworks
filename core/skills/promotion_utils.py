@@ -76,9 +76,32 @@ def normalise_risk(raw: Any) -> dict[str, bool]:
         "external_send": bool(raw.get("external_send", False)),
         "handles_untrusted_data": bool(raw.get("handles_untrusted_data", False)),
         "open_world": bool(raw.get("open_world", False)),
+        "credential": _risk_any(raw, "credential", "credentials", "uses_credentials", "secret", "secrets"),
+        "production": _risk_any(raw, "production", "production_system", "prod"),
+        "billing": _risk_any(raw, "billing", "payment", "payments", "cost_bearing"),
+        "private_data": _risk_any(
+            raw,
+            "private_data",
+            "private-data",
+            "personal_data",
+            "pii",
+            "sensitive_data",
+        ),
         "requires_human_approval": bool(raw.get("requires_human_approval", False)),
     }
-    if risk["destructive"] or risk["external_send"] or risk["open_world"]:
+    if any(
+        risk[field]
+        for field in (
+            "destructive",
+            "external_send",
+            "handles_untrusted_data",
+            "open_world",
+            "credential",
+            "production",
+            "billing",
+            "private_data",
+        )
+    ):
         risk["requires_human_approval"] = True
     return risk
 
@@ -88,9 +111,18 @@ def runtime_approval_required(risk: dict[str, Any], scan_result: ScanResult) -> 
         risk.get("requires_human_approval")
         or risk.get("destructive")
         or risk.get("external_send")
+        or risk.get("handles_untrusted_data")
         or risk.get("open_world")
+        or risk.get("credential")
+        or risk.get("production")
+        or risk.get("billing")
+        or risk.get("private_data")
         or scan_result.verdict in {SkillScanVerdict.caution, SkillScanVerdict.warn}
     )
+
+
+def _risk_any(raw: dict[str, Any], *keys: str) -> bool:
+    return any(bool(raw.get(key, False)) for key in keys)
 
 
 def scan_security_metadata(scan_result: ScanResult) -> dict[str, Any]:

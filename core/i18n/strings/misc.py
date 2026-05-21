@@ -454,7 +454,7 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "skill_auto.created": {
         "ja": "スキル化しました: {skill_name} ({path})",
-        "en": "Skillized: {skill_name} ({path})",
+        "en": "スキル化しました: {skill_name} ({path})",
     },
     "task_queue.auto_taskexec": {
         "ja": "(auto: TaskExec)",

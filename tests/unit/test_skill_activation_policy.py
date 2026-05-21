@@ -30,6 +30,12 @@ def test_probation_skill_policy_is_candidate_hint() -> None:
     assert policy.trust_weight == 0.55
 
 
+def test_probation_status_overrides_default_trusted_level() -> None:
+    policy = policy_for_skill(SkillMetadata(name="auto", promotion_status="probation"))
+    assert policy.injection == "pointer_preferred"
+    assert policy.render_section == "candidate"
+
+
 def test_archived_or_dangerous_skill_policy_is_blocked() -> None:
     archived = policy_for_skill(SkillMetadata(name="old", lifecycle_state=SkillLifecycleState.archived))
     dangerous = policy_for_skill(SkillMetadata(name="bad", security={"verdict": SkillScanVerdict.dangerous}))

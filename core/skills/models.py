@@ -51,6 +51,7 @@ class SkillUsageStats(BaseModel):
     failure_count: int = 0
     patch_count: int = 0
     create_count: int = 0
+    created_at: str | None = None
     last_used_at: str | None = None
     is_common: bool = False
 
@@ -232,6 +233,10 @@ class SkillRiskMetadata(BaseModel):
     destructive: bool = False
     external_send: bool = False
     handles_untrusted_data: bool = False
+    credential: bool = False
+    production: bool = False
+    billing: bool = False
+    private_data: bool = False
     requires_human_approval: bool = False
     open_world: bool = False
 

@@ -93,3 +93,19 @@ class TestConsolidationToolFilter:
         background = build_tool_list(include_submit_tasks=True, trigger="background:manual")
         assert "submit_tasks" not in _tool_names(normal)
         assert "submit_tasks" in _tool_names(background)
+
+    def test_trust_skill_only_available_for_human_triggers(self):
+        human = build_unified_tool_list(trigger="message:user")
+        heartbeat = build_unified_tool_list(trigger="heartbeat")
+        cron = build_unified_tool_list(trigger="cron:daily")
+        consolidation = build_unified_tool_list(trigger="consolidation:daily")
+
+        assert "trust_skill" in _tool_names(human)
+        assert "trust_skill" not in _tool_names(heartbeat)
+        assert "trust_skill" not in _tool_names(cron)
+        assert "trust_skill" not in _tool_names(consolidation)
+
+    def test_build_tool_list_hides_trust_skill_for_background_trigger(self):
+        tools = build_tool_list(include_create_skill=True, trigger="background:manual")
+        assert "create_skill" in _tool_names(tools)
+        assert "trust_skill" not in _tool_names(tools)

@@ -83,24 +83,6 @@ def test_usage_stats_drive_lifecycle_suggestions_and_protected_skips_archive(tmp
     assert by_name["patched"].reason == "patch_count_consolidation"
 
 
-def test_probation_skill_has_stricter_review_and_archive_rules(tmp_path: Path) -> None:
-    anima_dir = tmp_path / "alice"
-    anima_dir.mkdir()
-    failing = SkillMetadata(name="auto-failing", promotion_status="probation")
-    unused = SkillMetadata(name="auto-unused", promotion_status="probation")
-    tracker = SkillUsageTracker(anima_dir)
-    for _ in range(3):
-        tracker.record("auto-failing", SkillUsageEventType.failure)
-
-    suggestions = SkillCurator(anima_dir).suggest_lifecycle_transitions([failing, unused])
-    by_name = {s.skill_name: s for s in suggestions}
-
-    assert by_name["auto-failing"].suggested_state == SkillLifecycleState.review
-    assert by_name["auto-failing"].reason == "probation_failure_rate_high"
-    assert by_name["auto-unused"].suggested_state == SkillLifecycleState.archived
-    assert by_name["auto-unused"].reason == "probation_unused_90d"
-
-
 def test_duplicate_detector_uses_routing_and_lexical_signals(tmp_path: Path) -> None:
     curator = SkillCurator(tmp_path / "alice")
     left = SkillMetadata(

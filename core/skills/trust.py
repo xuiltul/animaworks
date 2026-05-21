@@ -68,6 +68,8 @@ def promote_skill_to_trusted(
         raise ValueError(f"Cannot promote lifecycle state: {meta.lifecycle_state.value}")
     if meta.trust_level in {SkillTrustLevel.blocked, SkillTrustLevel.quarantine}:
         raise ValueError(f"Cannot promote trust level: {meta.trust_level.value}")
+    if str(meta.promotion_status or "").lower() != "probation":
+        raise ValueError("Only probation skills can be promoted to trusted")
     if meta.security.verdict in {SkillScanVerdict.dangerous, SkillScanVerdict.warn, SkillScanVerdict.caution}:
         raise ValueError(f"Cannot promote unsafe skill: {meta.security.verdict.value}")
 

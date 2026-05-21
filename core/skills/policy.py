@@ -37,6 +37,9 @@ def policy_for_skill(meta: SkillMetadata) -> SkillActivationPolicy:
         return _blocked("skill_policy_blocked")
 
     promotion_status = str(meta.promotion_status or "").strip().lower()
+    if promotion_status == "probation" or meta.skill_policy.use_mode == "candidate_hint":
+        return _candidate("probation_candidate", trust_weight=0.55)
+
     if promotion_status == "trusted" or meta.trust_level in (
         SkillTrustLevel.builtin,
         SkillTrustLevel.official,
@@ -50,8 +53,6 @@ def policy_for_skill(meta: SkillMetadata) -> SkillActivationPolicy:
             reason="trusted_guidance",
         )
 
-    if promotion_status == "probation" or meta.skill_policy.use_mode == "candidate_hint":
-        return _candidate("probation_candidate", trust_weight=0.55)
     if meta.trust_level == SkillTrustLevel.community:
         return _candidate("community_candidate", trust_weight=0.35)
     if meta.trust_level == SkillTrustLevel.untrusted:

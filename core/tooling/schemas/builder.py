@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.skills.trust_gate import trust_skill_enabled_for_trigger
 from core.tooling.schemas.admin import _AW_CORE_NAMES, ADMIN_TOOLS, CC_TOOLS
 from core.tooling.schemas.channel import _channel_tools
 from core.tooling.schemas.converters import apply_db_descriptions
@@ -68,6 +69,11 @@ def submit_tasks_enabled_for_trigger(trigger: str | None) -> bool:
     """Return True only for explicit background task-authoring sessions."""
     normalized = (trigger or "").strip()
     return normalized in _SUBMIT_TASKS_ALLOWED_TRIGGERS or normalized.startswith(_SUBMIT_TASKS_ALLOWED_PREFIXES)
+
+
+def _skill_authoring_schemas_for_trigger(trigger: str) -> list[dict[str, Any]]:
+    allow_trust = trust_skill_enabled_for_trigger(trigger)
+    return [t for t in _create_skill_schemas() if allow_trust or t["name"] != "trust_skill"]
 
 
 def build_tool_list(
@@ -155,7 +161,7 @@ def build_tool_list(
     tools = apply_db_descriptions(tools)
 
     if include_create_skill:
-        tools.extend(_create_skill_schemas())
+        tools.extend(_skill_authoring_schemas_for_trigger(trigger))
         tools.extend(_curator_skill_schemas())
     return tools
 
@@ -238,7 +244,11 @@ def build_unified_tool_list(
     tools = apply_db_descriptions(tools)
 
     if include_create_skill:
-        tools.extend(t for t in _create_skill_schemas() if t["name"] in {"create_skill", "trust_skill"})
+        tools.extend(
+            t
+            for t in _skill_authoring_schemas_for_trigger(trigger)
+            if t["name"] in {"create_skill", "trust_skill"}
+        )
         tools.extend(_curator_skill_schemas())
 
     if compact:

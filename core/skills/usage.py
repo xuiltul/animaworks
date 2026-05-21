@@ -114,6 +114,7 @@ class SkillUsageTracker:
                     s.patch_count += 1
                 case SkillUsageEventType.create:
                     s.create_count += 1
+                    s.created_at = s.created_at or event.ts
 
             if event.event_type in (
                 SkillUsageEventType.view,

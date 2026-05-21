@@ -466,6 +466,10 @@ def _merged_risk(meta: SkillMetadata) -> SkillRiskMetadata:
         destructive=base.destructive or nested.destructive,
         external_send=base.external_send or nested.external_send,
         handles_untrusted_data=base.handles_untrusted_data or nested.handles_untrusted_data,
+        credential=base.credential or nested.credential,
+        production=base.production or nested.production,
+        billing=base.billing or nested.billing,
+        private_data=base.private_data or nested.private_data,
         requires_human_approval=base.requires_human_approval or nested.requires_human_approval,
         open_world=base.open_world or nested.open_world,
     )

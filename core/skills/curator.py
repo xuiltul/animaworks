@@ -264,7 +264,11 @@ class SkillCurator:
                 continue
             last_used = _parse_time(stats.last_used_at if stats else None) or meta.last_used_at
             if is_probation and last_used is None:
-                suggestions.append(LifecycleSuggestion(meta.name, SkillLifecycleState.archived, "probation_unused_90d", "never"))
+                created_at = _parse_time(stats.created_at if stats else None)
+                if created_at is not None and (now - created_at.astimezone(UTC)).days >= stale_days:
+                    suggestions.append(
+                        LifecycleSuggestion(meta.name, SkillLifecycleState.archived, "probation_unused_90d", "never")
+                    )
                 continue
             if last_used is None:
                 continue
