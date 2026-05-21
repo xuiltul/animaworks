@@ -44,6 +44,9 @@ _CLI_ACTION_MAP: dict[tuple[str, str], str] = {
 }
 
 
+ACTION_TOOL_NAMES: frozenset[str] = _HANDLER_ACTION_TOOLS
+
+
 @dataclass(frozen=True, slots=True)
 class ActionMemoryGateDecision:
     """Result of checking whether an action can execute."""
@@ -86,6 +89,13 @@ class ActionMemoryGateDecision:
 def action_tool_name_for_handler(name: str) -> str | None:
     """Return the action-rule tool name for a ToolHandler schema name."""
     return name if name in _HANDLER_ACTION_TOOLS else None
+
+
+def action_tool_name_for_sdk(name: str) -> str | None:
+    """Return the canonical action-rule name for SDK/MCP PreToolUse names."""
+    if name.startswith("mcp__aw__"):
+        name = name[len("mcp__aw__") :]
+    return action_tool_name_for_handler(name)
 
 
 def action_tool_name_from_cli_argv(argv: list[str]) -> str | None:

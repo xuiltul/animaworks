@@ -12,6 +12,7 @@ All memory is in `{anima_dir}/`. You can only write to your own directory and `c
 
 Knowledge: {knowledge_count} files | Procedures: {procedure_count} files
 Skill and procedure paths appear in the system prompt skill catalog; load bodies with `read_memory_file`.
+When creating a new reusable capability, read `common_skills/skill-creator/SKILL.md` first and use `create_skill` so the result is `skills/{name}/SKILL.md`. Do not create only a flat `skills/foo.md` for new skills.
 
 Shared users: {shared_users_list}
 

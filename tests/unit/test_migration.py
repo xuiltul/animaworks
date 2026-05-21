@@ -329,6 +329,52 @@ class TestMigrationSteps:
         result = step_update_version(data_dir, dry_run=False, verbose=True)
         assert result.changed == 1
 
+    def test_v063_registered_after_v062(self, tmp_path: Path) -> None:
+        from core.migrations.steps import register_all_steps
+
+        runner = MigrationRunner(tmp_path)
+        register_all_steps(runner)
+        ids = [item["id"] for item in runner.list_steps()]
+
+        assert "v062_skill_removal_and_activity_log" in ids
+        assert "v063_behavior_rules_action_rules_skill_sync" in ids
+        assert ids.index("v063_behavior_rules_action_rules_skill_sync") > ids.index(
+            "v062_skill_removal_and_activity_log"
+        )
+        assert ids.index("v063_behavior_rules_action_rules_skill_sync") < ids.index("update_version")
+
+    def test_step_v063_resyncs_stale_runtime_prompts_and_db(self, data_dir: Path) -> None:
+        from core.migrations.steps import step_v063_behavior_rules_action_rules_skill_sync
+        from core.tooling.prompt_db import ToolPromptStore
+
+        prompts_dir = data_dir / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        (prompts_dir / "behavior_rules.md").write_text(
+            "stale: human instructions must be registered with `submit_tasks`",
+            encoding="utf-8",
+        )
+        store = ToolPromptStore(data_dir / "tool_prompts.sqlite3")
+        store.set_section("behavior_rules", "stale behavior_rules", None)
+        store.set_guide("non_s", "stale non_s guide")
+
+        result = step_v063_behavior_rules_action_rules_skill_sync(data_dir, dry_run=False, verbose=True)
+
+        assert result.error is None
+        behavior_rules = (data_dir / "prompts" / "behavior_rules.md").read_text(encoding="utf-8")
+        action_guide = (
+            data_dir / "common_knowledge" / "operations" / "action-rules-guide.md"
+        ).read_text(encoding="utf-8")
+        skill_creator = (data_dir / "common_skills" / "skill-creator" / "SKILL.md").read_text(encoding="utf-8")
+        store = ToolPromptStore(data_dir / "tool_prompts.sqlite3")
+
+        assert "[ACTION-RULE]" in behavior_rules
+        assert "common_skills/skill-creator/SKILL.md" in behavior_rules
+        assert "gmail_draft" in action_guide
+        assert "slack_post" not in action_guide
+        assert "trust_level" in skill_creator
+        assert "[ACTION-RULE]" in (store.get_section("behavior_rules") or "")
+        assert "[ACTION-RULE]" in (store.get_guide("non_s") or "")
+
     def test_step_task_delegation_to_common_knowledge(self, data_dir: Path) -> None:
         from core.migrations.steps import step_task_delegation_to_common_knowledge
 

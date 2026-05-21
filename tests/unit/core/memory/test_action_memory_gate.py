@@ -212,6 +212,34 @@ def test_cli_argv_mapping() -> None:
     assert action_tool_name_from_cli_argv(["gmail", "draft", "--to", "a@example.com"]) == "gmail_draft"
     assert action_tool_name_from_cli_argv(["gmail", "send", "--to", "a@example.com"]) == "gmail_send"
     assert action_tool_name_from_cli_argv(["chatwork", "send", "room", "body"]) == "chatwork_send"
+    assert action_tool_name_from_cli_argv(["slack", "send", "#ops", "body"]) == "slack_send"
+    assert action_tool_name_from_cli_argv(["discord", "send", "general", "body"]) == "discord_send"
     assert action_tool_name_from_cli_argv(["call_human", "subject", "body"]) == "call_human"
     assert action_tool_name_from_cli_argv(["gmail", "unread"]) is None
     assert action_tool_name_from_cli_argv(["submit", "gmail", "send"]) is None
+
+
+def test_handler_action_tool_names_are_current() -> None:
+    from core.memory.action_gate import ACTION_TOOL_NAMES, action_tool_name_for_handler
+
+    assert ACTION_TOOL_NAMES == {
+        "call_human",
+        "send_message",
+        "post_channel",
+        "write_memory_file",
+        "gmail_draft",
+        "gmail_send",
+        "chatwork_send",
+        "slack_send",
+        "discord_send",
+    }
+    assert action_tool_name_for_handler("slack_post") is None
+
+
+def test_sdk_tool_name_normalization() -> None:
+    from core.memory.action_gate import action_tool_name_for_sdk
+
+    assert action_tool_name_for_sdk("mcp__aw__send_message") == "send_message"
+    assert action_tool_name_for_sdk("mcp__aw__write_memory_file") == "write_memory_file"
+    assert action_tool_name_for_sdk("mcp__aw__gmail_draft") == "gmail_draft"
+    assert action_tool_name_for_sdk("slack_post") is None

@@ -45,6 +45,7 @@ _EXPECTED_FILES = [
     "common_knowledge/communication/messaging-guide.md",
     "common_knowledge/communication/reporting-guide.md",
     "common_knowledge/communication/sending-limits.md",
+    "common_knowledge/operations/action-rules-guide.md",
     "common_knowledge/operations/background-tasks.md",
     "common_knowledge/operations/heartbeat-cron-guide.md",
     "common_knowledge/operations/machine/tool-usage.md",

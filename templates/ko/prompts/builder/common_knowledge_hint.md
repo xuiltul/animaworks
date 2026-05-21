@@ -9,4 +9,6 @@
 - 읽기: `read_memory_file(path="common_knowledge/...")`
 - 쓰기: `write_memory_file(path="common_knowledge/...", content="...")`
 - 목차: `common_knowledge/00_index.md`
+- 액션 규칙: 전송·게시·메모리 쓰기 전 확인은 `common_knowledge/operations/action-rules-guide.md`
+- 스킬 작성: 새 스킬은 `common_skills/skill-creator/SKILL.md`를 읽고 `create_skill`로 생성
 - 상세 기술 레퍼런스: `read_memory_file(path="reference/...")` (읽기 전용)

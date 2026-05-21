@@ -211,8 +211,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "## Available Skills",
     },
     "builder.skill_catalog_instruction": {
-        "ja": "該当するスキルがあれば、表示されているパスで `read_memory_file` を使って全文を読むこと。",
-        "en": "When a matching skill exists, use `read_memory_file` with the path shown to load full instructions.",
+        "ja": "ここに出るスキルは候補です。使う前に表示パスを `read_memory_file` で読み、全文の手順・制約を確認すること。新規スキル作成時は `common_skills/skill-creator/SKILL.md` を読むこと。",
+        "en": "Skills shown here are candidates. Before using one, read the shown path with `read_memory_file` and verify the full instructions and constraints. Before authoring a new skill, read `common_skills/skill-creator/SKILL.md`.",
+        "ko": "여기에 표시되는 스킬은 후보입니다. 사용하기 전에 표시된 경로를 `read_memory_file`로 읽고 전체 절차와 제약을 확인하세요. 새 스킬을 작성할 때는 `common_skills/skill-creator/SKILL.md`를 읽으세요.",
     },
     "builder.procedure_label": {
         "ja": "手順",

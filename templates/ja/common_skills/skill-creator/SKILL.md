@@ -66,7 +66,7 @@ SKILL.md 先頭の YAML は `core/memory/frontmatter.parse_frontmatter()` で除
 SKILL.md はYAMLフロントマターとMarkdown本文で構成される。
 フロントマターには `name` と `description` を**必須**とする。
 
-**`create_skill` が書き出す任意キーは `allowed_tools` のみ**（`name` / `description` に加えて）。それ以外の YAML キーを手編集で足しても、`SkillMetadataService.extract_skill_meta()` が読むのは **`name`・`description`・`allowed_tools`**（不正型の `allowed_tools` は空リスト扱い）。
+`create_skill` は `allowed_tools` だけでなく、信頼・出自・分類・ルーティング補助のメタデータも書き出せる。必須は `name` / `description` / `body` で、任意キーは用途が明確なときだけ使う。
 
 ```yaml
 ---
@@ -77,8 +77,25 @@ description: >-
 allowed_tools:
   - read_memory_file
   - web_search
+trust_level: trusted
+source:
+  type: anima
+  origin: manual
+category: communication
+use_when:
+  - drafting partner emails
+trigger_phrases:
+  - draft a partner email
+negative_phrases:
+  - personal diary
+domains:
+  - gmail
+routing_examples:
+  - Prepare a reply draft for the bank thread
 ---
 ```
+
+主な任意フィールド: `allowed_tools`, `trust_level`, `source_type`, `source_origin`, `category`, `promotion_status`, `skill_policy`, `use_when`, `trigger_phrases`, `negative_phrases`, `domains`, `routing_examples`。`create_skill` の引数名では `source.type` は `source_type`、`source.origin` は `source_origin` として渡す。
 
 ### `description` の役割
 
@@ -124,6 +141,7 @@ Level 1 はカタログでコンテキストを消費しやすいため **descri
 - **body**: 手順の構成（セクション分け）。必要なら `{{now_local}}` 等のプレースホルダを利用
 - **references** / **templates**: 必要なら外部ファイルの設計
 - **allowed_tools**: 推奨ツールを絞りたい場合のみ
+- **trust/source/category/policy/routing**: 信頼レベル、出自、分類、prompt policy、`use_when` / `trigger_phrases` / `negative_phrases` / `domains` / `routing_examples` を必要に応じて設計
 
 ### Step 3: 作成
 
@@ -168,6 +186,12 @@ create_skill(
 | references | | `references/` に配置するファイル群。`[{filename, content}, ...]` |
 | templates | | `templates/` に配置するファイル群。`[{filename, content}, ...]` |
 | allowed_tools | | frontmatter の `allowed_tools`（任意） |
+| trust_level | | `trusted` / `community` などの信頼レベル |
+| source_type / source_origin | | 出自（例: `anima`, `manual`, `auto_created`） |
+| category | | 分類タグ |
+| promotion_status | | `probation` / `trusted` などの昇格状態 |
+| skill_policy | | prompt注入方針（`use_mode`, injection系の設定） |
+| use_when / trigger_phrases / negative_phrases / domains / routing_examples | | スキルルーターの候補選択を助ける補助メタデータ |
 
 `references` / `templates` の `filename` にパス成分は含めない。`_validate_filename()` で親ディレクトリ外に解決されないことを確認し、不正なら**黙ってスキップ**（そのファイルは作られない）。
 
@@ -193,6 +217,7 @@ create_skill(
 - [ ] **descriptionがドメイン固有で具体的**（「管理を行う」「確認する」のような汎用表現を避け、ツール名・操作名・対象を明記）
 - [ ] bodyに具体的な手順が記載されている
 - [ ] 新規ではフロントマターに `description` を置き、**`## 概要` だけに説明を依存しない**（`## 発動条件` 等の旧テンプレート形式も避ける）
+- [ ] 任意メタデータ（`trust_level`, `source`, `category`, `skill_policy`, `use_when`, `trigger_phrases`, `negative_phrases`, `domains`, `routing_examples`）は実際の用途と一致している
 - [ ] スキルは `create_skill` で `{name}/SKILL.md` を作成している（手続きは `procedures/*.md` で意図通りか）
 
 ## テンプレート
@@ -223,6 +248,6 @@ description: >-
 
 - スキルはMarkdown手順書であり、Pythonコード（ツール）とは異なる
 - フロントマターの必須フィールドは `name` と `description`
-- `create_skill` が設定できる任意フィールドは **`allowed_tools` のみ**（`tags` 等の他キーは手編集可だが、メタ抽出で使うのは基本 `name` / `description` / `allowed_tools`）
+- `create_skill` は信頼・出自・分類・policy・routing補助メタデータも設定できる。不要なキーは増やさず、説明文だけで十分な場合はシンプルに保つ
 - bodyが長くなりすぎるとコンテキストを圧迫するため、150行以内を目安にする
 - 外部リソース参照（Level 3）は `references/` を活用して本文を簡潔に保つ

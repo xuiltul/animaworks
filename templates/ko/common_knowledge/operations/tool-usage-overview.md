@@ -6,7 +6,7 @@ description: "도구 체계 개요 및 사용 가이드"
 
 ## 개요
 
-17개의 도구를 사용할 수 있습니다. 모든 실행 모드에서 동일한 체계가 적용됩니다.
+도구는 실행 모드에 따라 노출 방식이 다릅니다. Mode S는 Claude Code 기본 도구와 MCP `mcp__aw__*`, Mode A/B는 통합 도구 목록과 Bash 경로를 사용합니다. 최신 목록은 시스템 프롬프트의 도구 섹션과 `core/tooling/schemas/`, `core/mcp/server.py`가 기준입니다.
 
 ## 파일 및 셸 조작 (Claude Code 호환, 8개 도구)
 
@@ -27,7 +27,7 @@ description: "도구 체계 개요 및 사용 가이드"
 - 검색: Grep(내용 검색), Glob(파일명 검색)을 우선 사용하세요. Bash를 통한 grep/find는 비권장
 - 메모리 디렉터리 내 파일: read_memory_file / write_memory_file을 사용하세요 (Read/Write가 아님)
 
-## AnimaWorks 필수 도구 (9개 도구)
+## AnimaWorks 필수 도구
 
 ### 메모리
 
@@ -56,6 +56,12 @@ description: "도구 체계 개요 및 사용 가이드"
 ### 스킬 및 CLI 매뉴얼
 
 스킬·절차 전문은 **`read_memory_file`**로 시스템 프롬프트의 스킬 카탈로그에 표시된 경로(예: `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`, `procedures/baz.md`)를 지정해 읽습니다.
+신규 스킬 작성 전에는 **`read_memory_file(path="common_skills/skill-creator/SKILL.md")`**를 읽고, `write_memory_file`로 `skills/foo.md` 단일 파일만 만들지 말고 `create_skill`을 사용해 `skills/{name}/SKILL.md` 형식으로 생성합니다. `create_skill`은 `allowed_tools`, 신뢰/출처/분류/policy/routing 메타데이터도 필요 시 설정할 수 있습니다.
+
+### 액션 규칙
+
+전송·게시·알림·메모리 쓰기 전에 반드시 확인할 절차가 있으면 `knowledge/action-rule-*.md`에 `[ACTION-RULE]`과 `trigger_tools:`를 작성합니다. 자세한 내용은 **`read_memory_file(path="common_knowledge/operations/action-rules-guide.md")`**를 읽습니다.
+대상 이름은 `call_human`, `send_message`, `post_channel`, `write_memory_file`, `gmail_draft`, `gmail_send`, `chatwork_send`, `slack_send`, `discord_send`입니다.
 
 ## CLI를 통한 도구 (Bash + animaworks-tool)
 

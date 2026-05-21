@@ -9,4 +9,6 @@ Actively write findings that would benefit other Animas to common_knowledge.
 - Read: `read_memory_file(path="common_knowledge/...")`
 - Write: `write_memory_file(path="common_knowledge/...", content="...")`
 - Index: `common_knowledge/00_index.md`
+- Action rules: for pre-send/post/write checks, read `common_knowledge/operations/action-rules-guide.md`
+- Skill authoring: for new skills, read `common_skills/skill-creator/SKILL.md` and create with `create_skill`
 - Detailed technical references: `read_memory_file(path="reference/...")` (read-only)

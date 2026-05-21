@@ -1,110 +1,79 @@
-# アクションルール（Action-Aware Priming）
+# アクションルール（Action Rules）
 
 ## 概要
 
-アクションルールは、特定のツール実行前に自動的にリマインドされるルールです。
-knowledgeに `[ACTION-RULE]` マーカー付きで記述することで、該当ツールの呼び出し時にシステムが自動検出し、ツール実行を一時停止してルール内容を提示します。
+アクションルールは、送信・投稿・通知・記憶書き込みなど副作用のある操作の直前に確認を入れるための知識です。`knowledge/action-rule-*.md` に `[ACTION-RULE]` と `trigger_tools:` を書くと、該当ツール実行前に検索されます。
 
-## 仕組み
-
-1. あなたが「アウトプット系ツール」（call_human, send_message等）を呼び出そうとする
-2. システムがknowledge内の `[ACTION-RULE]` ルールをRAG検索する
-3. 関連度の高いルールが見つかった場合、ツール実行が一時停止される
-4. ルール内容が提示される
-5. あなたはルールを確認し、必要な事前アクションを実行してから再試行する
-
-## ルールの書き方
-
-### 基本形式
+## 基本形式
 
 ```markdown
 ## [ACTION-RULE] ルール名
-trigger_tools: ツール名1, ツール名2
-keywords: キーワード1, キーワード2
+trigger_tools: gmail_draft, gmail_send
+keywords: メール, 下書き, 重複確認
 ---
-ルール本文。ここがリマインド時に表示される。
-具体的に「何をする前に」「何を確認すべきか」を書く。
+実行前に必ず read_memory_file(path="procedures/gmail-draft-check.md") を読む。
+必要な確認が終わってから同じツールを再実行する。
 ```
-
-### フィールド説明
 
 | フィールド | 必須 | 説明 |
 |-----------|------|------|
-| `trigger_tools` | 必須 | このルールが発火する対象ツール名（カンマ区切り） |
-| `keywords` | 任意 | 関連キーワード（ベクトル検索精度向上に寄与） |
-| `---` 以下 | 必須 | ルール本文（停止時にそのまま表示される） |
+| `trigger_tools` | 必須 | 対象ツール名。複数はカンマ区切り |
+| `keywords` | 任意 | 検索精度を上げる語 |
+| 本文 | 必須 | 停止時に表示される確認内容。必読ファイルは `read_memory_file(path="...")` と書く |
 
-### 対象ツール一覧
+## ToolHandler の対象ツール名
 
-以下のツールがアクションルールの対象です（読み取り系は対象外）:
+- `call_human`
+- `send_message`
+- `post_channel`
+- `write_memory_file`
+- `gmail_draft`
+- `gmail_send`
+- `chatwork_send`
+- `slack_send`
+- `discord_send`
 
-- `call_human` — 人間への通知・報告
-- `send_message` — Anima間メッセージ送信
-- `post_channel` — Board投稿
-- `slack_post` — Slack投稿
-- `chatwork_send` — Chatwork送信
-- `gmail_send` — メール送信
-- `write_memory_file` — 記憶ファイル書き込み
+## CLI 対応
 
-## 例
+| CLI | アクションルール上の名前 |
+|-----|--------------------------|
+| `animaworks-tool gmail draft` | `gmail_draft` |
+| `animaworks-tool gmail send` | `gmail_send` |
+| `animaworks-tool chatwork send` | `chatwork_send` |
+| `animaworks-tool slack send` | `slack_send` |
+| `animaworks-tool discord send` | `discord_send` |
+| `animaworks-tool call_human` | `call_human` |
 
-### 報告前の確認ルール
+`animaworks-tool submit ...` はアクションルール対象外です。バックグラウンド投入先の実行時に、対象サブコマンドが改めて判定されます。
+
+## ゲート動作
+
+- 関連度スコア `0.80` 未満のルールは停止しません。
+- 検索失敗、vector store不在、一致ルールなしの場合は fail-open で実行を妨げません。
+- 本文に `read_memory_file(path="...")` が含まれる場合、同じ action-gate セッション内で全パスを読むまで停止します。
+- 必読ファイルがないレビュー専用ルールは、同じ action-gate セッションの `tool:rule` ごとに1回だけ停止します。
+- グローバルな「最大2回停止」制限はありません。
+- 停止されたら、表示されたルールを読み、必要な `read_memory_file` や確認を実行してから同じ操作を再試行します。
+
+## 作成例
 
 ```markdown
-## [ACTION-RULE] ペンディング報告前のChatwork確認
-trigger_tools: call_human, send_message
-keywords: ペンディング, pending, 報告, 進捗
+## [ACTION-RULE] Gmail下書き前の重複確認
+trigger_tools: gmail_draft, gmail_send
+keywords: Gmail, 下書き, 重複, thread
 ---
-ペンディング事項を上司に報告する前に、必ずChatworkの最新メッセージを確認すること。
-新しい情報や状況変化が入っている可能性がある。
-確認せずに古い情報を報告すると混乱を招く。
+Gmail下書きや送信の前に、必ず read_memory_file(path="procedures/gmail-draft-check.md") を読む。
+既存スレッドと既存下書きの重複を確認してから実行する。
 ```
 
-### メール送信前の確認ルール
-
 ```markdown
-## [ACTION-RULE] メール送信前の宛先確認
-trigger_tools: gmail_send
-keywords: メール, email, 送信
----
-メールを送信する前に以下を確認:
-1. 宛先が正しいか（社内/社外の区別）
-2. CCに上司を含めるべきか
-3. 添付ファイルの有無を本文と照合
-```
-
-### `[IMPORTANT]` との併用
-
-```markdown
-## [ACTION-RULE] [IMPORTANT] 顧客データ変更前の承認確認
+## [ACTION-RULE] 顧客メモ更新前の確認
 trigger_tools: write_memory_file
-keywords: 顧客, customer, プロファイル
+keywords: 顧客, customer, profile
 ---
-顧客関連のメモリファイルを変更する前に、上司の承認を得ること。
-承認なしの顧客データ変更は禁止。
+顧客関連の `knowledge/` を更新する前に、関連する既存ファイルを読んで矛盾がないか確認する。
 ```
 
-## 動作制約
+## 置き場所
 
-- **1セッションで最大2回まで停止**: 3回目以降はルールが見つかっても停止しない
-- **同一ルールは1回のみ**: 同じルールで2回停止されることはない
-- **再試行は即実行**: 停止後に同じツールを再度呼ぶと即実行される
-- **スコア閾値**: 関連度0.80以上でのみ発火する
-
-## 効果的なルール作成のコツ
-
-1. **ツール名を本文に含める**: RAG検索の精度が向上する
-2. **1ルール1責務**: 複数の条件を1つのルールに詰め込まない
-3. **具体的に書く**: 「適切に確認する」ではなく「Chatworkを読む」等
-4. **キーワードを活用**: tool_inputに含まれそうな語をkeywordsに列挙する
-5. **`---` 以下を実用的に**: 停止時にそのまま表示されるので、モデルが理解しやすい指示にする
-
-## ルールの作成方法
-
-通常のknowledge作成と同じです:
-
-```
-write_memory_file(path="knowledge/action-rule-chatwork-check.md", content="## [ACTION-RULE] ...")
-```
-
-作成後、次回のRAGインデックス再構築（日次）で自動的に反映されます。
+通常は `knowledge/action-rule-{topic}.md` に作成します。作成前に `search_memory(scope="knowledge")` で類似ルールを探し、既存ルールがあれば更新を優先してください。

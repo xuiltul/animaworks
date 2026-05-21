@@ -41,14 +41,14 @@ Heartbeat does **not** execute. When it finds work that must run, either delegat
 ### Task Queue (submit_tasks / update_task / List via CLI)
 
 The persistent task queue is recorded in `state/task_queue.jsonl` as append-only JSONL.
-Use `submit_tasks` to register tasks and `update_task` to update status. To list tasks, use the CLI: `animaworks-tool task list`.
+Use `submit_tasks` to register tasks when explicit background execution or follow-up tracking is needed, and `update_task` to update status. To list tasks, use the CLI: `animaworks-tool task list`.
 Tasks registered in the queue appear as a summary in the system prompt Priming section.
 
 #### submit_tasks (Task Registration — Executed by You)
 
 > **IMPORTANT**: Tasks submitted with `submit_tasks` are executed by **your own TaskExec** (they are not sent to subordinates). To assign work to a subordinate, use `delegate_task`.
 
-Use `submit_tasks` to create and register tasks. For a single task, specify one entry in the `tasks` array.
+Use `submit_tasks` to create and register tasks for TaskExec. Human instructions that can be handled directly in normal chat should be executed directly; use `submit_tasks`, `update_task`, or `state/current_state.md` only when follow-up tracking, parallel execution, or background execution is needed. For a single task, specify one entry in the `tasks` array.
 
 ```
 submit_tasks(batch_id="human-20260313", tasks=[
@@ -66,7 +66,7 @@ submit_tasks(batch_id="human-20260313", tasks=[
 | `tasks[].depends_on` | MAY | Array of predecessor task IDs |
 | `tasks[].workspace` | MAY | Working directory. A workspace alias (e.g. `aischreiber`) makes TaskExec run in that directory. If omitted, the Anima default applies |
 
-- When you receive instructions from a human, always register the task with `submit_tasks` (MUST)
+- In normal chat, human instructions do not have to be registered with `submit_tasks`. Register only when the work cannot be handled directly, should run in parallel/background, or needs follow-up tracking
 - Human-origin tasks (equivalent to `source=human`) must be handled with highest priority (MUST)
 - Queued tasks are reviewed on Heartbeat; when you start work, update status to `in_progress` with `update_task`
 

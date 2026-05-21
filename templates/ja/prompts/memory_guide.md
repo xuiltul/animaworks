@@ -12,6 +12,7 @@
 
 知識: {knowledge_count}件 | 手順書: {procedure_count}件
 スキル・手順書のパスはシステムプロンプトのスキルカタログで確認し、本文は `read_memory_file` で読み込めます。
+新しい再利用可能な能力を作るときは、先に `common_skills/skill-creator/SKILL.md` を読み、`create_skill` で `skills/{name}/SKILL.md` 形式として作成してください。`write_memory_file` で `skills/foo.md` だけを作る方法は新規作成では使いません。
 
 共有ユーザー: {shared_users_list}
 

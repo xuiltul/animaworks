@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from dataclasses import dataclass
+from unittest.mock import patch
 
 import pytest
+
+
+@dataclass
+class FakeRule:
+    doc_id: str
+    content: str
+    score: float = 0.95
 
 
 @pytest.fixture
@@ -76,60 +84,136 @@ class TestActionAwarePrimingHook:
         assert result.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
 
     @pytest.mark.asyncio
-    async def test_deny_on_high_score_match(self, anima_dir, session_stats):
-        """High-score action rule match should trigger deny (integration-level check).
+    async def test_mcp_name_normalizes_and_required_read_denies(self, anima_dir, session_stats, monkeypatch):
+        """MCP-prefixed tool names use canonical action-rule names and required-read behavior."""
+        from core.memory import action_gate
 
-        This test verifies the deny path works when a retriever returns
-        a high-score result. Since the retriever is lazily initialized inside
-        a closure, we verify the state changes that indicate deny occurred.
-        """
-        pass
+        seen_tools: list[str] = []
 
-    @pytest.mark.asyncio
-    async def test_deny_budget_respected(self, anima_dir, session_stats):
-        """After 2 denials, no more denials should occur."""
-        session_stats["aap_deny_count"] = 2
-        session_stats["aap_shown_rules"] = set()
-        session_stats["aap_next_call_approved"] = {}
+        def fake_search(_anima_dir, tool_name, _query):
+            seen_tools.append(tool_name)
+            return [
+                FakeRule(
+                    "rule-required",
+                    (
+                        "## [ACTION-RULE] send check\n"
+                        "trigger_tools: send_message\n"
+                        "---\n"
+                        'read_memory_file(path="procedures/check.md")'
+                    ),
+                )
+            ]
 
+        monkeypatch.setattr(action_gate, "_search_action_rules", fake_search)
         hook = self._build_hook(anima_dir, session_stats)
         result = await hook(
-            {"hook_event_name": "PreToolUse", "tool_name": "call_human", "tool_input": {"message": "test"}, "tool_use_id": "t1"},
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "mcp__aw__send_message",
+                "tool_input": {"content": "test"},
+                "tool_use_id": "t1",
+            },
             "t1",
             {"signal": None},
         )
-        assert result.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+        assert result.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        assert seen_tools == ["send_message"]
+        assert session_stats["action_gate_denied_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_retry_immediately_allowed(self, anima_dir, session_stats):
-        """After deny, same tool should be immediately allowed."""
-        session_stats["aap_deny_count"] = 1
-        session_stats["aap_shown_rules"] = {"chunk_123"}
-        session_stats["aap_next_call_approved"] = {"call_human": True}
+    async def test_required_read_allows_after_memory_read(self, anima_dir, session_stats, monkeypatch):
+        """Required-read rules keep blocking until the required path is read in the same session."""
+        from core.memory import action_gate
+
+        monkeypatch.setattr(
+            action_gate,
+            "_search_action_rules",
+            lambda *args, **kwargs: [
+                FakeRule(
+                    "rule-required",
+                    (
+                        "## [ACTION-RULE] notify check\n"
+                        "trigger_tools: call_human\n"
+                        "---\n"
+                        'read_memory_file(path="procedures/check.md")'
+                    ),
+                )
+            ],
+        )
 
         hook = self._build_hook(anima_dir, session_stats)
-        result = await hook(
+        blocked = await hook(
             {"hook_event_name": "PreToolUse", "tool_name": "call_human", "tool_input": {"message": "test"}, "tool_use_id": "t2"},
             "t2",
             {"signal": None},
         )
-        assert result.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
-        assert "call_human" not in session_stats["aap_next_call_approved"]
+        assert blocked.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+
+        action_gate.record_memory_read(anima_dir, "procedures/check.md")
+        allowed = await hook(
+            {"hook_event_name": "PreToolUse", "tool_name": "call_human", "tool_input": {"message": "test"}, "tool_use_id": "t3"},
+            "t3",
+            {"signal": None},
+        )
+        assert allowed.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
 
     @pytest.mark.asyncio
-    async def test_dedup_same_rule(self, anima_dir, session_stats):
-        """Same rule should not fire twice."""
-        session_stats["aap_deny_count"] = 1
-        session_stats["aap_shown_rules"] = {"chunk_123"}
-        session_stats["aap_next_call_approved"] = {}
+    async def test_review_only_rule_blocks_once_then_allows(self, anima_dir, session_stats, monkeypatch):
+        """Review-only rules are deduplicated by action-gate state."""
+        from core.memory import action_gate
+
+        monkeypatch.setattr(
+            action_gate,
+            "_search_action_rules",
+            lambda *args, **kwargs: [
+                FakeRule("chunk_123", "## [ACTION-RULE] review\ntrigger_tools: send_message\n---\nReview.")
+            ],
+        )
 
         hook = self._build_hook(anima_dir, session_stats)
-        result = await hook(
+        first = await hook(
             {"hook_event_name": "PreToolUse", "tool_name": "send_message", "tool_input": {"content": "test"}, "tool_use_id": "t3"},
             "t3",
             {"signal": None},
         )
-        assert result.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+        second = await hook(
+            {"hook_event_name": "PreToolUse", "tool_name": "send_message", "tool_input": {"content": "test"}, "tool_use_id": "t4"},
+            "t4",
+            {"signal": None},
+        )
+        assert first.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        assert second.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+    @pytest.mark.asyncio
+    async def test_no_global_two_pause_limit(self, anima_dir, session_stats, monkeypatch):
+        """Different review-only rules can block more than twice in one session."""
+        from core.memory import action_gate
+
+        rules = [
+            FakeRule("r1", "## [ACTION-RULE] r1\ntrigger_tools: send_message\n---\nReview 1."),
+            FakeRule("r2", "## [ACTION-RULE] r2\ntrigger_tools: send_message\n---\nReview 2."),
+            FakeRule("r3", "## [ACTION-RULE] r3\ntrigger_tools: send_message\n---\nReview 3."),
+        ]
+
+        def fake_search(*args, **kwargs):
+            return [rules.pop(0)]
+
+        monkeypatch.setattr(action_gate, "_search_action_rules", fake_search)
+        hook = self._build_hook(anima_dir, session_stats)
+
+        for idx in range(3):
+            result = await hook(
+                {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "send_message",
+                    "tool_input": {"content": f"test {idx}"},
+                    "tool_use_id": f"t{idx}",
+                },
+                f"t{idx}",
+                {"signal": None},
+            )
+            assert result.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        assert session_stats["action_gate_denied_count"] == 3
 
     @pytest.mark.asyncio
     async def test_session_stats_none_graceful(self, anima_dir):
@@ -155,7 +239,7 @@ class TestActionAwarePrimingInit:
     """Test AAP state initialization."""
 
     def test_session_stats_initialized(self, anima_dir, session_stats):
-        """AAP fields should be auto-initialized in session_stats."""
+        """Action gate fields should be auto-initialized in session_stats."""
         from core.execution._sdk_hooks import _build_pre_tool_hook
 
         _build_pre_tool_hook(
@@ -165,7 +249,4 @@ class TestActionAwarePrimingInit:
             session_stats=session_stats,
             superuser=False,
         )
-        assert "aap_deny_count" in session_stats
-        assert session_stats["aap_deny_count"] == 0
-        assert isinstance(session_stats["aap_shown_rules"], set)
-        assert isinstance(session_stats["aap_next_call_approved"], dict)
+        assert session_stats["action_gate_denied_count"] == 0

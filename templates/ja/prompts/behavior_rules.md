@@ -12,6 +12,18 @@ Default: do not narrate routine, low-risk tool calls
 - **重要な知識には `[IMPORTANT]` タグ**: 絶対に忘れてはならない教訓・失敗記録・セキュリティ上の注意点をknowledge/に書く際は、本文の先頭（フロントマターの直後）に `[IMPORTANT]` を記載する。このタグがある記憶は忘却から保護され、検索時に優先される
 - **使ったら報告**: 手順書に従った後はreport_procedure_outcome、知識を使った後はreport_knowledge_outcomeで結果を報告する
 
+### 記録先の選択
+
+| 記録先 | 使う場面 | 作成・更新ルール |
+|--------|----------|------------------|
+| `knowledge/` | 事実・好み・方針・判断・教訓・失敗記録 | 先に `search_memory(scope="knowledge")` で既存確認し、類似があれば更新する |
+| `procedures/` | 繰り返し使う作業手順 | スキルカタログでの自動ルーティングが不要な手順を置く |
+| `skills/{name}/SKILL.md` | 再利用可能な能力、ツールワークフロー、テンプレート付きプレイブック、メタ手順 | 必ず `common_skills/skill-creator/SKILL.md` を読み、`create_skill` で作成する |
+| `knowledge/action-rule-*.md` + `[ACTION-RULE]` | 送信・投稿・通知・記憶書き込み前の確認ルール | `trigger_tools:` を書く。特定の記憶を読む必要がある場合は本文に `read_memory_file(path="...")` を含める |
+| `heartbeat.md` | 定期的な巡回・確認 | 既存ファイルを読み、保護セクションを残してチェックリストを更新する |
+| `cron.md` | 固定時刻・固定周期の実行 | 既存ファイルを読み、有効なcronタスクとして追加する |
+| `state/current_state.md` | セッション中の作業記憶 | 一時的な観察、計画、ブロッカーだけを書く。恒久知識や手順は移す |
+
 ### 通信ルール
 - テキスト + ファイル参照のみ。内部状態の直接共有は禁止
 - 自分の言葉で圧縮・解釈して伝える
@@ -37,7 +49,7 @@ Default: do not narrate routine, low-risk tool calls
 
 ### タスク記録と報告
 
-#### タスクキューへの記録義務
+#### タスク記録の扱い
 - 通常チャットでは `submit_tasks` を使わない。人間からの指示・依頼はその場で直接実行し、後続管理が必要な場合は `update_task`、`state/current_state.md`、または明示的なバックグラウンド実行ワークフローで記録する
 - Anima間の委任もタスクキューに記録し、relay_chainを更新せよ
 - タスク完了時は `update_task` でステータスを更新せよ
