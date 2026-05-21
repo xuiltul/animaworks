@@ -70,6 +70,8 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "submit_tasks",
         "update_task",
         "goal",
+        # AW-essential: workspace access grants
+        "grant_workspace_access",
         # AW-essential: skill authoring
         "create_skill",
         "promote_procedure_to_skill",
@@ -181,10 +183,12 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         _task_tools,
         _vault_tools,
     )
+    from core.tooling.schemas.workspace import WORKSPACE_TOOLS
 
     all_schemas: list[dict[str, Any]] = [
         *MEMORY_TOOLS,
         *_channel_tools(),
+        *WORKSPACE_TOOLS,
         *_completion_gate_tools(),
         *_task_tools(),
         *_goal_tools(),

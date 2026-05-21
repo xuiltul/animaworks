@@ -28,55 +28,46 @@ Animaは普段「自分の家」（~/.animaworks/animas/{name}/）にいる。
 
 ### 登録
 
-config.json の workspaces セクションに追加する:
+人間から明示指示を受けたトップレベルAnimaは `grant_workspace_access` を使う:
 
-1. `read_memory_file(path="config.json")` で現在の設定を確認
-2. workspaces セクションにエイリアスとパスを追加
-3. `write_memory_file` で保存
-
-または、Bash で以下を実行:
-```bash
-python3 -c "
-from core.workspace import register_workspace
-result = register_workspace('エイリアス名', '/absolute/path/to/project')
-print(result)
-"
-```
-
-**注意**: ディレクトリが存在しない場合はエラーになる。
-
-### 一覧
-
-config.json の workspaces セクションを読む:
-```
-read_memory_file(path="config.json")
-```
-
-### 削除
-
-config.json の workspaces セクションから該当エントリを削除する。
-
-### 自分のデフォルトワークスペース変更
-
-自分の `status.json` の `default_workspace` フィールドを更新する:
-1. `read_memory_file(path="status.json")` で現在の内容を確認
-2. `default_workspace` にエイリアス（例: `aischreiber`）または完全形（例: `aischreiber#3af4be6e`）を設定
-3. `write_memory_file(path="status.json", content=...)` で保存
-
-記載例:
 ```json
 {
-  "default_workspace": "aischreiber#3af4be6e"
+  "alias": "finance-dashboard",
+  "path": "/absolute/path/to/project",
+  "make_default": true
 }
 ```
 
+このツールは組織共有レジストリへの登録、`permissions.json.file_roots` への書き込み権限追加、必要に応じた `status.json.default_workspace` 更新をまとめて行う。
+
+**注意**: ディレクトリが存在しない場合はエラーになる。
+**注意**: `read_memory_file(path="config.json")` は自分のAnimaディレクトリの `config.json` を読む。組織共有レジストリの登録には使わない。
+
+### 一覧
+
+組織共有レジストリの一覧は `core.workspace.list_workspaces()` で確認する。`read_memory_file(path="config.json")` は使わない。
+
+### 削除
+
+削除は管理者操作として扱う。通常の作業では既存エイリアスを上書きせず、新しいエイリアスを登録する。
+
+### 自分のデフォルトワークスペース変更
+
+トップレベルAnimaは `grant_workspace_access` に `make_default: true` を指定する。
+非トップレベルAnimaは自分で権限追加できない。トップレベルAnimaに人間から指示してもらう。
+
 ### 部下への割り当て（スーパバイザー用）
 
-1. ワークスペースを登録（上記）
-2. 部下の `status.json` の `default_workspace` フィールドを更新する:
-   - `read_memory_file(path="../{subordinate}/status.json")`
-   - `default_workspace` にエイリアスを設定
-   - `write_memory_file(path="../{subordinate}/status.json", content=...)`
+人間から明示指示を受けたトップレベルAnimaは `target_anima` を指定して部下または子孫Animaに権限を付与できる:
+
+```json
+{
+  "alias": "finance-dashboard",
+  "path": "/absolute/path/to/project",
+  "target_anima": "ritsu",
+  "make_default": true
+}
+```
 
 ## ツールでの使用
 

@@ -69,6 +69,7 @@ from core.tooling.handler_memory import MemoryToolsMixin
 from core.tooling.handler_org import OrgToolsMixin
 from core.tooling.handler_perms import PermissionsMixin
 from core.tooling.handler_skills import SkillsToolsMixin
+from core.tooling.handler_workspace import WorkspaceToolsMixin
 
 logger = logging.getLogger("animaworks.tool_handler")
 
@@ -97,6 +98,7 @@ class ToolHandler(
     OrgToolsMixin,
     SkillsToolsMixin,
     GoalsToolsMixin,
+    WorkspaceToolsMixin,
     FileToolsMixin,
     PermissionsMixin,
 ):
@@ -247,6 +249,7 @@ class ToolHandler(
             "ping_subordinate": self._handle_ping_subordinate,
             "read_subordinate_state": self._handle_read_subordinate_state,
             "check_permissions": self._handle_check_permissions,
+            "grant_workspace_access": self._handle_grant_workspace_access,
             "delegate_task": self._handle_delegate_task,
             "task_tracker": self._handle_task_tracker,
             "audit_subordinate": self._handle_audit_subordinate,

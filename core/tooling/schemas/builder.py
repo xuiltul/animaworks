@@ -39,6 +39,7 @@ from core.tooling.schemas.supervisor import (
     _vault_tools,
 )
 from core.tooling.schemas.task import _submit_tasks_tools, _task_tools
+from core.tooling.schemas.workspace import WORKSPACE_TOOLS
 
 _CONSOLIDATION_BLOCKED_TOOLS: frozenset[str] = frozenset(
     {"delegate_task", "submit_tasks", "goal", "send_message", "post_channel"}
@@ -125,6 +126,8 @@ def build_tool_list(
     tools.extend(_channel_tools())
     tools.extend(PROCEDURE_TOOLS)
     tools.extend(KNOWLEDGE_TOOLS)
+    if not is_consolidation:
+        tools.extend(WORKSPACE_TOOLS)
     tools.extend(_check_permissions_tools())
     if include_file_tools:
         tools.extend(FILE_TOOLS)
@@ -205,6 +208,7 @@ def build_unified_tool_list(
             tools.append(t)
 
     if not is_consolidation:
+        tools.extend(WORKSPACE_TOOLS)
         for t in _channel_tools():
             if t["name"] == "post_channel":
                 tools.append(t)
@@ -245,9 +249,7 @@ def build_unified_tool_list(
 
     if include_create_skill:
         tools.extend(
-            t
-            for t in _skill_authoring_schemas_for_trigger(trigger)
-            if t["name"] in {"create_skill", "trust_skill"}
+            t for t in _skill_authoring_schemas_for_trigger(trigger) if t["name"] in {"create_skill", "trust_skill"}
         )
         tools.extend(_curator_skill_schemas())
 

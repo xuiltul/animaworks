@@ -56,6 +56,7 @@ from core.tooling.schemas.supervisor import (
     _vault_tools,
 )
 from core.tooling.schemas.task import SUBMIT_TASKS_TOOLS, _submit_tasks_tools, _task_tools
+from core.tooling.schemas.workspace import WORKSPACE_TOOLS
 
 __all__ = [
     "ADMIN_TOOLS",
@@ -70,6 +71,7 @@ __all__ = [
     "_submit_tasks_tools",
     "TOOL_MANAGEMENT_TOOLS",
     "USE_TOOL",
+    "WORKSPACE_TOOLS",
     "_AW_CORE_NAMES",
     "_COMPACT_COMM_TOOLS",
     "_CONSOLIDATION_BLOCKED_TOOLS",

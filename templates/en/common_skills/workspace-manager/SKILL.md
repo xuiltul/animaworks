@@ -28,55 +28,46 @@ Workspaces are stored in a shared registry (config.json `workspaces` section) an
 
 ### Register
 
-Add to the workspaces section of config.json:
+A top-level Anima with an explicit human instruction uses `grant_workspace_access`:
 
-1. `read_memory_file(path="config.json")` to check current settings
-2. Add alias and path to the workspaces section
-3. Save with `write_memory_file`
-
-Or run via Bash:
-```bash
-python3 -c "
-from core.workspace import register_workspace
-result = register_workspace('alias_name', '/absolute/path/to/project')
-print(result)
-"
-```
-
-**Note**: Registration fails if the directory does not exist.
-
-### List
-
-Read the workspaces section of config.json:
-```
-read_memory_file(path="config.json")
-```
-
-### Remove
-
-Delete the entry from the workspaces section of config.json.
-
-### Change Your Default Workspace
-
-Update the `default_workspace` field in your `status.json`:
-1. `read_memory_file(path="status.json")` to check current content
-2. Set `default_workspace` to an alias (e.g., `aischreiber`) or qualified form (e.g., `aischreiber#3af4be6e`)
-3. `write_memory_file(path="status.json", content=...)` to save
-
-Example:
 ```json
 {
-  "default_workspace": "aischreiber#3af4be6e"
+  "alias": "finance-dashboard",
+  "path": "/absolute/path/to/project",
+  "make_default": true
 }
 ```
 
+This tool updates the shared workspace registry, adds the path to the target Anima's `permissions.json.file_roots`, and optionally updates `status.json.default_workspace`.
+
+**Note**: Registration fails if the directory does not exist.
+**Note**: `read_memory_file(path="config.json")` reads the Anima-local `config.json`. Do not use it for the shared workspace registry.
+
+### List
+
+Use `core.workspace.list_workspaces()` to inspect the shared registry. Do not use `read_memory_file(path="config.json")`.
+
+### Remove
+
+Treat removal as an administrator operation. For normal work, avoid overwriting an existing alias and register a new alias instead.
+
+### Change Your Default Workspace
+
+A top-level Anima sets `make_default: true` when calling `grant_workspace_access`.
+Non-top-level Animas cannot grant themselves workspace access; ask the top-level Anima via a human instruction.
+
 ### Assign to Subordinates (for Supervisors)
 
-1. Register the workspace (see above)
-2. Update the subordinate's `status.json` `default_workspace` field:
-   - `read_memory_file(path="../{subordinate}/status.json")`
-   - Set `default_workspace` to the alias
-   - `write_memory_file(path="../{subordinate}/status.json", content=...)`
+A top-level Anima with an explicit human instruction can grant access to a subordinate or descendant by setting `target_anima`:
+
+```json
+{
+  "alias": "finance-dashboard",
+  "path": "/absolute/path/to/project",
+  "target_anima": "ritsu",
+  "make_default": true
+}
+```
 
 ## Tool Usage
 

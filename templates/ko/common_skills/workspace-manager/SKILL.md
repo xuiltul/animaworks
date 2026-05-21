@@ -28,55 +28,46 @@ Anima는 평소 "자신의 집" (~/.animaworks/animas/{name}/)에 있습니다.
 
 ### 등록
 
-config.json의 workspaces 섹션에 추가합니다:
+인간의 명시적 지시를 받은 최상위 Anima는 `grant_workspace_access`를 사용합니다:
 
-1. `read_memory_file(path="config.json")`으로 현재 설정을 확인
-2. workspaces 섹션에 에일리어스와 경로를 추가
-3. `write_memory_file`로 저장
-
-또는 Bash로 실행:
-```bash
-python3 -c "
-from core.workspace import register_workspace
-result = register_workspace('에일리어스명', '/absolute/path/to/project')
-print(result)
-"
-```
-
-**주의**: 디렉토리가 존재하지 않으면 에러가 발생합니다.
-
-### 목록 조회
-
-config.json의 workspaces 섹션을 읽습니다:
-```
-read_memory_file(path="config.json")
-```
-
-### 삭제
-
-config.json의 workspaces 섹션에서 해당 항목을 삭제합니다.
-
-### 자신의 기본 워크스페이스 변경
-
-자신의 `status.json`의 `default_workspace` 필드를 업데이트합니다:
-1. `read_memory_file(path="status.json")`으로 현재 내용을 확인
-2. `default_workspace`에 에일리어스 (예: `aischreiber`) 또는 완전 형태 (예: `aischreiber#3af4be6e`)를 설정
-3. `write_memory_file(path="status.json", content=...)`로 저장
-
-예시:
 ```json
 {
-  "default_workspace": "aischreiber#3af4be6e"
+  "alias": "finance-dashboard",
+  "path": "/absolute/path/to/project",
+  "make_default": true
 }
 ```
 
+이 도구는 조직 공유 레지스트리 등록, 대상 Anima의 `permissions.json.file_roots` 쓰기 권한 추가, 필요 시 `status.json.default_workspace` 갱신을 함께 수행합니다.
+
+**주의**: 디렉토리가 존재하지 않으면 에러가 발생합니다.
+**주의**: `read_memory_file(path="config.json")`은 자신의 Anima 디렉토리에 있는 `config.json`을 읽습니다. 조직 공유 레지스트리 등록에는 사용하지 않습니다.
+
+### 목록 조회
+
+조직 공유 레지스트리 목록은 `core.workspace.list_workspaces()`로 확인합니다. `read_memory_file(path="config.json")`은 사용하지 않습니다.
+
+### 삭제
+
+삭제는 관리자 작업으로 취급합니다. 일반 작업에서는 기존 에일리어스를 덮어쓰지 말고 새 에일리어스를 등록합니다.
+
+### 자신의 기본 워크스페이스 변경
+
+최상위 Anima는 `grant_workspace_access` 호출 시 `make_default: true`를 지정합니다.
+최상위가 아닌 Anima는 스스로 워크스페이스 권한을 추가할 수 없습니다. 인간 지시를 통해 최상위 Anima에게 요청합니다.
+
 ### 부하에 할당 (슈퍼바이저용)
 
-1. 워크스페이스를 등록 (위 참조)
-2. 부하의 `status.json`의 `default_workspace` 필드를 업데이트:
-   - `read_memory_file(path="../{subordinate}/status.json")`
-   - `default_workspace`에 에일리어스를 설정
-   - `write_memory_file(path="../{subordinate}/status.json", content=...)`
+인간의 명시적 지시를 받은 최상위 Anima는 `target_anima`를 지정하여 부하 또는 자손 Anima에 권한을 부여할 수 있습니다:
+
+```json
+{
+  "alias": "finance-dashboard",
+  "path": "/absolute/path/to/project",
+  "target_anima": "ritsu",
+  "make_default": true
+}
+```
 
 ## 도구에서의 사용
 
