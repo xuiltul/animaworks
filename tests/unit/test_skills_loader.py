@@ -46,11 +46,7 @@ def legacy_skill(tmp_path: Path) -> Path:
     d = tmp_path / "old-skill"
     d.mkdir()
     (d / "SKILL.md").write_text(
-        "---\n"
-        "name: old-skill\n"
-        "description: Legacy skill\n"
-        "---\n\n"
-        "# Old Skill\n\nDoes things.\n",
+        "---\nname: old-skill\ndescription: Legacy skill\n---\n\n# Old Skill\n\nDoes things.\n",
         encoding="utf-8",
     )
     return d
@@ -136,6 +132,22 @@ class TestLoadSkillMetadata:
         assert meta.trust_level == SkillTrustLevel.trusted
         assert meta.version == 1
 
+    def test_legacy_string_source_is_normalized(self, tmp_path: Path):
+        d = tmp_path / "legacy-source-skill"
+        d.mkdir()
+        (d / "SKILL.md").write_text(
+            "---\n"
+            "name: legacy-source-skill\n"
+            "description: Legacy scalar source field\n"
+            "source: activity_log\n"
+            "---\n\n"
+            "# Legacy Source Skill\n",
+            encoding="utf-8",
+        )
+        meta = load_skill_metadata(d / "SKILL.md")
+        assert meta.source.type == "activity_log"
+        assert meta.source.identifier is None
+
     def test_no_frontmatter_infers_name_from_directory(self, no_frontmatter_skill: Path):
         meta = load_skill_metadata(no_frontmatter_skill / "SKILL.md")
         assert meta.name == "bare-skill"
@@ -163,10 +175,7 @@ class TestLoadSkillMetadata:
         d = tmp_path / "bad-yaml"
         d.mkdir()
         (d / "SKILL.md").write_text(
-            "---\n"
-            "name: [invalid yaml structure\n"
-            "---\n\n"
-            "# Bad YAML\n\n## 概要\n\nFallback description.\n",
+            "---\nname: [invalid yaml structure\n---\n\n# Bad YAML\n\n## 概要\n\nFallback description.\n",
             encoding="utf-8",
         )
         meta = load_skill_metadata(d / "SKILL.md")

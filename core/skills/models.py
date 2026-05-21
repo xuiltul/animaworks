@@ -323,6 +323,25 @@ class SkillMetadata(BaseModel):
     def _normalize_list_fields(cls, value: object) -> list[str]:
         return _coerce_str_list(value)
 
+    @field_validator("source", mode="before")
+    @classmethod
+    def _normalize_source_field(cls, value: object) -> object:
+        """Accept legacy scalar ``source`` frontmatter values.
+
+        Older procedure / skill files frequently stored provenance as a simple
+        string such as ``activity_log`` or ``error_trace_analysis``. The newer
+        schema expects a ``SkillSource`` object, so we normalize a scalar into
+        ``{\"type\": <value>}`` to preserve backward compatibility.
+        """
+        if value is None:
+            return value
+        if isinstance(value, SkillSource):
+            return value
+        if isinstance(value, str):
+            stripped = value.strip()
+            return {"type": stripped} if stripped else None
+        return value
+
     def to_legacy(self) -> SkillMeta:
         """Convert to the legacy ``SkillMeta`` dataclass used elsewhere in core.
 
