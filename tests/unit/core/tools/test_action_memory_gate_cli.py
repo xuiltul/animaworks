@@ -21,6 +21,8 @@ class FakeRule:
         (["animaworks-tool", "gmail", "draft", "--to", "a@example.com"], "gmail_draft"),
         (["animaworks-tool", "gmail", "send", "--to", "a@example.com"], "gmail_send"),
         (["animaworks-tool", "chatwork", "send", "--room", "123"], "chatwork_send"),
+        (["animaworks-tool", "slack", "send", "--channel", "ops"], "slack_send"),
+        (["animaworks-tool", "discord", "send", "--channel", "ops"], "discord_send"),
     ],
 )
 def test_cli_dispatch_blocks_mapped_action_before_tool_loading(

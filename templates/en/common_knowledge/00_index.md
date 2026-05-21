@@ -52,8 +52,10 @@ After reading, use the index below to find details on each topic.
 | Want to know how completion_gate verification works | `operations/completion-gate-guide.md` |
 | Want to use the task board (human-facing dashboard) | `operations/task-board-guide.md` |
 | Don't know how to configure Heartbeat or cron | `operations/heartbeat-cron-guide.md` |
+| Want pre-action checks before sending, posting, or memory writes | `operations/action-rules-guide.md` |
 | Don't know how to run long-running tools | `operations/background-tasks.md` |
 | Don't know how to register or use workspaces | `operations/workspace-guide.md` |
+| Want to create a new skill or check skill metadata | `common_skills/skill-creator/SKILL.md` |
 | Want to change project settings | `reference/operations/project-setup.md` (→ reference) |
 
 ### Tools, Models & Technical
@@ -150,6 +152,7 @@ After reading, use the index below to find details on each topic.
 | `task-management.md` | Task management (current_state.md usage and task queue, state transitions, priorities) |
 | `task-board-guide.md` | Task board (human-facing dashboard) — structure and operational guidelines |
 | `heartbeat-cron-guide.md` | Scheduling and running Heartbeat and cron (how Heartbeat works, cron definitions, self-updates) |
+| `action-rules-guide.md` | Action rules (`[ACTION-RULE]`, `trigger_tools`, pre-send checks, required `read_memory_file`) |
 | `tool-usage-overview.md` | Tool usage overview (S/C/D/G/A/B mode tool sets, internal/external tools, how to call them) |
 | `completion-gate-guide.md` | Pre-completion verification guide (completion_gate concepts, per-mode behavior, trigger rules) |
 | `background-tasks.md` | Background task guide (using submit, when to use it, how to get results) |

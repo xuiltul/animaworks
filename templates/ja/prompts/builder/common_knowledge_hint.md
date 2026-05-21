@@ -9,4 +9,6 @@
 - 読む: `read_memory_file(path="common_knowledge/...")`
 - 書く: `write_memory_file(path="common_knowledge/...", content="...")`
 - 目次: `common_knowledge/00_index.md`
+- アクションルール: 送信・投稿・記憶書き込み前の確認は `common_knowledge/operations/action-rules-guide.md`
+- スキル作成: 新規スキルは `common_skills/skill-creator/SKILL.md` を読んで `create_skill` で作成
 - 詳細な技術リファレンス: `read_memory_file(path="reference/...")`（読み取り専用）

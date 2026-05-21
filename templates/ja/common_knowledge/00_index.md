@@ -52,8 +52,10 @@ Heartbeat / Cron / machine / チーム設計 / 記憶 / コスト最適化の要
 | 完了前検証（completion_gate）の仕組みを知りたい | `operations/completion-gate-guide.md` |
 | タスクボード（人間向けダッシュボード）を使いたい | `operations/task-board-guide.md` |
 | ハートビートやcronの設定がわからない | `operations/heartbeat-cron-guide.md` |
+| 送信・投稿・記憶書き込み前に確認ルールを入れたい | `operations/action-rules-guide.md` |
 | 長時間ツールの実行方法がわからない | `operations/background-tasks.md` |
 | ワークスペースの登録・使い方がわからない | `operations/workspace-guide.md` |
+| 新しいスキルの作り方・メタデータを確認したい | `common_skills/skill-creator/SKILL.md` |
 | プロジェクト設定を変更したい | `reference/operations/project-setup.md` ※技術リファレンス |
 
 ### ツール・モデル・技術
@@ -150,6 +152,7 @@ Heartbeat / Cron / machine / チーム設計 / 記憶 / コスト最適化の要
 | `task-management.md` | タスク管理（current_state.md の使い方とタスクキュー、状態遷移、優先順位） |
 | `task-board-guide.md` | タスクボード（人間向けダッシュボード）の仕組みと運用方法 |
 | `heartbeat-cron-guide.md` | 定期実行の設定と運用（ハートビートの仕組み、cron タスク定義、自己更新） |
+| `action-rules-guide.md` | アクションルール（`[ACTION-RULE]`、`trigger_tools`、送信前確認、必須 `read_memory_file`） |
 | `tool-usage-overview.md` | ツール使用の概要（S/C/D/G/A/B モード別のツール体系、内部/外部ツール、呼び出し方法） |
 | `completion-gate-guide.md` | 完了前検証ガイド（completion_gate の概念・モード別動作・トリガー適用ルール） |
 | `background-tasks.md` | バックグラウンドタスク実行ガイド（submit の使い方、判断基準、結果の受け取り方） |

@@ -487,51 +487,8 @@ def _build_pre_tool_hook(
         SyncHookJSONOutput,
     )
 
-    if session_stats is not None and "aap_deny_count" not in session_stats:
-        session_stats["aap_deny_count"] = 0
-        session_stats["aap_shown_rules"] = set()
-        session_stats["aap_next_call_approved"] = {}
-
-    _AAP_OUTPUT_TOOLS: frozenset[str] = frozenset(
-        {
-            "call_human",
-            "send_message",
-            "post_channel",
-            "slack_post",
-            "chatwork_send",
-            "gmail_send",
-            "write_memory_file",
-            "mcp__aw__call_human",
-            "mcp__aw__send_message",
-            "mcp__aw__post_channel",
-        }
-    )
-
-    _aap_retriever_state: dict[str, Any] = {"retriever": None, "initialized": False}
-
-    def _get_aap_retriever() -> Any | None:
-        if _aap_retriever_state["initialized"]:
-            ret = _aap_retriever_state["retriever"]
-            return ret
-        _aap_retriever_state["initialized"] = True
-        knowledge_dir = anima_dir / "knowledge"
-        if not knowledge_dir.is_dir():
-            return None
-        try:
-            from core.memory.rag import MemoryRetriever
-            from core.memory.rag.indexer import MemoryIndexer
-            from core.memory.rag.singleton import get_vector_store
-
-            vector_store = get_vector_store(anima_dir.name)
-            if vector_store is None:
-                return None
-            indexer = MemoryIndexer(vector_store, anima_dir.name, anima_dir)
-            retriever = MemoryRetriever(vector_store, indexer, knowledge_dir)
-            _aap_retriever_state["retriever"] = retriever
-            return retriever
-        except Exception:
-            logger.debug("Action-Aware Priming: retriever init failed", exc_info=True)
-            return None
+    if session_stats is not None and "action_gate_denied_count" not in session_stats:
+        session_stats["action_gate_denied_count"] = 0
 
     # Cache subordinate and peer paths once at hook build time
     _sub_activity_dirs, _sub_mgmt_files, _peer_activity_dirs, _desc_read_files, _desc_read_dirs = (
@@ -556,46 +513,24 @@ def _build_pre_tool_hook(
         tool_input: dict[str, Any],
         tool_use_id: str | None,
     ) -> SyncHookJSONOutput | None:
-        del tool_use_id  # Retry bypass uses per-tool approval dict only
-        if session_stats is None:
-            return None
+        del tool_use_id
         try:
-            if tool_name not in _AAP_OUTPUT_TOOLS:
+            from core.memory.action_gate import action_tool_name_for_sdk, check_action
+
+            action_tool = action_tool_name_for_sdk(tool_name)
+            if action_tool is None:
                 return None
 
-            if session_stats["aap_next_call_approved"].pop(tool_name, False):
+            decision = await asyncio.to_thread(check_action, anima_dir, action_tool, tool_input)
+            if decision.allowed:
                 return None
 
-            if session_stats["aap_deny_count"] >= 2:
-                return None
-
-            retriever = _get_aap_retriever()
-            if retriever is None:
-                return None
-
-            query = f"{tool_name} {json.dumps(tool_input, ensure_ascii=False)[:500]}"
-            anima_name = anima_dir.name
-            results = await asyncio.to_thread(
-                retriever.search_action_rules,
-                tool_name,
-                query,
-                anima_name,
-            )
-            if not results or results[0].score < 0.80:
-                return None
-
-            top_result = results[0]
-            rule_key = top_result.doc_id
-            if rule_key in session_stats["aap_shown_rules"]:
-                return None
-
-            session_stats["aap_shown_rules"].add(rule_key)
-            session_stats["aap_deny_count"] += 1
-            session_stats["aap_next_call_approved"][tool_name] = True
+            if session_stats is not None:
+                session_stats["action_gate_denied_count"] = session_stats.get("action_gate_denied_count", 0) + 1
 
             from core.i18n import t as _t
 
-            system_message = _t("action_rule.system_message", rule_content=top_result.content.strip())
+            system_message = _t("action_rule.system_message", rule_content=decision.rule.strip())
             return SyncHookJSONOutput(
                 systemMessage=system_message,
                 hookSpecificOutput=PreToolUseHookSpecificOutput(

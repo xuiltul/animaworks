@@ -13,12 +13,18 @@ import json
 import logging
 import re
 import shutil
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 from core.migrations.registry import MigrationStep, StepResult
 
 logger = logging.getLogger(__name__)
+
+
+def _prime_tooling_imports() -> None:
+    """Load execution sanitizers before tooling schemas to avoid import cycles."""
+    import_module("core.execution._sanitize")
 
 # ── Section mapping for system_sections resync ─────────────────────
 
@@ -464,6 +470,7 @@ def step_prompt_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResu
         if dry_run:
             details.append("Would run merge_templates (prompts/ overwritten)")
             return StepResult(changed=1, skipped=0, details=details)
+        _prime_tooling_imports()
         from core.init import merge_templates
 
         added = merge_templates(data_dir)
@@ -654,6 +661,7 @@ def step_tool_prompt_db_init(data_dir: Path, dry_run: bool, verbose: bool) -> St
             db_path = data_dir / "tool_prompts.sqlite3"
             details.append("Would ensure tool_prompts.sqlite3 initialized")
             return StepResult(changed=1 if not db_path.exists() else 0, skipped=0, details=details)
+        _prime_tooling_imports()
         from core.init import _ensure_tool_prompt_db
 
         _ensure_tool_prompt_db(data_dir)
@@ -668,6 +676,7 @@ def step_system_sections_resync(data_dir: Path, dry_run: bool, verbose: bool) ->
     """Resync system_sections from prompts/ into SQLite DB."""
     details: list[str] = []
     try:
+        _prime_tooling_imports()
         from core.tooling.prompt_db import SECTION_CONDITIONS, ToolPromptStore
 
         tool_db_path = data_dir / "tool_prompts.sqlite3"
@@ -710,6 +719,7 @@ def step_tool_descriptions_resync(data_dir: Path, dry_run: bool, verbose: bool) 
     """Overwrite tool descriptions and guides from defaults."""
     details: list[str] = []
     try:
+        _prime_tooling_imports()
         from core.paths import _get_locale
         from core.tooling.prompt_db import (
             DEFAULT_DESCRIPTIONS,
@@ -765,6 +775,7 @@ def step_stale_sections_cleanup(data_dir: Path, dry_run: bool, verbose: bool) ->
     """Remove stale entries from system_sections (e.g. hiring_context)."""
     details: list[str] = []
     try:
+        _prime_tooling_imports()
         from core.tooling.prompt_db import ToolPromptStore
 
         tool_db_path = data_dir / "tool_prompts.sqlite3"
@@ -981,6 +992,7 @@ def step_v062_skill_removal_and_activity_log(data_dir: Path, dry_run: bool, verb
 
     # Remove stale 'skill' tool description from DB
     try:
+        _prime_tooling_imports()
         from core.tooling.prompt_db import ToolPromptStore
 
         tool_db_path = data_dir / "tool_prompts.sqlite3"
@@ -1010,6 +1022,44 @@ def step_v062_skill_removal_and_activity_log(data_dir: Path, dry_run: bool, verb
         logger.warning("v062: stale skill description cleanup failed: %s", exc)
 
     return StepResult(changed=total, skipped=0, details=details)
+
+
+def step_v063_behavior_rules_action_rules_skill_sync(
+    data_dir: Path,
+    dry_run: bool,
+    verbose: bool,
+) -> StepResult:
+    """v0.6.3: Force-sync behavior/action rules, skills docs, references, and DB guides.
+
+    This aggregate step deliberately re-runs the current sync helpers under a
+    new migration ID so runtimes that already applied historical resync steps
+    still receive the latest behavior_rules, common_knowledge, common_skills,
+    reference files, system_sections, and tool guide rows.
+    """
+    details: list[str] = ["v063 aggregate resync: behavior rules, action rules, skill docs, prompts, DB"]
+    total = 0
+    skipped = 0
+    errors: list[str] = []
+
+    for resync_fn in (
+        step_common_knowledge_resync,
+        step_common_skills_resync,
+        step_reference_resync,
+        step_prompt_resync,
+        step_tool_prompt_db_init,
+        step_system_sections_resync,
+        step_tool_descriptions_resync,
+        step_stale_sections_cleanup,
+    ):
+        result = resync_fn(data_dir, dry_run, verbose)
+        total += result.changed
+        skipped += result.skipped
+        details.extend(result.details)
+        if result.error:
+            errors.append(f"{resync_fn.__name__}: {result.error}")
+
+    error = "; ".join(errors) if errors else None
+    return StepResult(changed=total, skipped=skipped, details=details, error=error)
 
 
 # ── Category 5: Version tracking ────────────────────────────────
@@ -1116,6 +1166,12 @@ def register_all_steps(runner: Any) -> None:
             "v0.6.2: Skill tool removal + activity_log scope + completion_gate",
             "template_sync",
             step_v062_skill_removal_and_activity_log,
+        ),
+        MigrationStep(
+            "v063_behavior_rules_action_rules_skill_sync",
+            "v0.6.3: Behavior/action rules + skill docs runtime sync",
+            "template_sync",
+            step_v063_behavior_rules_action_rules_skill_sync,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

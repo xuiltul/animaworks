@@ -50,8 +50,10 @@ Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심
 | 태스크 관리 방법을 모르겠다 | `operations/task-management.md` |
 | 태스크 보드(사람용 대시보드)를 사용하고 싶다 | `operations/task-board-guide.md` |
 | heartbeat이나 cron 설정을 모르겠다 | `operations/heartbeat-cron-guide.md` |
+| 전송·게시·메모리 쓰기 전에 확인 규칙을 넣고 싶다 | `operations/action-rules-guide.md` |
 | 장시간 실행 도구 사용법을 모르겠다 | `operations/background-tasks.md` |
 | 워크스페이스 등록이나 사용법을 모르겠다 | `operations/workspace-guide.md` |
+| 새 스킬 작성 방법이나 메타데이터를 확인하고 싶다 | `common_skills/skill-creator/SKILL.md` |
 | 프로젝트 설정을 변경하고 싶다 | `reference/operations/project-setup.md` (→ reference) |
 
 ### 도구, 모델 및 기술
@@ -147,6 +149,7 @@ Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심
 | `task-management.md` | 태스크 관리 (current_state.md 사용법과 태스크 큐, 상태 전이, 우선순위) |
 | `task-board-guide.md` | 태스크 보드(사람용 대시보드)의 구조와 운영 방법 |
 | `heartbeat-cron-guide.md` | 정기 실행 설정 및 운영 (heartbeat 구조, cron 태스크 정의, 자체 갱신) |
+| `action-rules-guide.md` | 액션 규칙 (`[ACTION-RULE]`, `trigger_tools`, 전송 전 확인, 필수 `read_memory_file`) |
 | `tool-usage-overview.md` | 도구 사용 개요 (S/A/B 모드별 도구 체계, 내부/외부 도구, 호출 방법) |
 | `background-tasks.md` | 백그라운드 태스크 실행 가이드 (submit 사용법, 판단 기준, 결과 수신 방법) |
 | `workspace-guide.md` | 워크스페이스 가이드 (개념, 등록, 도구에서의 활용, 트러블슈팅) |

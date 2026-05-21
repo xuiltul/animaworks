@@ -11,7 +11,7 @@ description: >-
 
 A Skill file consists of YAML frontmatter and Markdown body.
 Required frontmatter fields are `name` and `description`.
-Optional fields: `allowed_tools` (permitted tool list), `tags` (classification tags).
+Optional metadata may include tool constraints, trust/provenance fields, category, prompt policy, and routing hints. Use optional fields only when they help selection, safety, or maintenance.
 
 ```yaml
 ---
@@ -19,11 +19,30 @@ name: skill-name
 description: >-
   Concise third-person summary of what the skill does.
   Use when: comma-separated scenarios where this skill applies.
+allowed_tools:
+  - read_memory_file
+trust_level: trusted
+source:
+  type: anima
+  origin: manual
+category: communication
+use_when:
+  - drafting partner emails
+trigger_phrases:
+  - draft a partner email
+negative_phrases:
+  - personal diary
+domains:
+  - gmail
+routing_examples:
+  - Prepare a reply draft for the bank thread
 ---
 ```
 
 `description` is the primary field for discovery and selection: the model uses it to decide relevance.
 The body is read when you open the path from the system prompt skill catalog with `read_memory_file` (e.g. `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`).
+
+Supported `create_skill` optional arguments include `references`, `templates`, `allowed_tools`, `trust_level`, `source_type`, `source_origin`, `category`, `promotion_status`, `skill_policy`, `use_when`, `trigger_phrases`, `negative_phrases`, `domains`, and `routing_examples`.
 
 **Authoring format**: follow **`Use when:`** as described in `references/description_guide.md` (Agent Skills standard).
 After editing, validate with **`python scripts/lint_skill.py path/to/SKILL.md`**.
@@ -65,6 +84,7 @@ Keep Level 1 concise; put procedures in Level 2; offload long material to Level 
 - **body**: section structure; optional `{{now_local}}` and other builtins
 - **references** / **templates**: optional
 - **allowed_tools**: optional soft constraint
+- **trust/source/category/policy/routing**: optional trust level, provenance, category, prompt policy, and routing metadata (`use_when`, `trigger_phrases`, `negative_phrases`, `domains`, `routing_examples`)
 
 ### Step 3: Create
 
@@ -77,6 +97,8 @@ Common skills:
 ```
 create_skill(skill_name="{name}", description="{description}", body="{body}", location="common")
 ```
+
+You can also pass `references`, `templates`, `allowed_tools`, `trust_level`, `source_type`, `source_origin`, `category`, `promotion_status`, `skill_policy`, `use_when`, `trigger_phrases`, `negative_phrases`, `domains`, and `routing_examples` when those fields are useful.
 
 Prefer `create_skill` for new skills; flat `skills/foo.md` alone may not match `skills/foo/SKILL.md` for `read_memory_file`.
 
@@ -93,6 +115,7 @@ Prefer `create_skill` for new skills; flat `skills/foo.md` alone may not match `
 - [ ] Domain-specific, concrete wording (avoid vague “manage” / “check” alone)
 - [ ] Body has actionable steps
 - [ ] Avoid relying only on `## Overview` for description; prefer frontmatter
+- [ ] Optional metadata (`trust_level`, `source`, `category`, `skill_policy`, `use_when`, `trigger_phrases`, `negative_phrases`, `domains`, `routing_examples`) matches the actual skill
 - [ ] Created via `create_skill` with `{name}/SKILL.md` layout where applicable
 
 ## Template
@@ -123,5 +146,5 @@ description: >-
 
 - Skills are Markdown playbooks, not Python tools
 - Required frontmatter: `name`, `description`
-- Optional: `allowed_tools`, `tags` (metadata usage may vary)
+- Optional: `allowed_tools`, trust/provenance fields, `category`, `skill_policy`, and routing metadata. Keep metadata minimal when the description is sufficient
 - Keep body around 150 lines when practical; use `references/` for long material

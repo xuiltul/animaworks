@@ -104,7 +104,7 @@ The following summarizes tools handled directly by `ToolHandler` (some are condi
 | Tool | Description |
 |------|-------------|
 | **todo_write** | Short in-session to-do list (planning aid in Mode A) |
-| **create_skill** | Create a skill |
+| **create_skill** | Create `skills/{name}/SKILL.md` or `common_skills/{name}/SKILL.md`; can also set `allowed_tools`, trust/provenance/category/policy/routing metadata when useful |
 | **refresh_tools** / **share_tool** | Reload/share personal or common tools |
 
 ### Pre-completion verification
@@ -114,6 +114,12 @@ The following summarizes tools handled directly by `ToolHandler` (some are condi
 | **completion_gate** | Self-verification checklist before the final answer. In Mode S the Stop hook auto-injects it; in Mode A a retry is forced if not called. Disabled for `heartbeat` and `inbox:*` triggers |
 
 Load full skill and procedure text with **`read_memory_file`** using the relative paths shown in the system prompt skill catalog (e.g. `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`, `procedures/baz.md`).
+Before authoring a new skill, read **`read_memory_file(path="common_skills/skill-creator/SKILL.md")`** and use `create_skill` rather than writing only a flat `skills/foo.md` file.
+
+### Action rules
+
+When a send/post/notify/memory-write operation needs a mandatory pre-check, create `knowledge/action-rule-*.md` with `[ACTION-RULE]` and `trigger_tools:`. Details: **`read_memory_file(path="common_knowledge/operations/action-rules-guide.md")`**.
+Action names are `call_human`, `send_message`, `post_channel`, `write_memory_file`, `gmail_draft`, `gmail_send`, `chatwork_send`, `slack_send`, and `discord_send`.
 
 ### Procedure and knowledge feedback
 

@@ -1,110 +1,79 @@
-# Action Rules (Action-Aware Priming)
+# Action Rules
 
 ## Overview
 
-Action rules are rules that are automatically reminded before specific tool executions.
-By writing them in your knowledge with the `[ACTION-RULE]` marker, the system automatically detects them when the corresponding tool is about to be called, pauses execution, and presents the rule content.
+Action rules are knowledge files that add a pre-action check before side-effect operations such as sending, posting, notifying, or writing memory. Put `[ACTION-RULE]` and `trigger_tools:` in `knowledge/action-rule-*.md`; matching rules are searched before the target tool runs.
 
-## How It Works
-
-1. You are about to call an "output tool" (call_human, send_message, etc.)
-2. The system searches your knowledge for `[ACTION-RULE]` rules via RAG
-3. If a highly relevant rule is found, tool execution is paused
-4. The rule content is presented to you
-5. You review the rule, take any required pre-actions, then retry
-
-## Writing Rules
-
-### Basic Format
+## Basic Format
 
 ```markdown
-## [ACTION-RULE] Rule Name
-trigger_tools: tool_name1, tool_name2
-keywords: keyword1, keyword2
+## [ACTION-RULE] Rule name
+trigger_tools: gmail_draft, gmail_send
+keywords: email, draft, duplicate check
 ---
-Rule body. This is what gets displayed when the tool is paused.
-Be specific about "what to check before" the action.
+Before executing, read_memory_file(path="procedures/gmail-draft-check.md").
+After completing the check, retry the same tool.
 ```
-
-### Field Description
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `trigger_tools` | Required | Target tool names that trigger this rule (comma-separated) |
-| `keywords` | Optional | Related keywords (improves vector search precision) |
-| Below `---` | Required | Rule body (displayed as-is when paused) |
+| `trigger_tools` | Required | Target tool names, comma-separated |
+| `keywords` | Optional | Search hints |
+| Body | Required | Check text displayed when paused. Required files must be written as `read_memory_file(path="...")` |
 
-### Target Tools
+## ToolHandler Action Names
 
-The following tools are subject to action rules (read-only tools are excluded):
+- `call_human`
+- `send_message`
+- `post_channel`
+- `write_memory_file`
+- `gmail_draft`
+- `gmail_send`
+- `chatwork_send`
+- `slack_send`
+- `discord_send`
 
-- `call_human` — Human notification/reporting
-- `send_message` — Inter-Anima messaging
-- `post_channel` — Board posting
-- `slack_post` — Slack posting
-- `chatwork_send` — Chatwork sending
-- `gmail_send` — Email sending
-- `write_memory_file` — Memory file writing
+## CLI Mappings
+
+| CLI | Action-rule name |
+|-----|------------------|
+| `animaworks-tool gmail draft` | `gmail_draft` |
+| `animaworks-tool gmail send` | `gmail_send` |
+| `animaworks-tool chatwork send` | `chatwork_send` |
+| `animaworks-tool slack send` | `slack_send` |
+| `animaworks-tool discord send` | `discord_send` |
+| `animaworks-tool call_human` | `call_human` |
+
+`animaworks-tool submit ...` is not an action-rule target. The actual queued subcommand is checked when it runs.
+
+## Gate Behavior
+
+- Rules below score `0.80` do not block.
+- Search failure, missing vector store, and no matching rule are fail-open.
+- If the body contains `read_memory_file(path="...")`, the gate blocks until all extracted paths have been read in the same action-gate session.
+- Review-only rules without required reads block once per `tool:rule` in the same action-gate session.
+- There is no global maximum-two-pauses limit.
+- When paused, read the displayed rule, perform the required `read_memory_file` or checks, then retry the same operation.
 
 ## Examples
 
-### Pre-report Verification Rule
-
 ```markdown
-## [ACTION-RULE] Check Chatwork before pending report
-trigger_tools: call_human, send_message
-keywords: pending, report, progress
+## [ACTION-RULE] Duplicate check before Gmail draft
+trigger_tools: gmail_draft, gmail_send
+keywords: Gmail, draft, duplicate, thread
 ---
-Before reporting pending items to your supervisor, always check
-the latest Chatwork messages first. New information or status
-changes may have arrived. Reporting stale information causes confusion.
+Before creating or sending a Gmail draft, read_memory_file(path="procedures/gmail-draft-check.md").
+Check existing threads and drafts for duplicates before proceeding.
 ```
 
-### Pre-email Verification Rule
-
 ```markdown
-## [ACTION-RULE] Verify recipients before email
-trigger_tools: gmail_send
-keywords: email, send, mail
----
-Before sending an email, verify:
-1. Recipients are correct (internal vs external distinction)
-2. Whether CC should include your supervisor
-3. Cross-reference attachments mentioned in body
-```
-
-### Combined with `[IMPORTANT]`
-
-```markdown
-## [ACTION-RULE] [IMPORTANT] Approval required before customer data change
+## [ACTION-RULE] Verify before customer memory update
 trigger_tools: write_memory_file
 keywords: customer, client, profile
 ---
-Before modifying any customer-related memory files, obtain supervisor approval.
-Unauthorized customer data changes are prohibited.
+Before updating customer-related `knowledge/`, read the related existing files and verify there is no contradiction.
 ```
 
-## Behavior Constraints
+## Location
 
-- **Maximum 2 pauses per session**: From the 3rd match onward, no pause occurs
-- **Each rule fires once**: The same rule will not pause you twice in one session
-- **Retry executes immediately**: After a pause, calling the same tool again succeeds immediately
-- **Score threshold**: Only fires at relevance score 0.80 or above
-
-## Tips for Effective Rules
-
-1. **Include tool names in body text**: Improves RAG search precision
-2. **One rule, one responsibility**: Don't pack multiple conditions into one rule
-3. **Be specific**: Write "read Chatwork" not "verify appropriately"
-4. **Use keywords**: List words likely to appear in tool_input
-5. **Make body actionable**: It's displayed as-is, so write clear instructions the model can follow
-
-## Creating Rules
-
-Same as normal knowledge creation:
-
-```
-write_memory_file(path="knowledge/action-rule-chatwork-check.md", content="## [ACTION-RULE] ...")
-```
-
-After creation, rules take effect at the next RAG index rebuild (daily).
+Create rules under `knowledge/action-rule-{topic}.md`. Before creating a new rule, search `knowledge/` for similar rules and update an existing one when appropriate.

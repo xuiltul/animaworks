@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import core.execution._sanitize  # noqa: F401
 from core.tooling.handler_base import _validate_skill_format
 
 
@@ -249,11 +250,13 @@ class TestJapaneseSkillCreatorContent:
         assert "write_memory_file" in content, "write_memory_file should still be mentioned"
         assert "非推奨" in content or "参照できない" in content
 
-    def test_allowed_tools_tags_mentioned(self) -> None:
+    def test_current_optional_metadata_mentioned(self) -> None:
         path = _REPO_ROOT / "templates" / "ja" / "common_skills" / "skill-creator" / "SKILL.md"
         content = path.read_text(encoding="utf-8")
         assert "allowed_tools" in content
-        assert "tags" in content
+        assert "skill_policy" in content
+        assert "trigger_phrases" in content
+        assert "source_origin" in content
 
     def test_no_exclusive_field_restriction(self) -> None:
         path = _REPO_ROOT / "templates" / "ja" / "common_skills" / "skill-creator" / "SKILL.md"

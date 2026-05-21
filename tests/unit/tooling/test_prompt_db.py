@@ -16,6 +16,7 @@ from core.tooling.prompt_db import (
     DEFAULT_DESCRIPTIONS,
     DEFAULT_GUIDES,
     ToolPromptStore,
+    get_default_guide,
     get_prompt_store,
     reset_prompt_store,
 )
@@ -351,3 +352,21 @@ class TestDefaultData:
         assert "WebSearch" in en
         assert "animaworks-tool --help" in en
         assert "Bash: animaworks-tool" in en
+
+    def test_guides_include_action_rules_and_skill_creator(self) -> None:
+        for key in ("s_mcp", "non_s"):
+            for loc in ("ja", "en", "ko"):
+                guide = DEFAULT_GUIDES[key][loc]
+                assert "[ACTION-RULE]" in guide
+                assert "read_memory_file(path=" in guide
+                assert "common_skills/skill-creator/SKILL.md" in guide
+                assert "slack_post" not in guide
+
+    def test_get_default_guide_uses_current_default_guides(self) -> None:
+        ja = get_default_guide("non_s", locale="ja")
+        en = get_default_guide("s_mcp", locale="en")
+
+        assert "[ACTION-RULE]" in ja
+        assert "common_knowledge/operations/action-rules-guide.md" in ja
+        assert "[ACTION-RULE]" in en
+        assert "gmail_draft" in en
