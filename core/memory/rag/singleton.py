@@ -38,6 +38,7 @@ _embedding_model: SentenceTransformer | None = None
 _embedding_model_name: str | None = None
 _init_failed: bool = False
 _direct_disabled_warned: bool = False
+_cuda_unavailable_warned: bool = False
 
 
 def _get_http_store(base_url: str, anima_name: str | None) -> HttpVectorStore:
@@ -137,6 +138,28 @@ def _get_configured_model_name() -> str:
         return "intfloat/multilingual-e5-small"
 
 
+def _cuda_available_safely() -> bool:
+    """Return whether CUDA can be initialized without raising.
+
+    Some hosts expose CUDA libraries while the installed driver/GPU pair is
+    incompatible.  In that state PyTorch can raise ``cudaGetDeviceCount``
+    during lazy CUDA initialization.  Treat that as "CUDA unavailable" so RAG
+    embeddings continue on CPU instead of surfacing a 500 from the internal
+    embedding endpoint.
+    """
+    global _cuda_unavailable_warned
+
+    try:
+        import torch
+
+        return bool(torch.cuda.is_available() and torch.cuda.device_count() > 0)
+    except Exception as exc:
+        if not _cuda_unavailable_warned:
+            logger.warning("CUDA unavailable for embedding model; using CPU: %s", exc)
+            _cuda_unavailable_warned = True
+        return False
+
+
 def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
     """Return process-level singleton SentenceTransformer model.
 
@@ -181,7 +204,7 @@ def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
             _use_gpu = load_config().rag.use_gpu
         except Exception:
             _use_gpu = False
-        device = "cuda" if _use_gpu else "cpu"
+        device = "cuda" if _use_gpu and _cuda_available_safely() else "cpu"
         logger.info("Loading embedding model (singleton): %s on %s", resolved_name, device)
         try:
             _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device=device)
@@ -323,7 +346,7 @@ def get_embedding_model_name() -> str:
 
 def _reset_for_testing():
     """Reset singletons for test isolation."""
-    global _direct_disabled_warned, _embedding_model, _embedding_model_name, _init_failed
+    global _cuda_unavailable_warned, _direct_disabled_warned, _embedding_model, _embedding_model_name, _init_failed
     with _lock:
         _vector_stores.clear()
         _http_stores.clear()
@@ -331,3 +354,4 @@ def _reset_for_testing():
         _embedding_model_name = None
         _init_failed = False
         _direct_disabled_warned = False
+        _cuda_unavailable_warned = False
