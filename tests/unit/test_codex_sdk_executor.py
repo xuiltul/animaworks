@@ -379,6 +379,24 @@ class TestExecutorInit:
         assert env.get("OPENAI_API_KEY") == "test-key-123"
         assert "CODEX_HOME" in env
 
+    def test_build_env_includes_runtime_session(self, executor):
+        from core.execution.session_context import RuntimeSessionContext, runtime_session_scope
+
+        ctx = RuntimeSessionContext.create(
+            session_type="chat",
+            thread_id="thread-1",
+            trigger="message:taka",
+        )
+
+        with runtime_session_scope(ctx):
+            env = executor._build_env()
+
+        assert env["ANIMAWORKS_REQUEST_ID"] == ctx.request_id
+        assert env["ANIMAWORKS_SESSION_TYPE"] == "chat"
+        assert env["ANIMAWORKS_THREAD_ID"] == "thread-1"
+        assert env["ANIMAWORKS_TRIGGER"] == "message:taka"
+        assert env["ANIMAWORKS_TOOL_SESSION_ID"] == ctx.tool_session_id
+
     def test_build_env_codex_azure_uses_azure_api_key(self, model_config, anima_dir, monkeypatch):
         monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
         model_config.credential = "azure_codex"

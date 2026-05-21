@@ -274,6 +274,26 @@ def cli_dispatch():
         _handle_submit(sys.argv[2:])
         return
 
+    # Action memory gate (before loading tool modules)
+    if anima_dir_str:
+        try:
+            from core.memory.action_gate import action_tool_name_from_cli_argv, check_action
+
+            action_tool_name = action_tool_name_from_cli_argv(sys.argv[1:])
+            if action_tool_name:
+                gate_decision = check_action(
+                    Path(anima_dir_str),
+                    action_tool_name,
+                    {"argv": sys.argv[1:]},
+                )
+                if not gate_decision.allowed:
+                    print(gate_decision.to_json(), file=sys.stderr)
+                    sys.exit(1)
+        except SystemExit:
+            raise
+        except Exception:
+            logger.debug("CLI action memory gate failed for %s", tool_name, exc_info=True)
+
     # Gated action check (before loading tool module)
     if anima_dir_str:
         subcommand = ""

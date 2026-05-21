@@ -577,6 +577,19 @@ class ToolHandler(
                 return t("handler.meeting_tool_blocked", tool=name)
             logger.debug("tool_call name=%s args_keys=%s", name, list(args.keys()))
 
+            from core.memory.action_gate import action_tool_name_for_handler, check_action
+
+            action_tool_name = action_tool_name_for_handler(name)
+            if action_tool_name:
+                gate_decision = check_action(
+                    self._anima_dir,
+                    action_tool_name,
+                    args,
+                    session_key=self._session_id,
+                )
+                if not gate_decision.allowed:
+                    return gate_decision.to_json()
+
             handler = self._dispatch.get(name)
             if handler is not None:
                 result = handler(args)
@@ -775,6 +788,18 @@ class ToolHandler(
                 "PermissionDenied",
                 t("tooling.gated_action_denied", tool=tool_name, action=action),
             )
+
+        from core.memory.action_gate import action_tool_name_for_handler, check_action
+
+        if action_tool_name_for_handler(schema_name):
+            gate_decision = check_action(
+                self._anima_dir,
+                schema_name,
+                tool_args,
+                session_key=self._session_id,
+            )
+            if not gate_decision.allowed:
+                return gate_decision.to_json()
 
         dispatch_args = {**tool_args, "anima_dir": str(self._anima_dir)}
 

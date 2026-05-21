@@ -683,6 +683,12 @@ class MemoryToolsMixin:
 
             logger.debug("read_memory_file path=%s", rel)
             self._read_paths.add(rel)
+            try:
+                from core.memory.action_gate import record_memory_read
+
+                record_memory_read(self._anima_dir, rel, session_key=getattr(self, "_session_id", None))
+            except Exception:
+                logger.debug("Failed to record action-gate memory read for %s", rel, exc_info=True)
 
             # Record skill view event
             self._record_skill_view_if_applicable(rel)

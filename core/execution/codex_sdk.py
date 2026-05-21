@@ -696,6 +696,7 @@ class CodexSDKExecutor(BaseExecutor):
 
     def _build_env(self) -> dict[str, str]:
         """Build env dict for the Codex CLI child process."""
+        from core.execution.session_context import current_runtime_session
         from core.paths import PROJECT_DIR
 
         env: dict[str, str] = {
@@ -705,6 +706,9 @@ class CodexSDKExecutor(BaseExecutor):
             "CODEX_HOME": str(self._codex_home),
             "HOME": _default_home_dir(),
         }
+        ctx = current_runtime_session()
+        if ctx is not None:
+            env.update(ctx.to_env())
         # Windows requires SYSTEMROOT for Winsock/TLS initialisation and
         # TEMP/TMP for scratch files.  Without these the Codex CLI subprocess
         # fails with OS error 10106 (WSAEPROVIDERFAILEDINIT).
