@@ -490,4 +490,3 @@ def _pointer_path(meta: SkillMetadata) -> str:
     if path.name == "SKILL.md":
         return f"skills/{path.parent.name}/SKILL.md"
     return str(path)
-

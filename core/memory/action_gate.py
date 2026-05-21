@@ -16,9 +16,7 @@ from typing import Any
 
 logger = logging.getLogger("animaworks.action_memory_gate")
 
-_REQUIRED_READ_RE = re.compile(
-    r"""read_memory_file\s*\(\s*path\s*=\s*(?P<quote>['"])(?P<path>.+?)(?P=quote)\s*\)"""
-)
+_REQUIRED_READ_RE = re.compile(r"""read_memory_file\s*\(\s*path\s*=\s*(?P<quote>['"])(?P<path>.+?)(?P=quote)\s*\)""")
 _SAFE_SESSION_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 _HANDLER_ACTION_TOOLS: frozenset[str] = frozenset(

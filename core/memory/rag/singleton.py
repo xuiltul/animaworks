@@ -79,9 +79,7 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
 
     if not direct_chroma_allowed():
         if not _direct_disabled_warned:
-            logger.warning(
-                "Vector store unavailable: direct ChromaDB access is disabled outside the vector worker"
-            )
+            logger.warning("Vector store unavailable: direct ChromaDB access is disabled outside the vector worker")
             _direct_disabled_warned = True
         return None
 

@@ -440,7 +440,9 @@ class ProcedureToSkillConverter:
         tags = as_list(overrides.get("tags") or procedure_metadata.get("tags"))
         routing = procedure_metadata.get("routing") if isinstance(procedure_metadata.get("routing"), dict) else {}
         routing_risk = routing.get("risk") if isinstance(routing.get("risk"), dict) else {}
-        risk = normalise_risk({**routing_risk, **(procedure_metadata.get("risk") or {}), **(overrides.get("risk") or {})})
+        risk = normalise_risk(
+            {**routing_risk, **(procedure_metadata.get("risk") or {}), **(overrides.get("risk") or {})}
+        )
 
         return {
             "name": skill_name,

@@ -26,6 +26,7 @@ def _prime_tooling_imports() -> None:
     """Load execution sanitizers before tooling schemas to avoid import cycles."""
     import_module("core.execution._sanitize")
 
+
 # ── Section mapping for system_sections resync ─────────────────────
 
 _SECTION_FILES: dict[str, str] = {

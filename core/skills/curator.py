@@ -247,7 +247,9 @@ class SkillCurator:
             is_probation = str(meta.promotion_status or "").lower() == "probation"
             if is_probation and total >= 3 and failure / total >= 0.7:
                 suggestions.append(
-                    LifecycleSuggestion(meta.name, SkillLifecycleState.review, "probation_failure_rate_high", failure / total)
+                    LifecycleSuggestion(
+                        meta.name, SkillLifecycleState.review, "probation_failure_rate_high", failure / total
+                    )
                 )
                 continue
             if not is_probation and total and failure / total >= 0.7:

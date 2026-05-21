@@ -75,7 +75,11 @@ def create_probation_skill_for_converter(
     meta["risk"]["requires_human_approval"] = runtime_approval_required(meta["risk"], scan_result)
     converter._write_skill_file(skill_md, meta, body)
 
-    if scan_result.verdict != SkillScanVerdict.safe or scan_result.size_violations or meta["risk"]["requires_human_approval"]:
+    if (
+        scan_result.verdict != SkillScanVerdict.safe
+        or scan_result.size_violations
+        or meta["risk"]["requires_human_approval"]
+    ):
         shutil.rmtree(active_skill_dir, ignore_errors=True)
         converter._append_audit(
             {

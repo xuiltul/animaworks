@@ -76,8 +76,13 @@ def promote_skill_to_trusted(
     skill_path = meta.path
     text = skill_path.read_text(encoding="utf-8")
     frontmatter, body = parse_frontmatter(text)
-    scan = (scanner or SkillScanner()).scan_skill(skill_path.parent if skill_path.name == "SKILL.md" else skill_path, source="anima")
-    if scan.verdict in {SkillScanVerdict.dangerous, SkillScanVerdict.warn, SkillScanVerdict.caution} or scan.size_violations:
+    scan = (scanner or SkillScanner()).scan_skill(
+        skill_path.parent if skill_path.name == "SKILL.md" else skill_path, source="anima"
+    )
+    if (
+        scan.verdict in {SkillScanVerdict.dangerous, SkillScanVerdict.warn, SkillScanVerdict.caution}
+        or scan.size_violations
+    ):
         raise ValueError(f"Cannot promote unsafe skill: {scan.verdict.value}")
 
     trusted_at = now_iso()
@@ -103,7 +108,9 @@ def promote_skill_to_trusted(
     )
     rendered = yaml.dump(frontmatter, allow_unicode=True, default_flow_style=False, sort_keys=False).strip()
     atomic_write_text(skill_path, f"---\n{rendered}\n---\n\n{body.rstrip()}\n")
-    SkillUsageTracker(anima_dir).record(meta.name, SkillUsageEventType.patch, is_common=meta.is_common, notes="trusted_promotion")
+    SkillUsageTracker(anima_dir).record(
+        meta.name, SkillUsageEventType.patch, is_common=meta.is_common, notes="trusted_promotion"
+    )
     return TrustedPromotionResult(
         skill_name=meta.name,
         path=_pointer_for_path(anima_dir, skill_path),

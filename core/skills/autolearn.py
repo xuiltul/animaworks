@@ -105,7 +105,9 @@ class AutonomousSkillLearner:
         )
         return [meta for meta in index.search("", include_blocked=True) if not meta.is_procedure]
 
-    def _duplicate_for(self, skill_name: str, metadata: dict[str, Any], existing: list[SkillMetadata]) -> SkillMetadata | None:
+    def _duplicate_for(
+        self, skill_name: str, metadata: dict[str, Any], existing: list[SkillMetadata]
+    ) -> SkillMetadata | None:
         description = str(metadata.get("description") or metadata.get("title") or "").strip()
         for meta in existing:
             if meta.name == skill_name:
