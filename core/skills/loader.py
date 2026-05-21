@@ -85,6 +85,10 @@ def _skill_metadata_from_dict(path: Path, meta: dict[str, Any], body: str) -> Sk
     name = _normalize_name(meta.get("name"), path)
     description = _normalize_description(meta.get("description"), body)
     passthrough = {k: v for k, v in meta.items() if k not in ("name", "description", "path")}
+    source = passthrough.get("source")
+    if isinstance(source, str):
+        source_type = source.strip()
+        passthrough["source"] = {"type": source_type or "local"}
     if "version" in passthrough:
         try:
             passthrough["version"] = int(passthrough["version"])

@@ -16,6 +16,7 @@ from typing import Any
 from core.skills.index import SkillIndex
 from core.skills.loader import load_skill_body, skill_access_decision
 from core.skills.models import SkillMetadata, SkillScanVerdict, SkillUsageEventType
+from core.skills.policy import SkillActivationPolicy, policy_for_skill
 from core.skills.usage import SkillUsageTracker
 from core.time_utils import now_iso
 
@@ -38,9 +39,11 @@ class ActiveSkillItem:
     trust_level: str = ""
     security_verdict: str = ""
     active: bool = False
+    activation_policy: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_metadata(cls, ref: str, path: str, meta: SkillMetadata, *, active: bool = False) -> ActiveSkillItem:
+        policy = policy_for_skill(meta)
         return cls(
             ref=ref,
             name=meta.name,
@@ -51,6 +54,7 @@ class ActiveSkillItem:
             trust_level=str(meta.trust_level.value),
             security_verdict=str(meta.security.verdict.value),
             active=active,
+            activation_policy=policy.model_dump(mode="json"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -64,6 +68,7 @@ class ActiveSkillItem:
             "trust_level": self.trust_level,
             "security_verdict": self.security_verdict,
             "active": self.active,
+            "activation_policy": self.activation_policy,
         }
 
 
@@ -72,6 +77,8 @@ class ActiveSkillAttachment:
     name: str
     path: str
     body: str
+    description: str = ""
+    policy: SkillActivationPolicy = field(default_factory=SkillActivationPolicy)
     is_common: bool = False
     truncated: bool = False
     truncation_reason: str | None = None
@@ -120,9 +127,19 @@ class ActiveSkillContextResult:
     def render(self) -> str:
         if not self.attachments:
             return ""
-        sections = ["## Active Skills"]
-        for item in self.attachments:
-            sections.extend(_render_attachment_lines(item))
+        sections: list[str] = []
+        trusted = [item for item in self.attachments if item.policy.render_section == "trusted"]
+        candidates = [item for item in self.attachments if item.policy.render_section == "candidate"]
+        if trusted:
+            sections.append("## Trusted Skills")
+            for item in trusted:
+                sections.extend(_render_attachment_lines(item))
+        if candidates:
+            if sections:
+                sections.append("")
+            sections.append("## Candidate Skill Hints")
+            for item in candidates:
+                sections.extend(_render_candidate_hint_lines(item))
         return "\n".join(sections).strip()
 
 
@@ -234,6 +251,24 @@ def build_active_skill_context(
         meta = index.resolve_skill_reference(item.path)
         if meta is None or meta.path is None:
             continue
+        policy = policy_for_skill(meta)
+        if policy.blocked:
+            resolution.rejections.append(ActiveSkillRejection(item.path, policy.reason))
+            continue
+        if policy.injection == "pointer_preferred":
+            attachments.append(
+                ActiveSkillAttachment(
+                    name=meta.name,
+                    path=item.path,
+                    body="",
+                    description=meta.description,
+                    policy=policy,
+                    is_common=meta.is_common,
+                )
+            )
+            if record_usage:
+                _record_active_usage(anima_dir, meta)
+            continue
         try:
             body = load_skill_body(meta.path)
         except Exception:
@@ -245,6 +280,8 @@ def build_active_skill_context(
             name=meta.name,
             path=item.path,
             body=body,
+            description=meta.description,
+            policy=policy,
             is_common=meta.is_common,
         )
         truncated_reason = _truncation_reason(
@@ -260,6 +297,8 @@ def build_active_skill_context(
                     name=meta.name,
                     path=item.path,
                     body="",
+                    description=meta.description,
+                    policy=policy,
                     is_common=meta.is_common,
                     truncated=True,
                     truncation_reason=truncated_reason,
@@ -313,6 +352,9 @@ def _resolve_refs(
 
 
 def _active_access_decision(meta: SkillMetadata, anima_dir: Path, *, confirm_risk: bool) -> tuple[bool, str]:
+    policy = policy_for_skill(meta)
+    if policy.blocked:
+        return False, policy.reason
     allowed, reason = skill_access_decision(meta, anima_dir=anima_dir)
     if not allowed:
         return False, reason
@@ -377,6 +419,16 @@ def _render_attachment_lines(item: ActiveSkillAttachment) -> list[str]:
     else:
         lines.extend(["", item.body.strip(), ""])
     return lines
+
+
+def _render_candidate_hint_lines(item: ActiveSkillAttachment) -> list[str]:
+    summary = item.description.strip() or "(no description)"
+    return [
+        f"- {item.name}",
+        f"  path: {item.path}",
+        f"  summary: {summary}",
+        "  policy: Candidate hint only. Verify against the current task before relying on it.",
+    ]
 
 
 def _truncation_reason(

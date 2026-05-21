@@ -3,7 +3,6 @@ from __future__ import annotations
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-
 from pathlib import Path
 from unittest.mock import patch
 
@@ -125,3 +124,41 @@ async def test_skills_route_validates_anima_and_thread(tmp_path: Path) -> None:
         anima_dir.mkdir()
         invalid_thread = await client.get("/api/animas/alice/skills", params={"thread_id": "../bad"})
         assert invalid_thread.status_code == 400
+
+
+async def test_trust_skill_route_promotes_probation_skill(tmp_path: Path) -> None:
+    animas_dir = tmp_path / "animas"
+    anima_dir = animas_dir / "alice"
+    common_dir = tmp_path / "common_skills"
+    anima_dir.mkdir(parents=True)
+    common_dir.mkdir()
+    _write_skill(
+        anima_dir,
+        "writer",
+        body="Writer body.",
+        extra=(
+            "trust_level: community\n"
+            "promotion_status: probation\n"
+            "skill_policy:\n"
+            "  use_mode: candidate_hint\n"
+            "  injection: pointer_preferred\n"
+        ),
+    )
+
+    app = _make_app(animas_dir)
+    transport = ASGITransport(app=app)
+    with patch("core.paths.get_common_skills_dir", return_value=common_dir):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            promoted = await client.post(
+                "/api/animas/alice/skills/trust",
+                json={"ref": "writer", "trusted_by": "user", "trust_reason": "human_instruction"},
+            )
+
+    assert promoted.status_code == 200
+    data = promoted.json()
+    assert data["status"] == "trusted"
+    assert data["skill_name"] == "writer"
+    text = (anima_dir / "skills" / "writer" / "SKILL.md").read_text(encoding="utf-8")
+    assert "trust_level: trusted" in text
+    assert "promotion_status: trusted" in text
+    assert "trusted_by: user" in text

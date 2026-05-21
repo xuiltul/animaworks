@@ -6,10 +6,8 @@ from __future__ import annotations
 
 """Unit tests for core.skills.models — Pydantic models and enums."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
-import pytest
 
 from core.skills.models import (
     SkillMetadata,
@@ -63,7 +61,7 @@ class TestSkillSecurityScan:
         scan = SkillSecurityScan(
             verdict=SkillScanVerdict.warn,
             findings=[{"type": "shell_exec", "line": 42}],
-            scanned_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+            scanned_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         assert len(scan.findings) == 1
         assert scan.scanned_at is not None
@@ -75,9 +73,22 @@ class TestSkillMetadata:
         assert meta.name == "test-skill"
         assert meta.description == ""
         assert meta.trust_level == SkillTrustLevel.trusted
+        assert meta.skill_policy.use_mode == "primary_guidance"
+        assert meta.skill_policy.injection == "body_allowed"
         assert meta.version == 1
         assert meta.is_common is False
         assert meta.is_procedure is False
+
+    def test_probation_policy_construction(self):
+        meta = SkillMetadata(
+            name="auto-skill",
+            trust_level=SkillTrustLevel.community,
+            promotion_status="probation",
+            skill_policy={"use_mode": "candidate_hint", "injection": "pointer_preferred"},
+        )
+        assert meta.promotion_status == "probation"
+        assert meta.skill_policy.use_mode == "candidate_hint"
+        assert meta.skill_policy.injection == "pointer_preferred"
 
     def test_full_construction(self):
         meta = SkillMetadata(

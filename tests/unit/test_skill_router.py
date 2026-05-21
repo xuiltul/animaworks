@@ -70,6 +70,33 @@ def test_routes_by_trigger_phrase_and_returns_pointer(tmp_path: Path) -> None:
     assert candidates[0].path == "skills/gmail-tool/SKILL.md"
     assert candidates[0].confidence in {"medium", "high"}
     assert candidates[0].risk.external_send is True
+    assert candidates[0].activation_policy.injection == "body_allowed"
+
+
+def test_trust_policy_does_not_change_relevance_score(tmp_path: Path) -> None:
+    trusted = SkillMetadata(
+        name="mail-helper",
+        description="メール下書き",
+        trigger_phrases=["メール下書き"],
+        path=tmp_path / "skills" / "mail-helper" / "SKILL.md",
+    )
+    probation = SkillMetadata(
+        name="mail-helper",
+        description="メール下書き",
+        trigger_phrases=["メール下書き"],
+        path=tmp_path / "skills" / "mail-helper" / "SKILL.md",
+        trust_level="community",
+        promotion_status="probation",
+        skill_policy={"use_mode": "candidate_hint", "injection": "pointer_preferred"},
+    )
+
+    router = SkillRouter(include_body=False)
+    trusted_candidate = router.route("メール下書きを作って", [trusted])[0]
+    probation_candidate = router.route("メール下書きを作って", [probation])[0]
+
+    assert trusted_candidate.score == probation_candidate.score
+    assert trusted_candidate.activation_policy.injection == "body_allowed"
+    assert probation_candidate.activation_policy.injection == "pointer_preferred"
 
 
 def test_negative_phrase_can_force_abstention(tmp_path: Path) -> None:

@@ -159,8 +159,67 @@ def _create_skill_schemas() -> list[dict[str, Any]]:
                         "type": "string",
                         "description": "Category tag for skill classification (e.g. software-development, communication)",
                     },
+                    "source_origin": {
+                        "type": "string",
+                        "description": "Provenance origin such as manual or auto_created.",
+                    },
+                    "promotion_status": {
+                        "type": "string",
+                        "description": "Skill promotion status such as probation or trusted.",
+                    },
+                    "skill_policy": {
+                        "type": "object",
+                        "description": "Prompt policy with use_mode and injection fields.",
+                    },
+                    "use_when": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Positive routing use cases.",
+                    },
+                    "trigger_phrases": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Phrases that should activate this skill as a candidate.",
+                    },
+                    "negative_phrases": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Phrases that should suppress this skill.",
+                    },
+                    "domains": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Routing domains for this skill.",
+                    },
+                    "routing_examples": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Example requests for routing evaluation.",
+                    },
                 },
                 "required": ["skill_name", "description", "body"],
+            },
+        },
+        {
+            "name": "trust_skill",
+            "description": "Promote an existing safe skill to trusted operating guidance after explicit human instruction.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ref": {
+                        "type": "string",
+                        "description": "Skill name or pointer such as skills/<name>/SKILL.md.",
+                    },
+                    "trusted_by": {
+                        "type": "string",
+                        "description": "Actor approving trusted promotion, default user.",
+                    },
+                    "trust_reason": {
+                        "type": "string",
+                        "description": "Reason for promotion, default human_instruction.",
+                    },
+                },
+                "required": ["ref"],
             },
         },
         {

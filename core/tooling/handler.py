@@ -255,6 +255,7 @@ class ToolHandler(
             "report_procedure_outcome": self._handle_report_procedure_outcome,
             "report_knowledge_outcome": self._handle_report_knowledge_outcome,
             "create_skill": self._handle_create_skill,
+            "trust_skill": self._handle_trust_skill,
             "promote_procedure_to_skill": self._handle_promote_procedure_to_skill,
             "curate_skills": self._handle_curate_skills,
             "archive_skill": self._handle_archive_skill,

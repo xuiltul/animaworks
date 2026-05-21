@@ -452,6 +452,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "無効なスキル名: '{skill_name}'（パス区切り文字は使用不可）",
         "en": "Invalid skill name: '{skill_name}' (path separators are not allowed)",
     },
+    "skill_auto.created": {
+        "ja": "スキル化しました: {skill_name} ({path})",
+        "en": "Skillized: {skill_name} ({path})",
+    },
     "task_queue.auto_taskexec": {
         "ja": "(auto: TaskExec)",
         "en": "(auto: TaskExec)",

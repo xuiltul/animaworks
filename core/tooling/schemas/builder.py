@@ -238,7 +238,7 @@ def build_unified_tool_list(
     tools = apply_db_descriptions(tools)
 
     if include_create_skill:
-        tools.extend(t for t in _create_skill_schemas() if t["name"] == "create_skill")
+        tools.extend(t for t in _create_skill_schemas() if t["name"] in {"create_skill", "trust_skill"})
         tools.extend(_curator_skill_schemas())
 
     if compact:

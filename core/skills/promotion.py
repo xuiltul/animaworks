@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from core.i18n import t
 from core.memory._io import atomic_write_text
 from core.memory.frontmatter import parse_frontmatter
 from core.skills.guard import SkillScanner
@@ -44,6 +45,8 @@ from core.time_utils import now_iso
 
 PROMOTION_DRAFT_CREATED = "promotion_draft_created"
 PROMOTION_APPROVED = "promotion_approved"
+AUTO_SKILL_CREATED = "auto_skill_created"
+AUTO_SKILL_BLOCKED = "auto_skill_blocked"
 
 
 @dataclass(slots=True)
@@ -273,6 +276,115 @@ class ProcedureToSkillConverter:
             size_violations=scan_result.size_violations,
         )
 
+    def create_probation_skill(
+        self,
+        procedure_path: str | Path,
+        *,
+        skill_name: str | None = None,
+        metadata_overrides: dict[str, Any] | None = None,
+        enforce_policy: bool = True,
+    ) -> SkillPromotionResult:
+        """Generate an active low-risk probation skill without human approval."""
+        source_path = self._resolve_procedure_path(procedure_path)
+        if not source_path.exists():
+            raise FileNotFoundError(f"Procedure not found: {source_path}")
+
+        text = source_path.read_text(encoding="utf-8")
+        proc_meta, proc_body = parse_frontmatter(text)
+        final_skill_name = safe_skill_name(skill_name or proc_meta.get("name") or source_path.stem)
+        active_skill_dir = self._skills_dir / final_skill_name
+        if active_skill_dir.exists():
+            raise FileExistsError(f"Active skill already exists: {active_skill_dir}")
+        quarantine_skill_dir = self._quarantine_dir / final_skill_name
+        if quarantine_skill_dir.exists():
+            raise FileExistsError(f"Quarantine skill already exists: {quarantine_skill_dir}")
+
+        candidate = self.candidate_from_path(source_path)
+        if enforce_policy and candidate is not None and not candidate.eligible:
+            raise ValueError("Procedure is not eligible for skill promotion: " + ", ".join(candidate.reasons))
+
+        meta = self._build_skill_metadata(
+            skill_name=final_skill_name,
+            procedure_path=source_path,
+            procedure_metadata=proc_meta,
+            overrides=metadata_overrides or {},
+        )
+        meta["trust_level"] = "community"
+        meta["promotion_status"] = "probation"
+        meta["source"]["origin"] = "auto_created"
+        meta["skill_policy"] = {
+            "use_mode": "candidate_hint",
+            "injection": "pointer_preferred",
+        }
+        meta["trusted_by"] = None
+        meta["trusted_at"] = None
+        meta["trust_reason"] = None
+
+        body = self._build_skill_body(final_skill_name, proc_meta, proc_body)
+        active_skill_dir.mkdir(parents=True, exist_ok=False)
+        skill_md = active_skill_dir / "SKILL.md"
+        self._write_skill_file(skill_md, meta, body)
+
+        scan_result = self._scanner.scan_skill(active_skill_dir, source="anima")
+        meta["security"] = scan_security_metadata(scan_result)
+        meta["risk"]["requires_human_approval"] = runtime_approval_required(meta["risk"], scan_result)
+        self._write_skill_file(skill_md, meta, body)
+
+        if scan_result.verdict != SkillScanVerdict.safe or scan_result.size_violations or meta["risk"]["requires_human_approval"]:
+            shutil.rmtree(active_skill_dir, ignore_errors=True)
+            event_type = AUTO_SKILL_BLOCKED
+            self._append_audit(
+                {
+                    "event_type": event_type,
+                    "procedure_path": str(source_path.relative_to(self._anima_dir)),
+                    "skill_name": final_skill_name,
+                    "scan_verdict": scan_result.verdict.value,
+                    "size_violations": scan_result.size_violations,
+                    "requires_human_approval": meta["risk"]["requires_human_approval"],
+                }
+            )
+            return SkillPromotionResult(
+                status="blocked" if scan_result.verdict == SkillScanVerdict.dangerous else "review",
+                skill_name=final_skill_name,
+                procedure_path=str(source_path.relative_to(self._anima_dir)),
+                scan_verdict=scan_result.verdict.value,
+                requires_human_approval=True,
+                message="Auto-created skill candidate requires review before activation.",
+                findings=[f.model_dump(mode="json") for f in scan_result.findings],
+                size_violations=scan_result.size_violations,
+            )
+
+        SkillUsageTracker(self._anima_dir).record(
+            final_skill_name,
+            SkillUsageEventType.create,
+            is_common=False,
+            notes="auto_probation_skill",
+        )
+        self._append_audit(
+            {
+                "event_type": AUTO_SKILL_CREATED,
+                "procedure_path": str(source_path.relative_to(self._anima_dir)),
+                "skill_name": final_skill_name,
+                "target_path": str(skill_md.relative_to(self._anima_dir)),
+                "scan_verdict": scan_result.verdict.value,
+            }
+        )
+        return SkillPromotionResult(
+            status="probation",
+            skill_name=final_skill_name,
+            procedure_path=str(source_path.relative_to(self._anima_dir)),
+            active_path=str(skill_md.relative_to(self._anima_dir)),
+            scan_verdict=scan_result.verdict.value,
+            requires_human_approval=False,
+            message=t(
+                "skill_auto.created",
+                skill_name=final_skill_name,
+                path=skill_md.relative_to(self._anima_dir),
+            ),
+            findings=[f.model_dump(mode="json") for f in scan_result.findings],
+            size_violations=scan_result.size_violations,
+        )
+
     def register_approval_request(self, skill_name: str, callback_id: str) -> None:
         """Attach an interactive approval callback to a quarantine skill draft."""
         final_skill_name = safe_skill_name(skill_name)
@@ -415,6 +527,7 @@ class ProcedureToSkillConverter:
         )
         if not domains:
             domains = ["general"]
+        routing_examples = as_list(overrides.get("routing_examples") or procedure_metadata.get("routing_examples"))
         tags = as_list(overrides.get("tags") or procedure_metadata.get("tags"))
         risk = normalise_risk(overrides.get("risk") or procedure_metadata.get("risk") or {})
 
@@ -434,6 +547,7 @@ class ProcedureToSkillConverter:
             "trigger_phrases": trigger_phrases,
             "negative_phrases": negative_phrases,
             "domains": domains,
+            "routing_examples": routing_examples,
             "tags": tags,
             "risk": risk,
         }

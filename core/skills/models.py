@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -261,6 +261,13 @@ class SkillRoutingMetadata(BaseModel):
         return _coerce_str_list(value)
 
 
+class SkillPolicyMetadata(BaseModel):
+    """How strongly a skill may influence prompt context and behavior."""
+
+    use_mode: Literal["primary_guidance", "candidate_hint"] = "primary_guidance"
+    injection: Literal["body_allowed", "pointer_preferred", "blocked"] = "body_allowed"
+
+
 # ── SkillMetadata ─────────────────────────────────────────
 
 
@@ -284,6 +291,7 @@ class SkillMetadata(BaseModel):
     routing_examples: list[str] = Field(default_factory=list)
     risk: SkillRiskMetadata = Field(default_factory=SkillRiskMetadata)
     routing: SkillRoutingMetadata = Field(default_factory=SkillRoutingMetadata)
+    skill_policy: SkillPolicyMetadata = Field(default_factory=SkillPolicyMetadata)
     trust_level: SkillTrustLevel = SkillTrustLevel.trusted
     source: SkillSource = Field(default_factory=SkillSource)
     version: int = 1
@@ -293,6 +301,9 @@ class SkillMetadata(BaseModel):
     approved_by: str | None = None
     approved_at: datetime | None = None
     approval_callback_id: str | None = None
+    trusted_by: str | None = None
+    trusted_at: datetime | None = None
+    trust_reason: str | None = None
     usage_count: int = 0
     success_count: int = 0
     failure_count: int = 0

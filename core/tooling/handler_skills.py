@@ -277,7 +277,15 @@ class SkillsToolsMixin:
         allowed_tools = args.get("allowed_tools")
         trust_level = args.get("trust_level")
         source_type = args.get("source_type")
+        source_origin = args.get("source_origin")
         category = args.get("category")
+        promotion_status = args.get("promotion_status")
+        skill_policy = args.get("skill_policy")
+        use_when = args.get("use_when")
+        trigger_phrases = args.get("trigger_phrases")
+        negative_phrases = args.get("negative_phrases")
+        domains = args.get("domains")
+        routing_examples = args.get("routing_examples")
 
         if not skill_name:
             return t("handler.skill_name_required")
@@ -302,8 +310,16 @@ class SkillsToolsMixin:
             allowed_tools=allowed_tools,
             trust_level=trust_level,
             source_type=source_type,
+            source_origin=source_origin,
             source_owner_anima=self._anima_dir.name,
             category=category,
+            promotion_status=promotion_status,
+            skill_policy=skill_policy,
+            use_when=use_when,
+            trigger_phrases=trigger_phrases,
+            negative_phrases=negative_phrases,
+            domains=domains,
+            routing_examples=routing_examples,
         )
 
         # Record create event in usage tracker
@@ -327,6 +343,27 @@ class SkillsToolsMixin:
             result += f"\n\n{scan_summary}"
 
         return result
+
+    def _handle_trust_skill(self, args: dict[str, Any]) -> str:
+        """Promote a safe skill to trusted operating guidance."""
+        from core.skills.trust import promote_skill_to_trusted
+
+        ref = str(args.get("ref") or args.get("skill_name") or "").strip()
+        if not ref:
+            return _error_result("InvalidArguments", "ref is required")
+        trusted_by = str(args.get("trusted_by") or "user").strip() or "user"
+        trust_reason = str(args.get("trust_reason") or "human_instruction").strip() or "human_instruction"
+        try:
+            result = promote_skill_to_trusted(
+                self._anima_dir,
+                ref,
+                trusted_by=trusted_by,
+                trust_reason=trust_reason,
+            )
+        except Exception as exc:
+            logger.exception("trust_skill failed")
+            return _error_result("TrustSkillFailed", str(exc))
+        return _json.dumps({"status": "trusted", **result.to_dict()}, ensure_ascii=False, indent=2)
 
     def _handle_promote_procedure_to_skill(self, args: dict[str, Any]) -> str:
         """Create or approve a reviewed skill generated from a procedure."""

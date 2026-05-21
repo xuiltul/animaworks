@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from core.memory.frontmatter import strip_frontmatter
 from core.skills.models import SkillMetadata, SkillRiskMetadata
+from core.skills.policy import SkillActivationPolicy, policy_for_skill
 
 _ASCII_WORD_RE = re.compile(r"[a-z0-9][a-z0-9_+.-]*", re.IGNORECASE)
 _JP_SEGMENT_RE = re.compile(r"[ぁ-んァ-ヶー一-龯々]{2,}")
@@ -77,6 +78,7 @@ class SkillRouteCandidate(BaseModel):
     is_common: bool = False
     is_procedure: bool = False
     risk: SkillRiskMetadata = Field(default_factory=SkillRiskMetadata)
+    activation_policy: SkillActivationPolicy = Field(default_factory=SkillActivationPolicy)
 
 
 class SkillRouter:
@@ -180,6 +182,7 @@ class SkillRouter:
                     is_common=record.meta.is_common,
                     is_procedure=record.meta.is_procedure,
                     risk=_merged_risk(record.meta),
+                    activation_policy=policy_for_skill(record.meta),
                 )
             )
         return candidates
@@ -480,12 +483,32 @@ def _dedupe(values: Sequence[str]) -> list[str]:
 
 
 def _router_visible(meta: SkillMetadata) -> bool:
+    if policy_for_skill(meta).blocked:
+        return False
     try:
         from core.skills.curator import is_unloadable_lifecycle_state
 
         return not is_unloadable_lifecycle_state(meta.lifecycle_state)
     except Exception:
         return True
+
+
+def fill_routing_metadata_gaps(meta: dict, *, skill_name: str, description: str, body: str = "") -> dict:
+    """Return deterministic routing metadata for auto-created skills."""
+    result = dict(meta)
+    text = body.strip()
+    trigger = skill_name.replace("-", " ").strip()
+    if not result.get("trigger_phrases"):
+        result["trigger_phrases"] = [trigger] if trigger else []
+    if not result.get("use_when"):
+        result["use_when"] = [description] if description else result.get("trigger_phrases", [])
+    if not result.get("domains") and not result.get("tags"):
+        result["domains"] = ["general"]
+    if not result.get("routing_examples"):
+        first_line = next((line.strip("# ").strip() for line in text.splitlines() if line.strip()), "")
+        example = first_line or description or trigger
+        result["routing_examples"] = [example] if example else []
+    return result
 
 
 def _has_strong_signal(reasons: Sequence[str]) -> bool:

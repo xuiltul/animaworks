@@ -526,11 +526,16 @@ class LifecycleMixin:
                 model_config_override=base_model_config,
             )
 
+        autolearn = self._run_autonomous_skill_learning()
+        summary = result.summary or ""
+        if autolearn is not None and autolearn.report_lines:
+            summary = (summary + "\n\n" if summary else "") + "\n".join(autolearn.report_lines)
+
         elapsed_ms = int((_time.monotonic() - start_mono) * 1000)
         return CycleResult(
             trigger="consolidation:daily",
             action="completed",
-            summary=result.summary or "",
+            summary=summary,
             duration_ms=elapsed_ms,
         )
 
@@ -584,13 +589,57 @@ class LifecycleMixin:
                 model_config_override=base_model_config,
             )
 
+        autolearn = self._run_autonomous_skill_learning()
+        summary = result.summary or ""
+        if autolearn is not None and autolearn.report_lines:
+            summary = (summary + "\n\n" if summary else "") + "\n".join(autolearn.report_lines)
+
         elapsed_ms = int((_time.monotonic() - start_mono) * 1000)
         return CycleResult(
             trigger="consolidation:weekly",
             action="completed",
-            summary=result.summary or "",
+            summary=summary,
             duration_ms=elapsed_ms,
         )
+
+    def _run_autonomous_skill_learning(self):
+        """Run deterministic skill auto-learning after successful consolidation."""
+        try:
+            from core.skills.autolearn import AutonomousSkillLearner
+
+            result = AutonomousSkillLearner(self.anima_dir).run()
+        except Exception:
+            logger.debug("[%s] autonomous skill learning failed", self.name, exc_info=True)
+            return None
+
+        for created in result.created:
+            self._activity.log(
+                "skill_auto_created",
+                summary=created.message,
+                meta={
+                    "skill_name": created.skill_name,
+                    "path": created.active_path,
+                    "scan_verdict": created.scan_verdict,
+                },
+            )
+        if result.skipped or result.blocked:
+            self._activity.log(
+                "skill_autolearn_summary",
+                summary=f"Autonomous skill learning skipped={len(result.skipped)} blocked={len(result.blocked)}",
+                meta={
+                    "skipped": [
+                        {
+                            "skill_name": skip.skill_name,
+                            "procedure_path": skip.procedure_path,
+                            "reason": skip.reason,
+                            "related_skill": skip.related_skill,
+                        }
+                        for skip in result.skipped
+                    ],
+                    "blocked": [blocked.to_dict() for blocked in result.blocked],
+                },
+            )
+        return result
 
     async def run_cron_task(
         self,

@@ -36,8 +36,19 @@ def create_skill_directory(
     allowed_tools: list[str] | None = None,
     trust_level: str | None = None,
     source_type: str | None = None,
+    source_origin: str | None = None,
     source_owner_anima: str | None = None,
     category: str | None = None,
+    promotion_status: str | None = None,
+    skill_policy: dict[str, str] | None = None,
+    use_when: list[str] | None = None,
+    trigger_phrases: list[str] | None = None,
+    negative_phrases: list[str] | None = None,
+    domains: list[str] | None = None,
+    routing_examples: list[str] | None = None,
+    trusted_by: str | None = None,
+    trusted_at: str | None = None,
+    trust_reason: str | None = None,
 ) -> str:
     """Create skill directory structure with SKILL.md and optional sub-files."""
     if "/" in skill_name or "\\" in skill_name or ".." in skill_name:
@@ -53,11 +64,31 @@ def create_skill_directory(
     source: dict[str, str] = {"type": source_type or "anima"}
     if source_owner_anima:
         source["owner_anima"] = source_owner_anima
-    source["origin"] = "manual"
+    source["origin"] = source_origin or "manual"
     fm["source"] = source
     fm["version"] = 1
+    if promotion_status:
+        fm["promotion_status"] = promotion_status
+    if skill_policy:
+        fm["skill_policy"] = skill_policy
     if allowed_tools:
         fm["allowed_tools"] = allowed_tools
+    if use_when:
+        fm["use_when"] = use_when
+    if trigger_phrases:
+        fm["trigger_phrases"] = trigger_phrases
+    if negative_phrases:
+        fm["negative_phrases"] = negative_phrases
+    if domains:
+        fm["domains"] = domains
+    if routing_examples:
+        fm["routing_examples"] = routing_examples
+    if trusted_by is not None:
+        fm["trusted_by"] = trusted_by
+    if trusted_at is not None:
+        fm["trusted_at"] = trusted_at
+    if trust_reason is not None:
+        fm["trust_reason"] = trust_reason
     frontmatter = yaml.dump(fm, allow_unicode=True, default_flow_style=False, sort_keys=False).strip()
 
     skill_md = f"---\n{frontmatter}\n---\n\n{body}\n"

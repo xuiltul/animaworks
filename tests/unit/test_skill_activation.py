@@ -3,7 +3,6 @@ from __future__ import annotations
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-
 from pathlib import Path
 from unittest.mock import patch
 
@@ -123,7 +122,7 @@ def test_build_active_skill_context_renders_body_and_records_use(tmp_path: Path)
         result = build_active_skill_context(anima_dir)
 
     rendered = result.render()
-    assert "## Active Skills" in rendered
+    assert "## Trusted Skills" in rendered
     assert "### writer" in rendered
     assert "Follow writer rules." in rendered
     assert SkillUsageTracker(anima_dir).get_stats("writer").use_count == 1

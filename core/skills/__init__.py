@@ -52,6 +52,7 @@ from core.skills.models import (
     SkillHubLockEntry,
     SkillLifecycleState,
     SkillMetadata,
+    SkillPolicyMetadata,
     SkillRiskMetadata,
     SkillRoutingMetadata,
     SkillScanVerdict,
@@ -63,6 +64,7 @@ from core.skills.models import (
     SkillUsageStats,
     ThreatPattern,
 )
+from core.skills.policy import SkillActivationPolicy, policy_for_skill
 from core.skills.promotion import (
     ProcedurePromotionCandidate,
     ProcedureToSkillConverter,
@@ -70,6 +72,7 @@ from core.skills.promotion import (
     SkillPromotionResult,
 )
 from core.skills.router import SkillRouteCandidate, SkillRouter
+from core.skills.trust import TrustedPromotionResult, promote_skill_to_trusted
 from core.skills.usage import SkillUsageTracker
 
 __all__ = [
@@ -86,6 +89,8 @@ __all__ = [
     "SkillHubLockEntry",
     "SkillLifecycleState",
     "SkillMetadata",
+    "SkillPolicyMetadata",
+    "SkillActivationPolicy",
     "SkillPromotionResult",
     "SkillRouteCandidate",
     "SkillRouter",
@@ -102,6 +107,7 @@ __all__ = [
     "SkillUsageEventType",
     "SkillUsageStats",
     "SkillUsageTracker",
+    "TrustedPromotionResult",
     "ActiveSkillAttachment",
     "ActiveSkillContextResult",
     "ActiveSkillItem",
@@ -123,5 +129,7 @@ __all__ = [
     "load_skill_metadata",
     "set_active_skill_refs",
     "skill_access_decision",
+    "policy_for_skill",
+    "promote_skill_to_trusted",
     "validate_thread_id",
 ]
