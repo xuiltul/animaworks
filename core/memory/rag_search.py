@@ -322,6 +322,7 @@ class RAGMemorySearch:
             )
 
         primary_results: list[dict] = []
+        used_keyword_fallback = False
         indexer = self._get_indexer()
         if indexer is not None:
             try:
@@ -333,6 +334,7 @@ class RAGMemorySearch:
                 )
             except Exception as e:
                 logger.debug("Vector search failed, falling back to keyword: %s", e)
+                used_keyword_fallback = True
                 primary_results = self._keyword_search_fallback(
                     query,
                     scope,
@@ -343,6 +345,7 @@ class RAGMemorySearch:
                     common_knowledge_dir=common_knowledge_dir,
                 )
         else:
+            used_keyword_fallback = True
             primary_results = self._keyword_search_fallback(
                 query,
                 scope,
@@ -353,6 +356,9 @@ class RAGMemorySearch:
                 common_knowledge_dir=common_knowledge_dir,
             )
 
+        if used_keyword_fallback and primary_results:
+            return primary_results
+
         if scope == "all" and reciprocal_rank_fusion is not None and search_activity_log is not None:
             return self._search_scope_all_hybrid(
                 query,
@@ -361,6 +367,7 @@ class RAGMemorySearch:
                 episodes_dir=episodes_dir,
                 procedures_dir=procedures_dir,
                 common_knowledge_dir=common_knowledge_dir,
+                vector_pool=primary_results if not used_keyword_fallback else None,
             )
 
         return primary_results
@@ -407,6 +414,7 @@ class RAGMemorySearch:
         episodes_dir: Path,
         procedures_dir: Path,
         common_knowledge_dir: Path,
+        vector_pool: list[dict] | None = None,
     ) -> list[dict]:
         """Hybrid scope=all: multi-source RRF → rerank → confidence gate."""
         from core.memory.retrieval.pipeline import RetrievalPipeline
@@ -417,13 +425,14 @@ class RAGMemorySearch:
 
         ranked_lists: list[list[dict]] = []
 
-        vector_pool = self._vector_search_primary(
-            query,
-            "all",
-            offset=0,
-            knowledge_dir=knowledge_dir,
-            result_limit=pool_k,
-        )
+        if vector_pool is None:
+            vector_pool = self._vector_search_primary(
+                query,
+                "all",
+                offset=0,
+                knowledge_dir=knowledge_dir,
+                result_limit=pool_k,
+            )
         if vector_pool:
             ranked_lists.append(vector_pool)
 
@@ -446,7 +455,7 @@ class RAGMemorySearch:
 
         keyword_hits = self._keyword_search_fallback(
             query,
-            "episodes",
+            "all",
             0,
             knowledge_dir=knowledge_dir,
             episodes_dir=episodes_dir,
