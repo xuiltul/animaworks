@@ -102,3 +102,44 @@ results/
 
 - **Embedding**: `intfloat/multilingual-e5-small` (384次元)
 - **データ隔離**: 一時ディレクトリ（`ANIMAWORKS_DATA_DIR`）を使用、既存データに影響しない
+
+## Legacy 回帰スモーク（Wave 1 harness）
+
+固定ベースライン: `benchmarks/results/baselines/legacy_scope_all_20260522.json`  
+（2026-05-22 計測: overall F1 **63.7%**, open_domain **70.8%**, 1 conv / top-k=10）
+
+### 環境変数
+
+| 変数 | 必須 | 説明 |
+|------|------|------|
+| `OPENAI_API_BASE` | Yes（スモーク実行時） | 回答 LLM の OpenAI 互換 API |
+| `OPENAI_API_KEY` | 推奨 | API キー（ローカル vLLM では `dummy` 可） |
+| `LOCOMO_ANSWER_MODEL` | No | pytest 用モデル（default: `gpt-4o-mini`） |
+
+### シェルスクリプト
+
+```bash
+export OPENAI_API_BASE="http://host:8001/v1"
+export OPENAI_API_KEY="dummy"
+chmod +x scripts/locomo_legacy_smoke.sh
+./scripts/locomo_legacy_smoke.sh
+```
+
+Neo4j 確認をスキップ: `./scripts/locomo_legacy_smoke.sh --skip-neo4j`
+
+### pytest
+
+```bash
+# ベースライン JSON の存在確認のみ（LLM 不要）
+pytest tests/integration/test_locomo_legacy_smoke.py::test_legacy_baseline_file_shape -m locomo
+
+# 1 conv フルスモーク（LLM 必須）
+pytest tests/integration/test_locomo_legacy_smoke.py -m locomo
+```
+
+### ベースライン更新手順
+
+1. `./scripts/locomo_legacy_smoke.sh` で新結果を取得
+2. overall / open_domain が意図的改善であることを確認
+3. `benchmarks/results/baselines/legacy_scope_all_20260522.json` の `overall_f1` / `by_category` を更新（ファイル名は日付サフィックスで新規作成しても可）
+

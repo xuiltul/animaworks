@@ -97,6 +97,7 @@ class RAGMemorySearch:
         self._common_skills_dir = common_skills_dir
         self._indexer = None
         self._indexer_initialized = False
+        self._last_search_meta: dict[str, object] = {}
 
     def _init_indexer(self) -> None:
         """Initialize RAG indexer if dependencies are available.
@@ -308,6 +309,7 @@ class RAGMemorySearch:
         (activated when ChromaDB is unavailable).
         """
         offset = max(0, min(offset, 50))
+        self._last_search_meta = {}
 
         if scope == "activity_log":
             if search_activity_log is None:
@@ -352,25 +354,175 @@ class RAGMemorySearch:
             )
 
         if scope == "all" and reciprocal_rank_fusion is not None and search_activity_log is not None:
-            try:
-                bm25_results = search_activity_log(
-                    self._anima_dir,
-                    query,
-                    top_k=10,
-                    offset=0,
-                )
-            except Exception:
-                logger.debug("activity_log BM25 search failed", exc_info=True)
-                bm25_results = []
-
-            if bm25_results:
-                return reciprocal_rank_fusion(
-                    primary_results,
-                    bm25_results,
-                    k=60,
-                )[:10]
+            return self._search_scope_all_hybrid(
+                query,
+                offset=offset,
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+            )
 
         return primary_results
+
+    @property
+    def last_search_meta(self) -> dict[str, object]:
+        """Metadata from the most recent search (e.g. abstain flag)."""
+        return dict(self._last_search_meta)
+
+    def _load_rag_pipeline_settings(self) -> dict[str, object]:
+        """Resolve RAG pipeline knobs from config with safe defaults."""
+        defaults: dict[str, object] = {
+            "rerank_enabled": True,
+            "rerank_candidate_pool": 50,
+            "cross_encoder_model": "cross-encoder/ms-marco-MiniLM-L-12-v2",
+            "abstain_on_low_confidence": True,
+            "confidence_threshold": 0.35,
+            "rrf_confidence_threshold": 0.02,
+        }
+        try:
+            from core.config import load_config
+
+            rag = load_config().rag
+            defaults.update(
+                {
+                    "rerank_enabled": rag.rerank_enabled,
+                    "rerank_candidate_pool": rag.rerank_candidate_pool,
+                    "cross_encoder_model": rag.cross_encoder_model,
+                    "abstain_on_low_confidence": rag.abstain_on_low_confidence,
+                    "confidence_threshold": rag.confidence_threshold,
+                    "rrf_confidence_threshold": rag.rrf_confidence_threshold,
+                }
+            )
+        except Exception:
+            logger.debug("Using default RAG pipeline settings", exc_info=True)
+        return defaults
+
+    def _search_scope_all_hybrid(
+        self,
+        query: str,
+        *,
+        offset: int,
+        knowledge_dir: Path,
+        episodes_dir: Path,
+        procedures_dir: Path,
+        common_knowledge_dir: Path,
+    ) -> list[dict]:
+        """Hybrid scope=all: multi-source RRF → rerank → confidence gate."""
+        from core.memory.retrieval.pipeline import RetrievalPipeline
+
+        settings = self._load_rag_pipeline_settings()
+        pool_k = int(settings["rerank_candidate_pool"])
+        limit = 10
+
+        ranked_lists: list[list[dict]] = []
+
+        vector_pool = self._vector_search_primary(
+            query,
+            "all",
+            offset=0,
+            knowledge_dir=knowledge_dir,
+            result_limit=pool_k,
+        )
+        if vector_pool:
+            ranked_lists.append(vector_pool)
+
+        graph_pool = self._graph_episodes_search(query, pool_k, knowledge_dir)
+        if graph_pool:
+            ranked_lists.append(graph_pool)
+
+        if search_activity_log is not None:
+            try:
+                activity_hits = search_activity_log(
+                    self._anima_dir,
+                    query,
+                    top_k=pool_k,
+                    offset=0,
+                )
+                if activity_hits:
+                    ranked_lists.append(activity_hits)
+            except Exception:
+                logger.debug("activity_log BM25 search failed", exc_info=True)
+
+        keyword_hits = self._keyword_search_fallback(
+            query,
+            "episodes",
+            0,
+            knowledge_dir=knowledge_dir,
+            episodes_dir=episodes_dir,
+            procedures_dir=procedures_dir,
+            common_knowledge_dir=common_knowledge_dir,
+        )
+        if keyword_hits:
+            ranked_lists.append(keyword_hits[:pool_k])
+
+        pipeline = RetrievalPipeline(
+            cross_encoder_model=str(settings["cross_encoder_model"]),
+        )
+        result = pipeline.run(
+            query,
+            ranked_lists,
+            limit=limit,
+            pool_k=pool_k,
+            rerank_enabled=bool(settings["rerank_enabled"]),
+            abstain_on_low_confidence=bool(settings["abstain_on_low_confidence"]),
+            confidence_threshold=float(settings["confidence_threshold"]),
+            rrf_confidence_threshold=float(settings["rrf_confidence_threshold"]),
+        )
+        self._last_search_meta = {
+            "abstain": result.abstain,
+            "abstain_reason": result.abstain_reason,
+        }
+
+        if offset > 0:
+            return result.items[offset : offset + limit]
+        return result.items[:limit]
+
+    def _graph_episodes_search(
+        self,
+        query: str,
+        pool_k: int,
+        knowledge_dir: Path,
+    ) -> list[dict]:
+        """Episodes vector search with graph spreading activation."""
+        from core.memory.rag.retriever import MemoryRetriever
+
+        indexer = self._get_indexer()
+        if indexer is None:
+            return []
+
+        anima_name = self._anima_dir.name
+        retriever = MemoryRetriever(
+            indexer.vector_store,
+            indexer,
+            knowledge_dir,
+        )
+        try:
+            rag_results = retriever.search(
+                query=query,
+                anima_name=anima_name,
+                memory_type="episodes",
+                top_k=pool_k,
+                enable_spreading_activation=True,
+            )
+        except Exception:
+            logger.debug("graph episodes search failed", exc_info=True)
+            return []
+
+        out: list[dict] = []
+        for r in rag_results:
+            out.append(
+                {
+                    "source_file": r.metadata.get("source_file", r.doc_id),
+                    "content": r.content,
+                    "score": r.score,
+                    "chunk_index": int(r.metadata.get("chunk_index", 0)),
+                    "total_chunks": int(r.metadata.get("total_chunks", 1)),
+                    "memory_type": "episodes",
+                    "search_method": "vector_graph",
+                }
+            )
+        return out
 
     def _vector_search_primary(
         self,
@@ -378,6 +530,8 @@ class RAGMemorySearch:
         scope: str,
         offset: int,
         knowledge_dir: Path,
+        *,
+        result_limit: int | None = None,
     ) -> list[dict]:
         """Perform vector search as primary result source."""
         from core.memory.rag.retriever import MemoryRetriever
@@ -395,10 +549,14 @@ class RAGMemorySearch:
         include_shared = scope in ("common_knowledge", "skills", "all")
         all_results: list[dict] = []
         tokens = [tok for tok in query.lower().split() if tok]
+        page_size = result_limit if result_limit is not None else 10
 
         for memory_type in self._resolve_search_types(scope):
-            top_k = _EPISODES_TOP_K if memory_type == "episodes" else _DEFAULT_TOP_K
-            fetch_k = offset + top_k
+            if result_limit is not None:
+                fetch_k = result_limit
+            else:
+                per_type = _EPISODES_TOP_K if memory_type == "episodes" else _DEFAULT_TOP_K
+                fetch_k = offset + per_type
 
             rag_results = retriever.search(
                 query=query,
@@ -432,7 +590,9 @@ class RAGMemorySearch:
                 )
 
         all_results.sort(key=lambda x: x["score"], reverse=True)
-        return all_results[offset : offset + 10]
+        if result_limit is not None:
+            return all_results[:result_limit]
+        return all_results[offset : offset + page_size]
 
     def _keyword_search_fallback(
         self,

@@ -227,6 +227,12 @@ class RAGConfig(BaseModel):
     vector_worker_request_timeout_seconds: float = 30.0
     vector_worker_restart_backoff_seconds: float = 2.0
     vector_worker_fallback_direct: bool = False
+    rerank_enabled: bool = True
+    rerank_candidate_pool: int = 50
+    cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+    abstain_on_low_confidence: bool = True
+    confidence_threshold: float = 0.35
+    rrf_confidence_threshold: float = 0.02
 
 
 class Neo4jConfig(BaseModel):

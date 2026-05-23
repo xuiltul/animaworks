@@ -30,6 +30,7 @@ class _FakeHandler(MemoryToolsMixin):
     def __init__(self, search_results: list[dict]) -> None:
         self._memory = MagicMock()
         self._memory.search_memory_text.return_value = search_results
+        self._memory.last_search_meta = {}
         self._activity = MagicMock()
         self._anima_name = "test"
         self._read_paths: set[str] = set()
@@ -72,6 +73,18 @@ class TestSearchMemoryCountHeader:
         output = handler._handle_search_memory({"query": "missing"})
 
         assert output == "No results for 'missing'"
+
+    def test_abstain_meta_in_no_results_message(self) -> None:
+        handler = _FakeHandler([])
+        handler._memory.last_search_meta = {
+            "abstain": True,
+            "abstain_reason": "low_confidence",
+        }
+
+        output = handler._handle_search_memory({"query": "missing"})
+
+        assert "abstain=true" in output
+        assert "low_confidence" in output
 
     def test_no_more_results_at_offset(self) -> None:
         handler = _FakeHandler([])

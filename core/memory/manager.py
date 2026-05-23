@@ -593,6 +593,11 @@ class MemoryManager:
             common_knowledge_dir=self.common_knowledge_dir,
         )
 
+    @property
+    def last_search_meta(self) -> dict[str, object]:
+        """Metadata from the most recent ``search_memory_text`` call."""
+        return self._rag.last_search_meta
+
     def search_procedures(self, query: str) -> list[dict]:
         """Facade: search via search_memory_text with procedures scope."""
         return self.search_memory_text(query, scope="procedures")

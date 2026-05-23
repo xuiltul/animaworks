@@ -482,7 +482,12 @@ class MemoryToolsMixin:
             len(results),
         )
         if not results:
-            if offset > 0:
+            meta = getattr(self._memory, "last_search_meta", {}) or {}
+            if meta.get("abstain"):
+                base = (
+                    f'No results for "{query}" [abstain=true reason={meta.get("abstain_reason", "low_confidence")}]'
+                )
+            elif offset > 0:
                 base = f"No more results for '{query}' at offset={offset}."
             else:
                 base = f"No results for '{query}'"

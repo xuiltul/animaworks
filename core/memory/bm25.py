@@ -287,24 +287,6 @@ def search_activity_log(
 
 def reciprocal_rank_fusion(*ranked_lists: list[dict[str, Any]], k: int = 60) -> list[dict[str, Any]]:
     """Merge ranked result lists with reciprocal rank fusion (RRF)."""
-    scores: dict[str, float] = {}
-    first_row: dict[str, dict[str, Any]] = {}
+    from core.memory.retrieval.rrf import reciprocal_rank_fusion as _rrf
 
-    for lst in ranked_lists:
-        for rank, item in enumerate(lst, start=1):
-            sf = str(item.get("source_file", ""))
-            ts = item.get("ts")
-            doc_id = f"{sf}\x00{ts}"
-            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
-            if doc_id not in first_row:
-                first_row[doc_id] = dict(item)
-
-    merged: list[dict[str, Any]] = []
-    for doc_id, rrf in scores.items():
-        row = dict(first_row[doc_id])
-        row["score"] = rrf
-        row["search_method"] = "rrf"
-        merged.append(row)
-
-    merged.sort(key=lambda r: float(r.get("score", 0.0)), reverse=True)
-    return merged
+    return _rrf(*ranked_lists, k=k)

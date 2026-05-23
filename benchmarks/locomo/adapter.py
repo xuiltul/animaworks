@@ -281,6 +281,8 @@ class AnimaWorksLoCoMoAdapter:
         self._retriever: Any = None
         self._bm25_corpus: list[tuple[str, dict[str, Any]]] | None = None
         self._bm25_index: Any = None
+        self._last_abstain: bool = False
+        self._last_abstain_reason: str = ""
         # Deferred heavy init
         self._init_isolated_rag()
 
@@ -401,8 +403,78 @@ class AnimaWorksLoCoMoAdapter:
             )
         return out
 
+    def _pipeline_item_from_adapter_hit(self, item: dict[str, Any]) -> dict[str, Any]:
+        """Normalize adapter retrieval dict for ``RetrievalPipeline``."""
+        meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        return {
+            "content": (item.get("content") or "").strip(),
+            "score": float(item.get("score", 0.0)),
+            "source_file": str(meta.get("source_file", meta.get("source", ""))),
+            "chunk_index": int(meta.get("section", meta.get("chunk_index", 0))),
+            "memory_type": "episodes",
+            "search_method": str(meta.get("search_method", "")),
+        }
+
+    def _adapter_hit_from_pipeline_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        """Convert pipeline output back to LoCoMo adapter context shape."""
+        return {
+            "content": item.get("content", ""),
+            "score": float(item.get("score", 0.0)),
+            "metadata": {
+                "source_file": item.get("source_file", ""),
+                "chunk_index": item.get("chunk_index", 0),
+                "search_method": item.get("search_method", "pipeline"),
+            },
+        }
+
+    def _load_pipeline_settings(self) -> dict[str, object]:
+        """Resolve RAG pipeline knobs (same defaults as ``RAGMemorySearch``)."""
+        defaults: dict[str, object] = {
+            "rerank_enabled": True,
+            "rerank_candidate_pool": 50,
+            "cross_encoder_model": "cross-encoder/ms-marco-MiniLM-L-12-v2",
+            "abstain_on_low_confidence": True,
+            "confidence_threshold": 0.35,
+            "rrf_confidence_threshold": 0.02,
+        }
+        try:
+            cfg_path = Path("~/.animaworks/config.json").expanduser()
+            if cfg_path.is_file():
+                cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+                rag = cfg.get("rag", {})
+                defaults.update(
+                    {
+                        "rerank_enabled": rag.get("rerank_enabled", defaults["rerank_enabled"]),
+                        "rerank_candidate_pool": rag.get(
+                            "rerank_candidate_pool",
+                            defaults["rerank_candidate_pool"],
+                        ),
+                        "cross_encoder_model": rag.get(
+                            "cross_encoder_model",
+                            defaults["cross_encoder_model"],
+                        ),
+                        "abstain_on_low_confidence": rag.get(
+                            "abstain_on_low_confidence",
+                            defaults["abstain_on_low_confidence"],
+                        ),
+                        "confidence_threshold": rag.get(
+                            "confidence_threshold",
+                            defaults["confidence_threshold"],
+                        ),
+                        "rrf_confidence_threshold": rag.get(
+                            "rrf_confidence_threshold",
+                            defaults["rrf_confidence_threshold"],
+                        ),
+                    },
+                )
+        except Exception:
+            logger.debug("Using default pipeline settings for LoCoMo adapter", exc_info=True)
+        return defaults
+
     def retrieve(self, question: str) -> list[dict[str, Any]]:
         """Run retrieval for ``question`` following ``self._search_mode``."""
+        self._last_abstain = False
+        self._last_abstain_reason = ""
         assert self._retriever is not None
         if self._search_mode == "vector":
             res = self._retriever.search(
@@ -422,18 +494,50 @@ class AnimaWorksLoCoMoAdapter:
                 enable_spreading_activation=True,
             )
             return self._retrieval_to_dicts(res)
-        # scope_all: dense + graph on episodes, BM25 on episode text, RRF merge
-        pool = max(self._top_k * 4, 20)
-        vec = self._retriever.search(
+        # scope_all: vector + graph + BM25 → shared RetrievalPipeline (prod parity)
+        from core.memory.retrieval.pipeline import RetrievalPipeline  # noqa: PLC0415
+
+        settings = self._load_pipeline_settings()
+        pool_k = max(int(settings["rerank_candidate_pool"]), self._top_k * 4, 20)
+
+        vec_res = self._retriever.search(
             query=question,
             anima_name=ANIMA_NAME,
             memory_type="episodes",
-            top_k=pool,
+            top_k=pool_k,
+            enable_spreading_activation=False,
+        )
+        graph_res = self._retriever.search(
+            query=question,
+            anima_name=ANIMA_NAME,
+            memory_type="episodes",
+            top_k=pool_k,
             enable_spreading_activation=True,
         )
-        vec_dicts = self._retrieval_to_dicts(vec)
-        bm25_dicts = self._bm25_search(question, top_k=pool)
-        return self._rrf_merge(vec_dicts, bm25_dicts, k=60)[: self._top_k]
+        vec_dicts = self._retrieval_to_dicts(vec_res)
+        graph_dicts = self._retrieval_to_dicts(graph_res)
+        bm25_dicts = self._bm25_search(question, top_k=pool_k)
+
+        ranked_lists = [
+            [self._pipeline_item_from_adapter_hit(x) for x in vec_dicts],
+            [self._pipeline_item_from_adapter_hit(x) for x in graph_dicts],
+            [self._pipeline_item_from_adapter_hit(x) for x in bm25_dicts],
+        ]
+
+        pipeline = RetrievalPipeline(cross_encoder_model=str(settings["cross_encoder_model"]))
+        result = pipeline.run(
+            question,
+            ranked_lists,
+            limit=self._top_k,
+            pool_k=pool_k,
+            rerank_enabled=bool(settings["rerank_enabled"]),
+            abstain_on_low_confidence=bool(settings["abstain_on_low_confidence"]),
+            confidence_threshold=float(settings["confidence_threshold"]),
+            rrf_confidence_threshold=float(settings["rrf_confidence_threshold"]),
+        )
+        self._last_abstain = result.abstain
+        self._last_abstain_reason = result.abstain_reason
+        return [self._adapter_hit_from_pipeline_item(x) for x in result.items]
 
     def _build_bm25_cache(self) -> None:
         """Build BM25 index from episode files; cached until reset/ingest."""
@@ -574,6 +678,8 @@ class AnimaWorksLoCoMoAdapter:
 
     def answer(self, question: str, context: list[dict], *, model: str = "gpt-4o-mini") -> str:
         """Generate a short answer from retrieved ``context`` using LiteLLM."""
+        if getattr(self, "_last_abstain", False):
+            return "No information available."
         parts = []
         for i, c in enumerate(context, start=1):
             t = (c.get("content") or "").strip()

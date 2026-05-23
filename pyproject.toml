@@ -110,6 +110,7 @@ markers = [
     "live: tests making real API calls (skip with --mock or no API key)",
     "azure: tests requiring Azure OpenAI API key",
     "ollama: tests requiring Ollama server access",
+    "locomo: LoCoMo benchmark smoke (requires OPENAI_API_BASE; run with -m locomo)",
     "timeout: set per-test timeout in seconds (requires pytest-timeout)",
 ]
 
