@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE_PATH = ROOT / "benchmarks/results/baselines/legacy_scope_all_20260522.json"
+BASELINE_PATH = ROOT / "benchmarks/locomo/baselines/legacy_scope_all_20260522.json"
 DATA_PATH = ROOT / "benchmarks/locomo/data/locomo10.json"
 
 

@@ -105,7 +105,7 @@ results/
 
 ## Legacy 回帰スモーク（Wave 1 harness）
 
-固定ベースライン: `benchmarks/results/baselines/legacy_scope_all_20260522.json`  
+固定ベースライン: `benchmarks/locomo/baselines/legacy_scope_all_20260522.json`  
 （2026-05-22 計測: overall F1 **63.7%**, open_domain **70.8%**, 1 conv / top-k=10）
 
 ### 環境変数
@@ -141,5 +141,5 @@ pytest tests/integration/test_locomo_legacy_smoke.py -m locomo
 
 1. `./scripts/locomo_legacy_smoke.sh` で新結果を取得
 2. overall / open_domain が意図的改善であることを確認
-3. `benchmarks/results/baselines/legacy_scope_all_20260522.json` の `overall_f1` / `by_category` を更新（ファイル名は日付サフィックスで新規作成しても可）
+3. `benchmarks/locomo/baselines/legacy_scope_all_20260522.json` の `overall_f1` / `by_category` を更新（ファイル名は日付サフィックスで新規作成しても可）
 

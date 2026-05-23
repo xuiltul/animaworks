@@ -1,0 +1,20 @@
+{
+  "source_run": "benchmarks/results/locomo-20260522-154109/summary.json",
+  "timestamp": "2026-05-22T19:31:00",
+  "mode": "legacy_scope_all",
+  "answer_model": "openai/mlx-community/Qwen3.5-397B-A17B-4bit",
+  "conversations": 1,
+  "top_k": 10,
+  "overall_f1": 0.6373712700312547,
+  "by_category": {
+    "temporal": {"f1": 0.6072072072072072, "count": 37},
+    "complex": {"f1": 0.3401709401709402, "count": 13},
+    "multi_hop": {"f1": 0.41917162698412697, "count": 32},
+    "open_domain": {"f1": 0.7076357397691246, "count": 70},
+    "adversarial": {"f1": 0.7872340425531915, "count": 47}
+  },
+  "thresholds": {
+    "overall_f1_min_delta": 0.02,
+    "open_domain_f1_min_delta": 0.03
+  }
+}

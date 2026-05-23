@@ -59,7 +59,7 @@ fi
 cp "$LATEST" "$OUT"
 echo "Smoke complete: $OUT"
 
-BASELINE="benchmarks/results/baselines/legacy_scope_all_20260522.json"
+BASELINE="benchmarks/locomo/baselines/legacy_scope_all_20260522.json"
 "$PYTHON" - <<'PY'
 import json
 import sys
