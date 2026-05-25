@@ -112,17 +112,27 @@ results/
 
 | 変数 | 必須 | 説明 |
 |------|------|------|
-| `OPENAI_API_BASE` | Yes（スモーク実行時） | 回答 LLM の OpenAI 互換 API |
-| `OPENAI_API_KEY` | 推奨 | API キー（ローカル vLLM では `dummy` 可） |
-| `LOCOMO_ANSWER_MODEL` | No | pytest 用モデル（default: `gpt-4o-mini`） |
+| `LOCOMO_ANSWER_MODEL` | No | 回答モデル（default: `deepseek-v4-flash`） |
+| `LOCOMO_LLM_CREDENTIAL` | No | `~/.animaworks/config.json` の credential 名（default: `vllm-lb` → `http://localhost:4000/v1`） |
+| `OPENAI_API_BASE` | No | 明示 override（未設定時は credential 解決） |
+| `OPENAI_API_KEY` | 推奨 | API キー（ローカル LiteLLM では `dummy` 可） |
 
-### シェルスクリプト
+trserveru 標準構成（LiteLLM プロキシ）:
 
 ```bash
-export OPENAI_API_BASE="http://host:8001/v1"
-export OPENAI_API_KEY="dummy"
-chmod +x scripts/locomo_legacy_smoke.sh
+# 追加設定なしで vllm-lb (localhost:4000) を使用
 ./scripts/locomo_legacy_smoke.sh
+
+# 明示指定する場合
+export LOCOMO_ANSWER_MODEL="deepseek-v4-flash"
+export LOCOMO_LLM_CREDENTIAL="vllm-lb"
+```
+
+旧 MacStudio 直叩きとの比較:
+
+```bash
+export OPENAI_API_BASE="http://100.72.124.21:8001/v1"
+export LOCOMO_ANSWER_MODEL="openai/mlx-community/Qwen3.5-397B-A17B-4bit"
 ```
 
 Neo4j 確認をスキップ: `./scripts/locomo_legacy_smoke.sh --skip-neo4j`

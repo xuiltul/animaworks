@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.locomo.adapter import SEARCH_MODES, AnimaWorksLoCoMoAdapter, load_dataset
+from benchmarks.locomo.llm_config import default_answer_model
 from benchmarks.locomo.metrics import CATEGORY_NAMES, compute_summary, eval_by_category, llm_judge_sync
 
 logger = logging.getLogger(__name__)
@@ -461,9 +462,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--answer-model",
         type=str,
-        default="gpt-4o-mini",
+        default=default_answer_model(),
         dest="answer_model",
-        help="answer generation model (default: gpt-4o-mini)",
+        help=f"answer generation model (default: {default_answer_model()} via LiteLLM proxy)",
     )
     p.add_argument(
         "--output",

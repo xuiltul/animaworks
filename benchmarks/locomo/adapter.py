@@ -28,8 +28,7 @@ SEARCH_MODES: tuple[str, ...] = ("vector", "vector_graph", "scope_all")
 _SESSION_RE = re.compile(r"^session_(\d+)$")
 
 _ANSWER_SYSTEM = (
-    "You are an expert assistant answering questions about past conversations "
-    "based on the provided context."
+    "You are an expert assistant answering questions about past conversations based on the provided context."
 )
 
 _ANSWER_TEMPLATE = """# INSTRUCTIONS:
@@ -90,57 +89,7 @@ except ImportError:
 
 # ── LLM helpers ──────────
 
-
-def _resolve_llm_kwargs(model: str) -> dict[str, Any]:
-    """Resolve api_base and extra kwargs from AnimaWorks credentials.
-
-    Resolution order:
-      0. ``OPENAI_API_BASE`` / ``OPENAI_API_KEY`` env vars (explicit override)
-      1. Anima status.json ``credential`` field (exact match in config credentials)
-      2. Credential whose ``base_url`` is set AND name contains "vllm" or "macstudio"
-    """
-    kwargs: dict[str, Any] = {}
-    model_lower = model.lower()
-    if "qwen" in model_lower:
-        kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
-
-    env_base = os.environ.get("OPENAI_API_BASE") or os.environ.get("OPENAI_BASE_URL")
-    env_key = os.environ.get("OPENAI_API_KEY")
-    if env_base:
-        kwargs["api_base"] = env_base
-        kwargs["api_key"] = env_key or "dummy"
-        return kwargs
-
-    try:
-        cfg_path = Path("~/.animaworks/config.json").expanduser()
-        if not cfg_path.is_file():
-            return kwargs
-        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-        creds = cfg.get("credentials", {})
-
-        matched_cred: dict[str, Any] | None = None
-        for _name, cred in creds.items():
-            base_url = cred.get("base_url")
-            if not base_url:
-                continue
-            name_lower = _name.lower()
-            if "vllm" in name_lower or "macstudio" in name_lower:
-                if matched_cred is None:
-                    matched_cred = cred
-                if "qwen" in name_lower and "qwen" in model_lower:
-                    matched_cred = cred
-                    break
-                if "glm" in name_lower and "glm" in model_lower:
-                    matched_cred = cred
-                    break
-
-        if matched_cred:
-            kwargs["api_base"] = matched_cred["base_url"]
-            kwargs["api_key"] = matched_cred.get("api_key") or "dummy"
-    except Exception:
-        pass
-    return kwargs
-
+from benchmarks.locomo.llm_config import default_answer_model, resolve_locomo_litellm_kwargs
 
 # ── load_dataset ──────────
 
@@ -633,12 +582,12 @@ class AnimaWorksLoCoMoAdapter:
         """Synchronous LLM call with retries (used inside running event loop)."""
         import litellm  # noqa: PLC0415
 
+        litellm_model, extra = resolve_locomo_litellm_kwargs(model)
         last: Exception | None = None
-        extra: dict[str, Any] = _resolve_llm_kwargs(model)
         for attempt in range(1, 4):
             try:
                 r = litellm.completion(
-                    model=model,
+                    model=litellm_model,
                     messages=messages,
                     temperature=0.0,
                     max_tokens=512,
@@ -658,13 +607,16 @@ class AnimaWorksLoCoMoAdapter:
         """Async LLM call with retries."""
         import litellm  # noqa: PLC0415
 
+        litellm_model, extra = resolve_locomo_litellm_kwargs(model)
         last: Exception | None = None
         for attempt in range(1, 4):
             try:
                 r = await litellm.acompletion(
-                    model=model,
+                    model=litellm_model,
                     messages=messages,
                     temperature=0.0,
+                    max_tokens=512,
+                    **extra,
                 )
                 ch = r.choices[0].message
                 return (ch.content or "").strip()
@@ -676,7 +628,7 @@ class AnimaWorksLoCoMoAdapter:
         assert last is not None
         raise last
 
-    def answer(self, question: str, context: list[dict], *, model: str = "gpt-4o-mini") -> str:
+    def answer(self, question: str, context: list[dict], *, model: str | None = None) -> str:
         """Generate a short answer from retrieved ``context`` using LiteLLM."""
         if getattr(self, "_last_abstain", False):
             return "No information available."
@@ -691,7 +643,7 @@ class AnimaWorksLoCoMoAdapter:
             {"role": "system", "content": _ANSWER_SYSTEM},
             {"role": "user", "content": user_content},
         ]
-        return self._complete_sync(messages, model)
+        return self._complete_sync(messages, model or default_answer_model())
 
     def cleanup(self) -> None:
         """Remove temp data directory and restore ``ANIMAWORKS_DATA_DIR``."""

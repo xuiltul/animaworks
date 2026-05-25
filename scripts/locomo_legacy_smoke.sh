@@ -23,9 +23,10 @@ if [[ "$SKIP_NEO4J" -eq 0 ]]; then
 fi
 
 if [[ -z "${OPENAI_API_BASE:-}" && -z "${OPENAI_BASE_URL:-}" ]]; then
-  echo "ERROR: OPENAI_API_BASE (or OPENAI_BASE_URL) is required for LoCoMo smoke." >&2
-  exit 1
+  echo "OPENAI_API_BASE unset — using config credential (default: vllm-lb / localhost:4000)"
 fi
+
+ANSWER_MODEL="${LOCOMO_ANSWER_MODEL:-deepseek-v4-flash}"
 
 DATA="benchmarks/locomo/data/locomo10.json"
 if [[ ! -f "$DATA" ]]; then
@@ -41,13 +42,14 @@ if [[ -x "$ROOT/.venv/bin/python" ]]; then
   PYTHON="$ROOT/.venv/bin/python"
 fi
 
-echo "Running Legacy scope_all smoke (1 conversation, top-k=10)..."
+echo "Running Legacy scope_all smoke (1 conversation, top-k=10, model=${ANSWER_MODEL})..."
 echo "Output: $OUT"
 
 "$PYTHON" -m benchmarks.locomo.runner \
   --mode scope_all \
   --conversations 1 \
   --top-k 10 \
+  --answer-model "$ANSWER_MODEL" \
   --output /tmp/locomo_smoke_run
 
 LATEST="$(ls -t /tmp/locomo_smoke_run/*_scope_all.json 2>/dev/null | head -1 || true)"
@@ -60,7 +62,7 @@ cp "$LATEST" "$OUT"
 echo "Smoke complete: $OUT"
 
 BASELINE="benchmarks/locomo/baselines/legacy_scope_all_20260522.json"
-"$PYTHON" - <<'PY'
+"$PYTHON" - "$OUT" "$BASELINE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -84,6 +86,5 @@ if open_dom < b_open - d_open:
     raise SystemExit(f"FAIL: open_domain regression ({open_dom:.4f} < {b_open - d_open:.4f})")
 print("PASS: within baseline thresholds")
 PY
-"$OUT" "$BASELINE"
 
 echo "locomo_legacy_smoke: OK"

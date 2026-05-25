@@ -6,13 +6,15 @@ from pathlib import Path
 
 import pytest
 
+from benchmarks.locomo.llm_config import default_answer_model, llm_routing_configured
+
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE_PATH = ROOT / "benchmarks/locomo/baselines/legacy_scope_all_20260522.json"
 DATA_PATH = ROOT / "benchmarks/locomo/data/locomo10.json"
 
 
 def _llm_configured() -> bool:
-    return bool(os.environ.get("OPENAI_API_BASE") or os.environ.get("OPENAI_BASE_URL"))
+    return llm_routing_configured()
 
 
 @pytest.mark.locomo
@@ -29,7 +31,7 @@ def test_legacy_baseline_file_shape() -> None:
 def test_legacy_scope_all_within_baseline() -> None:
     """Run 1-conversation Legacy scope_all and compare to fixed baseline."""
     if not _llm_configured():
-        pytest.skip("OPENAI_API_BASE not set — skipping live LoCoMo smoke")
+        pytest.skip("LLM routing not configured — skipping live LoCoMo smoke")
     if not DATA_PATH.is_file():
         pytest.fail(
             f"dataset missing: {DATA_PATH}\n"
@@ -49,7 +51,7 @@ def test_legacy_scope_all_within_baseline() -> None:
         top_k=10,
         judge=False,
         judge_model="gpt-4o",
-        answer_model=os.environ.get("LOCOMO_ANSWER_MODEL", "gpt-4o-mini"),
+        answer_model=os.environ.get("LOCOMO_ANSWER_MODEL", default_answer_model()),
         exclude_cat5=False,
     )
     args.output.mkdir(parents=True, exist_ok=True)
@@ -66,9 +68,5 @@ def test_legacy_scope_all_within_baseline() -> None:
     d_overall = float(baseline["thresholds"]["overall_f1_min_delta"])
     d_open = float(baseline["thresholds"]["open_domain_f1_min_delta"])
 
-    assert overall >= b_overall - d_overall, (
-        f"overall_f1 regression: {overall:.4f} < {b_overall - d_overall:.4f}"
-    )
-    assert open_dom >= b_open - d_open, (
-        f"open_domain regression: {open_dom:.4f} < {b_open - d_open:.4f}"
-    )
+    assert overall >= b_overall - d_overall, f"overall_f1 regression: {overall:.4f} < {b_overall - d_overall:.4f}"
+    assert open_dom >= b_open - d_open, f"open_domain regression: {open_dom:.4f} < {b_open - d_open:.4f}"
