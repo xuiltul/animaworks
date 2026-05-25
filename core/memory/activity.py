@@ -319,6 +319,14 @@ class ActivityLogger(
                             raw = json.loads(line)
                         except json.JSONDecodeError:
                             continue
+                        if not isinstance(raw, dict):
+                            logger.debug(
+                                "Skipping non-object activity log entry at line %d in %s: %s",
+                                line_num,
+                                path,
+                                type(raw).__name__,
+                            )
+                            continue
                         if "event" in raw and "type" not in raw:
                             raw["type"] = raw.pop("event")
                         if type_set and raw.get("type") not in type_set:
