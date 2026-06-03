@@ -92,12 +92,16 @@ class UnifiedMemorySearch:
     ) -> None:
         self._anima_dir = anima_dir
         if common_knowledge_dir is None or common_skills_dir is None:
-            try:
-                from core.paths import get_data_dir
+            inferred_data_dir = anima_dir.parent.parent if len(anima_dir.parents) >= 2 else anima_dir.parent
+            if (inferred_data_dir / "common_knowledge").is_dir() or (inferred_data_dir / "common_skills").is_dir():
+                data_dir = inferred_data_dir
+            else:
+                try:
+                    from core.paths import get_data_dir
 
-                data_dir = get_data_dir()
-            except Exception:
-                data_dir = anima_dir.parent.parent if len(anima_dir.parents) >= 2 else anima_dir.parent
+                    data_dir = get_data_dir()
+                except Exception:
+                    data_dir = inferred_data_dir
             common_knowledge_dir = common_knowledge_dir or (data_dir / "common_knowledge")
             common_skills_dir = common_skills_dir or (data_dir / "common_skills")
         self._common_knowledge_dir = common_knowledge_dir

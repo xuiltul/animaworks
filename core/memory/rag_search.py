@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from pathlib import Path
 
 logger = logging.getLogger("animaworks.memory")
@@ -19,6 +20,29 @@ except ImportError:
 _EPISODES_TOP_K = 10
 _DEFAULT_TOP_K = 5
 WEIGHT_TOKEN_OVERLAP = 0.1
+
+
+def _keyword_token_matches(token: str, content_lower: str) -> bool:
+    """Return True when a keyword token matches content directly or as a compound term.
+
+    Japanese and mixed-script user messages are often extracted as a single
+    token such as ``pythonのコーディング規約について``.  Keyword fallback should
+    still match meaningful indexed terms (for example ``python`` or
+    ``コーディング規約``) embedded in that compound query token.
+    """
+    if token in content_lower:
+        return True
+    if len(token) < 4:
+        return False
+    for content_token in re.findall(r"[\w]+", content_lower, re.UNICODE):
+        if len(content_token) >= 3 and content_token in token:
+            return True
+    if any("\u3040" <= ch <= "\u30ff" or "\u4e00" <= ch <= "\u9fff" for ch in token):
+        for size in (8, 6, 4):
+            for start in range(0, max(0, len(token) - size + 1)):
+                if token[start : start + size] in content_lower:
+                    return True
+    return False
 
 
 # ── Shared-index change detection helpers ─────────────────
@@ -684,7 +708,7 @@ class RAGMemorySearch:
                 score = r.score
                 if tokens:
                     content_lower = r.content.lower()
-                    matched = sum(1 for tok in tokens if tok in content_lower)
+                    matched = sum(1 for tok in tokens if _keyword_token_matches(tok, content_lower))
                     overlap_ratio = matched / len(tokens)
                     score += WEIGHT_TOKEN_OVERLAP * overlap_ratio
 
@@ -762,7 +786,7 @@ class RAGMemorySearch:
                 except OSError:
                     continue
                 content_lower = content.lower()
-                matched = sum(1 for tok in tokens if tok in content_lower)
+                matched = sum(1 for tok in tokens if _keyword_token_matches(tok, content_lower))
                 if matched == 0:
                     continue
                 score = matched / len(tokens)
@@ -770,7 +794,7 @@ class RAGMemorySearch:
                 if rel_path not in file_scores or file_scores[rel_path]["score"] < score:
                     lines = content.split("\n")
                     preview = "\n".join(lines[:30])
-                    file_scores[rel_path] = {
+                    item = {
                         "source_file": rel_path,
                         "content": preview,
                         "score": score,
@@ -779,6 +803,9 @@ class RAGMemorySearch:
                         "memory_type": memory_type,
                         "search_method": "keyword_fallback",
                     }
+                    if memory_type == "common_knowledge":
+                        item["anima"] = "shared"
+                    file_scores[rel_path] = item
 
         if scope in ("facts", "all"):
             for hit in self._keyword_search_facts(query, tokens):
@@ -794,7 +821,7 @@ class RAGMemorySearch:
                     summary = conv_data.get("compressed_summary", "")
                     if summary:
                         content_lower = summary.lower()
-                        matched = sum(1 for tok in tokens if tok in content_lower)
+                        matched = sum(1 for tok in tokens if _keyword_token_matches(tok, content_lower))
                         if matched > 0:
                             score = matched / len(tokens)
                             file_scores["conversation_summary"] = {
