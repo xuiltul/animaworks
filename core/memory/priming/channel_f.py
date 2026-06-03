@@ -16,7 +16,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from core.memory.priming.utils import build_queries, search_and_merge
+from core.memory.priming.utils import build_queries
+from core.memory.retrieval.unified_search import UnifiedMemorySearch
 from core.time_utils import now_local
 
 logger = logging.getLogger(__name__)
@@ -99,7 +100,6 @@ async def channel_f_episodes(
         queries = build_queries(message, keywords, recent_human_messages)
         if not queries:
             return ""
-        anima_name = anima_dir.name
 
         _min_score: float | None = None
         try:
@@ -167,42 +167,37 @@ async def channel_f_episodes(
         if not episodes_dir.is_dir():
             return ""
 
-        retriever = get_retriever()
-        if retriever is None:
-            return ""
-
-        results = search_and_merge(
-            retriever,
+        searcher = UnifiedMemorySearch(anima_dir)
+        results = searcher.search_many(
             queries,
-            anima_name,
-            memory_type="episodes",
-            top_k=5,
-            min_score=_min_score,
+            scope="episodes",
+            limit=5,
+            trigger="chat",
+            min_score=float(_min_score) if _min_score is not None else 0.0,
         )
+        if bool(searcher.last_search_meta.get("abstain", False)):
+            logger.debug("Channel F: unified search abstained")
+            return ""
 
         if not results:
             return ""
 
         parts = []
-        accessed_results = []
         for result in results:
-            source = result.metadata.get("source_file") or result.doc_id
+            source = str(result.get("source_file", "") or result.get("doc_id", "") or "")
             path = to_episode_memory_path(source)
             if not path:
-                logger.debug("Channel F: skipping episode without readable path: %s", result.doc_id)
+                logger.debug("Channel F: skipping episode without readable path: %s", result.get("doc_id", ""))
                 continue
-            accessed_results.append(result)
             parts.append(
                 format_episode_pointer(
                     index=len(parts) + 1,
-                    score=result.score,
+                    score=float(result.get("score", 0.0) or 0.0),
                     source=source,
-                    content=result.content,
+                    content=str(result.get("content", "") or ""),
                     path=path,
                 )
             )
-        if accessed_results:
-            retriever.record_access(accessed_results, anima_name)
 
         logger.debug(
             "Channel F: Episode search returned %d results",

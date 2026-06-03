@@ -18,20 +18,9 @@ if TYPE_CHECKING:
     from core.memory.rag.retriever import MemoryRetriever
     from core.memory.rag.store import VectorStore
     from core.memory.rag_search import RAGMemorySearch
+    from core.memory.retrieval.unified_search import UnifiedMemorySearch
 
 logger = logging.getLogger(__name__)
-
-# ── Scope mapping ──────────────────────────────────────────────────────────
-
-_SCOPE_TO_MEMORY_TYPE: dict[str, str] = {
-    "knowledge": "knowledge",
-    "episodes": "episodes",
-    "procedures": "procedures",
-    "common_knowledge": "common_knowledge",
-    "skills": "skills",
-    "facts": "facts",
-    "all": "all",
-}
 
 _PATH_PART_TO_MEMORY_TYPE: dict[str, str] = {
     "episodes": "episodes",
@@ -42,6 +31,7 @@ _PATH_PART_TO_MEMORY_TYPE: dict[str, str] = {
     "common_knowledge": "common_knowledge",
     "common_skills": "common_skills",
 }
+
 
 class LegacyRAGBackend(MemoryBackend):
     """Legacy backend wrapping existing ChromaDB + RAG.
@@ -69,6 +59,7 @@ class LegacyRAGBackend(MemoryBackend):
         self._common_skills_dir = common_skills_dir or (data_dir / "common_skills")
 
         self._rag_search: RAGMemorySearch | None = None
+        self._unified_search: UnifiedMemorySearch | None = None
         self._retriever: MemoryRetriever | None = None
         self._indexer: MemoryIndexer | None = None
         self._vector_store: VectorStore | None = None
@@ -86,6 +77,19 @@ class LegacyRAGBackend(MemoryBackend):
                 self._common_skills_dir,
             )
         return self._rag_search
+
+    def _ensure_unified_search(self) -> UnifiedMemorySearch:
+        """Return a lazily initialised :class:`UnifiedMemorySearch`."""
+        if self._unified_search is None:
+            from core.memory.retrieval.unified_search import UnifiedMemorySearch
+
+            self._unified_search = UnifiedMemorySearch(
+                self._anima_dir,
+                common_knowledge_dir=self._common_knowledge_dir,
+                common_skills_dir=self._common_skills_dir,
+                rag_search=self._ensure_rag_search(),
+            )
+        return self._unified_search
 
     def _ensure_vector_store(self) -> VectorStore | None:
         """Return a lazily initialised :class:`VectorStore` (or ``None``)."""
@@ -175,39 +179,16 @@ class LegacyRAGBackend(MemoryBackend):
         time_start: str | None = None,
         time_end: str | None = None,
     ) -> list[RetrievedMemory]:
-        """Retrieve memories, delegating to retriever or search_memory_text."""
-        memory_type = _SCOPE_TO_MEMORY_TYPE.get(scope, "knowledge")
-
-        if scope in ("all", "activity_log", "facts", "episodes"):
-            return await self._retrieve_via_search_text(query, scope, limit, min_score)
-
-        retriever = self._ensure_retriever()
-        if retriever is None:
-            return await self._retrieve_via_search_text(query, scope, limit, min_score)
-
-        try:
-            include_shared = scope in ("common_knowledge", "skills", "all")
-            rag_min = min_score if min_score > 0.0 else None
-            results = await asyncio.to_thread(
-                retriever.search,
-                query,
-                self._anima_name,
-                memory_type=memory_type,
-                top_k=limit,
-                include_shared=include_shared,
-                min_score=rag_min,
-            )
-
-            if results:
-                try:
-                    await asyncio.to_thread(retriever.record_access, results, self._anima_name)
-                except Exception:
-                    logger.debug("record_access failed", exc_info=True)
-
-            return [self._retrieval_result_to_memory(r) for r in results]
-        except Exception:
-            logger.warning("retrieve via retriever failed, falling back", exc_info=True)
-            return await self._retrieve_via_search_text(query, scope, limit, min_score)
+        """Retrieve memories through the unified Legacy search policy."""
+        effective_time_end = time_end or as_of_time
+        return await self._retrieve_via_unified_search(
+            query,
+            scope,
+            limit,
+            min_score,
+            time_start=time_start,
+            time_end=effective_time_end,
+        )
 
     async def delete(self, source: str) -> None:
         """Remove all chunks whose ``source_file`` metadata matches *source*."""
@@ -386,7 +367,7 @@ class LegacyRAGBackend(MemoryBackend):
         limit: int = 10,
     ) -> list[RetrievedMemory]:
         """Search active atomic facts, falling back to activity_log for legacy data."""
-        fact_results = await self._retrieve_via_search_text(query, "facts", limit, 0.0)
+        fact_results = await self._retrieve_via_unified_search(query, "facts", limit, 0.0)
         if fact_results:
             return fact_results
 
@@ -395,9 +376,10 @@ class LegacyRAGBackend(MemoryBackend):
 
             results = await asyncio.to_thread(
                 search_activity_log,
+                self._anima_dir,
                 query,
-                self._anima_dir / "activity_log",
                 top_k=limit,
+                offset=0,
             )
             return [
                 RetrievedMemory(
@@ -413,56 +395,34 @@ class LegacyRAGBackend(MemoryBackend):
             logger.debug("get_recent_facts via BM25 failed", exc_info=True)
             return []
 
-    async def _retrieve_via_search_text(
+    async def _retrieve_via_unified_search(
         self,
         query: str,
         scope: str,
         limit: int,
         min_score: float,
+        *,
+        time_start: str | None = None,
+        time_end: str | None = None,
     ) -> list[RetrievedMemory]:
-        """Fall back to :meth:`RAGMemorySearch.search_memory_text`."""
-        rag = self._ensure_rag_search()
+        """Retrieve through :class:`UnifiedMemorySearch`."""
+        searcher = self._ensure_unified_search()
         try:
             raw_results = await asyncio.to_thread(
-                rag.search_memory_text,
+                searcher.search,
                 query,
-                scope,
-                offset=0,
-                context_window=128_000,
-                knowledge_dir=self._anima_dir / "knowledge",
-                episodes_dir=self._anima_dir / "episodes",
-                procedures_dir=self._anima_dir / "procedures",
-                common_knowledge_dir=self._common_knowledge_dir,
-                result_limit=limit,
+                scope=scope,
+                limit=limit,
+                trigger="chat",
+                min_score=min_score,
+                time_start=time_start,
+                time_end=time_end,
             )
         except Exception:
-            logger.warning("search_memory_text failed", exc_info=True)
+            logger.warning("unified search failed", exc_info=True)
             return []
 
-        memories: list[RetrievedMemory] = []
-        for d in raw_results[:limit]:
-            score = float(d.get("score", 0.0))
-            if score < min_score:
-                continue
-            memories.append(
-                RetrievedMemory(
-                    content=d.get("content", ""),
-                    score=score,
-                    source=d.get("source_file", ""),
-                    metadata={
-                        "memory_type": d.get("memory_type", ""),
-                        "search_method": d.get("search_method", ""),
-                        "chunk_index": d.get("chunk_index", 0),
-                        "fact_id": d.get("fact_id", ""),
-                        "edge_type": d.get("edge_type", ""),
-                        "source_episode": d.get("source_episode", ""),
-                        "valid_at": d.get("valid_at_iso", ""),
-                        "valid_until": d.get("valid_until", ""),
-                    },
-                    trust="medium",
-                )
-            )
-        return memories
+        return [self._dict_to_memory(d) for d in raw_results[:limit]]
 
     @staticmethod
     def _infer_memory_type(path: Path) -> str:
@@ -482,18 +442,20 @@ class LegacyRAGBackend(MemoryBackend):
         return "knowledge"
 
     @staticmethod
-    def _retrieval_result_to_memory(r) -> RetrievedMemory:
-        """Convert a :class:`RetrievalResult` to :class:`RetrievedMemory`."""
-        meta = dict(r.metadata) if r.metadata else {}
-        flat_meta: dict[str, str | int | float | bool] = {}
-        for k, v in meta.items():
-            if isinstance(v, (str, int, float, bool)):
-                flat_meta[k] = v
-        flat_meta["doc_id"] = r.doc_id
+    def _dict_to_memory(d: dict) -> RetrievedMemory:
+        """Convert a unified-search result dict to :class:`RetrievedMemory`."""
+        metadata: dict[str, str | int | float | bool] = {}
+        for key, value in d.items():
+            if key in ("content", "score"):
+                continue
+            if isinstance(value, (str, int, float, bool)):
+                metadata[key] = value
+        if "valid_at" not in metadata and isinstance(d.get("valid_at_iso"), str):
+            metadata["valid_at"] = d["valid_at_iso"]
         return RetrievedMemory(
-            content=r.content,
-            score=r.score,
-            source=str(meta.get("source_file", r.doc_id)),
-            metadata=flat_meta,
+            content=d.get("content", ""),
+            score=float(d.get("score", 0.0)),
+            source=d.get("source_file", d.get("source", "")),
+            metadata=metadata,
             trust="medium",
         )

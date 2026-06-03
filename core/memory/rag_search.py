@@ -337,6 +337,34 @@ class RAGMemorySearch:
                 offset=offset,
             )
 
+        if scope in (
+            "all",
+            "facts",
+            "knowledge",
+            "episodes",
+            "procedures",
+            "common_knowledge",
+            "skills",
+            "conversation_summary",
+        ):
+            from core.memory.retrieval.unified_search import UnifiedMemorySearch
+
+            searcher = UnifiedMemorySearch(
+                self._anima_dir,
+                common_knowledge_dir=common_knowledge_dir,
+                common_skills_dir=self._common_skills_dir,
+                rag_search=self,
+            )
+            results = searcher.search(
+                query,
+                scope=scope,
+                limit=result_limit or 10,
+                trigger="tool",
+                offset=offset,
+            )
+            self._last_search_meta = searcher.last_search_meta
+            return results
+
         indexer = self._get_indexer()
         if (
             scope == "all"
@@ -583,6 +611,7 @@ class RAGMemorySearch:
         for r in rag_results:
             out.append(
                 {
+                    "doc_id": r.doc_id,
                     "source_file": r.metadata.get("source_file", r.doc_id),
                     "content": r.content,
                     "score": r.score,
@@ -649,6 +678,7 @@ class RAGMemorySearch:
                     score += WEIGHT_TOKEN_OVERLAP * overlap_ratio
 
                 item = {
+                    "doc_id": r.doc_id,
                     "source_file": r.metadata.get("source_file", r.doc_id),
                     "content": r.content,
                     "score": score,

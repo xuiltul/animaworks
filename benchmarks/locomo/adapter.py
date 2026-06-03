@@ -615,58 +615,34 @@ class AnimaWorksLoCoMoAdapter:
             items = self._retrieval_to_dicts(res)
             self._remember_retrieval_diagnostics(items)
             return items
-        # scope_all: vector + graph + BM25 → shared RetrievalPipeline (prod parity)
+        # scope_all: production-compatible Legacy unified search with benchmark ablations.
         from core.memory.retrieval.entity import EntityBoostConfig  # noqa: PLC0415
-        from core.memory.retrieval.pipeline import RetrievalPipeline  # noqa: PLC0415
         from core.memory.retrieval.temporal import TemporalBoostConfig  # noqa: PLC0415
+        from core.memory.retrieval.unified_search import UnifiedMemorySearch  # noqa: PLC0415
 
+        assert self._anima_dir is not None
         settings = self._load_pipeline_settings()
-        pool_k = max(int(settings["rerank_candidate_pool"]), self._top_k * 4, 20)
-
-        vec_res = self._retriever.search(
-            query=question,
-            anima_name=ANIMA_NAME,
-            memory_type="episodes",
-            top_k=pool_k,
-            enable_spreading_activation=False,
-        )
-        graph_res = self._retriever.search(
-            query=question,
-            anima_name=ANIMA_NAME,
-            memory_type="episodes",
-            top_k=pool_k,
-            enable_spreading_activation=True,
-        )
-        vec_dicts = self._retrieval_to_dicts(vec_res)
-        graph_dicts = self._retrieval_to_dicts(graph_res)
-        bm25_dicts = self._bm25_search(question, top_k=pool_k)
-
-        ranked_lists = [
-            [self._pipeline_item_from_adapter_hit(x) for x in vec_dicts],
-            [self._pipeline_item_from_adapter_hit(x) for x in graph_dicts],
-            [self._pipeline_item_from_adapter_hit(x) for x in bm25_dicts],
-        ]
-        if locomo_fact_index_enabled() and self._last_fact_count > 0:
-            fact_vec_dicts = self._search_fact_vectors(question, top_k=pool_k)
-            fact_bm25_dicts = self._fact_bm25_search(question, top_k=pool_k)
-            ranked_lists.extend(
-                [
-                    [self._pipeline_item_from_adapter_hit(x) for x in fact_vec_dicts],
-                    [self._pipeline_item_from_adapter_hit(x) for x in fact_bm25_dicts],
-                ],
-            )
-
-        pipeline = RetrievalPipeline(cross_encoder_model=str(settings["cross_encoder_model"]))
         gate = merge_pipeline_gate_settings(settings, category=category)
-        result = pipeline.run(
+        search_settings = {
+            **settings,
+            "confidence_threshold": gate["confidence_threshold"],
+            "rrf_confidence_threshold": gate["rrf_confidence_threshold"],
+        }
+        scope_override = (
+            ("episodes", "facts") if locomo_fact_index_enabled() and self._last_fact_count > 0 else ("episodes",)
+        )
+        searcher = UnifiedMemorySearch(
+            self._anima_dir,
+            common_knowledge_dir=self._anima_dir / "common_knowledge",
+            common_skills_dir=self._anima_dir / "common_skills",
+        )
+        result_items = searcher.search(
             question,
-            ranked_lists,
+            scope="all",
             limit=self._top_k,
-            pool_k=pool_k,
-            rerank_enabled=bool(settings["rerank_enabled"]),
-            abstain_on_low_confidence=bool(settings["abstain_on_low_confidence"]),
-            confidence_threshold=gate["confidence_threshold"],
-            rrf_confidence_threshold=gate["rrf_confidence_threshold"],
+            trigger="chat",
+            scope_override=scope_override,
+            pipeline_settings=search_settings,
             temporal_boost=TemporalBoostConfig(
                 enabled=locomo_temporal_boost_enabled(),
                 category=category,
@@ -677,9 +653,10 @@ class AnimaWorksLoCoMoAdapter:
                 ignored_entities=self._entity_ignored_entities,
             ),
         )
-        self._last_abstain = result.abstain
-        self._last_abstain_reason = result.abstain_reason
-        items = [self._adapter_hit_from_pipeline_item(x) for x in result.items]
+        meta = searcher.last_search_meta
+        self._last_abstain = bool(meta.get("abstain", False))
+        self._last_abstain_reason = str(meta.get("abstain_reason", "") or "")
+        items = [self._adapter_hit_from_pipeline_item(x) for x in result_items]
         self._remember_retrieval_diagnostics(items)
         return items
 

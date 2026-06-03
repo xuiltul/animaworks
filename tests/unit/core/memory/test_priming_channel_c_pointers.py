@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -44,6 +44,22 @@ class TestChannelCTrustSeparation:
         mock_retriever.record_access = MagicMock()
         return mock_retriever
 
+    def _patch_unified_search(self, results: list, meta: dict | None = None):
+        searcher = MagicMock()
+        searcher.search_many.return_value = [self._to_unified_row(result) for result in results]
+        searcher.last_search_meta = meta or {"abstain": False, "abstain_reason": ""}
+        return patch("core.memory.priming.channel_c.UnifiedMemorySearch", return_value=searcher), searcher
+
+    @staticmethod
+    def _to_unified_row(result: FakeSearchResult) -> dict:
+        row = {
+            "doc_id": result.doc_id,
+            "content": result.content,
+            "score": result.score,
+        }
+        row.update(result.metadata)
+        return row
+
     @pytest.mark.asyncio
     async def test_all_trusted_results(self, engine: PrimingEngine) -> None:
         """All results with consolidation origin go to the medium bucket."""
@@ -54,10 +70,9 @@ class TestChannelCTrustSeparation:
                 metadata={"anima": "test-anima", "origin": "consolidation"},
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert 'read_memory_file(path="knowledge/test.md")' in medium
         assert "Trusted knowledge" not in medium
         assert untrusted == ""
@@ -72,10 +87,9 @@ class TestChannelCTrustSeparation:
                 metadata={"anima": "test-anima", "origin": "external_platform"},
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert medium == ""
         assert 'read_memory_file(path="knowledge/test.md")' in untrusted
         assert "External data" not in untrusted
@@ -97,10 +111,9 @@ class TestChannelCTrustSeparation:
                 metadata={"anima": "test-anima", "origin": "external_platform"},
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert 'read_memory_file(path="knowledge/test.md")' in medium
         assert 'read_memory_file(path="knowledge/test.md")' in untrusted
         assert "Consolidated knowledge" not in medium
@@ -116,10 +129,9 @@ class TestChannelCTrustSeparation:
                 metadata={"anima": "test-anima"},
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert medium == ""
         assert 'read_memory_file(path="knowledge/test.md")' in untrusted
         assert "Legacy chunk without origin" not in untrusted
@@ -134,10 +146,9 @@ class TestChannelCTrustSeparation:
                 metadata={"anima": "test-anima", "origin": "system"},
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert 'read_memory_file(path="knowledge/test.md")' in medium
         assert "System knowledge" not in medium
         assert untrusted == ""
@@ -152,10 +163,9 @@ class TestChannelCTrustSeparation:
                 metadata={"anima": "test-anima", "origin": "human"},
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert 'read_memory_file(path="knowledge/test.md")' in medium
         assert "Human-provided knowledge" not in medium
         assert untrusted == ""
@@ -163,10 +173,9 @@ class TestChannelCTrustSeparation:
     @pytest.mark.asyncio
     async def test_no_results_returns_empty_tuple(self, engine: PrimingEngine) -> None:
         """No search results returns an empty tuple."""
-        engine._retriever = self._make_retriever([])
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search([])
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert medium == ""
         assert untrusted == ""
 
@@ -190,10 +199,9 @@ class TestChannelCTrustSeparation:
                 },
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert "[shared]" in medium
         assert 'read_memory_file(path="common_knowledge/shared-test.md")' in medium
         assert "Shared common knowledge" not in medium
@@ -209,10 +217,9 @@ class TestChannelCTrustSeparation:
                 metadata={"anima": "test-anima", "origin": "system", "source_file": ""},
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert 'read_memory_file(path="knowledge/from-docid.md")' in medium
         assert "Doc id fallback body" not in medium
         assert untrusted == ""
@@ -231,10 +238,9 @@ class TestChannelCTrustSeparation:
                 },
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["deploy"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["deploy"])
         assert "Deploy Checklist - Run the deploy verifier before release." in medium
         assert 'read_memory_file(path="knowledge/deploy.md")' in medium
         assert untrusted == ""
@@ -253,10 +259,9 @@ class TestChannelCTrustSeparation:
                 metadata={"anima": "shared", "origin": "system", "source_file": ""},
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert 'read_memory_file(path="common_knowledge/from-docid.md")' in medium
         assert "Shared doc id fallback body" not in medium
         assert untrusted == ""
@@ -276,16 +281,13 @@ class TestChannelCTrustSeparation:
             score=0.90,
             metadata={"anima": "test-anima", "origin": "system", "source_file": ""},
         )
-        retriever = self._make_retriever([pathless, readable])
-        engine._retriever = retriever
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search([pathless, readable])
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert "--- Result 1" in medium
         assert "--- Result 2" not in medium
         assert 'read_memory_file(path="knowledge/readable.md")' in medium
         assert untrusted == ""
-        retriever.record_access.assert_called_once_with([readable], "test-anima")
 
     @pytest.mark.asyncio
     async def test_quotes_path_and_collapses_summary(self, engine: PrimingEngine) -> None:
@@ -301,10 +303,9 @@ class TestChannelCTrustSeparation:
                 },
             ),
         ]
-        engine._retriever = self._make_retriever(results)
-        engine._retriever_initialized = True
-
-        medium, untrusted = await engine._channel_c_related_knowledge(["test"])
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher:
+            medium, untrusted = await engine._channel_c_related_knowledge(["test"])
         assert 'read_memory_file(path="knowledge/weird\\"name.md")' in medium
         assert 'Bad "heading" - body should not leak' in medium
         assert "\nbody should not leak" not in medium

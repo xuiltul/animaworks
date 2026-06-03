@@ -7,9 +7,9 @@ from __future__ import annotations
 """Channel G: Graph context — community summaries + recent facts.
 
 Fetches community context and recent facts from the MemoryBackend
-abstraction layer.  For Neo4j backends this returns actual graph data;
-for the legacy ChromaDB backend, communities are empty and recent_facts
-falls back to BM25 activity-log search.
+abstraction layer.  For Neo4j backends this returns graph data; for the
+legacy ChromaDB backend, communities are empty and recent_facts now prefers
+atomic facts before falling back to BM25 activity-log search.
 """
 
 import asyncio
@@ -59,7 +59,13 @@ async def collect_graph_context(
     if facts:
         parts.append("## Recent Facts")
         for mem in facts:
-            parts.append(f"- {mem.content}")
+            meta = mem.metadata if isinstance(mem.metadata, dict) else {}
+            source_entity = str(meta.get("source_entity", "") or "")
+            edge_type = str(meta.get("edge_type", "") or "")
+            target_entity = str(meta.get("target_entity", "") or "")
+            relation = " ".join(part for part in (source_entity, edge_type, target_entity) if part)
+            prefix = f"[{relation}] " if relation else ""
+            parts.append(f"- {prefix}{mem.content}")
 
     if not parts:
         return ""

@@ -169,7 +169,7 @@ class TestRAGSearchScopeAllPipeline:
             )
 
         assert captured["entity_boost"].enabled is True
-        assert captured["result_limit"] == 20
+        assert captured["result_limit"] == 50
 
     def test_non_all_scope_clears_meta(self, rag_search: RAGMemorySearch) -> None:
         rag_search._last_search_meta = {"abstain": True}
@@ -182,4 +182,4 @@ class TestRAGSearchScopeAllPipeline:
                 procedures_dir=rag_search._anima_dir / "procedures",
                 common_knowledge_dir=rag_search._anima_dir / "common_knowledge",
             )
-        assert rag_search.last_search_meta == {}
+        assert rag_search.last_search_meta["abstain"] is False

@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from core.memory.priming.constants import _BUDGET_IMPORTANT_KNOWLEDGE, _CHARS_PER_TOKEN
-from core.memory.priming.utils import build_queries, search_and_merge
+from core.memory.priming.utils import build_queries
+from core.memory.retrieval.unified_search import UnifiedMemorySearch
 
 if TYPE_CHECKING:
     from core.memory.rag.retriever import MemoryRetriever
@@ -180,9 +181,8 @@ async def channel_c_related_knowledge(
     message: str = "",
     recent_human_messages: list[str] | None = None,
 ) -> tuple[str, str]:
-    """Channel C: Related knowledge search (vector search).
+    """Channel C: Related knowledge search through unified Legacy retrieval.
 
-    Uses dense vector retrieval via MemoryRetriever.
     Searches both personal knowledge and shared common_knowledge,
     merging results by score.
 
@@ -194,11 +194,6 @@ async def channel_c_related_knowledge(
         return ("", "")
 
     try:
-        retriever = get_retriever()
-        if retriever is None:
-            logger.debug("Channel C: Retriever unavailable")
-            return ("", "")
-
         queries = build_queries(message, keywords, recent_human_messages)
         if not queries:
             logger.debug("Channel C: No keywords and no message")
@@ -213,54 +208,52 @@ async def channel_c_related_knowledge(
         except Exception:
             logger.debug("Failed to load rag.min_retrieval_score from config, using default")
 
-        results = search_and_merge(
-            retriever,
+        searcher = UnifiedMemorySearch(anima_dir)
+        results = searcher.search_many(
             queries,
-            anima_name,
-            memory_type="knowledge",
-            top_k=5,
-            include_shared=True,
-            min_score=_min_score,
+            scope="common_knowledge",
+            limit=5,
+            trigger="chat",
+            min_score=float(_min_score) if _min_score is not None else 0.0,
         )
+        if bool(searcher.last_search_meta.get("abstain", False)):
+            logger.debug("Channel C: unified search abstained")
+            return ("", "")
 
         if restrict_to is not None and results:
             restrict_set = set(restrict_to)
-            results = [r for r in results if Path(str(r.metadata.get("source_file", r.doc_id))).stem in restrict_set]
+            results = [r for r in results if Path(str(r.get("source_file", r.get("doc_id", "")))).stem in restrict_set]
 
         if results:
             from core.execution._sanitize import ORIGIN_UNKNOWN, resolve_trust
 
             medium_parts: list[str] = []
             untrusted_parts: list[str] = []
-            accessed_results = []
             display_index = 1
 
             for result in results:
-                chunk_origin = result.metadata.get("origin", "")
+                metadata = _metadata_from_unified_result(result)
+                chunk_origin = metadata.get("origin", "")
                 chunk_trust = resolve_trust(chunk_origin or ORIGIN_UNKNOWN)
-                source_label = result.metadata.get("anima", anima_name)
+                source_label = metadata.get("anima", anima_name)
                 label = "shared" if source_label == "shared" else "personal"
-                rel_path = to_read_memory_path(result.metadata, anima_name, result.doc_id)
+                rel_path = to_read_memory_path(metadata, anima_name, str(result.get("doc_id", "")))
                 if not rel_path:
-                    logger.debug("Channel C: skipping result without readable path: %s", result.doc_id)
+                    logger.debug("Channel C: skipping result without readable path: %s", result.get("doc_id", ""))
                     continue
                 line = format_pointer_result(
                     index=display_index,
                     label=label,
-                    score=result.score,
-                    content=result.content,
-                    metadata=result.metadata,
+                    score=float(result.get("score", 0.0) or 0.0),
+                    content=str(result.get("content", "") or ""),
+                    metadata=metadata,
                     path=rel_path,
                 )
                 display_index += 1
-                accessed_results.append(result)
                 if chunk_trust == "untrusted":
                     untrusted_parts.append(line)
                 else:
                     medium_parts.append(line)
-
-            if accessed_results:
-                retriever.record_access(accessed_results, anima_name)
 
             medium_output = "\n".join(medium_parts)
             untrusted_output = "\n".join(untrusted_parts)
@@ -280,3 +273,14 @@ async def channel_c_related_knowledge(
     except Exception as e:
         logger.warning("Channel C: Vector search failed: %s", e)
         return ("", "")
+
+
+def _metadata_from_unified_result(result: dict) -> dict:
+    metadata = {
+        key: value
+        for key, value in result.items()
+        if key not in ("content", "score") and isinstance(value, (str, int, float, bool, list))
+    }
+    if "source_file" not in metadata and result.get("source"):
+        metadata["source_file"] = result["source"]
+    return metadata
