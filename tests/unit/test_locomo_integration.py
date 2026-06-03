@@ -163,7 +163,10 @@ class TestAdapterAnswer:
         mock_resp.choices = [MagicMock()]
         mock_resp.choices[0].message.content = "Paris"
 
-        with patch("litellm.completion", return_value=mock_resp) as mock_comp:
+        with (
+            patch("benchmarks.locomo.adapter.resolve_locomo_litellm_kwargs", return_value=("test-model", {})),
+            patch("litellm.completion", return_value=mock_resp) as mock_comp,
+        ):
             result = adapter.answer(
                 "Where did Alice go?",
                 [{"content": "Alice went to Paris"}],
@@ -213,7 +216,10 @@ class TestAdapterAnswer:
         mock_resp.choices = [MagicMock()]
         mock_resp.choices[0].message.content = "No information available."
 
-        with patch("litellm.completion", return_value=mock_resp):
+        with (
+            patch("benchmarks.locomo.adapter.resolve_locomo_litellm_kwargs", return_value=("test-model", {})),
+            patch("litellm.completion", return_value=mock_resp),
+        ):
             result = adapter.answer("Where?", [], model="test-model")
             assert "No information" in result
 
