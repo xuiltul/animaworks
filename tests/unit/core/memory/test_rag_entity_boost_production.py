@@ -25,7 +25,7 @@ def rag_search(tmp_path: Path) -> RAGMemorySearch:
     return RAGMemorySearch(anima_dir, common_knowledge, common_skills)
 
 
-def _settings(*, enabled: bool) -> dict[str, object]:
+def _settings(*, enabled: bool, registry_enabled: bool = True) -> dict[str, object]:
     return {
         "rerank_enabled": False,
         "rerank_candidate_pool": 20,
@@ -33,7 +33,7 @@ def _settings(*, enabled: bool) -> dict[str, object]:
         "abstain_on_low_confidence": False,
         "confidence_threshold": 0.35,
         "rrf_confidence_threshold": 0.02,
-        "entity_registry_enabled": True,
+        "entity_registry_enabled": registry_enabled,
         "entity_boost_enabled": enabled,
         "entity_boost": 0.25,
         "entity_boost_cap": 0.40,
@@ -65,6 +65,25 @@ def test_entity_boost_prefers_candidate_metadata_list_and_json() -> None:
     assert boosted[0]["entity_boost"] == 0.2
     assert boosted[0]["candidate_entities"] == ["becoming nicole", "caroline"]
     assert "entity_boost" not in boosted[1]
+
+
+@pytest.mark.unit
+def test_entity_boost_requires_registry_query_entities_when_configured() -> None:
+    candidates = [
+        {
+            "content": "Caroline recommended Becoming Nicole.",
+            "score": 0.2,
+            "entities": ["Caroline", "Becoming Nicole"],
+        }
+    ]
+
+    boosted = apply_entity_boost(
+        "What did Caroline recommend?",
+        candidates,
+        EntityBoostConfig(enabled=True, category=None, require_query_entities=True),
+    )
+
+    assert boosted == candidates
 
 
 @pytest.mark.unit
@@ -134,6 +153,7 @@ def test_production_config_enabled_passes_registry_entities_to_hybrid(rag_search
     assert config.boost == 0.25
     assert config.max_boost == 0.40
     assert "caroline" in config.query_entities
+    assert config.require_query_entities is True
 
 
 @pytest.mark.unit
@@ -160,3 +180,4 @@ def test_non_all_vector_scope_receives_entity_boost_config(rag_search: RAGMemory
         )
 
     assert captured["entity_boost"].enabled is True
+    assert captured["entity_boost"].require_query_entities is True

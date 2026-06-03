@@ -28,6 +28,16 @@ def _facts_extraction_enabled() -> bool:
         return True
 
 
+def _entity_registry_enabled() -> bool:
+    try:
+        from core.config import load_config
+
+        return bool(getattr(load_config().rag, "entity_registry_enabled", True))
+    except Exception:
+        logger.debug("Failed to load entity_registry_enabled; defaulting to enabled", exc_info=True)
+        return True
+
+
 def _resolve_extraction_config(anima_dir: Path) -> tuple[str, dict[str, object], str, int]:
     """Resolve extraction model and timeout without trusting endpoint data from status.json."""
     llm_extra: dict[str, object] = {}
@@ -186,21 +196,52 @@ async def extract_and_store_facts(
         return []
 
     if stored:
-        _upsert_fact_entities(anima_dir, stored)
-        _index_fact_records(anima_dir, stored, origin=origin)
+        entity_registry_enabled = _entity_registry_enabled()
+        entity_registry = None
+        entity_keys = None
+        if entity_registry_enabled:
+            entity_registry = _upsert_fact_entities(anima_dir, stored)
+            entity_keys = _entity_keys_for_records(entity_registry, stored) if entity_registry else None
+        _index_fact_records(
+            anima_dir,
+            stored,
+            origin=origin,
+            sync_entities=entity_registry_enabled,
+            entity_registry=entity_registry,
+            entity_keys=entity_keys,
+        )
     return stored
 
 
-def _upsert_fact_entities(anima_dir: Path, records: list[FactRecord]) -> None:
+def _upsert_fact_entities(anima_dir: Path, records: list[FactRecord]) -> dict[str, Any] | None:
     try:
         from core.memory.entity_index import upsert_entities_from_facts
 
-        upsert_entities_from_facts(anima_dir, records)
+        return upsert_entities_from_facts(anima_dir, records)
     except Exception:
         logger.debug("Failed to update entity registry from facts", exc_info=True)
+        return None
 
 
-def _index_fact_records(anima_dir: Path, records: list[FactRecord], *, origin: str) -> None:
+def _entity_keys_for_records(registry: dict[str, Any], records: list[FactRecord]) -> set[str]:
+    try:
+        from core.memory.entity_index import entity_keys_for_records
+
+        return entity_keys_for_records(registry, records)
+    except Exception:
+        logger.debug("Failed to resolve entity keys for sync", exc_info=True)
+        return set()
+
+
+def _index_fact_records(
+    anima_dir: Path,
+    records: list[FactRecord],
+    *,
+    origin: str,
+    sync_entities: bool = True,
+    entity_registry: dict[str, Any] | None = None,
+    entity_keys: set[str] | None = None,
+) -> None:
     paths = sorted({fact_file_for_record(anima_dir, record) for record in records})
     if not paths:
         return
@@ -210,18 +251,25 @@ def _index_fact_records(anima_dir: Path, records: list[FactRecord], *, origin: s
         memory = MemoryManager(anima_dir)
         for path in paths:
             memory._rag.index_file(path, "facts", origin=origin)
-        _sync_entity_collection(anima_dir, memory)
+        if sync_entities:
+            _sync_entity_collection(anima_dir, memory, registry=entity_registry, entity_keys=entity_keys)
     except Exception:
         logger.debug("Failed to index atomic facts", exc_info=True)
 
 
-def _sync_entity_collection(anima_dir: Path, memory: Any) -> None:
+def _sync_entity_collection(
+    anima_dir: Path,
+    memory: Any,
+    *,
+    registry: dict[str, Any] | None = None,
+    entity_keys: set[str] | None = None,
+) -> None:
     try:
         from core.memory.entity_index import sync_entity_collection
 
         indexer = memory._rag._get_indexer()
         vector_store = getattr(indexer, "vector_store", None) if indexer is not None else None
         if vector_store is not None:
-            sync_entity_collection(anima_dir, vector_store=vector_store)
+            sync_entity_collection(anima_dir, registry=registry, entity_keys=entity_keys, vector_store=vector_store)
     except Exception:
         logger.debug("Failed to sync entity collection", exc_info=True)

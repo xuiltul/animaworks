@@ -18,7 +18,6 @@ from core.memory.backend.base import MemoryBackend, RetrievedMemory
 from core.memory.backend.legacy import LegacyRAGBackend
 from core.memory.backend.registry import get_backend
 
-
 # ── Fixtures ───────────────────────────────────────────────────────────────
 
 
@@ -79,6 +78,27 @@ async def test_retrieve_with_invalid_scope(
 ) -> None:
     result = await legacy_backend.retrieve("test query", scope="nonexistent_scope")
     assert isinstance(result, list)
+
+
+async def test_legacy_retrieve_episodes_uses_rag_search_path(
+    legacy_backend: LegacyRAGBackend,
+) -> None:
+    legacy_backend._rag_search.search_memory_text.return_value = [
+        {
+            "content": "Caroline recommended Becoming Nicole.",
+            "score": 0.9,
+            "source_file": "episodes/2026-06-03.md",
+            "memory_type": "episodes",
+            "search_method": "vector",
+        }
+    ]
+
+    result = await legacy_backend.retrieve("Caroline", scope="episodes", limit=3)
+
+    legacy_backend._retriever.search.assert_not_called()
+    legacy_backend._rag_search.search_memory_text.assert_called_once()
+    assert result[0].content == "Caroline recommended Becoming Nicole."
+    assert result[0].metadata["memory_type"] == "episodes"
 
 
 # ── Health check ───────────────────────────────────────────────────────────

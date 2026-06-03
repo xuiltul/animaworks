@@ -43,9 +43,7 @@ _PATH_PART_TO_MEMORY_TYPE: dict[str, str] = {
     "common_skills": "common_skills",
 }
 
-
 # ── LegacyRAGBackend ──────────────────────────────────────────────────────
-
 
 class LegacyRAGBackend(MemoryBackend):
     """Legacy backend wrapping existing ChromaDB + RAG.
@@ -182,7 +180,7 @@ class LegacyRAGBackend(MemoryBackend):
         """Retrieve memories, delegating to retriever or search_memory_text."""
         memory_type = _SCOPE_TO_MEMORY_TYPE.get(scope, "knowledge")
 
-        if scope in ("all", "activity_log", "facts"):
+        if scope in ("all", "activity_log", "facts", "episodes"):
             return await self._retrieve_via_search_text(query, scope, limit, min_score)
 
         retriever = self._ensure_retriever()

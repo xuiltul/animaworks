@@ -431,8 +431,9 @@ class RAGMemorySearch:
         settings = settings or self._load_rag_pipeline_settings()
         if not bool(settings.get("entity_boost_enabled", False)):
             return None
+        registry_enabled = bool(settings.get("entity_registry_enabled", True))
         query_entities: tuple[str, ...] = ()
-        if bool(settings.get("entity_registry_enabled", True)):
+        if registry_enabled:
             try:
                 from core.memory.entity_index import match_query_entities
 
@@ -447,6 +448,7 @@ class RAGMemorySearch:
             max_boost=float(settings.get("entity_boost_cap", 0.80) or 0.0),
             category=None,
             query_entities=query_entities,
+            require_query_entities=registry_enabled,
         )
 
     def _search_scope_all_hybrid(

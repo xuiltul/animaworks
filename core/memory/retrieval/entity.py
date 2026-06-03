@@ -101,6 +101,7 @@ class EntityBoostConfig:
     categories: tuple[int, ...] = (1, 4)
     ignored_entities: tuple[str, ...] = ()
     query_entities: tuple[str, ...] = ()
+    require_query_entities: bool = False
     prefer_candidate_metadata: bool = True
 
 
@@ -137,12 +138,17 @@ def apply_entity_boost(
     if config.category is not None and config.category not in config.categories:
         return candidates
 
+    ignored = {_normalize_entity(v) for v in config.ignored_entities}
+    ignored.discard("")
     query_entities = {
         _normalize_entity(value)
         for value in config.query_entities
-        if _valid_entity(_normalize_entity(value), {_normalize_entity(v) for v in config.ignored_entities})
+        if _valid_entity(_normalize_entity(value), ignored)
     }
-    query_entities.update(extract_entities(query, ignored_entities=config.ignored_entities))
+    if config.require_query_entities and not query_entities:
+        return candidates
+    if not config.require_query_entities:
+        query_entities.update(extract_entities(query, ignored_entities=config.ignored_entities))
     if not query_entities:
         return candidates
 

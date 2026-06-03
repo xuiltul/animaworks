@@ -310,11 +310,23 @@ async def test_extract_and_store_facts_appends_and_indexes(tmp_path: Path, monke
         calls["append"] = (anima_dir, records)
         return records
 
-    def fake_index(anima_dir: Path, records: list[FactRecord], *, origin: str) -> None:
-        calls["index"] = (anima_dir, records, origin)
+    def fake_upsert(anima_dir: Path, records: list[FactRecord]) -> None:
+        calls["upsert"] = (anima_dir, records)
+
+    def fake_index(
+        anima_dir: Path,
+        records: list[FactRecord],
+        *,
+        origin: str,
+        sync_entities: bool = True,
+        entity_registry: dict[str, object] | None = None,
+        entity_keys: set[str] | None = None,
+    ) -> None:
+        calls["index"] = (anima_dir, records, origin, sync_entities, entity_registry, entity_keys)
 
     monkeypatch.setattr(fact_extraction, "extract_fact_records", fake_extract)
     monkeypatch.setattr(fact_extraction, "append_fact_records", fake_append)
+    monkeypatch.setattr(fact_extraction, "_upsert_fact_entities", fake_upsert)
     monkeypatch.setattr(fact_extraction, "_index_fact_records", fake_index)
 
     stored = await extract_and_store_facts(
@@ -329,8 +341,61 @@ async def test_extract_and_store_facts_appends_and_indexes(tmp_path: Path, monke
 
     assert stored == [record]
     assert calls["append"] == (tmp_path / "alice", [record])
-    assert calls["index"] == (tmp_path / "alice", [record], "episode")
+    assert calls["upsert"] == (tmp_path / "alice", [record])
+    assert calls["index"] == (tmp_path / "alice", [record], "episode", True, None, None)
     assert calls["extract_kwargs"]["source_session_id"] == "session-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.unit
+async def test_extract_and_store_facts_skips_registry_when_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = FactRecord(
+        text="Alice tracks LoCoMo memory scores.",
+        source_entity="Alice",
+        target_entity="LoCoMo",
+        edge_type="TRACKS",
+        recorded_at="2026-06-03T10:00:00+09:00",
+    )
+    calls: dict[str, object] = {}
+
+    async def fake_extract(*args, **kwargs):
+        return [record]
+
+    def fake_append(anima_dir: Path, records: list[FactRecord]):
+        return records
+
+    def fail_upsert(anima_dir: Path, records: list[FactRecord]) -> None:
+        raise AssertionError("registry upsert should be disabled")
+
+    def fake_index(
+        anima_dir: Path,
+        records: list[FactRecord],
+        *,
+        origin: str,
+        sync_entities: bool = True,
+        entity_registry: dict[str, object] | None = None,
+        entity_keys: set[str] | None = None,
+    ) -> None:
+        calls["index"] = (anima_dir, records, origin, sync_entities, entity_registry, entity_keys)
+
+    monkeypatch.setattr(fact_extraction, "extract_fact_records", fake_extract)
+    monkeypatch.setattr(fact_extraction, "append_fact_records", fake_append)
+    monkeypatch.setattr(fact_extraction, "_entity_registry_enabled", lambda: False)
+    monkeypatch.setattr(fact_extraction, "_upsert_fact_entities", fail_upsert)
+    monkeypatch.setattr(fact_extraction, "_index_fact_records", fake_index)
+
+    stored = await extract_and_store_facts(
+        tmp_path / "alice",
+        "Alice tracks LoCoMo memory scores.",
+        source_episode="episodes/2026-06-03.md",
+        origin="episode",
+        enabled=True,
+    )
+
+    assert stored == [record]
+    assert calls["index"] == (tmp_path / "alice", [record], "episode", False, None, None)
 
 
 @pytest.mark.asyncio
