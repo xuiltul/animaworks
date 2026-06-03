@@ -268,32 +268,36 @@ class TestSemanticDilutionRegression:
         """
         engine = PrimingEngine(anima_dir_with_knowledge)
 
-        malaysia_result = MagicMock(
-            doc_id="malaysia-travel#0",
-            score=0.9,
-            content="マレーシア旅行の計画",
-            metadata={"source_file": "knowledge/malaysia-travel.md", "origin": "consolidation", "anima": "test"},
-        )
-        debug_result = MagicMock(
-            doc_id="debugging-guide#0",
-            score=0.85,
-            content="デバッグ手順",
-            metadata={"source_file": "knowledge/debugging-guide.md", "origin": "consolidation", "anima": "test"},
-        )
+        malaysia_result = {
+            "doc_id": "malaysia-travel#0",
+            "score": 0.9,
+            "content": "マレーシア旅行の計画",
+            "source_file": "knowledge/malaysia-travel.md",
+            "origin": "consolidation",
+            "anima": "test",
+        }
+        debug_result = {
+            "doc_id": "debugging-guide#0",
+            "score": 0.85,
+            "content": "デバッグ手順",
+            "source_file": "knowledge/debugging-guide.md",
+            "origin": "consolidation",
+            "anima": "test",
+        }
 
-        mock_retriever = MagicMock()
-        mock_retriever.search.side_effect = [
-            [debug_result],
-            [malaysia_result],
-        ]
+        mock_searcher = MagicMock()
+        mock_searcher.search_many.return_value = [debug_result, malaysia_result]
+        mock_searcher.last_search_meta = {"abstain": False, "abstain_reason": ""}
 
-        with patch.object(engine, "_get_or_create_retriever", return_value=mock_retriever):
+        with patch("core.memory.priming.channel_c.UnifiedMemorySearch", return_value=mock_searcher):
             result = await engine._channel_c_related_knowledge(
                 keywords=["マレーシア", "デバッグ"],
                 message="サーバーのデバッグに問題があったので修正した。マレーシア",
             )
 
-        assert mock_retriever.search.call_count == 2, "Dual query should issue 2 searches"
+        mock_searcher.search_many.assert_called_once()
+        queries = mock_searcher.search_many.call_args.kwargs.get("queries") or mock_searcher.search_many.call_args[0][0]
+        assert len(queries) == 2, "Dual query should issue 2 searches through unified search"
         medium_text, _ = result
         assert 'read_memory_file(path="knowledge/malaysia-travel.md")' in medium_text, (
             f"Malaysia pointer should be in results: {medium_text}"
@@ -309,23 +313,28 @@ class TestSemanticDilutionRegression:
         """Single-topic messages should still work correctly (no regression)."""
         engine = PrimingEngine(anima_dir)
 
-        r1 = MagicMock(
-            doc_id="doc1",
-            score=0.9,
-            content="relevant content",
-            metadata={"source_file": "knowledge/test.md", "origin": "consolidation", "anima": "test"},
-        )
+        r1 = {
+            "doc_id": "doc1",
+            "score": 0.9,
+            "content": "relevant content",
+            "source_file": "knowledge/test.md",
+            "origin": "consolidation",
+            "anima": "test",
+        }
 
-        mock_retriever = MagicMock()
-        mock_retriever.search.return_value = [r1]
+        mock_searcher = MagicMock()
+        mock_searcher.search_many.return_value = [r1]
+        mock_searcher.last_search_meta = {"abstain": False, "abstain_reason": ""}
 
-        with patch.object(engine, "_get_or_create_retriever", return_value=mock_retriever):
+        with patch("core.memory.priming.channel_c.UnifiedMemorySearch", return_value=mock_searcher):
             result = await engine._channel_c_related_knowledge(
                 keywords=["マレーシア"],
                 message="マレーシア旅行について教えて",
             )
 
-        assert mock_retriever.search.call_count == 2
+        mock_searcher.search_many.assert_called_once()
+        queries = mock_searcher.search_many.call_args.kwargs.get("queries") or mock_searcher.search_many.call_args[0][0]
+        assert len(queries) == 2
         medium_text, _ = result
         assert 'read_memory_file(path="knowledge/test.md")' in medium_text
         assert "relevant content" not in medium_text
