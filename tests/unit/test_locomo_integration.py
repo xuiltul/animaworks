@@ -500,6 +500,8 @@ class TestBM25Cache:
             adapter._anima_dir = tmp_path
             adapter._episodes_dir = tmp_path / "episodes"
             adapter._episodes_dir.mkdir()
+            adapter._facts_dir = tmp_path / "facts"
+            adapter._facts_dir.mkdir()
             adapter._vector_store = None
             adapter._indexer = MagicMock()
             adapter._indexer.index_file.return_value = 3
@@ -537,6 +539,8 @@ class TestBM25Cache:
             adapter._anima_dir = tmp_path
             adapter._episodes_dir = tmp_path / "episodes"
             adapter._episodes_dir.mkdir()
+            adapter._facts_dir = tmp_path / "facts"
+            adapter._facts_dir.mkdir()
             adapter._vector_store = MagicMock()
             adapter._vector_store.list_collections.return_value = []
             adapter._indexer = None
