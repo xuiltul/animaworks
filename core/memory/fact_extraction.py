@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from core.memory.fact_invalidation import ReconcileAction, ReconcileResult, reconcile_new_fact
 from core.memory.facts import FactRecord, append_fact_records, fact_file_for_record
 from core.memory.ontology.default import ExtractedEntity, ExtractedFact
 from core.time_utils import now_iso
@@ -35,6 +36,16 @@ def _entity_registry_enabled() -> bool:
         return bool(getattr(load_config().rag, "entity_registry_enabled", True))
     except Exception:
         logger.debug("Failed to load entity_registry_enabled; defaulting to enabled", exc_info=True)
+        return True
+
+
+def _facts_reconcile_enabled() -> bool:
+    try:
+        from core.config import load_config
+
+        return bool(getattr(load_config().rag, "facts_reconcile_enabled", True))
+    except Exception:
+        logger.debug("Failed to load facts_reconcile_enabled; defaulting to enabled", exc_info=True)
         return True
 
 
@@ -189,19 +200,28 @@ async def extract_and_store_facts(
     if not records:
         return []
 
+    records_to_append, affected_paths, updated_records = _reconcile_extracted_facts(
+        anima_dir,
+        records,
+        as_of_time=reference_time,
+    )
+    if not records_to_append and not affected_paths:
+        return []
+
     try:
-        stored = append_fact_records(anima_dir, records)
+        stored = append_fact_records(anima_dir, records_to_append)
     except Exception:
         logger.warning("Failed to append atomic facts", exc_info=True)
         return []
 
-    if stored:
+    if stored or affected_paths:
         entity_registry_enabled = _entity_registry_enabled()
         entity_registry = None
         entity_keys = None
-        if entity_registry_enabled:
-            entity_registry = _upsert_fact_entities(anima_dir, stored)
-            entity_keys = _entity_keys_for_records(entity_registry, stored) if entity_registry else None
+        registry_records = [*stored, *[record for record in updated_records if record.is_active()]]
+        if entity_registry_enabled and registry_records:
+            entity_registry = _upsert_fact_entities(anima_dir, registry_records)
+            entity_keys = _entity_keys_for_records(entity_registry, registry_records) if entity_registry else None
         _index_fact_records(
             anima_dir,
             stored,
@@ -209,8 +229,42 @@ async def extract_and_store_facts(
             sync_entities=entity_registry_enabled,
             entity_registry=entity_registry,
             entity_keys=entity_keys,
+            extra_paths=affected_paths,
         )
     return stored
+
+
+def _reconcile_extracted_facts(
+    anima_dir: Path,
+    records: list[FactRecord],
+    *,
+    as_of_time: str | None,
+) -> tuple[list[FactRecord], set[Path], list[FactRecord]]:
+    if not _facts_reconcile_enabled():
+        return list(records), set(), []
+
+    to_append: list[FactRecord] = []
+    affected_paths: set[Path] = set()
+    updated_records: list[FactRecord] = []
+
+    for record in records:
+        try:
+            result = reconcile_new_fact(anima_dir, record, as_of_time=as_of_time)
+        except Exception:
+            logger.warning("Fact reconciliation failed; appending extracted fact", exc_info=True)
+            result = ReconcileResult(
+                action=ReconcileAction.ADD,
+                fact=record,
+                should_append=True,
+                reason="reconcile_exception",
+            )
+
+        affected_paths.update(result.affected_paths)
+        updated_records.extend(result.updated_records)
+        if result.should_append:
+            to_append.append(record)
+
+    return to_append, affected_paths, updated_records
 
 
 def _upsert_fact_entities(anima_dir: Path, records: list[FactRecord]) -> dict[str, Any] | None:
@@ -241,8 +295,9 @@ def _index_fact_records(
     sync_entities: bool = True,
     entity_registry: dict[str, Any] | None = None,
     entity_keys: set[str] | None = None,
+    extra_paths: set[Path] | None = None,
 ) -> None:
-    paths = sorted({fact_file_for_record(anima_dir, record) for record in records})
+    paths = sorted({fact_file_for_record(anima_dir, record) for record in records} | set(extra_paths or set()))
     if not paths:
         return
     try:
@@ -250,11 +305,11 @@ def _index_fact_records(
 
         memory = MemoryManager(anima_dir)
         for path in paths:
-            memory._rag.index_file(path, "facts", origin=origin)
+            memory._rag.index_file(path, "facts", force=True, origin=origin)
         if sync_entities:
             _sync_entity_collection(anima_dir, memory, registry=entity_registry, entity_keys=entity_keys)
     except Exception:
-        logger.debug("Failed to index atomic facts", exc_info=True)
+        logger.warning("Failed to index atomic facts", exc_info=True)
 
 
 def _sync_entity_collection(

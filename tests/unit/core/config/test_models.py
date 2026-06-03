@@ -220,6 +220,13 @@ class TestRAGConfig:
         assert rag.entity_boost == 0.20
         assert rag.entity_boost_cap == 0.80
 
+    def test_fact_reconcile_defaults(self) -> None:
+        """Fact reconciliation defaults to high-threshold, bounded top-k behavior."""
+        rag = RAGConfig()
+        assert rag.facts_reconcile_enabled is True
+        assert rag.facts_reconcile_similarity_threshold == 0.82
+        assert rag.facts_reconcile_top_k == 5
+
 
 # ── Cache management ──────────────────────────────────────
 

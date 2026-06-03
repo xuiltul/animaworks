@@ -12,14 +12,14 @@ import json
 import logging
 import os
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from core.memory._io import atomic_write_text
-from core.time_utils import now_iso, today_local
+from core.time_utils import ensure_aware, now_iso, now_local, today_local
 
 logger = logging.getLogger("animaworks.memory.facts")
 
@@ -127,8 +127,8 @@ class FactRecord:
                 pass
         return today_local().isoformat()
 
-    def is_active(self) -> bool:
-        return self.valid_until == ""
+    def is_active(self, as_of_time: str | datetime | None = None) -> bool:
+        return is_valid_until_active(self.valid_until, as_of_time=as_of_time)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -186,8 +186,42 @@ def fact_file_for_record(anima_dir: Path, record: FactRecord) -> Path:
     return facts_dir(anima_dir) / f"{record.storage_date}.jsonl"
 
 
-def is_fact_active(record: FactRecord) -> bool:
-    return record.is_active()
+@dataclass(frozen=True)
+class FactRecordUpdate:
+    """A fact row updated in a JSONL facts file."""
+
+    path: Path
+    line_no: int
+    record: FactRecord
+
+
+def _parse_timestamp(value: str | datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return ensure_aware(value)
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return ensure_aware(datetime.fromisoformat(raw.replace("Z", "+00:00")))
+    except (TypeError, ValueError):
+        return None
+
+
+def is_valid_until_active(valid_until: str, *, as_of_time: str | datetime | None = None) -> bool:
+    """Return whether a ``valid_until`` value is still active at ``as_of_time``."""
+    if not str(valid_until or "").strip():
+        return True
+    until = _parse_timestamp(valid_until)
+    if until is None:
+        return False
+    as_of = _parse_timestamp(as_of_time) or now_local()
+    return until > as_of
+
+
+def is_fact_active(record: FactRecord, *, as_of_time: str | datetime | None = None) -> bool:
+    return record.is_active(as_of_time=as_of_time)
 
 
 def fact_entity_names(record: FactRecord) -> list[str]:
@@ -226,7 +260,12 @@ def _locked_file(path: Path) -> Iterator[None]:
                 pass
 
 
-def read_fact_records(path: Path, *, include_expired: bool = False) -> list[FactRecord]:
+def read_fact_records(
+    path: Path,
+    *,
+    include_expired: bool = False,
+    as_of_time: str | datetime | None = None,
+) -> list[FactRecord]:
     if not path.is_file():
         return []
 
@@ -245,24 +284,91 @@ def read_fact_records(path: Path, *, include_expired: bool = False) -> list[Fact
         except (json.JSONDecodeError, TypeError, ValueError):
             logger.warning("Skipping invalid fact line %s:%d", path, line_no)
             continue
-        if include_expired or record.is_active():
+        if include_expired or record.is_active(as_of_time=as_of_time):
             records.append(record)
     return records
 
 
-def iter_fact_records(anima_dir: Path, *, include_expired: bool = False) -> Iterator[FactRecord]:
+def iter_fact_records(
+    anima_dir: Path,
+    *,
+    include_expired: bool = False,
+    as_of_time: str | datetime | None = None,
+) -> Iterator[FactRecord]:
     directory = facts_dir(anima_dir)
     if not directory.is_dir():
         return
     for path in sorted(directory.glob("*.jsonl")):
-        yield from read_fact_records(path, include_expired=include_expired)
+        yield from read_fact_records(path, include_expired=include_expired, as_of_time=as_of_time)
 
 
 def rewrite_fact_records(path: Path, records: list[FactRecord]) -> None:
     with _locked_file(path):
         unique = _dedup_records(records)
-        content = "\n".join(record.to_json_line() for record in unique)
-        atomic_write_text(path, content + ("\n" if content else ""))
+        _write_fact_records_unlocked(path, unique)
+
+
+def find_fact_record(anima_dir: Path, fact_id: str) -> FactRecordUpdate | None:
+    """Find a fact by id, including expired rows."""
+    wanted = str(fact_id or "").strip()
+    if not wanted:
+        return None
+    directory = facts_dir(anima_dir)
+    if not directory.is_dir():
+        return None
+    for path in sorted(directory.glob("*.jsonl")):
+        records = read_fact_records(path, include_expired=True)
+        for idx, record in enumerate(records, 1):
+            if record.fact_id == wanted:
+                return FactRecordUpdate(path=path, line_no=idx, record=record)
+    return None
+
+
+def update_fact_records_by_id(
+    anima_dir: Path,
+    updaters: dict[str, Callable[[FactRecord], FactRecord | None]],
+) -> list[FactRecordUpdate]:
+    """Atomically rewrite facts files after applying fact_id-specific updaters."""
+    pending = {
+        str(fact_id or "").strip(): updater for fact_id, updater in updaters.items() if str(fact_id or "").strip()
+    }
+    if not pending:
+        return []
+
+    directory = facts_dir(anima_dir)
+    if not directory.is_dir():
+        return []
+
+    updated: list[FactRecordUpdate] = []
+    for path in sorted(directory.glob("*.jsonl")):
+        if not pending:
+            break
+        with _locked_file(path):
+            records = read_fact_records(path, include_expired=True)
+            changed = False
+            for idx, record in enumerate(records):
+                updater = pending.get(record.fact_id)
+                if updater is None:
+                    continue
+                replacement = updater(record)
+                pending.pop(record.fact_id, None)
+                if replacement is None:
+                    continue
+                records[idx] = replacement
+                updated.append(FactRecordUpdate(path=path, line_no=idx + 1, record=replacement))
+                changed = True
+            if changed:
+                _write_fact_records_unlocked(path, records)
+    return updated
+
+
+def update_fact_record_by_id(
+    anima_dir: Path,
+    fact_id: str,
+    updater: Callable[[FactRecord], FactRecord | None],
+) -> FactRecordUpdate | None:
+    updates = update_fact_records_by_id(anima_dir, {fact_id: updater})
+    return updates[0] if updates else None
 
 
 def append_fact_records(anima_dir: Path, records: list[FactRecord]) -> list[FactRecord]:
@@ -309,3 +415,8 @@ def _dedup_records(records: list[FactRecord]) -> list[FactRecord]:
         seen_keys.add(record.dedup_key)
         out.append(record)
     return out
+
+
+def _write_fact_records_unlocked(path: Path, records: list[FactRecord]) -> None:
+    content = "\n".join(record.to_json_line() for record in records if record.text)
+    atomic_write_text(path, content + ("\n" if content else ""))

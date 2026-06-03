@@ -89,7 +89,7 @@ def test_keyword_fallback_searches_active_facts_only(tmp_path: Path) -> None:
                 target_entity="LoCoMo",
                 edge_type="USED",
                 recorded_at="2026-06-03T10:01:00+09:00",
-                valid_until="2026-06-03T11:00:00+09:00",
+                valid_until="2000-01-01T00:00:00+00:00",
             ),
         ],
     )
@@ -111,3 +111,19 @@ def test_keyword_fallback_searches_active_facts_only(tmp_path: Path) -> None:
     assert results[0]["memory_type"] == "facts"
     assert results[0]["fact_id"]
     assert "expired" not in results[0]["content"].lower()
+
+
+@pytest.mark.unit
+def test_vector_fact_filter_keeps_future_valid_until_and_drops_past() -> None:
+    from core.memory.rag.retriever import MemoryRetriever
+
+    retriever = MemoryRetriever(MagicMock(), MagicMock(), Path("/tmp/knowledge"))
+    rows = [
+        ("active-empty", "active empty", 0.9, {"valid_until": ""}),
+        ("active-future", "active future", 0.8, {"valid_until": "2999-01-01T00:00:00+00:00"}),
+        ("expired-past", "expired past", 0.7, {"valid_until": "2000-01-01T00:00:00+00:00"}),
+    ]
+
+    filtered = retriever._filter_active_fact_vector_results(rows)
+
+    assert [row[0] for row in filtered] == ["active-empty", "active-future"]

@@ -234,6 +234,18 @@ class RAGConfig(BaseModel):
     confidence_threshold: float = 0.35
     rrf_confidence_threshold: float = 0.02
     facts_extraction_enabled: bool = True
+    facts_reconcile_enabled: bool = Field(
+        default=True,
+        description="Enable legacy atomic fact reconciliation before append; failures fall back to ADD.",
+    )
+    facts_reconcile_similarity_threshold: float = Field(
+        default=0.82,
+        description="Minimum facts vector similarity before strict LLM duplicate/contradiction/complement labeling.",
+    )
+    facts_reconcile_top_k: int = Field(
+        default=5,
+        description="Maximum similar active facts considered during legacy fact reconciliation.",
+    )
     entity_registry_enabled: bool = True
     entity_boost_enabled: bool = False
     entity_boost: float = 0.20

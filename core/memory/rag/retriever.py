@@ -150,17 +150,19 @@ class MemoryRetriever:
             include_shared,
         )
 
-        # Build metadata filter for superseded knowledge exclusion
+        # Build metadata filter for superseded knowledge exclusion.
+        # Facts need post-filtering because future valid_until values remain active.
         filter_metadata: dict[str, str | int | float] | None = None
-        if not include_superseded and memory_type in ("knowledge", "facts"):
+        if not include_superseded and memory_type == "knowledge":
             filter_metadata = {"valid_until": ""}
 
         # 1. Dense Vector search (personal collection)
+        fetch_multiplier = 4 if memory_type == "facts" and not include_superseded else 2
         vector_results = self._vector_search(
             query,
             anima_name,
             memory_type,
-            top_k * 2,
+            top_k * fetch_multiplier,
             filter_metadata=filter_metadata,
         )
 
@@ -182,6 +184,8 @@ class MemoryRetriever:
 
         if memory_type == "skills":
             vector_results = self._filter_loadable_skill_vector_results(vector_results)
+        if memory_type == "facts" and not include_superseded:
+            vector_results = self._filter_active_fact_vector_results(vector_results)
 
         # 2. Convert to RetrievalResult
         results = [
@@ -392,6 +396,23 @@ class MemoryRetriever:
                 logger.debug("Failed to evaluate vector skill result %s", source_file, exc_info=True)
                 continue
             if allowed:
+                filtered.append((doc_id, content, score, metadata))
+        return filtered
+
+    def _filter_active_fact_vector_results(
+        self,
+        results: list[tuple[str, str, float, dict]],
+    ) -> list[tuple[str, str, float, dict]]:
+        try:
+            from core.memory.facts import is_valid_until_active
+        except Exception:
+            logger.debug("Failed to import fact validity helper", exc_info=True)
+            return results
+
+        filtered: list[tuple[str, str, float, dict]] = []
+        for doc_id, content, score, metadata in results:
+            valid_until = str((metadata or {}).get("valid_until", "") or "")
+            if is_valid_until_active(valid_until):
                 filtered.append((doc_id, content, score, metadata))
         return filtered
 

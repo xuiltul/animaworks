@@ -38,7 +38,7 @@ async def test_legacy_atomic_facts_search_flow(tmp_path: Path) -> None:
                 target_entity="LoCoMo rubric",
                 edge_type="USED",
                 recorded_at="2026-06-03T10:06:00+09:00",
-                valid_until="2026-06-03T11:00:00+09:00",
+                valid_until="2000-01-01T00:00:00+00:00",
             ),
         ],
     )
@@ -56,9 +56,7 @@ async def test_legacy_atomic_facts_search_flow(tmp_path: Path) -> None:
     recent = await backend.get_recent_facts("LoCoMo reports", limit=5)
     all_scope = await backend.retrieve("LoCoMo reports", scope="all", limit=5)
 
-    assert [r.content for r in scoped] == [
-        "Alice prefers LoCoMo benchmark reports when evaluating memory changes."
-    ]
+    assert [r.content for r in scoped] == ["Alice prefers LoCoMo benchmark reports when evaluating memory changes."]
     assert recent[0].metadata["fact_id"] == scoped[0].metadata["fact_id"]
     assert any(r.metadata["memory_type"] == "facts" for r in all_scope)
     assert all("expired" not in r.content.lower() for r in scoped + recent + all_scope)
