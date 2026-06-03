@@ -668,6 +668,29 @@ class ConsolidationEngine:
 
         return chunks
 
+    async def extract_facts_from_text(
+        self,
+        text: str,
+        *,
+        source_episode: str,
+        source_session_id: str = "consolidation:daily",
+    ) -> int:
+        """Extract and store atomic facts from consolidated episode text."""
+        try:
+            from core.memory.fact_extraction import extract_and_store_facts
+
+            stored = await extract_and_store_facts(
+                self.anima_dir,
+                text,
+                source_episode=source_episode,
+                source_session_id=source_session_id,
+                origin="consolidation",
+            )
+            return len(stored)
+        except Exception:
+            logger.debug("Consolidation atomic fact extraction failed", exc_info=True)
+            return 0
+
     @staticmethod
     def merge_timeline_parts(parts: list[str]) -> str:
         """Merge multiple structured timeline parts into a single episode.
@@ -1241,6 +1264,11 @@ class ConsolidationEngine:
             for episode_file in self.episodes_dir.glob("*.md"):
                 indexer.index_file(episode_file, memory_type="episodes")
                 logger.debug("Re-indexed episode: %s", episode_file.name)
+
+            facts_dir = self.anima_dir / "facts"
+            for fact_file in facts_dir.glob("*.jsonl"):
+                indexer.index_file(fact_file, memory_type="facts")
+                logger.debug("Re-indexed facts: %s", fact_file.name)
 
             logger.info("RAG index rebuild complete for anima=%s", self.anima_name)
 

@@ -233,6 +233,7 @@ class RAGConfig(BaseModel):
     abstain_on_low_confidence: bool = True
     confidence_threshold: float = 0.35
     rrf_confidence_threshold: float = 0.02
+    facts_extraction_enabled: bool = True
 
 
 class Neo4jConfig(BaseModel):

@@ -29,6 +29,7 @@ _SCOPE_TO_MEMORY_TYPE: dict[str, str] = {
     "procedures": "procedures",
     "common_knowledge": "common_knowledge",
     "skills": "skills",
+    "facts": "facts",
     "all": "all",
 }
 
@@ -37,6 +38,7 @@ _PATH_PART_TO_MEMORY_TYPE: dict[str, str] = {
     "knowledge": "knowledge",
     "procedures": "procedures",
     "skills": "skills",
+    "facts": "facts",
     "common_knowledge": "common_knowledge",
     "common_skills": "common_skills",
 }
@@ -180,7 +182,7 @@ class LegacyRAGBackend(MemoryBackend):
         """Retrieve memories, delegating to retriever or search_memory_text."""
         memory_type = _SCOPE_TO_MEMORY_TYPE.get(scope, "knowledge")
 
-        if scope in ("all", "activity_log"):
+        if scope in ("all", "activity_log", "facts"):
             return await self._retrieve_via_search_text(query, scope, limit, min_score)
 
         retriever = self._ensure_retriever()
@@ -355,7 +357,7 @@ class LegacyRAGBackend(MemoryBackend):
         if indexer is None:
             return 0
 
-        scopes = [scope] if scope else ["knowledge", "episodes", "procedures"]
+        scopes = [scope] if scope else ["knowledge", "episodes", "procedures", "facts"]
         total = 0
 
         for s in scopes:
@@ -385,7 +387,11 @@ class LegacyRAGBackend(MemoryBackend):
         hours: int = 24,
         limit: int = 10,
     ) -> list[RetrievedMemory]:
-        """Search recent activity_log via BM25 as a rough proxy for recent facts."""
+        """Search active atomic facts, falling back to activity_log for legacy data."""
+        fact_results = await self._retrieve_via_search_text(query, "facts", limit, 0.0)
+        if fact_results:
+            return fact_results
+
         try:
             from core.memory.bm25 import search_activity_log
 
@@ -450,6 +456,11 @@ class LegacyRAGBackend(MemoryBackend):
                         "memory_type": d.get("memory_type", ""),
                         "search_method": d.get("search_method", ""),
                         "chunk_index": d.get("chunk_index", 0),
+                        "fact_id": d.get("fact_id", ""),
+                        "edge_type": d.get("edge_type", ""),
+                        "source_episode": d.get("source_episode", ""),
+                        "valid_at": d.get("valid_at_iso", ""),
+                        "valid_until": d.get("valid_until", ""),
                     },
                     trust="medium",
                 )

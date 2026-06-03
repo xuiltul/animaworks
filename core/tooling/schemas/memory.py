@@ -15,7 +15,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "search_memory",
         "description": (
-            "Search YOUR OWN long-term memory (knowledge, episodes, procedures) by semantic similarity. "
+            "Search YOUR OWN long-term memory (knowledge, episodes, procedures, facts) by semantic similarity. "
             "Returns ranked results with scores and full content. "
             "Use offset for pagination (10 results per page). "
             "NOT for locating subordinate Animas — use ping_subordinate for that."
@@ -30,13 +30,14 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                         "knowledge",
                         "episodes",
                         "procedures",
+                        "facts",
                         "common_knowledge",
                         "skills",
                         "activity_log",
                         "all",
                     ],
                     "description": (
-                        "Memory category to search. 'activity_log' searches recent tool results "
+                        "Memory category to search. 'facts' searches atomic extracted facts. 'activity_log' searches recent tool results "
                         "and messages (last 3 days via BM25)."
                     ),
                 },

@@ -152,7 +152,7 @@ class MemoryRetriever:
 
         # Build metadata filter for superseded knowledge exclusion
         filter_metadata: dict[str, str | int | float] | None = None
-        if not include_superseded and memory_type == "knowledge":
+        if not include_superseded and memory_type in ("knowledge", "facts"):
             filter_metadata = {"valid_until": ""}
 
         # 1. Dense Vector search (personal collection)

@@ -56,12 +56,14 @@ class MemoryManager:
         self.episodes_dir = anima_dir / "episodes"
         self.knowledge_dir = anima_dir / "knowledge"
         self.procedures_dir = anima_dir / "procedures"
+        self.facts_dir = anima_dir / "facts"
         self.skills_dir = anima_dir / "skills"
         self.state_dir = anima_dir / "state"
         for d in (
             self.episodes_dir,
             self.knowledge_dir,
             self.procedures_dir,
+            self.facts_dir,
             self.skills_dir,
             self.state_dir,
         ):
@@ -143,6 +145,8 @@ class MemoryManager:
             self.knowledge_dir = ad / "knowledge"
         if not hasattr(self, "procedures_dir"):
             self.procedures_dir = ad / "procedures"
+        if not hasattr(self, "facts_dir"):
+            self.facts_dir = ad / "facts"
         if not hasattr(self, "skills_dir"):
             self.skills_dir = ad / "skills"
         self.__cron = CronLogger(ad)
@@ -345,6 +349,9 @@ class MemoryManager:
 
     def list_procedure_files(self) -> list[str]:
         return [f.stem for f in sorted(self.procedures_dir.glob("*.md"))]
+
+    def list_fact_files(self) -> list[str]:
+        return [f.stem for f in sorted(self.facts_dir.glob("*.jsonl"))]
 
     def list_skill_files(self) -> list[str]:
         return [f.parent.name for f in sorted(self.skills_dir.glob("*/SKILL.md"))]

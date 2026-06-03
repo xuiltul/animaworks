@@ -135,6 +135,21 @@ class RAGMemorySearch:
                 except Exception as e:
                     logger.warning("Failed to index procedures: %s", e)
 
+            facts_dir = self._anima_dir / "facts"
+            if facts_dir.is_dir() and any(facts_dir.glob("*.jsonl")):
+                try:
+                    indexed = self._indexer.index_directory(
+                        facts_dir,
+                        "facts",
+                    )
+                    if indexed > 0:
+                        logger.debug(
+                            "Indexed %d chunks from facts/",
+                            indexed,
+                        )
+                except Exception as e:
+                    logger.warning("Failed to index facts: %s", e)
+
             # Index conversation summary (compressed_summary)
             state_dir = self._anima_dir / "state"
             conv_file = state_dir / "conversation.json"
@@ -451,7 +466,7 @@ class RAGMemorySearch:
 
         keyword_hits = self._keyword_search_fallback(
             query,
-            "episodes",
+            "all",
             0,
             knowledge_dir=knowledge_dir,
             episodes_dir=episodes_dir,
@@ -459,6 +474,12 @@ class RAGMemorySearch:
             common_knowledge_dir=common_knowledge_dir,
         )
         if keyword_hits:
+            if not ranked_lists:
+                self._last_search_meta = {
+                    "abstain": False,
+                    "abstain_reason": "",
+                }
+                return keyword_hits[offset : offset + limit]
             ranked_lists.append(keyword_hits[:pool_k])
 
         pipeline = RetrievalPipeline(
@@ -582,17 +603,29 @@ class RAGMemorySearch:
                     overlap_ratio = matched / len(tokens)
                     score += WEIGHT_TOKEN_OVERLAP * overlap_ratio
 
-                all_results.append(
-                    {
-                        "source_file": r.metadata.get("source_file", r.doc_id),
-                        "content": r.content,
-                        "score": score,
-                        "chunk_index": int(r.metadata.get("chunk_index", 0)),
-                        "total_chunks": int(r.metadata.get("total_chunks", 1)),
-                        "memory_type": r.metadata.get("memory_type", memory_type),
-                        "search_method": "vector",
-                    }
-                )
+                item = {
+                    "source_file": r.metadata.get("source_file", r.doc_id),
+                    "content": r.content,
+                    "score": score,
+                    "chunk_index": int(r.metadata.get("chunk_index", 0)),
+                    "total_chunks": int(r.metadata.get("total_chunks", 1)),
+                    "memory_type": r.metadata.get("memory_type", memory_type),
+                    "search_method": "vector",
+                }
+                for key in (
+                    "fact_id",
+                    "edge_type",
+                    "source_entity",
+                    "target_entity",
+                    "valid_at_iso",
+                    "valid_until",
+                    "source_episode",
+                    "source_session_id",
+                    "entities",
+                ):
+                    if key in r.metadata:
+                        item[key] = r.metadata[key]
+                all_results.append(item)
 
         all_results.sort(key=lambda x: x["score"], reverse=True)
         if result_limit is not None:
@@ -655,6 +688,12 @@ class RAGMemorySearch:
                         "search_method": "keyword_fallback",
                     }
 
+        if scope in ("facts", "all"):
+            for hit in self._keyword_search_facts(query, tokens):
+                rel_path = f"{hit['source_file']}:{hit.get('fact_id', '')}"
+                if rel_path not in file_scores or file_scores[rel_path]["score"] < hit["score"]:
+                    file_scores[rel_path] = hit
+
         if scope in ("all", "conversation_summary"):
             conv_file = self._anima_dir / "state" / "conversation.json"
             if conv_file.is_file():
@@ -696,9 +735,79 @@ class RAGMemorySearch:
             return ["skills"]
         if scope == "conversation_summary":
             return ["conversation_summary"]
+        if scope == "facts":
+            return ["facts"]
         if scope == "all":
-            return ["knowledge", "episodes", "procedures", "skills", "conversation_summary"]
+            return ["facts", "knowledge", "episodes", "procedures", "skills", "conversation_summary"]
         return ["knowledge"]
+
+    def _keyword_search_facts(self, query: str, tokens: list[str] | None = None) -> list[dict]:
+        """Keyword search over active legacy facts JSONL records."""
+        del query
+        tokens = tokens or []
+        if not tokens:
+            return []
+
+        try:
+            from core.memory.facts import FactRecord
+        except ImportError:
+            return []
+
+        facts_dir = self._anima_dir / "facts"
+        if not facts_dir.is_dir():
+            return []
+
+        results: list[dict] = []
+        for path in sorted(facts_dir.glob("*.jsonl")):
+            try:
+                lines = path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for line_no, line in enumerate(lines, 1):
+                if not line.strip():
+                    continue
+                try:
+                    record = FactRecord.from_json_line(line)
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    continue
+                if not record.is_active():
+                    continue
+                searchable = "\n".join(
+                    [
+                        record.text,
+                        record.source_entity,
+                        record.target_entity,
+                        record.edge_type,
+                        " ".join(record.entities),
+                    ]
+                ).lower()
+                matched = sum(1 for tok in tokens if tok in searchable)
+                if matched == 0:
+                    continue
+                score = matched / len(tokens)
+                results.append(
+                    {
+                        "source_file": f"facts/{path.name}",
+                        "content": record.text,
+                        "score": score,
+                        "chunk_index": line_no - 1,
+                        "total_chunks": len(lines),
+                        "memory_type": "facts",
+                        "search_method": "keyword_fallback",
+                        "fact_id": record.fact_id,
+                        "edge_type": record.edge_type,
+                        "source_entity": record.source_entity,
+                        "target_entity": record.target_entity,
+                        "valid_at_iso": record.valid_at,
+                        "valid_until": record.valid_until,
+                        "source_episode": record.source_episode,
+                        "source_session_id": record.source_session_id,
+                        "entities": list(record.entities),
+                    }
+                )
+
+        results.sort(key=lambda x: x["score"], reverse=True)
+        return results
 
     def search_knowledge(self, query: str, knowledge_dir: Path) -> list[tuple[str, str]]:
         """Search knowledge/ by keyword (OR-split on whitespace tokens)."""

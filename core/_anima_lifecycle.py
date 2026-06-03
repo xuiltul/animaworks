@@ -462,6 +462,16 @@ class LifecycleMixin:
                 len(merged_episodes),
                 episode_path.name,
             )
+            try:
+                fact_count = await engine.extract_facts_from_text(
+                    merged_episodes,
+                    source_episode=f"episodes/{episode_path.name}",
+                    source_session_id="consolidation:daily",
+                )
+                if fact_count:
+                    logger.info("[%s] Phase A: stored %d atomic fact(s)", self.name, fact_count)
+            except Exception:
+                logger.debug("[%s] Phase A atomic fact extraction failed", self.name, exc_info=True)
 
         # ── Phase B: Knowledge extraction ───────────────────────
         episodes = engine._collect_recent_episodes(hours=24)

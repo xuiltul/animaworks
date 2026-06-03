@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from core.memory.rag.episode_time import apply_episode_heading_event_time
+from core.memory.rag.facts_chunker import chunk_facts_jsonl
 from core.time_utils import ensure_aware, now_iso
 
 if TYPE_CHECKING:
@@ -365,10 +366,8 @@ class MemoryIndexer:
             logger.warning("Directory not found: %s", directory)
             return 0
 
-        if memory_type in ("skills", "common_skills"):
-            md_files = sorted(directory.rglob("SKILL.md"))
-        else:
-            md_files = sorted(directory.rglob("*.md"))
+        patterns = {"facts": "*.jsonl", "skills": "SKILL.md", "common_skills": "SKILL.md"}
+        md_files = sorted(directory.rglob(patterns.get(memory_type, "*.md")))
         total_chunks = 0
         for md_file in md_files:
             total_chunks += self.index_file(md_file, memory_type, force=force)
@@ -580,13 +579,14 @@ class MemoryIndexer:
     ) -> list[MemoryChunk]:
         """Chunk file based on memory type.
 
-        Strategies:
-        - knowledge / common_knowledge: Markdown heading sections
-        - episodes: Time headings (``## HH:MM``) when present, else Markdown headings
-        - procedures: Whole file (don't split procedures)
-        - skills / common_skills: Whole file
-        - shared_users: Whole file
+        Markdown memory is split by headings/time headings; facts use JSONL
+        records; procedures, skills, and shared users are indexed whole.
         """
+        if memory_type == "facts":
+            return chunk_facts_jsonl(
+                file_path, content, anima_dir=self.anima_dir, collection_prefix=self.collection_prefix,
+                make_chunk_id=self._make_chunk_id, chunk_factory=MemoryChunk, origin=origin,
+            )
         if memory_type in ("knowledge", "common_knowledge"):
             return self._chunk_by_markdown_headings(file_path, content, memory_type, origin=origin)
         if memory_type == "episodes":

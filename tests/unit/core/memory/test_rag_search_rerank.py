@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.memory.retrieval.pipeline import PipelineResult
 from core.memory.rag_search import RAGMemorySearch
+from core.memory.retrieval.pipeline import PipelineResult
 
 
 @pytest.fixture
@@ -88,6 +89,42 @@ class TestRAGSearchScopeAllPipeline:
         assert results == []
         assert rag_search.last_search_meta["abstain"] is True
         assert rag_search.last_search_meta["abstain_reason"] == "low_confidence"
+
+    def test_hybrid_all_returns_keyword_fallback_when_vector_sources_empty(
+        self,
+        rag_search: RAGMemorySearch,
+    ) -> None:
+        state_dir = rag_search._anima_dir / "state"
+        state_dir.mkdir(parents=True)
+        (state_dir / "conversation.json").write_text(
+            json.dumps(
+                {
+                    "turns": [],
+                    "compressed_summary": "Reviewed memory consolidation pipeline.",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with (
+            patch.object(rag_search, "_vector_search_primary", return_value=[]),
+            patch.object(rag_search, "_graph_episodes_search", return_value=[]),
+            patch("core.memory.rag_search.search_activity_log", return_value=[]),
+            patch("core.memory.retrieval.pipeline.RetrievalPipeline") as pipeline_cls,
+        ):
+            results = rag_search.search_memory_text(
+                "consolidation",
+                scope="all",
+                knowledge_dir=rag_search._anima_dir / "knowledge",
+                episodes_dir=rag_search._anima_dir / "episodes",
+                procedures_dir=rag_search._anima_dir / "procedures",
+                common_knowledge_dir=rag_search._anima_dir / "common_knowledge",
+            )
+
+        assert results[0]["memory_type"] == "conversation_summary"
+        assert "consolidation" in results[0]["content"].lower()
+        assert rag_search.last_search_meta["abstain"] is False
+        pipeline_cls.assert_not_called()
 
     def test_non_all_scope_clears_meta(self, rag_search: RAGMemorySearch) -> None:
         rag_search._last_search_meta = {"abstain": True}

@@ -1,8 +1,4 @@
 """Unit tests for procedures vector search enablement in rag_search.py."""
-# AnimaWorks - Digital Anima Framework
-# Copyright (C) 2026 AnimaWorks Authors
-# SPDX-License-Identifier: Apache-2.0
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,7 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.memory.rag_search import RAGMemorySearch
-
 
 # ── Fixtures ─────────────────────────────────────────────
 
@@ -84,8 +79,9 @@ class TestResolveSearchTypesProcedures:
 
 class TestResolveSearchTypesAll:
     def test_resolve_search_types_all(self) -> None:
-        """scope='all' -> includes knowledge, episodes, procedures, skills, conversation_summary."""
+        """scope='all' -> includes facts plus existing long-term memory types."""
         assert RAGMemorySearch._resolve_search_types("all") == [
+            "facts",
             "knowledge",
             "episodes",
             "procedures",

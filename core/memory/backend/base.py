@@ -22,6 +22,7 @@ VALID_SCOPES: frozenset[str] = frozenset(
         "procedures",
         "common_knowledge",
         "skills",
+        "facts",
         "activity_log",
         "all",
     }

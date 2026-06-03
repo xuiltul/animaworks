@@ -126,10 +126,12 @@ class TestScopePolicy:
         assert is_neo4j_backed_scope("all") is True
         assert is_legacy_only_scope("common_knowledge") is True
         assert is_legacy_only_scope("skills") is True
+        assert is_legacy_only_scope("facts") is True
         assert is_legacy_only_scope("activity_log") is True
-        assert LEGACY_ONLY_SCOPES_FOR_ALL == ("common_knowledge", "skills", "activity_log")
+        assert LEGACY_ONLY_SCOPES_FOR_ALL == ("common_knowledge", "skills", "facts", "activity_log")
         assert neo4j_scope_for("episodes") == "episode"
         assert title_for_legacy_scope("common_knowledge") == "Common Knowledge"
+        assert title_for_legacy_scope("facts") == "Facts"
 
 
 # ── TestCreateNeo4jBackend ────────────────────────────────
@@ -327,6 +329,14 @@ class TestHandleSearchMemoryIntegration:
                         "search_method": "vector",
                     }
                 ],
+                "facts": [
+                    {
+                        "content": "fact result",
+                        "source_file": "facts/2026-06-03.jsonl",
+                        "score": 0.65,
+                        "search_method": "keyword_fallback",
+                    }
+                ],
                 "activity_log": [
                     {
                         "content": "activity result",
@@ -348,6 +358,8 @@ class TestHandleSearchMemoryIntegration:
         assert "common result" in result
         assert "## Skills" in result
         assert "skill result" in result
+        assert "## Facts" in result
+        assert "fact result" in result
         assert "## Activity Log" in result
         assert "activity result" in result
         assert mock_backend.retrieve.await_args.kwargs["scope"] == "all"
@@ -355,6 +367,7 @@ class TestHandleSearchMemoryIntegration:
             [
                 call("test", scope="common_knowledge", offset=0, context_window=128_000),
                 call("test", scope="skills", offset=0, context_window=128_000),
+                call("test", scope="facts", offset=0, context_window=128_000),
                 call("test", scope="activity_log", offset=0, context_window=128_000),
             ]
         )

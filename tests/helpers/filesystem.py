@@ -35,6 +35,7 @@ DEFAULT_TEST_CONFIG: dict[str, Any] = {
         "conversation_history_threshold": 0.30,
     },
     "animas": {},
+    "rag": {"facts_extraction_enabled": False},
     "external_messaging": {
         "slack": {"enabled": True},
         "chatwork": {"enabled": True},

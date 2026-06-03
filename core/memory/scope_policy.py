@@ -22,6 +22,7 @@ LEGACY_ONLY_SCOPES: frozenset[str] = frozenset(
     {
         "common_knowledge",
         "skills",
+        "facts",
         "activity_log",
     }
 )
@@ -29,12 +30,14 @@ LEGACY_ONLY_SCOPES: frozenset[str] = frozenset(
 LEGACY_ONLY_SCOPES_FOR_ALL: tuple[str, ...] = (
     "common_knowledge",
     "skills",
+    "facts",
     "activity_log",
 )
 
 LEGACY_SCOPE_TITLES: dict[str, str] = {
     "common_knowledge": "Common Knowledge",
     "skills": "Skills",
+    "facts": "Facts",
     "activity_log": "Activity Log",
 }
 
