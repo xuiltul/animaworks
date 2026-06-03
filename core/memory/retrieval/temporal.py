@@ -58,8 +58,5 @@ def _has_event_time(candidate: dict[str, Any]) -> bool:
 
 
 def _candidate_years(candidate: dict[str, Any]) -> set[str]:
-    text = " ".join(
-        str(candidate.get(key, "") or "")
-        for key in ("content", "event_time_text", "event_time_iso")
-    )
+    text = " ".join(str(candidate.get(key, "") or "") for key in ("content", "event_time_text", "event_time_iso"))
     return set(_YEAR_RE.findall(text))

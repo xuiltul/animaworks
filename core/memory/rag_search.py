@@ -321,8 +321,23 @@ class RAGMemorySearch:
                 offset=offset,
             )
 
-        primary_results: list[dict] = []
         indexer = self._get_indexer()
+        if (
+            scope == "all"
+            and indexer is not None
+            and reciprocal_rank_fusion is not None
+            and search_activity_log is not None
+        ):
+            return self._search_scope_all_hybrid(
+                query,
+                offset=offset,
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+            )
+
+        primary_results: list[dict] = []
         if indexer is not None:
             try:
                 primary_results = self._vector_search_primary(
@@ -347,16 +362,6 @@ class RAGMemorySearch:
                 query,
                 scope,
                 offset,
-                knowledge_dir=knowledge_dir,
-                episodes_dir=episodes_dir,
-                procedures_dir=procedures_dir,
-                common_knowledge_dir=common_knowledge_dir,
-            )
-
-        if scope == "all" and reciprocal_rank_fusion is not None and search_activity_log is not None:
-            return self._search_scope_all_hybrid(
-                query,
-                offset=offset,
                 knowledge_dir=knowledge_dir,
                 episodes_dir=episodes_dir,
                 procedures_dir=procedures_dir,
