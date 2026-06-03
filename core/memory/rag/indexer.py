@@ -24,6 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from core.memory.rag.episode_time import apply_episode_heading_event_time
 from core.time_utils import ensure_aware, now_iso
 
 if TYPE_CHECKING:
@@ -31,13 +32,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("animaworks.rag.indexer")
 
-# ── Configuration ───────────────────────────────────────────────────
-
-# Index metadata file
 INDEX_META_FILE = "index_meta.json"
-
-
-# ── Data structures ─────────────────────────────────────────────────
 
 
 @dataclass
@@ -46,7 +41,7 @@ class MemoryChunk:
 
     id: str
     content: str
-    metadata: dict[str, str | int | float | list[str]]
+    metadata: dict[str, str | int | float | bool | list[str]]
 
 
 # ── MemoryIndexer ───────────────────────────────────────────────────
@@ -624,7 +619,7 @@ class MemoryIndexer:
         frontmatter = self._parse_frontmatter(content)
         content = self._strip_frontmatter(content)
         chunks: list[MemoryChunk] = []
-        sections = re.split(r"\n(##\s+.+)", content)
+        sections = re.split(r"\n(##\s+.+)", f"\n{content}")
 
         preamble = sections[0].strip()
         chunk_idx = 0
@@ -668,6 +663,8 @@ class MemoryIndexer:
                         frontmatter=frontmatter,
                         origin=origin,
                     )
+                    if memory_type == "episodes":
+                        apply_episode_heading_event_time(metadata, heading)
                     chunks.append(
                         MemoryChunk(
                             id=chunk_id,
@@ -696,7 +693,7 @@ class MemoryIndexer:
         base_date_str = date_match.group(1) if date_match else None
 
         # Match headings like ## 09:30, ## 14:15 optional — title
-        sections = re.split(r"\n(##\s+\d{1,2}:\d{2}.*)", content)
+        sections = re.split(r"\n(##\s+\d{1,2}:\d{2}.*)", f"\n{content}")
 
         if len(sections) <= 1:
             return []
@@ -840,7 +837,7 @@ class MemoryIndexer:
         total_chunks: int,
         frontmatter: dict | None = None,
         origin: str = "",
-    ) -> dict[str, str | int | float | list[str]]:
+    ) -> dict[str, str | int | float | bool | list[str]]:
         """Extract metadata from file and content.
 
         Args:
@@ -853,7 +850,7 @@ class MemoryIndexer:
                 If provided, ``valid_until`` is extracted from it.
             origin: Provenance origin category for trust resolution.
         """
-        metadata: dict[str, str | int | float | list[str]] = {
+        metadata: dict[str, str | int | float | bool | list[str]] = {
             "anima": self.collection_prefix,
             "memory_type": memory_type,
             "source_file": str(file_path.relative_to(self.anima_dir)),

@@ -11,8 +11,10 @@ Verifies:
 """
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -260,6 +262,93 @@ class TestChunkByTimeHeadingsMemoryType:
         for chunk in chunks:
             assert chunk.metadata["memory_type"] == "episodes"
             assert "episodes/episodes/" not in chunk.id
+            assert "event_time_iso" not in chunk.metadata
+
+
+class TestLoCoMoSessionHeadingEventTime:
+    """Verify LoCoMo session headings are promoted to event-time metadata."""
+
+    @pytest.fixture
+    def anima_dir(self, tmp_path: Path) -> Path:
+        d = tmp_path / "anima"
+        d.mkdir()
+        (d / "episodes").mkdir()
+        return d
+
+    def _make_indexer(self, anima_dir: Path):
+        from core.memory.rag.indexer import MemoryIndexer
+
+        with patch.object(MemoryIndexer, "_init_embedding_model"):
+            return MemoryIndexer(
+                MagicMock(),
+                anima_name=anima_dir.name,
+                anima_dir=anima_dir,
+            )
+
+    def test_session_heading_em_dash_sets_event_metadata(self, anima_dir: Path):
+        indexer = self._make_indexer(anima_dir)
+        f = anima_dir / "episodes" / "conv-26.md"
+        f.write_text(
+            "<!-- sample_id: conv-26 -->\n\n"
+            "## Session 10 — 8:56 pm on 20 July, 2023\n\n"
+            "**Caroline**: I recommended Becoming Nicole.",
+            encoding="utf-8",
+        )
+
+        chunks = indexer._chunk_by_markdown_headings(f, f.read_text(), "episodes")
+
+        assert len(chunks) == 1
+        metadata = chunks[0].metadata
+        assert metadata["session_index"] == 10
+        assert metadata["event_time_text"] == "8:56 pm on 20 July, 2023"
+        assert metadata["event_time_iso"] == "2023-07-20T20:56:00+09:00"
+        assert metadata["valid_at"] == pytest.approx(
+            datetime(2023, 7, 20, 20, 56, tzinfo=ZoneInfo("Asia/Tokyo")).timestamp(),
+        )
+        assert metadata["event_time_parse_error"] is False
+
+    def test_session_heading_hyphen_is_supported(self, anima_dir: Path):
+        indexer = self._make_indexer(anima_dir)
+        f = anima_dir / "episodes" / "conv-26.md"
+        f.write_text(
+            "## Session 2 - 1:50 pm on 17 August, 2023\n\nBody",
+            encoding="utf-8",
+        )
+
+        chunks = indexer._chunk_by_markdown_headings(f, f.read_text(), "episodes")
+
+        assert chunks[0].metadata["session_index"] == 2
+        assert chunks[0].metadata["event_time_iso"] == "2023-08-17T13:50:00+09:00"
+
+    def test_unknown_date_keeps_existing_valid_at(self, anima_dir: Path):
+        indexer = self._make_indexer(anima_dir)
+        f = anima_dir / "episodes" / "conv-26.md"
+        f.write_text("## Session 3 — unknown date\n\nBody", encoding="utf-8")
+
+        chunks = indexer._chunk_by_markdown_headings(f, f.read_text(), "episodes")
+
+        metadata = chunks[0].metadata
+        assert metadata["session_index"] == 3
+        assert metadata["event_time_text"] == "unknown date"
+        assert metadata["event_time_iso"] == ""
+        assert metadata["event_time_parse_error"] is True
+        assert isinstance(metadata["valid_at"], float)
+
+    def test_missing_dateutil_keeps_existing_valid_at(self, anima_dir: Path, monkeypatch: pytest.MonkeyPatch):
+        import core.memory.rag.episode_time as episode_time_module
+
+        monkeypatch.setattr(episode_time_module, "dateutil_parser", None)
+        indexer = self._make_indexer(anima_dir)
+        f = anima_dir / "episodes" / "conv-26.md"
+        f.write_text("## Session 4 — 8:56 pm on 20 July, 2023\n\nBody", encoding="utf-8")
+
+        chunks = indexer._chunk_by_markdown_headings(f, f.read_text(), "episodes")
+
+        metadata = chunks[0].metadata
+        assert metadata["session_index"] == 4
+        assert metadata["event_time_iso"] == ""
+        assert metadata["event_time_parse_error"] is True
+        assert isinstance(metadata["valid_at"], float)
 
 
 class TestChunkFileDispatches:

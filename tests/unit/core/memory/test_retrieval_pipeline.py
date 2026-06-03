@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from core.memory.retrieval.pipeline import RetrievalPipeline
+from core.memory.retrieval.temporal import TemporalBoostConfig
 
 
 def test_pipeline_rerank_disabled_keeps_rrf_order() -> None:
@@ -46,3 +47,79 @@ def test_pipeline_uses_reranker_when_enabled() -> None:
     )
     assert result.items[0]["content"] == "b"
     reranker.rerank_sync.assert_called_once()
+
+
+def test_pipeline_temporal_boost_absent_keeps_default_order() -> None:
+    ranked = [
+        [
+            {"content": "older", "score": 0.5, "source_file": "a.md", "chunk_index": 0},
+            {
+                "content": "newer 2023",
+                "score": 0.4,
+                "source_file": "b.md",
+                "chunk_index": 0,
+                "event_time_iso": "2023-07-20T20:56:00+09:00",
+            },
+        ],
+    ]
+    pipeline = RetrievalPipeline(reranker=MagicMock())
+
+    result = pipeline.run("what happened in 2023?", ranked, limit=2, rerank_enabled=False, abstain_on_low_confidence=False)
+
+    assert [item["content"] for item in result.items] == ["older", "newer 2023"]
+    assert "temporal_boost" not in result.items[1]
+
+
+def test_pipeline_temporal_boost_is_category_2_only() -> None:
+    ranked = [
+        [
+            {
+                "content": "newer 2023",
+                "score": 0.4,
+                "source_file": "b.md",
+                "chunk_index": 0,
+                "event_time_iso": "2023-07-20T20:56:00+09:00",
+            },
+        ],
+    ]
+    pipeline = RetrievalPipeline(reranker=MagicMock())
+
+    result = pipeline.run(
+        "what happened in 2023?",
+        ranked,
+        limit=1,
+        rerank_enabled=False,
+        abstain_on_low_confidence=False,
+        temporal_boost=TemporalBoostConfig(enabled=True, category=4),
+    )
+
+    assert "temporal_boost" not in result.items[0]
+
+
+def test_pipeline_temporal_boost_adds_score_for_temporal_year_match() -> None:
+    ranked = [
+        [
+            {
+                "content": "newer event in 2023",
+                "score": 0.4,
+                "source_file": "b.md",
+                "chunk_index": 0,
+                "event_time_iso": "2023-07-20T20:56:00+09:00",
+            },
+        ],
+    ]
+    pipeline = RetrievalPipeline(reranker=MagicMock())
+
+    result = pipeline.run(
+        "what happened in 2023?",
+        ranked,
+        limit=1,
+        rerank_enabled=False,
+        abstain_on_low_confidence=False,
+        temporal_boost=TemporalBoostConfig(enabled=True, category=2),
+    )
+
+    item = result.items[0]
+    assert item["base_score"] == item["rrf_score"]
+    assert item["temporal_boost"] == 0.10
+    assert item["score"] == item["base_score"] + 0.10

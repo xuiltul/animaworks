@@ -299,6 +299,7 @@ def _run_qa_loop(
                 normalized_prediction = getattr(adapter, "_last_normalized_answer", None)
                 abstain_reason = getattr(adapter, "_last_abstain_reason", "")
                 top_score = getattr(adapter, "_last_top_score", None)
+                top_event_time_iso = getattr(adapter, "_last_top_event_time_iso", "")
                 if isinstance(raw_prediction, str):
                     result["raw_prediction"] = raw_prediction
                 if isinstance(normalized_prediction, str):
@@ -307,6 +308,8 @@ def _run_qa_loop(
                     result["abstain_reason"] = abstain_reason
                 if isinstance(top_score, int | float):
                     result["top_retrieval_score"] = float(top_score)
+                if isinstance(top_event_time_iso, str) and top_event_time_iso:
+                    result["top_event_time_iso"] = top_event_time_iso
                 results.append(result)
                 if (j + 1) % 50 == 0:
                     print(f"  Questions: {j + 1}/{len(qa_list)}")

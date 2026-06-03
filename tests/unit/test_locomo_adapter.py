@@ -11,6 +11,7 @@ from benchmarks.locomo.adapter import (
     _episode_stem_for_sample,
     _session_indices,
     load_dataset,
+    locomo_temporal_boost_enabled,
 )
 
 # ── load_dataset ──────────
@@ -139,3 +140,78 @@ class TestSearchModes:
 
         with pytest.raises(ValueError, match="search_mode"):
             AnimaWorksLoCoMoAdapter(search_mode="invalid")
+
+
+class TestEventMetadataPropagation:
+    def _adapter_without_init(self):
+        from benchmarks.locomo.adapter import AnimaWorksLoCoMoAdapter
+
+        return object.__new__(AnimaWorksLoCoMoAdapter)
+
+    def test_pipeline_item_preserves_event_metadata(self):
+        adapter = self._adapter_without_init()
+        item = {
+            "content": "## Session 10\n\nBody",
+            "score": 0.7,
+            "metadata": {
+                "source_file": "conv-26.md",
+                "chunk_index": 10,
+                "search_method": "vector",
+                "valid_at": 1689854160.0,
+                "event_time_iso": "2023-07-20T20:56:00+09:00",
+                "event_time_text": "8:56 pm on 20 July, 2023",
+                "session_index": 10,
+                "event_time_parse_error": False,
+            },
+        }
+
+        pipeline_item = adapter._pipeline_item_from_adapter_hit(item)
+
+        assert pipeline_item["valid_at"] == 1689854160.0
+        assert pipeline_item["event_time_iso"] == "2023-07-20T20:56:00+09:00"
+        assert pipeline_item["event_time_text"] == "8:56 pm on 20 July, 2023"
+        assert pipeline_item["session_index"] == 10
+        assert pipeline_item["event_time_parse_error"] is False
+
+    def test_adapter_hit_restores_event_metadata(self):
+        adapter = self._adapter_without_init()
+        item = {
+            "content": "Body",
+            "score": 0.9,
+            "source_file": "conv-26.md",
+            "chunk_index": 2,
+            "search_method": "cross_encoder",
+            "event_time_iso": "2023-08-17T13:50:00+09:00",
+            "session_index": 2,
+            "base_score": 0.8,
+            "temporal_boost": 0.1,
+        }
+
+        hit = adapter._adapter_hit_from_pipeline_item(item)
+
+        assert hit["metadata"]["event_time_iso"] == "2023-08-17T13:50:00+09:00"
+        assert hit["metadata"]["session_index"] == 2
+        assert hit["metadata"]["base_score"] == 0.8
+        assert hit["metadata"]["temporal_boost"] == 0.1
+
+    def test_retrieval_diagnostics_remember_top_event_time(self):
+        adapter = self._adapter_without_init()
+        adapter._remember_retrieval_diagnostics(
+            [
+                {"content": "low", "score": 0.1, "metadata": {"event_time_iso": "2023-01-01T00:00:00+09:00"}},
+                {"content": "high", "score": 0.9, "metadata": {"event_time_iso": "2023-02-01T00:00:00+09:00"}},
+            ],
+        )
+
+        assert adapter._last_top_score == 0.9
+        assert adapter._last_top_event_time_iso == "2023-02-01T00:00:00+09:00"
+
+
+class TestTemporalBoostEnv:
+    def test_temporal_boost_disabled_by_default(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("LOCOMO_TEMPORAL_BOOST", raising=False)
+        assert locomo_temporal_boost_enabled() is False
+
+    def test_temporal_boost_enabled_by_explicit_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("LOCOMO_TEMPORAL_BOOST", "1")
+        assert locomo_temporal_boost_enabled() is True

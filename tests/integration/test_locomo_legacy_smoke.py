@@ -20,17 +20,20 @@ def _llm_configured() -> bool:
     return llm_routing_configured()
 
 
-def test_phase13_regression_guardrails_without_llm() -> None:
+def test_phase13_regression_guardrails_without_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     """Representative Run 3 failures are blocked before live smoke."""
+    from benchmarks.locomo.adapter import locomo_temporal_boost_enabled
     from benchmarks.locomo.answer_prompt import (
         LOCOMO_ANSWER_MAX_TOKENS,
         build_answer_user_content,
         normalize_locomo_answer,
     )
 
+    monkeypatch.delenv("LOCOMO_TEMPORAL_BOOST", raising=False)
     prompt = build_answer_user_content("What book did Caroline recommend?", "ctx", category=4)
     assert "never abstain when context exists" not in prompt
     assert LOCOMO_ANSWER_MAX_TOKENS == 512
+    assert locomo_temporal_boost_enabled() is False
 
     open_domain_raw = (
         'We are asked: "What book did Caroline recommend to Melanie?" '

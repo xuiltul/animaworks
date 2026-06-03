@@ -78,6 +78,26 @@ from benchmarks.locomo.llm_config import default_answer_model, resolve_locomo_li
 
 # ── load_dataset ──────────
 
+_EVENT_METADATA_FIELDS: tuple[str, ...] = (
+    "valid_at",
+    "event_time_iso",
+    "event_time_text",
+    "session_index",
+    "event_time_parse_error",
+    "base_score",
+    "temporal_boost",
+)
+
+
+def locomo_temporal_boost_enabled() -> bool:
+    """Return True when LoCoMo temporal boost ablation is explicitly enabled."""
+    return os.environ.get("LOCOMO_TEMPORAL_BOOST", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
 
 def load_dataset(path: Path) -> list[dict[str, Any]]:
     """Load LoCoMo JSON (e.g. ``locomo10.json``) and normalize category-5 QAs.
@@ -218,6 +238,7 @@ class AnimaWorksLoCoMoAdapter:
         self._last_abstain: bool = False
         self._last_abstain_reason: str = ""
         self._last_top_score: float | None = None
+        self._last_top_event_time_iso: str = ""
         self._last_raw_answer: str = ""
         self._last_normalized_answer: str = ""
         # Deferred heavy init
@@ -343,7 +364,7 @@ class AnimaWorksLoCoMoAdapter:
     def _pipeline_item_from_adapter_hit(self, item: dict[str, Any]) -> dict[str, Any]:
         """Normalize adapter retrieval dict for ``RetrievalPipeline``."""
         meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-        return {
+        out: dict[str, Any] = {
             "content": (item.get("content") or "").strip(),
             "score": float(item.get("score", 0.0)),
             "source_file": str(meta.get("source_file", meta.get("source", ""))),
@@ -351,25 +372,37 @@ class AnimaWorksLoCoMoAdapter:
             "memory_type": "episodes",
             "search_method": str(meta.get("search_method", "")),
         }
+        for key in _EVENT_METADATA_FIELDS:
+            if key in meta:
+                out[key] = meta[key]
+        return out
 
     def _adapter_hit_from_pipeline_item(self, item: dict[str, Any]) -> dict[str, Any]:
         """Convert pipeline output back to LoCoMo adapter context shape."""
+        metadata: dict[str, Any] = {
+            "source_file": item.get("source_file", ""),
+            "chunk_index": item.get("chunk_index", 0),
+            "search_method": item.get("search_method", "pipeline"),
+        }
+        for key in _EVENT_METADATA_FIELDS:
+            if key in item:
+                metadata[key] = item[key]
         return {
             "content": item.get("content", ""),
             "score": float(item.get("score", 0.0)),
-            "metadata": {
-                "source_file": item.get("source_file", ""),
-                "chunk_index": item.get("chunk_index", 0),
-                "search_method": item.get("search_method", "pipeline"),
-            },
+            "metadata": metadata,
         }
 
     def _remember_retrieval_diagnostics(self, items: list[dict[str, Any]]) -> None:
         """Store lightweight retrieval diagnostics for benchmark output."""
         if not items:
             self._last_top_score = None
+            self._last_top_event_time_iso = ""
             return
-        self._last_top_score = max(float(item.get("score", 0.0) or 0.0) for item in items)
+        top = max(items, key=lambda item: float(item.get("score", 0.0) or 0.0))
+        self._last_top_score = float(top.get("score", 0.0) or 0.0)
+        meta = top.get("metadata") if isinstance(top.get("metadata"), dict) else {}
+        self._last_top_event_time_iso = str(meta.get("event_time_iso", "") or top.get("event_time_iso", "") or "")
 
     def _load_pipeline_settings(self) -> dict[str, object]:
         """Resolve RAG pipeline knobs (same defaults as ``RAGMemorySearch``)."""
@@ -420,6 +453,7 @@ class AnimaWorksLoCoMoAdapter:
         self._last_abstain = False
         self._last_abstain_reason = ""
         self._last_top_score = None
+        self._last_top_event_time_iso = ""
         assert self._retriever is not None
         if self._search_mode == "vector":
             res = self._retriever.search(
@@ -445,6 +479,7 @@ class AnimaWorksLoCoMoAdapter:
             return items
         # scope_all: vector + graph + BM25 → shared RetrievalPipeline (prod parity)
         from core.memory.retrieval.pipeline import RetrievalPipeline  # noqa: PLC0415
+        from core.memory.retrieval.temporal import TemporalBoostConfig  # noqa: PLC0415
 
         settings = self._load_pipeline_settings()
         pool_k = max(int(settings["rerank_candidate_pool"]), self._top_k * 4, 20)
@@ -484,6 +519,10 @@ class AnimaWorksLoCoMoAdapter:
             abstain_on_low_confidence=bool(settings["abstain_on_low_confidence"]),
             confidence_threshold=gate["confidence_threshold"],
             rrf_confidence_threshold=gate["rrf_confidence_threshold"],
+            temporal_boost=TemporalBoostConfig(
+                enabled=locomo_temporal_boost_enabled(),
+                category=category,
+            ),
         )
         self._last_abstain = result.abstain
         self._last_abstain_reason = result.abstain_reason
@@ -505,7 +544,13 @@ class AnimaWorksLoCoMoAdapter:
             else:
                 segs = [raw] if raw.strip() else []
             for j, seg in enumerate(segs):
-                documents.append((seg, {"source_file": p.name, "section": j}))
+                metadata: dict[str, Any] = {"source_file": p.name, "section": j}
+                first_line = seg.splitlines()[0].strip() if seg.splitlines() else ""
+                if first_line.startswith("## Session"):
+                    from core.memory.rag.episode_time import apply_episode_heading_event_time  # noqa: PLC0415
+
+                    apply_episode_heading_event_time(metadata, first_line)
+                documents.append((seg, metadata))
         self._bm25_corpus = documents
         if documents:
             tokenized = [_bm25_tokenize(doc) for doc, _ in documents]

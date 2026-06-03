@@ -30,7 +30,7 @@ class Document:
     id: str
     content: str
     embedding: list[float] | None = None
-    metadata: dict[str, str | int | float | list[str]] = field(default_factory=dict)
+    metadata: dict[str, str | int | float | bool | list[str]] = field(default_factory=dict)
 
 
 @dataclass
