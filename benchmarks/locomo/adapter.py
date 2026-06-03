@@ -130,6 +130,16 @@ def locomo_fact_index_enabled() -> bool:
     }
 
 
+def locomo_entity_aware_graph_enabled() -> bool:
+    """Return True when LoCoMo entity-aware graph ablation is explicitly enabled."""
+    return os.environ.get("LOCOMO_ENTITY_AWARE_GRAPH", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def load_dataset(path: Path) -> list[dict[str, Any]]:
     """Load LoCoMo JSON (e.g. ``locomo10.json``) and normalize category-5 QAs.
 
@@ -376,6 +386,15 @@ class AnimaWorksLoCoMoAdapter:
         self._fact_bm25_index = None
         self._fact_metadata_by_source_file = {}
         self._last_fact_count = 0
+        if self._retriever is not None:
+            self._retriever._knowledge_graph = None
+            self._retriever._knowledge_graph_signature = None
+        graph_cache = self._anima_dir / "vectordb" / "knowledge_graph.json"
+        if graph_cache.exists():
+            try:
+                graph_cache.unlink()
+            except OSError as e:
+                logger.warning("Failed to remove %s: %s", graph_cache, e)
         meta = self._index_meta_path
         if meta.exists():
             try:

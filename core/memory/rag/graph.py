@@ -19,10 +19,14 @@ Based on: docs/design/priming-layer-design.md Phase 3
 import json
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import networkx as nx
 from networkx.readwrite import json_graph
+
+from core.memory.rag.entity_graph import add_entity_aware_layers, fact_node_id, graph_diagnostics
 
 logger = logging.getLogger("animaworks.rag.graph")
 
@@ -41,6 +45,7 @@ MAX_HOPS = 2  # Maximum hops for spreading activation
 
 # Graph cache filename
 GRAPH_CACHE_FILE = "knowledge_graph.json"
+GRAPH_SCHEMA_VERSION = 2
 
 
 # ── KnowledgeGraph ──────────────────────────────────────────────────
@@ -84,6 +89,11 @@ class KnowledgeGraph:
         *,
         memory_dirs: dict[str, Path] | None = None,
         implicit_link_threshold: float = IMPLICIT_LINK_THRESHOLD,
+        entity_aware_graph_enabled: bool = False,
+        graph_entity_edge_cap: int = 8,
+        graph_inverse_fan_enabled: bool = True,
+        graph_recency_weight_enabled: bool = True,
+        as_of_time: str | datetime | None = None,
     ) -> nx.DiGraph:
         """Build knowledge graph from memory files.
 
@@ -103,6 +113,8 @@ class KnowledgeGraph:
 
         self._implicit_link_threshold = implicit_link_threshold
         graph = nx.DiGraph()
+        graph.graph["schema_version"] = GRAPH_SCHEMA_VERSION
+        graph.graph["entity_aware_graph_enabled"] = bool(entity_aware_graph_enabled)
 
         sources: dict[str, Path] = {}
         if knowledge_dir.is_dir():
@@ -126,6 +138,7 @@ class KnowledgeGraph:
                 node_id = self._make_node_id(rel_key, memory_type)
                 graph.add_node(
                     node_id,
+                    node_type="memory_file",
                     path=str(md_file),
                     memory_type=memory_type,
                     stem=md_file.stem,
@@ -166,6 +179,20 @@ class KnowledgeGraph:
         # Add implicit links (vector similarity)
         implicit_count = self._add_implicit_links(graph, anima_name)
         logger.debug("Added %d implicit edges", implicit_count)
+
+        if entity_aware_graph_enabled:
+            add_entity_aware_layers(
+                graph,
+                knowledge_dir.parent,
+                graph_entity_edge_cap=max(1, int(graph_entity_edge_cap)),
+                graph_inverse_fan_enabled=graph_inverse_fan_enabled,
+                graph_recency_weight_enabled=graph_recency_weight_enabled,
+                as_of_time=as_of_time,
+                make_node_id=self._make_node_id,
+                resolve_link_target=self._resolve_link_target,
+            )
+
+        graph.graph["diagnostics"] = graph_diagnostics(graph)
 
         logger.info(
             "Knowledge graph built: %d nodes, %d edges",
@@ -324,6 +351,7 @@ class KnowledgeGraph:
             return
 
         cache_path = cache_dir / GRAPH_CACHE_FILE
+        self.graph.graph.setdefault("schema_version", GRAPH_SCHEMA_VERSION)
         data = json_graph.node_link_data(self.graph)
 
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -337,7 +365,13 @@ class KnowledgeGraph:
             cache_path,
         )
 
-    def load_graph(self, cache_dir: Path) -> bool:
+    def load_graph(
+        self,
+        cache_dir: Path,
+        *,
+        expected_schema_version: int | None = None,
+        entity_aware_graph_enabled: bool | None = None,
+    ) -> bool:
         """Load graph from JSON cache.
 
         Args:
@@ -356,6 +390,15 @@ class KnowledgeGraph:
                 data = json.load(f)
 
             graph = json_graph.node_link_graph(data, directed=True)
+            if expected_schema_version is not None and graph.graph.get("schema_version") != expected_schema_version:
+                logger.info("Ignoring stale graph cache schema at %s", cache_path)
+                return False
+            if (
+                entity_aware_graph_enabled is not None
+                and bool(graph.graph.get("entity_aware_graph_enabled", False)) != bool(entity_aware_graph_enabled)
+            ):
+                logger.info("Ignoring graph cache with mismatched entity-aware setting at %s", cache_path)
+                return False
             self.graph = graph
 
             logger.info(
@@ -486,6 +529,7 @@ class KnowledgeGraph:
                 nid = self._make_node_id(rel_key, mt)
                 self.graph.add_node(
                     nid,
+                    node_type="memory_file",
                     path=str(file_path),
                     memory_type=mt,
                     stem=file_path.stem,
@@ -698,8 +742,7 @@ class KnowledgeGraph:
         query_nodes: list[str] = []
         initial_node_ids: set[str] = set()
         for result in initial_results:
-            node = self._match_result_to_node(self.graph, result.doc_id, 0.0)
-            if node is not None:
+            for node in self._match_retrieval_result_to_nodes(self.graph, result):
                 query_nodes.append(node)
                 initial_node_ids.add(node)
 
@@ -723,36 +766,15 @@ class KnowledgeGraph:
 
         logger.debug("Found %d activated nodes, adding top %d", len(activated_nodes), len(top_activated))
 
-        from core.memory.rag.retriever import RetrievalResult
-
         expanded_results = list(initial_results)
+        seen_doc_ids = {str(result.doc_id) for result in initial_results}
 
         for node_id, score in top_activated:
-            attrs = self.graph.nodes[node_id]
-            node_path = Path(attrs.get("path", ""))
-            memory_type = attrs.get("memory_type", "knowledge")
-            stem = attrs.get("stem", node_id)
-
-            content = self._fetch_node_content(node_id, node_path, memory_type)
-
-            rel_key = attrs.get("rel_key", stem)
-            rel_md = f"{rel_key}.md"
-            expanded_results.append(
-                RetrievalResult(
-                    doc_id=f"{self.indexer.anima_name}/{memory_type}/{rel_md}#0",
-                    content=content,
-                    score=score * 0.5,
-                    metadata={
-                        "source_file": f"{memory_type}/{rel_md}",
-                        "memory_type": memory_type,
-                        "activation": "spreading",
-                        "pagerank_score": score,
-                    },
-                    source_scores={
-                        "pagerank": score,
-                    },
-                )
-            )
+            for expanded in self._results_for_activated_node(node_id, score, max_results=3):
+                if expanded.doc_id in seen_doc_ids:
+                    continue
+                seen_doc_ids.add(expanded.doc_id)
+                expanded_results.append(expanded)
 
         logger.info(
             "Expanded from %d to %d results",
@@ -761,6 +783,93 @@ class KnowledgeGraph:
         )
 
         return expanded_results
+
+    def _results_for_activated_node(self, node_id: str, score: float, *, max_results: int) -> list[Any]:
+        from core.memory.rag.retriever import RetrievalResult
+
+        attrs = self.graph.nodes[node_id]
+        node_type = attrs.get("node_type", "memory_file")
+        if node_type == "entity":
+            return self._results_for_entity_node(node_id, score, max_results=max_results)
+        if node_type == "fact":
+            return [self._result_for_fact_node(node_id, score)]
+
+        node_path = Path(attrs.get("path", ""))
+        memory_type = attrs.get("memory_type", "knowledge")
+        stem = attrs.get("stem", node_id)
+        content = self._fetch_node_content(node_id, node_path, memory_type)
+        rel_key = attrs.get("rel_key", stem)
+        rel_md = f"{rel_key}.md"
+        return [
+            RetrievalResult(
+                doc_id=f"{self.indexer.anima_name}/{memory_type}/{rel_md}#0",
+                content=content,
+                score=score * 0.5,
+                metadata={
+                    "source_file": f"{memory_type}/{rel_md}",
+                    "memory_type": memory_type,
+                    "activation": "spreading",
+                    "pagerank_score": score,
+                },
+                source_scores={"pagerank": score},
+            )
+        ]
+
+    def _results_for_entity_node(self, node_id: str, score: float, *, max_results: int) -> list[Any]:
+        ranked_neighbors = sorted(
+            self.graph[node_id].items(),
+            key=lambda item: float(item[1].get("similarity", 0.0) or 0.0),
+            reverse=True,
+        )
+        out: list[Any] = []
+        for neighbor, _edge in ranked_neighbors:
+            if self.graph.nodes[neighbor].get("node_type") == "entity":
+                continue
+            out.extend(self._results_for_activated_node(neighbor, score, max_results=1))
+            if len(out) >= max_results:
+                break
+        return out[:max_results]
+
+    def _result_for_fact_node(self, node_id: str, score: float) -> Any:
+        from core.memory.rag.retriever import RetrievalResult
+
+        attrs = self.graph.nodes[node_id]
+        fact_id = str(attrs.get("fact_id", node_id.split(":", 1)[-1]))
+        metadata: dict[str, Any] = {
+            "source_file": attrs.get("source_file", f"facts/{fact_id}"),
+            "memory_type": "facts",
+            "activation": "spreading",
+            "pagerank_score": score,
+            "fact_id": fact_id,
+            "edge_type": attrs.get("edge_type", ""),
+            "source_entity": attrs.get("source_entity", ""),
+            "target_entity": attrs.get("target_entity", ""),
+            "valid_at_iso": attrs.get("valid_at_iso", ""),
+            "valid_until": attrs.get("valid_until", ""),
+            "source_episode": attrs.get("source_episode", ""),
+            "source_session_id": attrs.get("source_session_id", ""),
+        }
+        return RetrievalResult(
+            doc_id=f"{self.indexer.anima_name}/facts/{fact_id}#0",
+            content=str(attrs.get("content", "") or ""),
+            score=score * 0.5,
+            metadata=metadata,
+            source_scores={"pagerank": score},
+        )
+
+    @staticmethod
+    def _match_retrieval_result_to_nodes(graph: nx.DiGraph, result: Any) -> list[str]:
+        nodes: list[str] = []
+        metadata = result.metadata if isinstance(getattr(result, "metadata", None), dict) else {}
+        fact_id = str(metadata.get("fact_id", "") or "")
+        if fact_id:
+            fact_node = fact_node_id(fact_id)
+            if fact_node in graph:
+                nodes.append(fact_node)
+        node = KnowledgeGraph._match_result_to_node(graph, result.doc_id, 0.0)
+        if node is not None and node not in nodes:
+            nodes.append(node)
+        return nodes
 
     def _fetch_node_content(
         self,

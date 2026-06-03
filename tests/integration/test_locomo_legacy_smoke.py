@@ -23,6 +23,7 @@ def _llm_configured() -> bool:
 def test_phase13_regression_guardrails_without_llm(monkeypatch: pytest.MonkeyPatch) -> None:
     """Representative Run 3 failures are blocked before live smoke."""
     from benchmarks.locomo.adapter import (
+        locomo_entity_aware_graph_enabled,
         locomo_entity_boost_enabled,
         locomo_fact_index_enabled,
         locomo_temporal_boost_enabled,
@@ -35,12 +36,14 @@ def test_phase13_regression_guardrails_without_llm(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.delenv("LOCOMO_TEMPORAL_BOOST", raising=False)
     monkeypatch.delenv("LOCOMO_ENTITY_BOOST", raising=False)
+    monkeypatch.delenv("LOCOMO_ENTITY_AWARE_GRAPH", raising=False)
     monkeypatch.delenv("LOCOMO_FACT_INDEX", raising=False)
     prompt = build_answer_user_content("What book did Caroline recommend?", "ctx", category=4)
     assert "never abstain when context exists" not in prompt
     assert LOCOMO_ANSWER_MAX_TOKENS == 512
     assert locomo_temporal_boost_enabled() is False
     assert locomo_entity_boost_enabled() is False
+    assert locomo_entity_aware_graph_enabled() is False
     assert locomo_fact_index_enabled() is False
 
     open_domain_raw = (

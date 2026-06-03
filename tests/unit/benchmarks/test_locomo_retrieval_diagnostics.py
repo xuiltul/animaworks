@@ -8,6 +8,7 @@ import pytest
 
 import benchmarks.locomo.retrieval_diagnostics as retrieval_diagnostics
 from benchmarks.locomo.retrieval_diagnostics import (
+    _temporary_entity_aware_graph,
     _temporary_entity_boost,
     _temporary_fact_index,
     _temporary_temporal_boost,
@@ -96,6 +97,7 @@ class TestWriteDiagnosticsJson:
             "ceiling_top_k": 50,
             "temporal_boost": False,
             "entity_boost": False,
+            "entity_aware_graph": False,
             "fact_index": False,
         }
         assert payload["summary"]["answer_token_recall_at_10"] == 0.5
@@ -126,6 +128,31 @@ class TestWriteDiagnosticsJson:
         assert payload["fact_ablation"]["config"] == {"fact_index": True}
         assert payload["fact_ablation"]["deltas"]["answer_token_recall_at_10"] == 0.1
 
+    def test_write_json_can_include_entity_aware_graph_ablation(self, tmp_path: Path) -> None:
+        out = write_diagnostics_json(
+            tmp_path,
+            mode="vector_graph",
+            conversations=1,
+            top_k=10,
+            ceiling_top_k=10,
+            temporal_boost=False,
+            entity_boost=False,
+            summary={},
+            results=[],
+            errors=0,
+            entity_aware_graph_ablation={
+                "config": {"entity_aware_graph": True},
+                "summary": {"answer_token_recall_at_10": 0.7},
+                "results": [],
+                "errors": 0,
+                "deltas": {"answer_token_recall_at_10": 0.2},
+            },
+        )
+
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        assert payload["entity_aware_graph_ablation"]["config"] == {"entity_aware_graph": True}
+        assert payload["entity_aware_graph_ablation"]["deltas"]["answer_token_recall_at_10"] == 0.2
+
 
 class TestTemporalAblationCli:
     def test_parse_temporal_ablation_flag(self) -> None:
@@ -155,6 +182,48 @@ class TestEntityAblationCli:
             assert os.environ["LOCOMO_ENTITY_BOOST"] == "1"
 
         assert "LOCOMO_ENTITY_BOOST" not in os.environ
+
+
+class TestEntityAwareGraphAblationCli:
+    def test_parse_entity_aware_graph_ablation_flag(self) -> None:
+        args = parse_args(["--entity-aware-graph-ablation"])
+
+        assert args.entity_aware_graph_ablation is True
+
+    def test_temporary_entity_aware_graph_sets_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("LOCOMO_ENTITY_AWARE_GRAPH", raising=False)
+
+        with _temporary_entity_aware_graph(True):
+            assert os.environ["LOCOMO_ENTITY_AWARE_GRAPH"] == "1"
+
+        assert "LOCOMO_ENTITY_AWARE_GRAPH" not in os.environ
+
+    def test_entity_aware_graph_ablation_runs_baseline_then_boosted(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        calls: list[bool] = []
+        captured_write: dict[str, object] = {}
+
+        monkeypatch.setattr(retrieval_diagnostics, "load_dataset", lambda _path: [{"qa": []}])
+        monkeypatch.setattr(retrieval_diagnostics, "summarize_results", lambda _results: {})
+        monkeypatch.setattr(retrieval_diagnostics, "_ablation_delta", lambda _base, _boosted: {})
+
+        def fake_run_retrieval_diagnostics(**kwargs):
+            calls.append(kwargs["entity_aware_graph"])
+            return [], 0
+
+        def fake_write_diagnostics_json(_output: Path, **kwargs):
+            captured_write.update(kwargs)
+            return tmp_path / "out.json"
+
+        monkeypatch.setattr(retrieval_diagnostics, "run_retrieval_diagnostics", fake_run_retrieval_diagnostics)
+        monkeypatch.setattr(retrieval_diagnostics, "write_diagnostics_json", fake_write_diagnostics_json)
+
+        assert retrieval_diagnostics.main(["--entity-aware-graph-ablation", "--output", str(tmp_path)]) == 0
+        assert calls == [False, True]
+        assert captured_write["entity_aware_graph_ablation"] is not None
 
 
 class TestFactAblationCli:

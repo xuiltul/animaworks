@@ -12,6 +12,7 @@ from benchmarks.locomo.adapter import (
     _episode_stem_for_sample,
     _session_indices,
     load_dataset,
+    locomo_entity_aware_graph_enabled,
     locomo_entity_boost_enabled,
     locomo_fact_index_enabled,
     locomo_temporal_boost_enabled,
@@ -370,6 +371,16 @@ class TestEntityBoostEnv:
     def test_entity_boost_enabled_by_explicit_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("LOCOMO_ENTITY_BOOST", "1")
         assert locomo_entity_boost_enabled() is True
+
+
+class TestEntityAwareGraphEnv:
+    def test_entity_aware_graph_disabled_by_default(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("LOCOMO_ENTITY_AWARE_GRAPH", raising=False)
+        assert locomo_entity_aware_graph_enabled() is False
+
+    def test_entity_aware_graph_enabled_by_explicit_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("LOCOMO_ENTITY_AWARE_GRAPH", "1")
+        assert locomo_entity_aware_graph_enabled() is True
 
 
 class TestFactIndexEnv:

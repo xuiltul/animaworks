@@ -609,18 +609,30 @@ class RAGMemorySearch:
 
         out: list[dict] = []
         for r in rag_results:
-            out.append(
-                {
-                    "doc_id": r.doc_id,
-                    "source_file": r.metadata.get("source_file", r.doc_id),
-                    "content": r.content,
-                    "score": r.score,
-                    "chunk_index": int(r.metadata.get("chunk_index", 0)),
-                    "total_chunks": int(r.metadata.get("total_chunks", 1)),
-                    "memory_type": "episodes",
-                    "search_method": "vector_graph",
-                }
-            )
+            meta = r.metadata if isinstance(r.metadata, dict) else {}
+            item = {
+                "doc_id": r.doc_id,
+                "source_file": meta.get("source_file", r.doc_id),
+                "content": r.content,
+                "score": r.score,
+                "chunk_index": int(meta.get("chunk_index", 0)),
+                "total_chunks": int(meta.get("total_chunks", 1)),
+                "memory_type": str(meta.get("memory_type", "episodes") or "episodes"),
+                "search_method": "vector_graph",
+            }
+            for key in (
+                "fact_id",
+                "edge_type",
+                "source_entity",
+                "target_entity",
+                "valid_at_iso",
+                "valid_until",
+                "source_episode",
+                "source_session_id",
+            ):
+                if key in meta:
+                    item[key] = meta[key]
+            out.append(item)
         return out
 
     def _vector_search_primary(

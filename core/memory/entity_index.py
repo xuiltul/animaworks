@@ -254,6 +254,17 @@ def entity_keys_for_records(registry: dict[str, Any], records: list[FactRecord])
     return keys
 
 
+def iter_entity_registry_entries(anima_dir: Path) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Iterate normalized entity registry entries for graph construction."""
+    registry = load_entity_registry(anima_dir, rebuild_on_corrupt=True)
+    entities = registry.get("entities", {})
+    if not isinstance(entities, dict):
+        return
+    for key, entry in sorted(entities.items()):
+        if isinstance(entry, dict):
+            yield normalize_entity_key(key), entry
+
+
 def _match_query_entities_from_collection(
     anima_dir: Path,
     query: str,

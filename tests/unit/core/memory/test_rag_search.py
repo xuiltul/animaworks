@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.memory.rag.retriever import RetrievalResult
 from core.memory.rag_search import RAGMemorySearch
 
 # ── Fixtures ─────────────────────────────────────────────
@@ -106,6 +107,47 @@ class TestGetIndexerDependencyMissing:
 
         assert result is None
         assert rag._indexer is None
+
+
+class TestGraphEpisodesSearch:
+    def test_preserves_entity_aware_fact_metadata(
+        self,
+        rag: RAGMemorySearch,
+        knowledge_dir: Path,
+    ) -> None:
+        class FakeIndexer:
+            vector_store = object()
+
+        fact_result = RetrievalResult(
+            doc_id="alice/facts/fact-1#0",
+            content="Alice prefers LoCoMo score deltas.",
+            score=0.42,
+            metadata={
+                "source_file": "facts/fact-1",
+                "memory_type": "facts",
+                "fact_id": "fact-1",
+                "edge_type": "PREFERS",
+                "source_entity": "Alice",
+                "target_entity": "LoCoMo",
+                "valid_at_iso": "2026-06-03T10:00:00+09:00",
+                "valid_until": "",
+                "source_episode": "episodes/2026-06-03.md",
+                "source_session_id": "session-1",
+            },
+            source_scores={"pagerank": 0.84},
+        )
+
+        with (
+            patch.object(rag, "_get_indexer", return_value=FakeIndexer()),
+            patch("core.memory.rag.retriever.MemoryRetriever") as retriever_cls,
+        ):
+            retriever_cls.return_value.search.return_value = [fact_result]
+            results = rag._graph_episodes_search("locomo", 10, knowledge_dir)
+
+        assert results[0]["memory_type"] == "facts"
+        assert results[0]["source_file"] == "facts/fact-1"
+        assert results[0]["fact_id"] == "fact-1"
+        assert results[0]["source_episode"] == "episodes/2026-06-03.md"
 
 
 # ── search_memory_text ───────────────────────────────────

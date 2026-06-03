@@ -86,6 +86,7 @@ def run_retrieval_diagnostics(
     ceiling_top_k: int,
     temporal_boost: bool = False,
     entity_boost: bool = False,
+    entity_aware_graph: bool = False,
     fact_index: bool | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Run retrieval-only LoCoMo diagnostics and return results plus error count."""
@@ -96,6 +97,7 @@ def run_retrieval_diagnostics(
         with _temporary_ablation_boosts(
             temporal_boost=temporal_boost,
             entity_boost=entity_boost,
+            entity_aware_graph=entity_aware_graph,
             fact_index=fact_index,
         ):
             for sample_index, sample in enumerate(samples):
@@ -180,11 +182,13 @@ def write_diagnostics_json(
     ceiling_top_k: int,
     temporal_boost: bool,
     entity_boost: bool,
+    entity_aware_graph: bool = False,
     summary: dict[str, Any],
     results: list[dict[str, Any]],
     errors: int,
     temporal_ablation: dict[str, Any] | None = None,
     entity_ablation: dict[str, Any] | None = None,
+    entity_aware_graph_ablation: dict[str, Any] | None = None,
     fact_index: bool = False,
     fact_ablation: dict[str, Any] | None = None,
 ) -> Path:
@@ -199,6 +203,7 @@ def write_diagnostics_json(
             "ceiling_top_k": ceiling_top_k,
             "temporal_boost": temporal_boost,
             "entity_boost": entity_boost,
+            "entity_aware_graph": entity_aware_graph,
             "fact_index": fact_index,
         },
         "summary": summary,
@@ -209,6 +214,8 @@ def write_diagnostics_json(
         payload["temporal_ablation"] = temporal_ablation
     if entity_ablation is not None:
         payload["entity_ablation"] = entity_ablation
+    if entity_aware_graph_ablation is not None:
+        payload["entity_aware_graph_ablation"] = entity_aware_graph_ablation
     if fact_ablation is not None:
         payload["fact_ablation"] = fact_ablation
 
@@ -239,15 +246,11 @@ def _retrieve_at_k(
 
 
 def _top_context(context: list[dict[str, Any]]) -> dict[str, Any]:
-    if not context:
-        return {}
-    return max(context, key=lambda item: float(item.get("score", 0.0) or 0.0))
+    return {} if not context else max(context, key=lambda item: float(item.get("score", 0.0) or 0.0))
 
 
 def _top_score(context: list[dict[str, Any]]) -> float | None:
-    if not context:
-        return None
-    return float(_top_context(context).get("score", 0.0) or 0.0)
+    return None if not context else float(_top_context(context).get("score", 0.0) or 0.0)
 
 
 def _mean(rows: list[dict[str, Any]], key: str) -> float | None:
@@ -281,9 +284,7 @@ def _ablation_delta(base: dict[str, Any], boosted: dict[str, Any]) -> dict[str, 
 
 
 def _numeric_delta(base: Any, boosted: Any) -> float | None:
-    if base is None or boosted is None:
-        return None
-    return float(boosted) - float(base)
+    return None if base is None or boosted is None else float(boosted) - float(base)
 
 
 @contextmanager
@@ -295,6 +296,12 @@ def _temporary_temporal_boost(enabled: bool) -> Iterator[None]:
 @contextmanager
 def _temporary_entity_boost(enabled: bool) -> Iterator[None]:
     with _temporary_env_flag("LOCOMO_ENTITY_BOOST", enabled):
+        yield
+
+
+@contextmanager
+def _temporary_entity_aware_graph(enabled: bool) -> Iterator[None]:
+    with _temporary_env_flag("LOCOMO_ENTITY_AWARE_GRAPH", enabled):
         yield
 
 
@@ -312,10 +319,14 @@ def _temporary_ablation_boosts(
     *,
     temporal_boost: bool,
     entity_boost: bool,
+    entity_aware_graph: bool,
     fact_index: bool | None,
 ) -> Iterator[None]:
-    with _temporary_temporal_boost(temporal_boost), _temporary_entity_boost(entity_boost), _temporary_fact_index(
-        fact_index,
+    with (
+        _temporary_temporal_boost(temporal_boost),
+        _temporary_entity_boost(entity_boost),
+        _temporary_entity_aware_graph(entity_aware_graph),
+        _temporary_fact_index(fact_index),
     ):
         yield
 
@@ -346,6 +357,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--ceiling-top-k", type=int, default=50)
     parser.add_argument("--temporal-ablation", action="store_true")
     parser.add_argument("--entity-ablation", action="store_true")
+    parser.add_argument("--entity-aware-graph-ablation", action="store_true")
     parser.add_argument("--fact-ablation", action="store_true")
     return parser.parse_args(argv)
 
@@ -369,12 +381,14 @@ def main(argv: list[str] | None = None) -> int:
         ceiling_top_k=int(args.ceiling_top_k),
         temporal_boost=False,
         entity_boost=False,
+        entity_aware_graph=False,
         fact_index=primary_fact_index,
     )
     summary = summarize_results(results)
 
     temporal_ablation: dict[str, Any] | None = None
     entity_ablation: dict[str, Any] | None = None
+    entity_aware_graph_ablation: dict[str, Any] | None = None
     fact_ablation: dict[str, Any] | None = None
     if args.temporal_ablation:
         boosted_results, boosted_errors = run_retrieval_diagnostics(
@@ -384,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
             ceiling_top_k=int(args.ceiling_top_k),
             temporal_boost=True,
             entity_boost=False,
+            entity_aware_graph=False,
             fact_index=primary_fact_index,
         )
         boosted_summary = summarize_results(boosted_results)
@@ -403,11 +418,32 @@ def main(argv: list[str] | None = None) -> int:
             ceiling_top_k=int(args.ceiling_top_k),
             temporal_boost=False,
             entity_boost=True,
+            entity_aware_graph=False,
             fact_index=primary_fact_index,
         )
         boosted_summary = summarize_results(boosted_results)
         entity_ablation = {
             "config": {"entity_boost": True},
+            "summary": boosted_summary,
+            "results": boosted_results,
+            "errors": boosted_errors,
+            "deltas": _ablation_delta(summary, boosted_summary),
+        }
+        errors += boosted_errors
+    if args.entity_aware_graph_ablation:
+        boosted_results, boosted_errors = run_retrieval_diagnostics(
+            samples=samples,
+            mode=str(args.mode),
+            top_k=int(args.top_k),
+            ceiling_top_k=int(args.ceiling_top_k),
+            temporal_boost=False,
+            entity_boost=False,
+            entity_aware_graph=True,
+            fact_index=primary_fact_index,
+        )
+        boosted_summary = summarize_results(boosted_results)
+        entity_aware_graph_ablation = {
+            "config": {"entity_aware_graph": True},
             "summary": boosted_summary,
             "results": boosted_results,
             "errors": boosted_errors,
@@ -422,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
             ceiling_top_k=int(args.ceiling_top_k),
             temporal_boost=False,
             entity_boost=False,
+            entity_aware_graph=False,
             fact_index=True,
         )
         boosted_summary = summarize_results(boosted_results)
@@ -442,12 +479,14 @@ def main(argv: list[str] | None = None) -> int:
         ceiling_top_k=int(args.ceiling_top_k),
         temporal_boost=False,
         entity_boost=False,
+        entity_aware_graph=False,
         fact_index=primary_fact_index,
         summary=summary,
         results=results,
         errors=errors,
         temporal_ablation=temporal_ablation,
         entity_ablation=entity_ablation,
+        entity_aware_graph_ablation=entity_aware_graph_ablation,
         fact_ablation=fact_ablation,
     )
     elapsed = time.perf_counter() - started

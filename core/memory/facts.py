@@ -302,6 +302,15 @@ def iter_fact_records(
         yield from read_fact_records(path, include_expired=include_expired, as_of_time=as_of_time)
 
 
+def iter_active_fact_records(
+    anima_dir: Path,
+    *,
+    as_of_time: str | datetime | None = None,
+) -> Iterator[FactRecord]:
+    """Iterate active facts for retrieval/graph consumers."""
+    yield from iter_fact_records(anima_dir, include_expired=False, as_of_time=as_of_time)
+
+
 def rewrite_fact_records(path: Path, records: list[FactRecord]) -> None:
     with _locked_file(path):
         unique = _dedup_records(records)
