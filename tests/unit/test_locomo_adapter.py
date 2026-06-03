@@ -8,9 +8,11 @@ import pytest
 from benchmarks.locomo.adapter import (
     SEARCH_MODES,
     _build_episode_markdown,
+    _conversation_speaker_names,
     _episode_stem_for_sample,
     _session_indices,
     load_dataset,
+    locomo_entity_boost_enabled,
     locomo_temporal_boost_enabled,
 )
 
@@ -126,6 +128,14 @@ class TestEpisodeStemForSample:
         assert _episode_stem_for_sample("") == "conv-unknown"
 
 
+class TestConversationSpeakerNames:
+    def test_speaker_names_are_collected_for_entity_ignore(self):
+        assert _conversation_speaker_names({"speaker_a": "Caroline", "speaker_b": "Melanie"}) == (
+            "Caroline",
+            "Melanie",
+        )
+
+
 # ── Adapter validation ──────────
 
 
@@ -185,6 +195,10 @@ class TestEventMetadataPropagation:
             "session_index": 2,
             "base_score": 0.8,
             "temporal_boost": 0.1,
+            "entity_boost": 0.08,
+            "entity_overlap": ["book", "suggestion"],
+            "query_entities": ["book", "suggestion"],
+            "candidate_entities": ["becoming nicole", "book", "suggestion"],
         }
 
         hit = adapter._adapter_hit_from_pipeline_item(item)
@@ -193,6 +207,8 @@ class TestEventMetadataPropagation:
         assert hit["metadata"]["session_index"] == 2
         assert hit["metadata"]["base_score"] == 0.8
         assert hit["metadata"]["temporal_boost"] == 0.1
+        assert hit["metadata"]["entity_boost"] == 0.08
+        assert hit["metadata"]["entity_overlap"] == ["book", "suggestion"]
 
     def test_retrieval_diagnostics_remember_top_event_time(self):
         adapter = self._adapter_without_init()
@@ -215,3 +231,13 @@ class TestTemporalBoostEnv:
     def test_temporal_boost_enabled_by_explicit_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("LOCOMO_TEMPORAL_BOOST", "1")
         assert locomo_temporal_boost_enabled() is True
+
+
+class TestEntityBoostEnv:
+    def test_entity_boost_disabled_by_default(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.delenv("LOCOMO_ENTITY_BOOST", raising=False)
+        assert locomo_entity_boost_enabled() is False
+
+    def test_entity_boost_enabled_by_explicit_env(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("LOCOMO_ENTITY_BOOST", "1")
+        assert locomo_entity_boost_enabled() is True

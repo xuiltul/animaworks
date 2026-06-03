@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from benchmarks.locomo.retrieval_diagnostics import (
+    _temporary_entity_boost,
     _temporary_temporal_boost,
     answer_token_recall,
     parse_args,
@@ -79,6 +80,7 @@ class TestWriteDiagnosticsJson:
             top_k=10,
             ceiling_top_k=50,
             temporal_boost=False,
+            entity_boost=False,
             summary={"answer_token_recall_at_10": 0.5},
             results=[],
             errors=0,
@@ -91,6 +93,7 @@ class TestWriteDiagnosticsJson:
             "top_k": 10,
             "ceiling_top_k": 50,
             "temporal_boost": False,
+            "entity_boost": False,
         }
         assert payload["summary"]["answer_token_recall_at_10"] == 0.5
 
@@ -108,3 +111,18 @@ class TestTemporalAblationCli:
             assert os.environ["LOCOMO_TEMPORAL_BOOST"] == "1"
 
         assert "LOCOMO_TEMPORAL_BOOST" not in os.environ
+
+
+class TestEntityAblationCli:
+    def test_parse_entity_ablation_flag(self) -> None:
+        args = parse_args(["--entity-ablation"])
+
+        assert args.entity_ablation is True
+
+    def test_temporary_entity_boost_sets_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("LOCOMO_ENTITY_BOOST", raising=False)
+
+        with _temporary_entity_boost(True):
+            assert os.environ["LOCOMO_ENTITY_BOOST"] == "1"
+
+        assert "LOCOMO_ENTITY_BOOST" not in os.environ

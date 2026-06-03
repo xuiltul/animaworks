@@ -80,13 +80,14 @@ def run_retrieval_diagnostics(
     top_k: int,
     ceiling_top_k: int,
     temporal_boost: bool,
+    entity_boost: bool,
 ) -> tuple[list[dict[str, Any]], int]:
     """Run retrieval-only LoCoMo diagnostics and return results plus error count."""
     results: list[dict[str, Any]] = []
     errors = 0
     adapter = AnimaWorksLoCoMoAdapter(search_mode=mode, top_k=top_k)
     try:
-        with _temporary_temporal_boost(temporal_boost):
+        with _temporary_ablation_boosts(temporal_boost=temporal_boost, entity_boost=entity_boost):
             for sample_index, sample in enumerate(samples):
                 sample_id = str(sample.get("sample_id", f"conv-{sample_index}"))
                 print(f"\n[{sample_index + 1}/{len(samples)}] retrieval | {sample_id}")
@@ -141,6 +142,8 @@ def run_retrieval_diagnostics(
                             "context_count_at_50": len(ceiling_context),
                             "top_retrieval_score": _top_score(top_context),
                             "top_event_time_iso": str(top_meta.get("event_time_iso", "") or ""),
+                            "top_entity_boost": top_meta.get("entity_boost"),
+                            "top_entity_overlap": top_meta.get("entity_overlap", []),
                             "answer_token_recall_at_10": None if excluded else recall_10,
                             "answer_token_recall_at_50": None if excluded else recall_50,
                             "all_answer_tokens_present_at_10": None if excluded else all_10,
@@ -162,10 +165,12 @@ def write_diagnostics_json(
     top_k: int,
     ceiling_top_k: int,
     temporal_boost: bool,
+    entity_boost: bool,
     summary: dict[str, Any],
     results: list[dict[str, Any]],
     errors: int,
     temporal_ablation: dict[str, Any] | None = None,
+    entity_ablation: dict[str, Any] | None = None,
 ) -> Path:
     """Write diagnostics JSON to a directory or explicit JSON path."""
     timestamp = datetime.now().isoformat(timespec="seconds")
@@ -177,6 +182,7 @@ def write_diagnostics_json(
             "top_k": top_k,
             "ceiling_top_k": ceiling_top_k,
             "temporal_boost": temporal_boost,
+            "entity_boost": entity_boost,
         },
         "summary": summary,
         "results": results,
@@ -184,6 +190,8 @@ def write_diagnostics_json(
     }
     if temporal_ablation is not None:
         payload["temporal_ablation"] = temporal_ablation
+    if entity_ablation is not None:
+        payload["entity_ablation"] = entity_ablation
 
     if output.suffix == ".json":
         path = output
@@ -261,18 +269,36 @@ def _numeric_delta(base: Any, boosted: Any) -> float | None:
 
 @contextmanager
 def _temporary_temporal_boost(enabled: bool) -> Iterator[None]:
-    previous = os.environ.get("LOCOMO_TEMPORAL_BOOST")
+    with _temporary_env_flag("LOCOMO_TEMPORAL_BOOST", enabled):
+        yield
+
+
+@contextmanager
+def _temporary_entity_boost(enabled: bool) -> Iterator[None]:
+    with _temporary_env_flag("LOCOMO_ENTITY_BOOST", enabled):
+        yield
+
+
+@contextmanager
+def _temporary_ablation_boosts(*, temporal_boost: bool, entity_boost: bool) -> Iterator[None]:
+    with _temporary_temporal_boost(temporal_boost), _temporary_entity_boost(entity_boost):
+        yield
+
+
+@contextmanager
+def _temporary_env_flag(name: str, enabled: bool) -> Iterator[None]:
+    previous = os.environ.get(name)
     if enabled:
-        os.environ["LOCOMO_TEMPORAL_BOOST"] = "1"
+        os.environ[name] = "1"
     else:
-        os.environ.pop("LOCOMO_TEMPORAL_BOOST", None)
+        os.environ.pop(name, None)
     try:
         yield
     finally:
         if previous is None:
-            os.environ.pop("LOCOMO_TEMPORAL_BOOST", None)
+            os.environ.pop(name, None)
         else:
-            os.environ["LOCOMO_TEMPORAL_BOOST"] = previous
+            os.environ[name] = previous
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -284,6 +310,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--ceiling-top-k", type=int, default=50)
     parser.add_argument("--temporal-ablation", action="store_true")
+    parser.add_argument("--entity-ablation", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -302,10 +329,12 @@ def main(argv: list[str] | None = None) -> int:
         top_k=int(args.top_k),
         ceiling_top_k=int(args.ceiling_top_k),
         temporal_boost=False,
+        entity_boost=False,
     )
     summary = summarize_results(results)
 
     temporal_ablation: dict[str, Any] | None = None
+    entity_ablation: dict[str, Any] | None = None
     if args.temporal_ablation:
         boosted_results, boosted_errors = run_retrieval_diagnostics(
             samples=samples,
@@ -313,10 +342,29 @@ def main(argv: list[str] | None = None) -> int:
             top_k=int(args.top_k),
             ceiling_top_k=int(args.ceiling_top_k),
             temporal_boost=True,
+            entity_boost=False,
         )
         boosted_summary = summarize_results(boosted_results)
         temporal_ablation = {
             "config": {"temporal_boost": True},
+            "summary": boosted_summary,
+            "results": boosted_results,
+            "errors": boosted_errors,
+            "deltas": _ablation_delta(summary, boosted_summary),
+        }
+        errors += boosted_errors
+    if args.entity_ablation:
+        boosted_results, boosted_errors = run_retrieval_diagnostics(
+            samples=samples,
+            mode=str(args.mode),
+            top_k=int(args.top_k),
+            ceiling_top_k=int(args.ceiling_top_k),
+            temporal_boost=False,
+            entity_boost=True,
+        )
+        boosted_summary = summarize_results(boosted_results)
+        entity_ablation = {
+            "config": {"entity_boost": True},
             "summary": boosted_summary,
             "results": boosted_results,
             "errors": boosted_errors,
@@ -331,10 +379,12 @@ def main(argv: list[str] | None = None) -> int:
         top_k=int(args.top_k),
         ceiling_top_k=int(args.ceiling_top_k),
         temporal_boost=False,
+        entity_boost=False,
         summary=summary,
         results=results,
         errors=errors,
         temporal_ablation=temporal_ablation,
+        entity_ablation=entity_ablation,
     )
     elapsed = time.perf_counter() - started
     print(f"\nWrote {out}")

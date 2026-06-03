@@ -86,12 +86,26 @@ _EVENT_METADATA_FIELDS: tuple[str, ...] = (
     "event_time_parse_error",
     "base_score",
     "temporal_boost",
+    "entity_boost",
+    "entity_overlap",
+    "query_entities",
+    "candidate_entities",
 )
 
 
 def locomo_temporal_boost_enabled() -> bool:
     """Return True when LoCoMo temporal boost ablation is explicitly enabled."""
     return os.environ.get("LOCOMO_TEMPORAL_BOOST", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def locomo_entity_boost_enabled() -> bool:
+    """Return True when LoCoMo entity boost ablation is explicitly enabled."""
+    return os.environ.get("LOCOMO_ENTITY_BOOST", "").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -201,6 +215,16 @@ def _episode_stem_for_sample(sample_id: str | int) -> str:
     return f"conv-{s}"
 
 
+def _conversation_speaker_names(conversation: dict[str, Any]) -> tuple[str, ...]:
+    """Return conversation speaker names to ignore in entity boost scoring."""
+    names: set[str] = set()
+    for key in ("speaker_a", "speaker_b"):
+        value = str(conversation.get(key, "") or "").strip()
+        if value:
+            names.add(value)
+    return tuple(sorted(names))
+
+
 # ── Adapter ──────────
 
 
@@ -241,6 +265,7 @@ class AnimaWorksLoCoMoAdapter:
         self._last_top_event_time_iso: str = ""
         self._last_raw_answer: str = ""
         self._last_normalized_answer: str = ""
+        self._entity_ignored_entities: tuple[str, ...] = ()
         # Deferred heavy init
         self._init_isolated_rag()
 
@@ -335,6 +360,7 @@ class AnimaWorksLoCoMoAdapter:
         conv = sample.get("conversation")
         if not isinstance(conv, dict):
             raise TypeError("sample['conversation'] must be a dict")
+        self._entity_ignored_entities = _conversation_speaker_names(conv)
         stem = _episode_stem_for_sample(str(sample_id))
         md = _build_episode_markdown(str(sample_id), conv)
         file_path = self._episodes_dir / f"{stem}.md"
@@ -478,6 +504,7 @@ class AnimaWorksLoCoMoAdapter:
             self._remember_retrieval_diagnostics(items)
             return items
         # scope_all: vector + graph + BM25 → shared RetrievalPipeline (prod parity)
+        from core.memory.retrieval.entity import EntityBoostConfig  # noqa: PLC0415
         from core.memory.retrieval.pipeline import RetrievalPipeline  # noqa: PLC0415
         from core.memory.retrieval.temporal import TemporalBoostConfig  # noqa: PLC0415
 
@@ -522,6 +549,11 @@ class AnimaWorksLoCoMoAdapter:
             temporal_boost=TemporalBoostConfig(
                 enabled=locomo_temporal_boost_enabled(),
                 category=category,
+            ),
+            entity_boost=EntityBoostConfig(
+                enabled=locomo_entity_boost_enabled(),
+                category=category,
+                ignored_entities=self._entity_ignored_entities,
             ),
         )
         self._last_abstain = result.abstain
