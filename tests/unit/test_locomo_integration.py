@@ -159,21 +159,14 @@ class TestAdapterAnswer:
             adapter._bm25_corpus = None
             adapter._bm25_index = None
 
-        mock_resp = MagicMock()
-        mock_resp.choices = [MagicMock()]
-        mock_resp.choices[0].message.content = "Paris"
-
-        with (
-            patch("benchmarks.locomo.adapter.resolve_locomo_litellm_kwargs", return_value=("test-model", {})),
-            patch("litellm.completion", return_value=mock_resp) as mock_comp,
-        ):
+        with patch.object(adapter, "_complete_sync", return_value="Paris") as mock_complete:
             result = adapter.answer(
                 "Where did Alice go?",
                 [{"content": "Alice went to Paris"}],
                 model="test-model",
             )
             assert result == "Paris"
-            mock_comp.assert_called_once()
+            mock_complete.assert_called_once()
 
     def test_answer_abstain_skips_llm(self):
         from benchmarks.locomo.adapter import AnimaWorksLoCoMoAdapter
@@ -212,14 +205,7 @@ class TestAdapterAnswer:
             adapter._bm25_corpus = None
             adapter._bm25_index = None
 
-        mock_resp = MagicMock()
-        mock_resp.choices = [MagicMock()]
-        mock_resp.choices[0].message.content = "No information available."
-
-        with (
-            patch("benchmarks.locomo.adapter.resolve_locomo_litellm_kwargs", return_value=("test-model", {})),
-            patch("litellm.completion", return_value=mock_resp),
-        ):
+        with patch.object(adapter, "_complete_sync", return_value="No information available."):
             result = adapter.answer("Where?", [], model="test-model")
             assert "No information" in result
 
