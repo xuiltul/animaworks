@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -9,11 +10,10 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from core.time_utils import today_local
-
 import pytest
 
 from core.memory.priming import PrimingEngine, format_priming_section
+from core.time_utils import today_local
 
 
 @pytest.fixture
@@ -62,7 +62,7 @@ def temp_anima_dir():
         skill_file = anima_dir / "skills" / "web_search" / "SKILL.md"
         skill_file.write_text(
             "---\n"
-            "description: \"「web search」「web検索」を実行して情報を収集する\"\n"
+            'description: "「web search」「web検索」を実行して情報を収集する"\n'
             "---\n\n"
             "# Web検索スキル\n\n"
             "## 概要\n"
@@ -105,6 +105,7 @@ async def test_priming_all_channels(temp_anima_dir, temp_shared_dir):
 
     # Mock shared_dir by patching get_shared_dir at the point it's imported
     from unittest.mock import patch
+
     with patch("core.paths.get_shared_dir", return_value=temp_shared_dir):
         result = await engine.prime_memories(
             message="山田さんとプライミングレイヤーについて話したい",
@@ -249,20 +250,21 @@ def test_keyword_extraction_english_stopwords_still_excluded(temp_anima_dir):
 
 @pytest.mark.asyncio
 async def test_channel_c_top_k(temp_anima_dir):
-    """Channel C must call retriever.search with top_k=5."""
+    """Channel C must ask unified search for 5 related knowledge hits."""
     engine = PrimingEngine(temp_anima_dir)
 
     from unittest.mock import MagicMock, patch
 
-    mock_retriever = MagicMock()
-    mock_retriever.search.return_value = []
+    mock_searcher = MagicMock()
+    mock_searcher.search_many.return_value = []
+    mock_searcher.last_search_meta = {"abstain": False, "abstain_reason": ""}
 
-    with patch.object(engine, "_get_or_create_retriever", return_value=mock_retriever):
+    with patch("core.memory.priming.channel_c.UnifiedMemorySearch", return_value=mock_searcher):
         await engine._channel_c_related_knowledge(["test"], message="")
 
-    mock_retriever.search.assert_called_once()
-    call_kwargs = mock_retriever.search.call_args
-    assert call_kwargs.kwargs.get("top_k") == 5 or call_kwargs[1].get("top_k") == 5
+    mock_searcher.search_many.assert_called_once()
+    call_kwargs = mock_searcher.search_many.call_args
+    assert call_kwargs.kwargs.get("limit") == 5 or call_kwargs[1].get("limit") == 5
 
 
 @pytest.mark.asyncio
@@ -272,20 +274,20 @@ async def test_channel_c_query_includes_message(temp_anima_dir):
 
     from unittest.mock import MagicMock, patch
 
-    mock_retriever = MagicMock()
-    mock_retriever.search.return_value = []
+    mock_searcher = MagicMock()
+    mock_searcher.search_many.return_value = []
+    mock_searcher.last_search_meta = {"abstain": False, "abstain_reason": ""}
 
     msg = "このIssueを裏で実装して"
 
-    with patch.object(engine, "_get_or_create_retriever", return_value=mock_retriever):
+    with patch("core.memory.priming.channel_c.UnifiedMemorySearch", return_value=mock_searcher):
         await engine._channel_c_related_knowledge(["Issue", "裏", "実装"], message=msg)
 
-    calls = mock_retriever.search.call_args_list
-    assert len(calls) == 2, f"Expected 2 dual queries, got {len(calls)}"
-    q1 = calls[0].kwargs.get("query") or calls[0][1].get("query")
-    q2 = calls[1].kwargs.get("query") or calls[1][1].get("query")
-    assert q1.startswith(msg[:200])
-    assert "Issue" in q2
+    call_kwargs = mock_searcher.search_many.call_args
+    queries = call_kwargs.kwargs.get("queries") or call_kwargs[0][0]
+    assert len(queries) == 2, f"Expected 2 dual queries, got {len(queries)}"
+    assert queries[0].startswith(msg[:200])
+    assert "Issue" in queries[1]
 
 
 @pytest.mark.asyncio
@@ -295,15 +297,16 @@ async def test_channel_c_query_keyword_only_when_no_message(temp_anima_dir):
 
     from unittest.mock import MagicMock, patch
 
-    mock_retriever = MagicMock()
-    mock_retriever.search.return_value = []
+    mock_searcher = MagicMock()
+    mock_searcher.search_many.return_value = []
+    mock_searcher.last_search_meta = {"abstain": False, "abstain_reason": ""}
 
-    with patch.object(engine, "_get_or_create_retriever", return_value=mock_retriever):
+    with patch("core.memory.priming.channel_c.UnifiedMemorySearch", return_value=mock_searcher):
         await engine._channel_c_related_knowledge(["Issue", "実装"], message="")
 
-    call_kwargs = mock_retriever.search.call_args
-    actual_query = call_kwargs.kwargs.get("query") or call_kwargs[1].get("query")
-    assert actual_query == "Issue 実装"
+    call_kwargs = mock_searcher.search_many.call_args
+    queries = call_kwargs.kwargs.get("queries") or call_kwargs[0][0]
+    assert queries == ["Issue 実装"]
 
 
 if __name__ == "__main__":
@@ -324,8 +327,7 @@ if __name__ == "__main__":
             # Create sample data
             today_episode = anima_dir / "episodes" / f"{today_local().isoformat()}.md"
             today_episode.write_text(
-                f"# {today_local().isoformat()} 行動ログ\n\n"
-                "## 09:00 — テスト\n\nテストエピソード\n",
+                f"# {today_local().isoformat()} 行動ログ\n\n## 09:00 — テスト\n\nテストエピソード\n",
                 encoding="utf-8",
             )
 
