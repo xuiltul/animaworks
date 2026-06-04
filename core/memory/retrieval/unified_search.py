@@ -27,11 +27,12 @@ _TOOL_ALL_SCOPES: tuple[str, ...] = (
     "episodes",
     "knowledge",
     "procedures",
+    "common_knowledge",
     "skills",
     "conversation_summary",
     "activity_log",
 )
-_EXPLICIT_SCOPES = _TOOL_ALL_SCOPES + ("common_knowledge",)
+_EXPLICIT_SCOPES = _TOOL_ALL_SCOPES
 
 
 @dataclass(frozen=True)
@@ -352,16 +353,14 @@ class UnifiedMemorySearch:
     ) -> list[dict[str, Any]]:
         merged: dict[str, dict[str, Any]] = {}
         for scope in scopes:
-            keyword_scopes = ("knowledge", "common_knowledge") if scope == "common_knowledge" else (scope,)
-            for keyword_scope in keyword_scopes:
-                self._merge_keyword_scope(
-                    rag,
-                    query,
-                    keyword_scope,
-                    pool_k,
-                    entity_boost=entity_boost,
-                    merged=merged,
-                )
+            self._merge_keyword_scope(
+                rag,
+                query,
+                scope,
+                pool_k,
+                entity_boost=entity_boost,
+                merged=merged,
+            )
         return sorted(merged.values(), key=lambda item: float(item.get("score", 0.0) or 0.0), reverse=True)[:pool_k]
 
     def _merge_keyword_scope(
