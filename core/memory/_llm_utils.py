@@ -411,7 +411,7 @@ async def _try_codex_sdk(
     del max_tokens
 
     try:
-        from openai_codex_sdk import Codex
+        from openai_codex import ApprovalMode, AsyncCodex, CodexConfig, Sandbox
     except ImportError:
         logger.debug("Codex SDK not available for one-shot fallback")
         return None
@@ -428,29 +428,41 @@ async def _try_codex_sdk(
     if llm_kwargs.get("api_base"):
         env["OPENAI_BASE_URL"] = str(llm_kwargs["api_base"])
 
-    options: dict[str, Any] = {"env": env}
     executable = get_codex_executable()
-    if executable:
-        options["codexPathOverride"] = executable
+    config = CodexConfig(
+        codex_bin=executable,
+        cwd=os.getcwd(),
+        env=env,
+        client_name="animaworks",
+        client_title="AnimaWorks",
+    )
 
     try:
-        client = Codex(options)
-        thread = client.start_thread(
-            {
-                "model": _resolve_codex_model(model),
-                "sandboxMode": "read-only",
-                "approvalPolicy": "never",
-                "skipGitRepoCheck": True,
-                "workingDirectory": os.getcwd(),
-                "networkAccessEnabled": False,
-            }
+        client = AsyncCodex(config)
+        thread = await client.thread_start(
+            approval_mode=ApprovalMode.deny_all,
+            base_instructions=system_prompt or None,
+            cwd=os.getcwd(),
+            model=_resolve_codex_model(model),
+            sandbox=Sandbox.read_only,
         )
-        full_prompt = prompt if not system_prompt else f"{system_prompt}\n\nUser request:\n{prompt}"
-        turn = await thread.run(full_prompt)
+        turn = await thread.run(
+            prompt,
+            approval_mode=ApprovalMode.deny_all,
+            cwd=os.getcwd(),
+            model=_resolve_codex_model(model),
+            sandbox=Sandbox.read_only,
+        )
         return getattr(turn, "final_response", None) or None
     except Exception as e:
         logger.warning("Codex SDK one-shot failed: %s", e)
         return None
+    finally:
+        if "client" in locals():
+            try:
+                await client.close()
+            except Exception:
+                logger.debug("Failed to close Codex one-shot client", exc_info=True)
 
 
 async def one_shot_completion(

@@ -124,7 +124,7 @@ class ExecutorFactoryMixin:
                 )
 
                 if not is_codex_sdk_available():
-                    raise ImportError("openai_codex_sdk not installed")
+                    raise ImportError("openai_codex not installed")
                 return CodexSDKExecutor(
                     model_config=active_config,
                     anima_dir=self.anima_dir,
@@ -134,7 +134,7 @@ class ExecutorFactoryMixin:
                 )
             except ImportError:
                 logger.warning(
-                    "CodexSDKExecutor unavailable (openai-codex-sdk not installed), falling back to LiteLLM (Mode A)"
+                    "CodexSDKExecutor unavailable (openai-codex not installed), falling back to LiteLLM (Mode A)"
                 )
                 fallback_model_config = active_config.model_copy(deep=True)
                 fallback_model: str | None = fallback_model_config.fallback_model

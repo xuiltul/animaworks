@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -11,6 +12,14 @@ mocked Codex SDK.  No real Codex CLI or API key required.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+def _mock_codex(start_thread):
+    codex = MagicMock()
+    codex.thread_start = AsyncMock(return_value=start_thread)
+    codex.thread_resume = AsyncMock(return_value=start_thread)
+    codex.close = AsyncMock()
+    return codex
 
 
 # ── Executor creation tests ──────────────────────────────────
@@ -36,15 +45,17 @@ class TestExecutorCreation:
         assert agent._resolve_execution_mode() == "c"
 
     def test_create_executor_mode_c_fallback_to_a(self, make_agent_core):
-        """codex/* model + openai-codex-sdk missing → LiteLLMExecutor fallback."""
+        """codex/* model + openai-codex missing → LiteLLMExecutor fallback."""
         agent = make_agent_core(name="codex-fallback", model="codex/o4-mini")
 
-        with patch.dict("sys.modules", {"openai_codex_sdk": None}):
-            with patch(
+        with (
+            patch.dict("sys.modules", {"openai_codex": None}),
+            patch(
                 "core.execution.codex_sdk.CodexSDKExecutor",
-                side_effect=ImportError("No module named 'openai_codex_sdk'"),
-            ):
-                executor = agent._create_executor()
+                side_effect=ImportError("No module named 'openai_codex'"),
+            ),
+        ):
+            executor = agent._create_executor()
 
         from core.execution.litellm_loop import LiteLLMExecutor
         assert isinstance(executor, LiteLLMExecutor)
@@ -69,8 +80,7 @@ class TestRunCycle:
         mock_thread.run = AsyncMock(return_value=mock_turn)
         mock_thread.id = "thread-chat-001"
 
-        mock_codex = MagicMock()
-        mock_codex.start_thread.return_value = mock_thread
+        mock_codex = _mock_codex(mock_thread)
 
         with patch("core.execution.codex_sdk.CodexSDKExecutor._create_codex_client", return_value=mock_codex):
             result = await agent.run_cycle(
@@ -95,8 +105,7 @@ class TestRunCycle:
         mock_thread.run = AsyncMock(return_value=mock_turn)
         mock_thread.id = "thread-hb-001"
 
-        mock_codex = MagicMock()
-        mock_codex.start_thread.return_value = mock_thread
+        mock_codex = _mock_codex(mock_thread)
 
         with patch("core.execution.codex_sdk.CodexSDKExecutor._create_codex_client", return_value=mock_codex):
             result = await agent.run_cycle(
@@ -121,8 +130,7 @@ class TestRunCycle:
         mock_thread.run = AsyncMock(return_value=mock_turn)
         mock_thread.id = "thread-cron-001"
 
-        mock_codex = MagicMock()
-        mock_codex.start_thread.return_value = mock_thread
+        mock_codex = _mock_codex(mock_thread)
 
         with patch("core.execution.codex_sdk.CodexSDKExecutor._create_codex_client", return_value=mock_codex):
             result = await agent.run_cycle(
@@ -147,8 +155,7 @@ class TestRunCycle:
         mock_thread.run = AsyncMock(return_value=mock_turn)
         mock_thread.id = "thread-task-001"
 
-        mock_codex = MagicMock()
-        mock_codex.start_thread.return_value = mock_thread
+        mock_codex = _mock_codex(mock_thread)
 
         with patch("core.execution.codex_sdk.CodexSDKExecutor._create_codex_client", return_value=mock_codex):
             result = await agent.run_cycle(

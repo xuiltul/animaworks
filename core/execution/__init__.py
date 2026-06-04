@@ -26,7 +26,7 @@ try:
 except ImportError:  # pragma: no cover
     AgentSDKExecutor = None  # type: ignore[assignment,misc]
 
-# CodexSDKExecutor requires openai_codex_sdk (optional dependency).
+# CodexSDKExecutor requires openai_codex (optional dependency).
 try:
     from core.execution.codex_sdk import CodexSDKExecutor
 except ImportError:  # pragma: no cover

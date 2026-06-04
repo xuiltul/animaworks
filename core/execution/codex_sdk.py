@@ -8,20 +8,20 @@ from __future__ import annotations
 # See LICENSE for the full license text.
 
 
-"""Mode C executor: Codex SDK (Codex CLI wrapper).
+"""Mode C executor: Codex Python SDK (Codex App Server wrapper).
 
-Runs OpenAI models via the Codex CLI as an autonomous agent.  The SDK spawns
-the Codex CLI binary and exchanges JSONL events over stdin/stdout.  Tool
-safety relies on Codex's sandbox mode (container-level isolation) plus MCP
-integration with AnimaWorks ``core/mcp/server.py`` for permission-checked
-tool access.
+Runs OpenAI models via the Codex App Server as an autonomous agent.  The SDK
+spawns the Codex binary and exchanges JSON-RPC notifications over stdio. Tool
+safety relies on Codex's sandbox mode plus MCP integration with AnimaWorks
+``core/mcp/server.py`` for permission-checked tool access.
 
 System prompt is injected via ``model_instructions_file`` in a per-anima
-CODEX_HOME directory.  Session resume uses the Codex SDK's ``resume_thread``
+CODEX_HOME directory.  Session resume uses the Codex SDK's ``thread_resume``
 mechanism with thread IDs persisted to the shortterm directory.
 """
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -80,9 +80,9 @@ def _resolve_codex_model(model: str) -> str:
 
 
 def is_codex_sdk_available() -> bool:
-    """Return True when ``openai_codex_sdk`` is importable."""
+    """Return True when ``openai_codex`` is importable."""
     try:
-        import openai_codex_sdk  # noqa: F401
+        import openai_codex  # noqa: F401
 
         return True
     except Exception:
@@ -304,47 +304,166 @@ def _close_subprocess_stdio(proc: asyncio.subprocess.Process) -> None:
     _close_stream_transport(getattr(proc, "stderr", None), "stderr")
 
 
+_ITEM_TYPE_ALIASES = {
+    "agentMessage": "agent_message",
+    "commandExecution": "command_execution",
+    "mcpToolCall": "mcp_tool_call",
+    "fileChange": "file_change",
+    "webSearch": "web_search",
+    "dynamicToolCall": "dynamic_tool_call",
+    "collabAgentToolCall": "collab_agent_tool_call",
+}
+
+
+def _get_attr(obj: Any, name: str, default: Any = None) -> Any:
+    """Return an attribute/key from SDK models, dicts, and lightweight test objects."""
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
+def _get_first_attr(obj: Any, *names: str, default: Any = None) -> Any:
+    for name in names:
+        value = _get_attr(obj, name, default)
+        if value is not default:
+            return value
+    return default
+
+
+def _get_str(obj: Any, *names: str) -> str:
+    for name in names:
+        value = _get_attr(obj, name, None)
+        if isinstance(value, str):
+            return value
+    return ""
+
+
+def _get_list(obj: Any, *names: str) -> list[Any]:
+    for name in names:
+        value = _get_attr(obj, name, None)
+        if isinstance(value, list):
+            return value
+    return []
+
+
+def _unwrap_thread_item(item: Any) -> Any:
+    """Unwrap new SDK ``ThreadItem`` RootModel values while tolerating mocks."""
+    root = _get_attr(item, "root", None)
+    if root is not None and (_get_str(root, "type") or _get_str(root, "id")):
+        return root
+    return item
+
+
+def _normalise_item_type(item_type: str) -> str:
+    if not item_type:
+        return ""
+    return _ITEM_TYPE_ALIASES.get(item_type, item_type)
+
+
+def _item_type(item: Any) -> str:
+    return _normalise_item_type(_get_str(_unwrap_thread_item(item), "type"))
+
+
+def _item_id(item: Any) -> str:
+    return _get_str(_unwrap_thread_item(item), "id")
+
+
+def _event_method(event: Any) -> str:
+    """Return the Codex notification method, normalising old dotted test events."""
+    method = _get_str(event, "method")
+    if method:
+        return method
+    etype = _get_str(event, "type")
+    if "." in etype:
+        return etype.replace(".", "/")
+    return etype
+
+
+def _payload_looks_real(payload: Any) -> bool:
+    if payload is None:
+        return False
+    if _get_str(payload, "thread_id", "threadId", "turn_id", "turnId", "item_id", "itemId"):
+        return True
+    if _get_str(payload, "delta", "message"):
+        return True
+    item = _get_attr(payload, "item", None)
+    if item is not None and _item_type(item):
+        return True
+    turn = _get_attr(payload, "turn", None)
+    return bool(turn is not None and _get_str(turn, "id"))
+
+
+def _event_payload(event: Any) -> Any:
+    payload = _get_attr(event, "payload", None)
+    if _payload_looks_real(payload):
+        return payload
+    return event
+
+
+def _payload_item_id(payload: Any) -> str:
+    return _get_str(payload, "item_id", "itemId")
+
+
+def _payload_delta(payload: Any) -> str:
+    return _get_str(payload, "delta")
+
+
 def _extract_item_text(item: Any) -> str:
     """Extract text content from a Codex completed item."""
-    if hasattr(item, "content"):
-        if isinstance(item.content, str):
-            return item.content
-        if isinstance(item.content, list):
+    item = _unwrap_thread_item(item)
+    content = _get_attr(item, "content", None)
+    if content is not None:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
             parts: list[str] = []
-            for part in item.content:
-                if hasattr(part, "text"):
-                    parts.append(part.text)
+            for part in content:
+                part_text = _get_str(part, "text")
+                if part_text:
+                    parts.append(part_text)
                 elif isinstance(part, str):
                     parts.append(part)
             return "".join(parts)
-    if hasattr(item, "text"):
-        return item.text
+    text = _get_str(item, "text")
+    if text:
+        return text
+    summary = _get_list(item, "summary")
+    if summary:
+        return "".join(str(part) for part in summary)
     return ""
 
 
 def _codex_item_tool_name(item: Any, item_type: str) -> str:
     """Derive a human-readable tool name from a Codex item."""
+    item = _unwrap_thread_item(item)
+    item_type = _normalise_item_type(item_type)
     if item_type == "mcp_tool_call":
-        server = getattr(item, "server", "")
-        tool = getattr(item, "tool", "")
+        server = _get_str(item, "server")
+        tool = _get_str(item, "tool")
         return f"{server}/{tool}" if server else tool or "mcp_tool"
     if item_type == "command_execution":
-        cmd = getattr(item, "command", "")
+        cmd = _get_str(item, "command")
         return cmd[:60] if cmd else "command"
-    return getattr(item, "name", None) or item_type or "unknown"
+    if item_type == "file_change":
+        return "file_change"
+    if item_type == "web_search":
+        query = _get_str(item, "query")
+        return f"web_search: {query[:48]}" if query else "web_search"
+    return _get_str(item, "name") or item_type or "unknown"
 
 
 def _item_to_tool_record(item: Any) -> ToolCallRecord | None:
     """Convert a Codex item (command_execution / mcp_tool_call) to a ``ToolCallRecord``."""
     try:
-        item_type = getattr(item, "type", "")
-        tool_id = getattr(item, "id", "")
+        item = _unwrap_thread_item(item)
+        item_type = _item_type(item)
+        tool_id = _item_id(item)
         if item_type == "mcp_tool_call":
             name = _codex_item_tool_name(item, item_type)
-            input_data = getattr(item, "arguments", {})
-            result_obj = getattr(item, "result", None)
-            result_data = str(getattr(result_obj, "content", "")) if result_obj else ""
-            error_obj = getattr(item, "error", None)
+            input_data = _get_attr(item, "arguments", {})
+            result_obj = _get_attr(item, "result", None)
+            result_data = str(_get_attr(result_obj, "content", "")) if result_obj else ""
+            error_obj = _get_attr(item, "error", None)
             is_error = error_obj is not None
             return ToolCallRecord(
                 tool_name=name,
@@ -354,9 +473,9 @@ def _item_to_tool_record(item: Any) -> ToolCallRecord | None:
                 is_error=is_error,
             )
         if item_type == "command_execution":
-            cmd = getattr(item, "command", "")
-            output = getattr(item, "aggregated_output", "")
-            exit_code = getattr(item, "exit_code", None)
+            cmd = _get_str(item, "command")
+            output = _get_str(item, "aggregated_output", "aggregatedOutput")
+            exit_code = _get_first_attr(item, "exit_code", "exitCode", default=None)
             is_error = exit_code is not None and exit_code != 0
             return ToolCallRecord(
                 tool_name=cmd[:80] if cmd else "command",
@@ -365,10 +484,20 @@ def _item_to_tool_record(item: Any) -> ToolCallRecord | None:
                 result_summary=_truncate_for_record(output, 500),
                 is_error=is_error,
             )
+        if item_type == "file_change":
+            changes = _get_list(item, "changes")
+            detail = _format_file_changes(changes)
+            return ToolCallRecord(
+                tool_name="file_change",
+                tool_id=tool_id,
+                input_summary=_truncate_for_record(detail, 500),
+                result_summary=_truncate_for_record(_get_str(item, "status") or detail, 500),
+                is_error=False,
+            )
         # Legacy fallback for unknown tool-like items
-        name = getattr(item, "name", "unknown")
-        input_data = getattr(item, "input", {})
-        result_data = getattr(item, "output", "")
+        name = _get_str(item, "name") or "unknown"
+        input_data = _get_attr(item, "input", {})
+        result_data = _get_attr(item, "output", "")
         return ToolCallRecord(
             tool_name=name,
             tool_id=tool_id,
@@ -382,8 +511,8 @@ def _item_to_tool_record(item: Any) -> ToolCallRecord | None:
 def _extract_tool_records(items: list[Any]) -> list[ToolCallRecord]:
     records: list[ToolCallRecord] = []
     for item in items:
-        itype = getattr(item, "type", None)
-        if itype in ("tool_use", "command_execution", "mcp_tool_call"):
+        itype = _item_type(item)
+        if itype in ("tool_use", "command_execution", "mcp_tool_call", "file_change"):
             rec = _item_to_tool_record(item)
             if rec:
                 records.append(rec)
@@ -405,13 +534,52 @@ def _synthesise_fallback(tool_records: list[ToolCallRecord]) -> str:
 def _usage_to_dict(usage: Any) -> dict[str, int]:
     """Normalise a Codex usage object (or dict) to a plain dict."""
     if isinstance(usage, dict):
-        return usage
+        result: dict[str, int] = {}
+        key_aliases = {
+            "input_tokens": ("input_tokens", "inputTokens", "prompt_tokens", "promptTokens"),
+            "output_tokens": ("output_tokens", "outputTokens", "completion_tokens", "completionTokens"),
+            "cached_input_tokens": ("cached_input_tokens", "cachedInputTokens"),
+            "reasoning_output_tokens": ("reasoning_output_tokens", "reasoningOutputTokens"),
+            "total_tokens": ("total_tokens", "totalTokens"),
+        }
+        for out_key, aliases in key_aliases.items():
+            for alias in aliases:
+                val = usage.get(alias)
+                if val is not None:
+                    result[out_key] = int(val)
+                    break
+        return result or usage
+    total_usage = _get_attr(usage, "total", None)
+    if total_usage is not None and any(
+        isinstance(_get_attr(total_usage, key, None), int)
+        for key in ("input_tokens", "output_tokens", "prompt_tokens", "completion_tokens")
+    ):
+        usage = total_usage
     d: dict[str, int] = {}
-    for key in ("input_tokens", "output_tokens", "prompt_tokens", "completion_tokens"):
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "prompt_tokens",
+        "completion_tokens",
+        "cached_input_tokens",
+        "reasoning_output_tokens",
+        "total_tokens",
+    ):
         val = getattr(usage, key, None)
         if val is not None:
             d[key] = int(val)
     return d
+
+
+def _format_file_changes(changes: list[Any]) -> str:
+    parts: list[str] = []
+    for change in changes:
+        kind = _get_attr(change, "kind", "")
+        kind_text = getattr(kind, "value", kind)
+        path = _get_str(change, "path")
+        if kind_text or path:
+            parts.append(f"{kind_text}: {path}".strip(": "))
+    return "; ".join(parts[:10])
 
 
 def _cli_exec_result_text(result: Any) -> str:
@@ -541,128 +709,19 @@ def _wrap_result_message(
     )
 
 
-# ── Stream limit patch ────────────────────────────────────────
+async def _maybe_await(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
 
 
-def _patch_codex_exec_stream_limit(exec_: Any) -> None:
-    """Monkey-patch ``CodexExec.run()`` to raise the StreamReader limit.
-
-    The upstream ``openai-codex-sdk`` uses ``asyncio.create_subprocess_exec``
-    with the default ``limit=2**16`` (64 KB).  When the Codex CLI outputs a
-    single JSONL line larger than 64 KB (common during thread resume with
-    large system prompts), ``readline()`` raises ``LimitOverrunError``.
-
-    This patch wraps the original ``run()`` to inject
-    ``limit=_SUBPROCESS_STREAM_LIMIT`` (16 MB) into the subprocess creation.
-    """
-    from openai_codex_sdk.errors import CodexExecError
-    from openai_codex_sdk.exec import CodexExecArgs
-
-    async def _patched_run(args: CodexExecArgs):  # type: ignore[override]
-        command_args = exec_._build_command_args(args)
-        env = exec_._build_env(args)
-
-        proc = await asyncio.create_subprocess_exec(
-            exec_.executable_path,
-            *command_args,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-            limit=_SUBPROCESS_STREAM_LIMIT,
-        )
-
-        if proc.stdin is None or proc.stdout is None:
-            try:
-                proc.kill()
-            finally:
-                _close_subprocess_stdio(proc)
-                raise CodexExecError("Child process missing stdin/stdout")
-
-        async def _read_stderr(stream, fatal_future: asyncio.Future[str]):  # type: ignore[no-untyped-def]
-            if stream is None:
-                return b""
-            chunks: list[bytes] = []
-            recent_text = ""
-            while True:
-                chunk = await stream.read(4096)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                if fatal_future.done():
-                    continue
-                decoded = chunk.decode("utf-8", errors="replace")
-                recent_text = (recent_text + decoded)[-512:]
-                if _stderr_contains_fatal_signal(recent_text):
-                    fatal_future.set_result(recent_text)
-            return b"".join(chunks)
-
-        fatal_stderr: asyncio.Future[str] = asyncio.get_running_loop().create_future()
-        stderr_task = asyncio.create_task(_read_stderr(proc.stderr, fatal_stderr))
-
+async def _close_codex_client(client: Any) -> None:
+    close = getattr(client, "close", None)
+    if callable(close):
         try:
-            proc.stdin.write(args.input.encode("utf-8"))
-            await proc.stdin.drain()
-            proc.stdin.close()
-
-            while True:
-                line_task = asyncio.create_task(proc.stdout.readline())
-                done, pending = await asyncio.wait(
-                    {line_task, fatal_stderr},
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                # Only cancel line_task if it's still pending; never cancel
-                # fatal_stderr — it must survive across loop iterations.
-                if line_task in pending:
-                    line_task.cancel()
-                    await asyncio.gather(line_task, return_exceptions=True)
-
-                if fatal_stderr in done:
-                    if proc.returncode is None:
-                        try:
-                            proc.kill()
-                        except ProcessLookupError:
-                            pass
-                        await proc.wait()
-                    stderr_bytes = await stderr_task
-                    stderr_text = stderr_bytes.decode("utf-8", errors="replace")
-                    try:
-                        fatal_detail = fatal_stderr.result()
-                    except (asyncio.CancelledError, asyncio.InvalidStateError):
-                        fatal_detail = "(unknown fatal signal)"
-                    raise CodexExecError(f"Codex Exec aborted after fatal stderr signal: {stderr_text or fatal_detail}")
-
-                line = line_task.result()
-                if not line:
-                    break
-                yield line.decode("utf-8").rstrip("\n")
-
-            returncode = await proc.wait()
-            stderr_bytes = await stderr_task
-
-            if returncode != 0:
-                raise CodexExecError(
-                    f"Codex Exec exited with code {returncode}: {stderr_bytes.decode('utf-8', errors='replace')}"
-                )
-        finally:
-            if proc.returncode is None:
-                try:
-                    proc.kill()
-                except ProcessLookupError:
-                    pass
-                try:
-                    await proc.wait()
-                except Exception:  # noqa: BLE001
-                    pass
-            stderr_task.cancel()
-            await asyncio.gather(stderr_task, return_exceptions=True)
-            _close_subprocess_stdio(proc)
-
-    exec_.run = _patched_run
-    logger.info(
-        "Patched CodexExec.run() with stream limit=%d bytes",
-        _SUBPROCESS_STREAM_LIMIT,
-    )
+            await _maybe_await(close())
+        except Exception:
+            logger.debug("Failed to close Codex SDK client", exc_info=True)
 
 
 # ── Executor ─────────────────────────────────────────────────
@@ -889,26 +948,57 @@ class CodexSDKExecutor(BaseExecutor):
         (self._codex_home / "config.toml").write_text(config_toml, encoding="utf-8")
 
     def _create_codex_client(self) -> Any:
-        """Create a ``Codex`` SDK client instance.
-
-        Patches the underlying ``CodexExec.run()`` to use a larger
-        ``asyncio.StreamReader`` buffer (16 MB instead of the default 64 KB).
-        This prevents ``LimitOverrunError`` when the Codex CLI emits JSONL
-        lines exceeding 64 KB (e.g., during thread resume with large prompts).
-        """
+        """Create an ``AsyncCodex`` SDK client instance."""
         try:
-            from openai_codex_sdk import Codex
+            from openai_codex import AsyncCodex, CodexConfig
         except ModuleNotFoundError as e:
-            raise ImportError("openai_codex_sdk is required for Mode C (install openai-codex-sdk).") from e
+            raise ImportError("openai_codex is required for Mode C (install openai-codex).") from e
 
-        options: dict[str, Any] = {"env": self._build_env()}
         executable = get_codex_executable()
-        if executable:
-            options["codexPathOverride"] = executable
+        config = CodexConfig(
+            codex_bin=executable,
+            cwd=str(self._task_cwd or self._anima_dir),
+            env=self._build_env(),
+            client_name="animaworks",
+            client_title="AnimaWorks",
+        )
+        return AsyncCodex(config)
 
-        client = Codex(options)
-        _patch_codex_exec_stream_limit(client._exec)
-        return client
+    def _sdk_approval_mode(self) -> Any:
+        from openai_codex import ApprovalMode
+
+        return ApprovalMode.deny_all
+
+    def _sdk_sandbox(self) -> Any:
+        from openai_codex import Sandbox
+
+        from core.config.models import load_permissions
+
+        permissions_config = load_permissions(self._anima_dir)
+        if "/" in permissions_config.file_roots:
+            return Sandbox.full_access
+        return Sandbox.workspace_write
+
+    def _codex_thread_kwargs(self, system_prompt: str) -> dict[str, Any]:
+        provider_config = _resolve_codex_provider_config(self._model_config)
+        return {
+            "approval_mode": self._sdk_approval_mode(),
+            "base_instructions": system_prompt or None,
+            "cwd": str(self._task_cwd or self._anima_dir),
+            "developer_instructions": self._CODEX_DEVELOPER_INSTRUCTIONS,
+            "model": provider_config.model,
+            "model_provider": provider_config.provider,
+            "sandbox": self._sdk_sandbox(),
+        }
+
+    def _codex_turn_kwargs(self) -> dict[str, Any]:
+        provider_config = _resolve_codex_provider_config(self._model_config)
+        return {
+            "approval_mode": self._sdk_approval_mode(),
+            "cwd": str(self._task_cwd or self._anima_dir),
+            "model": provider_config.model,
+            "sandbox": self._sdk_sandbox(),
+        }
 
     def _build_cli_exec_command(self) -> list[str]:
         """Build the `codex exec --json` command used as a runtime fallback."""
@@ -1110,18 +1200,20 @@ class CodexSDKExecutor(BaseExecutor):
             usage=usage_acc,
         )
 
-    def _start_or_resume_thread(
+    async def _start_or_resume_thread(
         self,
         codex: Any,
         thread_id: str | None,
         session_type: str,
+        system_prompt: str,
         chat_thread_id: str = "default",
         persist_thread: bool = True,
     ) -> Any:
         """Start a new thread or attempt to resume an existing one."""
+        thread_kwargs = self._codex_thread_kwargs(system_prompt)
         if thread_id:
             try:
-                thread = codex.resume_thread(thread_id)
+                thread = await _maybe_await(codex.thread_resume(thread_id, **thread_kwargs))
                 logger.info("Resumed Codex thread %s", thread_id)
                 return thread
             except Exception as e:
@@ -1132,12 +1224,7 @@ class CodexSDKExecutor(BaseExecutor):
                 )
                 if persist_thread:
                     _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
-        thread = codex.start_thread(
-            {
-                "working_directory": str(self._task_cwd or self._anima_dir),
-                "skip_git_repo_check": True,
-            }
-        )
+        thread = await _maybe_await(codex.thread_start(**thread_kwargs))
         logger.info("Started fresh Codex thread")
         return thread
 
@@ -1197,80 +1284,85 @@ class CodexSDKExecutor(BaseExecutor):
 
         self._write_codex_config(system_prompt)
         codex = self._create_codex_client()
-        thread = self._start_or_resume_thread(
-            codex,
-            codex_thread_id,
-            session_type,
-            chat_thread_id,
-            persist_thread,
-        )
-
         try:
-            turn = await thread.run(prompt)
-        except Exception as e:
-            if codex_thread_id:
-                logger.warning(
-                    "Codex execute failed with resume (thread=%s): %s. Retrying with fresh thread.",
+            try:
+                thread = await self._start_or_resume_thread(
+                    codex,
                     codex_thread_id,
-                    e,
+                    session_type,
+                    system_prompt,
+                    chat_thread_id,
+                    persist_thread,
                 )
-                if persist_thread:
-                    _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
-                thread = codex.start_thread(
-                    {
-                        "working_directory": str(self._task_cwd or self._anima_dir),
-                        "skip_git_repo_check": True,
-                    }
-                )
-                try:
-                    turn = await thread.run(prompt)
-                except Exception as retry_exc:
-                    if _should_cli_exec_fallback(retry_exc):
+                turn = await _maybe_await(thread.run(prompt, **self._codex_turn_kwargs()))
+            except Exception as e:
+                if codex_thread_id:
+                    logger.warning(
+                        "Codex execute failed with resume (thread=%s): %s. Retrying with fresh thread.",
+                        codex_thread_id,
+                        e,
+                    )
+                    if persist_thread:
+                        _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
+                    try:
+                        thread = await self._start_or_resume_thread(
+                            codex,
+                            None,
+                            session_type,
+                            system_prompt,
+                            chat_thread_id,
+                            persist_thread,
+                        )
+                        turn = await _maybe_await(thread.run(prompt, **self._codex_turn_kwargs()))
+                    except Exception as retry_exc:
+                        if _should_cli_exec_fallback(retry_exc):
+                            logger.warning("Codex SDK execute failed; falling back to `codex exec`")
+                            return await self._execute_via_cli_exec(prompt, system_prompt, tracker, trigger=trigger)
+                        logger.exception("Codex SDK execution error (fresh retry)")
+                        return ExecutionResult(
+                            text=f"[Codex SDK Error: {retry_exc}]",
+                        )
+                else:
+                    if _should_cli_exec_fallback(e):
                         logger.warning("Codex SDK execute failed; falling back to `codex exec`")
                         return await self._execute_via_cli_exec(prompt, system_prompt, tracker, trigger=trigger)
-                    logger.exception("Codex SDK execution error (fresh retry)")
-                    return ExecutionResult(
-                        text=f"[Codex SDK Error: {retry_exc}]",
-                    )
-            else:
-                if _should_cli_exec_fallback(e):
-                    logger.warning("Codex SDK execute failed; falling back to `codex exec`")
-                    return await self._execute_via_cli_exec(prompt, system_prompt, tracker, trigger=trigger)
-                logger.exception("Codex SDK execution error")
-                return ExecutionResult(text=f"[Codex SDK Error: {e}]")
+                    logger.exception("Codex SDK execution error")
+                    return ExecutionResult(text=f"[Codex SDK Error: {e}]")
 
-        if self._check_interrupted():
-            logger.info("Codex SDK execute interrupted after run")
-            return ExecutionResult(text="[Session interrupted by user]")
+            if self._check_interrupted():
+                logger.info("Codex SDK execute interrupted after run")
+                return ExecutionResult(text="[Session interrupted by user]")
 
-        tid = _get_thread_id(thread)
-        if tid and persist_thread:
-            _save_thread_id(self._anima_dir, tid, session_type, chat_thread_id)
+            tid = _get_thread_id(thread)
+            if tid and persist_thread:
+                _save_thread_id(self._anima_dir, tid, session_type, chat_thread_id)
 
-        response_text = getattr(turn, "final_response", "") or ""
-        items = getattr(turn, "items", []) or []
-        tool_records = _extract_tool_records(items)
+            response_text = getattr(turn, "final_response", "") or ""
+            items = getattr(turn, "items", []) or []
+            tool_records = _extract_tool_records(items)
 
-        if not response_text and tool_records:
-            response_text = _synthesise_fallback(tool_records)
+            if not response_text and tool_records:
+                response_text = _synthesise_fallback(tool_records)
 
-        usage_acc: TokenUsage | None = None
-        raw_usage = getattr(turn, "usage", None)
-        if raw_usage:
-            ud = _usage_to_dict(raw_usage)
-            usage_acc = TokenUsage(
-                input_tokens=ud.get("input_tokens", 0) or ud.get("prompt_tokens", 0) or 0,
-                output_tokens=ud.get("output_tokens", 0) or ud.get("completion_tokens", 0) or 0,
+            usage_acc: TokenUsage | None = None
+            raw_usage = getattr(turn, "usage", None)
+            if raw_usage:
+                ud = _usage_to_dict(raw_usage)
+                usage_acc = TokenUsage(
+                    input_tokens=ud.get("input_tokens", 0) or ud.get("prompt_tokens", 0) or 0,
+                    output_tokens=ud.get("output_tokens", 0) or ud.get("completion_tokens", 0) or 0,
+                )
+
+            replied_to = self._read_replied_to_file()
+            return ExecutionResult(
+                text=response_text,
+                result_message=_wrap_result_message(turn, thread, completed_turns=1),
+                replied_to_from_transcript=replied_to,
+                tool_call_records=tool_records,
+                usage=usage_acc,
             )
-
-        replied_to = self._read_replied_to_file()
-        return ExecutionResult(
-            text=response_text,
-            result_message=_wrap_result_message(turn, thread, completed_turns=1),
-            replied_to_from_transcript=replied_to,
-            tool_call_records=tool_records,
-            usage=usage_acc,
-        )
+        finally:
+            await _close_codex_client(codex)
 
     # ── Streaming execution ──────────────────────────────────
 
@@ -1334,300 +1426,399 @@ class CodexSDKExecutor(BaseExecutor):
         self._write_codex_config(system_prompt)
         codex = self._create_codex_client()
 
-        response_text_parts: list[str] = []
+        response_item_order: list[str] = []
+        response_text_by_item: dict[str, str] = {}
         all_tool_records: list[ToolCallRecord] = []
         turn_result: Any = None
         active_thread: Any = None
         usage_acc = TokenUsage()
         completed_turn_count = 0
 
+        def _current_full_text() -> str:
+            return "\n".join(response_text_by_item[item_id] for item_id in response_item_order if response_text_by_item[item_id])
+
+        def _remember_agent_delta(item_id: str, delta: str) -> None:
+            if not item_id:
+                item_id = f"agent-{len(response_item_order) + 1}"
+            if item_id not in response_text_by_item:
+                response_item_order.append(item_id)
+                response_text_by_item[item_id] = ""
+            response_text_by_item[item_id] += delta
+
+        def _set_agent_text(item_id: str, text: str) -> None:
+            if not item_id:
+                item_id = f"agent-{len(response_item_order) + 1}"
+            if item_id not in response_text_by_item:
+                response_item_order.append(item_id)
+            response_text_by_item[item_id] = text
+
         async def _stream_turn(tid: str | None) -> AsyncGenerator[dict[str, Any], None]:
             nonlocal completed_turn_count, turn_result, active_thread
-            thread = self._start_or_resume_thread(
+            thread = await self._start_or_resume_thread(
                 codex,
                 tid,
                 session_type,
+                system_prompt,
                 chat_thread_id,
                 persist_thread,
             )
             active_thread = thread
-            streamed = await thread.run_streamed(prompt)
-            event_iter = streamed.events.__aiter__()
+            turn = await _maybe_await(thread.turn(prompt, **self._codex_turn_kwargs()))
+            stream = turn.stream()
+            event_iter = stream.__aiter__()
             idle_timeout = _event_idle_timeout_seconds(trigger)
 
-            # Per-item text length tracker for delta computation.
-            # item.started/updated carry the full text so far; we yield
-            # only the newly appended portion each time.
-            _item_text_len: dict[str, int] = {}
-            # Track which tool items have already emitted tool_start.
-            _tool_started: set[str] = set()
+            item_text_len: dict[str, int] = {}
+            agent_delta_seen: set[str] = set()
+            tool_started: set[str] = set()
+            tool_ended: set[str] = set()
 
-            while True:
-                try:
-                    event = await asyncio.wait_for(
-                        event_iter.__anext__(),
-                        timeout=idle_timeout,
-                    )
-                except StopAsyncIteration:
-                    break
-                except TimeoutError as e:
-                    raise StreamDisconnectedError(
-                        f"Codex SDK stream idle timeout after {idle_timeout:.0f}s",
-                        partial_text="\n".join(response_text_parts),
-                        immediate_retry=True,
-                    ) from e
+            def _tool_start_chunk(tool_id: str, tool_name: str) -> dict[str, Any] | None:
+                if not tool_id or tool_id in tool_started:
+                    return None
+                tool_started.add(tool_id)
+                return {
+                    "type": "tool_start",
+                    "tool_name": tool_name,
+                    "tool_id": tool_id,
+                }
 
-                if self._check_interrupted():
-                    logger.info("Codex SDK streaming interrupted")
-                    yield {"type": "text_delta", "text": "[Session interrupted by user]"}
+            def _tool_detail_chunk(tool_id: str, tool_name: str, detail: str) -> dict[str, Any] | None:
+                if not detail:
+                    return None
+                return {
+                    "type": "tool_detail",
+                    "tool_id": tool_id,
+                    "tool_name": tool_name,
+                    "detail": detail,
+                }
+
+            def _usage_from_raw(raw_usage: Any) -> None:
+                if not raw_usage:
                     return
-                etype = getattr(event, "type", "")
+                ud = _usage_to_dict(raw_usage)
+                usage_acc.input_tokens = ud.get("input_tokens", 0) or ud.get("prompt_tokens", 0) or 0
+                usage_acc.output_tokens = ud.get("output_tokens", 0) or ud.get("completion_tokens", 0) or 0
 
-                # ── Progressive events: item.started / item.updated ──
-                if etype in ("item.started", "item.updated"):
-                    item = getattr(event, "item", None)
-                    if item is None:
-                        continue
-                    item_type = getattr(item, "type", "")
-                    item_id = getattr(item, "id", "")
-
-                    if item_type == "agent_message":
-                        text = _extract_item_text(item)
-                        if text:
-                            prev_len = _item_text_len.get(item_id, 0)
-                            if len(text) > prev_len:
-                                delta = text[prev_len:]
-                                _item_text_len[item_id] = len(text)
-                                yield {"type": "text_delta", "text": delta}
-
-                    elif item_type == "reasoning":
-                        text = _extract_item_text(item)
-                        if text:
-                            prev_len = _item_text_len.get(item_id, 0)
-                            if len(text) > prev_len:
-                                delta = text[prev_len:]
-                                _item_text_len[item_id] = len(text)
-                                yield {"type": "thinking_delta", "text": delta}
-
-                    elif item_type in ("command_execution", "mcp_tool_call"):
-                        if item_id and item_id not in _tool_started:
-                            _tool_started.add(item_id)
-                            tool_name = _codex_item_tool_name(item, item_type)
-                            yield {
-                                "type": "tool_start",
-                                "tool_name": tool_name,
-                                "tool_id": item_id,
-                            }
-
-                # ── item.completed: finalise per-item data ──
-                elif etype == "item.completed":
-                    item = event.item
-                    item_type = getattr(item, "type", "")
-                    item_id = getattr(item, "id", "")
-
-                    if item_type == "agent_message":
-                        text = _extract_item_text(item)
-                        if text:
-                            prev_len = _item_text_len.get(item_id, 0)
-                            if len(text) > prev_len:
-                                delta = text[prev_len:]
-                                yield {"type": "text_delta", "text": delta}
-                            _item_text_len[item_id] = len(text)
-                            response_text_parts.append(text)
-                        else:
-                            logger.debug(
-                                "Codex item.completed agent_message with empty text: %s",
-                                repr(item)[:300],
-                            )
-
-                    elif item_type in ("command_execution", "mcp_tool_call"):
-                        tool_name = _codex_item_tool_name(item, item_type)
-                        tool_id = item_id
-                        if tool_id not in _tool_started:
-                            _tool_started.add(tool_id)
-                            yield {
-                                "type": "tool_start",
-                                "tool_name": tool_name,
-                                "tool_id": tool_id,
-                            }
-                        rec = _item_to_tool_record(item)
-                        if rec:
-                            all_tool_records.append(rec)
-                        yield {
-                            "type": "tool_end",
-                            "tool_id": tool_id,
-                            "tool_name": tool_name,
-                        }
-
-                    elif item_type == "file_change":
-                        changes = getattr(item, "changes", [])
-                        tool_id = item_id
-                        if tool_id not in _tool_started:
-                            _tool_started.add(tool_id)
-                            yield {
-                                "type": "tool_start",
-                                "tool_name": "file_change",
-                                "tool_id": tool_id,
-                            }
-                        detail_parts = [f"{c.kind}: {c.path}" for c in changes if hasattr(c, "kind")]
-                        if detail_parts:
-                            yield {
-                                "type": "tool_detail",
-                                "tool_id": tool_id,
-                                "tool_name": "file_change",
-                                "detail": "; ".join(detail_parts[:10]),
-                            }
-                        yield {
-                            "type": "tool_end",
-                            "tool_id": tool_id,
-                            "tool_name": "file_change",
-                        }
-
-                    elif item_type == "reasoning":
-                        text = _extract_item_text(item)
-                        if text:
-                            prev_len = _item_text_len.get(item_id, 0)
-                            if len(text) > prev_len:
-                                yield {"type": "thinking_delta", "text": text[prev_len:]}
-                            _item_text_len[item_id] = len(text)
-
-                    else:
-                        text = _extract_item_text(item)
-                        if text:
-                            logger.info(
-                                "Codex item.completed type=%s has text (%d chars); emitting",
-                                item_type,
-                                len(text),
-                            )
-                            response_text_parts.append(text)
-                            yield {"type": "text_delta", "text": text}
-                        else:
-                            logger.debug(
-                                "Codex item.completed type=%s: %s",
-                                item_type,
-                                repr(item)[:300],
-                            )
-
-                # ── turn.completed: usage + thread persistence ──
-                elif etype == "turn.completed":
-                    completed_turn_count += 1
-                    turn_result = _wrap_result_message(event, thread, completed_turns=completed_turn_count)
-                    raw_usage = getattr(event, "usage", None)
-                    if raw_usage:
-                        ud = _usage_to_dict(raw_usage)
-                        usage_acc.input_tokens = ud.get("input_tokens", 0) or ud.get("prompt_tokens", 0) or 0
-                        usage_acc.output_tokens = ud.get("output_tokens", 0) or ud.get("completion_tokens", 0) or 0
-                    saved_tid = _get_thread_id(thread)
-                    if saved_tid and persist_thread:
-                        _save_thread_id(self._anima_dir, saved_tid, session_type, chat_thread_id)
-
-                # ── Error events ──
-                elif etype == "turn.failed":
-                    error_msg = ""
-                    err_obj = getattr(event, "error", None)
-                    if err_obj:
-                        error_msg = getattr(err_obj, "message", str(err_obj))
-                    logger.error("Codex turn.failed: %s", error_msg)
-                    yield {"type": "error", "message": f"[Codex turn failed: {error_msg}]"}
-
-                elif etype == "error":
-                    error_msg = getattr(event, "message", str(event))
-                    logger.error("Codex error event: %s", error_msg)
-                    yield {"type": "error", "message": f"[Codex error: {error_msg}]"}
-
-                elif etype in ("thread.started", "turn.started"):
-                    logger.debug("Codex lifecycle event: %s", etype)
-
-                else:
-                    logger.debug(
-                        "Codex unhandled event type=%s attrs=%s",
-                        etype,
-                        [a for a in dir(event) if not a.startswith("_")][:15],
-                    )
-
-        # Try resume first, fallback to fresh thread
-        fell_back = False
-        if codex_thread_id:
             try:
-                gen = _stream_turn(codex_thread_id)
-                first_event: dict[str, Any] | None = None
+                while True:
+                    try:
+                        event = await asyncio.wait_for(
+                            event_iter.__anext__(),
+                            timeout=idle_timeout,
+                        )
+                    except StopAsyncIteration:
+                        break
+                    except TimeoutError as e:
+                        raise StreamDisconnectedError(
+                            f"Codex SDK stream idle timeout after {idle_timeout:.0f}s",
+                            partial_text=_current_full_text(),
+                            immediate_retry=True,
+                        ) from e
+
+                    if self._check_interrupted():
+                        logger.info("Codex SDK streaming interrupted")
+                        yield {"type": "text_delta", "text": "[Session interrupted by user]"}
+                        return
+
+                    method = _event_method(event)
+                    payload = _event_payload(event)
+
+                    if method == "item/agentMessage/delta":
+                        item_id = _payload_item_id(payload)
+                        delta = _payload_delta(payload)
+                        if delta:
+                            agent_delta_seen.add(item_id)
+                            _remember_agent_delta(item_id, delta)
+                            yield {"type": "text_delta", "text": delta}
+                        continue
+
+                    if method in ("item/reasoning/textDelta", "item/reasoning/summaryTextDelta"):
+                        delta = _payload_delta(payload)
+                        if delta:
+                            yield {"type": "thinking_delta", "text": delta}
+                        continue
+
+                    if method == "item/commandExecution/outputDelta":
+                        tool_id = _payload_item_id(payload)
+                        start = _tool_start_chunk(tool_id, "command")
+                        if start:
+                            yield start
+                        detail = _payload_delta(payload)
+                        detail_chunk = _tool_detail_chunk(tool_id, "command", detail)
+                        if detail_chunk:
+                            yield detail_chunk
+                        continue
+
+                    if method in ("item/fileChange/outputDelta", "item/fileChange/patchUpdated"):
+                        tool_id = _payload_item_id(payload)
+                        start = _tool_start_chunk(tool_id, "file_change")
+                        if start:
+                            yield start
+                        detail = _payload_delta(payload) or _format_file_changes(_get_list(payload, "changes"))
+                        detail_chunk = _tool_detail_chunk(tool_id, "file_change", detail)
+                        if detail_chunk:
+                            yield detail_chunk
+                        continue
+
+                    if method == "item/mcpToolCall/progress":
+                        tool_id = _payload_item_id(payload)
+                        start = _tool_start_chunk(tool_id, "mcp_tool")
+                        if start:
+                            yield start
+                        detail_chunk = _tool_detail_chunk(tool_id, "mcp_tool", _get_str(payload, "message"))
+                        if detail_chunk:
+                            yield detail_chunk
+                        continue
+
+                    if method in ("item/started", "item/updated"):
+                        item = _get_attr(payload, "item", None)
+                        if item is None:
+                            continue
+                        item_type = _item_type(item)
+                        item_id = _item_id(item)
+
+                        if item_type == "agent_message":
+                            text = _extract_item_text(item)
+                            if text:
+                                prev_len = item_text_len.get(item_id, 0)
+                                if len(text) > prev_len:
+                                    delta = text[prev_len:]
+                                    item_text_len[item_id] = len(text)
+                                    agent_delta_seen.add(item_id)
+                                    _remember_agent_delta(item_id, delta)
+                                    yield {"type": "text_delta", "text": delta}
+
+                        elif item_type == "reasoning":
+                            text = _extract_item_text(item)
+                            if text:
+                                prev_len = item_text_len.get(item_id, 0)
+                                if len(text) > prev_len:
+                                    delta = text[prev_len:]
+                                    item_text_len[item_id] = len(text)
+                                    yield {"type": "thinking_delta", "text": delta}
+
+                        elif item_type in (
+                            "command_execution",
+                            "mcp_tool_call",
+                            "file_change",
+                            "web_search",
+                            "dynamic_tool_call",
+                            "collab_agent_tool_call",
+                        ):
+                            start = _tool_start_chunk(item_id, _codex_item_tool_name(item, item_type))
+                            if start:
+                                yield start
+                        continue
+
+                    if method == "item/completed":
+                        item = _get_attr(payload, "item", None)
+                        if item is None:
+                            continue
+                        item_type = _item_type(item)
+                        item_id = _item_id(item)
+
+                        if item_type == "agent_message":
+                            text = _extract_item_text(item)
+                            if text:
+                                if item_id in agent_delta_seen:
+                                    _set_agent_text(item_id, text)
+                                else:
+                                    _set_agent_text(item_id, text)
+                                    yield {"type": "text_delta", "text": text}
+                                item_text_len[item_id] = len(text)
+                            else:
+                                logger.debug(
+                                    "Codex item/completed agent_message with empty text: %s",
+                                    repr(item)[:300],
+                                )
+
+                        elif item_type == "reasoning":
+                            text = _extract_item_text(item)
+                            if text:
+                                prev_len = item_text_len.get(item_id, 0)
+                                if len(text) > prev_len:
+                                    yield {"type": "thinking_delta", "text": text[prev_len:]}
+                                item_text_len[item_id] = len(text)
+
+                        elif item_type in (
+                            "command_execution",
+                            "mcp_tool_call",
+                            "file_change",
+                            "web_search",
+                            "dynamic_tool_call",
+                            "collab_agent_tool_call",
+                        ):
+                            tool_name = _codex_item_tool_name(item, item_type)
+                            start = _tool_start_chunk(item_id, tool_name)
+                            if start:
+                                yield start
+                            if item_type == "file_change":
+                                detail = _format_file_changes(_get_list(_unwrap_thread_item(item), "changes"))
+                                detail_chunk = _tool_detail_chunk(item_id, tool_name, detail)
+                                if detail_chunk:
+                                    yield detail_chunk
+                            rec = _item_to_tool_record(item)
+                            if rec:
+                                all_tool_records.append(rec)
+                            if item_id not in tool_ended:
+                                tool_ended.add(item_id)
+                                yield {
+                                    "type": "tool_end",
+                                    "tool_id": item_id,
+                                    "tool_name": tool_name,
+                                }
+
+                        else:
+                            text = _extract_item_text(item)
+                            if text:
+                                logger.info(
+                                    "Codex item/completed type=%s has text (%d chars); emitting",
+                                    item_type,
+                                    len(text),
+                                )
+                                _set_agent_text(item_id, text)
+                                yield {"type": "text_delta", "text": text}
+                            else:
+                                logger.debug(
+                                    "Codex item/completed type=%s: %s",
+                                    item_type,
+                                    repr(item)[:300],
+                                )
+                        continue
+
+                    if method == "thread/tokenUsage/updated":
+                        _usage_from_raw(_get_attr(payload, "token_usage", None))
+                        continue
+
+                    if method == "turn/completed":
+                        completed_turn_count += 1
+                        turn_result = _wrap_result_message(payload, thread, completed_turns=completed_turn_count)
+                        _usage_from_raw(_get_attr(payload, "usage", None) or _get_attr(payload, "token_usage", None))
+                        saved_tid = _get_thread_id(thread)
+                        if saved_tid and persist_thread:
+                            _save_thread_id(self._anima_dir, saved_tid, session_type, chat_thread_id)
+                        turn_obj = _get_attr(payload, "turn", None)
+                        error_obj = _get_attr(turn_obj, "error", None)
+                        error_msg = _get_str(error_obj, "message")
+                        if error_msg:
+                            logger.error("Codex turn/completed error: %s", error_msg)
+                            yield {"type": "error", "message": f"[Codex turn failed: {error_msg}]"}
+                        continue
+
+                    if method == "turn/failed":
+                        err_obj = _get_attr(payload, "error", None)
+                        error_msg = _get_str(err_obj, "message") or str(err_obj or "")
+                        logger.error("Codex turn.failed: %s", error_msg)
+                        yield {"type": "error", "message": f"[Codex turn failed: {error_msg}]"}
+                        continue
+
+                    if method == "error":
+                        error_msg = _get_str(payload, "message") or str(payload)
+                        logger.error("Codex error event: %s", error_msg)
+                        yield {"type": "error", "message": f"[Codex error: {error_msg}]"}
+                        continue
+
+                    if method in ("thread/started", "turn/started"):
+                        logger.debug("Codex lifecycle event: %s", method)
+                        continue
+
+                    logger.debug(
+                        "Codex unhandled event method=%s attrs=%s",
+                        method,
+                        [a for a in dir(payload) if not a.startswith("_")][:15],
+                    )
+            finally:
+                aclose = getattr(stream, "aclose", None)
+                if callable(aclose):
+                    await aclose()
+
+        try:
+            # Try resume first, fallback to fresh thread.
+            fell_back = False
+            if codex_thread_id:
                 try:
-                    first_event = await asyncio.wait_for(
-                        gen.__anext__(),
-                        timeout=RESUME_TIMEOUT_SEC,
-                    )
-                except (TimeoutError, StopAsyncIteration):
-                    logger.warning(
-                        "Codex resume timed out or empty (thread=%s), falling back to fresh thread.",
-                        codex_thread_id,
-                    )
-                    if persist_thread:
-                        _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
-                    fell_back = True
-                    await gen.aclose()
+                    gen = _stream_turn(codex_thread_id)
+                    first_event: dict[str, Any] | None = None
+                    try:
+                        first_event = await asyncio.wait_for(
+                            gen.__anext__(),
+                            timeout=RESUME_TIMEOUT_SEC,
+                        )
+                    except (TimeoutError, StopAsyncIteration):
+                        logger.warning(
+                            "Codex resume timed out or empty (thread=%s), falling back to fresh thread.",
+                            codex_thread_id,
+                        )
+                        if persist_thread:
+                            _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
+                        fell_back = True
+                        await gen.aclose()
+                    except Exception as e:
+                        logger.warning(
+                            "Codex resume stream failed (thread=%s): %s",
+                            codex_thread_id,
+                            e,
+                        )
+                        if persist_thread:
+                            _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
+                        fell_back = True
+                        await gen.aclose()
+                    else:
+                        if first_event:
+                            yield first_event
+                        async for ev in gen:
+                            yield ev
                 except Exception as e:
                     logger.warning(
-                        "Codex resume stream failed (thread=%s): %s",
-                        codex_thread_id,
+                        "Codex stream resume error: %s. Fresh thread.",
                         e,
                     )
                     if persist_thread:
                         _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
                     fell_back = True
-                    await gen.aclose()
-                else:
-                    if first_event:
-                        yield first_event
-                    async for ev in gen:
-                        yield ev
-            except Exception as e:
-                logger.warning(
-                    "Codex stream resume error: %s. Fresh thread.",
-                    e,
-                )
-                if persist_thread:
-                    _clear_thread_id(self._anima_dir, session_type, chat_thread_id)
+            else:
                 fell_back = True
-        else:
-            fell_back = True
 
-        if fell_back:
-            try:
-                async for ev in _stream_turn(None):
-                    yield ev
-            except Exception as e:
-                if _should_cli_exec_fallback(e):
-                    logger.warning("Codex SDK streaming failed; falling back to `codex exec`")
-                    async for ev in self._execute_streaming_via_cli_exec(
-                        system_prompt, prompt, tracker, trigger=trigger
-                    ):
+            if fell_back:
+                try:
+                    async for ev in _stream_turn(None):
                         yield ev
-                    return
-                logger.exception("Codex SDK streaming error")
-                partial = "\n".join(response_text_parts)
-                is_buffer_overflow = _is_limit_overrun(e)
-                raise StreamDisconnectedError(
-                    f"Codex SDK stream error: {e}",
-                    partial_text=partial,
-                    immediate_retry=is_buffer_overflow,
-                ) from e
+                except Exception as e:
+                    if _should_cli_exec_fallback(e):
+                        logger.warning("Codex SDK streaming failed; falling back to `codex exec`")
+                        async for ev in self._execute_streaming_via_cli_exec(
+                            system_prompt, prompt, tracker, trigger=trigger
+                        ):
+                            yield ev
+                        return
+                    logger.exception("Codex SDK streaming error")
+                    partial = _current_full_text()
+                    is_buffer_overflow = _is_limit_overrun(e)
+                    raise StreamDisconnectedError(
+                        f"Codex SDK stream error: {e}",
+                        partial_text=partial,
+                        immediate_retry=is_buffer_overflow,
+                    ) from e
 
-        full_text = "\n".join(response_text_parts)
-        if not full_text and all_tool_records:
-            full_text = _synthesise_fallback(all_tool_records)
-        if turn_result is None and (full_text or all_tool_records):
-            turn_result = CodexResultMessage(
-                num_turns=max(1, completed_turn_count),
-                session_id=_get_thread_id(active_thread) or "",
-                usage=usage_acc.to_dict(),
-            )
+            full_text = _current_full_text()
+            if not full_text and all_tool_records:
+                full_text = _synthesise_fallback(all_tool_records)
+            if turn_result is None and (full_text or all_tool_records):
+                turn_result = CodexResultMessage(
+                    num_turns=max(1, completed_turn_count),
+                    session_id=_get_thread_id(active_thread) or "",
+                    usage=usage_acc.to_dict(),
+                )
 
-        replied_to = self._read_replied_to_file()
-        yield {
-            "type": "done",
-            "full_text": full_text,
-            "result_message": turn_result,
-            "replied_to_from_transcript": replied_to,
-            "tool_call_records": [asdict(r) for r in all_tool_records],
-            "usage": usage_acc.to_dict(),
-        }
+            replied_to = self._read_replied_to_file()
+            yield {
+                "type": "done",
+                "full_text": full_text,
+                "result_message": turn_result,
+                "replied_to_from_transcript": replied_to,
+                "tool_call_records": [asdict(r) for r in all_tool_records],
+                "usage": usage_acc.to_dict(),
+            }
+        finally:
+            await _close_codex_client(codex)
