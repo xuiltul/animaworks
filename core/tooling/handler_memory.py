@@ -580,7 +580,13 @@ class MemoryToolsMixin:
             else:
                 skill_name = Path(rel).stem
 
-            tracker.record(skill_name, SkillUsageEventType.view, is_common=is_common)
+            tracker.record(
+                skill_name,
+                SkillUsageEventType.view,
+                is_common=is_common,
+                is_procedure=is_procedure,
+                ref=rel,
+            )
         except Exception:
             logger.debug("Failed to record skill view event for %s", rel, exc_info=True)
 

@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 from core.skills.index import SkillIndex
-from core.skills.models import SkillMetadata, SkillTrustLevel
+from core.skills.models import SkillUsageEventType
+from core.skills.usage import SkillUsageTracker
 
 
 def _write_skill(base: Path, name: str, *, trust_level: str = "trusted", desc: str = "") -> Path:
@@ -148,6 +149,33 @@ class TestSkillIndexBuild:
             else:
                 tiers.append(0)
         assert tiers == sorted(tiers)
+
+    def test_usage_stats_merge_by_canonical_ref(self, tmp_path: Path):
+        anima_dir = tmp_path / "animas" / "mei"
+        skills = anima_dir / "skills"
+        common = tmp_path / "common_skills"
+        procs = anima_dir / "procedures"
+        skills.mkdir(parents=True)
+        common.mkdir()
+        procs.mkdir()
+        _write_skill(skills, "same", desc="Personal same")
+        nested = common / "community"
+        nested.mkdir()
+        _write_skill(nested, "same", desc="Common same")
+        _write_procedure(procs, "same", desc="Procedure same")
+
+        tracker = SkillUsageTracker(anima_dir)
+        tracker.record("same", SkillUsageEventType.use, ref="skills/same/SKILL.md")
+        tracker.record("same", SkillUsageEventType.use, is_common=True, ref="common_skills/community/same/SKILL.md")
+        tracker.record("same", SkillUsageEventType.use, is_procedure=True, ref="procedures/same.md")
+
+        idx = SkillIndex(skills, common, procs, anima_dir=anima_dir)
+        results = idx.build_index()
+
+        by_scope = {(m.name, m.is_common, m.is_procedure): m for m in results}
+        assert by_scope[("same", False, False)].usage_count == 1
+        assert by_scope[("same", True, False)].usage_count == 1
+        assert by_scope[("same", False, True)].usage_count == 1
 
     def test_caching(self, skill_dirs: tuple[Path, Path, Path]):
         skills, common, procs = skill_dirs

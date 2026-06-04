@@ -158,12 +158,19 @@ class SkillIndex:
         # promotion decisions (Issue 4).
         if self._anima_dir is not None:
             try:
-                from core.skills.usage import SkillUsageTracker
+                from core.skills.usage import SkillUsageTracker, usage_ref_from_path
 
                 tracker = SkillUsageTracker(self._anima_dir)
                 all_stats = tracker.get_all_stats()
                 for i, meta in enumerate(sorted_all):
-                    stats = all_stats.get(meta.name)
+                    stats = all_stats.get(
+                        usage_ref_from_path(
+                            meta.path,
+                            name=meta.name,
+                            is_common=meta.is_common,
+                            is_procedure=meta.is_procedure,
+                        )
+                    ) or all_stats.get(meta.name)
                     if stats:
                         sorted_all[i] = meta.model_copy(
                             update={

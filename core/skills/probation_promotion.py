@@ -106,6 +106,7 @@ def create_probation_skill_for_converter(
         final_skill_name,
         SkillUsageEventType.create,
         is_common=False,
+        ref=str(skill_md.relative_to(converter._anima_dir)),
         notes="auto_probation_skill",
         source_origin="auto_created",
     )

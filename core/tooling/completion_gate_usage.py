@@ -41,16 +41,18 @@ def _bad_ref(ref: str) -> str | None:
         return "backslashes are not allowed"
     if "//" in ref:
         return "empty path segments are not allowed"
+    if any(part in {"", ".", ".."} for part in ref.split("/")):
+        return "path traversal is not allowed"
     path = Path(ref)
     if path.is_absolute():
         return "absolute paths are not allowed"
     parts = path.parts
-    if not parts or any(part in {"", ".", ".."} for part in parts):
+    if not parts:
         return "path traversal is not allowed"
     return None
 
 
-def _resolve_skill_ref(anima_dir: Path, ref: str) -> tuple[str, bool] | str:
+def _resolve_skill_ref(anima_dir: Path, ref: str) -> tuple[str, bool, str] | str:
     reason = _bad_ref(ref)
     if reason:
         return reason
@@ -58,8 +60,14 @@ def _resolve_skill_ref(anima_dir: Path, ref: str) -> tuple[str, bool] | str:
     parts = Path(ref).parts
     if len(parts) == 2 and parts[0] in {"skills", "common_skills"}:
         root, name = parts
-    elif len(parts) == 3 and parts[0] in {"skills", "common_skills"} and parts[2] == "SKILL.md":
+        rel_parts = (root, name, "SKILL.md")
+    elif len(parts) == 3 and parts[0] == "skills" and parts[2] == "SKILL.md":
         root, name, _ = parts
+        rel_parts = parts
+    elif len(parts) >= 3 and parts[0] == "common_skills" and parts[-1] == "SKILL.md":
+        root = parts[0]
+        name = parts[-2]
+        rel_parts = parts
     else:
         return "expected skills/{name}/SKILL.md or common_skills/{name}/SKILL.md"
 
@@ -67,7 +75,7 @@ def _resolve_skill_ref(anima_dir: Path, ref: str) -> tuple[str, bool] | str:
         return "quarantine or empty skill names are not active skills"
 
     if root == "common_skills":
-        skill_md = get_common_skills_dir() / name / "SKILL.md"
+        skill_md = get_common_skills_dir().joinpath(*rel_parts[1:])
         is_common = True
     else:
         skill_md = anima_dir / "skills" / name / "SKILL.md"
@@ -75,7 +83,7 @@ def _resolve_skill_ref(anima_dir: Path, ref: str) -> tuple[str, bool] | str:
 
     if not skill_md.exists():
         return "skill file not found"
-    return name, is_common
+    return name, is_common, str(Path(*rel_parts))
 
 
 def _resolve_procedure_ref(anima_dir: Path, ref: str) -> tuple[str, Path] | str:
@@ -105,7 +113,7 @@ def record_completion_gate_usage(anima_dir: Path, args: dict[str, Any]) -> Compl
         if isinstance(resolved, str):
             result.warnings.append(f"{ref}: {resolved}")
             continue
-        skill_name, is_common = resolved
+        skill_name, is_common, canonical_ref = resolved
         key = ("skill", skill_name, is_common)
         if key in seen:
             continue
@@ -114,9 +122,10 @@ def record_completion_gate_usage(anima_dir: Path, args: dict[str, Any]) -> Compl
             skill_name,
             SkillUsageEventType.use,
             is_common=is_common,
+            ref=canonical_ref,
             notes="completion_gate",
         )
-        result.recorded.append(f"{'common_skills' if is_common else 'skills'}/{skill_name}")
+        result.recorded.append(canonical_ref.removesuffix("/SKILL.md"))
 
     for ref in _ref_list(args.get("applied_procedure_refs")):
         resolved_proc = _resolve_procedure_ref(anima_dir, ref)
@@ -132,6 +141,8 @@ def record_completion_gate_usage(anima_dir: Path, args: dict[str, Any]) -> Compl
             proc_name,
             SkillUsageEventType.use,
             is_common=False,
+            is_procedure=True,
+            ref=ref,
             notes="completion_gate",
         )
         result.recorded.append(f"procedures/{proc_name}.md")

@@ -140,7 +140,14 @@ class SkillsToolsMixin:
         tracker = SkillUsageTracker(self._anima_dir)
         skill_name = Path(rel).parent.name if is_skill else Path(rel).stem
         event_type = SkillUsageEventType.success if success else SkillUsageEventType.failure
-        tracker.record(skill_name, event_type, is_common=False, notes=notes or None)
+        tracker.record(
+            skill_name,
+            event_type,
+            is_common=False,
+            is_procedure=not is_skill,
+            ref=rel,
+            notes=notes or None,
+        )
 
         if is_skill:
             # Skills use JSONL only — no frontmatter write
@@ -333,6 +340,7 @@ class SkillsToolsMixin:
                     skill_name,
                     SkillUsageEventType.create,
                     is_common=(location == "common"),
+                    ref=f"{'common_skills' if location == 'common' else 'skills'}/{skill_name}/SKILL.md",
                     source_origin=source_origin or "manual",
                 )
             except Exception:

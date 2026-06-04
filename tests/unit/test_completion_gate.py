@@ -320,8 +320,8 @@ class TestCompletionGateTool:
 
         assert "usage recorded" in raw
         stats = SkillUsageTracker(anima_dir).get_all_stats()
-        assert stats["deploy-helper"].use_count == 1
-        assert stats["deploy"].use_count == 1
+        assert stats["skills/deploy-helper/SKILL.md"].use_count == 1
+        assert stats["procedures/deploy.md"].use_count == 1
 
     def test_completion_gate_records_common_skill_use(
         self,
@@ -342,6 +342,25 @@ class TestCompletionGateTool:
         assert stats.use_count == 1
         assert stats.is_common is True
 
+    def test_completion_gate_records_nested_common_skill_use(
+        self,
+        anima_dir: Path,
+        memory: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        data_dir = anima_dir.parents[1]
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(data_dir))
+        skill_dir = data_dir / "common_skills" / "community" / "common-review"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: common-review\n---\n\n# Shared\n", encoding="utf-8")
+
+        h = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
+        h.handle("completion_gate", {"applied_skill_refs": ["common_skills/community/common-review/SKILL.md"]})
+
+        stats = SkillUsageTracker(anima_dir).get_all_stats()
+        assert stats["common_skills/community/common-review/SKILL.md"].use_count == 1
+        assert stats["common_skills/community/common-review/SKILL.md"].is_common is True
+
     def test_completion_gate_deduplicates_refs(self, anima_dir: Path, memory: MagicMock):
         skill_dir = anima_dir / "skills" / "same"
         skill_dir.mkdir(parents=True)
@@ -358,7 +377,7 @@ class TestCompletionGateTool:
         raw = h.handle(
             "completion_gate",
             {
-                "applied_skill_refs": ["../bad", "skills//missing/SKILL.md"],
+                "applied_skill_refs": ["../bad", "skills//missing/SKILL.md", "skills/./missing/SKILL.md"],
                 "skill_creation": {"status": "created", "created_skill_refs": []},
             },
         )

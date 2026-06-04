@@ -231,7 +231,7 @@ class SkillCurator:
         stale_days: int = 90,
         archive_days: int = 180,
     ) -> list[LifecycleSuggestion]:
-        from core.skills.usage import SkillUsageTracker
+        from core.skills.usage import SkillUsageTracker, usage_ref_from_path
 
         stats_by_name = SkillUsageTracker(self.anima_dir).get_all_stats()
         now = datetime.now(UTC)
@@ -239,7 +239,14 @@ class SkillCurator:
         for meta in skills:
             if meta.is_procedure or is_unloadable_lifecycle_state(meta.lifecycle_state):
                 continue
-            stats = stats_by_name.get(meta.name)
+            stats = stats_by_name.get(
+                usage_ref_from_path(
+                    meta.path,
+                    name=meta.name,
+                    is_common=meta.is_common,
+                    is_procedure=meta.is_procedure,
+                )
+            ) or stats_by_name.get(meta.name)
             success = stats.success_count if stats else meta.success_count
             failure = stats.failure_count if stats else meta.failure_count
             patch_count = stats.patch_count if stats else meta.patch_count

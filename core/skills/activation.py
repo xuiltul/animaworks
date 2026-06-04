@@ -390,10 +390,13 @@ def _rendered_attachment_chars(attachments: list[ActiveSkillAttachment]) -> int:
 
 def _record_active_usage(anima_dir: Path, meta: SkillMetadata) -> None:
     try:
+        from core.skills.usage import usage_ref_from_path
+
         SkillUsageTracker(anima_dir).record(
             meta.name,
             SkillUsageEventType.use,
             is_common=meta.is_common,
+            ref=usage_ref_from_path(meta.path, name=meta.name, is_common=meta.is_common),
             notes="active_skill",
         )
     except Exception:

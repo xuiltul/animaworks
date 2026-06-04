@@ -361,6 +361,7 @@ class ProcedureToSkillConverter:
             final_skill_name,
             SkillUsageEventType.create,
             is_common=False,
+            ref=str((active_skill_dir / "SKILL.md").relative_to(self._anima_dir)),
             notes="procedure_promotion_approved",
             source_origin=str(source_origin or "manual"),
         )
