@@ -113,6 +113,16 @@ class TestBuildMcpTools:
         assert actual_names >= _EXPOSED_TOOL_NAMES
         assert exposed >= _EXPOSED_TOOL_NAMES
 
+    def test_outcome_tools_are_exposed(self) -> None:
+        from core.mcp.server import _EXPOSED_TOOL_NAMES, _build_mcp_tools
+
+        tools, _ = _build_mcp_tools()
+        actual_names = {t.name for t in tools}
+        assert "report_procedure_outcome" in _EXPOSED_TOOL_NAMES
+        assert "report_knowledge_outcome" in _EXPOSED_TOOL_NAMES
+        assert "report_procedure_outcome" in actual_names
+        assert "report_knowledge_outcome" in actual_names
+
 
 # ── TestListToolsHandler ─────────────────────────────────────────────
 

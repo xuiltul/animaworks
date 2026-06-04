@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.skills.autolearn import AutonomousSkillLearner
+from core.skills.usage import SkillUsageTracker
 from core.time_utils import now_iso
 
 
@@ -56,6 +57,8 @@ def test_autonomous_learner_creates_probation_skill_without_approval(tmp_path: P
     assert "promotion_status: probation" in skill_text
     assert "origin: auto_created" in skill_text
     assert "injection: pointer_preferred" in skill_text
+    stats = SkillUsageTracker(anima_dir).get_stats("mail-helper")
+    assert stats.create_origins == {"auto_created": 1}
 
 
 def test_autonomous_learner_skips_risky_procedure(tmp_path: Path) -> None:

@@ -355,11 +355,14 @@ class ProcedureToSkillConverter:
         active_skill_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(quarantine_skill_dir), str(active_skill_dir))
 
+        source_meta = meta.get("source")
+        source_origin = source_meta.get("origin") if isinstance(source_meta, dict) else None
         SkillUsageTracker(self._anima_dir).record(
             final_skill_name,
             SkillUsageEventType.create,
             is_common=False,
             notes="procedure_promotion_approved",
+            source_origin=str(source_origin or "manual"),
         )
         self._append_audit(
             {

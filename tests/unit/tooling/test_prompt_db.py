@@ -339,6 +339,10 @@ class TestDefaultData:
         assert "unified tool set" in en
         assert "**Bash**" in en
         assert "**Read**" in en
+        assert "applied_skill_refs" in ja
+        assert "applied_procedure_refs" in en
+        assert "skill_creation" in ja
+        assert "skill_creation" in en
 
     def test_s_mcp_guide_documents_builtin_and_cli_tools(self) -> None:
         ja = DEFAULT_GUIDES["s_mcp"]["ja"]

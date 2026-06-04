@@ -333,6 +333,7 @@ class SkillsToolsMixin:
                     skill_name,
                     SkillUsageEventType.create,
                     is_common=(location == "common"),
+                    source_origin=source_origin or "manual",
                 )
             except Exception:
                 logger.debug("Failed to record skill create event", exc_info=True)

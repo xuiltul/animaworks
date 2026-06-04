@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-
 TEMPLATES_ROOT = Path(__file__).parent.parent.parent / "templates"
 TEMPLATES_DIR = TEMPLATES_ROOT / "ja" / "prompts"
 LOCALES = ("ja", "en", "ko")
@@ -110,6 +108,16 @@ class TestActionRulesGuideTemplate:
             for content in (index, hint):
                 assert "operations/action-rules-guide.md" in content
                 assert "common_skills/skill-creator/SKILL.md" in content
+
+
+class TestHeartbeatToolInstructionTemplate:
+    def test_heartbeat_mentions_lightweight_skill_authoring_all_locales(self):
+        for locale in LOCALES:
+            content = (
+                TEMPLATES_ROOT / locale / "prompts" / "builder" / "heartbeat_tool_instruction.md"
+            ).read_text(encoding="utf-8")
+            assert "create_skill" in content
+            assert "submit_tasks" in content
 
 
 class TestSkillCreatorTemplate:

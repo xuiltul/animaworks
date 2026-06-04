@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -13,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
+from core.skills.usage import SkillUsageTracker
 
 # ── Fixtures ──────────────────────────────────────────────
 
@@ -197,6 +198,7 @@ class TestReportProcedureOutcome:
         )
         assert meta["failure_count"] == 1
         assert abs(meta["confidence"] - 2 / 3) < 0.01
+        assert SkillUsageTracker(anima_dir).get_stats("backup").failure_count == 1
 
     def test_missing_file_returns_error(self, memory, anima_dir: Path) -> None:
         from core.tooling.handler import ToolHandler
@@ -254,6 +256,13 @@ class TestProcedureToolSchema:
         from core.tooling.schemas import build_tool_list
 
         tools = build_tool_list()
+        names = {t["name"] for t in tools}
+        assert "report_procedure_outcome" in names
+
+    def test_schema_in_build_unified_tool_list(self) -> None:
+        from core.tooling.schemas import build_unified_tool_list
+
+        tools = build_unified_tool_list(include_create_skill=False)
         names = {t["name"] for t in tools}
         assert "report_procedure_outcome" in names
 

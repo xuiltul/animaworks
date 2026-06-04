@@ -35,6 +35,7 @@ class SkillUsageTracker:
         *,
         is_common: bool = False,
         notes: str | None = None,
+        source_origin: str | None = None,
     ) -> None:
         """Append a usage event to the JSONL file.
 
@@ -53,6 +54,7 @@ class SkillUsageTracker:
             event_type=event_type,
             is_common=is_common,
             notes=notes,
+            source_origin=source_origin,
         )
 
         self._usage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,6 +117,8 @@ class SkillUsageTracker:
                 case SkillUsageEventType.create:
                     s.create_count += 1
                     s.created_at = s.created_at or event.ts
+                    origin = event.source_origin or "unknown"
+                    s.create_origins[origin] = s.create_origins.get(origin, 0) + 1
 
             if event.event_type in (
                 SkillUsageEventType.view,

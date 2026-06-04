@@ -10,6 +10,7 @@ Heartbeat에서는 **관찰, 보고, 계획, 후속 조치**에 도구를 사용
 "인지했지만 조치하지 않음"이나 "다음 Heartbeat에서 처리"는 금지입니다. delegate_task / send_message / call_human / state/current_state.md 중 하나로 즉시 액션을 취하세요.
 
 Heartbeat에서 직접 작업을 수행하지 마세요. 태스크 실행은 별도 세션(TaskExec)에서 자동으로 수행됩니다.
+관찰 중 가벼운 재사용 가능 능력을 발견하면 `create_skill`로 생성하세요. 작성이 무거우면 스킬 작성 태스크를 만드세요.
 
 완료된 백그라운드 태스크 결과는 state/task_results/에 있습니다.
 중요한 결과가 있으면 확인하고, 필요에 따라 후속 조치를 계획하세요.

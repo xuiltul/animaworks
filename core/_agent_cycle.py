@@ -563,6 +563,7 @@ class CycleMixin:
                 prior_messages=prior_messages,
                 max_turns_override=max_turns_override,
                 thread_id=thread_id,
+                trigger=trigger,
             )
             _save_prompt_log_end(
                 self.anima_dir,

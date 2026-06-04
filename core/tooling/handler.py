@@ -367,9 +367,80 @@ class ToolHandler(
             }
         )
 
+    @staticmethod
+    def _completion_gate_ref_list(value: Any) -> list[str]:
+        """Normalize completion_gate ref arguments into a string list."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            return [stripped] if stripped else []
+        if isinstance(value, (list, tuple, set)):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return [str(value).strip()] if str(value).strip() else []
+
+    @staticmethod
+    def _completion_gate_bad_ref(ref: str) -> str | None:
+        if not ref:
+            return "empty ref"
+        if "\\" in ref:
+            return "backslashes are not allowed"
+        path = Path(ref)
+        if path.is_absolute():
+            return "absolute paths are not allowed"
+        parts = path.parts
+        if not parts or any(part in {"", ".", ".."} for part in parts):
+            return "path traversal is not allowed"
+        return None
+
+    def _completion_gate_resolve_skill_ref(self, ref: str) -> tuple[str, bool, Path] | tuple[None, None, None, str]:
+        """Resolve an active skill ref into ``(name, is_common, skill_md)``."""
+        reason = self._completion_gate_bad_ref(ref)
+        if reason:
+            return None, None, None, reason
+
+        parts = Path(ref).parts
+        if len(parts) == 2 and parts[0] in {"skills", "common_skills"}:
+            root, name = parts
+        elif len(parts) == 3 and parts[0] in {"skills", "common_skills"} and parts[2] == "SKILL.md":
+            root, name, _ = parts
+        else:
+            return None, None, None, "expected skills/{name}/SKILL.md or common_skills/{name}/SKILL.md"
+
+        if not name or name == "quarantine":
+            return None, None, None, "quarantine or empty skill names are not active skills"
+
+        if root == "common_skills":
+            from core.paths import get_common_skills_dir
+
+            skill_md = get_common_skills_dir() / name / "SKILL.md"
+            is_common = True
+        else:
+            skill_md = self._anima_dir / "skills" / name / "SKILL.md"
+            is_common = False
+
+        if not skill_md.exists():
+            return None, None, None, "skill file not found"
+        return name, is_common, skill_md
+
+    def _completion_gate_resolve_procedure_ref(self, ref: str) -> tuple[str, Path] | tuple[None, None, str]:
+        """Resolve a procedure ref into ``(name, path)``."""
+        reason = self._completion_gate_bad_ref(ref)
+        if reason:
+            return None, None, reason
+
+        path = Path(ref)
+        parts = path.parts
+        if len(parts) != 2 or parts[0] != "procedures" or path.suffix != ".md":
+            return None, None, "expected procedures/{name}.md"
+
+        target = self._anima_dir / path
+        if not target.exists():
+            return None, None, "procedure file not found"
+        return path.stem, target
+
     def _handle_completion_gate(self, args: dict[str, Any]) -> str:
         """Record pre-completion verification and return the checklist text."""
-        del args
         marker = self._anima_dir / "run" / "completion_gate_called"
         try:
             marker.parent.mkdir(parents=True, exist_ok=True)
@@ -377,12 +448,80 @@ class ToolHandler(
         except OSError as e:
             logger.warning("completion_gate: failed to write marker: %s", e)
 
+        warnings: list[str] = []
+        recorded: list[str] = []
+        try:
+            from core.skills.models import SkillUsageEventType
+            from core.skills.usage import SkillUsageTracker
+
+            tracker = SkillUsageTracker(self._anima_dir)
+            seen: set[tuple[str, str, bool]] = set()
+            for ref in self._completion_gate_ref_list(args.get("applied_skill_refs")):
+                resolved = self._completion_gate_resolve_skill_ref(ref)
+                if len(resolved) == 4:
+                    warnings.append(f"{ref}: {resolved[3]}")
+                    continue
+                skill_name, is_common, _skill_path = resolved
+                key = ("skill", str(skill_name), bool(is_common))
+                if key in seen:
+                    continue
+                seen.add(key)
+                tracker.record(
+                    str(skill_name),
+                    SkillUsageEventType.use,
+                    is_common=bool(is_common),
+                    notes="completion_gate",
+                )
+                recorded.append(f"{'common_skills' if is_common else 'skills'}/{skill_name}")
+
+            for ref in self._completion_gate_ref_list(args.get("applied_procedure_refs")):
+                resolved_proc = self._completion_gate_resolve_procedure_ref(ref)
+                if len(resolved_proc) == 3:
+                    warnings.append(f"{ref}: {resolved_proc[2]}")
+                    continue
+                proc_name, _proc_path = resolved_proc
+                key = ("procedure", str(proc_name), False)
+                if key in seen:
+                    continue
+                seen.add(key)
+                tracker.record(
+                    str(proc_name),
+                    SkillUsageEventType.use,
+                    is_common=False,
+                    notes="completion_gate",
+                )
+                recorded.append(f"procedures/{proc_name}.md")
+
+            creation = args.get("skill_creation")
+            if creation is not None:
+                if not isinstance(creation, dict):
+                    warnings.append("skill_creation: expected object")
+                else:
+                    status = str(creation.get("status") or "").strip()
+                    if status and status not in {"created", "candidate_only", "not_needed"}:
+                        warnings.append(f"skill_creation.status: unexpected value '{status}'")
+                    created_refs = self._completion_gate_ref_list(creation.get("created_skill_refs"))
+                    if status == "created" and not created_refs:
+                        warnings.append("skill_creation.created_skill_refs: required when status is created")
+                    for ref in created_refs:
+                        resolved = self._completion_gate_resolve_skill_ref(ref)
+                        if len(resolved) == 4:
+                            warnings.append(f"{ref}: {resolved[3]}")
+        except Exception:
+            logger.debug("Failed to record completion_gate skill usage", exc_info=True)
+            warnings.append("usage recording failed")
+
         self._activity.log(
             event_type="tool_use",
             tool="completion_gate",
             summary=t("completion_gate.activity_log_summary"),
         )
-        return t("completion_gate.checklist")
+        result = t("completion_gate.checklist")
+        if recorded:
+            result += "\n\nusage recorded: " + ", ".join(recorded)
+        if warnings:
+            result += "\n\nwarnings: " + "; ".join(warnings)
+        return result
 
     # ── Properties and session management ─────────────────────
 

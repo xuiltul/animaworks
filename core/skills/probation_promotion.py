@@ -107,6 +107,7 @@ def create_probation_skill_for_converter(
         SkillUsageEventType.create,
         is_common=False,
         notes="auto_probation_skill",
+        source_origin="auto_created",
     )
     converter._append_audit(
         {

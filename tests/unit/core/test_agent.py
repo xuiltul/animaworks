@@ -8,10 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 from core.prompt.builder import BuildResult
 from core.schemas import CycleResult, ModelConfig
-
 
 # ── Helper to construct AgentCore with mocked dependencies ─
 
@@ -213,6 +211,7 @@ class TestRunCycle:
             result = await agent.run_cycle("Hello", trigger="test")
             assert isinstance(result, CycleResult)
             assert result.summary == "A2 response"
+            assert agent._executor.execute.call_args.kwargs["trigger"] == "test"
 
     async def test_mode_s_returns_result(self, tmp_path):
         agent = _make_agent(tmp_path, model="claude-sonnet-4-6")

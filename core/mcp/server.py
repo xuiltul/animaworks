@@ -60,6 +60,8 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "read_memory_file",
         "write_memory_file",
         "archive_memory_file",
+        "report_procedure_outcome",
+        "report_knowledge_outcome",
         # AW-essential: messaging
         "send_message",
         "post_channel",

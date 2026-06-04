@@ -345,7 +345,7 @@ PROCEDURE_TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Relative path to the procedure or skill file "
-                        "(e.g. 'procedures/deploy.md' or 'skills/git-flow.md')"
+                        "(e.g. 'procedures/deploy.md' or 'skills/git-flow/SKILL.md')"
                     ),
                 },
                 "success": {

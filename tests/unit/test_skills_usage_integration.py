@@ -95,6 +95,29 @@ class TestHandlerSkillsOutcome:
         stats = tracker.get_stats("deploy")
         assert stats.success_count == 1
 
+    def test_skill_success_recorded_by_real_handler(self, anima_dir: Path):
+        memory = MagicMock()
+        memory.read_permissions.return_value = ""
+        memory.search_memory_text.return_value = []
+        handler = ToolHandler(anima_dir=anima_dir, memory=memory, messenger=None, tool_registry=[])
+
+        result = handler.handle(
+            "report_procedure_outcome",
+            {
+                "path": "skills/my-test-skill/SKILL.md",
+                "success": True,
+                "notes": "worked through handler",
+            },
+        )
+
+        assert "Skill outcome recorded" in result
+        stats = SkillUsageTracker(anima_dir).get_stats("my-test-skill")
+        assert stats.success_count == 1
+        usage_file = anima_dir / "state" / "skill_usage.jsonl"
+        data = json.loads(usage_file.read_text(encoding="utf-8").strip())
+        assert data["event_type"] == "success"
+        assert data["notes"] == "worked through handler"
+
 
 class TestCreateSkillUsageEvent:
     """Test that create_skill records create events through the real handler."""
@@ -120,6 +143,31 @@ class TestCreateSkillUsageEvent:
         assert "usage-probe" in result
         stats = SkillUsageTracker(anima_dir).get_stats("usage-probe")
         assert stats.create_count == 1
+        assert stats.create_origins == {"manual": 1}
+        usage_file = anima_dir / "state" / "skill_usage.jsonl"
+        data = json.loads(usage_file.read_text(encoding="utf-8").strip())
+        assert data["source_origin"] == "manual"
+
+    def test_create_skill_records_explicit_source_origin(self, tmp_path: Path):
+        anima_dir = tmp_path / "alice"
+        (anima_dir / "state").mkdir(parents=True)
+        memory = MagicMock()
+        memory.read_permissions.return_value = ""
+        memory.search_memory_text.return_value = []
+        handler = ToolHandler(anima_dir=anima_dir, memory=memory, messenger=None, tool_registry=[])
+
+        handler.handle(
+            "create_skill",
+            {
+                "skill_name": "auto-origin-probe",
+                "description": "Origin probe skill",
+                "body": "# Origin Probe\n\nBody.",
+                "source_origin": "auto_created",
+            },
+        )
+
+        stats = SkillUsageTracker(anima_dir).get_stats("auto-origin-probe")
+        assert stats.create_origins == {"auto_created": 1}
 
     def test_create_skill_invalid_name_does_not_record_create_event(self, tmp_path: Path):
         anima_dir = tmp_path / "alice"

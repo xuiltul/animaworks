@@ -65,6 +65,8 @@ class TestConsolidationToolFilter:
         assert "search_memory" in names
         assert "read_memory_file" in names
         assert "write_memory_file" in names
+        assert "report_procedure_outcome" in names
+        assert "report_knowledge_outcome" in names
 
     def test_empty_trigger_excludes_submit_tasks(self):
         tools = build_unified_tool_list(

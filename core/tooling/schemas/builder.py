@@ -206,6 +206,8 @@ def build_unified_tool_list(
             if is_consolidation and t["name"] in _CONSOLIDATION_BLOCKED_TOOLS:
                 continue
             tools.append(t)
+    tools.extend(PROCEDURE_TOOLS)
+    tools.extend(KNOWLEDGE_TOOLS)
 
     if not is_consolidation:
         tools.extend(WORKSPACE_TOOLS)
