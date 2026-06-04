@@ -32,6 +32,7 @@ class TestArgParser:
         assert args.answer_timeout is None
         assert args.answer_max_retries == 2
         assert args.checkpoint_every == 0
+        assert args.max_questions == 0
         assert args.verbose is False
 
     def test_mode_choice(self):
@@ -51,10 +52,22 @@ class TestArgParser:
 
     def test_answer_knobs(self):
         p = _build_arg_parser()
-        args = p.parse_args(["--answer-timeout", "60", "--answer-max-retries", "0", "--checkpoint-every", "25"])
+        args = p.parse_args(
+            [
+                "--answer-timeout",
+                "60",
+                "--answer-max-retries",
+                "0",
+                "--checkpoint-every",
+                "25",
+                "--max-questions",
+                "20",
+            ],
+        )
         assert args.answer_timeout == 60.0
         assert args.answer_max_retries == 0
         assert args.checkpoint_every == 25
+        assert args.max_questions == 20
 
 
 # ── Missing data ──────────

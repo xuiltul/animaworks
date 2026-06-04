@@ -220,6 +220,7 @@ def _run_qa_loop(
     results: list[dict[str, Any]] = []
     errors = 0
     litellm_warned = False
+    max_questions = int(getattr(args, "max_questions", 0) or 0)
 
     def _warn_litellm(exc: Exception) -> None:
         nonlocal litellm_warned
@@ -234,9 +235,12 @@ def _run_qa_loop(
         )
 
     for i, sample in enumerate(samples):
+        if max_questions > 0 and len(results) >= max_questions:
+            break
         sample_id = sample.get("sample_id", f"conv-{i}")
         print(f"\n[{i + 1}/{len(samples)}] {mode_label} | {sample_id}")
         t_conv0 = time.perf_counter()
+        sample_result_start = len(results)
 
         try:
             adapter.reset()
@@ -255,6 +259,8 @@ def _run_qa_loop(
             qa_list = []
 
         for j, qa in enumerate(qa_list):
+            if max_questions > 0 and len(results) >= max_questions:
+                break
             if not isinstance(qa, dict):
                 continue
             if getattr(args, "exclude_cat5", False):
@@ -355,7 +361,8 @@ def _run_qa_loop(
                 _warn_litellm(exc)
 
         conv_elapsed = time.perf_counter() - t_conv0
-        print(f"  Done: {len(qa_list)} questions (elapsed: {conv_elapsed:.1f}s)")
+        answered = len(results) - sample_result_start
+        print(f"  Done: {answered}/{len(qa_list)} questions (elapsed: {conv_elapsed:.1f}s)")
 
     return results, errors
 
@@ -416,6 +423,7 @@ def run_benchmark(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             "answer_timeout": getattr(args, "answer_timeout", None),
             "answer_max_retries": int(getattr(args, "answer_max_retries", 2) or 0),
             "checkpoint_every": int(getattr(args, "checkpoint_every", 0) or 0),
+            "max_questions": int(getattr(args, "max_questions", 0) or 0),
             "judge_model": str(args.judge_model),
             "judge_enabled": bool(args.judge),
             "conversations": n_conv,
@@ -565,6 +573,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         dest="checkpoint_every",
         metavar="N",
         help="write a .partial.json checkpoint every N answered questions (default: disabled)",
+    )
+    p.add_argument(
+        "--max-questions",
+        type=int,
+        default=0,
+        dest="max_questions",
+        metavar="N",
+        help="stop after N answered questions across selected conversations (default: all)",
     )
     p.add_argument(
         "--output",
