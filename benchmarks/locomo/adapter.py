@@ -301,6 +301,7 @@ class AnimaWorksLoCoMoAdapter:
         self._fact_bm25_corpus: list[tuple[str, dict[str, Any]]] | None = None
         self._fact_bm25_index: Any = None
         self._fact_metadata_by_source_file: dict[str, dict[str, Any]] = {}
+        self._fact_metadata_by_fact_id: dict[str, dict[str, Any]] = {}
         self._last_fact_count: int = 0
         self._last_abstain: bool = False
         self._last_abstain_reason: str = ""
@@ -396,6 +397,7 @@ class AnimaWorksLoCoMoAdapter:
         self._fact_bm25_corpus = None
         self._fact_bm25_index = None
         self._fact_metadata_by_source_file = {}
+        self._fact_metadata_by_fact_id = {}
         self._last_fact_count = 0
         if self._retriever is not None:
             self._retriever._knowledge_graph = None
@@ -438,6 +440,7 @@ class AnimaWorksLoCoMoAdapter:
         self._fact_bm25_corpus = None
         self._fact_bm25_index = None
         self._fact_metadata_by_source_file = {}
+        self._fact_metadata_by_fact_id = {}
         self._last_fact_count = 0
         if locomo_fact_index_enabled():
             self._ingest_fact_index(str(sample_id), conv, source_episode=f"episodes/{stem}.md")
@@ -458,6 +461,7 @@ class AnimaWorksLoCoMoAdapter:
         self._fact_bm25_corpus = []
         self._fact_bm25_index = None
         self._fact_metadata_by_source_file = {}
+        self._fact_metadata_by_fact_id = {}
         self._last_fact_count = 0
 
     def _ingest_fact_index(self, sample_id: str, conversation: dict[str, Any], *, source_episode: str) -> None:
@@ -490,12 +494,16 @@ class AnimaWorksLoCoMoAdapter:
                 for _, meta in self._fact_bm25_corpus
                 if meta.get("source_file")
             }
+            self._fact_metadata_by_fact_id = {
+                str(meta.get("fact_id", "")): dict(meta) for _, meta in self._fact_bm25_corpus if meta.get("fact_id")
+            }
         except Exception as e:  # noqa: BLE001
             logger.warning("LoCoMo fact index skipped after failure: %s", e)
             self._last_fact_count = 0
             self._fact_bm25_corpus = []
             self._fact_bm25_index = None
             self._fact_metadata_by_source_file = {}
+            self._fact_metadata_by_fact_id = {}
 
     def _retrieval_to_dicts(self, results: list[Any]) -> list[dict[str, Any]]:
         from core.memory.rag.retriever import RetrievalResult  # noqa: PLC0415
@@ -518,9 +526,10 @@ class AnimaWorksLoCoMoAdapter:
     def _enrich_fact_metadata(self, meta: dict[str, Any]) -> dict[str, Any]:
         """Attach adapter-side fact metadata omitted by the generic indexer."""
         source_file = str(meta.get("source_file", "") or "")
-        if not source_file:
-            return meta
-        fact_meta = self._fact_metadata_by_source_file.get(source_file)
+        fact_id = str(meta.get("fact_id", "") or "")
+        fact_meta = self._fact_metadata_by_source_file.get(source_file) if source_file else None
+        if not fact_meta and fact_id:
+            fact_meta = self._fact_metadata_by_fact_id.get(fact_id)
         if not fact_meta:
             return meta
         return {**fact_meta, **meta, "memory_type": "facts"}

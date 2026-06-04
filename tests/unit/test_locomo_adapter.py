@@ -273,6 +273,24 @@ class TestEventMetadataPropagation:
         assert meta["event_time_iso"] == "2023-05-07T10:00:00+00:00"
         assert meta["valid_at"] == 1683453600.0
 
+    def test_enrich_fact_metadata_uses_fact_id_map_for_jsonl_vectors(self):
+        adapter = self._adapter_without_init()
+        adapter._fact_metadata_by_source_file = {}
+        adapter._fact_metadata_by_fact_id = {
+            "abc": {
+                "memory_type": "facts",
+                "fact_id": "abc",
+                "event_time_iso": "2023-05-07T10:00:00+00:00",
+                "event_time_text": "7 May 2023",
+            }
+        }
+
+        meta = adapter._enrich_fact_metadata({"source_file": "facts/locomo_facts.jsonl", "fact_id": "abc"})
+
+        assert meta["memory_type"] == "facts"
+        assert meta["event_time_iso"] == "2023-05-07T10:00:00+00:00"
+        assert meta["event_time_text"] == "7 May 2023"
+
     def test_fact_index_failure_is_nonfatal(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         from benchmarks.locomo import fact_index
 
@@ -295,6 +313,7 @@ class TestEventMetadataPropagation:
         assert adapter._fact_bm25_corpus == []
         assert adapter._fact_bm25_index is None
         assert adapter._fact_metadata_by_source_file == {}
+        assert adapter._fact_metadata_by_fact_id == {}
 
     def test_fact_index_cleanup_failure_is_nonfatal(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         adapter = self._adapter_without_init()
@@ -304,6 +323,7 @@ class TestEventMetadataPropagation:
         adapter._fact_bm25_corpus = [("stale", {})]
         adapter._fact_bm25_index = object()
         adapter._fact_metadata_by_source_file = {"stale": {}}
+        adapter._fact_metadata_by_fact_id = {"stale": {}}
 
         def fail_cleanup():
             raise OSError("cleanup failed")
@@ -316,6 +336,7 @@ class TestEventMetadataPropagation:
         assert adapter._fact_bm25_corpus == []
         assert adapter._fact_bm25_index is None
         assert adapter._fact_metadata_by_source_file == {}
+        assert adapter._fact_metadata_by_fact_id == {}
 
     def test_fact_index_ingest_indexes_jsonl_for_facts_collection(self, tmp_path: Path):
         adapter = self._adapter_without_init()
@@ -333,6 +354,7 @@ class TestEventMetadataPropagation:
         adapter._fact_bm25_corpus = []
         adapter._fact_bm25_index = None
         adapter._fact_metadata_by_source_file = {}
+        adapter._fact_metadata_by_fact_id = {}
         conversation = {
             "session_1_date_time": "7 May 2023, 10:00 AM",
             "session_1": [{"speaker": "Caroline", "text": "I recommended Becoming Nicole."}],
@@ -342,6 +364,7 @@ class TestEventMetadataPropagation:
 
         assert indexed == [(tmp_path / "locomo_facts.jsonl", "facts", True)]
         assert (tmp_path / "locomo_facts.jsonl").is_file()
+        assert adapter._fact_metadata_by_fact_id
         assert adapter._last_fact_count == 1
         assert adapter._fact_bm25_corpus
 
@@ -351,6 +374,7 @@ class TestEventMetadataPropagation:
         adapter._fact_bm25_corpus = [("stale", {})]
         adapter._fact_bm25_index = object()
         adapter._fact_metadata_by_source_file = {"stale": {}}
+        adapter._fact_metadata_by_fact_id = {"stale": {}}
         adapter._last_fact_count = 3
         (tmp_path / "fact_stale.md").write_text("stale", encoding="utf-8")
         deleted: list[str] = []
@@ -368,6 +392,7 @@ class TestEventMetadataPropagation:
         assert adapter._fact_bm25_corpus == []
         assert adapter._fact_bm25_index is None
         assert adapter._fact_metadata_by_source_file == {}
+        assert adapter._fact_metadata_by_fact_id == {}
         assert adapter._last_fact_count == 0
 
     def test_retrieval_diagnostics_remember_top_event_time(self):
