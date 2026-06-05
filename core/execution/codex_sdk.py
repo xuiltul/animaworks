@@ -1046,8 +1046,9 @@ class CodexSDKExecutor(BaseExecutor):
             "approval_mode": self._sdk_approval_mode(),
             "cwd": str(self._task_cwd or self._anima_dir),
             "model": provider_config.model,
-            "sandbox": self._sdk_sandbox(),
         }
+        # Sandbox is set at thread/config level. Passing the SDK enum per turn
+        # can drop config.toml details such as workspace network_access=true.
         summary = self._sdk_reasoning_summary()
         if summary is not None:
             kwargs["summary"] = summary

@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import tomllib
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -313,6 +314,176 @@ class TestUnregisterAnimaFromConfig:
         from core.config.models import unregister_anima_from_config
         result = unregister_anima_from_config(tmp_path, "alice")
         assert result is False
+
+
+class TestCmdAnimaCodexYolo:
+    """Tests for cmd_anima_codex_yolo."""
+
+    def setup_method(self):
+        from core.config.models import invalidate_cache, invalidate_models_json_cache
+
+        invalidate_cache()
+        invalidate_models_json_cache()
+
+    def _make_runtime(
+        self,
+        tmp_path: Path,
+        *,
+        animas: dict[str, dict[str, object]],
+    ) -> Path:
+        data_dir = tmp_path / ".animaworks"
+        animas_dir = data_dir / "animas"
+        animas_dir.mkdir(parents=True)
+        (data_dir / "config.json").write_text(json.dumps({"version": 1}), encoding="utf-8")
+        for name, status in animas.items():
+            anima_dir = animas_dir / name
+            anima_dir.mkdir()
+            (anima_dir / "identity.md").write_text(f"# {name}", encoding="utf-8")
+            (anima_dir / "status.json").write_text(json.dumps(status), encoding="utf-8")
+            (anima_dir / "permissions.json").write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "file_roots": [str(anima_dir)],
+                        "commands": {"allow_all": True, "allow": [], "deny": []},
+                        "external_tools": {"allow_all": True, "allow": [], "deny": []},
+                        "tool_creation": {"personal": True, "shared": False},
+                    }
+                ),
+                encoding="utf-8",
+            )
+        return data_dir
+
+    @patch("core.paths.get_data_dir")
+    def test_codex_yolo_preserves_permissions_and_updates_config(self, mock_data_dir, tmp_path, capsys):
+        from cli.commands.anima_mgmt import cmd_anima_codex_yolo
+
+        data_dir = self._make_runtime(
+            tmp_path,
+            animas={"sakura": {"enabled": True, "model": "codex/o4-mini"}},
+        )
+        mock_data_dir.return_value = data_dir
+
+        args = argparse.Namespace(anima="sakura", all=False, restart=False, gateway_url=None)
+        cmd_anima_codex_yolo(args)
+
+        captured = capsys.readouterr()
+        assert "sakura" in captured.out
+        assert "Codex YOLO updated for 1 anima(s)." in captured.out
+
+        anima_dir = data_dir / "animas" / "sakura"
+        permissions = json.loads((anima_dir / "permissions.json").read_text(encoding="utf-8"))
+        assert permissions["file_roots"] == [str(anima_dir)]
+
+        config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")
+        parsed = tomllib.loads(config_toml)
+        assert parsed["sandbox_mode"] == "workspace-write"
+        assert parsed["sandbox_workspace_write"]["network_access"] is True
+        assert parsed["approval_policy"] == "never"
+
+    @patch("core.paths.get_data_dir")
+    def test_codex_yolo_all_skips_non_codex_animas(self, mock_data_dir, tmp_path, capsys):
+        from cli.commands.anima_mgmt import cmd_anima_codex_yolo
+
+        data_dir = self._make_runtime(
+            tmp_path,
+            animas={
+                "sakura": {"enabled": True, "model": "codex/o4-mini"},
+                "mei": {"enabled": True, "model": "claude-sonnet-4-6"},
+            },
+        )
+        mock_data_dir.return_value = data_dir
+
+        args = argparse.Namespace(anima=None, all=True, restart=False, gateway_url=None)
+        cmd_anima_codex_yolo(args)
+
+        captured = capsys.readouterr()
+        assert "sakura" in captured.out
+        assert "mei" not in captured.out
+        sakura_permissions = json.loads(
+            (data_dir / "animas" / "sakura" / "permissions.json").read_text(encoding="utf-8")
+        )
+        mei_permissions = json.loads(
+            (data_dir / "animas" / "mei" / "permissions.json").read_text(encoding="utf-8")
+        )
+        assert sakura_permissions["file_roots"] == [str(data_dir / "animas" / "sakura")]
+        assert mei_permissions["file_roots"] == [str(data_dir / "animas" / "mei")]
+        assert (data_dir / "animas" / "sakura" / ".codex_home" / "config.toml").is_file()
+        assert not (data_dir / "animas" / "mei" / ".codex_home" / "config.toml").exists()
+
+    @patch("core.paths.get_data_dir")
+    def test_codex_yolo_rejects_name_with_all(self, mock_data_dir, tmp_path, capsys):
+        from cli.commands.anima_mgmt import cmd_anima_codex_yolo
+
+        data_dir = self._make_runtime(
+            tmp_path,
+            animas={"sakura": {"enabled": True, "model": "codex/o4-mini"}},
+        )
+        mock_data_dir.return_value = data_dir
+
+        args = argparse.Namespace(anima="sakura", all=True, restart=False, gateway_url=None)
+        with pytest.raises(SystemExit):
+            cmd_anima_codex_yolo(args)
+
+        captured = capsys.readouterr()
+        assert "not both" in captured.out
+
+    @patch("core.paths.get_data_dir")
+    def test_codex_yolo_single_refresh_failure_exits_nonzero(self, mock_data_dir, tmp_path, capsys):
+        from cli.commands import anima_mgmt
+
+        data_dir = self._make_runtime(
+            tmp_path,
+            animas={"sakura": {"enabled": True, "model": "codex/o4-mini"}},
+        )
+        mock_data_dir.return_value = data_dir
+
+        args = argparse.Namespace(anima="sakura", all=False, restart=False, gateway_url=None)
+        with (
+            patch.object(anima_mgmt, "_refresh_codex_yolo_config", side_effect=RuntimeError("broken config")),
+            pytest.raises(SystemExit),
+        ):
+            anima_mgmt.cmd_anima_codex_yolo(args)
+
+        captured = capsys.readouterr()
+        assert "config refresh failed" in captured.out
+        assert "Codex YOLO updated for 0 anima(s)." in captured.out
+
+    @patch("core.paths.get_data_dir")
+    @patch("requests.post")
+    def test_codex_yolo_restart_posts_when_server_running(
+        self,
+        mock_post,
+        mock_data_dir,
+        tmp_path,
+        capsys,
+    ):
+        from cli.commands.anima_mgmt import cmd_anima_codex_yolo
+
+        data_dir = self._make_runtime(
+            tmp_path,
+            animas={"sakura": {"enabled": True, "model": "codex/o4-mini"}},
+        )
+        (data_dir / "server.pid").write_text("1234", encoding="utf-8")
+        mock_data_dir.return_value = data_dir
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        mock_post.return_value = response
+
+        args = argparse.Namespace(
+            anima="sakura",
+            all=False,
+            restart=True,
+            gateway_url="http://localhost:18500",
+        )
+        cmd_anima_codex_yolo(args)
+
+        captured = capsys.readouterr()
+        assert "restarted" in captured.out
+        mock_post.assert_called_once_with(
+            "http://localhost:18500/api/animas/sakura/restart",
+            timeout=30.0,
+        )
 
 
 class TestCmdAnimaSetMemoryBackend:

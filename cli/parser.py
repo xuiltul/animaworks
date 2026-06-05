@@ -474,6 +474,29 @@ def cli_main() -> None:
     )
     p_anima_set_model.set_defaults(func=_lazy_anima_set_model)
 
+    # anima codex-yolo
+    p_anima_codex_yolo = anima_sub.add_parser(
+        "codex-yolo",
+        help="Set Codex-mode Animas to YOLO sandbox defaults",
+    )
+    p_anima_codex_yolo.add_argument(
+        "anima",
+        nargs="?",
+        default=None,
+        help="Anima name (not required with --all)",
+    )
+    p_anima_codex_yolo.add_argument(
+        "--all",
+        action="store_true",
+        help="Apply to all enabled Codex-mode animas",
+    )
+    p_anima_codex_yolo.add_argument(
+        "--restart",
+        action="store_true",
+        help="Restart updated animas when the server is running",
+    )
+    p_anima_codex_yolo.set_defaults(func=_lazy_anima_codex_yolo)
+
     # anima set-background-model
     p_bg = anima_sub.add_parser("set-background-model", help="Set heartbeat/cron model")
     p_bg.add_argument("anima", nargs="?", default=None, help="Anima name")
@@ -918,6 +941,12 @@ def _lazy_anima_set_model(args: argparse.Namespace) -> None:
     from cli.commands.anima_mgmt import cmd_anima_set_model
 
     cmd_anima_set_model(args)
+
+
+def _lazy_anima_codex_yolo(args: argparse.Namespace) -> None:
+    from cli.commands.anima_mgmt import cmd_anima_codex_yolo
+
+    cmd_anima_codex_yolo(args)
 
 
 def _lazy_anima_set_background_model(args: argparse.Namespace) -> None:

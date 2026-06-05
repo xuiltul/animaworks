@@ -693,6 +693,141 @@ def cmd_anima_set_role(args: argparse.Namespace) -> None:
         print("  Changes will take effect on next server start.")
 
 
+def _read_status_json(anima_dir: Path) -> dict[str, object]:
+    status_file = anima_dir / "status.json"
+    if not status_file.is_file():
+        return {}
+    try:
+        data = json.loads(status_file.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _is_codex_mode_anima(anima_dir: Path, status_data: dict[str, object]) -> bool:
+    model = status_data.get("model")
+    model_name = model if isinstance(model, str) else ""
+    explicit = status_data.get("execution_mode")
+    explicit_mode = explicit if isinstance(explicit, str) else None
+
+    try:
+        from core.config.models import load_config, resolve_execution_mode
+
+        if not model_name:
+            from core.config.model_config import load_model_config
+
+            model_config = load_model_config(anima_dir)
+            model_name = model_config.model
+            explicit_mode = model_config.execution_mode
+        return resolve_execution_mode(load_config(), model_name, explicit_mode) == "C"
+    except Exception:
+        if explicit_mode:
+            return explicit_mode.strip().upper() == "C"
+        return model_name.startswith(("codex/", "openai-codex/"))
+
+
+def _refresh_codex_yolo_config(anima_dir: Path) -> Path:
+    from core.config.model_config import load_model_config
+    from core.execution.codex_sdk import CodexSDKExecutor
+
+    instructions_path = anima_dir / ".codex_home" / "instructions.md"
+    system_prompt = ""
+    if instructions_path.is_file():
+        system_prompt = instructions_path.read_text(encoding="utf-8")
+    executor = CodexSDKExecutor(
+        model_config=load_model_config(anima_dir),
+        anima_dir=anima_dir,
+    )
+    executor._write_codex_config(system_prompt)
+    return anima_dir / ".codex_home" / "config.toml"
+
+
+def cmd_anima_codex_yolo(args: argparse.Namespace) -> None:
+    """Set Codex-mode Animas to YOLO sandbox defaults."""
+    from core.paths import get_data_dir
+
+    data_dir = get_data_dir()
+    animas_dir = data_dir / "animas"
+    pid_file = data_dir / "server.pid"
+
+    if not animas_dir.is_dir():
+        print("No animas found.")
+        return
+    if args.all and args.anima:
+        print("Error: specify either an anima name or --all, not both")
+        sys.exit(1)
+
+    if args.all:
+        targets: list[Path] = []
+        for anima_dir in sorted(animas_dir.iterdir()):
+            if not anima_dir.is_dir():
+                continue
+            status_data = _read_status_json(anima_dir)
+            if status_data.get("enabled", True) is False:
+                continue
+            if _is_codex_mode_anima(anima_dir, status_data):
+                targets.append(anima_dir)
+        if not targets:
+            print("No enabled Codex-mode animas found.")
+            return
+    else:
+        if not args.anima:
+            print("Error: anima name is required (or use --all)")
+            sys.exit(1)
+        anima_dir = animas_dir / args.anima
+        if not anima_dir.exists():
+            print(f"Error: Anima '{args.anima}' not found")
+            sys.exit(1)
+        status_data = _read_status_json(anima_dir)
+        if not _is_codex_mode_anima(anima_dir, status_data):
+            model = status_data.get("model", "?")
+            print(f"Error: Anima '{args.anima}' is not Codex mode (model={model})")
+            sys.exit(1)
+        targets = [anima_dir]
+
+    restart_requested = bool(getattr(args, "restart", False))
+    gateway_url = getattr(args, "gateway_url", None) or "http://localhost:18500"
+    updated = 0
+    failed = 0
+    restarted = 0
+
+    for anima_dir in targets:
+        try:
+            config_path = _refresh_codex_yolo_config(anima_dir)
+        except Exception as exc:
+            failed += 1
+            print(f"  {anima_dir.name}: config refresh failed ({exc})")
+            continue
+        updated += 1
+        print(f"  {anima_dir.name}: YOLO config={config_path}")
+
+        if restart_requested:
+            if not pid_file.exists():
+                print(f"  {anima_dir.name}: restart skipped; server is not running")
+                continue
+            try:
+                import requests
+
+                response = requests.post(
+                    f"{gateway_url}/api/animas/{anima_dir.name}/restart",
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                restarted += 1
+                print(f"  {anima_dir.name}: restarted")
+            except Exception as exc:
+                print(f"  {anima_dir.name}: restart failed ({exc})")
+
+    print(f"Codex YOLO updated for {updated} anima(s).")
+    if failed:
+        print(f"Codex YOLO failed for {failed} anima(s).")
+        sys.exit(1)
+    if restart_requested and restarted:
+        print(f"Restarted {restarted} anima(s).")
+    elif not restart_requested and pid_file.exists():
+        print("Server is running. Restart updated animas to apply changes to active workers.")
+
+
 def cmd_anima_set_model(args: argparse.Namespace) -> None:
     """Set an anima's model (updates status.json)."""
     from core.config.model_config import smart_update_model
