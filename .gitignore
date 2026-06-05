@@ -22,6 +22,7 @@ tmp/
 
 # Coverage
 .coverage
+coverage.xml
 htmlcov/
 
 # Tool caches
@@ -127,6 +128,14 @@ benchmarks/locomo/data/
 benchmarks/results/
 benchmarks/locomo/results/
 tests/performance/BENCHMARK_RESULTS.md
+
+# Local LoCoMo smoke/orchestration outputs
+/.locomo_*
+/LOCOMO_SMOKE_STATUS.md
+/scripts/.locomo_*
+
+# Local runtime memory accidentally created in repo root
+/knowledge/
 
 # SWE-bench evaluation
 swe/runtime/
