@@ -12,6 +12,7 @@ from benchmarks.locomo.adapter import (
     _build_episode_markdown,
     _conversation_speaker_names,
     _episode_stem_for_sample,
+    _latest_session_reference_time,
     _session_indices,
     load_dataset,
     locomo_entity_aware_graph_enabled,
@@ -138,6 +139,32 @@ class TestConversationSpeakerNames:
             "Caroline",
             "Melanie",
         )
+
+
+class TestLatestSessionReferenceTime:
+    def test_uses_latest_parseable_session_date(self):
+        conversation = {
+            "session_1_date_time": "7 May 2023, 10:00 AM",
+            "session_1": [],
+            "session_2_date_time": "8 May 2023, 9:00 PM",
+            "session_2": [],
+        }
+
+        reference_time = _latest_session_reference_time(conversation)
+
+        assert reference_time.startswith("2023-05-08T21:00:00")
+
+    def test_ignores_unknown_session_dates(self):
+        conversation = {
+            "session_1_date_time": "unknown date",
+            "session_1": [],
+            "session_2_date_time": "8 May 2023, 9:00 PM",
+            "session_2": [],
+        }
+
+        reference_time = _latest_session_reference_time(conversation)
+
+        assert reference_time.startswith("2023-05-08T21:00:00")
 
 
 # ── Adapter validation ──────────

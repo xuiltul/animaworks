@@ -438,6 +438,10 @@ class RAGMemorySearch:
             "entity_boost_enabled": False,
             "entity_boost": 0.20,
             "entity_boost_cap": 0.80,
+            "access_boost_enabled": True,
+            "access_boost_weight": 0.05,
+            "access_boost_cap": 0.25,
+            "access_boost_half_life_days": 30.0,
         }
         try:
             from core.config import load_config
@@ -455,6 +459,10 @@ class RAGMemorySearch:
                     "entity_boost_enabled": getattr(rag, "entity_boost_enabled", False),
                     "entity_boost": getattr(rag, "entity_boost", 0.20),
                     "entity_boost_cap": getattr(rag, "entity_boost_cap", 0.80),
+                    "access_boost_enabled": getattr(rag, "access_boost_enabled", True),
+                    "access_boost_weight": getattr(rag, "access_boost_weight", 0.05),
+                    "access_boost_cap": getattr(rag, "access_boost_cap", 0.25),
+                    "access_boost_half_life_days": getattr(rag, "access_boost_half_life_days", 30.0),
                 }
             )
         except Exception:
@@ -485,6 +493,19 @@ class RAGMemorySearch:
             require_query_entities=registry_enabled,
         )
 
+    def _build_access_boost_config(self, settings: dict[str, object] | None = None):
+        settings = settings or self._load_rag_pipeline_settings()
+        if not bool(settings.get("access_boost_enabled", True)):
+            return None
+        from core.memory.retrieval.access_boost import AccessBoostConfig
+
+        return AccessBoostConfig(
+            enabled=True,
+            weight=float(settings.get("access_boost_weight", 0.05) or 0.0),
+            cap=float(settings.get("access_boost_cap", 0.25) or 0.0),
+            half_life_days=float(settings.get("access_boost_half_life_days", 30.0) or 30.0),
+        )
+
     def _search_scope_all_hybrid(
         self,
         query: str,
@@ -500,6 +521,7 @@ class RAGMemorySearch:
 
         settings = self._load_rag_pipeline_settings()
         entity_boost = self._build_entity_boost_config(query, settings)
+        access_boost = self._build_access_boost_config(settings)
         pool_k = int(settings["rerank_candidate_pool"])
         limit = 10
 
@@ -565,6 +587,7 @@ class RAGMemorySearch:
             confidence_threshold=float(settings["confidence_threshold"]),
             rrf_confidence_threshold=float(settings["rrf_confidence_threshold"]),
             entity_boost=entity_boost,
+            access_boost=access_boost,
         )
         self._last_search_meta = {
             "abstain": result.abstain,
@@ -625,9 +648,16 @@ class RAGMemorySearch:
                 "source_entity",
                 "target_entity",
                 "valid_at_iso",
+                "valid_at",
+                "event_time_iso",
+                "event_time_text",
+                "event_time_parse_error",
                 "valid_until",
                 "source_episode",
                 "source_session_id",
+                "access_count",
+                "last_accessed_at",
+                "anima",
             ):
                 if key in meta:
                     item[key] = meta[key]
@@ -704,10 +734,17 @@ class RAGMemorySearch:
                     "source_entity",
                     "target_entity",
                     "valid_at_iso",
+                    "valid_at",
+                    "event_time_iso",
+                    "event_time_text",
+                    "event_time_parse_error",
                     "valid_until",
                     "source_episode",
                     "source_session_id",
                     "entities",
+                    "access_count",
+                    "last_accessed_at",
+                    "anima",
                 ):
                     if key in r.metadata:
                         item[key] = r.metadata[key]
@@ -898,6 +935,7 @@ class RAGMemorySearch:
                         "source_entity": record.source_entity,
                         "target_entity": record.target_entity,
                         "valid_at_iso": record.valid_at,
+                        "event_time_iso": record.valid_at,
                         "valid_until": record.valid_until,
                         "source_episode": record.source_episode,
                         "source_session_id": record.source_session_id,

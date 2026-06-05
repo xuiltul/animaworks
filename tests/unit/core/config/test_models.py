@@ -220,6 +220,14 @@ class TestRAGConfig:
         assert rag.entity_boost == 0.20
         assert rag.entity_boost_cap == 0.80
 
+    def test_access_boost_defaults(self) -> None:
+        """Access-count LTP boost has conservative production defaults."""
+        rag = RAGConfig()
+        assert rag.access_boost_enabled is True
+        assert rag.access_boost_weight == 0.05
+        assert rag.access_boost_cap == 0.25
+        assert rag.access_boost_half_life_days == 30.0
+
     def test_fact_reconcile_defaults(self) -> None:
         """Fact reconciliation defaults to high-threshold, bounded top-k behavior."""
         rag = RAGConfig()

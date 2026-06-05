@@ -267,6 +267,10 @@ class RAGConfig(BaseModel):
     entity_boost_enabled: bool = False
     entity_boost: float = 0.20
     entity_boost_cap: float = 0.80
+    access_boost_enabled: bool = True
+    access_boost_weight: float = 0.05
+    access_boost_cap: float = 0.25
+    access_boost_half_life_days: float = 30.0
 
 
 class Neo4jConfig(BaseModel):

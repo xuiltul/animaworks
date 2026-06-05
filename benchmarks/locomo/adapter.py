@@ -252,6 +252,33 @@ def _conversation_speaker_names(conversation: dict[str, Any]) -> tuple[str, ...]
     return tuple(sorted(names))
 
 
+def _latest_session_reference_time(conversation: dict[str, Any]) -> str:
+    """Return the latest parseable LoCoMo session time as an ISO string."""
+    from core.memory.rag.episode_time import apply_episode_heading_event_time
+
+    latest: str = ""
+    latest_dt: Any = None
+    for n in _session_indices(conversation):
+        when = str(conversation.get(f"session_{n}_date_time", "") or "").strip()
+        if not when:
+            continue
+        metadata: dict[str, Any] = {}
+        apply_episode_heading_event_time(metadata, f"## Session {n} - {when}")
+        iso = str(metadata.get("event_time_iso", "") or "")
+        if not iso:
+            continue
+        try:
+            from datetime import datetime
+
+            parsed = datetime.fromisoformat(iso)
+        except ValueError:
+            continue
+        if latest_dt is None or parsed > latest_dt:
+            latest_dt = parsed
+            latest = iso
+    return latest
+
+
 # ── Adapter ──────────
 
 
@@ -311,6 +338,7 @@ class AnimaWorksLoCoMoAdapter:
         self._last_raw_answer: str = ""
         self._last_normalized_answer: str = ""
         self._entity_ignored_entities: tuple[str, ...] = ()
+        self._query_reference_time: str = ""
         # Deferred heavy init
         self._init_isolated_rag()
 
@@ -399,6 +427,7 @@ class AnimaWorksLoCoMoAdapter:
         self._fact_metadata_by_source_file = {}
         self._fact_metadata_by_fact_id = {}
         self._last_fact_count = 0
+        self._query_reference_time = ""
         if self._retriever is not None:
             self._retriever._knowledge_graph = None
             self._retriever._knowledge_graph_signature = None
@@ -430,6 +459,7 @@ class AnimaWorksLoCoMoAdapter:
         if not isinstance(conv, dict):
             raise TypeError("sample['conversation'] must be a dict")
         self._entity_ignored_entities = _conversation_speaker_names(conv)
+        self._query_reference_time = _latest_session_reference_time(conv)
         stem = _episode_stem_for_sample(str(sample_id))
         md = _build_episode_markdown(str(sample_id), conv)
         file_path = self._episodes_dir / f"{stem}.md"
@@ -589,6 +619,10 @@ class AnimaWorksLoCoMoAdapter:
             "abstain_on_low_confidence": True,
             "confidence_threshold": 0.35,
             "rrf_confidence_threshold": 0.02,
+            "access_boost_enabled": True,
+            "access_boost_weight": 0.05,
+            "access_boost_cap": 0.25,
+            "access_boost_half_life_days": 30.0,
         }
         try:
             cfg_path = Path("~/.animaworks/config.json").expanduser()
@@ -617,6 +651,22 @@ class AnimaWorksLoCoMoAdapter:
                         "rrf_confidence_threshold": rag.get(
                             "rrf_confidence_threshold",
                             defaults["rrf_confidence_threshold"],
+                        ),
+                        "access_boost_enabled": rag.get(
+                            "access_boost_enabled",
+                            defaults["access_boost_enabled"],
+                        ),
+                        "access_boost_weight": rag.get(
+                            "access_boost_weight",
+                            defaults["access_boost_weight"],
+                        ),
+                        "access_boost_cap": rag.get(
+                            "access_boost_cap",
+                            defaults["access_boost_cap"],
+                        ),
+                        "access_boost_half_life_days": rag.get(
+                            "access_boost_half_life_days",
+                            defaults["access_boost_half_life_days"],
                         ),
                     },
                 )
@@ -686,6 +736,7 @@ class AnimaWorksLoCoMoAdapter:
                 category=category,
             ),
             entity_boost=self._entity_boost_config(category),
+            reference_time=self._query_reference_time or None,
         )
         meta = searcher.last_search_meta
         self._last_abstain = bool(meta.get("abstain", False))
