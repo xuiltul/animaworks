@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,9 @@ class FakeRAGSearch:
         self.keyword_returns: dict[str, list[dict[str, Any]]] = {}
         self.graph_returns: list[dict[str, Any]] = []
         self.vector_scopes: list[str] = []
+        self.vector_queries: list[str] = []
         self.keyword_scopes: list[str] = []
+        self.keyword_queries: list[str] = []
         self.graph_calls = 0
 
     def _load_rag_pipeline_settings(self) -> dict[str, object]:
@@ -38,6 +41,7 @@ class FakeRAGSearch:
         return object()
 
     def _vector_search_primary(self, query: str, scope: str, *args, **kwargs) -> list[dict[str, Any]]:
+        self.vector_queries.append(query)
         self.vector_scopes.append(scope)
         return self.vector_returns.get(scope, [])
 
@@ -46,6 +50,7 @@ class FakeRAGSearch:
         return self.graph_returns
 
     def _keyword_search_fallback(self, query: str, scope: str, *args, **kwargs) -> list[dict[str, Any]]:
+        self.keyword_queries.append(query)
         self.keyword_scopes.append(scope)
         return self.keyword_returns.get(scope, [])
 
@@ -161,6 +166,64 @@ def test_missing_fact_index_continues_other_scopes(fake_rag: FakeRAGSearch, monk
 
     assert "facts" in fake_rag.vector_scopes
     assert results[0]["doc_id"] == "episode-1"
+
+
+def test_query_expansion_uses_reference_time_and_filters_event_time(
+    fake_rag: FakeRAGSearch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.memory.retrieval.pipeline.RetrievalPipeline", CapturingPipeline)
+    monkeypatch.setattr("core.memory.retrieval.unified_search.search_activity_log", lambda *args, **kwargs: [])
+    fake_rag.vector_returns["episodes"] = [
+        {
+            "doc_id": "outside",
+            "content": "outside",
+            "score": 0.9,
+            "source_file": "outside.md",
+            "chunk_index": 0,
+            "memory_type": "episodes",
+            "event_time_iso": "2023-04-20T00:00:00+00:00",
+        },
+        {
+            "doc_id": "inside",
+            "content": "inside",
+            "score": 0.8,
+            "source_file": "inside.md",
+            "chunk_index": 0,
+            "memory_type": "episodes",
+            "event_time_iso": "2023-05-07T00:00:00+00:00",
+        },
+    ]
+
+    results = _searcher(fake_rag).search(
+        "What did Caroline do yesterday?",
+        scope="episodes",
+        limit=3,
+        trigger="chat",
+        reference_time=datetime(2023, 5, 8, 12, 0, tzinfo=UTC),
+    )
+
+    assert "2023-05-07" in fake_rag.vector_queries[0]
+    assert [item["doc_id"] for item in results] == ["inside"]
+    assert CapturingPipeline.calls[0]["ranked_lists"][0][0]["doc_id"] == "inside"
+
+
+def test_unified_search_passes_access_boost_config_to_pipeline(
+    fake_rag: FakeRAGSearch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class AccessFakeRAG(FakeRAGSearch):
+        def _build_access_boost_config(self, settings: dict[str, object]) -> str:
+            return "access-config"
+
+    access_rag = AccessFakeRAG(fake_rag._anima_dir)
+    access_rag.vector_returns["knowledge"] = [{"doc_id": "k", "content": "knowledge", "score": 0.8}]
+    monkeypatch.setattr("core.memory.retrieval.pipeline.RetrievalPipeline", CapturingPipeline)
+    monkeypatch.setattr("core.memory.retrieval.unified_search.search_activity_log", lambda *args, **kwargs: [])
+
+    _searcher(access_rag).search("query", scope="knowledge", limit=3, trigger="chat")
+
+    assert CapturingPipeline.calls[0]["access_boost"] == "access-config"
 
 
 def test_tool_and_priming_overlap_share_top_doc_ids(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from core.memory.retrieval.access_boost import AccessBoostConfig
 from core.memory.retrieval.entity import EntityBoostConfig, extract_entities
 from core.memory.retrieval.pipeline import RetrievalPipeline
 from core.memory.retrieval.temporal import TemporalBoostConfig
@@ -141,6 +142,55 @@ def test_pipeline_temporal_boost_adds_score_for_temporal_year_match() -> None:
     assert item["base_score"] == item["rrf_score"]
     assert item["temporal_boost"] == 0.10
     assert item["score"] == item["base_score"] + 0.10
+
+
+def test_pipeline_access_boost_applies_after_rrf_when_rerank_disabled() -> None:
+    ranked = [
+        [
+            {"content": "low access", "score": 0.9, "source_file": "a.md", "chunk_index": 0, "access_count": 0},
+            {"content": "high access", "score": 0.9, "source_file": "b.md", "chunk_index": 0, "access_count": 20},
+        ],
+    ]
+    pipeline = RetrievalPipeline(reranker=MagicMock())
+
+    result = pipeline.run(
+        "q",
+        ranked,
+        limit=2,
+        rerank_enabled=False,
+        abstain_on_low_confidence=False,
+        access_boost=AccessBoostConfig(weight=0.05, cap=0.25),
+    )
+
+    assert result.items[0]["content"] == "high access"
+    assert result.items[0]["access_boost"] > 0.0
+
+
+def test_pipeline_access_boost_applies_after_cross_encoder_scores() -> None:
+    reranker = MagicMock()
+    reranker.rerank_sync.return_value = [
+        {"content": "low access", "score": 0.8, "search_method": "cross_encoder", "access_count": 0},
+        {"content": "high access", "score": 0.8, "search_method": "cross_encoder", "access_count": 20},
+    ]
+    ranked = [
+        [
+            {"content": "low access", "score": 0.9, "source_file": "a.md", "chunk_index": 0, "access_count": 0},
+            {"content": "high access", "score": 0.9, "source_file": "b.md", "chunk_index": 0, "access_count": 20},
+        ],
+    ]
+    pipeline = RetrievalPipeline(reranker=reranker)
+
+    result = pipeline.run(
+        "q",
+        ranked,
+        limit=2,
+        rerank_enabled=True,
+        abstain_on_low_confidence=False,
+        access_boost=AccessBoostConfig(weight=0.05, cap=0.25),
+    )
+
+    assert result.items[0]["content"] == "high access"
+    assert result.items[0]["search_method"] == "cross_encoder"
 
 
 def test_extract_entities_deduplicates_phrases_and_ignores_speakers() -> None:

@@ -125,9 +125,9 @@ class UnifiedMemorySearch:
         pipeline_settings: dict[str, object] | None = None,
         temporal_boost: Any | None = None,
         entity_boost: Any | None = None,
+        reference_time: Any | None = None,
     ) -> list[dict[str, Any]]:
         """Search Legacy memories through a trigger-aware shared policy."""
-        del time_start, time_end
         limit = max(0, int(limit))
         if limit <= 0:
             self._last_search_meta = {"abstain": False, "abstain_reason": ""}
@@ -143,8 +143,23 @@ class UnifiedMemorySearch:
         rerank_enabled = bool(settings.get("rerank_enabled", policy.rerank)) and policy.rerank
         confidence_enabled = bool(settings.get("abstain_on_low_confidence", policy.confidence_gate))
         confidence_enabled = confidence_enabled and policy.confidence_gate
+
+        from core.memory.retrieval.query_expansion import (
+            coerce_reference_time,
+            expand_query,
+            filter_ranked_lists_by_time_hint,
+        )
+
+        expanded = expand_query(query, reference_time=coerce_reference_time(reference_time))
+        search_query = expanded.search_text or query
+        time_hint_start = time_start or expanded.time_hint_start
+        time_hint_end = time_end or expanded.time_hint_end
         if entity_boost is None:
-            entity_boost = rag._build_entity_boost_config(query, settings)
+            entity_boost = rag._build_entity_boost_config(search_query, settings)
+        access_boost = None
+        access_boost_builder = getattr(rag, "_build_access_boost_config", None)
+        if callable(access_boost_builder):
+            access_boost = access_boost_builder(settings)
 
         try:
             rag._get_indexer()
@@ -153,17 +168,40 @@ class UnifiedMemorySearch:
 
         ranked_lists = self._collect_ranked_lists(
             rag,
-            query,
+            search_query,
             scopes=scopes,
             pool_k=pool_k,
             entity_boost=entity_boost,
         )
+        ranked_lists = filter_ranked_lists_by_time_hint(
+            ranked_lists,
+            time_hint_start=time_hint_start,
+            time_hint_end=time_hint_end,
+        )
 
         if not ranked_lists:
-            self._last_search_meta = {"abstain": False, "abstain_reason": ""}
+            self._last_search_meta = {
+                "abstain": False,
+                "abstain_reason": "",
+                "query_expansion": {
+                    "original": expanded.original,
+                    "search_text": search_query,
+                    "time_hint_start": time_hint_start,
+                    "time_hint_end": time_hint_end,
+                },
+            }
             return []
         if self._is_keyword_only_fallback(ranked_lists):
-            self._last_search_meta = {"abstain": False, "abstain_reason": ""}
+            self._last_search_meta = {
+                "abstain": False,
+                "abstain_reason": "",
+                "query_expansion": {
+                    "original": expanded.original,
+                    "search_text": search_query,
+                    "time_hint_start": time_hint_start,
+                    "time_hint_end": time_hint_end,
+                },
+            }
             items = ranked_lists[0][offset : offset + limit]
             if min_score > 0.0:
                 items = [item for item in items if float(item.get("score", 0.0) or 0.0) >= min_score]
@@ -175,7 +213,7 @@ class UnifiedMemorySearch:
             cross_encoder_model=str(settings.get("cross_encoder_model", "cross-encoder/ms-marco-MiniLM-L-12-v2")),
         )
         result = pipeline.run(
-            query,
+            search_query,
             ranked_lists,
             limit=offset + limit,
             pool_k=pool_k,
@@ -185,10 +223,17 @@ class UnifiedMemorySearch:
             rrf_confidence_threshold=float(settings.get("rrf_confidence_threshold", 0.02)),
             temporal_boost=temporal_boost,
             entity_boost=entity_boost,
+            access_boost=access_boost,
         )
         self._last_search_meta = {
             "abstain": result.abstain,
             "abstain_reason": result.abstain_reason,
+            "query_expansion": {
+                "original": expanded.original,
+                "search_text": search_query,
+                "time_hint_start": time_hint_start,
+                "time_hint_end": time_hint_end,
+            },
         }
 
         items = result.items[offset : offset + limit]
