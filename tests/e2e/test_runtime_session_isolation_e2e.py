@@ -11,7 +11,6 @@ async def test_heartbeat_cycle_has_isolated_runtime_metadata(make_agent_core):
         agent = make_agent_core(name="runtime-hb", model="claude-sonnet-4-6")
         agent._sdk_available = True
         agent._run_priming = AsyncMock(return_value=("", []))
-        agent._compute_overflow_files = lambda: []
 
         result = await agent.run_cycle("heartbeat prompt", trigger="heartbeat")
 
@@ -38,7 +37,6 @@ async def test_streaming_cycle_done_carries_runtime_metadata(make_agent_core):
         agent = make_agent_core(name="runtime-stream", model="claude-sonnet-4-6")
         agent._sdk_available = True
         agent._run_priming = AsyncMock(return_value=("", []))
-        agent._compute_overflow_files = lambda: []
 
         events = []
         async for chunk in agent.run_cycle_streaming(

@@ -191,7 +191,6 @@ class PrimingEngine:
         channel: str = "chat",
         intent: str = "",
         enable_dynamic_budget: bool = False,
-        overflow_files: list[str] | None = None,
         recent_human_messages: list[str] | None = None,
     ) -> PrimingResult:
         """Prime memories based on incoming message."""
@@ -220,25 +219,11 @@ class PrimingEngine:
 
         keywords = self._extract_keywords(message or effective_message)
 
-        if overflow_files is None:
-            channel_c_coro = self._channel_c_related_knowledge(
-                keywords,
-                message=effective_message,
-                recent_human_messages=recent_human_messages,
-            )
-        elif overflow_files:
-            channel_c_coro = self._channel_c_related_knowledge(
-                keywords,
-                restrict_to=overflow_files,
-                message=effective_message,
-                recent_human_messages=recent_human_messages,
-            )
-        else:
-
-            async def _noop() -> tuple[str, str]:
-                return ("", "")
-
-            channel_c_coro = _noop()
+        channel_c_coro = self._channel_c_related_knowledge(
+            keywords,
+            message=effective_message,
+            recent_human_messages=recent_human_messages,
+        )
 
         results = await asyncio.gather(
             self._channel_a_sender_profile(sender_name),
@@ -376,7 +361,6 @@ class PrimingEngine:
     async def _channel_c_related_knowledge(
         self,
         keywords: list[str],
-        restrict_to: list[str] | None = None,
         message: str = "",
         recent_human_messages: list[str] | None = None,
     ) -> tuple[str, str]:
@@ -385,7 +369,6 @@ class PrimingEngine:
             self.knowledge_dir,
             self._get_retriever,
             keywords,
-            restrict_to=restrict_to,
             message=message,
             recent_human_messages=recent_human_messages,
         )

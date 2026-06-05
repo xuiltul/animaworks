@@ -4,8 +4,6 @@
 [group3_header]: 3. 現在の状況
 [current_state_header]: ## 現在の状態
 [pending_tasks_header]: ## 未完了タスク
-[procedures_header]: ## Procedures（手順書）
-[distilled_knowledge_header]: ## Distilled Knowledge
 [group4_header]: 4. 記憶と能力
 [group5_header]: 5. 組織とコミュニケーション
 [group6_header]: 6. メタ設定

@@ -17,7 +17,6 @@ def _make_agent(anima_dir: Path, model: str = "claude-sonnet-4-20250514"):
     memory = MagicMock()
     memory.read_permissions.return_value = ""
     memory.anima_dir = anima_dir
-    memory.collect_distilled_knowledge.return_value = []
 
     messenger = MagicMock()
 

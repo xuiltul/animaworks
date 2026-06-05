@@ -26,22 +26,12 @@ logger = logging.getLogger("animaworks.agent")
 class PrimingMixin:
     """Mixin: priming (auto-recall), context fitting, pre-flight size check."""
 
-    def _compute_overflow_files(self) -> list[str] | None:
-        """Always return None to enable full Channel C search.
-
-        DK injection still runs in builder.py, but Channel C now searches
-        all knowledge/procedures regardless of DK coverage.
-        Phase 1 of DK removal: docs/issues/20260304_dk-removal-phase1-*.md
-        """
-        return None
-
     async def _run_priming(
         self,
         prompt: str,
         trigger: str,
         *,
         message_intent: str = "",
-        overflow_files: list[str] | None = None,
         prompt_tier: str = "full",
         model_config=None,
     ) -> tuple[str, str]:
@@ -50,9 +40,6 @@ class PrimingMixin:
         Args:
             prompt: The user message (may include conversation history)
             trigger: Trigger type (e.g., "message:yamada")
-            overflow_files: File stems that didn't fit in knowledge injection.
-                None = legacy (full Channel C), [] = all injected (skip C),
-                [...] = overflow files only for Channel C.
             prompt_tier: Prompt tier for budget control
                 ("full"/"standard"/"light"/"minimal"/"micro").
 
@@ -126,7 +113,6 @@ class PrimingMixin:
                 sender_name,
                 channel=channel,
                 intent=message_intent,
-                overflow_files=overflow_files,
                 enable_dynamic_budget=True,
                 recent_human_messages=recent_human_messages,
             )

@@ -37,7 +37,6 @@ def _make_mock_memory(anima_dir: Path, tmp_path: Path) -> MagicMock:
     memory.list_procedure_metas.return_value = []
     memory.list_skill_metas.return_value = []
     memory.list_common_skill_metas.return_value = []
-    memory.collect_distilled_knowledge_separated.return_value = ([], [])
     return memory
 
 
@@ -261,8 +260,8 @@ class TestSkillCatalogE2E:
         prompt = result.system_prompt
         assert "| 名前 | 種別 | 概要 |" not in prompt
 
-    def test_injected_procedures_always_empty(self, tmp_path: Path):
-        """BuildResult.injected_procedures is always an empty list."""
+    def test_build_result_has_no_injected_procedures_field(self, tmp_path: Path):
+        """BuildResult no longer tracks prompt-injected procedures."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
 
@@ -291,4 +290,4 @@ class TestSkillCatalogE2E:
         ):
             result = build_system_prompt(memory, message="cron設定をして")
 
-        assert result.injected_procedures == []
+        assert not hasattr(result, "injected_procedures")

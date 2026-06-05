@@ -22,7 +22,6 @@ from core.memory.conversation import (
 from core.prompt.builder import _build_recent_tool_section
 from core.schemas import ModelConfig
 
-
 # ── Fixtures ────────────────────────────────────────────────
 
 
@@ -361,7 +360,7 @@ class TestBudgetTruncation:
             result = _build_recent_tool_section(anima_dir, model_config)
 
         # Should have some records but not all 15
-        lines = [l for l in result.split("\n") if l.startswith("- ")]
+        lines = [line for line in result.split("\n") if line.startswith("- ")]
         assert len(lines) > 0
         assert len(lines) < 15  # Budget should prevent all 15 from fitting
 
@@ -382,7 +381,7 @@ class TestBudgetTruncation:
             mock_instance.load.return_value = state
             result = _build_recent_tool_section(anima_dir, model_config)
 
-        lines = [l for l in result.split("\n") if l.startswith("- ")]
+        lines = [line for line in result.split("\n") if line.startswith("- ")]
         assert len(lines) == 5
 
 
@@ -414,7 +413,6 @@ class TestBuildSystemPromptIntegration:
         memory.list_procedure_metas.return_value = []
         memory.list_shared_users.return_value = []
         memory.read_model_config.return_value = model_config
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         return memory
 
     def test_tool_section_in_system_prompt_mode_b(

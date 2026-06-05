@@ -12,16 +12,14 @@ Covers:
 from __future__ import annotations
 
 import json
-
-from core.time_utils import today_local
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.schemas import CycleResult
+from core.time_utils import today_local
 from core.tooling.handler import active_session_type
-
 
 # ── Helpers ───────────────────────────────────────────────
 
@@ -96,7 +94,6 @@ def mock_memory(anima_dir: Path, tmp_path: Path) -> MagicMock:
     mm.list_shared_users.return_value = []
     mm.load_recent_heartbeat_summary.return_value = ""
     mm.read_model_config.return_value = MagicMock(supervisor=None)
-    mm.collect_distilled_knowledge_separated.return_value = ([], [])
     return mm
 
 

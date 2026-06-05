@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -15,13 +16,13 @@ from pathlib import Path
 import pytest
 
 from core.memory.conversation import (
-    ConversationMemory,
     _ERROR_PATTERN,
     _RESOLVED_PATTERN,
+    ConversationMemory,
+    ConversationTurn,
 )
 from core.prompt.builder import BuildResult
 from core.schemas import ModelConfig
-
 
 # ── BuildResult tests ──────────────────────────────────────
 
@@ -43,15 +44,11 @@ class TestBuildResult:
         assert isinstance(encoded, bytes)
         assert "日本語テスト".encode() == encoded
 
-    def test_injected_procedures_default_empty(self) -> None:
+    def test_dk_metadata_fields_removed(self) -> None:
         result = BuildResult(system_prompt="test")
-        assert result.injected_procedures == []
-
-    def test_injected_procedures_populated(self) -> None:
-        paths = [Path("/tmp/proc1.md"), Path("/tmp/proc2.md")]
-        result = BuildResult(system_prompt="test", injected_procedures=paths)
-        assert len(result.injected_procedures) == 2
-        assert result.injected_procedures[0] == Path("/tmp/proc1.md")
+        assert not hasattr(result, "injected_procedures")
+        assert not hasattr(result, "injected_knowledge_files")
+        assert not hasattr(result, "overflow_files")
 
 
 # ── Error detection pattern tests ─────────────────────────
@@ -111,34 +108,21 @@ class TestErrorDetectionPatterns:
 
     def test_only_last_assistant_turn_matters(self) -> None:
         """Verify that error detection logic uses only the last assistant turn."""
-        from core.memory.conversation import ConversationMemory, ConversationTurn
-        from core.schemas import ModelConfig
+        # First turn has error, but last turn is success.
+        turns = [
+            ConversationTurn(role="assistant", content="I got an error trying to connect."),
+            ConversationTurn(role="human", content="Try again"),
+            ConversationTurn(role="assistant", content="Successfully deployed. Everything works."),
+        ]
 
-        # Create minimal anima dir (in-memory only for pattern test)
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmpdir:
-            anima_dir = Path(tmpdir) / "test-anima"
-            for sub in ("episodes", "knowledge", "procedures", "skills", "state"):
-                (anima_dir / sub).mkdir(parents=True)
+        # Filter to last assistant turn only.
+        assistant_turns = [t for t in turns if t.role == "assistant"]
+        last_turn = assistant_turns[-1]
+        has_error = bool(_ERROR_PATTERN.search(last_turn.content))
+        if has_error and _RESOLVED_PATTERN.search(last_turn.content):
+            has_error = False
 
-            conv = ConversationMemory(anima_dir, ModelConfig())
-
-            # First turn has error, but last turn is success
-            turns = [
-                ConversationTurn(role="assistant", content="I got an error trying to connect."),
-                ConversationTurn(role="human", content="Try again"),
-                ConversationTurn(role="assistant", content="Successfully deployed. Everything works."),
-            ]
-
-            # Filter to last assistant turn only
-            assistant_turns = [t for t in turns if t.role == "assistant"]
-            last_turn = assistant_turns[-1]
-            has_error = bool(_ERROR_PATTERN.search(last_turn.content))
-            if has_error and _RESOLVED_PATTERN.search(last_turn.content):
-                has_error = False
-
-            # Last turn has no error
-            assert not has_error
+        assert not has_error
 
 
 # ── Double-count prevention tests ─────────────────────────

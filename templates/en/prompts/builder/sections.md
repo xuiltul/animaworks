@@ -4,8 +4,6 @@
 [group3_header]: 3. Current Situation
 [current_state_header]: ## Current State
 [pending_tasks_header]: ## Pending Tasks
-[procedures_header]: ## Procedures
-[distilled_knowledge_header]: ## Distilled Knowledge
 [group4_header]: 4. Memory and Capabilities
 [group5_header]: 5. Organization and Communication
 [group6_header]: 6. Meta Settings

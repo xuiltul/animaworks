@@ -9,11 +9,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 from core.execution._sanitize import wrap_tool_result
 from core.memory.priming import PrimingResult, format_priming_section
 from core.prompt.builder import build_system_prompt
-
 
 # ── Helpers ────────────────────────────────────────────────────
 
@@ -42,8 +40,6 @@ def _make_mock_memory(tmp_path: Path) -> MagicMock:
     memory.list_common_skill_metas.return_value = []
     memory.list_procedure_metas.return_value = []
     memory.list_shared_users.return_value = []
-    memory.collect_distilled_knowledge.return_value = []
-    memory.collect_distilled_knowledge_separated.return_value = ([], [])
     memory.common_skills_dir = tmp_path / "common_skills"
     return memory
 

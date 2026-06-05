@@ -1,24 +1,15 @@
-from __future__ import annotations
-
+"""Unit tests for DK cleanup and procedures RAG search behavior."""
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Unit tests for distilled knowledge injection (knowledge/ + procedures/).
+from __future__ import annotations
 
-Tests cover:
-- MemoryManager.collect_distilled_knowledge()
-- builder.py Distilled Knowledge injection section
-- PrimingEngine overflow_files conditional Channel C
-- RAGMemorySearch procedures vector search enablement
-"""
-
-import asyncio
+import inspect
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
-
-# ── Fixtures ─────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -28,7 +19,6 @@ def anima_dir(tmp_path):
     for sub in ("knowledge", "procedures", "skills", "episodes", "state"):
         (ad / sub).mkdir(parents=True)
     (ad / "state" / "current_state.md").write_text("status: idle\n")
-    (ad / "state" / "pending.md").write_text("")
     (ad / "identity.md").write_text("# Test\n")
     return ad
 
@@ -87,229 +77,54 @@ def data_dir(tmp_path, monkeypatch):
     _prompt_cache.clear()
 
 
-@pytest.fixture
-def memory(anima_dir, data_dir):
-    """Create MemoryManager with RAG disabled."""
-    from core.memory.manager import MemoryManager
-
-    mm = MemoryManager(anima_dir)
-    mm._indexer = None
-    mm._indexer_initialized = True
-    return mm
-
-
-def _write_knowledge(anima_dir: Path, name: str, body: str, confidence: float = 0.5):
-    """Write a knowledge file with frontmatter."""
-    content = f"---\nconfidence: {confidence}\ncreated_at: '2026-01-01'\n---\n\n{body}"
-    (anima_dir / "knowledge" / f"{name}.md").write_text(content, encoding="utf-8")
-
-
 def _write_procedure(anima_dir: Path, name: str, body: str, confidence: float = 0.5):
     """Write a procedure file with frontmatter."""
     content = f"---\ndescription: {name}\nconfidence: {confidence}\n---\n\n{body}"
     (anima_dir / "procedures" / f"{name}.md").write_text(content, encoding="utf-8")
 
 
-# ── collect_distilled_knowledge ──────────────────────────
+class TestDistilledKnowledgeApisRemoved:
+    def test_memory_manager_no_longer_exposes_dk_collectors(self, anima_dir, data_dir):
+        from core.memory.manager import MemoryManager
+
+        memory = MemoryManager(anima_dir)
+
+        assert not hasattr(memory, "collect_distilled_knowledge")
+        assert not hasattr(memory, "collect_distilled_knowledge_separated")
 
 
-class TestCollectDistilledKnowledge:
-    """Tests for MemoryManager.collect_distilled_knowledge()."""
-
-    def test_empty_directories(self, memory):
-        """Empty knowledge/ and procedures/ returns empty list."""
-        result = memory.collect_distilled_knowledge()
-        assert result == []
-
-    def test_knowledge_files_collected(self, memory, anima_dir):
-        """Knowledge files are collected with correct metadata."""
-        _write_knowledge(anima_dir, "topic-a", "Content of topic A", 0.8)
-        _write_knowledge(anima_dir, "topic-b", "Content of topic B", 0.6)
-
-        result = memory.collect_distilled_knowledge()
-
-        assert len(result) == 2
-        assert result[0]["name"] == "topic-a"
-        assert result[0]["confidence"] == 0.8
-        assert result[0]["content"] == "Content of topic A"
-        assert result[0]["source_type"] == "knowledge"
-
-    def test_procedure_files_collected(self, memory, anima_dir):
-        """Procedure files are collected with correct metadata."""
-        _write_procedure(anima_dir, "deploy-steps", "Step 1: deploy", 0.7)
-
-        result = memory.collect_distilled_knowledge()
-
-        assert len(result) == 1
-        assert result[0]["name"] == "deploy-steps"
-        assert result[0]["confidence"] == 0.7
-        assert result[0]["source_type"] == "procedures"
-
-    def test_sorted_by_confidence_descending(self, memory, anima_dir):
-        """Results: procedures first (each sorted by confidence), then knowledge (sorted)."""
-        _write_knowledge(anima_dir, "low", "Low conf", 0.3)
-        _write_knowledge(anima_dir, "high", "High conf", 0.9)
-        _write_procedure(anima_dir, "mid", "Mid conf", 0.6)
-
-        result = memory.collect_distilled_knowledge()
-
-        # collect_distilled_knowledge returns procedures + knowledge; each list sorted by confidence
-        confidences = [e["confidence"] for e in result]
-        assert confidences == [0.6, 0.9, 0.3]
-
-    def test_default_confidence_when_missing(self, memory, anima_dir):
-        """Files without confidence metadata get default 0.5."""
-        (anima_dir / "knowledge" / "no-meta.md").write_text(
-            "No frontmatter content",
-            encoding="utf-8",
-        )
-
-        result = memory.collect_distilled_knowledge()
-
-        assert len(result) == 1
-        assert result[0]["confidence"] == 0.5
-
-    def test_empty_body_skipped(self, memory, anima_dir):
-        """Files with empty body after frontmatter stripping are skipped."""
-        (anima_dir / "knowledge" / "empty.md").write_text(
-            "---\nconfidence: 0.8\n---\n\n   \n",
-            encoding="utf-8",
-        )
-
-        result = memory.collect_distilled_knowledge()
-        assert result == []
-
-    def test_mixed_knowledge_and_procedures(self, memory, anima_dir):
-        """Both knowledge and procedure files are collected together."""
-        _write_knowledge(anima_dir, "k1", "Knowledge 1", 0.9)
-        _write_procedure(anima_dir, "p1", "Procedure 1", 0.7)
-
-        result = memory.collect_distilled_knowledge()
-
-        assert len(result) == 2
-        names = [e["name"] for e in result]
-        assert "k1" in names
-        assert "p1" in names
-
-
-# ── Builder: Distilled Knowledge injection ───────────────
-
-
-class TestBuilderKnowledgeInjection:
-    """Tests for Distilled Knowledge section in build_system_prompt."""
-
-    def test_knowledge_injected_into_prompt(self, memory, anima_dir, data_dir):
-        """Knowledge summary appears in system prompt (list format, not full heading)."""
-        _write_knowledge(anima_dir, "test-topic", "# Topic Heading\n\nDetailed body.\nMore detail.", 0.8)
-
-        from core.prompt.builder import build_system_prompt
-
-        result = build_system_prompt(memory)
-
-        assert "## Distilled Knowledge" in result.system_prompt
-        assert "- **test-topic**: Topic Heading" in result.system_prompt
-        assert "### test-topic" not in result.system_prompt
-        assert "Detailed body." not in result.system_prompt
-
-    def test_injected_files_tracked(self, memory, anima_dir, data_dir):
-        """BuildResult tracks which files were injected."""
-        _write_knowledge(anima_dir, "k1", "Content 1", 0.9)
-
-        from core.prompt.builder import build_system_prompt
-
-        result = build_system_prompt(memory)
-
-        assert "k1" in result.injected_knowledge_files
-
-    def test_empty_knowledge_no_section(self, memory, anima_dir, data_dir):
-        """No Distilled Knowledge section when directories are empty."""
-        from core.prompt.builder import build_system_prompt
-
-        result = build_system_prompt(memory)
-
-        assert "## Distilled Knowledge" not in result.system_prompt
-        assert result.injected_knowledge_files == []
-        assert result.overflow_files == []
-
-    def test_budget_overflow(self, memory, anima_dir, data_dir):
-        """Many files exceeding summary budget go to overflow_files."""
-        for i in range(30):
-            _write_knowledge(anima_dir, f"know-{i:02d}", f"Content {i}", 0.5)
-
-        from core.prompt.builder import build_system_prompt
-
-        result = build_system_prompt(memory)
-
-        total = len(result.injected_knowledge_files) + len(result.overflow_files)
-        assert total == 30
-        assert len(result.overflow_files) > 0
-
-    def test_confidence_ordering_in_injection(self, memory, anima_dir, data_dir):
-        """Procedures injected first, then knowledge by confidence. Both tracked separately."""
-        _write_knowledge(anima_dir, "low-conf", "Low", 0.3)
-        _write_knowledge(anima_dir, "high-conf", "High", 0.9)
-        _write_procedure(anima_dir, "mid-conf", "Mid", 0.6)
-
-        from core.prompt.builder import build_system_prompt
-
-        result = build_system_prompt(memory)
-
-        assert len(result.injected_procedures) == 1
-        assert len(result.injected_knowledge_files) == 2
-        assert result.overflow_files == []
-        prompt = result.system_prompt
-        mid_pos = prompt.index("- **mid-conf**:")
-        high_pos = prompt.index("- **high-conf**:")
-        low_pos = prompt.index("- **low-conf**:")
-        assert mid_pos < high_pos < low_pos
-
-
-# ── Priming: Conditional Channel C ───────────────────────
-
-
-class TestPrimingConditionalChannelC:
-    """Tests for overflow_files conditional Channel C in PrimingEngine."""
-
-    def test_overflow_none_runs_full_channel_c(self, anima_dir):
-        """overflow_files=None triggers legacy full Channel C."""
+class TestPrimingAlwaysRunsChannelC:
+    @pytest.mark.asyncio
+    async def test_prime_memories_always_calls_channel_c(self, anima_dir):
         from core.memory.priming import PrimingEngine
 
         engine = PrimingEngine(anima_dir)
-        # Disable retriever to avoid RAG dependency
-        engine._get_retriever = lambda: None
+        with (
+            patch.object(
+                engine,
+                "_channel_c_related_knowledge",
+                new_callable=AsyncMock,
+                return_value=("related", ""),
+            ) as mock_channel_c,
+            patch.object(engine, "_channel_a_sender_profile", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_b_recent_activity", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_c0_important_knowledge", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_e_pending_tasks", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_collect_recent_outbound", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_f_episodes", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_collect_pending_human_notifications", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_g_graph_context", new_callable=AsyncMock, return_value=""),
+        ):
+            await engine.prime_memories("test query")
 
-        result = asyncio.run(engine.prime_memories("test query", overflow_files=None))
-        # Channel C returns empty (no retriever), but it should have been called
-        assert isinstance(result.related_knowledge, str)
+        mock_channel_c.assert_called_once()
+        assert "restrict_to" not in mock_channel_c.call_args.kwargs
 
-    def test_overflow_empty_skips_channel_c(self, anima_dir):
-        """overflow_files=[] (all injected) skips Channel C entirely."""
+    def test_prime_memories_signature_has_no_overflow_files(self) -> None:
         from core.memory.priming import PrimingEngine
 
-        engine = PrimingEngine(anima_dir)
-        engine._get_retriever = lambda: None
-
-        result = asyncio.run(engine.prime_memories("test query", overflow_files=[]))
-        assert result.related_knowledge == ""
-
-    def test_overflow_with_files_runs_restricted_channel_c(self, anima_dir):
-        """overflow_files=[...] runs Channel C restricted to those files."""
-        from core.memory.priming import PrimingEngine
-
-        engine = PrimingEngine(anima_dir)
-        engine._get_retriever = lambda: None
-
-        result = asyncio.run(
-            engine.prime_memories(
-                "test query",
-                overflow_files=["overflow-topic"],
-            )
-        )
-        # No retriever = empty result, but the code path should not error
-        assert result.related_knowledge == ""
-
-
-# ── RAG: procedures vector search ────────────────────────
+        params = inspect.signature(PrimingEngine.prime_memories).parameters
+        assert "overflow_files" not in params
 
 
 class TestRAGProceduresSearch:
@@ -367,10 +182,3 @@ class TestRAGProceduresSearch:
 
         assert len(results) > 0
         assert any("deploy" in r["content"].lower() for r in results)
-
-    def test_vector_search_condition_includes_procedures(self):
-        """Vector search condition now includes 'procedures' scope."""
-        # The condition check in search_memory_text:
-        # scope in ("knowledge", "common_knowledge", "procedures", "all")
-        valid_scopes = ("knowledge", "common_knowledge", "procedures", "all")
-        assert "procedures" in valid_scopes

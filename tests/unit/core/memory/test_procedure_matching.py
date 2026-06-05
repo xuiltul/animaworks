@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -14,7 +15,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from core.schemas import SkillMeta
-
 
 # ── Fixtures ──────────────────────────────────────────────
 
@@ -172,8 +172,13 @@ class TestBuilderProcedureInjection:
         assert "| backup | 手順 |" not in prompt
         assert "| 名前 | 種別 | 概要 |" not in prompt
 
-    def test_injected_procedures_populated_when_in_budget(self, memory, anima_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """BuildResult.injected_procedures contains procedures injected into the system prompt."""
+    def test_build_result_does_not_track_prompt_injected_procedures(
+        self,
+        memory,
+        anima_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """BuildResult no longer exposes DK procedure injection metadata."""
         (anima_dir / "procedures" / "deploy.md").write_text(
             "---\ndescription: \"「デプロイ」手順\"\n---\n\n# Deploy",
             encoding="utf-8",
@@ -195,7 +200,4 @@ class TestBuilderProcedureInjection:
 
         result = build_system_prompt(memory, message="デプロイをお願いします")
 
-        assert len(result.injected_procedures) == 1
-        assert "deploy" in str(result.injected_procedures[0]).lower()
-
-
+        assert not hasattr(result, "injected_procedures")

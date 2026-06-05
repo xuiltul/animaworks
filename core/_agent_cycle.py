@@ -238,12 +238,10 @@ class CycleMixin:
         _prompt_tier = resolve_prompt_tier(_ctx_window)
 
         # ── Priming: Automatic memory retrieval ────────────────
-        overflow_files = self._compute_overflow_files()
         priming_section, pending_human_notifications = await self._run_priming(
             prompt,
             trigger,
             message_intent=message_intent,
-            overflow_files=overflow_files,
             prompt_tier=_prompt_tier,
             model_config=active_model_config,
         )
@@ -277,7 +275,6 @@ class CycleMixin:
             thread_id=thread_id,
         )
         system_prompt = build_result.system_prompt
-        injected_procedures = build_result.injected_procedures
         logger.debug("System prompt assembled, length=%d tier=%s", len(system_prompt), _prompt_tier)
 
         # ── Context-window-aware tier downgrade ────────────
@@ -292,14 +289,6 @@ class CycleMixin:
             thread_id=thread_id,
         )
 
-        if injected_procedures and uses_chat_session:
-            from core.memory.conversation import ConversationMemory as _CM
-
-            _cm = _CM(self.anima_dir, active_model_config, thread_id=thread_id)
-            _cm.store_injected_procedures(
-                injected_procedures,
-                session_id=self._tool_handler.session_id,
-            )
         if uses_chat_session and shortterm.has_pending():
             system_prompt = inject_shortterm(system_prompt, shortterm)
             logger.info("Injected short-term memory into system prompt")
@@ -851,12 +840,10 @@ class CycleMixin:
         _prompt_tier_s = _rpt(_ctx_window_s)
 
         # ── Streaming executor (S / A / all modes) ───────────────
-        overflow_files = self._compute_overflow_files()
         priming_section, pending_human_notifications = await self._run_priming(
             prompt,
             trigger,
             message_intent=message_intent,
-            overflow_files=overflow_files,
             prompt_tier=_prompt_tier_s,
             model_config=active_model_config,
         )
@@ -902,14 +889,6 @@ class CycleMixin:
             pending_human_notifications=pending_human_notifications,
         )
 
-        if build_result.injected_procedures and uses_chat_session:
-            from core.memory.conversation import ConversationMemory as _CM
-
-            _cm = _CM(self.anima_dir, active_model_config, thread_id=thread_id)
-            _cm.store_injected_procedures(
-                build_result.injected_procedures,
-                session_id=self._tool_handler.session_id,
-            )
         if uses_chat_session and shortterm.has_pending():
             system_prompt = inject_shortterm(system_prompt, shortterm)
 

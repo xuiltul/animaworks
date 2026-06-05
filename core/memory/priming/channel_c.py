@@ -177,7 +177,6 @@ async def channel_c_related_knowledge(
     knowledge_dir: Path,
     get_retriever: Callable[[], MemoryRetriever | None],
     keywords: list[str],
-    restrict_to: list[str] | None = None,
     message: str = "",
     recent_human_messages: list[str] | None = None,
 ) -> tuple[str, str]:
@@ -220,10 +219,6 @@ async def channel_c_related_knowledge(
             logger.debug("Channel C: unified search abstained")
             return ("", "")
 
-        if restrict_to is not None and results:
-            restrict_set = set(restrict_to)
-            results = [r for r in results if Path(str(r.get("source_file", r.get("doc_id", "")))).stem in restrict_set]
-
         if results:
             from core.execution._sanitize import ORIGIN_UNKNOWN, resolve_trust
 
@@ -259,11 +254,10 @@ async def channel_c_related_knowledge(
             untrusted_output = "\n".join(untrusted_parts)
 
             logger.debug(
-                "Channel C: Vector search returned %d results (medium=%d, untrusted=%d)%s",
+                "Channel C: Vector search returned %d results (medium=%d, untrusted=%d)",
                 len(results),
                 len(medium_parts),
                 len(untrusted_parts),
-                f" (restricted to {len(restrict_to)} overflow files)" if restrict_to else "",
             )
             return (medium_output, untrusted_output)
         else:

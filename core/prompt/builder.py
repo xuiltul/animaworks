@@ -20,7 +20,7 @@ This module re-exports every symbol that tests reference via
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,9 +29,7 @@ from core.memory import MemoryManager
 from core.memory.shortterm import ShortTermMemory
 from core.paths import get_data_dir, load_prompt  # noqa: F401 — tests patch core.prompt.builder.load_prompt
 from core.prompt.assembler import (
-    _KNOW_SUMMARY_BUDGET,  # noqa: F401
     _MIN_SYSTEM_BUDGET,  # noqa: F401
-    _PROC_SUMMARY_BUDGET,
     _REFERENCE_WINDOW,
     SectionEntry,  # noqa: F401
     _allocate_sections,
@@ -53,7 +51,6 @@ from core.prompt.org_context import (
     _is_mcp_mode,
 )
 from core.prompt.sections import (
-    _extract_entry_summary,
     _load_fallback_strings,
     _load_section_strings,
 )
@@ -114,9 +111,6 @@ class BuildResult:
     """Result of system prompt building."""
 
     system_prompt: str
-    injected_procedures: list[Path] = field(default_factory=list)
-    injected_knowledge_files: list[str] = field(default_factory=list)
-    overflow_files: list[str] = field(default_factory=list)
 
     def __str__(self) -> str:
         return self.system_prompt
@@ -462,11 +456,8 @@ def _build_group4(
     _fs: dict[str, str],
     message: str = "",
     thread_id: str = "default",
-) -> tuple[list[SectionEntry], list[Path], list[str], list[str]]:
-    """Group 4: Memory guide, DK, common knowledge, tool guides.
-
-    Returns (sections, injected_procedures, injected_knowledge_files, overflow_files).
-    """
+) -> list[SectionEntry]:
+    """Group 4: Memory guide, common knowledge, tool guides."""
     from core.tooling.prompt_db import get_default_guide
 
     out: list[SectionEntry] = []
@@ -487,50 +478,6 @@ def _build_group4(
     )
     if mg:
         _add(mg, "memory_guide", 3)
-
-    # ── Distilled Knowledge ───
-    injected_procs: list[Path] = []
-    injected_know: list[str] = []
-    overflow: list[str] = []
-    proc_budget = max(int(_PROC_SUMMARY_BUDGET * scale), 0)
-    know_budget = max(int(_KNOW_SUMMARY_BUDGET * scale), 0)
-    procedures_list, knowledge_list = memory.collect_distilled_knowledge_separated()
-
-    proc_parts, proc_used = [], 0
-    for e in procedures_list:
-        line = f"- **{e['name']}**: {_extract_entry_summary(e)}"
-        est = len(line) // 3
-        if proc_used + est <= proc_budget:
-            proc_parts.append(line)
-            proc_used += est
-            injected_procs.append(Path(e["path"]))
-        else:
-            overflow.append(e["name"])
-    if proc_parts:
-        _add(
-            f"{_ss.get('procedures_header', '## Procedures')}\n\n" + "\n".join(proc_parts),
-            "dk_procedures",
-            3,
-            "elastic",
-        )
-
-    know_parts, know_used = [], 0
-    for e in knowledge_list:
-        line = f"- **{e['name']}**: {_extract_entry_summary(e)}"
-        est = len(line) // 3
-        if know_used + est <= know_budget:
-            know_parts.append(line)
-            know_used += est
-            injected_know.append(e["name"])
-        else:
-            overflow.append(e["name"])
-    if know_parts:
-        _add(
-            f"{_ss.get('distilled_knowledge_header', '## Distilled Knowledge')}\n\n" + "\n".join(know_parts),
-            "dk_knowledge",
-            3,
-            "elastic",
-        )
 
     ck_dir = data_dir / "common_knowledge"
     if ck_dir.exists() and any(ck_dir.rglob("*.md")):
@@ -661,7 +608,7 @@ def _build_group4(
             catalog_text = "\n".join(catalog_lines)
             _add(catalog_text, "skill_catalog", 2, "elastic")
 
-    return out, injected_procs, injected_know, overflow
+    return out
 
 
 def _build_group5(
@@ -825,7 +772,7 @@ def build_system_prompt(
         _ss,
         _fs,
     )
-    g4, injected_procedures, injected_knowledge_files, overflow_files = _build_group4(
+    g4 = _build_group4(
         pd,
         data_dir,
         memory,
@@ -880,12 +827,7 @@ def build_system_prompt(
         tier,
         context_window,
     )
-    return BuildResult(
-        system_prompt=prompt,
-        injected_procedures=injected_procedures,
-        injected_knowledge_files=injected_knowledge_files,
-        overflow_files=overflow_files,
-    )
+    return BuildResult(system_prompt=prompt)
 
 
 def inject_shortterm(

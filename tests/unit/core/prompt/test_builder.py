@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.prompt.builder import (
@@ -18,7 +17,6 @@ from core.prompt.builder import (
     build_system_prompt,
     inject_shortterm,
 )
-from core.schemas import SkillMeta
 
 _MOCK_SECTIONS = (
     "[group1_header]: 1. 動作環境と行動ルール\n"
@@ -27,8 +25,6 @@ _MOCK_SECTIONS = (
     "[group3_header]: 3. 現在の状況\n"
     "[current_state_header]: ## 現在の状態\n"
     "[pending_tasks_header]: ## 未完了タスク\n"
-    "[procedures_header]: ## Procedures（手順書）\n"
-    "[distilled_knowledge_header]: ## Distilled Knowledge\n"
     "[group4_header]: 4. 記憶と能力\n"
     "[group5_header]: 5. 組織とコミュニケーション\n"
     "[group6_header]: 6. メタ設定\n"
@@ -270,10 +266,8 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", return_value="prompt section"):
             result = build_system_prompt(memory)
@@ -303,10 +297,8 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", return_value="prompt"):
             result = build_system_prompt(memory)
@@ -348,10 +340,8 @@ class TestBuildSystemPrompt:
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
         memory.list_procedure_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with (
             patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()),
@@ -388,10 +378,8 @@ class TestBuildSystemPrompt:
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
         memory.list_procedure_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = ["taka"]
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         captured_calls: list[dict] = []
 
@@ -434,10 +422,8 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", return_value="section"):
             result = build_system_prompt(memory)
@@ -465,10 +451,8 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
 
         with patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt_with_builder()):
             result = build_system_prompt(memory)
@@ -499,7 +483,6 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
@@ -535,7 +518,6 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
@@ -573,7 +555,6 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_summaries.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
@@ -777,7 +758,6 @@ class TestAssemblyWithTags:
         memory.list_procedure_files.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
@@ -811,7 +791,6 @@ class TestAssemblyWithTags:
         memory.list_procedure_files.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
@@ -843,7 +822,6 @@ class TestAssemblyWithTags:
         memory.list_procedure_files.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 
@@ -879,7 +857,6 @@ class TestAssemblyWithTags:
         memory.list_procedure_files.return_value = []
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.common_skills_dir = data_dir / "common_skills"
         memory.list_shared_users.return_value = []
 

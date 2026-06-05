@@ -146,7 +146,6 @@ class TestCatalogUsesSkillIndex:
         memory.list_skill_metas.return_value = []
         memory.list_common_skill_metas.return_value = []
         memory.list_procedure_metas.return_value = []
-        memory.collect_distilled_knowledge_separated.return_value = ([], [])
         memory.list_shared_users.return_value = []
 
         with patch("core.paths.get_common_skills_dir", return_value=common_skills_dir):

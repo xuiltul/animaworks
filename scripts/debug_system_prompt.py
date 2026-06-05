@@ -95,8 +95,6 @@ _SECTION_META: dict[str, tuple[str, str]] = {
     "recent_tools":             ("tools",        "(computed: ConversationMemory)"),
     "pending_tasks":            ("state",        "state/pending/"),
     "memory_guide":             ("memory",       "templates/prompts/memory_guide.md"),
-    "dk_procedures":            ("memory",       "procedures/ (distilled)"),
-    "dk_knowledge":             ("memory",       "knowledge/ (distilled)"),
     "common_knowledge_hint":    ("memory",       "builder/common_knowledge_hint.md"),
     "reference_hint":           ("memory",       "builder/reference_hint.md"),
     "org_context":              ("organization", "(computed: _build_org_context)"),
@@ -581,24 +579,6 @@ def main() -> None:
         pct = sec.chars / total_chars * 100 if total_chars else 0
         print(f"  {i+1:2d}. [{sec.category:13s}] {sec.name:30s} {sec.chars:>6,} chars ({pct:4.1f}%) <- {sec.source}")
     print()
-
-    if result.injected_procedures:
-        print("Injected procedures:")
-        for p in result.injected_procedures:
-            print(f"  - {p}")
-        print()
-
-    if result.injected_knowledge_files:
-        print("Injected knowledge:")
-        for k in result.injected_knowledge_files:
-            print(f"  - {k}")
-        print()
-
-    if result.overflow_files:
-        print("Overflow (budget exceeded):")
-        for o in result.overflow_files:
-            print(f"  - {o}")
-        print()
 
 
 if __name__ == "__main__":

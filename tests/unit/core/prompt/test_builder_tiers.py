@@ -88,8 +88,6 @@ def _make_mock_memory(
     memory.list_common_skill_metas.return_value = []
     memory.list_procedure_metas.return_value = []
     memory.list_shared_users.return_value = []
-    memory.collect_distilled_knowledge.return_value = []
-    memory.collect_distilled_knowledge_separated.return_value = ([], [])
     return memory
 
 
@@ -284,46 +282,51 @@ class TestDefaultContextWindowBackwardCompat:
         assert result_default.system_prompt == result_explicit.system_prompt
 
 
-class TestDistilledKnowledgeTierBudget:
-    """Verify DK injection is controlled by budget scaling."""
+class TestDistilledKnowledgeRemovedForAllTiers:
+    """Verify DK summaries are no longer injected by prompt tier."""
 
-    def test_t1_injects_dk(self, tmp_path, data_dir):
+    def test_t1_does_not_inject_dk(self, tmp_path, data_dir):
         memory = _make_mock_memory(tmp_path, data_dir)
-        memory.collect_distilled_knowledge_separated.return_value = (
-            [],
-            [
-                {
-                    "name": "test_knowledge",
-                    "content": "knowledge content here",
-                    "description": "Knowledge overview",
-                    "confidence": 0.8,
-                    "path": "/tmp/knowledge/test_knowledge.md",
-                    "mtime": 0.0,
-                },
-            ],
+        memory.collect_distilled_knowledge_separated = MagicMock(
+            return_value=(
+                [],
+                [
+                    {
+                        "name": "test_knowledge",
+                        "content": "knowledge content here",
+                        "description": "Knowledge overview",
+                        "confidence": 0.8,
+                        "path": "/tmp/knowledge/test_knowledge.md",
+                        "mtime": 0.0,
+                    },
+                ],
+            )
         )
         with patch("core.prompt.builder.load_prompt", return_value="section"):
             result = build_system_prompt(memory, execution_mode="a", context_window=200_000)
-        assert "Distilled Knowledge" in result
-        assert "- **test_knowledge**: Knowledge overview" in result
+        assert "Distilled Knowledge" not in result
+        assert "test_knowledge" not in result
+        memory.collect_distilled_knowledge_separated.assert_not_called()
 
-    def test_small_window_limits_dk(self, tmp_path, data_dir):
-        """At 8K context, knowledge summary budget is very small.
-        Even a summary line can overflow."""
+    def test_small_window_does_not_track_overflow(self, tmp_path, data_dir):
         memory = _make_mock_memory(tmp_path, data_dir)
-        memory.collect_distilled_knowledge_separated.return_value = (
-            [],
-            [
-                {
-                    "name": "big",
-                    "content": "x" * 5000,
-                    "description": "A " * 100,
-                    "confidence": 0.8,
-                    "path": "/tmp/k/big.md",
-                    "mtime": 0.0,
-                },
-            ],
+        memory.collect_distilled_knowledge_separated = MagicMock(
+            return_value=(
+                [],
+                [
+                    {
+                        "name": "big",
+                        "content": "x" * 5000,
+                        "description": "A " * 100,
+                        "confidence": 0.8,
+                        "path": "/tmp/k/big.md",
+                        "mtime": 0.0,
+                    },
+                ],
+            )
         )
         with patch("core.prompt.builder.load_prompt", return_value="section"):
             result = build_system_prompt(memory, execution_mode="a", context_window=8_000)
-        assert "big" in result.overflow_files
+        assert not hasattr(result, "overflow_files")
+        assert "big" not in result
+        memory.collect_distilled_knowledge_separated.assert_not_called()

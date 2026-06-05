@@ -22,8 +22,6 @@ _MOCK_SECTIONS = (
     "[group3_header]: # 3. 現在の状況\n"
     "[current_state_header]: ## 現在の状態\n"
     "[pending_tasks_header]: ## 未完了タスク\n"
-    "[procedures_header]: ## Procedures\n"
-    "[distilled_knowledge_header]: ## Distilled Knowledge\n"
     "[group4_header]: # 4. 記憶と能力\n"
     "[group5_header]: # 5. 組織とコミュニケーション\n"
     "[group6_header]: # 6. メタ設定\n"
@@ -77,7 +75,6 @@ def _mock_memory(tmp_path: Path, *, specialty: str = "", current_state: str = ""
     memory.list_common_skill_metas.return_value = []
     memory.list_procedure_metas.return_value = []
     memory.list_shared_users.return_value = []
-    memory.collect_distilled_knowledge_separated.return_value = ([], [])
     memory.read_resolutions.return_value = []
     return memory
 

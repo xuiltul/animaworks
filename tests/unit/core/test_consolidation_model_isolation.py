@@ -159,9 +159,6 @@ class _FakeCycle(CycleMixin):
     def _load_context_window_overrides(self):
         return {}
 
-    def _compute_overflow_files(self):
-        return []
-
     async def _run_priming(self, *args, **kwargs):
         return "", ""
 
@@ -187,7 +184,7 @@ class _FakeCycle(CycleMixin):
 
 
 def _simple_prompt_result():
-    return SimpleNamespace(system_prompt="system", injected_procedures=[])
+    return SimpleNamespace(system_prompt="system")
 
 
 @pytest.mark.asyncio

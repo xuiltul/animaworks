@@ -293,7 +293,6 @@ def _make_mock_memory(anima_dir: Path) -> MagicMock:
     mem.list_common_skill_metas.return_value = []
     mem.list_shared_users.return_value = []
     mem.common_skills_dir = anima_dir.parent.parent / "common_skills"
-    mem.collect_distilled_knowledge_separated.return_value = ([], [])
     return mem
 
 

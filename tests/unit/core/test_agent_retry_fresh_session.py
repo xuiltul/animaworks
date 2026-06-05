@@ -57,7 +57,6 @@ def _build_result_mock() -> MagicMock:
     result = MagicMock(spec=BuildResult)
     result.system_prompt = "mocked system prompt"
     result.priming_section = ""
-    result.injected_procedures = []
     return result
 
 
@@ -73,7 +72,6 @@ def _common_patches(*, spy_clear=None, retry_max=2):
         patch("core._agent_cycle._save_prompt_log"),
         patch("core.execution._sdk_session._clear_session_id", side_effect=clear_side_effect),
         patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock, return_value=("", "")),
-        patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
     ]
 
 
@@ -128,7 +126,6 @@ class TestRetryFreshSession:
                 patch("core._agent_cycle._save_prompt_log"),
             patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
-            patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
         ):
             mock_preflight.return_value = ("mocked system prompt", "test prompt", False)
             mock_retry_cfg.return_value = {
@@ -184,7 +181,6 @@ class TestRetryFreshSession:
                 patch("core._agent_cycle._save_prompt_log"),
             patch("core.execution._sdk_session._clear_session_id"),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
-            patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
         ):
             mock_preflight.return_value = ("mocked system prompt", "test prompt", False)
             mock_retry_cfg.return_value = {
@@ -249,7 +245,6 @@ class TestRetryFreshSession:
                 patch("core._agent_cycle._save_prompt_log"),
             patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
-            patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
         ):
             mock_preflight.return_value = ("mocked system prompt", "test prompt", False)
             mock_retry_cfg.return_value = {
@@ -301,7 +296,6 @@ class TestRetryExhausted:
                 patch("core._agent_cycle._save_prompt_log"),
             patch("core.execution._sdk_session._clear_session_id"),
             patch("core.agent.AgentCore._run_priming", new_callable=AsyncMock) as mock_priming,
-            patch("core.agent.AgentCore._compute_overflow_files", return_value=[]),
         ):
             mock_preflight.return_value = ("mocked system prompt", "test prompt", False)
             mock_retry_cfg.return_value = {

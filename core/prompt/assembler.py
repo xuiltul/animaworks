@@ -14,8 +14,6 @@ from dataclasses import dataclass
 
 # ── Budget-based prompt scaling ───────────────────────────────
 _REFERENCE_WINDOW = 128_000
-_PROC_SUMMARY_BUDGET = 300  # tokens — procedure summary list
-_KNOW_SUMMARY_BUDGET = 200  # tokens — knowledge summary list
 _TOOL_RESERVATION_PCT = 0.15
 _OUTPUT_RESERVATION_PCT = 0.10
 _CONVERSATION_RESERVATION_PCT = 0.10
