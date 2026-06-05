@@ -66,6 +66,9 @@ _FATAL_STDERR_PATTERNS = ("error: stream closed",)
 # 16 MB provides ample headroom for realistic prompt sizes.
 _SUBPROCESS_STREAM_LIMIT = 16 * 1024 * 1024  # 16 MB
 
+_CODEX_REASONING_SUMMARY_DEFAULT = "concise"
+_CODEX_REASONING_SUMMARY_VALUES = {"auto", "concise", "detailed", "none"}
+
 
 # ── Model name helpers ───────────────────────────────────────
 
@@ -582,6 +585,30 @@ def _format_file_changes(changes: list[Any]) -> str:
     return "; ".join(parts[:10])
 
 
+def _enum_text(value: Any) -> str:
+    return str(getattr(value, "value", value) or "")
+
+
+def _format_plan_update(payload: Any) -> str:
+    """Format Codex plan updates for the existing GUI thinking channel."""
+    lines: list[str] = []
+    explanation = _get_str(payload, "explanation").strip()
+    if explanation:
+        lines.append(explanation)
+
+    for step in _get_list(payload, "plan")[:10]:
+        step_text = _get_str(step, "step", "text").strip()
+        if not step_text:
+            continue
+        status_text = _enum_text(_get_attr(step, "status", "")).strip()
+        if status_text:
+            lines.append(f"[{status_text}] {step_text}")
+        else:
+            lines.append(step_text)
+
+    return "\n".join(lines)
+
+
 def _cli_exec_result_text(result: Any) -> str:
     """Extract text from a Codex CLI exec result payload."""
     if isinstance(result, dict):
@@ -979,6 +1006,28 @@ class CodexSDKExecutor(BaseExecutor):
             return Sandbox.full_access
         return Sandbox.workspace_write
 
+    def _sdk_reasoning_summary(self) -> Any | None:
+        raw_value = (self._model_config.extra_keys or {}).get(
+            "codex_reasoning_summary",
+            _CODEX_REASONING_SUMMARY_DEFAULT,
+        )
+        value = str(raw_value or _CODEX_REASONING_SUMMARY_DEFAULT).strip().lower()
+        if value in {"default", "true", "yes", "on"}:
+            value = _CODEX_REASONING_SUMMARY_DEFAULT
+        if value == "none":
+            return None
+        if value not in _CODEX_REASONING_SUMMARY_VALUES:
+            logger.warning(
+                "Invalid codex_reasoning_summary=%r; using %s",
+                raw_value,
+                _CODEX_REASONING_SUMMARY_DEFAULT,
+            )
+            value = _CODEX_REASONING_SUMMARY_DEFAULT
+
+        from openai_codex.generated.v2_all import ReasoningSummary, ReasoningSummaryValue
+
+        return ReasoningSummary(root=getattr(ReasoningSummaryValue, value))
+
     def _codex_thread_kwargs(self, system_prompt: str) -> dict[str, Any]:
         provider_config = _resolve_codex_provider_config(self._model_config)
         return {
@@ -993,12 +1042,16 @@ class CodexSDKExecutor(BaseExecutor):
 
     def _codex_turn_kwargs(self) -> dict[str, Any]:
         provider_config = _resolve_codex_provider_config(self._model_config)
-        return {
+        kwargs: dict[str, Any] = {
             "approval_mode": self._sdk_approval_mode(),
             "cwd": str(self._task_cwd or self._anima_dir),
             "model": provider_config.model,
             "sandbox": self._sdk_sandbox(),
         }
+        summary = self._sdk_reasoning_summary()
+        if summary is not None:
+            kwargs["summary"] = summary
+        return kwargs
 
     def _build_cli_exec_command(self) -> list[str]:
         """Build the `codex exec --json` command used as a runtime fallback."""
@@ -1433,6 +1486,7 @@ class CodexSDKExecutor(BaseExecutor):
         active_thread: Any = None
         usage_acc = TokenUsage()
         completed_turn_count = 0
+        thinking_started = False
 
         def _current_full_text() -> str:
             return "\n".join(response_text_by_item[item_id] for item_id in response_item_order if response_text_by_item[item_id])
@@ -1451,6 +1505,24 @@ class CodexSDKExecutor(BaseExecutor):
             if item_id not in response_text_by_item:
                 response_item_order.append(item_id)
             response_text_by_item[item_id] = text
+
+        def _thinking_delta_chunks(text: str) -> list[dict[str, Any]]:
+            nonlocal thinking_started
+            if not text:
+                return []
+            chunks: list[dict[str, Any]] = []
+            if not thinking_started:
+                thinking_started = True
+                chunks.append({"type": "thinking_start"})
+            chunks.append({"type": "thinking_delta", "text": text})
+            return chunks
+
+        def _thinking_end_chunk() -> dict[str, Any] | None:
+            nonlocal thinking_started
+            if not thinking_started:
+                return None
+            thinking_started = False
+            return {"type": "thinking_end"}
 
         async def _stream_turn(tid: str | None) -> AsyncGenerator[dict[str, Any], None]:
             nonlocal completed_turn_count, turn_result, active_thread
@@ -1518,6 +1590,9 @@ class CodexSDKExecutor(BaseExecutor):
 
                     if self._check_interrupted():
                         logger.info("Codex SDK streaming interrupted")
+                        end_chunk = _thinking_end_chunk()
+                        if end_chunk:
+                            yield end_chunk
                         yield {"type": "text_delta", "text": "[Session interrupted by user]"}
                         return
 
@@ -1534,9 +1609,30 @@ class CodexSDKExecutor(BaseExecutor):
                         continue
 
                     if method in ("item/reasoning/textDelta", "item/reasoning/summaryTextDelta"):
+                        item_id = _payload_item_id(payload)
                         delta = _payload_delta(payload)
                         if delta:
-                            yield {"type": "thinking_delta", "text": delta}
+                            if item_id:
+                                item_text_len[item_id] = item_text_len.get(item_id, 0) + len(delta)
+                            for chunk in _thinking_delta_chunks(delta):
+                                yield chunk
+                        continue
+
+                    if method == "item/plan/delta":
+                        item_id = _payload_item_id(payload)
+                        delta = _payload_delta(payload)
+                        if delta:
+                            if item_id:
+                                item_text_len[item_id] = item_text_len.get(item_id, 0) + len(delta)
+                            for chunk in _thinking_delta_chunks(delta):
+                                yield chunk
+                        continue
+
+                    if method == "turn/plan/updated":
+                        detail = _format_plan_update(payload)
+                        if detail:
+                            for chunk in _thinking_delta_chunks(detail):
+                                yield chunk
                         continue
 
                     if method == "item/commandExecution/outputDelta":
@@ -1589,14 +1685,15 @@ class CodexSDKExecutor(BaseExecutor):
                                     _remember_agent_delta(item_id, delta)
                                     yield {"type": "text_delta", "text": delta}
 
-                        elif item_type == "reasoning":
+                        elif item_type in ("reasoning", "plan"):
                             text = _extract_item_text(item)
                             if text:
                                 prev_len = item_text_len.get(item_id, 0)
                                 if len(text) > prev_len:
                                     delta = text[prev_len:]
                                     item_text_len[item_id] = len(text)
-                                    yield {"type": "thinking_delta", "text": delta}
+                                    for chunk in _thinking_delta_chunks(delta):
+                                        yield chunk
 
                         elif item_type in (
                             "command_execution",
@@ -1633,12 +1730,13 @@ class CodexSDKExecutor(BaseExecutor):
                                     repr(item)[:300],
                                 )
 
-                        elif item_type == "reasoning":
+                        elif item_type in ("reasoning", "plan"):
                             text = _extract_item_text(item)
                             if text:
                                 prev_len = item_text_len.get(item_id, 0)
                                 if len(text) > prev_len:
-                                    yield {"type": "thinking_delta", "text": text[prev_len:]}
+                                    for chunk in _thinking_delta_chunks(text[prev_len:]):
+                                        yield chunk
                                 item_text_len[item_id] = len(text)
 
                         elif item_type in (
@@ -1703,6 +1801,9 @@ class CodexSDKExecutor(BaseExecutor):
                         error_msg = _get_str(error_obj, "message")
                         if error_msg:
                             logger.error("Codex turn/completed error: %s", error_msg)
+                            end_chunk = _thinking_end_chunk()
+                            if end_chunk:
+                                yield end_chunk
                             yield {"type": "error", "message": f"[Codex turn failed: {error_msg}]"}
                         continue
 
@@ -1710,12 +1811,18 @@ class CodexSDKExecutor(BaseExecutor):
                         err_obj = _get_attr(payload, "error", None)
                         error_msg = _get_str(err_obj, "message") or str(err_obj or "")
                         logger.error("Codex turn.failed: %s", error_msg)
+                        end_chunk = _thinking_end_chunk()
+                        if end_chunk:
+                            yield end_chunk
                         yield {"type": "error", "message": f"[Codex turn failed: {error_msg}]"}
                         continue
 
                     if method == "error":
                         error_msg = _get_str(payload, "message") or str(payload)
                         logger.error("Codex error event: %s", error_msg)
+                        end_chunk = _thinking_end_chunk()
+                        if end_chunk:
+                            yield end_chunk
                         yield {"type": "error", "message": f"[Codex error: {error_msg}]"}
                         continue
 
@@ -1787,6 +1894,9 @@ class CodexSDKExecutor(BaseExecutor):
                 except Exception as e:
                     if _should_cli_exec_fallback(e):
                         logger.warning("Codex SDK streaming failed; falling back to `codex exec`")
+                        end_chunk = _thinking_end_chunk()
+                        if end_chunk:
+                            yield end_chunk
                         async for ev in self._execute_streaming_via_cli_exec(
                             system_prompt, prompt, tracker, trigger=trigger
                         ):
@@ -1795,6 +1905,9 @@ class CodexSDKExecutor(BaseExecutor):
                     logger.exception("Codex SDK streaming error")
                     partial = _current_full_text()
                     is_buffer_overflow = _is_limit_overrun(e)
+                    end_chunk = _thinking_end_chunk()
+                    if end_chunk:
+                        yield end_chunk
                     raise StreamDisconnectedError(
                         f"Codex SDK stream error: {e}",
                         partial_text=partial,
@@ -1812,6 +1925,9 @@ class CodexSDKExecutor(BaseExecutor):
                 )
 
             replied_to = self._read_replied_to_file()
+            end_chunk = _thinking_end_chunk()
+            if end_chunk:
+                yield end_chunk
             yield {
                 "type": "done",
                 "full_text": full_text,

@@ -9,6 +9,7 @@ All tests use mocks — no Codex CLI binary or API key required.
 """
 
 import asyncio
+import logging
 import os
 import tomllib
 from pathlib import Path
@@ -464,6 +465,31 @@ class TestExecutorInit:
         assert mock_config.call_args.kwargs["client_name"] == "animaworks"
         mock_codex.assert_called_once_with(fake_config)
 
+    def test_codex_turn_kwargs_requests_concise_reasoning_summary_by_default(self, executor):
+        kwargs = executor._codex_turn_kwargs()
+
+        assert kwargs["summary"].root.value == "concise"
+
+    def test_codex_turn_kwargs_can_disable_reasoning_summary(self, model_config, anima_dir):
+        model_config.extra_keys = {"codex_reasoning_summary": "none"}
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+
+        kwargs = exc._codex_turn_kwargs()
+
+        assert "summary" not in kwargs
+
+    def test_codex_turn_kwargs_invalid_reasoning_summary_falls_back_to_concise(
+        self, model_config, anima_dir, caplog
+    ):
+        caplog.set_level(logging.WARNING, logger="animaworks.execution.codex_sdk")
+        model_config.extra_keys = {"codex_reasoning_summary": "verbose"}
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+
+        kwargs = exc._codex_turn_kwargs()
+
+        assert kwargs["summary"].root.value == "concise"
+        assert "Invalid codex_reasoning_summary" in caplog.text
+
 
 # ── Config writing tests ─────────────────────────────────────
 
@@ -634,6 +660,7 @@ class TestBlockingExecution:
 
         assert isinstance(result, ExecutionResult)
         assert result.text == "Hello from Codex!"
+        assert mock_thread.run.call_args.kwargs["summary"].root.value == "concise"
         assert _load_thread_id(anima_dir, "chat") == "thread-001"
 
     @pytest.mark.asyncio
@@ -1317,6 +1344,13 @@ class TestProgressiveStreaming:
                 chunks.append(ev)
 
         assert [c["text"] for c in chunks if c["type"] == "thinking_delta"] == ["thinking"]
+        assert [c["type"] for c in chunks if c["type"].startswith("thinking")] == [
+            "thinking_start",
+            "thinking_delta",
+            "thinking_end",
+        ]
+        types = [c["type"] for c in chunks]
+        assert types.index("thinking_end") < types.index("done")
         tool_details = [c for c in chunks if c["type"] == "tool_detail"]
         assert {c["tool_name"] for c in tool_details} == {"mcp_tool", "file_change"}
         assert any(c["detail"] == "searching memory" for c in tool_details)
@@ -1324,6 +1358,106 @@ class TestProgressiveStreaming:
         done = next(c for c in chunks if c["type"] == "done")
         assert done["usage"]["input_tokens"] == 15
         assert done["usage"]["output_tokens"] == 9
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "method",
+        ["item/reasoning/textDelta", "item/reasoning/summaryTextDelta"],
+    )
+    async def test_app_server_reasoning_delta_notifications_yield_thinking_lifecycle(self, executor, method):
+        events = [
+            SimpleNamespace(
+                method=method,
+                payload=SimpleNamespace(item_id="reason-1", turn_id="turn-1", thread_id="thread-1", delta="thinking"),
+            ),
+            SimpleNamespace(
+                method="turn/completed",
+                payload=SimpleNamespace(turn=SimpleNamespace(id="turn-1", error=None), thread_id="thread-1"),
+            ),
+        ]
+        mock_thread = _mock_stream_thread("thread-1", events)
+        mock_codex = _mock_codex(mock_thread)
+
+        chunks = []
+        with patch.object(executor, "_create_codex_client", return_value=mock_codex):
+            tracker = ContextTracker(model="codex/o4-mini")
+            async for ev in executor.execute_streaming(
+                system_prompt="test",
+                prompt="inspect",
+                tracker=tracker,
+            ):
+                chunks.append(ev)
+
+        assert [c["type"] for c in chunks if c["type"].startswith("thinking")] == [
+            "thinking_start",
+            "thinking_delta",
+            "thinking_end",
+        ]
+        assert [c["text"] for c in chunks if c["type"] == "thinking_delta"] == ["thinking"]
+
+    @pytest.mark.asyncio
+    async def test_app_server_plan_notifications_yield_thinking_lifecycle(self, executor):
+        events = [
+            SimpleNamespace(
+                method="item/plan/delta",
+                payload=SimpleNamespace(
+                    item_id="plan-1",
+                    turn_id="turn-1",
+                    thread_id="thread-1",
+                    delta="Inspect current Codex stream",
+                ),
+            ),
+            SimpleNamespace(
+                method="turn/plan/updated",
+                payload=SimpleNamespace(
+                    thread_id="thread-1",
+                    turn_id="turn-1",
+                    explanation="Plan updated",
+                    plan=[
+                        SimpleNamespace(
+                            status=SimpleNamespace(value="in_progress"),
+                            step="Update executor",
+                        ),
+                        SimpleNamespace(status="pending", step="Add tests"),
+                    ],
+                ),
+            ),
+            SimpleNamespace(
+                method="item/updated",
+                payload=SimpleNamespace(
+                    item=SimpleNamespace(type="plan", id="plan-2", text="Review results"),
+                    turn_id="turn-1",
+                    thread_id="thread-1",
+                ),
+            ),
+            SimpleNamespace(
+                method="turn/completed",
+                payload=SimpleNamespace(turn=SimpleNamespace(id="turn-1", error=None), thread_id="thread-1"),
+            ),
+        ]
+        mock_thread = _mock_stream_thread("thread-1", events)
+        mock_codex = _mock_codex(mock_thread)
+
+        chunks = []
+        with patch.object(executor, "_create_codex_client", return_value=mock_codex):
+            tracker = ContextTracker(model="codex/o4-mini")
+            async for ev in executor.execute_streaming(
+                system_prompt="test",
+                prompt="inspect",
+                tracker=tracker,
+            ):
+                chunks.append(ev)
+
+        types = [c["type"] for c in chunks]
+        assert types.count("thinking_start") == 1
+        assert types.index("thinking_start") < types.index("thinking_delta")
+        assert types.index("thinking_end") < types.index("done")
+        thinking_text = "\n".join(c["text"] for c in chunks if c["type"] == "thinking_delta")
+        assert "Inspect current Codex stream" in thinking_text
+        assert "Plan updated" in thinking_text
+        assert "[in_progress] Update executor" in thinking_text
+        assert "[pending] Add tests" in thinking_text
+        assert "Review results" in thinking_text
 
     @pytest.mark.asyncio
     async def test_reasoning_events_yield_thinking_delta(self, executor, anima_dir):
@@ -1378,6 +1512,10 @@ class TestProgressiveStreaming:
 
         thinking = [e for e in events if e["type"] == "thinking_delta"]
         assert len(thinking) >= 2
+        types = [e["type"] for e in events]
+        assert types.count("thinking_start") == 1
+        assert types.index("thinking_start") < types.index("thinking_delta")
+        assert types.index("thinking_end") < types.index("done")
 
     @pytest.mark.asyncio
     async def test_tool_started_before_completed(self, executor, anima_dir):
