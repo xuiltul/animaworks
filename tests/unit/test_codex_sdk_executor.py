@@ -469,6 +469,7 @@ class TestExecutorInit:
         kwargs = executor._codex_turn_kwargs()
 
         assert kwargs["summary"].root.value == "concise"
+        assert "sandbox" not in kwargs
 
     def test_codex_turn_kwargs_can_disable_reasoning_summary(self, model_config, anima_dir):
         model_config.extra_keys = {"codex_reasoning_summary": "none"}
@@ -477,6 +478,7 @@ class TestExecutorInit:
         kwargs = exc._codex_turn_kwargs()
 
         assert "summary" not in kwargs
+        assert "sandbox" not in kwargs
 
     def test_codex_turn_kwargs_invalid_reasoning_summary_falls_back_to_concise(
         self, model_config, anima_dir, caplog
@@ -531,6 +533,8 @@ class TestConfigWriting:
         config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")
         assert "workspace-write" in config_toml
         assert "writable_roots" in config_toml
+        parsed = tomllib.loads(config_toml)
+        assert parsed["sandbox_workspace_write"]["network_access"] is True
 
     def test_write_codex_config_includes_model_name(self, executor, anima_dir):
         """config.toml must include model = "o4-mini" (stripped prefix)."""
@@ -661,6 +665,7 @@ class TestBlockingExecution:
         assert isinstance(result, ExecutionResult)
         assert result.text == "Hello from Codex!"
         assert mock_thread.run.call_args.kwargs["summary"].root.value == "concise"
+        assert "sandbox" not in mock_thread.run.call_args.kwargs
         assert _load_thread_id(anima_dir, "chat") == "thread-001"
 
     @pytest.mark.asyncio
@@ -860,6 +865,7 @@ class TestStreamingExecution:
         types = [e["type"] for e in events]
         assert "text_delta" in types
         assert "done" in types
+        assert "sandbox" not in mock_thread.turn.call_args.kwargs
         done_ev = next(e for e in events if e["type"] == "done")
         assert "Streamed text" in done_ev["full_text"]
         assert done_ev["result_message"].num_turns == 1
