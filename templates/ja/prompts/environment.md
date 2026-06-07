@@ -59,7 +59,8 @@ Your identity (identity.md) and role directives (injection.md) follow immediatel
 5. **プロンプト** (`{data_dir}/prompts/`): 読み取り専用。キャラクター設計ガイド等のテンプレート
 6. **他の社員のディレクトリ**: permissions.json に明示された範囲のみアクセス可能
 7. **配下のディレクトリ**（supervisorのみ。子・孫・曾孫…全配下に同じ権限）:
-   - **管理ファイル**: `injection.md`, `cron.md`, `heartbeat.md`, `status.json` は**読み書き可能**（組織運営に必要な辞令・設定変更）
+   - **管理ファイル**: `injection.md`, `cron.md`, `heartbeat.md`, `status.json` は**write memoryツール**（`read_memory_file` / `write_memory_file`）で読み書き可能（組織運営に必要な辞令・設定変更）。配下を指定するときは `../{anima_name}/cron.md` のような相対パスを使う
+   - 配下の管理ファイル編集では、Read / Write / Edit / apply_patch / `Path.write_text` / シェルリダイレクト等の直接ファイル操作を使わない
    - **状態参照**: `activity_log/`, `state/current_state.md`（ワーキングメモリ）, `state/task_queue.jsonl`, `state/pending/` は**読み取りのみ**
    - **identity.md**: **読み取りのみ**（書き込み保護）
 8. **同僚のactivity_log**: 同じsupervisorを持つ同僚の `activity_log/` は読み取り可能（検証用）。書き込みは不可

@@ -298,6 +298,12 @@ Animaには判断・分析・報告に集中させること。
 
 ## cron.md操作手順
 
+### 対象パスと配下編集
+
+- 自分の `cron.md` は `read_memory_file(path="cron.md")` で読み、`write_memory_file(path="cron.md", ...)` で更新する。
+- 上司が配下 Anima の `cron.md` / `heartbeat.md` / `injection.md` / `status.json` を編集する場合も、Read / Write / Edit / apply_patch / `Path.write_text` / シェルリダイレクト等の直接ファイル操作は使わない。
+- 配下の管理ファイルは write memoryツールで `../{anima_name}/cron.md` のように指定して編集する（例: `../yuki/cron.md`）。対象は自分の全配下（子・孫以下）。`identity.md` は読み取りのみ。
+
 ### 新規タスク追加
 
 1. 自分の `cron.md` を読み込む
@@ -440,7 +446,7 @@ type: llm
 
 ## 注意事項
 
-- **ホットリロード**: `cron.md` / `heartbeat.md` を Anima の `write_memory_file` 等で更新すると、スケジュール変更コールバックで `reload_schedule` が走り即時再登録される。外部の直接編集は、次回 **heartbeat または任意の cron が発火する直前** の mtime チェック（`_check_schedule_freshness`）でも検出され、同様にリロードされる
+- **ホットリロード**: `cron.md` / `heartbeat.md` を Anima の `write_memory_file` 等で更新すると、スケジュール変更コールバックで `reload_schedule` が走り即時再登録される。配下管理ファイルの編集も `../{anima_name}/cron.md` のように write memoryツールで行う。外部の直接編集は、次回 **heartbeat または任意の cron が発火する直前** の mtime チェック（`_check_schedule_freshness`）でも検出されるが、上司による配下編集の標準手順にはしない
 - **リロード直後の古いジョブ**: mtime 変化を検知したタイミングでスケジューラが再構築されると、**直前の定義に紐づいた cron 発火は「stale」としてスキップ**されうる（意図的な二重実行防止）
 - **タイムゾーン**: APScheduler は `get_app_timezone()` を使用。`config.json` の `system.timezone` に IANA 名（例: `Asia/Tokyo`）を設定可能。**空文字**のときは OS タイムゾーンを自動検出し、失敗時は `Asia/Tokyo` にフォールバック
 - **同時実行**: **タスク名が異なれば**、同一分に複数ジョブが重なっても `asyncio.create_task` により並行しうる。同一タスク名は実行中に再入しない（`_cron_running` でスキップ）。各ジョブは `max_instances=1`

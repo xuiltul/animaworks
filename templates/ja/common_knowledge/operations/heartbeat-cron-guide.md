@@ -68,6 +68,8 @@ TaskExec が JSON を `processing/` へ移動したうえで LLM セッション
 各 Anima には名前ベースの 0〜9 分オフセットが付与され、同時起動を分散する。
 ファイルパス: `~/.animaworks/animas/{name}/heartbeat.md`
 
+上司が配下 Anima の `heartbeat.md` を編集する場合は、直接ファイル操作ではなく `read_memory_file` / `write_memory_file` を使い、`../{anima_name}/heartbeat.md` のような相対パスで指定する。
+
 ### フォーマット
 
 ```markdown
@@ -280,6 +282,8 @@ Cron は「決められた時間に自動実行されるタスク」。ハート
 
 Cron タスクは `cron.md` に Markdown + YAML 形式で定義する。
 ファイルパス: `~/.animaworks/animas/{name}/cron.md`
+
+上司が配下 Anima の `cron.md` を編集する場合は、直接ファイル操作ではなく `read_memory_file` / `write_memory_file` を使い、`../{anima_name}/cron.md` のような相対パスで指定する。
 
 ### 基本フォーマット
 
@@ -540,6 +544,7 @@ type: llm
 
 cron.md を更新すると、heartbeat.md と同様にスケジュールが自動リロードされる。
 Anima 自身が cron.md を書き換えた場合も即座に反映される（self-modify パターン）。
+配下 Anima の `cron.md` / `heartbeat.md` / `injection.md` / `status.json` を上司が編集する場合も、write memoryツールで `../{anima_name}/cron.md` のように指定する。Read / Write / Edit / apply_patch / `Path.write_text` / シェルリダイレクト等の直接ファイル操作は使わない。
 
 リロード時の動作:
 1. 該当 Anima の既存 cron ジョブを全て削除
