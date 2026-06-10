@@ -14,6 +14,7 @@ import asyncio
 import logging
 import re
 import shutil
+import subprocess
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from typing import Any
 from core.time_utils import now_local, today_local
 
 logger = logging.getLogger("animaworks.housekeeping")
+_PRESERVED_TMP_SUBDIRS = frozenset({"attachments", "skill_hub"})
 
 
 # ── Public API ──────────────────────────────────────────────────
@@ -642,8 +644,22 @@ def _cleanup_runtime_tmp(tmp_dir: Path, retention_days: int) -> dict[str, Any]:
     for entry in sorted(tmp_dir.iterdir()):
         if entry.name.startswith("."):
             continue
+        if entry.is_symlink():
+            skipped_count += 1
+            continue
         try:
-            if entry.stat().st_mtime >= cutoff_ts:
+            if entry.name in _PRESERVED_TMP_SUBDIRS and entry.is_dir():
+                nested = _cleanup_runtime_tmp_contents(entry, cutoff_ts)
+                deleted_entries += nested["deleted_entries"]
+                freed_bytes += nested["freed_bytes"]
+                skipped_count += nested["skipped_count"]
+                errors.extend(nested["errors"])
+                continue
+            if not _path_tree_older_than(entry, cutoff_ts):
+                continue
+            if _path_has_open_files(entry):
+                skipped_count += 1
+                logger.warning("Runtime tmp entry is open; skipping: %s", entry)
                 continue
             size = _path_size(entry)
             _remove_path(entry)
@@ -664,6 +680,60 @@ def _cleanup_runtime_tmp(tmp_dir: Path, retention_days: int) -> dict[str, Any]:
     }
 
 
+def _cleanup_runtime_tmp_contents(root: Path, cutoff_ts: float) -> dict[str, Any]:
+    """Clean old children inside a preserved tmp subdir without deleting it."""
+    deleted_entries = 0
+    freed_bytes = 0
+    skipped_count = 0
+    errors: list[str] = []
+
+    for entry in sorted(root.iterdir()):
+        if entry.name.startswith(".") or entry.is_symlink():
+            skipped_count += 1
+            continue
+        try:
+            if not _path_tree_older_than(entry, cutoff_ts):
+                continue
+            if _path_has_open_files(entry):
+                skipped_count += 1
+                logger.warning("Runtime tmp entry is open; skipping: %s", entry)
+                continue
+            size = _path_size(entry)
+            _remove_path(entry)
+            deleted_entries += 1
+            freed_bytes += size
+        except OSError as exc:
+            logger.warning("Failed to delete runtime tmp entry: %s", entry, exc_info=True)
+            skipped_count += 1
+            errors.append(f"{entry}: {exc}")
+
+    return {
+        "deleted_entries": deleted_entries,
+        "freed_bytes": freed_bytes,
+        "skipped_count": skipped_count,
+        "errors": errors,
+    }
+
+
+def _path_tree_older_than(path: Path, cutoff_ts: float) -> bool:
+    if path.stat().st_mtime >= cutoff_ts:
+        return False
+    if path.is_dir() and not path.is_symlink():
+        for child in path.rglob("*"):
+            if child.stat().st_mtime >= cutoff_ts:
+                return False
+    return True
+
+
+def _path_has_open_files(path: Path) -> bool:
+    lsof = shutil.which("lsof")
+    if not lsof:
+        return False
+    cmd = [lsof, "+D", str(path)] if path.is_dir() else [lsof, "--", str(path)]
+    result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    return result.returncode == 0
+
+
 def _cleanup_backup_dirs(animas_dir: Path, retention_days: int) -> dict[str, Any]:
     """Delete old explicit backup directories such as assets_backup_*."""
     if not animas_dir.exists():
@@ -674,7 +744,9 @@ def _cleanup_backup_dirs(animas_dir: Path, retention_days: int) -> dict[str, Any
     freed_bytes = 0
 
     for anima_dir in sorted(p for p in animas_dir.iterdir() if p.is_dir()):
-        for backup_dir in sorted(p for p in anima_dir.rglob("*_backup_*") if p.is_dir() and not p.is_symlink()):
+        for backup_dir in sorted(p for p in anima_dir.iterdir() if p.is_dir() and not p.is_symlink()):
+            if "_backup_" not in backup_dir.name:
+                continue
             try:
                 if backup_dir.stat().st_mtime >= cutoff_ts:
                     continue

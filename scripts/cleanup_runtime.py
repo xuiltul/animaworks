@@ -10,12 +10,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import shutil
 import subprocess
 import tarfile
 import tempfile
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from core.time_utils import now_local, today_local
 from core.tmp_cleanup import format_size
 
 logger = logging.getLogger("animaworks.cleanup_runtime")
+_CORRUPT_VECTORDB_RE = re.compile(r"^(?:vectordb-corrupt|corrupt-vectordb)[-_](?P<stamp>\d{8}[-_]?\d{6}|\d{14})")
 
 
 @dataclass(frozen=True)
@@ -77,7 +79,7 @@ def collect_cleanup_targets(
         for path in sorted(animas_dir.rglob("*.bloated.bak")):
             _add_target(targets, path, "bloated activity log backup")
 
-        cutoff_ts = (now_local() - timedelta(days=corrupt_archive_age_days)).timestamp()
+        cutoff = now_local() - timedelta(days=corrupt_archive_age_days)
         for archive_dir in sorted(animas_dir.glob("*/archive")):
             if not archive_dir.is_dir():
                 continue
@@ -86,10 +88,11 @@ def collect_cleanup_targets(
                     continue
                 if not (path.name.startswith("vectordb-corrupt-") or path.name.startswith("corrupt-vectordb-")):
                     continue
-                try:
-                    if path.stat().st_mtime >= cutoff_ts:
-                        continue
-                except OSError:
+                archive_time = _corrupt_archive_datetime(path)
+                if archive_time is None:
+                    logger.warning("Skipping corrupt vectordb archive with unparsable timestamp: %s", path)
+                    continue
+                if archive_time >= cutoff:
                     continue
                 _add_target(targets, path, f"corrupt vectordb archive older than {corrupt_archive_age_days}d")
 
@@ -219,6 +222,17 @@ def _remove_path(path: Path) -> None:
         path.unlink(missing_ok=True)
 
 
+def _corrupt_archive_datetime(path: Path) -> datetime | None:
+    match = _CORRUPT_VECTORDB_RE.match(path.name)
+    if not match:
+        return None
+    stamp = match.group("stamp").replace("_", "").replace("-", "")
+    try:
+        return datetime.strptime(stamp, "%Y%m%d%H%M%S").replace(tzinfo=now_local().tzinfo)
+    except ValueError:
+        return None
+
+
 def _path_has_open_files(path: Path) -> bool:
     """Return true when lsof can prove that *path* is open by a process."""
     lsof = shutil.which("lsof")
@@ -234,7 +248,7 @@ def _archive_targets(root: Path, archive_path: Path, targets: list[CleanupTarget
     tar = shutil.which("tar")
     if tar:
         result = subprocess.run(
-            [tar, "--zstd", "-cf", str(archive_path), "-C", str(root), *rels],
+            [tar, "--zstd", "-cf", str(archive_path), "-C", str(root), "--", *rels],
             capture_output=True,
             text=True,
             check=False,

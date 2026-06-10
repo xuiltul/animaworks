@@ -23,11 +23,16 @@ def test_collect_cleanup_targets_lists_residue_and_estimated_reclaim(tmp_path: P
     corrupt = data_dir / "animas" / "rin" / "archive" / "vectordb-corrupt-20260101-010101"
     corrupt.mkdir(parents=True)
     (corrupt / "chroma.sqlite3").write_bytes(b"y" * 20)
-    _old(corrupt)
+    # Directory name timestamp, not mtime, determines age. This simulates a
+    # copied old archive with a fresh mtime.
 
     config_bak = data_dir / "config.json.bak.1"
     config_bak.parent.mkdir(parents=True, exist_ok=True)
     config_bak.write_bytes(b"z" * 5)
+    recent_named_corrupt = data_dir / "animas" / "rin" / "archive" / "vectordb-corrupt-20990101-010101"
+    recent_named_corrupt.mkdir()
+    (recent_named_corrupt / "chroma.sqlite3").write_bytes(b"recent")
+    _old(recent_named_corrupt)
     memory = data_dir / "animas" / "sanae" / "knowledge" / "keep.md"
     memory.parent.mkdir(parents=True)
     memory.write_text("do not delete", encoding="utf-8")
@@ -48,6 +53,7 @@ def test_collect_cleanup_targets_lists_residue_and_estimated_reclaim(tmp_path: P
     assert bloated.exists()
     assert corrupt.exists()
     assert config_bak.exists()
+    assert recent_named_corrupt.exists()
     assert memory.exists()
 
 

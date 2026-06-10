@@ -706,12 +706,30 @@ class TestRuntimeBloatRetention:
         os.utime(old_file, (old_time, old_time))
         recent_file = tmp_dir / "recent.tmp"
         recent_file.write_text("recent")
+        old_dir_with_recent_child = tmp_dir / "old-dir-with-recent-child"
+        old_dir_with_recent_child.mkdir()
+        recent_child = old_dir_with_recent_child / "recent.txt"
+        recent_child.write_text("recent")
+        os.utime(old_dir_with_recent_child, (old_time, old_time))
+        attachments = tmp_dir / "attachments"
+        attachments.mkdir()
+        old_attachment = attachments / "old.bin"
+        old_attachment.write_text("old")
+        os.utime(old_attachment, (old_time, old_time))
+        recent_attachment = attachments / "recent.bin"
+        recent_attachment.write_text("recent")
+        os.utime(attachments, (old_time, old_time))
 
         result = _cleanup_runtime_tmp(tmp_dir, retention_days=14)
 
-        assert result["deleted_entries"] == 1
+        assert result["deleted_entries"] == 2
         assert not old_file.exists()
         assert recent_file.exists()
+        assert old_dir_with_recent_child.exists()
+        assert recent_child.exists()
+        assert attachments.exists()
+        assert not old_attachment.exists()
+        assert recent_attachment.exists()
 
     def test_backup_dirs_delete_only_old_backup_patterns(self, tmp_path: Path):
         from core.memory.housekeeping import _cleanup_backup_dirs
@@ -727,6 +745,9 @@ class TestRuntimeBloatRetention:
         recent_backup.mkdir()
         keep_memory = anima / "knowledge"
         keep_memory.mkdir()
+        nested_memory_backup = keep_memory / "assets_backup_20260201"
+        nested_memory_backup.mkdir()
+        os.utime(nested_memory_backup, (old_time, old_time))
 
         result = _cleanup_backup_dirs(tmp_path, retention_days=90)
 
@@ -734,3 +755,4 @@ class TestRuntimeBloatRetention:
         assert not old_backup.exists()
         assert recent_backup.exists()
         assert keep_memory.exists()
+        assert nested_memory_backup.exists()
