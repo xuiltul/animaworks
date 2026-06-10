@@ -943,7 +943,7 @@ Group 6: メタ設定
 
 **段階的システムプロンプト（Tiered System Prompt）:** コンテキストウィンドウに応じて4段階（T1 FULL 128k+ / T2 STANDARD 32k〜128k / T3 LIGHT 16k〜32k / T4 MINIMAL 16k未満）でプロンプト内容を調整する。
 
-**スキル注入（段階開示）:** スキルは現在のPriming本体で自動注入せず、active skill context、Skill Router、Skill Hub、`skill` ツール、`read_memory_file` を通じて必要時に読み込む。大量のスキルを常に全文注入せず、名前・説明・ポインタを起点に段階的に読む。
+**スキル注入（段階開示）:** スキルは現在のPriming本体で自動注入せず、active skill context、Skill Router、Skill Hub、`read_memory_file` を通じて必要時に読み込む。大量のスキルを常に全文注入せず、名前・説明・ポインタを起点に段階的に読む。
 
 「記憶を検索せずに判断するのは禁止」を `behavior_rules` に含めることが書庫型記憶の成功の鍵（実験で検証済み）。
 
@@ -972,7 +972,7 @@ Group 6: メタ設定
 - **FastAPIサーバー** — REST（`/api`）+ ダッシュボード WebSocket（`/ws`）+ 音声（`/ws/voice/{name}`）+ 初回セットアップウィザード（`/setup`）+ SPA（`#/chat` 等）+ Workspace（`/workspace`）。内部 embed/vector API で子プロセス RAG を集約、会議室 API+SSE、`StreamRegistry` / `ConfigReloadManager`、Slack Socket Mode 統合
 - **音声チャット** — WebSocket /ws/voice/{name}。STT（faster-whisper）→ Chat IPC → TTS（VOICEVOX/ElevenLabs/SBV2）
 - **Anima生成** — テンプレート / 空白（_blank）/ MDファイル（create --from-md）からの生成
-- **スキル段階開示** — マッチしたスキル名のみ注入。全文は `skill` ツールでオンデマンド読み込み
+- **スキル段階開示** — マッチしたスキル名やポインタのみ注入。全文は `read_memory_file` でオンデマンド読み込み
 - **外部メッセージング統合** — Slack Socket Mode（リアルタイム双方向）, Chatwork Webhook（受信）
 - **永続タスクキュー** — task_queue.jsonl。滞留検知・DAG並列実行（submit_tasks）・委任プロンプト注入
 - **解決レジストリ** — shared/resolutions.jsonlによるAnima横断の課題解決追跡
@@ -1018,7 +1018,6 @@ Group 6: メタ設定
 
 | ツール | 説明 |
 |--------|------|
-| `skill` | スキル参照（段階開示: 名前一覧→全文オンデマンド） |
 | `create_skill` | 新規スキルの作成 |
 
 **Vault:**

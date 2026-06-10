@@ -180,7 +180,9 @@ class TestPrimingChannelsReference:
             for path in root.rglob("*.md")
             if not any(part in {"legacy", "implemented", "research"} for part in path.parts)
         ]
-        pattern = re.compile(r"Channel D|channel D|channel_d|`skill` tool|skill tool")
+        pattern = re.compile(
+            r"Channel D|channel D|channel_d|`skill`\s*(?:/|\||tool|ツール|도구)|`skill` tool|skill tool"
+        )
         for path in paths:
             content = path.read_text(encoding="utf-8")
             assert not pattern.search(content), f"{path} contains obsolete priming/skill-tool wording"

@@ -127,7 +127,7 @@ search_memory(query="SSL証明書 更新", scope="procedures")
 **実行可能な手順書・ツール使用ガイド**。「特技」に相当する。
 
 - 個人スキル（`skills/`）と共通スキル（`common_skills/`）がある
-- 必要なスキルは active skill context、Skill Router、`skill` ツール、または `read_memory_file(path="...")` で読む
+- 必要なスキルは active skill context、Skill Router、Skill Hub、または `read_memory_file(path="...")` で読む
 - スキル本文を常に全部読む必要はない。まず名前・説明・ポインタを見て、必要になった時だけ本文を読む
 - 実績のある `procedures/` は probation skill や quarantine skill として昇格することがある
 - **ベクトルストア上は常に忘却対象外**（`skills` / `shared_users` 型は保護）

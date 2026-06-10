@@ -121,7 +121,7 @@ search_memory(query="SSL 인증서 갱신", scope="procedures")
 **실행 가능한 절차서 및 도구 사용 가이드**입니다. "특기"에 해당합니다.
 
 - 개인 스킬 (`skills/`)과 공통 스킬 (`common_skills/`)이 있음
-- 필요한 스킬은 active skill context, Skill Router, `skill` 도구 또는 `read_memory_file(path="...")`로 읽음
+- 필요한 스킬은 active skill context, Skill Router, Skill Hub 또는 `read_memory_file(path="...")`로 읽음
 - 스킬 본문을 항상 전부 읽을 필요는 없음. 먼저 이름, 설명, 포인터를 보고 필요할 때만 전문을 읽음
 - 실적이 있는 `procedures/`는 probation skill 또는 quarantine skill로 승격될 수 있음
 - **벡터 저장소에서는 항상 망각 대상에서 제외됨** (`skills` / `shared_users` 유형 보호)
