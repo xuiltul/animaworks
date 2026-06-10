@@ -3,7 +3,7 @@
 PrimingEngine が実行する全チャネルの詳細仕様。
 バジェット、検索ソース、フィルタリング、動的調整を含む。
 
-並列取得は **5 チャネル**（A / B / C / E / F）である。C0（important_knowledge）は Channel C と同一パイプライン内の補助ブロック。旧 Distilled Knowledge に相当した Channel D や「6 チャネル」表記は廃止済み。
+並列取得は **6 チャネル**（A / B / C / E / F / G）である。C0（important_knowledge）は Channel C と同一パイプライン内の補助ブロック。旧 Distilled Knowledge は独立したプライミングチャネルではなくなった。
 
 ---
 
@@ -13,10 +13,11 @@ PrimingEngine が実行する全チャネルの詳細仕様。
 |---------|---------------------|--------|-------|
 | A: sender_profile | 500 | `shared/users/{sender}/index.md` | medium |
 | B: recent_activity | 1300 | `activity_log/` + shared channels | trusted |
-| C: related_knowledge | 1200 | RAG ベクトル検索（knowledge + common_knowledge） | medium / untrusted |
-| C0: important_knowledge | 300 | `[IMPORTANT]` タグ付きチャンク | medium |
+| C: related_knowledge | 1000 | RAG ベクトル検索（knowledge + common_knowledge） | medium / untrusted |
+| C0: important_knowledge | 500 | `[IMPORTANT]` タグ付きチャンク | medium |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
-| F: episodes | 500 | RAG ベクトル検索（episodes/） | medium |
+| F: episodes | 800 | RAG ベクトル検索（episodes/） | medium |
+| G: graph_context | 500 | MemoryBackend の community context + recent facts | medium |
 
 追加注入:
 
@@ -61,7 +62,7 @@ PrimingEngine が実行する全チャネルの詳細仕様。
 
 RAG ベクトル検索で関連知識を注入する。
 
-- **バジェット**: 1200トークン
+- **バジェット**: 1000トークン
 - **検索方式**: Dual-query（メッセージコンテキスト + キーワードのみ）
 - **検索対象**: 個人 `knowledge/` + `shared_common_knowledge` コレクション
 - **最小スコア**: `config.json` の `rag.min_retrieval_score`（デフォルト 0.3）
@@ -81,7 +82,7 @@ RAG ベクトル検索で関連知識を注入する。
 
 `[IMPORTANT]` タグ付きチャンクの概要ポインタを常時注入する。
 
-- **バジェット**: 300トークン
+- **バジェット**: 500トークン
 - **対象**: `knowledge/` 内の `[IMPORTANT]` タグ付きチャンク
 - **注入形式**: 概要ポインタのみ（全文ではない）。詳細は `read_memory_file` で取得
 - **用途**: 重要な業務ルール・判断基準の確実な想起
@@ -109,9 +110,19 @@ RAG ベクトル検索で関連知識を注入する。
 
 RAG ベクトル検索で関連エピソードを注入する。
 
-- **バジェット**: 500トークン
+- **バジェット**: 800トークン
 - **検索対象**: `episodes/` コレクション（ChromaDB）
 - **最小スコア**: Channel C と共通（`rag.min_retrieval_score`）
+
+---
+
+## Channel G: graph_context
+
+MemoryBackend から graph/community context と recent facts を注入する。
+
+- **バジェット**: 500トークン
+- **ソース**: `MemoryBackend.get_priming_context()`
+- **バックエンド利用不可時**: スキップ
 
 ---
 
@@ -124,7 +135,7 @@ RAG ベクトル検索で関連エピソードを注入する。
 | メッセージタイプ | バジェット | 設定キー |
 |----------------|-----------|---------|
 | greeting | 500 | `priming.budget_greeting` |
-| question | 1500 | `priming.budget_question` |
+| question | 2000 | `priming.budget_question` |
 | request | 3000 | `priming.budget_request` |
 | heartbeat（フォールバック） | 200 | `priming.budget_heartbeat` |
 
@@ -141,4 +152,4 @@ heartbeat_budget = max(budget_heartbeat, context_window × heartbeat_context_pct
 
 ## Hebbian LTP（長期増強）
 
-Priming で検索・表示されたチャンクは `record_access()` により活性度が更新される。これにより、頻繁に想起される記憶の忘却が防止される（Forgetting エンジンとの連携）。
+Priming で検索・表示されたチャンクは `record_access(kind="retrieved")` により軽量な検索記録が更新される。`read_memory_file` や outcome 報告による明示的な使用は `used` として記録され、忘却保護はこの明示使用を基準にする。

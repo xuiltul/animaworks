@@ -947,7 +947,7 @@ Group 6: Meta settings
 
 **Tiered System Prompt:** Adjusts prompt content in 4 tiers based on context window (T1 FULL 128k+ / T2 STANDARD 32k–128k / T3 LIGHT 16k–32k / T4 MINIMAL <16k).
 
-**Skill injection (progressive disclosure):** Skills are not loaded wholesale by the main priming body. Active skill context, the Skill Router, Skill Hub, the `skill` tool, and `read_memory_file` provide the body or pointer only when needed. Message-type budgets still apply to the surrounding priming context: greeting=500, question=2000, request=3000, heartbeat=200 (`PrimingConfig` defaults).
+**Skill injection (progressive disclosure):** Skills are not loaded wholesale by the main priming body. Active skill context, the Skill Router, Skill Hub, and `read_memory_file` provide the body or pointer only when needed. Message-type budgets still apply to the surrounding priming context: greeting=500, question=2000, request=3000, heartbeat=200 (`PrimingConfig` defaults).
 
 Including "Making decisions without searching memory is prohibited" in `behavior_rules` is the key to the success of archive-based memory (validated experimentally).
 
@@ -975,7 +975,7 @@ Including "Making decisions without searching memory is prohibited" in `behavior
 - **FastAPI server** — REST (`/api`) + dashboard WebSocket (`/ws`) + voice (`/ws/voice/{name}`) + first-run setup wizard (`/setup`) + SPA (`#/chat`, etc.) + Workspace (`/workspace`). Internal embed/vector API centralizes child-process RAG; meeting room API + SSE; `StreamRegistry` / `ConfigReloadManager`; Slack Socket Mode integration
 - **Voice chat** — WebSocket /ws/voice/{name}. STT (faster-whisper) → Chat IPC → TTS (VOICEVOX/ElevenLabs/SBV2)
 - **Anima creation** — From template / blank (_blank) / MD file (create --from-md)
-- **Skill progressive disclosure** — Active skill context, Skill Router, and `skill` / `read_memory_file` load full text only when needed
+- **Skill progressive disclosure** — Active skill context, Skill Router, Skill Hub, and `read_memory_file` load full text only when needed
 - **External messaging integration** — Slack Socket Mode (real-time bidirectional), Chatwork Webhook (inbound)
 - **TaskBoard / persistent task queue** — TaskBoard is primary for current, processing, deferred, suppressed, background, and completed work; task_queue.jsonl remains as compatibility fallback. Includes staleness detection, DAG parallel execution (`submit_tasks`), and delegation prompt context
 - **Resolution registry** — Cross-Anima issue resolution tracking via shared/resolutions.jsonl
@@ -1021,7 +1021,6 @@ Internal tools provided by the framework. Combines Claude Code–compatible tool
 
 | Tool | Description |
 |------|-------------|
-| `skill` | Skill lookup (progressive disclosure: names only → full text on demand) |
 | `create_skill` | Create a new skill |
 
 **Vault:**

@@ -29,7 +29,7 @@
 | `core/tooling/handler.py` | Direct | write_memory_file後のRAGインデックス更新、report_procedure_outcome追加 |
 | `core/tooling/schemas.py` | Direct | report_procedure_outcomeツールスキーマ追加 |
 | `core/memory/rag/indexer.py` | Direct | proceduresのfrontmatterストリップ |
-| `core/memory/priming.py` | Indirect | Channel Dでproceduresも検索対象に |
+| `core/prompt/builder.py`, `core/skills/index.py` | Indirect | 現行の SkillIndex / Skill Router / catalog 経路で procedures も候補化 |
 
 ## Decided Approach / 確定方針
 
@@ -64,7 +64,7 @@
 | `core/tooling/handler.py` | Modify | write_memory_file後のRAGインデックス更新追加、`_handle_report_procedure_outcome()`追加、proceduresのソフトバリデーション追加 |
 | `core/tooling/schemas.py` | Modify | `report_procedure_outcome`ツールスキーマ追加 |
 | `core/memory/rag/indexer.py` | Modify | procedures/のfrontmatterストリップ処理追加 |
-| `core/memory/priming.py` | Modify | Channel Dでprocedures/も検索対象に追加 |
+| `core/prompt/builder.py`, `core/skills/index.py` | Modify | 現行の SkillIndex / Skill Router / catalog 経路で procedures/ も提示 |
 | `core/memory/conversation.py` | Modify | セッション境界時に注入された手順の成否を追跡・記録 |
 
 #### Change 1: procedures frontmatter
@@ -179,7 +179,7 @@ async def _handle_report_procedure_outcome(self, args):
 |---|------|--------|
 | 2-1 | `match_skills_by_description()` をprocedures対応に拡張（共通化） | `core/memory/manager.py` |
 | 2-2 | builder.pyでprocedures/もマッチング対象に追加、注入追跡記録 | `core/prompt/builder.py` |
-| 2-3 | Priming Channel Dにprocedures/を追加 | `core/memory/priming.py` |
+| 2-3 | 現行の SkillIndex / Skill Router / catalog 経路で procedures/ を提示 | `core/prompt/builder.py`, `core/skills/index.py` |
 | 2-4 | Phase 2のユニットテスト | `tests/` |
 
 **Completion condition**: procedures/がメッセージに基づいて自動マッチングされ、システムプロンプトに注入される
@@ -242,6 +242,7 @@ async def _handle_report_procedure_outcome(self, args):
 - `core/tooling/handler.py:425-486` — `_handle_write_memory_file()` RAGインデックス更新なし
 - `core/tooling/handler.py:110-168` — `_validate_skill_format()` skillsバリデーション
 - `core/memory/rag/indexer.py:232-253` — procedures/のチャンキング（whole_file方式）
-- `core/memory/priming.py:480-542` — Channel D（スキルマッチ）
+- `core/prompt/builder.py` — Skill catalog / active skill context / procedure pointers
+- `core/memory/manager.py` — `search_procedures()` and procedure metadata facade
 - [VOYAGER](https://arxiv.org/abs/2305.16291) — スキルライブラリの検証パイプライン
 - [ExpeL](https://arxiv.org/abs/2308.10144) — 洞察の投票システム（UPVOTE/DOWNVOTE）

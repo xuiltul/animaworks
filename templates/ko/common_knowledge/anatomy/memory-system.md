@@ -121,7 +121,7 @@ search_memory(query="SSL 인증서 갱신", scope="procedures")
 **실행 가능한 절차서 및 도구 사용 가이드**입니다. "특기"에 해당합니다.
 
 - 개인 스킬 (`skills/`)과 공통 스킬 (`common_skills/`)이 있음
-- 필요한 스킬은 active skill context, Skill Router, `skill` 도구 또는 `read_memory_file(path="...")`로 읽음
+- 필요한 스킬은 active skill context, Skill Router, Skill Hub 또는 `read_memory_file(path="...")`로 읽음
 - 스킬 본문을 항상 전부 읽을 필요는 없음. 먼저 이름, 설명, 포인터를 보고 필요할 때만 전문을 읽음
 - 실적이 있는 `procedures/`는 probation skill 또는 quarantine skill로 승격될 수 있음
 - **벡터 저장소에서는 항상 망각 대상에서 제외됨** (`skills` / `shared_users` 유형 보호)
@@ -156,7 +156,7 @@ create_skill(skill_name="deploy-procedure", description="운영 배포 절차", 
 | 일화 | `episodes` RAG 검색 | 800 |
 | 그래프 문맥 | memory backend의 community context와 recent facts | 500 |
 
-스킬과 절차는 필요할 때 `skill` 도구, active skill context, `read_memory_file`, 또는 `search_memory(scope="skills")`로 읽습니다. 스킬 본문 전체가 항상 자동 주입되는 설계는 아닙니다.
+스킬과 절차는 필요할 때 active skill context, Skill Hub, `read_memory_file`, 또는 `search_memory(scope="skills")`로 읽습니다. 스킬 본문 전체가 항상 자동 주입되는 설계는 아닙니다.
 
 일반 경로에서는 인사, 질문, 요청, heartbeat 등 메시지 종류에 따라 전체 상한이 달라집니다. `config.json`의 `priming.budget_*`와 `heartbeat_context_pct`로 조정할 수 있습니다.
 

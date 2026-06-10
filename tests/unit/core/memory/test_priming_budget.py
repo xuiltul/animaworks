@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -9,11 +10,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from core.time_utils import today_local
-
 import pytest
 
 from core.memory.priming import PrimingEngine
+from core.time_utils import today_local
 
 
 @pytest.fixture
@@ -168,19 +168,10 @@ async def test_disabled_dynamic_budget(temp_anima_dir):
 
 def test_budget_distribution(temp_anima_dir):
     """Test that budget is distributed proportionally across channels."""
-    engine = PrimingEngine(temp_anima_dir)
-
-    # Default budget distribution:
-    # - Sender profile: 500 / 2000 = 25%
-    # - Recent episodes: 600 / 2000 = 30%
-    # - Related knowledge: 700 / 2000 = 35%
-    # - Skill match: 200 / 2000 = 10%
-
-    # With greeting budget (500 tokens):
-    # - Sender profile: 500 * 0.25 = 125 tokens
-    # - Recent episodes: 500 * 0.30 = 150 tokens
-    # - Related knowledge: 500 * 0.35 = 175 tokens
-    # - Skill match: 500 * 0.10 = 50 tokens
+    # Current distribution is maintained in core.memory.priming.constants:
+    # sender profile, recent activity, related/important knowledge, pending
+    # tasks, related episodes, and graph context. Skills are handled outside
+    # the main priming body.
 
     # This is tested indirectly through the priming flow
     # Direct testing would require mocking internal truncate logic
@@ -260,7 +251,7 @@ def test_non_heartbeat_budget_unaffected_by_context_window(temp_anima_dir):
 
 def test_config_driven_budgets(temp_anima_dir):
     """PrimingEngine should read budget values from config.json."""
-    from core.config.models import PrimingConfig, AnimaWorksConfig
+    from core.config.models import AnimaWorksConfig, PrimingConfig
 
     custom_config = AnimaWorksConfig(
         priming=PrimingConfig(

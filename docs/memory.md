@@ -190,7 +190,7 @@ Priming lives in `core/memory/priming/` (`engine.py`: `PrimingEngine`). `prime_m
 | **Recent outbound** | `activity_log/` | Last 2h, max 3 | `channel_post`, `message_sent` | Self-awareness of outbound behavior |
 | **Pending human notifications** | `activity_log/` `human_notify` | ~500 tokens max | Recent unresolved human notifications | Unprocessed `call_human` context |
 
-Skills and procedures are handled through active skill context, the Skill Router, the Skill Hub, the `skill` tool, `read_memory_file`, and `search_memory(scope="skills")`. The main priming body does not inject all skill text by default; it surfaces enough context to decide what to read next.
+Skills and procedures are handled through active skill context, the Skill Router, the Skill Hub, `read_memory_file`, and `search_memory(scope="skills")`. The main priming body does not inject all skill text by default; it surfaces enough context to decide what to read next.
 
 Related knowledge results are split into **medium** and **untrusted** from chunk `origin`, etc. Untrusted content is trimmed into a separate slice and handled in the prompt-injection defense context (see `common_knowledge/security/`).
 
@@ -618,9 +618,9 @@ Per `consolidation_instruction`, the Anima creates/updates `procedures/` via `wr
 
 `create_procedures_from_resolved()` scans `issue_resolved` and builds procedures with `ProceduralDistiller`. Not invoked on the main daily path; usable from batch jobs.
 
-### 3-stage matching (skill injection)
+### 3-stage matching (compatibility path)
 
-Priming (channel D) and `builder.py` skill injection match `procedures/` to the message:
+The legacy description-based matcher can still rank `procedures/` against the message as an auxiliary path:
 
 | Stage | Method | Description |
 |---|---|---|
@@ -912,7 +912,7 @@ The memory subsystem is implemented under `core/memory/`.
 | `priming/format.py` | `format_priming_section` for prompts |
 | `priming/utils.py` | `RetrieverCache`, `build_queries`, `search_and_merge`, keywords, truncate |
 | `priming/outbound.py` | Recent Outbound, pending `human_notify` |
-| `priming/channel_a.py` … `channel_f.py` | Source collectors for sender, activity, knowledge, tasks, and episodes; auxiliary collectors add graph/outbound/notification context |
+| `priming/channel_a.py` … `channel_g.py` | Source collectors for sender, activity, knowledge, tasks, episodes, and graph context; auxiliary collectors add outbound/notification context |
 
 Public API: `from core.memory.priming import PrimingEngine, PrimingResult, format_priming_section` (re-exported from `core/memory/__init__.py`). Chat path calls `prime_memories` from `core/_agent_priming.py`.
 

@@ -120,7 +120,7 @@ routing_examples:
 
 Level 1 はカタログでコンテキストを消費しやすいため **description は簡潔**に。Level 2 は手順の中核。Level 3 で長大な参照を分離する。
 
-※ Priming のスキルマッチチャネル（旧 Channel D）は廃止。本文が必要なら **`read_memory_file`** でスキルパスを開く。
+※ Priming のスキル本文注入経路は廃止済み。本文が必要なら **`read_memory_file`** でスキルパスを開く。
 
 ## 作成手順
 

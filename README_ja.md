@@ -204,11 +204,11 @@ animaworks start
 
 | モード | エンジン | 対象 | ツール |
 |--------|----------|------|--------|
-| S (SDK) | Claude Agent SDK | Claudeモデル（推奨） | Claude Code 組込み（Read/Write/Edit/Bash/Grep/Glob 等）＋ **stdio MCP**（`mcp__aw__*`）で AnimaWorks 内部ツール。外部連携は `skill` → `animaworks-tool` |
+| S (SDK) | Claude Agent SDK | Claudeモデル（推奨） | Claude Code 組込み（Read/Write/Edit/Bash/Grep/Glob 等）＋ **stdio MCP**（`mcp__aw__*`）で AnimaWorks 内部ツール。外部連携はスキル文書 / `animaworks-tool` |
 | C (Codex) | Codex CLI（SDK ラッパ） | OpenAI Codex CLIモデル | Codex サンドボックス＋ **AnimaWorks MCP**（`core/mcp/server.py`）で内部ツール |
 | D (Cursor) | Cursor Agent CLI | `cursor/*` モデル | MCP統合のエージェントループ |
 | G (Gemini CLI) | Gemini CLI | `gemini/*` モデル | stream-json パース・ツールループ |
-| A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, Bedrock, Vertex, xAI 等 | CC 互換（Read/Write/Edit/Bash/Grep/Glob、**WebSearch/WebFetch**）＋記憶・メッセージ・タスク（**submit_tasks** 等）・**todo_write**・**skill** などを統合（通知・上司ツールで構成が増減） |
+| A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, Bedrock, Vertex, xAI 等 | CC 互換（Read/Write/Edit/Bash/Grep/Glob、**WebSearch/WebFetch**）＋記憶・メッセージ・タスク（**submit_tasks** 等）・**todo_write**・スキル作成/整理などを統合（通知・上司ツールで構成が増減） |
 | B (Basic) | LiteLLM 1ショット | tool_use が不安定なローカル系（例: 小型 Ollama） | プロンプト内の擬似ツール呼び出しでループ。フレームワークが記憶I/O を代行 |
 
 モードは `status.json` の `execution_mode` が最優先、なければモデル名パターン（`fnmatch`）で自動判定されます。Ollama は **tool_use 対応モデル**（例: `ollama/qwen3:14b`, `ollama/glm-4.7*`）が A、それ以外は B にフォールバックしやすいです。Heartbeat・Cron・Inbox はメインとは別の **background_model** で回せます（コスト最適化）。拡張思考（Extended thinking）にも対応しています。

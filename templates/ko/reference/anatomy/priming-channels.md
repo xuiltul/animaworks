@@ -3,6 +3,8 @@
 PrimingEngine이 실행하는 전체 채널의 상세 사양입니다.
 버짓, 검색 소스, 필터링, 동적 조정을 포함합니다.
 
+병렬 검색은 **6개 채널**(A / B / C / E / F / G)을 사용합니다. C0(important_knowledge)는 Channel C와 같은 파이프라인 안의 보조 블록입니다. Distilled Knowledge는 더 이상 별도 프라이밍 채널이 아닙니다.
+
 ---
 
 ## 채널 일람
@@ -11,10 +13,11 @@ PrimingEngine이 실행하는 전체 채널의 상세 사양입니다.
 |------|-------------|------|-------|
 | A: sender_profile | 500 | `shared/users/{sender}/index.md` | medium |
 | B: recent_activity | 1300 | `activity_log/` + shared channels | trusted |
-| C: related_knowledge | 1200 | RAG 벡터 검색 (knowledge + common_knowledge) | medium / untrusted |
-| C0: important_knowledge | 300 | `[IMPORTANT]` 태그가 지정된 청크 | medium |
+| C: related_knowledge | 1000 | RAG 벡터 검색 (knowledge + common_knowledge) | medium / untrusted |
+| C0: important_knowledge | 500 | `[IMPORTANT]` 태그가 지정된 청크 | medium |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
-| F: episodes | 500 | RAG 벡터 검색 (episodes/) | medium |
+| F: episodes | 800 | RAG 벡터 검색 (episodes/) | medium |
+| G: graph_context | 500 | MemoryBackend의 community context + recent facts | medium |
 
 추가 주입:
 
@@ -58,7 +61,7 @@ PrimingEngine이 실행하는 전체 채널의 상세 사양입니다.
 
 RAG 벡터 검색으로 관련 지식을 주입합니다.
 
-- **버짓**: 1200 토큰
+- **버짓**: 1000 토큰
 - **검색 방식**: Dual-query (메시지 컨텍스트 + 키워드만)
 - **검색 대상**: 개인 `knowledge/` + `shared_common_knowledge` 컬렉션
 - **최소 스코어**: `config.json`의 `rag.min_retrieval_score` (기본값 0.3)
@@ -78,7 +81,7 @@ RAG 벡터 검색으로 관련 지식을 주입합니다.
 
 `[IMPORTANT]` 태그가 지정된 청크의 요약 포인터를 항상 주입합니다.
 
-- **버짓**: 300 토큰
+- **버짓**: 500 토큰
 - **대상**: `knowledge/` 내 `[IMPORTANT]` 태그가 지정된 청크
 - **주입 형식**: 요약 포인터만 (전문 아님). 상세는 `read_memory_file`로 조회
 - **용도**: 중요한 비즈니스 규칙과 판단 기준의 확실한 회상
@@ -106,9 +109,19 @@ RAG 벡터 검색으로 관련 지식을 주입합니다.
 
 RAG 벡터 검색으로 관련 에피소드를 주입합니다.
 
-- **버짓**: 500 토큰
+- **버짓**: 800 토큰
 - **검색 대상**: `episodes/` 컬렉션 (ChromaDB)
 - **최소 스코어**: Channel C와 동일 (`rag.min_retrieval_score`)
+
+---
+
+## Channel G: graph_context
+
+MemoryBackend에서 graph/community context와 recent facts를 주입합니다.
+
+- **버짓**: 500 토큰
+- **소스**: `MemoryBackend.get_priming_context()`
+- **백엔드 사용 불가 시**: 건너뜀
 
 ---
 
@@ -121,7 +134,7 @@ RAG 벡터 검색으로 관련 에피소드를 주입합니다.
 | 메시지 타입 | 버짓 | 설정 키 |
 |-------------|------|---------|
 | greeting | 500 | `priming.budget_greeting` |
-| question | 1500 | `priming.budget_question` |
+| question | 2000 | `priming.budget_question` |
 | request | 3000 | `priming.budget_request` |
 | heartbeat (폴백) | 200 | `priming.budget_heartbeat` |
 
@@ -138,4 +151,4 @@ heartbeat_budget = max(budget_heartbeat, context_window × heartbeat_context_pct
 
 ## Hebbian LTP (장기 강화)
 
-Priming에서 검색 및 표시된 청크는 `record_access()`를 통해 활성도가 업데이트됩니다. 이를 통해 자주 회상되는 기억의 망각이 방지됩니다 (Forgetting 엔진과의 연동).
+Priming에서 검색 및 표시된 청크는 `record_access(kind="retrieved")`로 가벼운 검색 기록이 업데이트됩니다. `read_memory_file` 및 outcome 보고를 통한 명시적 사용은 `used`로 기록되며, 망각 보호는 이 명시적 사용을 기준으로 합니다.

@@ -3,7 +3,7 @@
 Detailed specification of all channels executed by PrimingEngine.
 Includes budget, search sources, filtering, and dynamic adjustment.
 
-Parallel retrieval uses **five channels** (A / B / C / E / F). Channel C0 (important_knowledge) is an auxiliary block inside the same pipeline as Channel C. The former Channel D (Distilled Knowledge) and any “six channel” wording are obsolete.
+Parallel retrieval uses **six channels** (A / B / C / E / F / G). Channel C0 (important_knowledge) is an auxiliary block inside the same pipeline as Channel C. Distilled Knowledge is no longer a separate priming channel.
 
 ---
 
@@ -13,10 +13,11 @@ Parallel retrieval uses **five channels** (A / B / C / E / F). Channel C0 (impor
 |---------|---------------------|--------|-------|
 | A: sender_profile | 500 | `shared/users/{sender}/index.md` | medium |
 | B: recent_activity | 1300 | `activity_log/` + shared channels | trusted |
-| C: related_knowledge | 1200 | RAG vector search (knowledge + common_knowledge) | medium / untrusted |
-| C0: important_knowledge | 300 | Chunks tagged with `[IMPORTANT]` | medium |
+| C: related_knowledge | 1000 | RAG vector search (knowledge + common_knowledge) | medium / untrusted |
+| C0: important_knowledge | 500 | Chunks tagged with `[IMPORTANT]` | medium |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
-| F: episodes | 500 | RAG vector search (episodes/) | medium |
+| F: episodes | 800 | RAG vector search (episodes/) | medium |
+| G: graph_context | 500 | MemoryBackend community context + recent facts | medium |
 
 Additional injection:
 
@@ -61,7 +62,7 @@ Injects the recent activity timeline.
 
 Injects related knowledge via RAG vector search.
 
-- **Budget**: 1200 tokens
+- **Budget**: 1000 tokens
 - **Search method**: Dual-query (message context + keywords only)
 - **Search target**: Personal `knowledge/` + `shared_common_knowledge` collection
 - **Min score**: `config.json` `rag.min_retrieval_score` (default 0.3)
@@ -81,7 +82,7 @@ Search results are separated by trust level based on chunk `origin`:
 
 Always injects summary pointers for chunks tagged with `[IMPORTANT]`.
 
-- **Budget**: 300 tokens
+- **Budget**: 500 tokens
 - **Target**: Chunks tagged with `[IMPORTANT]` in `knowledge/`
 - **Injection format**: Summary pointers only (not full text). Details fetched via `read_memory_file`
 - **Purpose**: Reliable recall of important business rules and decision criteria
@@ -109,9 +110,19 @@ Injects task queue summary.
 
 Injects related episodes via RAG vector search.
 
-- **Budget**: 500 tokens
+- **Budget**: 800 tokens
 - **Search target**: `episodes/` collection (ChromaDB)
 - **Min score**: Same as Channel C (`rag.min_retrieval_score`)
+
+---
+
+## Channel G: graph_context
+
+Injects graph/community context and recent facts from the configured memory backend.
+
+- **Budget**: 500 tokens
+- **Source**: `MemoryBackend.get_priming_context()`
+- **When backend unavailable**: Skipped
 
 ---
 
@@ -124,7 +135,7 @@ Enabled by `config.json` `priming.dynamic_budget: true` (default).
 | Message type | Budget | Config key |
 |----------------|-----------|---------|
 | greeting | 500 | `priming.budget_greeting` |
-| question | 1500 | `priming.budget_question` |
+| question | 2000 | `priming.budget_question` |
 | request | 3000 | `priming.budget_request` |
 | heartbeat (fallback) | 200 | `priming.budget_heartbeat` |
 
@@ -141,4 +152,4 @@ heartbeat_budget = max(budget_heartbeat, context_window × heartbeat_context_pct
 
 ## Hebbian LTP (Long-Term Potentiation)
 
-Chunks retrieved and displayed by Priming have their activation updated via `record_access()`. This prevents forgetting of frequently recalled memories (integration with Forgetting engine).
+Chunks retrieved and displayed by Priming receive lightweight retrieval accounting via `record_access(kind="retrieved")`. Explicit `read_memory_file` / outcome-report use records full `used` accounting, which is what forgetting protection relies on.

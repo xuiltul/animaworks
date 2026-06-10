@@ -204,11 +204,11 @@ Works with many LLMs. Each Anima can use a different model.
 
 | Mode | Engine | Targets | Tools |
 |------|--------|---------|--------|
-| S (SDK) | Claude Agent SDK | Claude models (recommended) | Claude Code built-ins (Read/Write/Edit/Bash/Grep/Glob, etc.) + **stdio MCP** (`mcp__aw__*`) for AnimaWorks internal tools; external integrations via `skill` → `animaworks-tool` |
+| S (SDK) | Claude Agent SDK | Claude models (recommended) | Claude Code built-ins (Read/Write/Edit/Bash/Grep/Glob, etc.) + **stdio MCP** (`mcp__aw__*`) for AnimaWorks internal tools; external integrations via skill docs / `animaworks-tool` |
 | C (Codex) | Codex CLI (SDK wrapper) | OpenAI Codex CLI models | Codex sandbox + **AnimaWorks MCP** (`core/mcp/server.py`) for internal tools |
 | D (Cursor) | Cursor Agent CLI | `cursor/*` models | MCP-integrated agent loop |
 | G (Gemini CLI) | Gemini CLI | `gemini/*` models | stream-json parsing, tool loop |
-| A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, Bedrock, Vertex, xAI, etc. | CC-style (Read/Write/Edit/Bash/Grep/Glob, **WebSearch/WebFetch**) + memory, messaging, tasks (**submit_tasks**, etc.), **todo_write**, **skill**, and more (varies with notifications and supervisor tools) |
+| A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, Bedrock, Vertex, xAI, etc. | CC-style (Read/Write/Edit/Bash/Grep/Glob, **WebSearch/WebFetch**) + memory, messaging, tasks (**submit_tasks**, etc.), **todo_write**, skill authoring/curation, and more (varies with notifications and supervisor tools) |
 | B (Basic) | LiteLLM one-shot | Unstable tool_use locals (e.g. small Ollama) | Pseudo tool calls in the prompt; the framework handles memory I/O on the model’s behalf |
 
 Mode resolution: `execution_mode` in `status.json` takes precedence; otherwise the model name pattern (`fnmatch`) is used automatically. For Ollama, **tool_use-capable models** (e.g. `ollama/qwen3:14b`, `ollama/glm-4.7*`) map to A; others tend to fall back to B. Heartbeat, Cron, and Inbox can run on a separate **background_model** from the main model (cost optimization). Extended thinking is supported where available.
