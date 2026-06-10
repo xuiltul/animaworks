@@ -346,18 +346,14 @@ class TestDailyEpisodeWriteHelpers:
 
     def test_previous_local_day_window_uses_configured_timezone(self) -> None:
         tokyo = ZoneInfo("Asia/Tokyo")
-        target, start, end = ConsolidationEngine.previous_local_day_window(
-            datetime(2026, 6, 10, 2, 0, tzinfo=tokyo)
-        )
+        target, start, end = ConsolidationEngine.previous_local_day_window(datetime(2026, 6, 10, 2, 0, tzinfo=tokyo))
 
         assert target == date(2026, 6, 9)
         assert start.isoformat() == "2026-06-09T00:00:00+09:00"
         assert end.isoformat() == "2026-06-10T00:00:00+09:00"
 
         new_york = ZoneInfo("America/New_York")
-        target, start, end = ConsolidationEngine.previous_local_day_window(
-            datetime(2026, 3, 9, 2, 0, tzinfo=new_york)
-        )
+        target, start, end = ConsolidationEngine.previous_local_day_window(datetime(2026, 3, 9, 2, 0, tzinfo=new_york))
 
         assert target == date(2026, 3, 8)
         assert start.date() == date(2026, 3, 8)
@@ -414,3 +410,65 @@ class TestDailyEpisodeWriteHelpers:
             "## 09:00-10:00 Work\n\n- event\n"
         )
         assert not (anima_dir / "archive" / "episodes").exists()
+
+
+class TestPhaseBCarryover:
+    """Tests for Phase B timeout carry-over state."""
+
+    def test_record_phase_b_carryover_caps_to_three_days(self, tmp_path: Path) -> None:
+        engine = ConsolidationEngine(tmp_path / "animas" / "ritsu", "ritsu")
+
+        for day in range(1, 5):
+            engine.record_phase_b_carryover(
+                f"episode source {day}",
+                target_date=date(2026, 6, day),
+                reason="phase_b_pending",
+            )
+
+        items = engine.load_phase_b_carryover()
+
+        assert [item["date"] for item in items] == ["2026-06-02", "2026-06-03", "2026-06-04"]
+        assert all("episode source 1" not in item["episodes_summary"] for item in items)
+
+    def test_format_phase_b_carryover(self, tmp_path: Path) -> None:
+        engine = ConsolidationEngine(tmp_path / "animas" / "ritsu", "ritsu")
+        items = engine.record_phase_b_carryover(
+            "## 14:00\nImportant source",
+            target_date=date(2026, 6, 9),
+            reason="phase_b_pending",
+        )
+
+        formatted = engine.format_phase_b_carryover(items)
+
+        assert "Carry-over from 2026-06-09" in formatted
+        assert "Important source" in formatted
+
+    def test_load_phase_b_carryover_accepts_legacy_list_state(self, tmp_path: Path) -> None:
+        engine = ConsolidationEngine(tmp_path / "animas" / "ritsu", "ritsu")
+        path = engine.phase_b_carryover_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            '[{"date":"2026-06-09","reason":"phase_b_pending","episodes_summary":"legacy source"}]\n',
+            encoding="utf-8",
+        )
+
+        items = engine.load_phase_b_carryover()
+
+        assert len(items) == 1
+        assert items[0]["date"] == "2026-06-09"
+        assert items[0]["episodes_summary"] == "legacy source"
+
+    def test_clear_phase_b_carryover(self, tmp_path: Path) -> None:
+        engine = ConsolidationEngine(tmp_path / "animas" / "ritsu", "ritsu")
+        engine.record_phase_b_carryover(
+            "episode source",
+            target_date=date(2026, 6, 9),
+            reason="phase_b_pending",
+        )
+
+        assert engine.phase_b_carryover_path().exists()
+
+        engine.clear_phase_b_carryover()
+
+        assert engine.load_phase_b_carryover() == []
+        assert not engine.phase_b_carryover_path().exists()

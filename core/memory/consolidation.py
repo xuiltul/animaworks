@@ -22,6 +22,7 @@ This module retains:
 - LLM output sanitisation (shared utility used by reconsolidation.py)
 """
 
+import json
 import logging
 import re
 import shutil
@@ -70,6 +71,8 @@ class ConsolidationEngine:
 
     RAW_NOTES_HEADER = "## Raw notes (preserved)"
     CONSOLIDATED_TIMELINE_HEADER = "## Consolidated timeline"
+    PHASE_B_CARRYOVER_FILE = "consolidation_phase_b_carryover.json"
+    PHASE_B_CARRYOVER_MAX_DAYS = 3
 
     @staticmethod
     def previous_local_day_window(reference: datetime | None = None) -> tuple[date, datetime, datetime]:
@@ -137,6 +140,117 @@ class ConsolidationEngine:
             self.archive_episode_before_write(episode_path)
         atomic_write_text(episode_path, merged)
         return episode_path
+
+    # ── Phase B carry-over helpers ──────────────────────────────
+
+    def phase_b_carryover_path(self) -> Path:
+        """Return the persistent Phase B carry-over state path."""
+        return self.anima_dir / "state" / self.PHASE_B_CARRYOVER_FILE
+
+    def load_phase_b_carryover(self) -> list[dict[str, Any]]:
+        """Load pending Phase B source bundles from previous runs."""
+        path = self.phase_b_carryover_path()
+        if not path.is_file():
+            return []
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.warning("Failed to read Phase B carry-over state for anima=%s", self.anima_name, exc_info=True)
+            return []
+        if isinstance(raw, dict):
+            items = raw.get("items", [])
+        elif isinstance(raw, list):
+            items = raw
+        else:
+            items = []
+        if not isinstance(items, list):
+            return []
+        normalized: list[dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            summary = str(item.get("episodes_summary") or "").strip()
+            if not summary:
+                continue
+            normalized.append(
+                {
+                    "date": str(item.get("date") or ""),
+                    "recorded_at": str(item.get("recorded_at") or ""),
+                    "reason": str(item.get("reason") or "phase_b_pending"),
+                    "episodes_summary": summary,
+                }
+            )
+        return normalized
+
+    def record_phase_b_carryover(
+        self,
+        episodes_summary: str,
+        *,
+        target_date: date,
+        reason: str,
+        max_days: int = PHASE_B_CARRYOVER_MAX_DAYS,
+    ) -> list[dict[str, Any]]:
+        """Persist Phase B source so timeout retries can resume from it.
+
+        Knowledge writes performed by the tool loop are already committed as
+        tools succeed.  This state preserves the source bundle until a
+        successful Phase B run clears it, so timed-out runs retry remaining
+        work without losing the source episode context.
+        """
+        summary = episodes_summary.strip()
+        if not summary:
+            return self.load_phase_b_carryover()
+
+        items = [item for item in self.load_phase_b_carryover() if item.get("date") != target_date.isoformat()]
+        items.append(
+            {
+                "date": target_date.isoformat(),
+                "recorded_at": now_iso(),
+                "reason": reason,
+                "episodes_summary": summary,
+            }
+        )
+        items.sort(key=lambda item: (str(item.get("date") or ""), str(item.get("recorded_at") or "")))
+        dropped = max(0, len(items) - max_days)
+        if dropped:
+            dropped_items = items[:dropped]
+            logger.warning(
+                "Phase B carry-over cap exceeded for anima=%s; dropping %d oldest day(s): %s",
+                self.anima_name,
+                dropped,
+                [item.get("date") for item in dropped_items],
+            )
+            items = items[dropped:]
+
+        from core.memory._io import atomic_write_text
+
+        path = self.phase_b_carryover_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(path, json.dumps({"items": items}, ensure_ascii=False, indent=2) + "\n")
+        return items
+
+    def clear_phase_b_carryover(self) -> None:
+        """Clear pending Phase B carry-over after a successful run."""
+        try:
+            self.phase_b_carryover_path().unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Failed to clear Phase B carry-over for anima=%s", self.anima_name, exc_info=True)
+
+    @staticmethod
+    def format_phase_b_carryover(items: list[dict[str, Any]]) -> str:
+        """Format pending Phase B source bundles for prompt injection."""
+        parts: list[str] = []
+        for item in items:
+            date_text = str(item.get("date") or "unknown-date")
+            reason = str(item.get("reason") or "phase_b_pending")
+            summary = str(item.get("episodes_summary") or "").strip()
+            if summary:
+                parts.append(f"## Carry-over from {date_text} ({reason})\n\n{summary}")
+        return "\n\n".join(parts)
+
+    def count_pending_phase_b_carryover(self) -> int:
+        """Return the number of pending Phase B carry-over bundles."""
+        return len(self.load_phase_b_carryover())
 
     # ── Legacy Migration ─────────────────────────────────────────
 
@@ -593,6 +707,47 @@ class ConsolidationEngine:
         # For longer content, use indented block
         indented = "\n".join(f"  {line}" for line in text.split("\n"))
         return f"{header}:\n{indented}"
+
+    def count_recent_activity_entries(
+        self,
+        hours: int = 24,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> int:
+        """Count activity-log entries eligible for daily consolidation."""
+        try:
+            from core.memory.activity import ActivityLogger
+
+            activity = ActivityLogger(self.anima_dir)
+            if since is not None or until is not None:
+                entries = activity._load_entries(since=since, until=until)
+            else:
+                entries = activity.recent(
+                    days=max(1, (hours + 23) // 24),
+                    limit=10_000,
+                )
+        except Exception:
+            logger.debug("Failed to count activity entries", exc_info=True)
+            return 0
+
+        cutoff = None if since is not None or until is not None else now_local() - timedelta(hours=hours)
+        count = 0
+        for entry in entries:
+            if entry.type in ("tool_result", "tool_use") and self._is_excluded_tool(entry):
+                continue
+            try:
+                ts = ensure_aware(datetime.fromisoformat(entry.ts))
+                if since is not None and ts < since:
+                    continue
+                if until is not None and ts >= until:
+                    continue
+                if cutoff is not None and ts < cutoff:
+                    continue
+            except (ValueError, TypeError):
+                pass
+            count += 1
+        return count
 
     def collect_activity_chunks(
         self,

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -10,6 +11,7 @@ from __future__ import annotations
 """Integration tests for lifecycle consolidation setup."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -50,8 +52,8 @@ class TestLifecycleConsolidationIntegration:
     @pytest.mark.asyncio
     async def test_handle_daily_consolidation_with_config(self, tmp_path: Path):
         """Test daily consolidation handler respects config settings."""
-        from core.lifecycle import LifecycleManager
         from core.anima import DigitalAnima
+        from core.lifecycle import LifecycleManager
 
         manager = LifecycleManager()
 
@@ -83,8 +85,8 @@ class TestLifecycleConsolidationIntegration:
     @pytest.mark.asyncio
     async def test_handle_daily_consolidation_with_anima(self, tmp_path: Path):
         """Test daily consolidation runs for registered anima via run_consolidation."""
-        from core.lifecycle import LifecycleManager
         from core.anima import DigitalAnima
+        from core.lifecycle import LifecycleManager
 
         manager = LifecycleManager()
 
@@ -98,9 +100,6 @@ class TestLifecycleConsolidationIntegration:
         mock_anima.name = "test_anima"
         mock_anima.memory = MagicMock()
         mock_anima.memory.anima_dir = anima_dir
-        # count_recent_episodes returns enough episodes to proceed
-        mock_anima.count_recent_episodes.return_value = 3
-
         # run_consolidation side-effect: simulate knowledge file creation
         mock_result = MagicMock()
         mock_result.duration_ms = 1234
@@ -110,8 +109,7 @@ class TestLifecycleConsolidationIntegration:
             # Simulate the Anima writing a knowledge file during consolidation
             kf = knowledge_dir / "test-knowledge.md"
             kf.write_text(
-                "---\nauto_consolidated: true\n---\n# Test Knowledge\n\n"
-                "Test content from consolidation\n",
+                "---\nauto_consolidated: true\n---\n# Test Knowledge\n\nTest content from consolidation\n",
                 encoding="utf-8",
             )
             return mock_result
@@ -128,13 +126,20 @@ class TestLifecycleConsolidationIntegration:
         mock_consolidation_cfg.max_turns = 30
         mock_config.consolidation = mock_consolidation_cfg
 
-        with patch("core.config.load_config", return_value=mock_config), \
-             patch("core.memory.forgetting.ForgettingEngine"), \
-             patch("core.memory.consolidation.ConsolidationEngine"):
-            await manager._handle_daily_consolidation()
+        gate = SimpleNamespace(
+            should_run=True,
+            activity_count=3,
+            episode_count=0,
+            carryover_count=0,
+            threshold=1,
+        )
 
-        # Verify anima.count_recent_episodes was called
-        mock_anima.count_recent_episodes.assert_called_once_with(hours=24)
+        with (
+            patch("core.config.load_config", return_value=mock_config),
+            patch("core.lifecycle.system_consolidation.evaluate_daily_consolidation_gate", return_value=gate),
+            patch("core.lifecycle.system_consolidation.run_daily_consolidation_post_processing", AsyncMock()),
+        ):
+            await manager._handle_daily_consolidation()
 
         # Verify anima.run_consolidation was called
         mock_anima.run_consolidation.assert_called_once()

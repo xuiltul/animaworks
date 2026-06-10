@@ -270,9 +270,9 @@ class SchedulerMixin:
     async def _run_daily_consolidation(self) -> None:
         """Run daily consolidation for all animas via IPC.
 
-        Sends ``run_consolidation`` IPC requests to running Anima processes,
-        then performs metadata-based post-processing (synaptic downscaling,
-        RAG index rebuild) from the supervisor process.
+        Sends ``run_consolidation`` IPC requests to running Anima processes.
+        Framework-side post-processing is delegated to the shared lifecycle
+        consolidation pipeline and runs even when the IPC phase times out.
         """
         logger.info("Starting system-wide daily consolidation")
 
@@ -286,11 +286,19 @@ class SchedulerMixin:
             consolidation_cfg = None
 
         from core.config.models import ConsolidationConfig
-        from core.memory.consolidation import ConsolidationEngine
+        from core.lifecycle.system_consolidation import (
+            evaluate_daily_consolidation_gate,
+            run_daily_consolidation_post_processing,
+        )
 
+        defaults = ConsolidationConfig()
         max_turns = ConsolidationConfig().max_turns
+        min_entries = defaults.min_episodes_threshold
+        model = defaults.llm_model
         if consolidation_cfg:
             max_turns = getattr(consolidation_cfg, "max_turns", max_turns)
+            min_entries = getattr(consolidation_cfg, "min_episodes_threshold", min_entries)
+            model = getattr(consolidation_cfg, "llm_model", model)
 
         for anima_name, anima_dir in self._iter_consolidation_targets():
             handle = self.processes.get(anima_name)
@@ -301,22 +309,24 @@ class SchedulerMixin:
                 )
                 continue
 
-            try:
-                engine = ConsolidationEngine(anima_dir, anima_name)
-                episodes = engine._collect_recent_episodes(hours=24)
-                if not episodes:
-                    logger.info(
-                        "Skipping consolidation for %s: no recent episodes",
-                        anima_name,
-                    )
-                    continue
-            except Exception:
-                logger.debug(
-                    "Failed to check episodes for %s, proceeding with consolidation",
+            gate = evaluate_daily_consolidation_gate(
+                anima_dir,
+                anima_name,
+                threshold=min_entries,
+                hours=24,
+            )
+            if not gate.should_run:
+                logger.info(
+                    "Daily consolidation skipped for %s: activity=%d episodes=%d carryover=%d threshold=%d",
                     anima_name,
-                    exc_info=True,
+                    gate.activity_count,
+                    gate.episode_count,
+                    gate.carryover_count,
+                    gate.threshold,
                 )
+                continue
 
+            result: dict = {}
             try:
                 _consolidating: set[str] = getattr(self, "_consolidating", set())
                 _consolidating.add(anima_name)
@@ -330,14 +340,13 @@ class SchedulerMixin:
                 except TimeoutError:
                     _timed_out = True
                     logger.warning(
-                        "Daily consolidation timed out for %s; keeping busy-hang protection for 120s",
+                        "consolidation_timeout anima=%s phase=phase_b type=daily timeout_s=1800",
                         anima_name,
                     )
                     try:
                         await handle.send_request("interrupt", {}, timeout=10.0)
                     except Exception:
                         logger.debug("Interrupt request after daily consolidation timeout failed", exc_info=True)
-                    continue
                 finally:
                     if _timed_out:
                         # Grace period: keep protection for 120s after timeout
@@ -346,47 +355,28 @@ class SchedulerMixin:
                     else:
                         _consolidating.discard(anima_name)
 
-                if response.error:
+                if not _timed_out and response.error:
                     logger.error(
                         "Daily consolidation IPC error for %s: %s",
                         anima_name,
                         response.error,
                     )
-                    continue
-
-                result = response.result or {}
-                logger.info(
-                    "Daily consolidation for %s: duration_ms=%d",
-                    anima_name,
-                    result.get("duration_ms", 0),
-                )
-
-                # Post-processing: Synaptic downscaling (metadata-based, no LLM)
-                try:
-                    from core.memory.forgetting import ForgettingEngine
-
-                    forgetter = ForgettingEngine(anima_dir, anima_name)
-                    downscaling_result = forgetter.synaptic_downscaling()
+                elif not _timed_out:
+                    result = response.result or {}
                     logger.info(
-                        "Synaptic downscaling for %s: %s",
+                        "Daily consolidation for %s: duration_ms=%d",
                         anima_name,
-                        downscaling_result,
+                        result.get("duration_ms", 0),
                     )
-                except Exception:
-                    logger.exception(
-                        "Synaptic downscaling failed for anima=%s",
-                        anima_name,
-                    )
-
-                # Post-processing: Rebuild RAG index
-                try:
-                    engine = ConsolidationEngine(anima_dir, anima_name)
-                    engine._rebuild_rag_index()
-                except Exception:
-                    logger.exception(
-                        "RAG index rebuild failed for anima=%s",
-                        anima_name,
-                    )
+            except Exception:
+                logger.exception("Daily consolidation failed for %s", anima_name)
+            finally:
+                await run_daily_consolidation_post_processing(
+                    anima_name,
+                    anima_dir,
+                    consolidation_cfg=consolidation_cfg,
+                    model=model,
+                )
 
                 await self._broadcast_event(
                     "system.consolidation",
@@ -397,17 +387,15 @@ class SchedulerMixin:
                         "duration_ms": result.get("duration_ms", 0),
                     },
                 )
-            except Exception:
-                logger.exception("Daily consolidation failed for %s", anima_name)
 
         _write_marker(_marker_dir(self._get_data_dir()) / "last_daily_consolidation")
 
     async def _run_weekly_integration(self) -> None:
         """Run weekly integration for all animas via IPC.
 
-        Sends ``run_consolidation`` IPC requests to running Anima processes,
-        then performs metadata-based post-processing (neurogenesis reorganization,
-        RAG index rebuild) from the supervisor process.
+        Sends ``run_consolidation`` IPC requests to running Anima processes.
+        Framework-side post-processing is delegated to the shared lifecycle
+        consolidation pipeline and runs even when the IPC phase times out.
         """
         logger.info("Starting system-wide weekly integration")
 
@@ -421,10 +409,14 @@ class SchedulerMixin:
             consolidation_cfg = None
 
         from core.config.models import ConsolidationConfig as _CC
+        from core.lifecycle.system_consolidation import run_weekly_integration_post_processing
 
-        max_turns = _CC().max_turns
+        defaults = _CC()
+        max_turns = defaults.max_turns
+        model = defaults.llm_model
         if consolidation_cfg:
             max_turns = getattr(consolidation_cfg, "max_turns", max_turns)
+            model = getattr(consolidation_cfg, "llm_model", model)
 
         for anima_name, anima_dir in self._iter_consolidation_targets():
             handle = self.processes.get(anima_name)
@@ -435,6 +427,7 @@ class SchedulerMixin:
                 )
                 continue
 
+            result: dict = {}
             try:
                 _consolidating_w: set[str] = getattr(self, "_consolidating", set())
                 _consolidating_w.add(anima_name)
@@ -448,14 +441,13 @@ class SchedulerMixin:
                 except TimeoutError:
                     _timed_out_w = True
                     logger.warning(
-                        "Weekly consolidation timed out for %s; keeping busy-hang protection for 120s",
+                        "consolidation_timeout anima=%s phase=phase_b type=weekly timeout_s=1800",
                         anima_name,
                     )
                     try:
                         await handle.send_request("interrupt", {}, timeout=10.0)
                     except Exception:
                         logger.debug("Interrupt request after weekly consolidation timeout failed", exc_info=True)
-                    continue
                 finally:
                     if _timed_out_w:
                         _name_capture_w = anima_name
@@ -463,49 +455,28 @@ class SchedulerMixin:
                     else:
                         _consolidating_w.discard(anima_name)
 
-                if response.error:
+                if not _timed_out_w and response.error:
                     logger.error(
                         "Weekly integration IPC error for %s: %s",
                         anima_name,
                         response.error,
                     )
-                    continue
-
-                result = response.result or {}
-                logger.info(
-                    "Weekly integration for %s: duration_ms=%d",
-                    anima_name,
-                    result.get("duration_ms", 0),
-                )
-
-                # Post-processing: Neurogenesis reorganization (metadata-based)
-                try:
-                    from core.memory.forgetting import ForgettingEngine
-
-                    forgetter = ForgettingEngine(anima_dir, anima_name)
-                    reorg_result = await forgetter.neurogenesis_reorganize()
+                elif not _timed_out_w:
+                    result = response.result or {}
                     logger.info(
-                        "Neurogenesis reorganization for %s: %s",
+                        "Weekly integration for %s: duration_ms=%d",
                         anima_name,
-                        reorg_result,
+                        result.get("duration_ms", 0),
                     )
-                except Exception:
-                    logger.exception(
-                        "Neurogenesis reorganization failed for anima=%s",
-                        anima_name,
-                    )
-
-                # Post-processing: Rebuild RAG index
-                try:
-                    from core.memory.consolidation import ConsolidationEngine
-
-                    engine = ConsolidationEngine(anima_dir, anima_name)
-                    engine._rebuild_rag_index()
-                except Exception:
-                    logger.exception(
-                        "RAG index rebuild failed for anima=%s",
-                        anima_name,
-                    )
+            except Exception:
+                logger.exception("Weekly integration failed for %s", anima_name)
+            finally:
+                await run_weekly_integration_post_processing(
+                    anima_name,
+                    anima_dir,
+                    consolidation_cfg=consolidation_cfg,
+                    model=model,
+                )
 
                 await self._broadcast_event(
                     "system.consolidation",
@@ -516,8 +487,6 @@ class SchedulerMixin:
                         "duration_ms": result.get("duration_ms", 0),
                     },
                 )
-            except Exception:
-                logger.exception("Weekly integration failed for %s", anima_name)
 
         _write_marker(_marker_dir(self._get_data_dir()) / "last_weekly_integration")
 

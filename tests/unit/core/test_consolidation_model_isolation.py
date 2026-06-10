@@ -4,7 +4,7 @@ import asyncio
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -27,10 +27,18 @@ class _FakeConsolidationAgent:
 
 
 class _FakeEngine:
-    def __init__(self, chunks: list[str] | None = None, existing_episode: str = "") -> None:
+    def __init__(
+        self,
+        chunks: list[str] | None = None,
+        existing_episode: str = "",
+        recent_episodes: list[dict[str, str]] | None = None,
+    ) -> None:
         self.episodes_dir = Path("/tmp/fake-episodes")
         self.chunks = chunks or []
         self.existing_episode = existing_episode
+        self.recent_episodes = recent_episodes or []
+        self.carryover_items: list[dict[str, str]] = []
+        self.carryover_cleared = False
         self.collect_calls: list[dict] = []
         self.write_calls: list[dict] = []
 
@@ -58,7 +66,28 @@ class _FakeEngine:
         return 0
 
     def _collect_recent_episodes(self, *, hours: int):
-        return []
+        return self.recent_episodes
+
+    def record_phase_b_carryover(self, episodes_summary, *, target_date, reason):
+        self.carryover_items = [
+            {
+                "date": target_date.isoformat(),
+                "recorded_at": "2026-06-10T02:00:00+09:00",
+                "reason": reason,
+                "episodes_summary": episodes_summary,
+            }
+        ]
+        return self.carryover_items
+
+    def load_phase_b_carryover(self):
+        return self.carryover_items
+
+    def format_phase_b_carryover(self, items):
+        return ConsolidationEngine.format_phase_b_carryover(items)
+
+    def clear_phase_b_carryover(self):
+        self.carryover_cleared = True
+        self.carryover_items = []
 
     def _extract_reflections_from_episodes(self, episodes_summary: str):
         return ""
@@ -200,6 +229,37 @@ async def test_daily_phase_a_llm_failure_leaves_existing_episode_unchanged(tmp_p
 
     assert episode_path.read_text(encoding="utf-8") == original
     assert not (anima_dir / "archive" / "episodes").exists()
+
+
+@pytest.mark.asyncio
+async def test_daily_phase_b_timeout_keeps_carryover_source_bundle():
+    status_config = ModelConfig(model="bedrock/qwen.qwen3-next-80b-a3b", resolved_mode="S")
+    anima = _make_lifecycle(status_config)
+    anima.agent.run_cycle = AsyncMock(side_effect=TimeoutError("phase b timed out"))
+    engine = _FakeEngine(
+        recent_episodes=[
+            {
+                "date": "2026-06-09",
+                "time": "14:00",
+                "content": "Important episode source",
+            }
+        ]
+    )
+    fixed_now = datetime(2026, 6, 10, 2, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+
+    with (
+        patch("core.config.load_config", return_value=_mock_config()),
+        patch("core.config.resolve_execution_mode", return_value="D"),
+        patch("core._anima_lifecycle.now_local", return_value=fixed_now),
+        patch("core._anima_lifecycle.load_prompt", return_value="daily prompt"),
+        pytest.raises(TimeoutError, match="phase b timed out"),
+    ):
+        await anima._run_daily_consolidation(engine, max_turns=7)
+
+    assert engine.carryover_items
+    assert engine.carryover_items[0]["date"] == "2026-06-09"
+    assert "Important episode source" in engine.carryover_items[0]["episodes_summary"]
+    assert engine.carryover_cleared is False
 
 
 @pytest.mark.asyncio

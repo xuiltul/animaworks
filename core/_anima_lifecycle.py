@@ -526,8 +526,20 @@ class LifecycleMixin:
 
         # ── Phase B: Knowledge extraction ───────────────────────
         episodes = engine._collect_recent_episodes(hours=24)
+        current_episodes_summary = ""
         if episodes:
-            episodes_summary = "\n\n".join(f"## {e['date']} {e['time']}\n{e['content']}" for e in episodes)
+            current_episodes_summary = "\n\n".join(f"## {e['date']} {e['time']}\n{e['content']}" for e in episodes)
+            engine.record_phase_b_carryover(
+                current_episodes_summary,
+                target_date=target_date,
+                reason="phase_b_pending",
+            )
+        carryover_items = engine.load_phase_b_carryover()
+        carryover_summary = engine.format_phase_b_carryover(carryover_items)
+        if carryover_summary:
+            episodes_summary = carryover_summary
+        elif current_episodes_summary:
+            episodes_summary = current_episodes_summary
         else:
             episodes_summary = t("anima.no_episodes_today")
 
@@ -587,13 +599,23 @@ class LifecycleMixin:
                 agent.set_interrupt_event(self._get_interrupt_event("_background"))
             if hasattr(agent, "_tool_handler"):
                 agent._tool_handler.set_session_origin(ORIGIN_SYSTEM)
-            result = await agent.run_cycle(
-                prompt,
-                trigger="consolidation:daily",
-                message_intent="request",
-                max_turns_override=max_turns,
-                model_config_override=consolidation_model_config,
-            )
+            try:
+                result = await agent.run_cycle(
+                    prompt,
+                    trigger="consolidation:daily",
+                    message_intent="request",
+                    max_turns_override=max_turns,
+                    model_config_override=consolidation_model_config,
+                )
+            except TimeoutError:
+                logger.warning(
+                    "consolidation_timeout anima=%s phase=phase_b type=daily carryover_items=%d",
+                    self.name,
+                    len(carryover_items),
+                )
+                raise
+
+        engine.clear_phase_b_carryover()
 
         autolearn = self._run_autonomous_skill_learning()
         summary = result.summary or ""

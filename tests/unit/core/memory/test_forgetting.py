@@ -333,7 +333,9 @@ class TestSynapticDownscaling:
 
         with patch.object(forgetting_engine, "_get_vector_store", return_value=mock_store):
             with patch.object(
-                forgetting_engine, "_get_all_chunks", side_effect=side_effect_chunks,
+                forgetting_engine,
+                "_get_all_chunks",
+                side_effect=side_effect_chunks,
             ):
                 result = forgetting_engine.synaptic_downscaling()
 
@@ -381,9 +383,7 @@ class TestNeurogenesisSourceSync:
         primary = anima_dir / "knowledge" / "primary.md"
         secondary = anima_dir / "knowledge" / "secondary.md"
         primary.write_text(
-            "## Keep One\n\nAlpha stays.\n\n"
-            "## Merge Me\n\nOld duplicate detail.\n\n"
-            "## Keep Two\n\nGamma stays.",
+            "## Keep One\n\nAlpha stays.\n\n## Merge Me\n\nOld duplicate detail.\n\n## Keep Two\n\nGamma stays.",
             encoding="utf-8",
         )
         secondary.write_text("## Merge Source\n\nNew duplicate detail.", encoding="utf-8")
@@ -500,9 +500,7 @@ class TestNeurogenesisSourceSync:
         secondary = anima_dir / "knowledge" / "secondary.md"
         primary.write_text("## Primary\n\nPrimary duplicate.", encoding="utf-8")
         secondary.write_text(
-            "## Keep One\n\nFirst survives.\n\n"
-            "## Remove Me\n\nDuplicate absorbed.\n\n"
-            "## Keep Two\n\nSecond survives.",
+            "## Keep One\n\nFirst survives.\n\n## Remove Me\n\nDuplicate absorbed.\n\n## Keep Two\n\nSecond survives.",
             encoding="utf-8",
         )
 
@@ -743,11 +741,22 @@ class TestConsolidationForgettingHooks:
 
         mock_downscaling_result = {"scanned": 10, "marked_low": 2}
 
-        with patch("core.config.load_config", return_value=mock_config), \
-             patch(
-                 "core.memory.forgetting.ForgettingEngine"
-             ) as MockForgettingEngine, \
-             patch("core.memory.consolidation.ConsolidationEngine"):
+        gate = SimpleNamespace(
+            should_run=True,
+            activity_count=3,
+            episode_count=0,
+            carryover_count=0,
+            threshold=1,
+        )
+
+        with (
+            patch("core.config.load_config", return_value=mock_config),
+            patch("core.lifecycle.system_consolidation.evaluate_daily_consolidation_gate", return_value=gate),
+            patch("core.lifecycle.system_consolidation.run_knowledge_self_correction_if_enabled", AsyncMock()),
+            patch("core.lifecycle.system_consolidation.detect_communities_if_neo4j", AsyncMock()),
+            patch("core.memory.forgetting.ForgettingEngine") as MockForgettingEngine,
+            patch("core.memory.consolidation.ConsolidationEngine"),
+        ):
             mock_forgetter = MagicMock()
             mock_forgetter.synaptic_downscaling.return_value = mock_downscaling_result
             MockForgettingEngine.return_value = mock_forgetter
@@ -793,11 +802,12 @@ class TestConsolidationForgettingHooks:
 
         mock_reorg_result = {"merged_count": 3, "merged_pairs": ["a+b", "c+d", "e+f"]}
 
-        with patch("core.config.load_config", return_value=mock_config), \
-             patch(
-                 "core.memory.forgetting.ForgettingEngine"
-             ) as MockForgettingEngine, \
-             patch("core.memory.consolidation.ConsolidationEngine"):
+        with (
+            patch("core.config.load_config", return_value=mock_config),
+            patch("core.lifecycle.system_consolidation.detect_communities_if_neo4j", AsyncMock()),
+            patch("core.memory.forgetting.ForgettingEngine") as MockForgettingEngine,
+            patch("core.memory.consolidation.ConsolidationEngine"),
+        ):
             mock_forgetter = MagicMock()
             mock_forgetter.neurogenesis_reorganize = AsyncMock(
                 return_value=mock_reorg_result,
@@ -834,9 +844,7 @@ class TestMonthlyForgettingHook:
         """Test that monthly_forget() calls ForgettingEngine.complete_forgetting()."""
         mock_result = {"forgotten_chunks": 5, "archived_files": ["a.md", "b.md"]}
 
-        with patch(
-            "core.memory.forgetting.ForgettingEngine"
-        ) as MockForgettingEngine:
+        with patch("core.memory.forgetting.ForgettingEngine") as MockForgettingEngine:
             mock_forgetter = MagicMock()
             mock_forgetter.complete_forgetting.return_value = mock_result
             MockForgettingEngine.return_value = mock_forgetter
