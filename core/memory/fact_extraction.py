@@ -7,17 +7,37 @@ from __future__ import annotations
 """Legacy atomic-fact extraction helpers."""
 
 import asyncio
-import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.memory.fact_config import _resolve_extraction_config
 from core.memory.fact_invalidation import ReconcileAction, ReconcileResult, reconcile_new_fact
+from core.memory.fact_observability import warn_rate_limited
 from core.memory.facts import FactRecord, append_fact_records, fact_file_for_record
 from core.memory.ontology.default import ExtractedEntity, ExtractedFact
 from core.time_utils import now_iso
 
 logger = logging.getLogger("animaworks.memory.fact_extraction")
+
+
+@dataclass(frozen=True)
+class FactExtractionOutcome:
+    """Fact extraction/storage outcome with operational failure counters."""
+
+    records: list[FactRecord]
+    failed: bool = False
+    failure_stage: str = ""
+    failure_reason: str = ""
+
+    @property
+    def facts_extracted(self) -> int:
+        return len(self.records)
+
+    @property
+    def facts_failed(self) -> int:
+        return int(self.failed)
 
 
 def _facts_extraction_enabled() -> bool:
@@ -48,43 +68,6 @@ def _facts_reconcile_enabled() -> bool:
     except Exception:
         logger.debug("Failed to load facts_reconcile_enabled; defaulting to enabled", exc_info=True)
         return True
-
-
-def _resolve_extraction_config(anima_dir: Path) -> tuple[str, dict[str, object], str, int]:
-    """Resolve extraction model and timeout without trusting endpoint data from status.json."""
-    llm_extra: dict[str, object] = {}
-    timeout = 30
-
-    try:
-        status_path = Path(anima_dir) / "status.json"
-        if status_path.is_file():
-            data = json.loads(status_path.read_text(encoding="utf-8"))
-            if data.get("extraction_timeout"):
-                timeout = int(data["extraction_timeout"])
-            if data.get("extraction_model"):
-                return str(data["extraction_model"]), llm_extra, _resolve_locale(), timeout
-            if data.get("background_model"):
-                return str(data["background_model"]), llm_extra, _resolve_locale(), timeout
-    except Exception:
-        logger.debug("Failed to read status.json for fact extraction", exc_info=True)
-
-    try:
-        from core.config.models import load_config
-
-        cfg = load_config()
-        model = cfg.anima_defaults.background_model or cfg.anima_defaults.model
-        return model, llm_extra, cfg.locale, timeout
-    except Exception:
-        return "claude-sonnet-4-6", llm_extra, "ja", timeout
-
-
-def _resolve_locale() -> str:
-    try:
-        from core.config.models import load_config
-
-        return str(load_config().locale or "ja")
-    except Exception:
-        return "ja"
 
 
 def format_turns_for_fact_extraction(turns: list[Any]) -> str:
@@ -143,40 +126,82 @@ async def extract_fact_records(
     llm_extra: dict[str, object] | None = None,
     enabled: bool | None = None,
 ) -> list[FactRecord]:
+    return (
+        await extract_fact_records_with_outcome(
+            anima_dir,
+            text,
+            source_episode=source_episode,
+            source_session_id=source_session_id,
+            reference_time=reference_time,
+            extractor=extractor,
+            model=model,
+            locale=locale,
+            llm_extra=llm_extra,
+            enabled=enabled,
+        )
+    ).records
+
+
+async def extract_fact_records_with_outcome(
+    anima_dir: Path,
+    text: str,
+    *,
+    source_episode: str,
+    source_session_id: str = "",
+    reference_time: str | None = None,
+    extractor: Any | None = None,
+    model: str | None = None,
+    locale: str | None = None,
+    llm_extra: dict[str, object] | None = None,
+    enabled: bool | None = None,
+) -> FactExtractionOutcome:
     if not text.strip():
-        return []
+        return FactExtractionOutcome([])
     if enabled is False or (enabled is None and not _facts_extraction_enabled()):
-        return []
+        return FactExtractionOutcome([])
 
     try:
         if extractor is None:
             from core.memory.extraction.extractor import FactExtractor
 
-            resolved_model, resolved_extra, resolved_locale, timeout = _resolve_extraction_config(anima_dir)
+            resolved_model, resolved_extra, resolved_locale, timeout, credential = _resolve_extraction_config(anima_dir)
             extractor = FactExtractor(
                 model=model or resolved_model,
                 locale=locale or resolved_locale,
                 timeout=timeout,
                 llm_extra=llm_extra or resolved_extra,
                 anima_dir=anima_dir,
+                credential="" if model else credential,
             )
         entities = await extractor.extract_entities(text)
+        failure_stage = str(getattr(extractor, "last_failure_stage", "") or "")
+        failure_reason = str(getattr(extractor, "last_failure_reason", "") or "")
+        if failure_stage:
+            return FactExtractionOutcome([], True, failure_stage, failure_reason)
         resolved_reference_time = reference_time or now_iso()
         facts = await extractor.extract_facts(
             text,
             entities,
             reference_time=resolved_reference_time,
         )
-        return records_from_extraction(
+        failure_stage = str(getattr(extractor, "last_failure_stage", "") or "")
+        failure_reason = str(getattr(extractor, "last_failure_reason", "") or "")
+        records = records_from_extraction(
             entities,
             facts,
             source_episode=source_episode,
             source_session_id=source_session_id,
             recorded_at=resolved_reference_time,
         )
-    except Exception:
-        logger.warning("Atomic fact extraction failed", exc_info=True)
-        return []
+        return FactExtractionOutcome(records, bool(failure_stage), failure_stage, failure_reason)
+    except Exception as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.extract",
+            "Atomic fact extraction failed",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        return FactExtractionOutcome([], True, "extract", f"{type(exc).__name__}: {exc}")
 
 
 async def extract_and_store_facts(
@@ -200,8 +225,63 @@ async def extract_and_store_facts(
         extractor=extractor,
         enabled=enabled,
     )
+    return (
+        await _store_fact_records(
+            anima_dir,
+            records,
+            reference_time=reference_time,
+            origin=origin,
+        )
+    ).records
+
+
+async def extract_and_store_facts_with_outcome(
+    anima_dir: Path,
+    text: str,
+    *,
+    source_episode: str,
+    source_session_id: str = "",
+    reference_time: str | None = None,
+    origin: str = "conversation",
+    extractor: Any | None = None,
+    enabled: bool | None = None,
+) -> FactExtractionOutcome:
+    """Extract/store facts and return counters for lifecycle completion logs."""
+
+    extraction = await extract_fact_records_with_outcome(
+        anima_dir,
+        text,
+        source_episode=source_episode,
+        source_session_id=source_session_id,
+        reference_time=reference_time,
+        extractor=extractor,
+        enabled=enabled,
+    )
+    if not extraction.records:
+        return extraction
+    return await _store_fact_records(
+        anima_dir,
+        extraction.records,
+        reference_time=reference_time,
+        origin=origin,
+        initial_failed=extraction.failed,
+        initial_stage=extraction.failure_stage,
+        initial_reason=extraction.failure_reason,
+    )
+
+
+async def _store_fact_records(
+    anima_dir: Path,
+    records: list[FactRecord],
+    *,
+    reference_time: str | None,
+    origin: str,
+    initial_failed: bool = False,
+    initial_stage: str = "",
+    initial_reason: str = "",
+) -> FactExtractionOutcome:
     if not records:
-        return []
+        return FactExtractionOutcome(records, initial_failed, initial_stage, initial_reason)
 
     records_to_append, reconciled_stored, affected_paths, updated_records = await asyncio.to_thread(
         _reconcile_extracted_facts,
@@ -210,14 +290,22 @@ async def extract_and_store_facts(
         as_of_time=reference_time,
     )
     if not records_to_append and not affected_paths:
-        return []
+        return FactExtractionOutcome(reconciled_stored, initial_failed, initial_stage, initial_reason)
 
     try:
         stored = [*reconciled_stored, *append_fact_records(anima_dir, records_to_append)]
-    except Exception:
-        logger.warning("Failed to append atomic facts", exc_info=True)
-        return []
+    except Exception as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.append",
+            "Failed to append atomic facts",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        return FactExtractionOutcome([], True, "append", f"{type(exc).__name__}: {exc}")
 
+    side_effect_failed = initial_failed
+    failure_stage = initial_stage
+    failure_reason = initial_reason
     if stored or affected_paths:
         entity_registry_enabled = _entity_registry_enabled()
         entity_registry = None
@@ -226,7 +314,11 @@ async def extract_and_store_facts(
         if entity_registry_enabled and registry_records:
             entity_registry = _upsert_fact_entities(anima_dir, registry_records)
             entity_keys = _entity_keys_for_records(entity_registry, registry_records) if entity_registry else None
-        _index_fact_records(
+            if entity_registry is None:
+                side_effect_failed = True
+                failure_stage = failure_stage or "entity_registry"
+                failure_reason = failure_reason or "entity_registry_update_failed"
+        index_ok = _index_fact_records(
             anima_dir,
             stored,
             origin=origin,
@@ -235,7 +327,11 @@ async def extract_and_store_facts(
             entity_keys=entity_keys,
             extra_paths=affected_paths,
         )
-    return stored
+        if index_ok is False:
+            side_effect_failed = True
+            failure_stage = failure_stage or "index"
+            failure_reason = failure_reason or "fact_index_update_failed"
+    return FactExtractionOutcome(stored, side_effect_failed, failure_stage, failure_reason)
 
 
 def _reconcile_extracted_facts(
@@ -255,8 +351,13 @@ def _reconcile_extracted_facts(
     for record in records:
         try:
             result = reconcile_new_fact(anima_dir, record, as_of_time=as_of_time)
-        except Exception:
-            logger.warning("Fact reconciliation failed; appending extracted fact", exc_info=True)
+        except Exception as exc:
+            warn_rate_limited(
+                logger,
+                "fact_extraction.reconcile",
+                "Fact reconciliation failed; appending extracted fact",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             result = ReconcileResult(
                 action=ReconcileAction.ADD,
                 fact=record,
@@ -278,8 +379,13 @@ def _upsert_fact_entities(anima_dir: Path, records: list[FactRecord]) -> dict[st
         from core.memory.entity_index import upsert_entities_from_facts
 
         return upsert_entities_from_facts(anima_dir, records)
-    except Exception:
-        logger.debug("Failed to update entity registry from facts", exc_info=True)
+    except Exception as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.entity_registry",
+            "Failed to update entity registry from facts",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
         return None
 
 
@@ -288,8 +394,13 @@ def _entity_keys_for_records(registry: dict[str, Any], records: list[FactRecord]
         from core.memory.entity_index import entity_keys_for_records
 
         return entity_keys_for_records(registry, records)
-    except Exception:
-        logger.debug("Failed to resolve entity keys for sync", exc_info=True)
+    except Exception as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.entity_keys",
+            "Failed to resolve entity keys for sync",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
         return set()
 
 
@@ -302,10 +413,10 @@ def _index_fact_records(
     entity_registry: dict[str, Any] | None = None,
     entity_keys: set[str] | None = None,
     extra_paths: set[Path] | None = None,
-) -> None:
+) -> bool | None:
     paths = sorted({fact_file_for_record(anima_dir, record) for record in records} | set(extra_paths or set()))
     if not paths:
-        return
+        return None
     try:
         from core.memory.manager import MemoryManager
 
@@ -313,9 +424,16 @@ def _index_fact_records(
         for path in paths:
             memory._rag.index_file(path, "facts", force=True, origin=origin)
         if sync_entities:
-            _sync_entity_collection(anima_dir, memory, registry=entity_registry, entity_keys=entity_keys)
-    except Exception:
-        logger.warning("Failed to index atomic facts", exc_info=True)
+            return _sync_entity_collection(anima_dir, memory, registry=entity_registry, entity_keys=entity_keys)
+        return True
+    except Exception as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.index",
+            "Failed to index atomic facts",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        return False
 
 
 def _sync_entity_collection(
@@ -324,7 +442,7 @@ def _sync_entity_collection(
     *,
     registry: dict[str, Any] | None = None,
     entity_keys: set[str] | None = None,
-) -> None:
+) -> bool:
     try:
         from core.memory.entity_index import sync_entity_collection
 
@@ -332,5 +450,13 @@ def _sync_entity_collection(
         vector_store = getattr(indexer, "vector_store", None) if indexer is not None else None
         if vector_store is not None:
             sync_entity_collection(anima_dir, registry=registry, entity_keys=entity_keys, vector_store=vector_store)
-    except Exception:
-        logger.debug("Failed to sync entity collection", exc_info=True)
+        return True
+    except Exception as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.entity_collection",
+            "Failed to sync entity collection",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        return False
+    return True

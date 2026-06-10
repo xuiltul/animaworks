@@ -29,11 +29,12 @@ from core.memory.conversation_models import (
     ConversationTurn,
     ParsedSessionSummary,
 )
+from core.memory.fact_observability import warn_rate_limited
 from core.paths import load_prompt
 from core.time_utils import ensure_aware, now_local, today_local
 
 logger = logging.getLogger("animaworks.conversation_memory")
-_FACT_EXTRACTION_TASKS: set[asyncio.Task[None]] = set()
+_FACT_EXTRACTION_TASKS: set[asyncio.Task[tuple[int, int]]] = set()
 
 
 def _gather_activity_context(anima_dir: Path, turns: list[ConversationTurn]) -> str:
@@ -101,11 +102,11 @@ async def _extract_session_facts_nonfatal(
     source_episode: str,
     source_session_id: str,
     reference_time: str | None,
-) -> None:
+) -> tuple[int, int]:
     try:
-        from core.memory.fact_extraction import extract_and_store_facts
+        from core.memory.fact_extraction import extract_and_store_facts_with_outcome
 
-        stored = await extract_and_store_facts(
+        outcome = await extract_and_store_facts_with_outcome(
             anima_dir,
             text,
             source_episode=source_episode,
@@ -113,13 +114,28 @@ async def _extract_session_facts_nonfatal(
             reference_time=reference_time,
             origin="conversation",
         )
-        if stored:
-            logger.info("Stored %d atomic fact(s) from session finalization", len(stored))
-    except Exception:
-        logger.debug("Session atomic fact extraction failed", exc_info=True)
+        logger.info(
+            ("Session atomic fact extraction complete: facts_extracted=%d facts_failed=%d source_session_id=%s"),
+            outcome.facts_extracted,
+            outcome.facts_failed,
+            source_session_id,
+        )
+        return outcome.facts_extracted, outcome.facts_failed
+    except Exception as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.session",
+            "Session atomic fact extraction failed",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+        logger.info(
+            "Session atomic fact extraction complete: facts_extracted=0 facts_failed=1 source_session_id=%s",
+            source_session_id,
+        )
+        return 0, 1
 
 
-def _finish_fact_task(task: asyncio.Task[None]) -> None:
+def _finish_fact_task(task: asyncio.Task[tuple[int, int]]) -> None:
     _FACT_EXTRACTION_TASKS.discard(task)
     try:
         task.exception()
@@ -132,15 +148,15 @@ def _schedule_session_fact_extraction(
     turns: list[ConversationTurn],
     *,
     session_id: str,
-) -> None:
+) -> str:
     try:
         from core.memory.fact_extraction import _facts_extraction_enabled, format_turns_for_fact_extraction
 
         if not _facts_extraction_enabled():
-            return
+            return "disabled"
         text = format_turns_for_fact_extraction(turns)
         if not text.strip():
-            return
+            return "skipped_empty"
         reference_time = turns[-1].timestamp if turns else None
         task = asyncio.create_task(
             _extract_session_facts_nonfatal(
@@ -153,10 +169,22 @@ def _schedule_session_fact_extraction(
         )
         _FACT_EXTRACTION_TASKS.add(task)
         task.add_done_callback(_finish_fact_task)
-    except RuntimeError:
-        logger.debug("No running loop for session atomic fact extraction", exc_info=True)
-    except Exception:
-        logger.debug("Failed to schedule session atomic fact extraction", exc_info=True)
+        return "scheduled"
+    except RuntimeError as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.session_schedule",
+            "No running loop for session atomic fact extraction",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+    except Exception as exc:
+        warn_rate_limited(
+            logger,
+            "fact_extraction.session_schedule",
+            "Failed to schedule session atomic fact extraction",
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+    return "failed"
 
 
 def _parse_session_summary(raw: str) -> ParsedSessionSummary:
@@ -269,7 +297,7 @@ async def finalize_session(
     time_str = timestamp.strftime("%H:%M")
     episode_entry = f"## {time_str} — {parsed.title}\n\n{parsed.episode_body}\n"
     memory_mgr.append_episode(episode_entry)
-    _schedule_session_fact_extraction(anima_dir, new_turns, session_id=session_id)
+    fact_extraction_status = _schedule_session_fact_extraction(anima_dir, new_turns, session_id=session_id)
 
     from core.memory.conversation_state_update import (
         _auto_track_procedure_outcomes,
@@ -335,9 +363,14 @@ async def finalize_session(
     memory_mgr.archive_and_reset_state(new_status or "status: idle")
 
     logger.info(
-        "Session finalized: %d new turns summarized and written to episodes/%s.md",
+        (
+            "Session finalized: %d new turns summarized and written to episodes/%s.md "
+            "fact_extraction=%s facts_extracted=0 facts_failed=%d"
+        ),
         len(new_turns),
         today_local().isoformat(),
+        fact_extraction_status,
+        int(fact_extraction_status == "failed"),
     )
 
     return True

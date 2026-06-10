@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 from typing import Any, get_args
 
+from core.memory.fact_observability import warn_rate_limited
 from core.memory.ontology.default import (
     ENTITY_TYPES,
     EntityExtractionResult,
@@ -51,6 +52,7 @@ class FactExtractor:
         timeout: int = 30,
         llm_extra: dict[str, object] | None = None,
         anima_dir: Path | None = None,
+        credential: str = "",
     ) -> None:
         self._model = model
         self._locale = locale
@@ -58,6 +60,9 @@ class FactExtractor:
         self._timeout = timeout
         self._llm_extra = llm_extra or {}
         self._anima_dir = Path(anima_dir) if anima_dir is not None else None
+        self._credential = credential
+        self.last_failure_stage = ""
+        self.last_failure_reason = ""
 
     # ── Public API ─────────────────────────────────────────
 
@@ -76,6 +81,7 @@ class FactExtractor:
         Returns:
             List of extracted entities. Empty list on failure.
         """
+        self._clear_failure()
         prompts = self._select_prompts()
         prev_str = json.dumps(previous_entities, ensure_ascii=False) if previous_entities else "[]"
         user_prompt = prompts.ENTITY_USER.format(
@@ -85,11 +91,16 @@ class FactExtractor:
 
         try:
             raw = await self._call_llm(prompts.ENTITY_SYSTEM, user_prompt)
-        except Exception:
-            logger.warning("Entity extraction LLM call failed", exc_info=True)
+        except Exception as exc:
+            self._record_failure(
+                "entity_llm",
+                f"{type(exc).__name__}: {exc}",
+                "Entity extraction LLM call failed",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             return []
 
-        result = self._parse_json_response(raw, EntityExtractionResult)
+        result = self._parse_json_response(raw, EntityExtractionResult, stage="entity")
         if not isinstance(result, EntityExtractionResult):
             return []
 
@@ -121,6 +132,7 @@ class FactExtractor:
         Returns:
             List of extracted facts. Empty list on failure.
         """
+        self._clear_failure()
         if not entities:
             return []
 
@@ -139,11 +151,16 @@ class FactExtractor:
 
         try:
             raw = await self._call_llm(prompts.FACT_SYSTEM, user_prompt)
-        except Exception:
-            logger.warning("Fact extraction LLM call failed", exc_info=True)
+        except Exception as exc:
+            self._record_failure(
+                "fact_llm",
+                f"{type(exc).__name__}: {exc}",
+                "Fact extraction LLM call failed",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             return []
 
-        result = self._parse_json_response(raw, FactExtractionResult)
+        result = self._parse_json_response(raw, FactExtractionResult, stage="fact")
         if not isinstance(result, FactExtractionResult):
             return []
 
@@ -186,7 +203,11 @@ class FactExtractor:
 
         from core.memory._llm_utils import get_memory_llm_kwargs_for_model
 
-        llm_kwargs = get_memory_llm_kwargs_for_model(self._model, self._llm_extra)
+        llm_kwargs = get_memory_llm_kwargs_for_model(
+            self._model,
+            self._llm_extra,
+            credential=self._credential,
+        )
         resolved_model = llm_kwargs.pop("model", self._model)
         effective_timeout = llm_kwargs.pop("timeout", self._timeout)
 
@@ -210,11 +231,12 @@ class FactExtractor:
                 return text
             except Exception as exc:
                 last_exc = exc
-                logger.warning(
+                logger.debug(
                     "LLM call attempt %d/%d failed: %s",
                     attempt + 1,
                     self._max_retries,
                     exc,
+                    exc_info=True,
                 )
                 if attempt < self._max_retries - 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
@@ -223,8 +245,7 @@ class FactExtractor:
 
     # ── JSON parsing ───────────────────────────────────────
 
-    @staticmethod
-    def _parse_json_response(text: str, model_cls: type[Any]) -> Any:
+    def _parse_json_response(self, text: str, model_cls: type[Any], *, stage: str) -> Any:
         """Parse LLM response text into a Pydantic model.
 
         Handles JSON wrapped in markdown code fences, raw JSON,
@@ -238,6 +259,12 @@ class FactExtractor:
             Parsed model instance, or an empty default on failure.
         """
         if not text or not text.strip():
+            self._record_failure(
+                f"{stage}_parse",
+                "empty_response",
+                "%s extraction returned an empty LLM response",
+                stage.capitalize(),
+            )
             return model_cls()
 
         body = text
@@ -245,20 +272,51 @@ class FactExtractor:
         if fence_match:
             body = fence_match.group(1)
 
+        first_exc: Exception | None = None
         try:
             data = json.loads(body)
             return model_cls.model_validate(data)
-        except (json.JSONDecodeError, ValueError):
-            pass
+        except (json.JSONDecodeError, ValueError) as exc:
+            first_exc = exc
 
         try:
             data = json.loads(text)
             return model_cls.model_validate(data)
-        except (json.JSONDecodeError, ValueError):
-            pass
+        except (json.JSONDecodeError, ValueError) as exc:
+            if first_exc is None:
+                first_exc = exc
 
-        logger.debug("Failed to parse LLM JSON response: %.200s", text)
+        self._record_failure(
+            f"{stage}_parse",
+            f"{type(first_exc).__name__}: {first_exc}" if first_exc else "invalid_json",
+            "Failed to parse %s extraction LLM JSON response: %.200s",
+            stage,
+            text,
+            exc_info=(type(first_exc), first_exc, first_exc.__traceback__) if first_exc else False,
+        )
         return model_cls()
+
+    def _clear_failure(self) -> None:
+        self.last_failure_stage = ""
+        self.last_failure_reason = ""
+
+    def _record_failure(
+        self,
+        stage: str,
+        reason: str,
+        message: str,
+        *args: object,
+        exc_info: bool | tuple[type[BaseException], BaseException, Any] = False,
+    ) -> None:
+        self.last_failure_stage = stage
+        self.last_failure_reason = reason
+        warn_rate_limited(
+            logger,
+            f"fact_extraction.{stage}",
+            message,
+            *args,
+            exc_info=exc_info,
+        )
 
     # ── Prompt selection ───────────────────────────────────
 

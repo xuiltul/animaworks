@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.memory.fact_observability import reset_warning_rate_limits
 from core.memory.ontology.default import (
     EntityExtractionResult,
     ExtractedEntity,
@@ -181,14 +182,19 @@ class TestFactExtractorExtractEntities:
     @pytest.mark.asyncio
     @_LLM_KWARGS_PATCH
     @patch("litellm.acompletion", new_callable=AsyncMock)
-    async def test_extract_entities_invalid_json(self, mock_acompletion, _mock_kwargs):
+    async def test_extract_entities_invalid_json(self, mock_acompletion, _mock_kwargs, caplog):
         from core.memory.extraction.extractor import FactExtractor
 
+        reset_warning_rate_limits()
         mock_acompletion.return_value = _make_llm_response("NOT VALID JSON {{{")
 
         ext = FactExtractor(model="test-model", max_retries=1)
-        entities = await ext.extract_entities("テスト")
+        with caplog.at_level("WARNING", logger="core.memory.extraction.extractor"):
+            entities = await ext.extract_entities("テスト")
+
         assert entities == []
+        assert ext.last_failure_stage == "entity_parse"
+        assert "Failed to parse entity extraction LLM JSON response" in caplog.text
 
     @pytest.mark.asyncio
     @_LLM_KWARGS_PATCH

@@ -108,12 +108,7 @@ class ConsolidationEngine:
         if not existing:
             return timeline + "\n"
 
-        return (
-            f"{cls.RAW_NOTES_HEADER}\n\n"
-            f"{existing}\n\n"
-            f"{cls.CONSOLIDATED_TIMELINE_HEADER}\n\n"
-            f"{timeline}\n"
-        )
+        return f"{cls.RAW_NOTES_HEADER}\n\n{existing}\n\n{cls.CONSOLIDATED_TIMELINE_HEADER}\n\n{timeline}\n"
 
     def archive_episode_before_write(self, episode_path: Path) -> Path | None:
         """Copy an existing episode file to archive/episodes before overwriting it."""
@@ -770,20 +765,54 @@ class ConsolidationEngine:
         source_session_id: str = "consolidation:daily",
     ) -> int:
         """Extract and store atomic facts from consolidated episode text."""
-        try:
-            from core.memory.fact_extraction import extract_and_store_facts
+        outcome = await self.extract_facts_from_text_outcome(
+            text,
+            source_episode=source_episode,
+            source_session_id=source_session_id,
+        )
+        return outcome.facts_extracted
 
-            stored = await extract_and_store_facts(
+    async def extract_facts_from_text_outcome(
+        self,
+        text: str,
+        *,
+        source_episode: str,
+        source_session_id: str = "consolidation:daily",
+    ):
+        """Extract/store atomic facts and return operational counters."""
+        try:
+            from core.memory.fact_extraction import FactExtractionOutcome, extract_and_store_facts_with_outcome
+
+            outcome = await extract_and_store_facts_with_outcome(
                 self.anima_dir,
                 text,
                 source_episode=source_episode,
                 source_session_id=source_session_id,
                 origin="consolidation",
             )
-            return len(stored)
-        except Exception:
-            logger.debug("Consolidation atomic fact extraction failed", exc_info=True)
-            return 0
+            logger.info(
+                ("Consolidation atomic fact extraction complete for anima=%s: facts_extracted=%d facts_failed=%d"),
+                self.anima_name,
+                outcome.facts_extracted,
+                outcome.facts_failed,
+            )
+            return outcome
+        except Exception as exc:
+            from core.memory.fact_extraction import FactExtractionOutcome
+            from core.memory.fact_observability import warn_rate_limited
+
+            warn_rate_limited(
+                logger,
+                "fact_extraction.consolidation",
+                "Consolidation atomic fact extraction failed for anima=%s",
+                self.anima_name,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+            logger.info(
+                ("Consolidation atomic fact extraction complete for anima=%s: facts_extracted=0 facts_failed=1"),
+                self.anima_name,
+            )
+            return FactExtractionOutcome([], True, "consolidation", f"{type(exc).__name__}: {exc}")
 
     @staticmethod
     def merge_timeline_parts(parts: list[str]) -> str:

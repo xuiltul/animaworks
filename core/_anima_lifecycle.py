@@ -494,22 +494,35 @@ class LifecycleMixin:
         if episode_parts:
             merged_episodes = engine.merge_timeline_parts(episode_parts)
             episode_path = engine.write_consolidated_episode(target_date, merged_episodes)
-            logger.info(
-                "[%s] Phase A complete: wrote %d chars to %s",
-                self.name,
-                len(merged_episodes),
-                episode_path.name,
-            )
+            facts_extracted = 0
+            facts_failed = 0
             try:
-                fact_count = await engine.extract_facts_from_text(
+                fact_outcome = await engine.extract_facts_from_text_outcome(
                     merged_episodes,
                     source_episode=f"episodes/{episode_path.name}",
                     source_session_id="consolidation:daily",
                 )
-                if fact_count:
-                    logger.info("[%s] Phase A: stored %d atomic fact(s)", self.name, fact_count)
-            except Exception:
-                logger.debug("[%s] Phase A atomic fact extraction failed", self.name, exc_info=True)
+                facts_extracted = fact_outcome.facts_extracted
+                facts_failed = fact_outcome.facts_failed
+            except Exception as exc:
+                from core.memory.fact_observability import warn_rate_limited
+
+                warn_rate_limited(
+                    logger,
+                    "fact_extraction.phase_a",
+                    "[%s] Phase A atomic fact extraction failed",
+                    self.name,
+                    exc_info=(type(exc), exc, exc.__traceback__),
+                )
+                facts_failed = 1
+            logger.info(
+                "[%s] Phase A complete: wrote %d chars to %s facts_extracted=%d facts_failed=%d",
+                self.name,
+                len(merged_episodes),
+                episode_path.name,
+                facts_extracted,
+                facts_failed,
+            )
 
         # ── Phase B: Knowledge extraction ───────────────────────
         episodes = engine._collect_recent_episodes(hours=24)

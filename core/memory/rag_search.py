@@ -8,6 +8,8 @@ import json
 import logging
 from pathlib import Path
 
+from core.memory.fact_observability import warn_rate_limited
+
 logger = logging.getLogger("animaworks.memory")
 
 try:
@@ -148,7 +150,13 @@ class RAGMemorySearch:
                             indexed,
                         )
                 except Exception as e:
-                    logger.warning("Failed to index facts: %s", e)
+                    warn_rate_limited(
+                        logger,
+                        "fact_extraction.rag_search_facts_index",
+                        "Failed to index facts for anima=%s",
+                        anima_name,
+                        exc_info=(type(e), e, e.__traceback__),
+                    )
 
             # Index conversation summary (compressed_summary)
             state_dir = self._anima_dir / "state"
@@ -165,7 +173,13 @@ class RAGMemorySearch:
                             indexed,
                         )
                 except Exception as e:
-                    logger.warning("Failed to index conversation_summary: %s", e)
+                    warn_rate_limited(
+                        logger,
+                        "fact_extraction.conversation_summary_index",
+                        "Failed to index conversation_summary for anima=%s",
+                        anima_name,
+                        exc_info=(type(e), e, e.__traceback__),
+                    )
 
         except ImportError:
             logger.debug("RAG dependencies not installed, indexing disabled")
