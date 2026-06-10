@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from core.memory.priming.constants import (
+    _BUDGET_GRAPH_CONTEXT,
     _BUDGET_GREETING,
     _BUDGET_HEARTBEAT,
     _BUDGET_IMPORTANT_KNOWLEDGE,
@@ -132,6 +133,7 @@ class TestPrimingChannelsReference:
         "C0": _BUDGET_IMPORTANT_KNOWLEDGE,
         "E": _BUDGET_PENDING_TASKS,
         "F": _BUDGET_RELATED_EPISODES,
+        "G": _BUDGET_GRAPH_CONTEXT,
     }
     message_budget_constants = {
         "priming.budget_greeting": _BUDGET_GREETING,
@@ -145,7 +147,7 @@ class TestPrimingChannelsReference:
             content = (TEMPLATES_ROOT / locale / "reference" / "anatomy" / "priming-channels.md").read_text(
                 encoding="utf-8"
             )
-            rows = dict(re.findall(r"^\| (A|B|C|C0|E|F): [^|]+ \| (\d+) \|", content, re.MULTILINE))
+            rows = dict(re.findall(r"^\| (A|B|C|C0|E|F|G): [^|]+ \| (\d+) \|", content, re.MULTILINE))
             assert rows == {channel: str(budget) for channel, budget in self.channel_budget_constants.items()}, (
                 f"{locale} priming channel overview budget drift"
             )
@@ -173,10 +175,10 @@ class TestPrimingChannelsReference:
 
     def test_current_priming_docs_have_no_obsolete_channel_or_skill_tool_references(self):
         paths = [
-            Path("docs/memory.md"),
-            Path("docs/memory.ja.md"),
-            Path("docs/specs/20260218_memory-system-enhancement-checklist-20260218.md"),
-            *[Path("templates") / locale / "reference" / "anatomy" / "priming-channels.md" for locale in LOCALES],
+            path
+            for root in (Path("docs"), Path("templates"))
+            for path in root.rglob("*.md")
+            if not any(part in {"legacy", "implemented", "research"} for part in path.parts)
         ]
         pattern = re.compile(r"Channel D|channel D|channel_d|`skill` tool|skill tool")
         for path in paths:

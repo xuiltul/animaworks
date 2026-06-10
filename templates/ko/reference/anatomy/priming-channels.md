@@ -3,7 +3,7 @@
 PrimingEngine이 실행하는 전체 채널의 상세 사양입니다.
 버짓, 검색 소스, 필터링, 동적 조정을 포함합니다.
 
-병렬 검색은 **5개 채널**(A / B / C / E / F)을 사용합니다. C0(important_knowledge)는 Channel C와 같은 파이프라인 안의 보조 블록입니다. Distilled Knowledge는 더 이상 별도 프라이밍 채널이 아니며 “6채널” 표기는 폐지되었습니다.
+병렬 검색은 **6개 채널**(A / B / C / E / F / G)을 사용합니다. C0(important_knowledge)는 Channel C와 같은 파이프라인 안의 보조 블록입니다. Distilled Knowledge는 더 이상 별도 프라이밍 채널이 아닙니다.
 
 ---
 
@@ -17,6 +17,7 @@ PrimingEngine이 실행하는 전체 채널의 상세 사양입니다.
 | C0: important_knowledge | 500 | `[IMPORTANT]` 태그가 지정된 청크 | medium |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
 | F: episodes | 800 | RAG 벡터 검색 (episodes/) | medium |
+| G: graph_context | 500 | MemoryBackend의 community context + recent facts | medium |
 
 추가 주입:
 
@@ -111,6 +112,16 @@ RAG 벡터 검색으로 관련 에피소드를 주입합니다.
 - **버짓**: 800 토큰
 - **검색 대상**: `episodes/` 컬렉션 (ChromaDB)
 - **최소 스코어**: Channel C와 동일 (`rag.min_retrieval_score`)
+
+---
+
+## Channel G: graph_context
+
+MemoryBackend에서 graph/community context와 recent facts를 주입합니다.
+
+- **버짓**: 500 토큰
+- **소스**: `MemoryBackend.get_priming_context()`
+- **백엔드 사용 불가 시**: 건너뜀
 
 ---
 

@@ -126,7 +126,7 @@ search_memory(query="SSL certificate renewal", scope="procedures")
 **Executable procedure guides and tool usage guides.** Corresponds to “specialties.”
 
 - Personal skills (`skills/`) and common skills (`common_skills/`)
-- Required skills are found through active skill context, the Skill Router, the `skill` tool, or `read_memory_file(path="...")`
+- Required skills are found through active skill context, the Skill Router, Skill Hub, or `read_memory_file(path="...")`
 - You do not need to read every skill body up front. First use names, descriptions, or pointers; read the full text only when details are needed
 - Proven `procedures/` may be promoted into probation or quarantine skills
 - **In the vector store, skills are always outside the forgetting scope** (`skills` / `shared_users` types are protected)
@@ -161,7 +161,7 @@ Each time a conversation starts, the Priming engine searches related memories in
 | Episodes | RAG search over `episodes/` | 800 |
 | Graph context | Community context and recent facts from the memory backend | 500 |
 
-Skills and procedures are read when needed through the `skill` tool, active skill context, `read_memory_file`, or `search_memory(scope="skills")`. Skill bodies are not automatically injected in full.
+Skills and procedures are read when needed through active skill context, Skill Hub, `read_memory_file`, or `search_memory(scope="skills")`. Skill bodies are not automatically injected in full.
 
 \* In normal paths, the overall cap changes by message type such as greeting, question, request, and heartbeat. You can adjust `priming.budget_*` and `heartbeat_context_pct` in `config.json`.
 

@@ -30,6 +30,20 @@ Wave 3
 └── Issue 6: 効用ベース忘却        ← Issue 3 + Issue 5
 ```
 
+## 2026-06-11 現行ステータス参照
+
+このチェックリストは当初の 2026-02-18 設計メモを、2026-06 時点の実装に合わせて注釈したもの。主な反映元:
+
+| Ref | 内容 |
+|-----|------|
+| #207 / `1917fe14` | knowledge self-correction post-processing を production path に接続 |
+| #208 / `48ad24fa` | 日次 consolidation の episode note 保全と日付ずれ修正 |
+| #209 / `0b5cdb02` | neurogenesis merge の whole-file overwrite 防止 |
+| #212 / `56b58781` | consolidation timeout 後も post-processing / RAG rebuild を保証 |
+| #215 / `11bcbd82` | 月次忘却・retention・bad-date cleanup を有効化 |
+| #216 / `5c27b587` | 長期記憶 BM25 と access-count feedback loop 修正 |
+| #217 | 本ファイル、memory docs、distributed templates の現行化 |
+
 ## 共有リソース
 
 以下のコンポーネントは複数Issueで変更される。実装順序を守ることでコンフリクトを回避する。
@@ -188,32 +202,18 @@ Wave 3
 - [x] docs/memory.md の更新（新機能の反映） — 現行 priming / forgetting / skill-router 記述へ更新
 - [ ] 実Anima環境での動作確認（最低1サイクルの日次→週次→月次を通す） — ローカル自動テスト外。運用確認項目として残す
 
-## 日次固定化パイプライン（最終形）
+## 現行固定化パイプライン（最終形）
 
 ```
-daily_consolidate()
+run_consolidation()
 │
-├── [既存] マイグレーションチェック（Issue 1: フロントマター, Issue 3: procedures）
-│
-├── [既存] エピソード収集
-│
-├── [既存] LLM抽出（拡張: knowledge/procedures振り分け — Issue 4）
-│
-├── [新規] サニタイズ（Issue 1: コードフェンス除去）
-│
-├── [新規] バリデーション（Issue 1: NLI + LLMカスケード）
-│
-├── [新規] 矛盾検出・解決（Issue 2: NLI + LLM判定 → supersede/merge/coexist）
-│
-├── [既存] knowledge/ 書き込み（拡張: フロントマター付き — Issue 1）
-│
-├── [新規] procedures/ 書き込み（Issue 4: フロントマター付き）
-│
-├── [既存] RAGインデックス更新
-│
-├── [新規] 手続き再固定化（Issue 5: 失敗蓄積手順のReflection + 修正）
-│
-└── [既存] Synaptic Downscaling（拡張: procedures対応 — Issue 6）
+├── [現行] 旧形式メモリの frontmatter / procedure metadata 互換処理
+├── [現行] episode / activity / tool-result 文脈を Anima tool loop に提示
+├── [現行] Anima が `consolidation_instruction` に従って knowledge/procedures を読む・書く
+├── [現行] post-consolidation correction (#207): validation / contradiction / reconsolidation
+├── [現行] timeout-safe post-processing (#212): RAG rebuild / repair / bookkeeping
+├── [現行] forgetting (#215): monthly_forget / procedure archive cleanup / bad-date cleanup
+└── [廃止] 旧 `daily_consolidate()` / `weekly_integrate()` entrypoint は現行コードに存在しない
 ```
 
 ## Issue一覧

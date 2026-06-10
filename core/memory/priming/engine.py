@@ -7,7 +7,7 @@ from __future__ import annotations
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 
-"""PrimingEngine - slim orchestrator for 5-channel memory priming."""
+"""PrimingEngine - slim orchestrator for six-channel memory priming."""
 
 import asyncio
 import logging

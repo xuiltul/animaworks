@@ -3,7 +3,7 @@
 Detailed specification of all channels executed by PrimingEngine.
 Includes budget, search sources, filtering, and dynamic adjustment.
 
-Parallel retrieval uses **five channels** (A / B / C / E / F). Channel C0 (important_knowledge) is an auxiliary block inside the same pipeline as Channel C. Distilled Knowledge is no longer a separate priming channel, and any “six channel” wording is obsolete.
+Parallel retrieval uses **six channels** (A / B / C / E / F / G). Channel C0 (important_knowledge) is an auxiliary block inside the same pipeline as Channel C. Distilled Knowledge is no longer a separate priming channel.
 
 ---
 
@@ -17,6 +17,7 @@ Parallel retrieval uses **five channels** (A / B / C / E / F). Channel C0 (impor
 | C0: important_knowledge | 500 | Chunks tagged with `[IMPORTANT]` | medium |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
 | F: episodes | 800 | RAG vector search (episodes/) | medium |
+| G: graph_context | 500 | MemoryBackend community context + recent facts | medium |
 
 Additional injection:
 
@@ -112,6 +113,16 @@ Injects related episodes via RAG vector search.
 - **Budget**: 800 tokens
 - **Search target**: `episodes/` collection (ChromaDB)
 - **Min score**: Same as Channel C (`rag.min_retrieval_score`)
+
+---
+
+## Channel G: graph_context
+
+Injects graph/community context and recent facts from the configured memory backend.
+
+- **Budget**: 500 tokens
+- **Source**: `MemoryBackend.get_priming_context()`
+- **When backend unavailable**: Skipped
 
 ---
 

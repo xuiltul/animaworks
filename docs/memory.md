@@ -912,7 +912,7 @@ The memory subsystem is implemented under `core/memory/`.
 | `priming/format.py` | `format_priming_section` for prompts |
 | `priming/utils.py` | `RetrieverCache`, `build_queries`, `search_and_merge`, keywords, truncate |
 | `priming/outbound.py` | Recent Outbound, pending `human_notify` |
-| `priming/channel_a.py` … `channel_f.py` | Source collectors for sender, activity, knowledge, tasks, and episodes; auxiliary collectors add graph/outbound/notification context |
+| `priming/channel_a.py` … `channel_g.py` | Source collectors for sender, activity, knowledge, tasks, episodes, and graph context; auxiliary collectors add outbound/notification context |
 
 Public API: `from core.memory.priming import PrimingEngine, PrimingResult, format_priming_section` (re-exported from `core/memory/__init__.py`). Chat path calls `prime_memories` from `core/_agent_priming.py`.
 

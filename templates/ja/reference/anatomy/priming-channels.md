@@ -3,7 +3,7 @@
 PrimingEngine が実行する全チャネルの詳細仕様。
 バジェット、検索ソース、フィルタリング、動的調整を含む。
 
-並列取得は **5 チャネル**（A / B / C / E / F）である。C0（important_knowledge）は Channel C と同一パイプライン内の補助ブロック。旧 Distilled Knowledge は独立したプライミングチャネルではなくなり、「6 チャネル」表記も廃止済み。
+並列取得は **6 チャネル**（A / B / C / E / F / G）である。C0（important_knowledge）は Channel C と同一パイプライン内の補助ブロック。旧 Distilled Knowledge は独立したプライミングチャネルではなくなった。
 
 ---
 
@@ -17,6 +17,7 @@ PrimingEngine が実行する全チャネルの詳細仕様。
 | C0: important_knowledge | 500 | `[IMPORTANT]` タグ付きチャンク | medium |
 | E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
 | F: episodes | 800 | RAG ベクトル検索（episodes/） | medium |
+| G: graph_context | 500 | MemoryBackend の community context + recent facts | medium |
 
 追加注入:
 
@@ -112,6 +113,16 @@ RAG ベクトル検索で関連エピソードを注入する。
 - **バジェット**: 800トークン
 - **検索対象**: `episodes/` コレクション（ChromaDB）
 - **最小スコア**: Channel C と共通（`rag.min_retrieval_score`）
+
+---
+
+## Channel G: graph_context
+
+MemoryBackend から graph/community context と recent facts を注入する。
+
+- **バジェット**: 500トークン
+- **ソース**: `MemoryBackend.get_priming_context()`
+- **バックエンド利用不可時**: スキップ
 
 ---
 

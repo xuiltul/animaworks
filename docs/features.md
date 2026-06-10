@@ -181,7 +181,7 @@ If there is no update for 30 minutes, a task is marked stale; if the deadline pa
 
 AnimaWorks-specific tools: memory (search, read/write, archive), procedure and knowledge metadata, channels (DM and Board), task queue (`backlog_task` / `update_task` / `list_tasks`), `submit_tasks`, notifications, skills, supervisor org tools, and (depending on configuration) credential **vault** and background-task inspection. **Schemas are filtered** by execution mode and trigger (chat, heartbeat, cron, consolidation jobs, etc.).
 
-In **Mode S (Claude Agent SDK)**, besides Claude Code built-in tools, tools in the **`mcp__aw__*` namespace** are exposed via the stdio MCP server `core.mcp.server`. Names on MCP are a **curated subset** (four memory tools, `send_message` / `post_channel`, `call_human`, `delegate_task` / `submit_tasks` / `update_task`, `skill`). For example, **`backlog_task` and `list_tasks` are not on MCP** and are used through the full tool path (same handler as other modes). External services depend on `permissions.md` allowances and schema injection.
+In **Mode S (Claude Agent SDK)**, besides Claude Code built-in tools, tools in the **`mcp__aw__*` namespace** are exposed via the stdio MCP server `core.mcp.server`. Names on MCP are a **curated subset** (four memory tools, `send_message` / `post_channel`, `call_human`, `delegate_task` / `submit_tasks` / `update_task`, `create_skill`). For example, **`backlog_task` and `list_tasks` are not on MCP** and are used through the full tool path (same handler as other modes). External services depend on `permissions.md` allowances and schema injection.
 
 ### External Tools
 
@@ -193,7 +193,7 @@ Per-Anima allowance is controlled in `permissions.md`. Long-running tools (e.g. 
 
 ### Skill System
 
-Skills use progressive disclosure. Required skills are surfaced through active skill context, the Skill Router, the `skill` tool, or explicit `read_memory_file` calls. Full text loads only when the Anima decides it is needed, keeping cognitive load manageable even with many skills.
+Skills use progressive disclosure. Required skills are surfaced through active skill context, the Skill Router, Skill Hub, or explicit `read_memory_file` calls. Full text loads only when the Anima decides it is needed, keeping cognitive load manageable even with many skills.
 
 The Skill Hub manages installation, inspection, removal, quarantine, and shared availability. Successful procedures can be promoted into probation skills, and the curator reviews usage to suggest archive, merge, or cleanup actions. Animas can also create their own skills.
 

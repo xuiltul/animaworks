@@ -156,7 +156,7 @@ create_skill(skill_name="deploy-procedure", description="운영 배포 절차", 
 | 일화 | `episodes` RAG 검색 | 800 |
 | 그래프 문맥 | memory backend의 community context와 recent facts | 500 |
 
-스킬과 절차는 필요할 때 `skill` 도구, active skill context, `read_memory_file`, 또는 `search_memory(scope="skills")`로 읽습니다. 스킬 본문 전체가 항상 자동 주입되는 설계는 아닙니다.
+스킬과 절차는 필요할 때 active skill context, Skill Hub, `read_memory_file`, 또는 `search_memory(scope="skills")`로 읽습니다. 스킬 본문 전체가 항상 자동 주입되는 설계는 아닙니다.
 
 일반 경로에서는 인사, 질문, 요청, heartbeat 등 메시지 종류에 따라 전체 상한이 달라집니다. `config.json`의 `priming.budget_*`와 `heartbeat_context_pct`로 조정할 수 있습니다.
 

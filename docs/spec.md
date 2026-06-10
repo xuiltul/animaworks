@@ -947,7 +947,7 @@ Group 6: Meta settings
 
 **Tiered System Prompt:** Adjusts prompt content in 4 tiers based on context window (T1 FULL 128k+ / T2 STANDARD 32k–128k / T3 LIGHT 16k–32k / T4 MINIMAL <16k).
 
-**Skill injection (progressive disclosure):** Skills are not loaded wholesale by the main priming body. Active skill context, the Skill Router, Skill Hub, the `skill` tool, and `read_memory_file` provide the body or pointer only when needed. Message-type budgets still apply to the surrounding priming context: greeting=500, question=2000, request=3000, heartbeat=200 (`PrimingConfig` defaults).
+**Skill injection (progressive disclosure):** Skills are not loaded wholesale by the main priming body. Active skill context, the Skill Router, Skill Hub, and `read_memory_file` provide the body or pointer only when needed. Message-type budgets still apply to the surrounding priming context: greeting=500, question=2000, request=3000, heartbeat=200 (`PrimingConfig` defaults).
 
 Including "Making decisions without searching memory is prohibited" in `behavior_rules` is the key to the success of archive-based memory (validated experimentally).
 
