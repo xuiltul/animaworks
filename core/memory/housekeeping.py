@@ -636,6 +636,7 @@ def _cleanup_runtime_tmp(tmp_dir: Path, retention_days: int) -> dict[str, Any]:
         return {"skipped": True}
 
     cutoff_ts = (now_local() - timedelta(days=retention_days)).timestamp()
+    open_paths = _collect_open_tmp_paths(tmp_dir)
     deleted_entries = 0
     freed_bytes = 0
     skipped_count = 0
@@ -649,7 +650,7 @@ def _cleanup_runtime_tmp(tmp_dir: Path, retention_days: int) -> dict[str, Any]:
             continue
         try:
             if entry.name in _PRESERVED_TMP_SUBDIRS and entry.is_dir():
-                nested = _cleanup_runtime_tmp_contents(entry, cutoff_ts)
+                nested = _cleanup_runtime_tmp_contents(entry, cutoff_ts, open_paths)
                 deleted_entries += nested["deleted_entries"]
                 freed_bytes += nested["freed_bytes"]
                 skipped_count += nested["skipped_count"]
@@ -657,7 +658,7 @@ def _cleanup_runtime_tmp(tmp_dir: Path, retention_days: int) -> dict[str, Any]:
                 continue
             if not _path_tree_older_than(entry, cutoff_ts):
                 continue
-            if _path_has_open_files(entry):
+            if _path_has_open_files(entry, open_paths):
                 skipped_count += 1
                 logger.warning("Runtime tmp entry is open; skipping: %s", entry)
                 continue
@@ -680,7 +681,7 @@ def _cleanup_runtime_tmp(tmp_dir: Path, retention_days: int) -> dict[str, Any]:
     }
 
 
-def _cleanup_runtime_tmp_contents(root: Path, cutoff_ts: float) -> dict[str, Any]:
+def _cleanup_runtime_tmp_contents(root: Path, cutoff_ts: float, open_paths: set[Path]) -> dict[str, Any]:
     """Clean old children inside a preserved tmp subdir without deleting it."""
     deleted_entries = 0
     freed_bytes = 0
@@ -694,7 +695,7 @@ def _cleanup_runtime_tmp_contents(root: Path, cutoff_ts: float) -> dict[str, Any
         try:
             if not _path_tree_older_than(entry, cutoff_ts):
                 continue
-            if _path_has_open_files(entry):
+            if _path_has_open_files(entry, open_paths):
                 skipped_count += 1
                 logger.warning("Runtime tmp entry is open; skipping: %s", entry)
                 continue
@@ -725,13 +726,43 @@ def _path_tree_older_than(path: Path, cutoff_ts: float) -> bool:
     return True
 
 
-def _path_has_open_files(path: Path) -> bool:
+def _collect_open_tmp_paths(root: Path) -> set[Path]:
     lsof = shutil.which("lsof")
     if not lsof:
+        return set()
+    try:
+        result = subprocess.run(
+            [lsof, "-F", "n", "+D", str(root)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("Runtime tmp lsof scan timed out; proceeding without open-file skips for %s", root)
+        return set()
+    if result.returncode not in (0, 1):
+        logger.debug("Runtime tmp lsof scan exited with status %s for %s", result.returncode, root)
+    paths: set[Path] = set()
+    for line in result.stdout.splitlines():
+        if not line.startswith("n"):
+            continue
+        raw_path = line[1:].split(" (", 1)[0]
+        if raw_path:
+            paths.add(Path(raw_path).resolve(strict=False))
+    return paths
+
+
+def _path_has_open_files(path: Path, open_paths: set[Path]) -> bool:
+    if not open_paths:
         return False
-    cmd = [lsof, "+D", str(path)] if path.is_dir() else [lsof, "--", str(path)]
-    result = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    return result.returncode == 0
+    resolved = path.resolve(strict=False)
+    if resolved in open_paths:
+        return True
+    if path.is_dir():
+        return any(open_path.is_relative_to(resolved) for open_path in open_paths)
+    return False
 
 
 def _cleanup_backup_dirs(animas_dir: Path, retention_days: int) -> dict[str, Any]:
