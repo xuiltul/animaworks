@@ -83,6 +83,7 @@ def compare_result_files(
             "after_only_count": len(set(after_by_key) - set(before_by_key)),
             **per_question,
         },
+        "warnings": _condition_warnings(before, after),
     }
 
 
@@ -137,7 +138,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.extend(_question_lines(questions.get("worst_regressions", [])))
     lines.extend(["", "### Best Improvements", ""])
     lines.extend(_question_lines(questions.get("best_improvements", [])))
-    warnings = []
+    warnings = list(report.get("warnings", []) or [])
     if before["missing_summary"]:
         warnings.append(f"Before summary was missing and recomputed from results: {before['path']}")
     if after["missing_summary"]:
@@ -159,7 +160,31 @@ def _bundle_summary(bundle: ResultBundle) -> dict[str, Any]:
         "cat5_excluded_summary": bundle.cat5_excluded_summary,
         "missing_summary": bundle.missing_summary,
         "errors": bundle.payload.get("errors"),
+        "config": bundle.payload.get("config", {}),
     }
+
+
+def _condition_warnings(before: ResultBundle, after: ResultBundle) -> list[str]:
+    before_config = before.payload.get("config") if isinstance(before.payload.get("config"), dict) else {}
+    after_config = after.payload.get("config") if isinstance(after.payload.get("config"), dict) else {}
+    keys = (
+        "protocol_version",
+        "leakage_alias_map_enabled",
+        "category_branches_enabled",
+        "category_dependent_normalization_enabled",
+        "judge_enabled",
+        "exclude_cat5",
+        "answer_model",
+        "judge_model",
+        "conversations",
+    )
+    warnings: list[str] = []
+    for key in keys:
+        before_value = before_config.get(key)
+        after_value = after_config.get(key)
+        if before_value != after_value:
+            warnings.append(f"Benchmark condition differs for `{key}`: before={before_value!r}, after={after_value!r}")
+    return warnings
 
 
 def _question_lines(rows: list[dict[str, Any]]) -> list[str]:

@@ -148,6 +148,28 @@ class TestComputeSummary:
         assert cat["temporal"]["f1"] == pytest.approx(0.5)
         assert cat["temporal"]["judge"] == pytest.approx(1.0)
 
+    def test_error_rows_excluded_from_score_averages(self):
+        results = [
+            {"category": 1, "f1": 0.8, "judge_score": None},
+            {
+                "category": 1,
+                "status": "error",
+                "error_stage": "answer",
+                "error_message": "timeout",
+                "f1": None,
+                "judge_score": None,
+            },
+        ]
+
+        s = compute_summary(results)
+
+        assert s["overall_f1"] == pytest.approx(0.8)
+        assert s["scored_count"] == 1
+        assert s["error_count"] == 1
+        assert s["excluded_error_count"] == 1
+        assert s["error_rate"] == pytest.approx(0.5)
+        assert s["invalid_due_to_error_rate"] is True
+
     def test_all_categories_present(self):
         for cat_id, name in CATEGORY_NAMES.items():
             results = [{"category": cat_id, "f1": 0.5, "judge_score": None}]

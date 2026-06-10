@@ -6,6 +6,10 @@
   "llm_credential": "vllm-lb",
   "conversations": 1,
   "top_k": 10,
+  "validity": {
+    "invalid_for_standard_comparison": true,
+    "reason": "Legacy smoke baseline uses one conversation, token F1, category 5 included, and historical benchmark-only conditions. It must not be used as a PASS verdict against the 2026-06 standard protocol."
+  },
   "overall_f1": 0.447015668230488,
   "by_category": {
     "temporal": {"f1": 0.4103399237453425, "count": 37},

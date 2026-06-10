@@ -40,8 +40,8 @@ python -m benchmarks.locomo.runner --conversations 1
 # 特定モード
 python -m benchmarks.locomo.runner --mode vector
 
-# LLM Judge 有効
-python -m benchmarks.locomo.runner --judge
+# 標準プロトコル（10会話 / LLM Judge / cat5除外 / leakage path off）
+python -m benchmarks.locomo.runner --standard-protocol
 
 # 回答モデル変更
 python -m benchmarks.locomo.runner --answer-model gpt-4o
@@ -54,11 +54,43 @@ python -m benchmarks.locomo.runner --answer-model gpt-4o
 | `--data PATH` | `benchmarks/locomo/data/locomo10.json` | データセットパス |
 | `--mode MODE` | `all` | `vector` / `vector_graph` / `scope_all` / `all` |
 | `--conversations N` | `10` | 処理する会話数 |
-| `--top-k K` | `5` | 検索結果数 |
+| `--top-k K` | `10` | 検索結果数 |
+| `--exclude-cat5` | off | adversarial（category 5）を評価集計から除外 |
 | `--judge` | off | LLM Judge 有効化 |
 | `--judge-model` | `gpt-4o` | Judge モデル |
 | `--answer-model` | `gpt-4o-mini` | 回答生成モデル |
+| `--enable-locomo-alias` | off | 旧LoCoMo alias mapを有効化。conv-26由来のgold answer leakageを含むため標準計測では禁止 |
+| `--enable-locomo-category-branches` | off | gold category labelを使う検索gate/answer整形を有効化。標準計測では禁止 |
+| `--standard-protocol` | off | `scope_all`、10会話、LLM Judge on、cat5除外、leakage flags off の標準条件を適用 |
 | `--output DIR` | `benchmarks/locomo/results` | 結果出力先 |
+
+## 標準計測プロトコル
+
+2026-06以降の比較基準は以下の条件に固定する。
+
+- データ: `locomo10.json` の10会話フルラン
+- 標準モード: `scope_all`
+- leakage path: `--enable-locomo-alias` と `--enable-locomo-category-branches` はどちらも未指定（off）
+- 主指標: LLM Judge の `cat5_excluded.overall_judge`
+- 副指標: token F1 の `overall_f1`（category 5込み、過去時系列との互換用）
+- Judge モデル: 回答モデルと異なるモデルを使う（`judge_model != answer_model`）
+- error扱い: retrieve/answer失敗は `status=error` として結果JSONに残し、F1=0として混ぜない。summaryの `error_rate` が2%を超えるrunは無効
+
+標準run例:
+
+```bash
+python -m benchmarks.locomo.runner \
+  --standard-protocol \
+  --answer-model deepseek-v4-flash \
+  --judge-model gpt-4o
+```
+
+結果JSONの `config` には `leakage_alias_map_enabled`、`category_branches_enabled`、
+`category_dependent_normalization_enabled`、`protocol_version` が記録される。`summary.standard_protocol`
+には主指標値、judge独立性、leakage-free判定、error率、valid判定が記録される。
+
+2026-06-11 のローカル再基準化試行は `benchmarks/results/locomo_standard_protocol_baseline_20260611.json`
+に記録した。2問smokeの段階で error率が100%となったため、有効な10会話baselineではない。
 
 ## 検索モード
 
@@ -104,6 +136,10 @@ results/
 - **データ隔離**: 一時ディレクトリ（`ANIMAWORKS_DATA_DIR`）を使用、既存データに影響しない
 
 ## Legacy 回帰スモーク（Wave 1 harness）
+
+以下は1会話・token F1・category 5込み・旧条件のスモーク回帰用であり、Mem0/Zep等との比較PASS判定や
+2026-06以降の標準baselineとしては無効。`benchmarks/locomo/baselines/*.json` にも
+`invalid_for_standard_comparison` を記録している。
 
 ベースライン（回答モデルで自動選択、`LOCOMO_BASELINE` で override 可）:
 

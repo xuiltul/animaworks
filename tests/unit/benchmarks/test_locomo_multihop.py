@@ -20,8 +20,14 @@ def _adapter(**attrs):
     return SimpleNamespace(**defaults)
 
 
-def test_multihop_aliases_expand_known_attribute_terms() -> None:
+def test_multihop_aliases_default_off_to_avoid_test_set_leakage() -> None:
     aliases = multihop_aliases("What does Melanie do to destress?")
+
+    assert aliases == ()
+
+
+def test_multihop_aliases_expand_known_attribute_terms_when_enabled() -> None:
+    aliases = multihop_aliases("What does Melanie do to destress?", enable_alias_map=True)
 
     assert "running" in aliases
     assert "pottery" in aliases

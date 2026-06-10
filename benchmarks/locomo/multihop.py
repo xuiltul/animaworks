@@ -71,6 +71,7 @@ logger = logging.getLogger(__name__)
 def empty_multihop_meta() -> dict[str, Any]:
     return {
         "enabled": False,
+        "alias_map_enabled": False,
         "fallback_used": False,
         "query_count": 0,
         "queries": [],
@@ -79,7 +80,10 @@ def empty_multihop_meta() -> dict[str, Any]:
     }
 
 
-def multihop_aliases(question: str) -> tuple[str, ...]:
+def multihop_aliases(question: str, *, enable_alias_map: bool = False) -> tuple[str, ...]:
+    if not enable_alias_map:
+        return ()
+
     from core.memory.retrieval.entity import expand_alias_terms  # noqa: PLC0415
 
     return expand_alias_terms(question, _MULTIHOP_ALIAS_MAP, limit=_MULTIHOP_ALIAS_LIMIT)
@@ -174,13 +178,15 @@ class LocomoMultiHopOrchestrator:
         return category == 1 and _fact_index_enabled() and int(getattr(self._adapter, "_last_fact_count", 0) or 0) > 0
 
     def augment(self, question: str, base_items: list[dict[str, Any]], *, top_k: int) -> list[dict[str, Any]]:
-        aliases = multihop_aliases(question)
+        alias_map_enabled = bool(getattr(self._adapter, "_enable_locomo_alias", False))
+        aliases = multihop_aliases(question, enable_alias_map=alias_map_enabled)
         persons = self.persons(question)
         query_specs = self.query_specs(question, persons=persons, aliases=aliases)
         if len(base_items) >= top_k:
             self._adapter._last_multihop_meta = self._meta(
                 query_specs=query_specs,
                 aliases=aliases,
+                alias_map_enabled=alias_map_enabled,
                 fallback_used=False,
                 helper_counts={},
             )
@@ -218,6 +224,7 @@ class LocomoMultiHopOrchestrator:
         self._adapter._last_multihop_meta = self._meta(
             query_specs=query_specs,
             aliases=aliases,
+            alias_map_enabled=alias_map_enabled,
             fallback_used=fallback_used,
             helper_counts=helper_counts,
         )
@@ -412,11 +419,13 @@ class LocomoMultiHopOrchestrator:
         *,
         query_specs: list[dict[str, Any]],
         aliases: tuple[str, ...],
+        alias_map_enabled: bool,
         fallback_used: bool,
         helper_counts: dict[str, int],
     ) -> dict[str, Any]:
         return {
             "enabled": True,
+            "alias_map_enabled": alias_map_enabled,
             "fallback_used": fallback_used,
             "query_count": len(query_specs),
             "queries": [spec["query"] for spec in query_specs],

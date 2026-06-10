@@ -320,6 +320,11 @@ class TestRunnerWithMockedAdapter:
         assert first["top_retrieval_score"] == 0.9
         result_files = list((tmp_path / "results").glob("*.json"))
         assert len(result_files) == 1
+        payload = json.loads(result_files[0].read_text(encoding="utf-8"))
+        assert payload["config"]["leakage_alias_map_enabled"] is False
+        assert payload["config"]["category_branches_enabled"] is False
+        assert payload["summary"]["standard_protocol"]["leakage_free"] is True
+        assert payload["summary"]["error_rate"] == 0.0
 
     def test_run_benchmark_with_judge(self, tmp_path):
         import argparse
@@ -358,6 +363,49 @@ class TestRunnerWithMockedAdapter:
         assert "vector" in results
         judge_scores = [r["judge_score"] for r in results["vector"]["results"] if r["judge_score"] is not None]
         assert len(judge_scores) > 0
+
+    def test_judge_verdict_error_counts_as_error_without_zeroing_f1(self, tmp_path):
+        import argparse
+
+        data_file = _make_dataset_file(tmp_path)
+
+        mock_adapter = MagicMock()
+        mock_adapter.__enter__ = MagicMock(return_value=mock_adapter)
+        mock_adapter.__exit__ = MagicMock(return_value=False)
+        mock_adapter.ingest_conversation.return_value = 3
+        mock_adapter.retrieve.return_value = [{"content": "Paris trip", "score": 0.9, "metadata": {}}]
+        mock_adapter.answer.return_value = "Paris"
+
+        with (
+            patch("benchmarks.locomo.runner.AnimaWorksLoCoMoAdapter", return_value=mock_adapter),
+            patch(
+                "benchmarks.locomo.runner.llm_judge_sync",
+                return_value={"verdict": "error", "score": 0.0},
+            ),
+        ):
+            from benchmarks.locomo.runner import run_benchmark
+
+            args = argparse.Namespace(
+                data=str(data_file),
+                output=str(tmp_path / "results_judge_error"),
+                mode="vector",
+                conversations=1,
+                top_k=5,
+                judge=True,
+                judge_model="gpt-4o",
+                answer_model="gpt-4o-mini",
+                verbose=False,
+            )
+            results, errors = run_benchmark(args)
+
+        assert errors > 0
+        first = results["vector"]["results"][0]
+        assert first["status"] == "ok"
+        assert first["f1"] == 1.0
+        assert first["judge_score"] is None
+        assert first["judge_error"]
+        assert results["vector"]["summary"]["judge_error_count"] > 0
+        assert results["vector"]["summary"]["error_count"] > 0
 
     def test_run_benchmark_all_modes(self, tmp_path):
         import argparse
@@ -429,6 +477,11 @@ class TestRunnerWithMockedAdapter:
 
         assert errors > 0
         assert "vector" in results
+        first = results["vector"]["results"][0]
+        assert first["status"] == "error"
+        assert first["error_stage"] == "retrieve"
+        assert results["vector"]["summary"]["scored_count"] == 0
+        assert results["vector"]["summary"]["error_count"] > 0
 
 
 # ── Metrics llm_judge_sync mock tests ──────────

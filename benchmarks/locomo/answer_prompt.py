@@ -95,7 +95,12 @@ def build_answer_user_content(
     )
 
 
-def normalize_locomo_answer(raw: str, *, category: int | None = None) -> str:
+def normalize_locomo_answer(
+    raw: str,
+    *,
+    category: int | None = None,
+    enable_category_normalization: bool = False,
+) -> str:
     """Strip CoT leakage and compress verbose answers for token-F1 scoring."""
     text = (raw or "").strip()
     if not text:
@@ -106,9 +111,9 @@ def normalize_locomo_answer(raw: str, *, category: int | None = None) -> str:
 
     low = text.lower()
     if "no information available" in low or "not mentioned" in low:
-        if category == _ADVERSARIAL_CATEGORY:
+        if enable_category_normalization and category == _ADVERSARIAL_CATEGORY:
             return "No information available."
-        if category in (3, 4):
+        if enable_category_normalization and category in (3, 4):
             pass
         else:
             return "No information available."
@@ -125,7 +130,7 @@ def normalize_locomo_answer(raw: str, *, category: int | None = None) -> str:
 
     text = _strip_chain_of_thought(text)
 
-    if category == 2 and len(text.split()) > 8:
+    if enable_category_normalization and category == 2 and len(text.split()) > 8:
         years = _YEAR_RE.findall(text)
         if years:
             return years[-1]
@@ -134,7 +139,7 @@ def normalize_locomo_answer(raw: str, *, category: int | None = None) -> str:
     if len(text.split()) > 20:
         text = first_line
 
-    if len(text.split()) > 15 and "," in text:
+    if enable_category_normalization and len(text.split()) > 15 and "," in text:
         parts = [p.strip() for p in text.split(",")]
         if parts and len(parts[-1].split()) <= 6:
             text = parts[-1]

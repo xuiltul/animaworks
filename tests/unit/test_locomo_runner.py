@@ -6,6 +6,7 @@ import json
 import pytest
 
 from benchmarks.locomo.llm_config import default_answer_model
+from benchmarks.locomo.protocol import apply_standard_protocol_args, attach_standard_protocol_summary
 from benchmarks.locomo.runner import (
     _REFERENCE_SCORES,
     EMBEDDING_MODEL_DEFAULT,
@@ -31,6 +32,9 @@ class TestArgParser:
         assert args.answer_model == default_answer_model()
         assert args.answer_timeout is None
         assert args.answer_max_retries == 2
+        assert args.enable_locomo_alias is False
+        assert args.enable_locomo_category_branches is False
+        assert args.standard_protocol is False
         assert args.checkpoint_every == 0
         assert args.max_questions == 0
         assert args.verbose is False
@@ -68,6 +72,71 @@ class TestArgParser:
         assert args.answer_max_retries == 0
         assert args.checkpoint_every == 25
         assert args.max_questions == 20
+
+    def test_integrity_flags(self):
+        p = _build_arg_parser()
+        args = p.parse_args(["--enable-locomo-alias", "--enable-locomo-category-branches", "--standard-protocol"])
+        assert args.enable_locomo_alias is True
+        assert args.enable_locomo_category_branches is True
+        assert args.standard_protocol is True
+
+    def test_standard_protocol_overrides_leakage_flags(self):
+        p = _build_arg_parser()
+        args = p.parse_args(
+            ["--mode", "all", "--enable-locomo-alias", "--enable-locomo-category-branches", "--standard-protocol"]
+        )
+
+        apply_standard_protocol_args(args)
+
+        assert args.mode == "scope_all"
+        assert args.conversations == 10
+        assert args.judge is True
+        assert args.exclude_cat5 is True
+        assert args.enable_locomo_alias is False
+        assert args.enable_locomo_category_branches is False
+
+
+class TestStandardProtocolSummary:
+    def test_requires_scope_all_and_cat5_exclusion(self):
+        summary = {
+            "overall_f1": 0.5,
+            "error_rate": 0.0,
+            "cat5_excluded": {"overall_judge": 0.75},
+        }
+        config = {
+            "answer_model": "answer-model",
+            "judge_model": "judge-model",
+            "judge_enabled": True,
+            "conversations": 10,
+            "search_mode": "all",
+            "exclude_cat5": False,
+            "max_questions": 0,
+            "leakage_alias_map_enabled": False,
+            "category_branches_enabled": False,
+        }
+
+        attach_standard_protocol_summary(summary, config)
+
+        protocol = summary["standard_protocol"]
+        assert protocol["valid"] is False
+        assert protocol["scope_all"] is False
+        assert protocol["cat5_excluded"] is False
+
+        config["search_mode"] = "scope_all"
+        config["exclude_cat5"] = True
+        attach_standard_protocol_summary(summary, config)
+
+        protocol = summary["standard_protocol"]
+        assert protocol["valid"] is True
+        assert protocol["scope_all"] is True
+        assert protocol["cat5_excluded"] is True
+
+        config["max_questions"] = 2
+        attach_standard_protocol_summary(summary, config)
+
+        protocol = summary["standard_protocol"]
+        assert protocol["valid"] is False
+        assert protocol["max_questions"] == 2
 
 
 # ── Missing data ──────────

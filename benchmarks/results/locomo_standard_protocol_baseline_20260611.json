@@ -1,0 +1,34 @@
+{
+  "schema": "locomo-standard-baseline-record-v1",
+  "recorded_at": "2026-06-11T04:06:00+09:00",
+  "status": "invalid_smoke_run",
+  "valid_baseline": false,
+  "reason": "The local LiteLLM proxy timed out or failed judge calls during a 2-question standard-protocol smoke run; a valid 10-conversation baseline was not produced.",
+  "standard_protocol": {
+    "protocol_version": "locomo-integrity-v1",
+    "mode": "scope_all",
+    "conversations": 10,
+    "primary_metric": "cat5_excluded.overall_judge",
+    "secondary_metric": "overall_f1",
+    "exclude_cat5": true,
+    "leakage_alias_map_enabled": false,
+    "category_branches_enabled": false,
+    "category_dependent_normalization_enabled": false,
+    "max_error_rate": 0.02,
+    "judge_must_differ_from_answer_model": true
+  },
+  "attempt": {
+    "command": "OPENAI_API_BASE=http://localhost:4000/v1 OPENAI_API_KEY=dummy ANIMAWORKS_DATA_DIR=/tmp/animaworks-test-213-smoke2 uv run python -m benchmarks.locomo.runner --standard-protocol --answer-model deepseek-v4-flash --judge-model deepseek-chat --answer-timeout 60 --answer-max-retries 0 --max-questions 2 --output /tmp/locomo-standard-smoke-213b",
+    "output_file": "/tmp/locomo-standard-smoke-213b/2026-06-11T03-59-41_scope_all.json",
+    "max_questions": 2,
+    "answer_model": "deepseek-v4-flash",
+    "judge_model": "deepseek-chat",
+    "overall_f1": 0.5,
+    "overall_judge": null,
+    "error_count": 2,
+    "error_rate": 1.0,
+    "invalid_due_to_error_rate": true,
+    "standard_protocol_valid": false
+  },
+  "next_valid_run_command": "OPENAI_API_BASE=http://localhost:4000/v1 OPENAI_API_KEY=dummy ANIMAWORKS_DATA_DIR=/tmp/animaworks-locomo-standard uv run python -m benchmarks.locomo.runner --standard-protocol --answer-model deepseek-v4-flash --judge-model openai/deepseek-chat --answer-timeout 180 --answer-max-retries 0 --output benchmarks/locomo/results/standard_20260611"
+}

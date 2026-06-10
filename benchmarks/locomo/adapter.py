@@ -289,6 +289,8 @@ class AnimaWorksLoCoMoAdapter:
         top_k: int = 5,
         answer_timeout: float | None = None,
         answer_max_retries: int = 2,
+        enable_locomo_alias: bool = False,
+        enable_locomo_category_branches: bool = False,
     ) -> None:
         """
         Args:
@@ -296,6 +298,8 @@ class AnimaWorksLoCoMoAdapter:
             top_k: Number of hits to return from retrieval
             answer_timeout: Optional LiteLLM timeout for answer generation.
             answer_max_retries: Number of retries after the first answer attempt.
+            enable_locomo_alias: Enable historical LoCoMo alias-map expansion.
+            enable_locomo_category_branches: Enable gold-category-specific retrieval and answer tweaks.
         """
         if search_mode not in SEARCH_MODES:
             raise ValueError(f"search_mode must be one of {SEARCH_MODES}, got {search_mode!r}")
@@ -304,6 +308,8 @@ class AnimaWorksLoCoMoAdapter:
         self._top_k = top_k
         self._answer_timeout = answer_timeout
         self._answer_max_retries = max(0, int(answer_max_retries))
+        self._enable_locomo_alias = bool(enable_locomo_alias)
+        self._enable_locomo_category_branches = bool(enable_locomo_category_branches)
         self._temp_dir: str | None = None
         self._previous_animaworks_data: str | None = None
         self._own_data_env = False
@@ -333,6 +339,12 @@ class AnimaWorksLoCoMoAdapter:
         self._query_reference_time: str = ""
         # Deferred heavy init
         self._init_isolated_rag()
+
+    def _effective_category(self, category: int | None) -> int | None:
+        """Return the category only when benchmark-only category branches are enabled."""
+        if not bool(getattr(self, "_enable_locomo_category_branches", False)):
+            return None
+        return category
 
     def _init_isolated_rag(self) -> None:
         """Create temp data dir, env override, and RAG components."""
@@ -677,6 +689,7 @@ class AnimaWorksLoCoMoAdapter:
 
     def retrieve(self, question: str, *, category: int | None = None) -> list[dict[str, Any]]:
         """Run retrieval for ``question`` following ``self._search_mode``."""
+        category = self._effective_category(category)
         self._last_abstain = False
         self._last_abstain_reason = ""
         self._last_top_score = None
@@ -996,6 +1009,7 @@ class AnimaWorksLoCoMoAdapter:
         category: int | None = None,
     ) -> str:
         """Generate a short answer from retrieved ``context`` using LiteLLM."""
+        category = self._effective_category(category)
         if getattr(self, "_last_abstain", False):
             self._last_raw_answer = ""
             self._last_normalized_answer = "No information available."
@@ -1017,7 +1031,11 @@ class AnimaWorksLoCoMoAdapter:
         ]
         raw = self._complete_sync(messages, model or default_answer_model())
         self._last_raw_answer = raw
-        self._last_normalized_answer = normalize_locomo_answer(raw, category=category)
+        self._last_normalized_answer = normalize_locomo_answer(
+            raw,
+            category=category,
+            enable_category_normalization=bool(getattr(self, "_enable_locomo_category_branches", False)),
+        )
         return self._last_normalized_answer
 
     def cleanup(self) -> None:

@@ -24,10 +24,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from benchmarks.locomo.adapter import SEARCH_MODES, AnimaWorksLoCoMoAdapter, load_dataset
-from benchmarks.locomo.metrics import CATEGORY_NAMES, compute_summary
+from benchmarks.locomo.adapter import AnimaWorksLoCoMoAdapter, load_dataset
+from benchmarks.locomo.metrics import compute_summary
 from benchmarks.locomo.neo4j_adapter import AblationFlags, Neo4jLoCoMoAdapter
-from benchmarks.locomo.runner import EMBEDDING_MODEL_DEFAULT, _resolve_path, _run_qa_loop
+from benchmarks.locomo.runner import _resolve_path, _run_qa_loop
 
 logger = logging.getLogger(__name__)
 
@@ -206,13 +206,15 @@ def _write_summary(
         cells.append(ac)
         lines.append("| " + " | ".join(cells) + " |")
 
-    lines.extend([
-        "",
-        "## Acceptance Criteria",
-        "",
-        f"**Threshold**: F1 ≥ {AC_F1_THRESHOLD * 100:.0f}%",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Acceptance Criteria",
+            "",
+            f"**Threshold**: F1 ≥ {AC_F1_THRESHOLD * 100:.0f}%",
+            "",
+        ]
+    )
 
     neo4j_full = all_summaries.get("neo4j_full", {})
     if neo4j_full:
@@ -276,32 +278,48 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Compare Legacy vs Neo4j on LoCoMo (5 runs).",
     )
     p.add_argument(
-        "--data", type=Path, default=_DEFAULT_DATA,
+        "--data",
+        type=Path,
+        default=_DEFAULT_DATA,
         help="path to locomo10.json",
     )
     p.add_argument(
-        "--conversations", type=int, default=10, metavar="N",
+        "--conversations",
+        type=int,
+        default=10,
+        metavar="N",
         help="number of conversations (default: 10)",
     )
     p.add_argument(
-        "--top-k", type=int, default=5, dest="top_k",
+        "--top-k",
+        type=int,
+        default=5,
+        dest="top_k",
         help="retrieval top-k (default: 5)",
     )
     p.add_argument(
-        "--answer-model", type=str, default="openai/qwen3.6-27b",
+        "--answer-model",
+        type=str,
+        default="openai/qwen3.6-27b",
         dest="answer_model",
         help="answer generation model (default: openai/qwen3.6-27b)",
     )
     p.add_argument(
-        "--judge", action="store_true",
+        "--judge",
+        action="store_true",
         help="enable LLM judge",
     )
     p.add_argument(
-        "--judge-model", type=str, default="gpt-4o", dest="judge_model",
+        "--judge-model",
+        type=str,
+        default="gpt-4o",
+        dest="judge_model",
         help="LLM judge model",
     )
     p.add_argument(
-        "--output", type=Path, default=_DEFAULT_OUTPUT,
+        "--output",
+        type=Path,
+        default=_DEFAULT_OUTPUT,
         help="results directory",
     )
     p.add_argument("--verbose", action="store_true")

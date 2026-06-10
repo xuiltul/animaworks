@@ -14,11 +14,13 @@ from benchmarks.locomo.answer_prompt import (
 
 class TestNormalizeLoCoMoAnswer:
     def test_strips_chain_of_thought(self) -> None:
-        raw = (
-            "We need to find when Melanie painted a sunrise. "
-            "From context she painted last year in 2022."
-        )
-        assert normalize_locomo_answer(raw, category=2) == "2022"
+        raw = "We need to find when Melanie painted a sunrise. From context she painted last year in 2022."
+        assert normalize_locomo_answer(raw, category=2, enable_category_normalization=True) == "2022"
+
+    def test_default_does_not_extract_temporal_year_from_category(self) -> None:
+        raw = "Melanie painted a lake sunrise last year, which happened during 2022."
+
+        assert normalize_locomo_answer(raw, category=2) != "2022"
 
     def test_extracts_which_is_clause(self) -> None:
         raw = 'Based on the conversation, Melanie painted "last year," which is 2022.'
@@ -33,7 +35,7 @@ class TestNormalizeLoCoMoAnswer:
 
     def test_temporal_verbose_answer_can_extract_year(self) -> None:
         raw = "Melanie painted a lake sunrise last year, which is 2022."
-        assert normalize_locomo_answer(raw, category=2) == "2022"
+        assert normalize_locomo_answer(raw, category=2, enable_category_normalization=True) == "2022"
 
     def test_single_line_reasoning_answer_clause(self) -> None:
         raw = (
@@ -43,9 +45,7 @@ class TestNormalizeLoCoMoAnswer:
         assert normalize_locomo_answer(raw, category=4) == "necklace"
 
     def test_adversarial_abstain_canonical(self) -> None:
-        assert normalize_locomo_answer("not mentioned in the logs", category=5) == (
-            "No information available."
-        )
+        assert normalize_locomo_answer("not mentioned in the logs", category=5) == ("No information available.")
 
     def test_empty_returns_abstain(self) -> None:
         assert normalize_locomo_answer("", category=1) == "No information available."
