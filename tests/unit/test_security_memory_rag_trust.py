@@ -23,7 +23,6 @@ from core.tooling.handler_base import (
     _is_protected_write,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────
 
 
@@ -62,6 +61,8 @@ class TestProtectedDirs:
         assert "permissions.md" in _PROTECTED_FILES
         assert "identity.md" in _PROTECTED_FILES
         assert "bootstrap.md" in _PROTECTED_FILES
+        assert "state/bm25_longterm_index.json" in _PROTECTED_FILES
+        assert "state/bm25_longterm_index.dirty" in _PROTECTED_FILES
 
     def test_is_protected_write_blocks_activity_log_file(self, tmp_path):
         anima_dir = tmp_path / "anima"
@@ -103,6 +104,16 @@ class TestProtectedDirs:
             target = anima_dir / name
             result = _is_protected_write(anima_dir, target)
             assert result is not None
+
+    def test_write_memory_file_rejects_longterm_bm25_index(self, tmp_path):
+        handler = _make_handler(tmp_path)
+        result = handler.handle(
+            "write_memory_file",
+            {"path": "state/bm25_longterm_index.json", "content": '{"documents": []}'},
+        )
+        parsed = json.loads(result)
+        assert parsed["error_type"] == "PermissionDenied"
+        assert "protected file" in parsed["message"]
 
     def test_is_protected_write_blocks_path_traversal(self, tmp_path):
         anima_dir = tmp_path / "anima"
@@ -445,13 +456,15 @@ class TestConsolidationOriginChain:
         mock_indexer = MagicMock()
         mock_store = MagicMock()
 
-        with patch("core.memory.rag.MemoryIndexer", return_value=mock_indexer):
-            with patch("core.memory.rag.singleton.get_vector_store", return_value=mock_store):
-                engine._update_rag_index(
-                    ["output.md"],
-                    origin="consolidation",
-                    source_files=["source_ext.md"],
-                )
+        with (
+            patch("core.memory.rag.MemoryIndexer", return_value=mock_indexer),
+            patch("core.memory.rag.singleton.get_vector_store", return_value=mock_store),
+        ):
+            engine._update_rag_index(
+                ["output.md"],
+                origin="consolidation",
+                source_files=["source_ext.md"],
+            )
 
         if mock_indexer.index_file.called:
             call_kwargs = mock_indexer.index_file.call_args
@@ -477,13 +490,15 @@ class TestConsolidationOriginChain:
         mock_indexer = MagicMock()
         mock_store = MagicMock()
 
-        with patch("core.memory.rag.MemoryIndexer", return_value=mock_indexer):
-            with patch("core.memory.rag.singleton.get_vector_store", return_value=mock_store):
-                engine._update_rag_index(
-                    ["output2.md"],
-                    origin="consolidation",
-                    source_files=["clean_src.md"],
-                )
+        with (
+            patch("core.memory.rag.MemoryIndexer", return_value=mock_indexer),
+            patch("core.memory.rag.singleton.get_vector_store", return_value=mock_store),
+        ):
+            engine._update_rag_index(
+                ["output2.md"],
+                origin="consolidation",
+                source_files=["clean_src.md"],
+            )
 
         if mock_indexer.index_file.called:
             call_kwargs = mock_indexer.index_file.call_args

@@ -41,6 +41,7 @@ def quarantine_vectordb(anima_name: str) -> Path | None:
 
 
 def full_reindex(anima_name: str, *, include_shared: bool) -> int:
+    from core.memory.bm25 import rebuild_longterm_bm25_index
     from core.memory.rag import MemoryIndexer
     from core.memory.rag.singleton import get_vector_store
     from core.paths import get_animas_dir, get_common_knowledge_dir, get_common_skills_dir, get_data_dir
@@ -62,6 +63,9 @@ def full_reindex(anima_name: str, *, include_shared: bool) -> int:
     state_dir = anima_dir / "state"
     if (state_dir / "conversation.json").is_file():
         total_chunks += indexer.index_conversation_summary(state_dir, anima_name, force=True)
+
+    bm25_result = rebuild_longterm_bm25_index(anima_dir)
+    logger.info("Rebuilt long-term BM25 index for %s: documents=%d", anima_name, bm25_result.documents)
 
     if include_shared:
         base_dir = get_data_dir()

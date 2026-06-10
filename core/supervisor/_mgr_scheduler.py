@@ -534,6 +534,7 @@ class SchedulerMixin:
         logger.info("Starting system-wide daily RAG indexing")
 
         try:
+            from core.memory.bm25 import rebuild_longterm_bm25_index
             from core.memory.rag import MemoryIndexer
             from core.memory.rag.singleton import get_vector_store
         except ImportError:
@@ -651,6 +652,17 @@ class SchedulerMixin:
                         anima_name,
                     )
                     total_chunks += chunks
+
+                bm25_result = await loop.run_in_executor(
+                    None,
+                    rebuild_longterm_bm25_index,
+                    anima_dir,
+                )
+                logger.info(
+                    "Daily long-term BM25 indexing for %s complete: documents=%d",
+                    anima_name,
+                    bm25_result.documents,
+                )
 
                 meta_path = anima_dir / "index_meta.json"
                 for label, src_dir, glob, meta_key in shared_sources:

@@ -19,7 +19,6 @@ from cli.commands.index_cmd import (
     setup_index_command,
 )
 
-
 # ── _is_anima_enabled ─────────────────────────────────────
 
 
@@ -93,29 +92,37 @@ class TestIndexSharedCollections:
         return [alice, bob]
 
     def test_dry_run_does_not_write_meta(
-        self, anima_dirs: list[Path], base_dir: Path, tmp_path: Path,
+        self,
+        anima_dirs: list[Path],
+        base_dir: Path,
+        tmp_path: Path,
     ) -> None:
-        with patch(_PATCH_STORE), \
-             patch(_PATCH_INDEXER), \
-             patch(_PATCH_VDBDIR, return_value=tmp_path / "vdb"):
+        with patch(_PATCH_STORE), patch(_PATCH_INDEXER), patch(_PATCH_VDBDIR, return_value=tmp_path / "vdb"):
             _index_shared_collections(
-                anima_dirs, base_dir, full=False, dry_run=True,
+                anima_dirs,
+                base_dir,
+                full=False,
+                dry_run=True,
             )
         for d in anima_dirs:
             assert not (d / "index_meta.json").exists()
 
     def test_indexes_into_each_anima_db(
-        self, anima_dirs: list[Path], base_dir: Path, tmp_path: Path,
+        self,
+        anima_dirs: list[Path],
+        base_dir: Path,
+        tmp_path: Path,
     ) -> None:
-        with patch(_PATCH_STORE), \
-             patch(_PATCH_INDEXER) as MockIdx, \
-             patch(_PATCH_VDBDIR, return_value=tmp_path / "vdb"):
+        with patch(_PATCH_STORE), patch(_PATCH_INDEXER) as MockIdx, patch(_PATCH_VDBDIR, return_value=tmp_path / "vdb"):
             mock_indexer = MagicMock()
             mock_indexer.index_directory.return_value = 3
             MockIdx.return_value = mock_indexer
 
             total = _index_shared_collections(
-                anima_dirs, base_dir, full=False, dry_run=False,
+                anima_dirs,
+                base_dir,
+                full=False,
+                dry_run=False,
             )
 
         assert total == 3 * len(anima_dirs)
@@ -126,7 +133,9 @@ class TestIndexSharedCollections:
             assert "shared_common_knowledge_hash" in data
 
     def test_skips_repair_locked_anima(
-        self, anima_dirs: list[Path], base_dir: Path,
+        self,
+        anima_dirs: list[Path],
+        base_dir: Path,
     ) -> None:
         """Shared indexing must not write into an anima under RAG repair."""
         with (
@@ -156,39 +165,50 @@ class TestIndexSharedCollections:
         assert total == 0
 
     def test_hash_skip_on_second_call(
-        self, anima_dirs: list[Path], base_dir: Path, tmp_path: Path,
+        self,
+        anima_dirs: list[Path],
+        base_dir: Path,
+        tmp_path: Path,
     ) -> None:
         """Second call with unchanged files skips indexing."""
-        with patch(_PATCH_STORE), \
-             patch(_PATCH_INDEXER) as MockIdx, \
-             patch(_PATCH_VDBDIR, return_value=tmp_path / "vdb"):
+        with patch(_PATCH_STORE), patch(_PATCH_INDEXER) as MockIdx, patch(_PATCH_VDBDIR, return_value=tmp_path / "vdb"):
             mock_indexer = MagicMock()
             mock_indexer.index_directory.return_value = 3
             MockIdx.return_value = mock_indexer
 
             _index_shared_collections(
-                anima_dirs, base_dir, full=False, dry_run=False,
+                anima_dirs,
+                base_dir,
+                full=False,
+                dry_run=False,
             )
             MockIdx.reset_mock()
 
             _index_shared_collections(
-                anima_dirs, base_dir, full=False, dry_run=False,
+                anima_dirs,
+                base_dir,
+                full=False,
+                dry_run=False,
             )
             MockIdx.assert_not_called()
 
     def test_full_flag_forces_reindex(
-        self, anima_dirs: list[Path], base_dir: Path, tmp_path: Path,
+        self,
+        anima_dirs: list[Path],
+        base_dir: Path,
+        tmp_path: Path,
     ) -> None:
         """--full ignores stored hash and re-indexes."""
-        with patch(_PATCH_STORE), \
-             patch(_PATCH_INDEXER) as MockIdx, \
-             patch(_PATCH_VDBDIR, return_value=tmp_path / "vdb"):
+        with patch(_PATCH_STORE), patch(_PATCH_INDEXER) as MockIdx, patch(_PATCH_VDBDIR, return_value=tmp_path / "vdb"):
             mock_indexer = MagicMock()
             mock_indexer.index_directory.return_value = 2
             MockIdx.return_value = mock_indexer
 
             _index_shared_collections(
-                anima_dirs, base_dir, full=False, dry_run=False,
+                anima_dirs,
+                base_dir,
+                full=False,
+                dry_run=False,
             )
             MockIdx.reset_mock()
             mock_indexer.reset_mock()
@@ -196,7 +216,10 @@ class TestIndexSharedCollections:
             MockIdx.return_value = mock_indexer
 
             total = _index_shared_collections(
-                anima_dirs, base_dir, full=True, dry_run=False,
+                anima_dirs,
+                base_dir,
+                full=True,
+                dry_run=False,
             )
             assert total == 2 * len(anima_dirs)
 
@@ -222,3 +245,33 @@ def test_index_command_skips_repair_locked_anima(tmp_path: Path) -> None:
 
     mock_get_vs.assert_not_called()
     mock_indexer.assert_not_called()
+
+
+def test_index_command_rebuilds_longterm_bm25(tmp_path: Path) -> None:
+    """CLI indexing rebuilds the persisted long-term BM25 index."""
+    animas_dir = tmp_path / "animas"
+    anima_dir = animas_dir / "alice"
+    (anima_dir / "knowledge").mkdir(parents=True)
+    (anima_dir / "knowledge" / "note.md").write_text("# Note", encoding="utf-8")
+
+    args = argparse.Namespace(anima="alice", full=False, shared=False, dry_run=False)
+    mock_store = MagicMock()
+
+    with (
+        patch("cli.commands.index_cmd.get_data_dir", return_value=tmp_path),
+        patch("cli.commands.index_cmd._setup_server_delegation", return_value=False),
+        patch("cli.commands.index_cmd._setup_offline_vector_worker_if_needed", return_value=None),
+        patch("cli.commands.index_cmd._check_model_change", return_value="test-model"),
+        patch("core.memory.rag.repair.is_repair_locked", return_value=False),
+        patch("core.memory.rag.singleton.get_vector_store", return_value=mock_store),
+        patch("core.memory.rag.MemoryIndexer") as mock_indexer_cls,
+        patch("core.memory.bm25.rebuild_longterm_bm25_index") as mock_rebuild,
+    ):
+        mock_indexer = MagicMock()
+        mock_indexer.index_directory.return_value = 1
+        mock_indexer_cls.return_value = mock_indexer
+        mock_rebuild.return_value = MagicMock(documents=1)
+
+        index_command(args)
+
+    mock_rebuild.assert_called_once_with(anima_dir)

@@ -15,7 +15,9 @@ from core.memory.bm25 import (
     _MIN_CONTENT_LENGTH,
     _SEARCHABLE_TYPES,
     _should_index_entry,
+    is_longterm_bm25_dirty,
     longterm_bm25_index_path,
+    mark_longterm_bm25_dirty,
     rebuild_longterm_bm25_index,
     reciprocal_rank_fusion,
     search_activity_log,
@@ -267,6 +269,7 @@ def test_rebuild_and_search_longterm_bm25_index(tmp_path: Path) -> None:
     assert hits[0]["source_file"] == "knowledge/meridian.md"
     assert hits[0]["memory_type"] == "knowledge"
     assert hits[0]["search_method"] == "bm25"
+    assert is_longterm_bm25_dirty(anima_dir) is False
 
 
 def test_longterm_bm25_proper_name_beats_naive_keyword_tie(tmp_path: Path) -> None:
@@ -340,3 +343,53 @@ def test_longterm_bm25_uses_persisted_stats_without_runtime_bm25okapi(
 
     assert hits[0]["source_file"] == "knowledge/a.md"
     assert hits[0]["search_method"] == "bm25"
+
+
+def test_rebuild_clears_longterm_bm25_dirty_marker(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _write_longterm_memory(anima_dir, "knowledge/a.md", "# A\n\nZephyrNova launchpad audit.")
+
+    marker = mark_longterm_bm25_dirty(anima_dir, reason="test")
+    assert marker.exists()
+    assert is_longterm_bm25_dirty(anima_dir) is True
+
+    rebuild_longterm_bm25_index(anima_dir)
+
+    assert is_longterm_bm25_dirty(anima_dir) is False
+
+
+def test_longterm_bm25_rejects_poisoned_index_content(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _write_longterm_memory(anima_dir, "knowledge/a.md", "# A\n\nBaseline launchpad audit.")
+    rebuild_longterm_bm25_index(anima_dir)
+
+    index_path = longterm_bm25_index_path(anima_dir)
+    payload = json.loads(index_path.read_text(encoding="utf-8"))
+    stat = (anima_dir / "knowledge" / "a.md").stat()
+    payload["documents"].append(
+        {
+            "doc_id": "alice/knowledge/a.md#99",
+            "source_file": "knowledge/a.md",
+            "content": "ZephyrNova forged memo that is not present in the source file.",
+            "tokens": ["zephyrnova", "forged", "memo"],
+            "token_counts": {"zephyrnova": 1, "forged": 1, "memo": 1},
+            "doc_len": 3,
+            "source_mtime_ns": stat.st_mtime_ns,
+            "source_size": stat.st_size,
+            "chunk_index": 99,
+            "total_chunks": 100,
+            "memory_type": "knowledge",
+            "metadata": {"source_file": "knowledge/a.md"},
+        }
+    )
+    index_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    hits = search_longterm_memory_bm25(
+        anima_dir,
+        "ZephyrNova",
+        memory_types=("knowledge",),
+        top_k=10,
+        rebuild_if_missing=False,
+    )
+
+    assert hits == []

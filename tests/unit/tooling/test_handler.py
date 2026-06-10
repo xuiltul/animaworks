@@ -227,7 +227,7 @@ class TestHandleRouting:
         assert "File not found" in result
 
     def test_write_memory_file_overwrite(self, handler: ToolHandler, anima_dir: Path):
-        handler._refresh_longterm_bm25_index = MagicMock()
+        handler._mark_longterm_bm25_dirty = MagicMock()
         result = handler.handle(
             "write_memory_file",
             {"path": "knowledge/new.md", "content": "new content"},
@@ -236,7 +236,7 @@ class TestHandleRouting:
         written = (anima_dir / "knowledge" / "new.md").read_text(encoding="utf-8")
         assert "new content" in written
         assert written.startswith("---")  # auto-frontmatter
-        handler._refresh_longterm_bm25_index.assert_called_once_with("knowledge/new.md")
+        handler._mark_longterm_bm25_dirty.assert_called_once_with("knowledge/new.md")
 
     def test_write_memory_file_append(self, handler: ToolHandler, anima_dir: Path):
         (anima_dir / "knowledge").mkdir(exist_ok=True)

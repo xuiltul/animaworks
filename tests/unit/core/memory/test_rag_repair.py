@@ -328,6 +328,7 @@ def test_repair_quarantines_vectordb_and_reindexes(data_dir: Path, monkeypatch):
     assert state["pid"] is None
     assert state["consecutive_failures"] == 0
     assert state["last_chunks_indexed"] == 4
+    assert (anima_dir / "state" / "bm25_longterm_index.json").exists()
 
 
 def test_repair_reindexes_shared_collections_when_requested(data_dir: Path, monkeypatch):

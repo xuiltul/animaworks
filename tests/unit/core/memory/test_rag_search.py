@@ -81,29 +81,31 @@ class TestGetIndexerLazyInit:
 
 
 class TestLongtermBM25Refresh:
-    def test_index_file_refreshes_longterm_bm25_even_without_vector_indexer(
+    def test_index_file_marks_longterm_bm25_dirty_without_rebuilding(
         self,
         rag: RAGMemorySearch,
         anima_dir: Path,
         knowledge_dir: Path,
     ) -> None:
-        from core.memory.bm25 import rebuild_longterm_bm25_index, search_longterm_memory_bm25
+        from core.memory.bm25 import is_longterm_bm25_dirty, rebuild_longterm_bm25_index, search_longterm_memory_bm25
 
         (knowledge_dir / "old.md").write_text("# Old\n\nBaseline memo.", encoding="utf-8")
         rebuild_longterm_bm25_index(anima_dir)
+        assert is_longterm_bm25_dirty(anima_dir) is False
 
         new_file = knowledge_dir / "new.md"
         new_file.write_text("# New\n\nZephyrNova launchpad checklist.", encoding="utf-8")
         with patch.object(rag, "_get_indexer", return_value=None):
             rag.index_file(new_file, "knowledge")
 
+        assert is_longterm_bm25_dirty(anima_dir) is True
         hits = search_longterm_memory_bm25(
             anima_dir,
             "ZephyrNova",
             memory_types=("knowledge",),
             top_k=5,
         )
-        assert hits[0]["source_file"] == "knowledge/new.md"
+        assert hits == []
 
     def test_get_indexer_only_inits_once(self, rag: RAGMemorySearch) -> None:
         """Second call to _get_indexer() does not call _init_indexer() again."""

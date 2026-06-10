@@ -19,7 +19,7 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -121,7 +121,9 @@ _CJK_RANGES: tuple[tuple[int, int], ...] = (
 
 _WORD_RE = re.compile(r"[\w]+", re.UNICODE)
 LONGTERM_BM25_INDEX_FILE = "bm25_longterm_index.json"
+LONGTERM_BM25_DIRTY_FILE = "bm25_longterm_index.dirty"
 LONGTERM_BM25_MEMORY_TYPES: tuple[str, ...] = ("knowledge", "episodes", "procedures")
+LONGTERM_BM25_SCHEMA_VERSION = 3
 _LONGTERM_BM25_CACHE: dict[Path, tuple[int, int, dict[str, Any]]] = {}
 
 
@@ -243,6 +245,38 @@ def longterm_bm25_index_path(anima_dir: Path) -> Path:
     return anima_dir / "state" / LONGTERM_BM25_INDEX_FILE
 
 
+def longterm_bm25_dirty_path(anima_dir: Path) -> Path:
+    """Return the dirty marker path for the long-term BM25 index."""
+    return anima_dir / "state" / LONGTERM_BM25_DIRTY_FILE
+
+
+def mark_longterm_bm25_dirty(anima_dir: Path, *, reason: str = "") -> Path:
+    """Mark the persisted long-term BM25 index as stale without rebuilding it."""
+    path = longterm_bm25_dirty_path(anima_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "dirty_at": datetime.now(UTC).isoformat(),
+        "reason": reason,
+    }
+    atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    return path
+
+
+def clear_longterm_bm25_dirty(anima_dir: Path) -> None:
+    """Clear the long-term BM25 dirty marker if it exists."""
+    try:
+        longterm_bm25_dirty_path(anima_dir).unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.debug("Failed to clear long-term BM25 dirty marker for %s", anima_dir, exc_info=True)
+
+
+def is_longterm_bm25_dirty(anima_dir: Path) -> bool:
+    """Return True when writes have marked the persisted BM25 index stale."""
+    return longterm_bm25_dirty_path(anima_dir).is_file()
+
+
 def rebuild_longterm_bm25_index(
     anima_dir: Path,
     *,
@@ -265,7 +299,7 @@ def rebuild_longterm_bm25_index(
         document_frequency.update(set(tokens))
 
     payload = {
-        "schema_version": 2,
+        "schema_version": LONGTERM_BM25_SCHEMA_VERSION,
         "memory_types": list(memory_types),
         "document_count": len(docs),
         "avgdl": total_doc_len / len(docs) if docs else 0.0,
@@ -276,6 +310,7 @@ def rebuild_longterm_bm25_index(
     index_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(index_path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     _LONGTERM_BM25_CACHE.pop(index_path, None)
+    clear_longterm_bm25_dirty(anima_dir)
     logger.info("Rebuilt long-term BM25 index for %s: documents=%d", anima_dir.name, len(docs))
     return LongTermBM25BuildResult(documents=len(docs), path=index_path)
 
@@ -294,6 +329,8 @@ def search_longterm_memory_bm25(
     if not query_tokens:
         return []
     payload = _load_longterm_bm25_payload(anima_dir)
+    if payload is not None and int(payload.get("schema_version") or 0) < LONGTERM_BM25_SCHEMA_VERSION:
+        payload = None
     if payload is None and rebuild_if_missing:
         try:
             rebuild_longterm_bm25_index(anima_dir)
@@ -325,8 +362,15 @@ def search_longterm_memory_bm25(
 
     search_method = "bm25"
     results: list[dict[str, Any]] = []
-    for idx, score in ranked[offset : offset + top_k]:
+    source_cache: dict[str, set[tuple[int, str]]] = {}
+    skipped_valid = 0
+    for idx, score in ranked:
         doc = docs[idx]
+        if not _longterm_doc_matches_current_source(anima_dir, doc, source_cache):
+            continue
+        if skipped_valid < offset:
+            skipped_valid += 1
+            continue
         row = {
             "doc_id": str(doc.get("doc_id", "")),
             "source_file": str(doc.get("source_file", "")),
@@ -343,6 +387,8 @@ def search_longterm_memory_bm25(
                 if key not in row:
                     row[key] = value
         results.append(row)
+        if len(results) >= top_k:
+            break
     return results
 
 
@@ -427,6 +473,10 @@ def _bm25_docs_for_file(anima_dir: Path, path: Path, memory_type: str) -> list[d
         raw = path.read_text(encoding="utf-8")
     except OSError:
         return []
+    try:
+        stat = path.stat()
+    except OSError:
+        return []
     frontmatter, body = _split_frontmatter(raw)
     if memory_type == "knowledge" and str(frontmatter.get("valid_until", "") or "").strip():
         return []
@@ -450,6 +500,8 @@ def _bm25_docs_for_file(anima_dir: Path, path: Path, memory_type: str) -> list[d
                 "tokens": tokens,
                 "token_counts": dict(token_counts),
                 "doc_len": len(tokens),
+                "source_mtime_ns": stat.st_mtime_ns,
+                "source_size": stat.st_size,
                 "chunk_index": idx,
                 "total_chunks": total,
                 "memory_type": memory_type,
@@ -457,6 +509,46 @@ def _bm25_docs_for_file(anima_dir: Path, path: Path, memory_type: str) -> list[d
             }
         )
     return docs
+
+
+def _longterm_doc_matches_current_source(
+    anima_dir: Path,
+    doc: dict[str, Any],
+    cache: dict[str, set[tuple[int, str]]],
+) -> bool:
+    """Validate persisted index content against the current source file."""
+    source_file = str(doc.get("source_file", "") or "")
+    memory_type = str(doc.get("memory_type", "") or "")
+    if memory_type not in LONGTERM_BM25_MEMORY_TYPES or not source_file.startswith(f"{memory_type}/"):
+        return False
+    path = anima_dir / source_file
+    try:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(anima_dir.resolve()) or not resolved.is_file():
+            return False
+        stat = resolved.stat()
+    except OSError:
+        return False
+
+    try:
+        indexed_mtime_ns = int(doc.get("source_mtime_ns") or -1)
+        indexed_size = int(doc.get("source_size") or -1)
+    except (TypeError, ValueError):
+        indexed_mtime_ns = -1
+        indexed_size = -1
+    if indexed_mtime_ns != stat.st_mtime_ns or indexed_size != stat.st_size:
+        return False
+
+    if source_file not in cache:
+        rebuilt_docs = _bm25_docs_for_file(anima_dir, resolved, memory_type)
+        cache[source_file] = {
+            (int(rebuilt.get("chunk_index", 0) or 0), str(rebuilt.get("content", ""))) for rebuilt in rebuilt_docs
+        }
+    try:
+        chunk_index = int(doc.get("chunk_index", 0) or 0)
+    except (TypeError, ValueError):
+        return False
+    return (chunk_index, str(doc.get("content", ""))) in cache[source_file]
 
 
 def _split_frontmatter(raw: str) -> tuple[dict[str, Any], str]:

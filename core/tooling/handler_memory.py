@@ -262,15 +262,15 @@ class MemoryToolsMixin:
     def _current_anima_name(self) -> str:
         return str(getattr(self, "_anima_name", "") or self._anima_dir.name)
 
-    def _refresh_longterm_bm25_index(self, rel: str) -> None:
+    def _mark_longterm_bm25_dirty(self, rel: str) -> None:
         if not rel.startswith(("knowledge/", "episodes/", "procedures/")):
             return
         try:
-            from core.memory.bm25 import rebuild_longterm_bm25_index
+            from core.memory.bm25 import mark_longterm_bm25_dirty
 
-            rebuild_longterm_bm25_index(self._anima_dir)
+            mark_longterm_bm25_dirty(self._anima_dir, reason=f"memory_write:{rel}")
         except Exception:
-            logger.debug("Failed to refresh long-term BM25 index after memory write: %s", rel, exc_info=True)
+            logger.debug("Failed to mark long-term BM25 index dirty after memory write: %s", rel, exc_info=True)
 
     def _retrieve_neo4j_memories(
         self,
@@ -1092,7 +1092,7 @@ class MemoryToolsMixin:
                     indexer.index_file(path, memory_type=memory_type, force=True)
                 except Exception as e:
                     logger.warning("Failed to update RAG index for %s: %s", rel, e)
-            self._refresh_longterm_bm25_index(rel)
+            self._mark_longterm_bm25_dirty(rel)
 
         # Auto-update RAG index for knowledge writes + origin frontmatter
         # (skip origin injection when auto-frontmatter already handled it)
@@ -1131,7 +1131,7 @@ class MemoryToolsMixin:
                     )
                 except Exception as e:
                     logger.warning("Failed to update RAG index for %s: %s", rel, e)
-            self._refresh_longterm_bm25_index(rel)
+            self._mark_longterm_bm25_dirty(rel)
 
         return result
 
@@ -1189,7 +1189,7 @@ class MemoryToolsMixin:
                 counter += 1
 
         shutil.move(str(target), str(dest))
-        self._refresh_longterm_bm25_index(rel)
+        self._mark_longterm_bm25_dirty(rel)
 
         logger.info("archive_memory_file: %s -> %s (reason: %s)", rel, dest.name, reason)
 

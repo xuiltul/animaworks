@@ -246,6 +246,7 @@ def _index_shared_collections(
 def index_command(args: argparse.Namespace) -> None:
     """Execute the index command."""
     try:
+        from core.memory.bm25 import rebuild_longterm_bm25_index
         from core.memory.rag import MemoryIndexer
         from core.memory.rag.repair import is_repair_locked
         from core.memory.rag.singleton import get_vector_store
@@ -353,6 +354,13 @@ def index_command(args: argparse.Namespace) -> None:
                 )
                 total_chunks += chunks
                 logger.info("  Indexed %d chunks from conversation_summary", chunks)
+
+        if not args.dry_run:
+            bm25_result = rebuild_longterm_bm25_index(anima_dir)
+            logger.info(
+                "  Rebuilt long-term BM25 index with %d documents",
+                bm25_result.documents,
+            )
 
     if include_shared:
         enabled_dirs = [d for d in anima_dirs if _is_anima_enabled(d)]

@@ -79,6 +79,8 @@ _PROTECTED_FILES = frozenset(
         "permissions.json",
         "identity.md",
         "bootstrap.md",
+        "state/bm25_longterm_index.json",
+        "state/bm25_longterm_index.dirty",
     }
 )
 
