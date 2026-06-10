@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from core._agent_cycle import CycleMixin
 from core.execution.base import ExecutionResult
+from core.memory.consolidation import ConsolidationEngine
 from core.schemas import CycleResult, ModelConfig
 
 
@@ -23,10 +27,35 @@ class _FakeConsolidationAgent:
 
 
 class _FakeEngine:
-    episodes_dir = MagicMock()
+    def __init__(self, chunks: list[str] | None = None, existing_episode: str = "") -> None:
+        self.episodes_dir = Path("/tmp/fake-episodes")
+        self.chunks = chunks or []
+        self.existing_episode = existing_episode
+        self.collect_calls: list[dict] = []
+        self.write_calls: list[dict] = []
 
-    def collect_activity_chunks(self, *, hours: int, model: str):
-        return []
+    def previous_local_day_window(self, reference=None):
+        return ConsolidationEngine.previous_local_day_window(reference)
+
+    def collect_activity_chunks(self, *, hours: int, model: str, since=None, until=None):
+        self.collect_calls.append({"hours": hours, "model": model, "since": since, "until": until})
+        return self.chunks
+
+    def read_episode_for_date(self, target_date):
+        return self.existing_episode
+
+    def merge_timeline_parts(self, parts):
+        return ConsolidationEngine.merge_timeline_parts(parts)
+
+    def _sanitize_llm_output(self, text):
+        return text
+
+    def write_consolidated_episode(self, target_date, consolidated_timeline):
+        self.write_calls.append({"target_date": target_date, "content": consolidated_timeline})
+        return self.episodes_dir / f"{target_date}.md"
+
+    async def extract_facts_from_text(self, *args, **kwargs):
+        return 0
 
     def _collect_recent_episodes(self, *, hours: int):
         return []
@@ -110,6 +139,67 @@ async def test_daily_phase_b_uses_consolidation_model_without_mutating_agent_exe
     assert override.api_key == "vllm-key"
     assert override.api_base_url == "http://vllm.example/v1"
     assert override.resolved_mode == "D"
+
+
+@pytest.mark.asyncio
+async def test_daily_phase_a_uses_previous_local_day_window_and_existing_episode_context():
+    status_config = ModelConfig(model="bedrock/qwen.qwen3-next-80b-a3b", resolved_mode="S")
+    anima = _make_lifecycle(status_config)
+    engine = _FakeEngine(chunks=["[23:50] RESPONSE: previous day work"], existing_episode="raw daytime note")
+    episode_prompt_kwargs: list[dict] = []
+    fixed_now = datetime(2026, 6, 10, 2, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+
+    def fake_load_prompt(name: str, **kwargs):
+        if name == "memory/episode_extraction":
+            episode_prompt_kwargs.append(kwargs)
+            return "episode prompt"
+        return "daily prompt"
+
+    async def fake_one_shot(*args, **kwargs):
+        return "## 23:00-23:59 Work\n\n- 23:50 previous day work"
+
+    with (
+        patch("core.config.load_config", return_value=_mock_config()),
+        patch("core.config.resolve_execution_mode", return_value="D"),
+        patch("core._anima_lifecycle.now_local", return_value=fixed_now),
+        patch("core._anima_lifecycle.load_prompt", side_effect=fake_load_prompt),
+        patch("core.memory._llm_utils.one_shot_completion", side_effect=fake_one_shot),
+    ):
+        await anima._run_daily_consolidation(engine, max_turns=7)
+
+    collect_call = engine.collect_calls[0]
+    assert collect_call["since"].isoformat() == "2026-06-09T00:00:00+09:00"
+    assert collect_call["until"].isoformat() == "2026-06-10T00:00:00+09:00"
+    assert engine.write_calls[0]["target_date"] == date(2026, 6, 9)
+    assert "previous day work" in engine.write_calls[0]["content"]
+    assert episode_prompt_kwargs[0]["time_range"] == "2026-06-09 chunk 1/1"
+    assert episode_prompt_kwargs[0]["existing_episode"] == "raw daytime note"
+
+
+@pytest.mark.asyncio
+async def test_daily_phase_a_llm_failure_leaves_existing_episode_unchanged(tmp_path):
+    status_config = ModelConfig(model="bedrock/qwen.qwen3-next-80b-a3b", resolved_mode="S")
+    anima = _make_lifecycle(status_config)
+    anima_dir = tmp_path / "animas" / "ritsu"
+    engine = ConsolidationEngine(anima_dir, "ritsu")
+    fixed_now = datetime(2026, 6, 10, 2, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+    target = fixed_now.date() - timedelta(days=1)
+    episode_path = engine.episode_path_for_date(target)
+    original = "# 2026-06-09\n\n## 14:00 — Raw\n\nmust survive"
+    episode_path.write_text(original, encoding="utf-8")
+    engine.collect_activity_chunks = MagicMock(return_value=["[14:00] RESPONSE: work"])
+
+    with (
+        patch("core.config.load_config", return_value=_mock_config()),
+        patch("core._anima_lifecycle.now_local", return_value=fixed_now),
+        patch("core._anima_lifecycle.load_prompt", return_value="episode prompt"),
+        patch("core.memory._llm_utils.one_shot_completion", side_effect=RuntimeError("llm timeout")),
+        pytest.raises(RuntimeError, match="llm timeout"),
+    ):
+        await anima._run_daily_consolidation(engine, max_turns=7)
+
+    assert episode_path.read_text(encoding="utf-8") == original
+    assert not (anima_dir / "archive" / "episodes").exists()
 
 
 @pytest.mark.asyncio

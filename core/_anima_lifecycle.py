@@ -440,26 +440,39 @@ class LifecycleMixin:
         start_mono = _time.monotonic()
 
         # ── Phase A: Episode extraction ─────────────────────────
-        chunks = engine.collect_activity_chunks(hours=24, model=consolidation_model)
+        target_date, window_start, window_end = engine.previous_local_day_window(now_local())
+        chunks = engine.collect_activity_chunks(
+            hours=24,
+            model=consolidation_model,
+            since=window_start,
+            until=window_end,
+        )
         episode_parts: list[str] = []
 
         if chunks:
             from core.memory._llm_utils import one_shot_completion
 
+            existing_episode = engine.read_episode_for_date(target_date)
+            existing_episode_context = existing_episode.strip() or "(none)"
+            if len(existing_episode_context) > 12_000:
+                existing_episode_context = existing_episode_context[:12_000] + "\n... (truncated)"
+
             logger.info(
-                "[%s] Phase A: extracting episodes from %d chunk(s) with model=%s",
+                "[%s] Phase A: extracting episodes for %s from %d chunk(s) with model=%s",
                 self.name,
+                target_date.isoformat(),
                 len(chunks),
                 consolidation_model,
             )
 
             for i, chunk in enumerate(chunks):
-                time_range = f"chunk {i + 1}/{len(chunks)}"
+                time_range = f"{target_date.isoformat()} chunk {i + 1}/{len(chunks)}"
                 ep_prompt = load_prompt(
                     "memory/episode_extraction",
                     anima_name=self.name,
                     time_range=time_range,
                     activity_chunk=chunk,
+                    existing_episode=existing_episode_context,
                 )
                 raw = await one_shot_completion(
                     ep_prompt,
@@ -480,9 +493,7 @@ class LifecycleMixin:
         # Merge and write episodes
         if episode_parts:
             merged_episodes = engine.merge_timeline_parts(episode_parts)
-            today = now_local().date()
-            episode_path = engine.episodes_dir / f"{today}.md"
-            episode_path.write_text(merged_episodes, encoding="utf-8")
+            episode_path = engine.write_consolidated_episode(target_date, merged_episodes)
             logger.info(
                 "[%s] Phase A complete: wrote %d chars to %s",
                 self.name,

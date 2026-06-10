@@ -4,6 +4,10 @@
 
 ## Target period: {time_range}
 
+## Existing Episode Content
+
+{existing_episode}
+
 ## Activity Log
 
 {activity_chunk}
@@ -30,4 +34,5 @@ Use the following Markdown format. Separate sections by time period using `## HH
 4. **Tool execution results**: Record result summaries for successes and error details for failures
 5. **Communication content**: Record the key points of sent/received messages (who, to whom, about what)
 6. **No speculation**: Record only facts from the activity log. Do not add inferences or interpretations
-7. **Use only `##` markdown headers**: Do not use `#` or `###`
+7. **Use existing content for deduplication**: If existing episode content is provided, absorb overlapping details into the timeline and avoid repeating the same facts twice
+8. **Use only `##` markdown headers**: Do not use `#` or `###`

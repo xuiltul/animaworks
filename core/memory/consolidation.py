@@ -25,12 +25,12 @@ This module retains:
 import logging
 import re
 import shutil
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
 from core.i18n import t
-from core.time_utils import ensure_aware, now_iso, now_local
+from core.time_utils import ensure_aware, get_app_timezone, now_iso, now_local
 
 logger = logging.getLogger("animaworks.consolidation")
 
@@ -65,6 +65,83 @@ class ConsolidationEngine:
         self.knowledge_dir = anima_dir / "knowledge"
         self.episodes_dir.mkdir(parents=True, exist_ok=True)
         self.knowledge_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Daily episode write helpers ──────────────────────────────
+
+    RAW_NOTES_HEADER = "## Raw notes (preserved)"
+    CONSOLIDATED_TIMELINE_HEADER = "## Consolidated timeline"
+
+    @staticmethod
+    def previous_local_day_window(reference: datetime | None = None) -> tuple[date, datetime, datetime]:
+        """Return the previous local date and its inclusive/exclusive bounds."""
+        now = reference or now_local()
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=get_app_timezone())
+        target_date = now.date() - timedelta(days=1)
+        start = datetime.combine(target_date, time.min, tzinfo=now.tzinfo)
+        end = start + timedelta(days=1)
+        return target_date, start, end
+
+    def episode_path_for_date(self, target_date: date) -> Path:
+        """Return the canonical episode file path for a local date."""
+        return self.episodes_dir / f"{target_date.isoformat()}.md"
+
+    def read_episode_for_date(self, target_date: date) -> str:
+        """Read a daily episode file if it exists."""
+        path = self.episode_path_for_date(target_date)
+        if not path.exists():
+            return ""
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            logger.warning("Failed to read existing episode file %s", path, exc_info=True)
+            return ""
+
+    @classmethod
+    def build_merged_episode_content(cls, existing: str, consolidated_timeline: str) -> str:
+        """Preserve existing notes and append the newly consolidated timeline."""
+        timeline = consolidated_timeline.strip()
+        if not timeline:
+            return existing
+
+        existing = existing.strip()
+        if not existing:
+            return timeline + "\n"
+
+        return (
+            f"{cls.RAW_NOTES_HEADER}\n\n"
+            f"{existing}\n\n"
+            f"{cls.CONSOLIDATED_TIMELINE_HEADER}\n\n"
+            f"{timeline}\n"
+        )
+
+    def archive_episode_before_write(self, episode_path: Path) -> Path | None:
+        """Copy an existing episode file to archive/episodes before overwriting it."""
+        if not episode_path.exists():
+            return None
+
+        archive_dir = self.anima_dir / "archive" / "episodes"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = now_local().strftime("%Y%m%dT%H%M%S%z")
+        archive_path = archive_dir / f"{episode_path.stem}_{timestamp}{episode_path.suffix}"
+        counter = 1
+        while archive_path.exists():
+            archive_path = archive_dir / f"{episode_path.stem}_{timestamp}_{counter}{episode_path.suffix}"
+            counter += 1
+        shutil.copy2(episode_path, archive_path)
+        return archive_path
+
+    def write_consolidated_episode(self, target_date: date, consolidated_timeline: str) -> Path:
+        """Merge a consolidated timeline into the target daily episode file."""
+        from core.memory._io import atomic_write_text
+
+        episode_path = self.episode_path_for_date(target_date)
+        existing = self.read_episode_for_date(target_date)
+        merged = self.build_merged_episode_content(existing, consolidated_timeline)
+        if episode_path.exists():
+            self.archive_episode_before_write(episode_path)
+        atomic_write_text(episode_path, merged)
+        return episode_path
 
     # ── Legacy Migration ─────────────────────────────────────────
 
@@ -526,6 +603,9 @@ class ConsolidationEngine:
         self,
         hours: int = 24,
         model: str | None = None,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
     ) -> list[str]:
         """Collect activity entries and split into budget-sized chunks.
 
@@ -536,6 +616,10 @@ class ConsolidationEngine:
             hours: Number of hours to look back.
             model: Model name for budget calculation. Uses consolidation
                 model from config if not provided.
+            since: Optional inclusive lower timestamp bound. When provided,
+                it takes precedence over ``hours`` for entry filtering.
+            until: Optional exclusive upper timestamp bound, used with
+                ``since`` for fixed date windows.
 
         Returns:
             List of formatted activity text chunks. Empty list if no entries.
@@ -553,11 +637,14 @@ class ConsolidationEngine:
 
             activity = ActivityLogger(self.anima_dir)
 
-            # Load all entries (no type filter, high limit)
-            entries = activity.recent(
-                days=max(1, (hours + 23) // 24),
-                limit=10_000,
-            )
+            if since is not None or until is not None:
+                entries = activity._load_entries(since=since, until=until)
+            else:
+                # Load all entries (no type filter, high limit)
+                entries = activity.recent(
+                    days=max(1, (hours + 23) // 24),
+                    limit=10_000,
+                )
         except Exception:
             logger.debug("Failed to collect activity entries", exc_info=True)
             return []
@@ -565,16 +652,23 @@ class ConsolidationEngine:
         if not entries:
             return []
 
-        # Filter by time cutoff
-        cutoff = now_local() - timedelta(hours=hours)
+        cutoff = None if since is not None or until is not None else now_local() - timedelta(hours=hours)
         filtered: list = []
         for e in entries:
             try:
                 ts = ensure_aware(datetime.fromisoformat(e.ts))
-                if ts >= cutoff:
+                if since is not None and ts < since:
+                    continue
+                if until is not None and ts >= until:
+                    continue
+                if since is not None or until is not None:
+                    filtered.append(e)
+                    continue
+                if cutoff is not None and ts >= cutoff:
                     filtered.append(e)
             except (ValueError, TypeError):
-                filtered.append(e)
+                if since is None and until is None:
+                    filtered.append(e)
 
         if not filtered:
             return []

@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 from core.memory.consolidation import ConsolidationEngine
 
@@ -306,3 +307,110 @@ class TestCollectActivityChunks:
 
         engine = ConsolidationEngine(Path("/tmp/y"), "t")
         assert engine.collect_activity_chunks(hours=24, model="m") == []
+
+    @patch("core.memory.consolidation.ConsolidationEngine.compute_activity_budget")
+    @patch("core.memory.activity.ActivityLogger")
+    def test_collect_uses_fixed_date_window(
+        self,
+        mock_logger_cls: MagicMock,
+        mock_budget: MagicMock,
+    ) -> None:
+        mock_budget.return_value = 50_000
+        start = datetime(2026, 6, 9, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2026, 6, 10, 0, 0, 0, tzinfo=UTC)
+        inside = FakeEntry(
+            ts="2026-06-09T23:50:00+00:00",
+            type="response_sent",
+            content="previous day activity",
+        )
+        boundary = FakeEntry(
+            ts="2026-06-10T00:00:00+00:00",
+            type="response_sent",
+            content="today boundary activity",
+        )
+        mock_activity = MagicMock()
+        mock_activity._load_entries.return_value = [inside, boundary]
+        mock_logger_cls.return_value = mock_activity
+
+        engine = ConsolidationEngine(Path("/tmp/window"), "t")
+        chunks = engine.collect_activity_chunks(model="m", since=start, until=end)
+
+        mock_activity._load_entries.assert_called_once_with(since=start, until=end)
+        text = "\n".join(chunks)
+        assert "previous day activity" in text
+        assert "today boundary activity" not in text
+
+
+class TestDailyEpisodeWriteHelpers:
+    """Tests for previous-day target and merge/archive episode helpers."""
+
+    def test_previous_local_day_window_uses_configured_timezone(self) -> None:
+        tokyo = ZoneInfo("Asia/Tokyo")
+        target, start, end = ConsolidationEngine.previous_local_day_window(
+            datetime(2026, 6, 10, 2, 0, tzinfo=tokyo)
+        )
+
+        assert target == date(2026, 6, 9)
+        assert start.isoformat() == "2026-06-09T00:00:00+09:00"
+        assert end.isoformat() == "2026-06-10T00:00:00+09:00"
+
+        new_york = ZoneInfo("America/New_York")
+        target, start, end = ConsolidationEngine.previous_local_day_window(
+            datetime(2026, 3, 9, 2, 0, tzinfo=new_york)
+        )
+
+        assert target == date(2026, 3, 8)
+        assert start.date() == date(2026, 3, 8)
+        assert end.date() == date(2026, 3, 9)
+        assert start.tzinfo is new_york
+
+    def test_build_merged_episode_preserves_existing_raw_notes(self) -> None:
+        existing = "# 2026-06-09\n\n## 14:00 — Raw note\n\nDaytime note."
+        timeline = "## 14:00-15:00 Work\n\n- 14:10 Consolidated event"
+
+        merged = ConsolidationEngine.build_merged_episode_content(existing, timeline)
+
+        assert ConsolidationEngine.RAW_NOTES_HEADER in merged
+        assert existing in merged
+        assert ConsolidationEngine.CONSOLIDATED_TIMELINE_HEADER in merged
+        assert timeline in merged
+        assert merged.index(existing) < merged.index(timeline)
+
+    def test_write_consolidated_episode_archives_before_replacing(self, tmp_path: Path) -> None:
+        anima_dir = tmp_path / "animas" / "ritsu"
+        engine = ConsolidationEngine(anima_dir, "ritsu")
+        target = date(2026, 6, 9)
+        episode_path = engine.episode_path_for_date(target)
+        original = "# 2026-06-09\n\n## 12:00 — Raw\n\nOriginal raw note."
+        episode_path.write_text(original, encoding="utf-8")
+
+        with patch(
+            "core.memory.consolidation.now_local",
+            return_value=datetime(2026, 6, 10, 2, 0, tzinfo=ZoneInfo("Asia/Tokyo")),
+        ):
+            written = engine.write_consolidated_episode(
+                target,
+                "## 12:00-13:00 Consolidated\n\n- 12:05 Kept event",
+            )
+
+        assert written == episode_path
+        archived = list((anima_dir / "archive" / "episodes").glob("2026-06-09_*.md"))
+        assert len(archived) == 1
+        assert archived[0].read_text(encoding="utf-8") == original
+        updated = episode_path.read_text(encoding="utf-8")
+        assert "## Raw notes (preserved)" in updated
+        assert "Original raw note." in updated
+        assert "## Consolidated timeline" in updated
+        assert "Kept event" in updated
+
+    def test_write_consolidated_episode_creates_new_file_without_archive(self, tmp_path: Path) -> None:
+        anima_dir = tmp_path / "animas" / "ritsu"
+        engine = ConsolidationEngine(anima_dir, "ritsu")
+        target = date(2026, 6, 9)
+
+        engine.write_consolidated_episode(target, "## 09:00-10:00 Work\n\n- event")
+
+        assert (engine.episodes_dir / "2026-06-09.md").read_text(encoding="utf-8") == (
+            "## 09:00-10:00 Work\n\n- event\n"
+        )
+        assert not (anima_dir / "archive" / "episodes").exists()
