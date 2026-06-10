@@ -28,14 +28,17 @@ class TestHousekeepingConfig:
         assert cfg.enabled is True
         assert cfg.run_time == "05:30"
         assert cfg.prompt_log_retention_days == 3
-        assert cfg.daemon_log_max_size_mb == 100
-        assert cfg.daemon_log_keep_generations == 5
+        assert cfg.daemon_log_max_size_mb == 200
+        assert cfg.daemon_log_keep_generations == 2
         assert cfg.frontend_log_backup_count == 7
         assert cfg.dm_log_archive_retention_days == 30
         assert cfg.cron_log_retention_days == 30
         assert cfg.shortterm_retention_days == 7
         assert cfg.task_results_retention_days == 7
         assert cfg.pending_failed_retention_days == 14
+        assert cfg.corrupt_vectordb_keep_generations == 3
+        assert cfg.tmp_retention_days == 14
+        assert cfg.backup_retention_days == 90
 
     def test_custom_values(self):
         from core.config.models import HousekeepingConfig
@@ -50,11 +53,17 @@ class TestHousekeepingConfig:
             dm_log_archive_retention_days=60,
             cron_log_retention_days=14,
             shortterm_retention_days=14,
+            corrupt_vectordb_keep_generations=4,
+            tmp_retention_days=21,
+            backup_retention_days=120,
         )
         assert cfg.enabled is False
         assert cfg.run_time == "03:00"
         assert cfg.prompt_log_retention_days == 7
         assert cfg.daemon_log_max_size_mb == 200
+        assert cfg.corrupt_vectordb_keep_generations == 4
+        assert cfg.tmp_retention_days == 21
+        assert cfg.backup_retention_days == 120
 
     def test_config_has_housekeeping_field(self):
         from core.config.models import AnimaWorksConfig
@@ -189,6 +198,23 @@ class TestRotateDaemonLog:
         log.write_text("small content")
         result = _rotate_daemon_log(log, 100, 5)
         assert result["skipped"] is True
+
+    def test_prunes_generations_when_current_under_size(self, tmp_path: Path):
+        from core.memory.housekeeping import _rotate_daemon_log
+
+        log = tmp_path / "server-daemon.log"
+        log.write_text("small content")
+        (tmp_path / "server-daemon.log.1").write_text("gen1")
+        (tmp_path / "server-daemon.log.2").write_text("gen2")
+        (tmp_path / "server-daemon.log.3").write_text("gen3")
+
+        result = _rotate_daemon_log(log, max_size_mb=100, keep_generations=2)
+
+        assert result["skipped"] is True
+        assert result["deleted_generations"] == 1
+        assert (tmp_path / "server-daemon.log.1").exists()
+        assert (tmp_path / "server-daemon.log.2").exists()
+        assert not (tmp_path / "server-daemon.log.3").exists()
 
     def test_rotates_when_over_size(self, tmp_path: Path):
         from core.memory.housekeeping import _rotate_daemon_log
@@ -454,6 +480,9 @@ class TestRunHousekeeping:
         assert "dm_archives" in results
         assert results["task_results"]["deleted_files"] == 1
         assert results["pending_failed"]["deleted_files"] == 1
+        assert "corrupt_vectordb_archives" in results
+        assert "runtime_tmp" in results
+        assert "backup_dirs" in results
 
     @pytest.mark.asyncio
     async def test_handles_missing_dirs_gracefully(self, tmp_path: Path):
@@ -635,3 +664,73 @@ class TestCleanupPendingFailed:
 
         result = _cleanup_pending_failed(tmp_path / "nonexistent", retention_days=14)
         assert result["skipped"] is True
+
+
+class TestRuntimeBloatRetention:
+    """Tests for recurring runtime bloat retention helpers."""
+
+    def test_keeps_latest_three_corrupt_vectordb_archives(self, tmp_path: Path):
+        from core.memory.housekeeping import _cleanup_corrupt_vectordb_archives
+
+        archive = tmp_path / "sakura" / "archive"
+        archive.mkdir(parents=True)
+        names = [
+            "vectordb-corrupt-20260101-010101",
+            "vectordb-corrupt-20260201-010101",
+            "vectordb-corrupt-20260301-010101",
+            "vectordb-corrupt-20260401-010101",
+            "corrupt-vectordb-20260501010101",
+        ]
+        for name in names:
+            path = archive / name
+            path.mkdir()
+            (path / "data.bin").write_text(name)
+
+        result = _cleanup_corrupt_vectordb_archives(tmp_path, keep_generations=3)
+
+        assert result["deleted_dirs"] == 2
+        assert not (archive / "vectordb-corrupt-20260101-010101").exists()
+        assert not (archive / "vectordb-corrupt-20260201-010101").exists()
+        assert (archive / "vectordb-corrupt-20260301-010101").exists()
+        assert (archive / "vectordb-corrupt-20260401-010101").exists()
+        assert (archive / "corrupt-vectordb-20260501010101").exists()
+
+    def test_runtime_tmp_deletes_old_top_level_entries(self, tmp_path: Path):
+        from core.memory.housekeeping import _cleanup_runtime_tmp
+
+        tmp_dir = tmp_path / "tmp"
+        tmp_dir.mkdir()
+        old_file = tmp_dir / "old.tmp"
+        old_file.write_text("old")
+        old_time = time.time() - (20 * 86400)
+        os.utime(old_file, (old_time, old_time))
+        recent_file = tmp_dir / "recent.tmp"
+        recent_file.write_text("recent")
+
+        result = _cleanup_runtime_tmp(tmp_dir, retention_days=14)
+
+        assert result["deleted_entries"] == 1
+        assert not old_file.exists()
+        assert recent_file.exists()
+
+    def test_backup_dirs_delete_only_old_backup_patterns(self, tmp_path: Path):
+        from core.memory.housekeeping import _cleanup_backup_dirs
+
+        anima = tmp_path / "sakura"
+        old_backup = anima / "assets_backup_20260201"
+        old_backup.mkdir(parents=True)
+        (old_backup / "asset.png").write_text("old")
+        old_time = time.time() - (120 * 86400)
+        os.utime(old_backup, (old_time, old_time))
+
+        recent_backup = anima / "assets_backup_20260601"
+        recent_backup.mkdir()
+        keep_memory = anima / "knowledge"
+        keep_memory.mkdir()
+
+        result = _cleanup_backup_dirs(tmp_path, retention_days=90)
+
+        assert result["deleted_dirs"] == 1
+        assert not old_backup.exists()
+        assert recent_backup.exists()
+        assert keep_memory.exists()

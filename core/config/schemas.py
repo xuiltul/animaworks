@@ -554,6 +554,7 @@ class ActivityLogConfig(BaseModel):
     rotation_enabled: bool = True
     rotation_mode: Literal["size", "time", "both"] = "size"
     max_size_mb: int = Field(default=1024, ge=0)  # per-anima total, default 1GB
+    max_file_size_mb: int = Field(default=100, ge=0)  # per-file bloat trigger; 0 disables
     max_age_days: int = Field(default=7, ge=0)  # mode="time"|"both" で使用
     rotation_time: str = "05:00"  # 実行時刻 (configured TZ)
 
@@ -582,14 +583,17 @@ class HousekeepingConfig(BaseModel):
     run_time: str = "05:30"
 
     prompt_log_retention_days: int = 3
-    daemon_log_max_size_mb: int = 100
-    daemon_log_keep_generations: int = 5
+    daemon_log_max_size_mb: int = 200
+    daemon_log_keep_generations: int = 2
     frontend_log_backup_count: int = 7
     dm_log_archive_retention_days: int = 30
     cron_log_retention_days: int = 30
     shortterm_retention_days: int = 7
     task_results_retention_days: int = 7
     pending_failed_retention_days: int = 14
+    corrupt_vectordb_keep_generations: int = Field(default=3, ge=0)
+    tmp_retention_days: int = Field(default=14, ge=1)
+    backup_retention_days: int = Field(default=90, ge=1)
     pending_processing_stale_hours: int = Field(default=24, ge=1)
     background_running_stale_hours: int = Field(default=48, ge=1)
     current_state_stale_hours: int = Field(default=24, ge=1)

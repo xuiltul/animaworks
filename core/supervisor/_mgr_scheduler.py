@@ -748,6 +748,11 @@ class SchedulerMixin:
         max_age_days = (
             getattr(activity_cfg, "max_age_days", defaults.max_age_days) if activity_cfg else defaults.max_age_days
         )
+        max_file_size_mb = (
+            getattr(activity_cfg, "max_file_size_mb", defaults.max_file_size_mb)
+            if activity_cfg
+            else defaults.max_file_size_mb
+        )
 
         try:
             from core.memory.activity import ActivityLogger
@@ -757,14 +762,18 @@ class SchedulerMixin:
                 mode=mode,
                 max_size_mb=max_size_mb,
                 max_age_days=max_age_days,
+                max_file_size_mb=max_file_size_mb,
             )
             if results:
                 total_freed = sum(r.get("freed_bytes", 0) for r in results.values())
                 total_deleted = sum(r.get("deleted_files", 0) for r in results.values())
+                total_bloated = sum(r.get("bloated_rotated_files", 0) for r in results.values())
                 logger.info(
-                    "Activity log rotation complete: %d animas, %d files deleted, %d bytes freed",
+                    "Activity log rotation complete: %d animas, %d files deleted, "
+                    "%d bloated files rotated, %d bytes freed",
                     len(results),
                     total_deleted,
+                    total_bloated,
                     total_freed,
                 )
             else:
@@ -807,6 +816,9 @@ class SchedulerMixin:
                 shortterm_retention_days=hk_cfg.shortterm_retention_days,
                 task_results_retention_days=hk_cfg.task_results_retention_days,
                 pending_failed_retention_days=hk_cfg.pending_failed_retention_days,
+                corrupt_vectordb_keep_generations=hk_cfg.corrupt_vectordb_keep_generations,
+                tmp_retention_days=hk_cfg.tmp_retention_days,
+                backup_retention_days=hk_cfg.backup_retention_days,
                 pending_processing_stale_hours=hk_cfg.pending_processing_stale_hours,
                 background_running_stale_hours=hk_cfg.background_running_stale_hours,
                 current_state_stale_hours=hk_cfg.current_state_stale_hours,

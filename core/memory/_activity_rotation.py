@@ -30,6 +30,7 @@ class RotationMixin:
         *,
         mode: str = "size",
         max_size_mb: int = 1024,
+        max_file_size_mb: int = 100,
         max_age_days: int = 7,
     ) -> dict[str, Any]:
         """Rotate activity log files by deleting old entries.
@@ -38,6 +39,8 @@ class RotationMixin:
             mode: ``"size"`` (total size cap), ``"time"`` (age cap),
                 or ``"both"`` (time then size).
             max_size_mb: Maximum total size in MB (per-anima).
+            max_file_size_mb: Maximum size in MB for one JSONL file before
+                it is moved aside as ``*.bloated.bak``. ``0`` disables.
             max_age_days: Maximum age in days for ``"time"``/``"both"``.
 
         Returns:
@@ -51,6 +54,29 @@ class RotationMixin:
 
         deleted_count = 0
         freed_bytes = 0
+        bloated_rotated = 0
+        bloated_bytes = 0
+
+        if max_file_size_mb > 0:
+            max_file_bytes = max_file_size_mb * 1024 * 1024
+            remaining_files: list[Path] = []
+            for f in files:
+                size = f.stat().st_size
+                if size <= max_file_bytes:
+                    remaining_files.append(f)
+                    continue
+                dst = _bloated_backup_path(f)
+                f.rename(dst)
+                bloated_rotated += 1
+                bloated_bytes += size
+                logger.warning(
+                    "Activity log file exceeded %d MB and was rotated aside: %s -> %s (%d bytes)",
+                    max_file_size_mb,
+                    f,
+                    dst,
+                    size,
+                )
+            files = remaining_files
 
         # Phase 1: time-based deletion
         if mode in ("time", "both"):
@@ -101,7 +127,12 @@ class RotationMixin:
                 freed_bytes,  # type: ignore[attr-defined]
             )
 
-        return {"deleted_files": deleted_count, "freed_bytes": freed_bytes}
+        return {
+            "deleted_files": deleted_count,
+            "freed_bytes": freed_bytes,
+            "bloated_rotated_files": bloated_rotated,
+            "bloated_bytes": bloated_bytes,
+        }
 
     @staticmethod
     def rotate_all(
@@ -109,6 +140,7 @@ class RotationMixin:
         *,
         mode: str = "size",
         max_size_mb: int = 1024,
+        max_file_size_mb: int = 100,
         max_age_days: int = 7,
     ) -> dict[str, dict[str, Any]]:
         """Run rotation for all Animas under *animas_dir*.
@@ -132,10 +164,24 @@ class RotationMixin:
                 result = al.rotate(
                     mode=mode,
                     max_size_mb=max_size_mb,
+                    max_file_size_mb=max_file_size_mb,
                     max_age_days=max_age_days,
                 )
-                if result["deleted_files"] > 0:
+                if result["deleted_files"] > 0 or result.get("bloated_rotated_files", 0) > 0:
                     results[anima_dir.name] = result
             except Exception:
                 logger.exception("Rotation failed for %s", anima_dir.name)
         return results
+
+
+def _bloated_backup_path(path: Path) -> Path:
+    """Return a non-conflicting ``*.bloated.bak`` path for an activity log."""
+    candidate = path.with_name(f"{path.name}.bloated.bak")
+    if not candidate.exists():
+        return candidate
+    index = 1
+    while True:
+        candidate = path.with_name(f"{path.name}.bloated.{index}.bak")
+        if not candidate.exists():
+            return candidate
+        index += 1

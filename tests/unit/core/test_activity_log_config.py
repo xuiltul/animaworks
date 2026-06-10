@@ -3,7 +3,6 @@ from __future__ import annotations
 """Tests for ActivityLogConfig and its integration with AnimaWorksConfig."""
 
 import pytest
-
 from pydantic import ValidationError
 
 from core.config.models import ActivityLogConfig, AnimaWorksConfig
@@ -15,6 +14,7 @@ class TestActivityLogConfig:
         assert cfg.rotation_enabled is True
         assert cfg.rotation_mode == "size"
         assert cfg.max_size_mb == 1024
+        assert cfg.max_file_size_mb == 100
         assert cfg.max_age_days == 7
         assert cfg.rotation_time == "05:00"
 
@@ -23,12 +23,14 @@ class TestActivityLogConfig:
             rotation_enabled=False,
             rotation_mode="both",
             max_size_mb=512,
+            max_file_size_mb=64,
             max_age_days=14,
             rotation_time="03:30",
         )
         assert cfg.rotation_enabled is False
         assert cfg.rotation_mode == "both"
         assert cfg.max_size_mb == 512
+        assert cfg.max_file_size_mb == 64
         assert cfg.max_age_days == 14
         assert cfg.rotation_time == "03:30"
 
@@ -43,6 +45,10 @@ class TestActivityLogConfig:
     def test_negative_max_age_rejected(self) -> None:
         with pytest.raises(ValidationError):
             ActivityLogConfig(max_age_days=-1)
+
+    def test_negative_max_file_size_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            ActivityLogConfig(max_file_size_mb=-1)
 
 
 class TestAnimaWorksConfigActivityLog:
