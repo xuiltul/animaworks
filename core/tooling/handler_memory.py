@@ -1133,6 +1133,9 @@ class MemoryToolsMixin:
                     logger.warning("Failed to update RAG index for %s: %s", rel, e)
             self._mark_longterm_bm25_dirty(rel)
 
+        if rel.startswith("episodes/") and rel.endswith(".md"):
+            self._mark_longterm_bm25_dirty(rel)
+
         return result
 
     def _handle_archive_memory_file(self, args: dict[str, Any]) -> str:

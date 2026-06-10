@@ -1888,12 +1888,14 @@ class TestWriteMemoryFileEpisodeWarning:
         handler: ToolHandler,
         anima_dir: Path,
     ):
+        handler._mark_longterm_bm25_dirty = MagicMock()
         result = handler.handle(
             "write_memory_file",
             {"path": "episodes/2026-02-17.md", "content": "## 10:00 — テスト\n"},
         )
         assert "Written to" in result
         assert "WARNING" not in result
+        handler._mark_longterm_bm25_dirty.assert_called_once_with("episodes/2026-02-17.md")
 
     def test_suffixed_episode_no_warning(
         self,

@@ -349,6 +349,14 @@ class LegacyRAGBackend(MemoryBackend):
             except Exception:
                 logger.warning("rebuild_index failed for scope=%s", s, exc_info=True)
 
+        if scope is None or scope in {"knowledge", "episodes", "procedures"}:
+            try:
+                from core.memory.bm25 import rebuild_longterm_bm25_index
+
+                await asyncio.to_thread(rebuild_longterm_bm25_index, self._anima_dir)
+            except Exception:
+                logger.warning("Long-term BM25 rebuild failed for scope=%s", scope, exc_info=True)
+
         return total
 
     async def get_community_context(

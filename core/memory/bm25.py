@@ -322,7 +322,7 @@ def search_longterm_memory_bm25(
     memory_types: tuple[str, ...],
     top_k: int = 10,
     offset: int = 0,
-    rebuild_if_missing: bool = True,
+    rebuild_if_missing: bool = False,
 ) -> list[dict[str, Any]]:
     """Search persisted long-term memory BM25 chunks."""
     query_tokens = tokenize(query)

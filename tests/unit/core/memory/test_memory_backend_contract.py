@@ -196,6 +196,20 @@ async def test_record_access_accepts_empty_list(
     await legacy_backend.record_access([])
 
 
+async def test_legacy_rebuild_index_rebuilds_longterm_bm25(
+    legacy_backend: LegacyRAGBackend,
+) -> None:
+    (legacy_backend._anima_dir / "knowledge").mkdir(parents=True)
+    legacy_backend._indexer.index_directory.return_value = 3
+
+    with patch("core.memory.bm25.rebuild_longterm_bm25_index") as mock_rebuild:
+        mock_rebuild.return_value = MagicMock(documents=1)
+        total = await legacy_backend.rebuild_index("knowledge")
+
+    assert total == 3
+    mock_rebuild.assert_called_once_with(legacy_backend._anima_dir)
+
+
 # ── Registry ───────────────────────────────────────────────────────────────
 
 

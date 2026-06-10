@@ -358,6 +358,28 @@ def test_rebuild_clears_longterm_bm25_dirty_marker(tmp_path: Path) -> None:
     assert is_longterm_bm25_dirty(anima_dir) is False
 
 
+def test_longterm_bm25_missing_index_does_not_rebuild_by_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _write_longterm_memory(anima_dir, "knowledge/a.md", "# A\n\nZephyrNova launchpad audit.")
+
+    def fail_rebuild(*args, **kwargs):
+        raise AssertionError("search path should not rebuild long-term BM25 by default")
+
+    monkeypatch.setattr(bm25_module, "rebuild_longterm_bm25_index", fail_rebuild)
+
+    assert (
+        search_longterm_memory_bm25(
+            anima_dir,
+            "ZephyrNova",
+            memory_types=("knowledge",),
+        )
+        == []
+    )
+
+
 def test_longterm_bm25_rejects_poisoned_index_content(tmp_path: Path) -> None:
     anima_dir = tmp_path / "animas" / "alice"
     _write_longterm_memory(anima_dir, "knowledge/a.md", "# A\n\nBaseline launchpad audit.")
