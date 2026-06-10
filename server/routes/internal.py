@@ -84,6 +84,13 @@ class VectorListCollectionsRequest(BaseModel):
     anima_name: str | None = None
 
 
+class VectorQuickCheckRequest(BaseModel):
+    anima_name: str
+    timeout_seconds: float = 10.0
+    source: str = "internal_vector_quick_check"
+    record_repair: bool = True
+
+
 def create_internal_router() -> APIRouter:
     router = APIRouter()
 
@@ -236,5 +243,9 @@ def create_internal_router() -> APIRouter:
     @router.post("/internal/vector/list-collections")
     async def vector_list_collections(body: VectorListCollectionsRequest, request: Request):
         return await _require_vector_worker(request, "/list-collections", body)
+
+    @router.post("/internal/vector/quick-check")
+    async def vector_quick_check(body: VectorQuickCheckRequest, request: Request):
+        return await _require_vector_worker(request, "/quick-check", body)
 
     return router

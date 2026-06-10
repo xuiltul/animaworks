@@ -237,12 +237,14 @@ class RAGConfig(BaseModel):
     repair_poll_interval_seconds: int = 5
     startup_repair_preflight_enabled: bool = True
     startup_repair_window_minutes: int = 1440
+    quick_check_timeout_seconds: float = 10.0
     vector_worker_enabled: bool = True
     vector_worker_host: str = "127.0.0.1"
     vector_worker_port: int = 0
     vector_worker_startup_timeout_seconds: float = 10.0
     vector_worker_request_timeout_seconds: float = 30.0
     vector_worker_restart_backoff_seconds: float = 2.0
+    vector_worker_shutdown_timeout_seconds: float = 30.0
     vector_worker_fallback_direct: bool = False
     rerank_enabled: bool = True
     rerank_candidate_pool: int = 50

@@ -17,6 +17,7 @@ from core.memory.rag.repair import (
     classify_corruption_error,
     collection_owner,
 )
+from core.memory.rag.sqlite_health import SQLiteHealthResult
 
 
 def test_classifies_today_error_finding_id():
@@ -172,6 +173,44 @@ def test_discover_suspect_animas_from_state_and_native_log(data_dir: Path):
     )
 
     assert suspects == ["rin", "sora"]
+
+
+def test_discover_suspect_animas_includes_quick_check_corruption(data_dir: Path, monkeypatch):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "vectordb").mkdir()
+
+    calls: list[dict[str, object]] = []
+
+    def fake_quick_check(anima_name: str, **kwargs) -> SQLiteHealthResult:
+        calls.append(kwargs)
+        return SQLiteHealthResult(
+            db_path=data_dir / "animas" / anima_name / "vectordb" / "chroma.sqlite3",
+            ok=False,
+            status="corrupt",
+            error="database disk image is malformed",
+        )
+
+    monkeypatch.setattr(
+        "core.memory.rag.sqlite_health.check_anima_vectordb_health_via_worker_or_direct",
+        fake_quick_check,
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        include_logs=False,
+        quick_check_timeout_seconds=2.0,
+        quick_check_source="startup_quick_check",
+    )
+
+    assert suspects == ["sora"]
+    assert calls == [
+        {
+            "timeout_seconds": 2.0,
+            "source": "startup_quick_check",
+            "record_repair": False,
+        }
+    ]
 
 
 def test_repair_animas_if_allowed_runs_each_target(data_dir: Path):

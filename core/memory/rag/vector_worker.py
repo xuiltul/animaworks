@@ -9,8 +9,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import concurrent.futures
+import functools
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
@@ -74,9 +76,17 @@ class VectorListCollectionsRequest(BaseModel):
     anima_name: str | None = None
 
 
-async def _run_native(fn, *args):
+class VectorQuickCheckRequest(BaseModel):
+    anima_name: str
+    timeout_seconds: float = 10.0
+    source: str = "worker_quick_check"
+    record_repair: bool = True
+
+
+async def _run_native(fn, *args, **kwargs):
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_native_executor, fn, *args)
+    call = functools.partial(fn, *args, **kwargs)
+    return await loop.run_in_executor(_native_executor, call)
 
 
 def _vector_write_failed(operation: str, collection: str) -> JSONResponse:
@@ -104,13 +114,27 @@ def _search_results_payload(results) -> dict[str, Any]:
     }
 
 
+async def _close_native_vector_stores() -> None:
+    from core.memory.rag.singleton import close_all_vector_stores
+
+    logger.info("Vector worker shutdown: closing cached vector stores")
+    await _run_native(close_all_vector_stores)
+
+
 def create_app() -> FastAPI:
     os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
     from core.memory.rag.direct_access import enable_direct_chroma_for_process
 
     enable_direct_chroma_for_process()
 
-    app = FastAPI(title="AnimaWorks Vector Worker")
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        try:
+            yield
+        finally:
+            await _close_native_vector_stores()
+
+    app = FastAPI(title="AnimaWorks Vector Worker", lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -241,6 +265,26 @@ def create_app() -> FastAPI:
             return {"collections": []}
         collections = await _run_native(store.list_collections)
         return {"collections": collections}
+
+    @app.post("/quick-check")
+    async def vector_quick_check(body: VectorQuickCheckRequest):
+        from core.memory.rag.sqlite_health import check_anima_vectordb_health
+
+        result = await _run_native(
+            check_anima_vectordb_health,
+            body.anima_name,
+            timeout_seconds=body.timeout_seconds,
+            source=body.source,
+            record_repair=body.record_repair,
+        )
+        return {
+            "status": result.status,
+            "ok": result.ok,
+            "corrupt": result.corrupt,
+            "db_path": str(result.db_path),
+            "details": list(result.details),
+            "error": result.error,
+        }
 
     return app
 

@@ -204,6 +204,9 @@ class RAGRepairService:
         *,
         window_minutes: int | None = None,
         include_logs: bool = True,
+        include_quick_check: bool = True,
+        quick_check_timeout_seconds: float = 10.0,
+        quick_check_source: str = "startup_quick_check",
         animas_dir: Path | None = None,
         log_paths: list[Path] | None = None,
     ) -> list[str]:
@@ -227,6 +230,23 @@ class RAGRepairService:
             state = repair_state.read_state(anima_name, animas_dir=animas_dir)
             if self._state_is_suspect(state, cutoff):
                 suspects.add(anima_name)
+
+        if include_quick_check:
+            from core.memory.rag.sqlite_health import check_anima_vectordb_health_via_worker_or_direct
+
+            for anima_name in repairable:
+                try:
+                    health = check_anima_vectordb_health_via_worker_or_direct(
+                        anima_name,
+                        timeout_seconds=quick_check_timeout_seconds,
+                        source=quick_check_source,
+                        record_repair=False,
+                    )
+                except Exception:
+                    logger.debug("RAG quick_check failed while discovering suspect DBs: %s", anima_name, exc_info=True)
+                    continue
+                if health.corrupt:
+                    suspects.add(anima_name)
 
         if include_logs:
             for line in self._iter_recent_corruption_log_lines(

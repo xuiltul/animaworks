@@ -390,7 +390,12 @@ def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
 
         service = get_repair_service()
         window_minutes = int(getattr(rag, "startup_repair_window_minutes", 1440))
-        suspects = service.discover_suspect_animas(window_minutes=window_minutes)
+        quick_check_timeout = float(getattr(rag, "quick_check_timeout_seconds", 10.0))
+        suspects = service.discover_suspect_animas(
+            window_minutes=window_minutes,
+            quick_check_timeout_seconds=quick_check_timeout,
+            quick_check_source="startup_quick_check",
+        )
         reason = "startup_chroma_crash_preflight"
         if not suspects and force_all_vectordb:
             animas_dir = get_animas_dir()

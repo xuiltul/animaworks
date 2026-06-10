@@ -16,6 +16,7 @@ def test_rag_startup_preflight_repairs_suspects() -> None:
             repair_enabled=True,
             startup_repair_preflight_enabled=True,
             startup_repair_window_minutes=30,
+            quick_check_timeout_seconds=4.0,
         ),
     )
     service = MagicMock()
@@ -30,7 +31,11 @@ def test_rag_startup_preflight_repairs_suspects() -> None:
     ):
         _run_rag_startup_preflight()
 
-    service.discover_suspect_animas.assert_called_once_with(window_minutes=30)
+    service.discover_suspect_animas.assert_called_once_with(
+        window_minutes=30,
+        quick_check_timeout_seconds=4.0,
+        quick_check_source="startup_quick_check",
+    )
     service.repair_animas_if_allowed.assert_called_once_with(
         ["sora"],
         reason="startup_chroma_crash_preflight",
@@ -52,6 +57,7 @@ def test_rag_startup_preflight_repairs_vectordbs_after_unclean_exit(data_dir: Pa
             repair_enabled=True,
             startup_repair_preflight_enabled=True,
             startup_repair_window_minutes=30,
+            quick_check_timeout_seconds=4.0,
         ),
     )
     service = MagicMock()

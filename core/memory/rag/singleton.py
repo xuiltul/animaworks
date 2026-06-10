@@ -102,8 +102,7 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
                         persist_dir = get_anima_vectordb_dir(anima_name)
                     else:
                         persist_dir = None  # ChromaVectorStore defaults to ~/.animaworks/vectordb
-                    store = create_chroma_vector_store(persist_dir=persist_dir)
-                    store.anima_name = anima_name
+                    store = create_chroma_vector_store(persist_dir=persist_dir, anima_name=anima_name)
                     _vector_stores[anima_name] = store
                 except Exception as exc:
                     _init_failed = True
@@ -265,23 +264,39 @@ def reset_vector_store(anima_name: str | None = None) -> None:
 
     with _lock:
         store = _vector_stores.pop(anima_name, None)
-        close = getattr(store, "close", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:
-                logger.debug("Failed to close vector store for %s", anima_name, exc_info=True)
+        _close_store(store, anima_name)
 
         http_keys = [key for key in _http_stores if key[1] == anima_name]
         for key in http_keys:
             store = _http_stores.pop(key, None)
-            close = getattr(store, "close", None)
-            if callable(close):
-                try:
-                    close()
-                except Exception:
-                    logger.debug("Failed to close vector store for %s", anima_name, exc_info=True)
+            _close_store(store, anima_name)
         _init_failed = False
+
+
+def close_all_vector_stores() -> None:
+    """Close all cached vector-store clients before process shutdown."""
+    global _init_failed
+
+    with _lock:
+        stores = list(_vector_stores.items())
+        http_stores = list(_http_stores.items())
+        _vector_stores.clear()
+        _http_stores.clear()
+        _init_failed = False
+
+    for anima_name, store in stores:
+        _close_store(store, anima_name)
+    for (_base_url, anima_name), store in http_stores:
+        _close_store(store, anima_name)
+
+
+def _close_store(store, anima_name: str | None) -> None:
+    close = getattr(store, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:
+            logger.debug("Failed to close vector store for %s", anima_name, exc_info=True)
 
 
 def get_embedding_dimension() -> int:

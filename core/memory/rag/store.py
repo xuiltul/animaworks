@@ -173,11 +173,22 @@ class ChromaVectorStore(VectorStore):
             )
             persist_dir.mkdir(parents=True, exist_ok=True)
 
+        from core.memory.rag.sqlite_health import configure_chroma_sqlite_pragmas, prepare_chroma_sqlite_for_startup
+
+        prepare_chroma_sqlite_for_startup(persist_dir, anima_name=anima_name)
         logger.debug("Initializing ChromaDB at %s", persist_dir)
         self.client = chromadb.PersistentClient(path=str(persist_dir))
         self.persist_dir = persist_dir
         self.anima_name = anima_name
         self._closed = False
+        post_init_pragma = configure_chroma_sqlite_pragmas(persist_dir)
+        if not post_init_pragma.ok and post_init_pragma.status != "missing":
+            logger.warning(
+                "Failed to configure Chroma SQLite pragmas after client init at %s: status=%s detail=%s",
+                post_init_pragma.db_path,
+                post_init_pragma.status,
+                post_init_pragma.error or post_init_pragma.details,
+            )
 
     def close(self) -> None:
         """Close the underlying Chroma client if supported.

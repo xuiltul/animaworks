@@ -9,6 +9,7 @@ System scheduler mixin for ProcessSupervisor.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -601,6 +602,14 @@ class SchedulerMixin:
 
         from core.memory.rag_search import _compute_dir_hash, _read_shared_hash, _write_shared_hash
 
+        quick_check_timeout = 10.0
+        try:
+            from core.config import load_config
+
+            quick_check_timeout = float(getattr(load_config().rag, "quick_check_timeout_seconds", 10.0))
+        except Exception:
+            logger.debug("Config load failed for RAG quick_check timeout", exc_info=True)
+
         loop = asyncio.get_running_loop()
         total_chunks = 0
         ck_dir = get_common_knowledge_dir()
@@ -618,6 +627,26 @@ class SchedulerMixin:
 
                 if is_repair_locked(anima_name):
                     logger.warning("Skipping daily RAG indexing for %s: RAG repair lock is held", anima_name)
+                    continue
+
+                from core.memory.rag.sqlite_health import check_anima_vectordb_health_via_worker_or_direct
+
+                health = await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        check_anima_vectordb_health_via_worker_or_direct,
+                        anima_name,
+                        timeout_seconds=quick_check_timeout,
+                        source="daily_indexing_quick_check",
+                    ),
+                )
+                if health.corrupt:
+                    logger.warning(
+                        "Skipping daily RAG indexing for %s: quick_check status=%s db=%s",
+                        anima_name,
+                        health.status,
+                        health.db_path,
+                    )
                     continue
 
                 vector_store = get_vector_store(anima_name)

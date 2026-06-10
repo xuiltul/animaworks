@@ -66,6 +66,7 @@ class VectorWorkerManager:
         startup_timeout: float = 10.0,
         request_timeout: float = 30.0,
         restart_backoff: float = 2.0,
+        shutdown_timeout: float = 30.0,
         fallback_direct: bool = True,
     ) -> None:
         self.enabled = enabled
@@ -75,6 +76,7 @@ class VectorWorkerManager:
         self.startup_timeout = startup_timeout
         self.request_timeout = request_timeout
         self.restart_backoff = restart_backoff
+        self.shutdown_timeout = shutdown_timeout
         self.fallback_direct = fallback_direct
         self.process: subprocess.Popen[bytes] | None = None
         self.base_url: str | None = None
@@ -93,6 +95,7 @@ class VectorWorkerManager:
             startup_timeout=float(getattr(rag, "vector_worker_startup_timeout_seconds", 10.0)),
             request_timeout=float(getattr(rag, "vector_worker_request_timeout_seconds", 30.0)),
             restart_backoff=float(getattr(rag, "vector_worker_restart_backoff_seconds", 2.0)),
+            shutdown_timeout=float(getattr(rag, "vector_worker_shutdown_timeout_seconds", 30.0)),
             fallback_direct=bool(getattr(rag, "vector_worker_fallback_direct", False)),
         )
 
@@ -112,8 +115,12 @@ class VectorWorkerManager:
             return
         proc.terminate()
         try:
-            await asyncio.to_thread(proc.wait, timeout=5)
+            await asyncio.to_thread(proc.wait, timeout=self.shutdown_timeout)
         except subprocess.TimeoutExpired:
+            logger.warning(
+                "Vector worker did not exit after %.1fs; sending SIGKILL",
+                self.shutdown_timeout,
+            )
             proc.kill()
             await asyncio.to_thread(proc.wait, timeout=5)
 
