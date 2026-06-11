@@ -6,16 +6,65 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 from core.agent import AgentCore
 from core.anima import DigitalAnima
 from core.memory import MemoryManager
 from core.messenger import Messenger
+
+
+class _DeterministicEmbeddingModel:
+    """Small local embedding stand-in for E2E tests.
+
+    The E2E suite verifies AnimaWorks behavior, not Hugging Face model
+    availability.  Keeping embeddings deterministic avoids CI failures when
+    hosted runners hit external model rate limits.
+    """
+
+    dimension = 384
+
+    def get_sentence_embedding_dimension(self) -> int:
+        return self.dimension
+
+    def encode(
+        self,
+        texts: list[str],
+        *,
+        convert_to_numpy: bool = True,
+        show_progress_bar: bool = False,
+    ):
+        vectors = [self._embed(text) for text in texts]
+        if convert_to_numpy:
+            return np.array(vectors, dtype=float)
+        return vectors
+
+    def _embed(self, text: str) -> list[float]:
+        vector = [0.0] * self.dimension
+        for token in self._tokens(text):
+            digest = hashlib.sha256(token.encode("utf-8")).digest()
+            index = digest[0] % self.dimension
+            sign = 1.0 if digest[1] % 2 == 0 else -1.0
+            weight = 1.0 + digest[2] / 255.0
+            vector[index] += sign * weight
+        norm = sum(value * value for value in vector) ** 0.5
+        if not norm:
+            return vector
+        return [value / norm for value in vector]
+
+    def _tokens(self, text: str) -> list[str]:
+        normalized = text.lower()
+        word_tokens = re.findall(r"[\w]+", normalized)
+        compact = re.sub(r"\s+", "", normalized)
+        char_tokens = [compact[i : i + 3] for i in range(max(0, len(compact) - 2))]
+        return word_tokens + char_tokens or [normalized]
 
 
 @pytest.fixture(autouse=True)
@@ -33,6 +82,14 @@ def _bypass_completion_gate():
         return_value=False,
     ):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _deterministic_embedding_model(monkeypatch: pytest.MonkeyPatch):
+    """Prevent E2E tests from reaching external embedding model hosts."""
+
+    model = _DeterministicEmbeddingModel()
+    monkeypatch.setattr("core.memory.rag.singleton.get_embedding_model", lambda model_name=None: model)
 
 
 @pytest.fixture
