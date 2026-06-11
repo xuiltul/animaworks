@@ -475,7 +475,7 @@ class MessagingMixin:
                             prior_messages=prior_messages,
                             thread_id=thread_id,
                             model_config_override=base_model_config,
-                    )
+                        )
                     self._last_activity = now_local()
                     result.summary = normalize_user_facing_response_text(result.summary)
                     meeting_redirects = _collect_meeting_redirects()

@@ -43,6 +43,8 @@ async def test_handle_process_message_normalizes_none_intent(tmp_path: Path):
         thread_id="default",
         include_cycle_result=True,
         source="",
+        meeting_room_id="",
+        meeting_participants=None,
     )
 
 

@@ -269,8 +269,9 @@ class TestRobustRecipientHandling:
         config_with_aliases,
         make_handler,
     ):
-        sakura_dir = make_anima("sakura")
-        handler = make_handler(sakura_dir)
+        make_anima("sakura")
+        hinata_dir = make_anima("hinata")
+        handler = make_handler(hinata_dir)
 
         with (
             patch("core.paths.get_animas_dir", return_value=animas_dir),
