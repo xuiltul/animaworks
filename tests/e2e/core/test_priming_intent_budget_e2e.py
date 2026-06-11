@@ -1,16 +1,19 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """E2E tests for intent-aware priming budget behavior."""
 
+from pathlib import Path
+
 from core.memory.priming import PrimingEngine
 
 
-def test_intent_budget_mapping_e2e(tmp_path) -> None:
+def test_intent_budget_mapping_e2e(data_dir: Path) -> None:
     """Intent should map to stable dynamic budgets in the real PrimingEngine."""
-    anima_dir = tmp_path / "animas" / "sakura"
+    anima_dir = data_dir / "animas" / "sakura"
     (anima_dir / "episodes").mkdir(parents=True)
     (anima_dir / "knowledge").mkdir()
     (anima_dir / "skills").mkdir()
