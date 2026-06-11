@@ -25,6 +25,7 @@ from core.memory.consolidation import ConsolidationEngine
 from core.memory.conversation import ConversationMemory
 from core.memory.priming import PrimingEngine, format_priming_section
 from core.schemas import CycleResult
+from core.supervisor.manager import ProcessSupervisor
 from core.time_utils import now_jst
 
 # ── Fixtures ──────────────────────────────────────────────────
@@ -502,7 +503,7 @@ async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket)
     """Test 4: System cron integration.
 
     Verifies:
-    - LifecycleManager sets up system crons correctly
+    - ProcessSupervisor sets up system crons correctly
     - daily_consolidation cron registered at 02:00
     - weekly_integration cron registered on Sunday 03:00
     - Crons trigger consolidation for all animas
@@ -568,11 +569,21 @@ async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket)
         )
         lifecycle.register_anima(anima)
 
-        # Setup system crons
-        lifecycle._setup_system_crons()
+        # Setup system crons through the production supervisor scheduler.
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+        from core.time_utils import get_app_timezone
+
+        supervisor = ProcessSupervisor(
+            animas_dir=tmp_path / "animas",
+            shared_dir=shared_dir,
+            run_dir=tmp_path / "run",
+        )
+        supervisor.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
+        supervisor._setup_system_crons()
 
         # Verify cron jobs were registered
-        jobs = lifecycle.scheduler.get_jobs()
+        jobs = supervisor.scheduler.get_jobs()
         job_ids = [job.id for job in jobs]
 
         assert "system_daily_consolidation" in job_ids
@@ -580,11 +591,11 @@ async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket)
         assert "system_dm_log_rotation" in job_ids
 
         # Verify cron schedules
-        daily_job = lifecycle.scheduler.get_job("system_daily_consolidation")
+        daily_job = supervisor.scheduler.get_job("system_daily_consolidation")
         assert daily_job is not None
         # The trigger should be a CronTrigger with hour=2, minute=0
 
-        weekly_job = lifecycle.scheduler.get_job("system_weekly_integration")
+        weekly_job = supervisor.scheduler.get_job("system_weekly_integration")
         assert weekly_job is not None
         # The trigger should be a CronTrigger with day_of_week="sun", hour=3
 

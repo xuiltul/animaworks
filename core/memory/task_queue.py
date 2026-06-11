@@ -236,6 +236,7 @@ class TaskQueueManager:
         deadline: str,
         relay_chain: list[str] | None = None,
         meta: dict[str, Any] | None = None,
+        task_id: str | None = None,
     ) -> TaskEntry:
         """Add a task with 'delegated' status for tracking delegation.
 
@@ -249,7 +250,7 @@ class TaskQueueManager:
             original_instruction = original_instruction[:_MAX_INSTRUCTION_CHARS]
         now = now_iso()
         entry = TaskEntry(
-            task_id=uuid.uuid4().hex[:12],
+            task_id=task_id if task_id else uuid.uuid4().hex[:12],
             ts=now,
             source="anima",
             original_instruction=original_instruction,

@@ -65,12 +65,11 @@ animaworks/
 │   ├── paths.py               # Path resolution
 │   ├── messenger.py           # Inter-Anima message send/receive
 │   ├── lifecycle/             # Heartbeat, cron, Inbox (package, APScheduler)
-│   │   ├── __init__.py        #   LifecycleManager (Scheduler/Inbox/rate limiting mixins)
+│   │   ├── __init__.py        #   LifecycleManager compatibility and mixin re-exports
 │   │   ├── scheduler.py       #   Schedule registration
 │   │   ├── inbox_watcher.py   #   Inbox monitoring
 │   │   ├── rate_limiter.py    #   Message chaining and cooldown
-│   │   ├── system_crons.py    #   Server-wide scheduled jobs
-│   │   └── system_consolidation.py # Cross-org consolidation triggers
+│   │   └── system_consolidation.py # System consolidation handlers used by ProcessSupervisor
 │   ├── outbound.py            # Unified outbound routing (Slack/Chatwork/internal auto-detection)
 │   ├── background.py          # Background task management
 │   ├── asset_reconciler.py    # Automatic asset generation
@@ -742,7 +741,7 @@ Use the `intent` field on `send_message` to state the purpose. Use DMs only for 
 | intent | Description | Use |
 |--------|-------------|-----|
 | `report` | Report upward | Progress and issues (MUST) |
-| `delegation` | Delegate to subordinate | Works with delegate_task |
+| `delegation` | Deprecated for `send_message` | Use `delegate_task` instead |
 | `question` | Question or consultation | Coordination with peers |
 
 ### Board (Shared Channels)
@@ -966,7 +965,7 @@ Including "Making decisions without searching memory is prohibited" in `behavior
 - **Board/shared channels** — Slack-style shared channels. REST API for channel posts, mentions, DM history
 - **Unified outbound routing** — Auto-resolves recipient names to internal Anima or external platforms (Slack/Chatwork) for delivery
 - **Heartbeat, cron, TaskExec, TaskBoard** — Schedule management via APScheduler. TaskBoard and TaskExec manage queued, running, deferred, suppressed, and completed work
-- **Inter-Anima messaging** — Text communication via Messenger. intent control (report/delegation/question); 3-layer rate limiting
+- **Inter-Anima messaging** — Text communication via Messenger. intent control (report/question; delegation uses `delegate_task`); 3-layer rate limiting
 - **Supervisor tools** — Auto-enabled for Animas with subordinates (see tool list below)
 - **Unified configuration** — config.json + Pydantic validation. status.json SSoT; models.json for execution mode override
 - **Credential Vault** — `vault.json` + `vault.key` (PyNaCl SealedBox, `core/config/vault.py`). Tools: `vault_get` / `vault_store` / `vault_list`
@@ -1001,7 +1000,7 @@ Internal tools provided by the framework. Combines Claude Code–compatible tool
 
 | Tool | Description |
 |------|-------------|
-| `send_message` | Inter-Anima DM (intent required: report/delegation/question) |
+| `send_message` | Inter-Anima DM (intent required: report/question; delegation intent is rejected, use `delegate_task`) |
 | `post_channel` | Post to Board (shared channel) |
 | `read_channel` | Read Board |
 | `manage_channel` | Channel management (create, ACL) |

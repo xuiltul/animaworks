@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -43,6 +44,13 @@ def model_config() -> ModelConfig:
 @pytest.fixture
 def conv(anima_dir: Path, model_config: ModelConfig) -> ConversationMemory:
     return ConversationMemory(anima_dir, model_config)
+
+
+def test_finalize_session_keeps_legacy_optional_kwargs() -> None:
+    signature = inspect.signature(ConversationMemory.finalize_session)
+
+    assert "injected_procedures" in signature.parameters
+    assert "session_id" in signature.parameters
 
 
 # ── ConversationTurn ──────────────────────────────────────

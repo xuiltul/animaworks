@@ -18,36 +18,35 @@ import pytest
 
 
 class TestLifecycleConsolidationIntegration:
-    """Test lifecycle manager's system cron setup."""
+    """Test lifecycle consolidation setup."""
 
     @pytest.mark.asyncio
-    async def test_system_crons_registered_on_start(self):
-        """Test that system crons are registered when lifecycle manager starts."""
-        from core.lifecycle import LifecycleManager
+    async def test_system_crons_registered_on_supervisor(self, tmp_path: Path):
+        """System-wide crons are registered by ProcessSupervisor."""
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-        manager = LifecycleManager()
+        from core.supervisor.manager import ProcessSupervisor
+        from core.time_utils import get_app_timezone
 
-        # Start the manager (needs to be in async context)
-        manager.start()
+        supervisor = ProcessSupervisor(
+            animas_dir=tmp_path / "animas",
+            shared_dir=tmp_path / "shared",
+            run_dir=tmp_path / "run",
+        )
+        supervisor.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
+        supervisor._setup_system_crons()
 
-        try:
-            # Check that system cron jobs were registered
-            jobs = manager.scheduler.get_jobs()
-            job_ids = [job.id for job in jobs]
+        jobs = supervisor.scheduler.get_jobs()
+        job_ids = [job.id for job in jobs]
 
-            assert "system_daily_consolidation" in job_ids
-            assert "system_weekly_integration" in job_ids
+        assert "system_daily_consolidation" in job_ids
+        assert "system_weekly_integration" in job_ids
 
-            # Check daily consolidation job details
-            daily_job = next(j for j in jobs if j.id == "system_daily_consolidation")
-            assert daily_job.name == "System: Daily Consolidation"
+        daily_job = next(j for j in jobs if j.id == "system_daily_consolidation")
+        assert daily_job.name == "System: Daily Consolidation"
 
-            # Check weekly integration job details
-            weekly_job = next(j for j in jobs if j.id == "system_weekly_integration")
-            assert weekly_job.name == "System: Weekly Integration"
-
-        finally:
-            manager.shutdown()
+        weekly_job = next(j for j in jobs if j.id == "system_weekly_integration")
+        assert weekly_job.name == "System: Weekly Integration"
 
     @pytest.mark.asyncio
     async def test_handle_daily_consolidation_with_config(self, tmp_path: Path):

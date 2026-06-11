@@ -207,7 +207,8 @@ def create_internal_router() -> APIRouter:
                 logger.warning("Vector worker unavailable for %s: %s", path, exc)
             return JSONResponse(status_code=503, content={"detail": "Vector worker unavailable"})
         if response.status_code >= 400:
-            return JSONResponse(status_code=response.status_code, content=response.data)
+            headers = dict(getattr(response, "headers", None) or {})
+            return JSONResponse(status_code=response.status_code, content=response.data, headers=headers)
         return response.data
 
     @router.post("/internal/vector/query")

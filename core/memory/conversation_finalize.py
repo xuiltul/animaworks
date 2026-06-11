@@ -259,6 +259,8 @@ async def finalize_session(
     model_config: Any,
     save_fn: Callable[[], None],
     min_turns: int = 3,
+    injected_procedures: list[str] | None = None,
+    session_id: str = "",
 ) -> bool:
     """Finalize the current conversation session (differential).
 
@@ -269,6 +271,7 @@ async def finalize_session(
     Returns:
         True if session was finalized and written to episodes/, False if skipped.
     """
+    del injected_procedures, session_id
     new_turns = state.turns[state.last_finalized_turn_index :]
     if len(new_turns) < min_turns:
         logger.debug(

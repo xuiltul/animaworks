@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +14,6 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from server.routes.system import _parse_cron_jobs
-from datetime import UTC
 
 
 def _make_test_app(
@@ -23,6 +23,7 @@ def _make_test_app(
     anima_names: list[str] | None = None,
 ):
     from fastapi import FastAPI
+
     from server.routes.system import create_system_router
 
     app = FastAPI()
@@ -108,6 +109,37 @@ class TestSystemStatus:
         assert data["animas"] == 1
         assert "processes" in data
         assert data["scheduler_running"] is False
+        assert data["vector_worker"]["status"] == "missing"
+
+    async def test_status_includes_vector_worker_circuit_breakers(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        animas_dir.mkdir()
+        app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
+        app.state.supervisor.get_all_status.return_value = {
+            "alice": {"status": "running", "pid": 1234},
+        }
+        app.state.vector_worker = MagicMock(
+            enabled=True,
+            status=AsyncMock(
+                return_value={
+                    "status": "ok",
+                    "write_circuit_breakers": [
+                        {
+                            "owner": "shared",
+                            "collection": "shared_common_knowledge",
+                            "open": True,
+                        }
+                    ],
+                }
+            ),
+        )
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/system/status")
+
+        data = resp.json()
+        assert data["vector_worker"]["status"] == "ok"
+        assert data["vector_worker"]["write_circuit_breakers"][0]["collection"] == "shared_common_knowledge"
 
     async def test_status_empty(self, tmp_path):
         animas_dir = tmp_path / "animas"

@@ -222,6 +222,8 @@ def bounce_disabled_delegations(
         for task in tasks:
             if task.source != "anima":
                 continue
+            if bool((task.meta or {}).get("bounced_back")):
+                continue
             if _task_age_days(task, current) < older_than_days:
                 continue
             delegator = task.relay_chain[0] if task.relay_chain else _supervisor_of(target_dir)
@@ -249,6 +251,14 @@ def bounce_disabled_delegations(
                 task.task_id,
                 "blocked",
                 summary=f"{task.summary} (bounced to {delegator}: delegatee disabled)",
+            )
+            target_tqm.update_meta(
+                task.task_id,
+                {
+                    "bounced_back": True,
+                    "bounce_delegator": delegator,
+                    "bounce_reason": "delegatee_disabled",
+                },
             )
             tracking = _find_tracking_task(
                 delegator_dir,

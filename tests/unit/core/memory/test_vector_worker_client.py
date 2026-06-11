@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from core.memory.rag.http_store import HttpVectorStore
+from core.memory.rag.store import Document
 from core.memory.rag.vector_worker_client import VectorWorkerManager, start_temporary_vector_worker
 
 
@@ -149,3 +151,34 @@ def test_start_temporary_vector_worker_sets_and_restores_vector_url(monkeypatch,
         worker.stop()
 
     assert os.environ["ANIMAWORKS_VECTOR_URL"] == "http://previous/vector"
+
+
+def test_http_vector_store_suspends_writes_after_worker_circuit_429(monkeypatch) -> None:
+    class FakeResponse:
+        status_code = 429
+        text = "circuit open"
+        headers = {"Retry-After": "60"}
+
+        def raise_for_status(self) -> None:
+            import httpx
+
+            raise httpx.HTTPStatusError("429", request=MagicMock(), response=MagicMock(status_code=429))
+
+        def json(self) -> dict[str, str]:
+            return {"detail": "Vector write circuit breaker open"}
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def post(self, path, json):
+            self.calls += 1
+            return FakeResponse()
+
+    client = FakeClient()
+    store = HttpVectorStore("http://vector", anima_name="sora")
+    store._client = client  # noqa: SLF001
+
+    assert store.upsert("sora_knowledge", [Document(id="d1", content="c", embedding=[0.1])]) is False
+    assert store.upsert("sora_knowledge", [Document(id="d2", content="c", embedding=[0.2])]) is False
+    assert client.calls == 1

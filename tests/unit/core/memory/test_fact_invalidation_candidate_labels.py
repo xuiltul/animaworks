@@ -114,7 +114,7 @@ def test_vector_candidate_search_keeps_same_id_duplicate_and_uses_source_file_me
             ]
 
     monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name: FakeVectorStore())
-    monkeypatch.setattr("core.memory.rag.singleton.generate_embeddings", lambda texts: [[0.1, 0.2]])
+    monkeypatch.setattr("core.memory.rag.singleton.generate_embeddings", lambda texts, **_kwargs: [[0.1, 0.2]])
     monkeypatch.setattr(
         fact_invalidation_module,
         "find_fact_record",
@@ -173,7 +173,7 @@ def test_same_id_vector_duplicate_skips_append_without_llm(
         return "CONTRADICT"
 
     monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name: FakeVectorStore())
-    monkeypatch.setattr("core.memory.rag.singleton.generate_embeddings", lambda texts: [[0.1, 0.2]])
+    monkeypatch.setattr("core.memory.rag.singleton.generate_embeddings", lambda texts, **_kwargs: [[0.1, 0.2]])
 
     result = reconcile_new_fact(
         anima_dir,

@@ -12,6 +12,7 @@ Delegates all VectorStore operations to the server's
 """
 
 import logging
+import time
 from typing import Any
 
 from core.memory.rag.store import Document, SearchResult, VectorStore
@@ -67,6 +68,7 @@ class HttpVectorStore(VectorStore):
         self._base_url = base_url.rstrip("/")
         self._anima_name = anima_name
         self._client: Any = None
+        self._write_circuit_retry_at: dict[str, float] = {}
 
     def _get_client(self):
         """Lazy-initialize httpx client."""
@@ -76,10 +78,42 @@ class HttpVectorStore(VectorStore):
             self._client = httpx.Client(base_url=self._base_url, timeout=30.0)
         return self._client
 
-    def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def _write_circuit_open(self, collection: str) -> bool:
+        retry_at = self._write_circuit_retry_at.get(collection)
+        if retry_at is None:
+            return False
+        now = time.monotonic()
+        if retry_at <= now:
+            self._write_circuit_retry_at.pop(collection, None)
+            return False
+        logger.warning(
+            "Skipping vector write while worker circuit is open: collection=%s retry_after=%ss",
+            collection,
+            int(retry_at - now),
+        )
+        return True
+
+    def _record_write_circuit(self, collection: str, retry_after: str | None) -> None:
+        try:
+            delay = max(1, int(float(retry_after or "1")))
+        except ValueError:
+            delay = 1
+        self._write_circuit_retry_at[collection] = time.monotonic() + delay
+
+    def _post(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        write_collection: str | None = None,
+    ) -> dict[str, Any] | None:
         """POST to endpoint and return JSON, or None on error."""
+        if write_collection and self._write_circuit_open(write_collection):
+            return None
         try:
             resp = self._get_client().post(path, json=payload)
+            if resp.status_code == 429 and write_collection:
+                self._record_write_circuit(write_collection, resp.headers.get("Retry-After"))
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -88,11 +122,25 @@ class HttpVectorStore(VectorStore):
 
     def create_collection(self, name: str) -> bool:
         """Create a new collection."""
-        return self._post("/create-collection", {"anima_name": self._anima_name, "collection": name}) is not None
+        return (
+            self._post(
+                "/create-collection",
+                {"anima_name": self._anima_name, "collection": name},
+                write_collection=name,
+            )
+            is not None
+        )
 
     def delete_collection(self, name: str) -> bool:
         """Delete a collection."""
-        return self._post("/delete-collection", {"anima_name": self._anima_name, "collection": name}) is not None
+        return (
+            self._post(
+                "/delete-collection",
+                {"anima_name": self._anima_name, "collection": name},
+                write_collection=name,
+            )
+            is not None
+        )
 
     def list_collections(self) -> list[str]:
         """List all collection names."""
@@ -121,7 +169,7 @@ class HttpVectorStore(VectorStore):
                     for d in batch
                 ],
             }
-            if self._post("/upsert", payload) is None:
+            if self._post("/upsert", payload, write_collection=collection) is None:
                 ok = False
         return ok
 
@@ -151,7 +199,11 @@ class HttpVectorStore(VectorStore):
         if not ids:
             return True
         return (
-            self._post("/delete-documents", {"anima_name": self._anima_name, "collection": collection, "ids": ids})
+            self._post(
+                "/delete-documents",
+                {"anima_name": self._anima_name, "collection": collection, "ids": ids},
+                write_collection=collection,
+            )
             is not None
         )
 
@@ -163,6 +215,7 @@ class HttpVectorStore(VectorStore):
             self._post(
                 "/update-metadata",
                 {"anima_name": self._anima_name, "collection": collection, "ids": ids, "metadatas": metadatas},
+                write_collection=collection,
             )
             is not None
         )

@@ -125,6 +125,26 @@ async def test_vector_worker_error_status_is_forwarded():
     assert resp.json()["detail"] == "Vector upsert failed"
 
 
+async def test_vector_worker_retry_after_header_is_forwarded():
+    worker = _FakeVectorWorker(
+        VectorWorkerResponse(
+            status_code=429,
+            data={"detail": "Vector write circuit breaker open"},
+            headers={"Retry-After": "30"},
+        )
+    )
+
+    resp = await _post(
+        "/api/internal/vector/upsert",
+        {"collection": "rin_knowledge", "documents": [{"id": "d1", "content": "c1"}]},
+        worker,
+    )
+
+    assert resp.status_code == 429
+    assert resp.headers["retry-after"] == "30"
+    assert resp.json()["detail"] == "Vector write circuit breaker open"
+
+
 async def test_all_vector_endpoints_proxy_to_worker_paths():
     cases = [
         (

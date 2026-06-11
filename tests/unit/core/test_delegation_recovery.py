@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
 
 import json
 from datetime import timedelta
@@ -83,6 +83,11 @@ def test_bounce_disabled_delegations_creates_delegator_task(tmp_path: Path) -> N
     assert any(record.get("meta", {}).get("kind") == "delegation_bounced" for record in boss_records)
     worker_records = _read_queue(worker_dir)
     assert any(record.get("_event") == "update" and record.get("status") == "blocked" for record in worker_records)
+    assert any(record.get("meta", {}).get("bounced_back") is True for record in worker_records)
+
+    repeated = bounce_disabled_delegations(animas_dir, older_than_days=14, now=now_local())
+
+    assert repeated == []
 
 
 def test_dormant_detection_records_offboarding_proposal(tmp_path: Path) -> None:

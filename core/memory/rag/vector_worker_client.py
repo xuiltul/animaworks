@@ -28,6 +28,7 @@ logger = logging.getLogger("animaworks.rag.vector_worker")
 class VectorWorkerResponse:
     status_code: int
     data: dict[str, Any]
+    headers: dict[str, str] | None = None
 
 
 class VectorWorkerUnavailable(RuntimeError):
@@ -141,8 +142,32 @@ class VectorWorkerManager:
         except ValueError:
             data = {"detail": resp.text}
         return VectorWorkerResponse(
-            status_code=resp.status_code, data=data if isinstance(data, dict) else {"data": data}
+            status_code=resp.status_code,
+            data=data if isinstance(data, dict) else {"data": data},
+            headers=dict(resp.headers),
         )
+
+    async def status(self) -> dict[str, Any]:
+        """Return vector worker status, including open write circuit breakers."""
+        if not self.enabled:
+            return {"enabled": False, "status": "disabled", "write_circuit_breakers": []}
+        await self._ensure_running()
+        assert self.base_url is not None
+        try:
+            async with httpx.AsyncClient(base_url=self.base_url, timeout=self.request_timeout) as client:
+                resp = await client.get("/status")
+        except httpx.RequestError as exc:
+            self._record_crash_if_exited({})
+            raise VectorWorkerUnavailable(str(exc)) from exc
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {"detail": resp.text}
+        if not isinstance(data, dict):
+            data = {"data": data}
+        data.setdefault("enabled", True)
+        data.setdefault("write_circuit_breakers", [])
+        return data
 
     async def _ensure_running(self, *, payload: dict[str, Any] | None = None) -> None:
         if self._is_running():

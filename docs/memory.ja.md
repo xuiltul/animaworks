@@ -460,7 +460,7 @@ protected: false
 ### 日次固定化フロー
 
 > 実装: `core/_anima_lifecycle.py` — `Anima.run_consolidation()`、`core/memory/consolidation.py` — `ConsolidationEngine`（前処理・後処理）
-> スケジュール: `core/lifecycle/system_crons.py` が `core/lifecycle/system_consolidation.py` の日次ハンドラを登録（時刻は `ConsolidationConfig.daily_time`、既定 02:00 JST）
+> スケジュール: 本番の `ProcessSupervisor` スケジューラ（`core/supervisor/_mgr_scheduler.py`）が `core/lifecycle/system_consolidation.py` の日次ハンドラを登録（時刻は `ConsolidationConfig.daily_time`、既定 02:00 JST）
 
 **1. 前処理**（ConsolidationEngine）: 以下の4種のデータを収集し、`consolidation_instruction` プロンプトに注入する:
 

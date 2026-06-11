@@ -85,7 +85,7 @@ def _resolve_reconcile_llm_config(anima_dir: Path) -> tuple[str, dict[str, objec
             timeout,
         )
     except Exception:
-        pass
+        logger.debug("Failed to load fact reconciliation timeout from config", exc_info=True)
 
     try:
         status_path = anima_dir / "status.json"

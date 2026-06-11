@@ -370,7 +370,10 @@ class ConversationMemory:
     async def finalize_session(
         self,
         min_turns: int = 3,
+        injected_procedures: list[str] | None = None,
+        session_id: str = "",
     ) -> bool:
+        del injected_procedures, session_id
         return await _finalize_session(
             self.anima_dir,
             self.load(),

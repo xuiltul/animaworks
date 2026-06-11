@@ -455,7 +455,7 @@ Waking (conversation)                     Sleeping (no conversation)
 ### Daily consolidation flow
 
 > Implementation: `core/_anima_lifecycle.py` — `Anima.run_consolidation()`, `core/memory/consolidation.py` — `ConsolidationEngine` (pre/post)
-> Schedule: `core/lifecycle/system_crons.py` registers the daily handler from `core/lifecycle/system_consolidation.py` (`ConsolidationConfig.daily_time`, default 02:00 JST)
+> Schedule: the production `ProcessSupervisor` scheduler (`core/supervisor/_mgr_scheduler.py`) registers the daily handler from `core/lifecycle/system_consolidation.py` (`ConsolidationConfig.daily_time`, default 02:00 JST)
 
 **1. Preprocessing** (ConsolidationEngine): collect four inputs and inject into `consolidation_instruction`:
 

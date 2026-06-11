@@ -1,4 +1,3 @@
-from __future__ import annotations
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -19,11 +18,12 @@ Covers:
 - No old entries does nothing (no results)
 """
 
+from __future__ import annotations
+
 import json
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
-
 
 from core.background import _rotate_dm_logs_sync
 from core.time_utils import now_jst
@@ -112,7 +112,6 @@ class TestRotateDmLogs:
         dm_logs.mkdir(parents=True)
         archive_path = dm_logs / "alice-bob.20260201.archive.jsonl"
         archive_path.write_text('{"ts":"2026-01-01T00:00:00+09:00","from":"a","to":"b","text":"x"}\n')
-        main_path = dm_logs / "bob-charlie.jsonl"
         old_ts = (now_jst() - timedelta(days=10)).isoformat()
         _write_dm_entries(dm_logs, "bob-charlie", [_make_dm_entry("bob", "charlie", "old", ts=old_ts)])
 
@@ -206,14 +205,22 @@ class TestRotateDmLogs:
 
 
 class TestDmLogRotationSchedulerRegistration:
-    """Verify rotate_dm_logs is registered in LifecycleManager system crons."""
+    """Verify rotate_dm_logs is registered in ProcessSupervisor system crons."""
 
-    def test_scheduler_has_dm_log_rotation_job(self) -> None:
+    def test_scheduler_has_dm_log_rotation_job(self, tmp_path: Path) -> None:
         """system_dm_log_rotation ジョブがスケジューラに登録される。"""
-        from core.lifecycle import LifecycleManager
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-        lifecycle = LifecycleManager()
-        lifecycle._setup_system_crons()
-        job = lifecycle.scheduler.get_job("system_dm_log_rotation")
+        from core.supervisor.manager import ProcessSupervisor
+        from core.time_utils import get_app_timezone
+
+        supervisor = ProcessSupervisor(
+            animas_dir=tmp_path / "animas",
+            shared_dir=tmp_path / "shared",
+            run_dir=tmp_path / "run",
+        )
+        supervisor.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
+        supervisor._setup_system_crons()
+        job = supervisor.scheduler.get_job("system_dm_log_rotation")
         assert job is not None, "system_dm_log_rotation job not found in scheduler"
         assert "DM Log Rotation" in job.name

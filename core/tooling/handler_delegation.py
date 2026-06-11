@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json as _json
 import logging
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -30,42 +31,29 @@ def _record_taskboard_delegation(
     delegator: str,
     tracking_task_id: str | None = None,
 ) -> None:
-    """Record delegation queue entries in TaskBoard metadata.
+    """Record delegation rows in TaskBoard before legacy queue compatibility writes."""
+    from core.taskboard.models import AttentionVisibility, BoardColumn
+    from core.taskboard.store import TaskBoardStore
 
-    task_queue.jsonl remains the compatibility source of task bodies; TaskBoard
-    gets the primary cross-org visibility row for every new delegation.
-    """
-    try:
-        from core.taskboard.models import AttentionVisibility, BoardColumn
-        from core.taskboard.store import TaskBoardStore
-
-        store = TaskBoardStore()
+    store = TaskBoardStore()
+    store.upsert_metadata(
+        anima_name=delegated_to,
+        task_id=delegated_task_id,
+        actor=delegator,
+        event_type="metadata_upserted",
+        visibility=AttentionVisibility.ACTIVE,
+        column=BoardColumn.TODO,
+        source_ref=f"task_queue:{delegated_to}:{delegated_task_id}",
+    )
+    if tracking_task_id:
         store.upsert_metadata(
-            anima_name=delegated_to,
-            task_id=delegated_task_id,
+            anima_name=delegator,
+            task_id=tracking_task_id,
             actor=delegator,
             event_type="metadata_upserted",
             visibility=AttentionVisibility.ACTIVE,
-            column=BoardColumn.TODO,
-            source_ref=f"task_queue:{delegated_to}:{delegated_task_id}",
-        )
-        if tracking_task_id:
-            store.upsert_metadata(
-                anima_name=delegator,
-                task_id=tracking_task_id,
-                actor=delegator,
-                event_type="metadata_upserted",
-                visibility=AttentionVisibility.ACTIVE,
-                column=BoardColumn.WAITING,
-                source_ref=f"task_queue:{delegator}:{tracking_task_id}",
-            )
-    except Exception:
-        logger.warning(
-            "Failed to record delegation in TaskBoard: %s -> %s (%s)",
-            delegator,
-            delegated_to,
-            delegated_task_id,
-            exc_info=True,
+            column=BoardColumn.WAITING,
+            source_ref=f"task_queue:{delegator}:{tracking_task_id}",
         )
 
 
@@ -118,6 +106,19 @@ class DelegationMixin(OrgHelpersMixin):
 
         target_dir = get_animas_dir() / target_name
 
+        sub_task_id = uuid.uuid4().hex[:12]
+        tracking_task_id = uuid.uuid4().hex[:12]
+        try:
+            _record_taskboard_delegation(
+                delegated_to=target_name,
+                delegated_task_id=sub_task_id,
+                delegator=self._anima_name,
+                tracking_task_id=tracking_task_id,
+            )
+        except Exception as e:
+            logger.error("TaskBoard write failed in delegate_task: %s", e, exc_info=True)
+            return _error_result("PersistenceFailed", f"Failed to record delegation in TaskBoard: {e}")
+
         sub_tqm = TaskQueueManager(target_dir)
         try:
             sub_entry = sub_tqm.add_task(
@@ -127,6 +128,7 @@ class DelegationMixin(OrgHelpersMixin):
                 summary=summary,
                 deadline=deadline,
                 relay_chain=[self._anima_name],
+                task_id=sub_task_id,
             )
         except ValueError as e:
             return _error_result("InvalidArguments", str(e))
@@ -207,6 +209,7 @@ class DelegationMixin(OrgHelpersMixin):
                 summary=t("handler.delegation_summary", summary=summary),
                 deadline=deadline,
                 relay_chain=[self._anima_name, target_name],
+                task_id=tracking_task_id,
                 meta={
                     "delegated_to": target_name,
                     "delegated_task_id": sub_entry.task_id,
@@ -217,12 +220,6 @@ class DelegationMixin(OrgHelpersMixin):
             own_entry = None
 
         own_id = own_entry.task_id if own_entry else "persist_failed"
-        _record_taskboard_delegation(
-            delegated_to=target_name,
-            delegated_task_id=sub_entry.task_id,
-            delegator=self._anima_name,
-            tracking_task_id=own_entry.task_id if own_entry else None,
-        )
         self._activity.log(
             "tool_use",
             tool="delegate_task",

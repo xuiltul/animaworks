@@ -163,7 +163,7 @@ class TestEmbedCentralizationE2E:
             result = indexer._generate_embeddings(["a", "b"])
 
         assert result == expected
-        mock_gen.assert_called_once_with(["a", "b"])
+        mock_gen.assert_called_once_with(["a", "b"], purpose="document")
 
     @pytest.mark.anyio
     async def test_env_var_not_set_in_server_process(self, monkeypatch):
