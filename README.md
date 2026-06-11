@@ -397,6 +397,13 @@ The CLI targets power users and automation. Day-to-day work lives in the Web UI.
 | `animaworks cost` / `profile` | Cost and profile inspection |
 | `animaworks models list` / `models info MODEL` | Model list / details |
 
+### Automation helpers
+
+`python3 -m swe.ci_autofix` is an experimental v0 loop for repairing failed CI runs. It can read the latest
+failed GitHub Actions logs with `gh`, ask a configured Architect fixer to edit the checkout, run local gates,
+ask a Reviewer, commit the repair, and escalate with `call_human` after three failed attempts. See
+[`swe/README.md`](swe/README.md#4-ci-auto-fix-loop-v0).
+
 </details>
 
 <details>

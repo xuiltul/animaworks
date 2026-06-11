@@ -39,6 +39,45 @@ python3 swe/runner.py --setup-team --run --instances 5 --port 18502
 python3 swe/runner.py --no-server --test --port 18502
 ```
 
+### 4. CI auto-fix loop v0
+
+Failed GitHub Actions runs can be repaired by a small unattended loop:
+
+```bash
+# Detect the latest failed CI run for the current branch/HEAD, fetch failed logs,
+# ask swe-architect to edit the checkout, run local gates, ask swe-reviewer, then commit.
+python3 -m swe.ci_autofix --mode ci --repo xuiltul/animaworks --branch my-branch --max-iter 3
+```
+
+The default local quality gate is the v0 fast gate from Issue #205:
+
+```bash
+ruff check core/ cli/ server/
+ruff format --check core/ cli/ server/
+pytest tests/unit -m "not live and not azure and not ollama"
+```
+
+Use `--push` only when GitHub Actions will actually run for the branch, for example an open PR targeting
+`main` or a workflow that accepts that branch. This repository's CI currently runs on `main` pushes and PRs to
+`main`, so arbitrary branch pushes do not create CI runs by themselves.
+
+Run CI auto-fix only on branches you trust. The repair prompt treats CI logs as untrusted evidence and tells
+agents not to obey instructions embedded in logs, stack traces, diffs, or command output, but the fixer still has
+repository write access.
+
+For deterministic local repair without GitHub or LLM calls, provide a fixer and gate commands:
+
+```bash
+python3 -m swe.ci_autofix \
+  --mode local \
+  --fix-command "python3 /path/to/fixer.py" \
+  --review-command "python3 /path/to/reviewer.py" \
+  --gate-command "python3 -m pytest tests/unit/swe/test_ci_autofix.py -q"
+```
+
+After three failed attempts, the loop runs `animaworks-tool call_human ... --priority high`. If notification is
+not configured, it writes a fallback summary to `swe/results/ci_autofix_escalation_*.md`.
+
 ## チーム構成
 
 | Agent | Model | Role | Mode |
