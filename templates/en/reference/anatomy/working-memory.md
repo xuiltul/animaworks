@@ -39,15 +39,21 @@ Official task tracking and management is handled by `task_queue.jsonl` (Layer 2)
 | Parameter | Value | Source |
 |-----------|-----|-------|
 | Display limit | 3000 chars | `_CURRENT_STATE_MAX_CHARS` (builder.py) |
-| Disk limit | 3000 chars | `_CURRENT_STATE_CLEANUP_THRESHOLD` (_anima_heartbeat.py) |
+| Disk trim limit | Disabled by default | `heartbeat.current_state_max_chars` (0 = disabled) |
 | Inbox limit | 500 chars | `min(_state_max, 500)` in builder.py |
 
-**Automatic cleanup during Heartbeat**:
+**Session boundaries**:
 
-1. If `current_state.md` exceeds 3000 chars before Heartbeat starts, an instruction to "organize and compress" is injected into the Heartbeat prompt
-2. After Heartbeat completes, `_enforce_state_size_limit()` is executed
-3. Content exceeding 3000 chars is moved to that day's episode memory (`episodes/{date}.md`) under `## current_state.md overflow archived`
-4. The last 3000 chars are retained, adjusted at line breaks (if a line break exists within the first 20%, cut there)
+- Normal heartbeat, cron, and conversation finalization preserve `current_state.md`
+- If the session summary contains a current status, it is written only when `current_state.md` is empty/idle
+- Stale state with no active visible task may still be archived by TaskBoard housekeeping
+
+**Optional cleanup during Heartbeat**:
+
+1. If `heartbeat.current_state_max_chars` is greater than 0 and `current_state.md` exceeds that value before Heartbeat starts, an instruction to organize and compress is injected into the Heartbeat prompt
+2. After Heartbeat or cron completes, `_enforce_state_size_limit()` is executed
+3. Content exceeding the configured limit is moved to that day's episode memory (`episodes/{date}.md`) under `## current_state.md overflow archived`
+4. The last configured number of characters is retained, adjusted at line breaks (if a line break exists within the first 20%, cut there)
 
 ### Prompt Injection
 

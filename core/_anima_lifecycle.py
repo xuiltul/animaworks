@@ -829,7 +829,9 @@ class LifecycleMixin:
                         task_name,
                         result.duration_ms,
                     )
-                    self.memory.archive_and_reset_state()
+                    # Preserve current_state.md across normal cron boundaries.
+                    # Stale idle cleanup is handled by taskboard housekeeping.
+                    self._enforce_state_size_limit()
                     return result
                 except Exception as exc:
                     logger.exception(

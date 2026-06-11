@@ -39,15 +39,21 @@ Anima의 워킹 메모리입니다. "지금 무엇을 하고 있는지", "무엇
 | 파라미터 | 값 | 소스 |
 |----------|-----|------|
 | 표시 상한 | 3000자 | `_CURRENT_STATE_MAX_CHARS` (builder.py) |
-| 디스크 상한 | 3000자 | `_CURRENT_STATE_CLEANUP_THRESHOLD` (_anima_heartbeat.py) |
+| 디스크 trim 상한 | 기본값 비활성 | `heartbeat.current_state_max_chars` (0 = 비활성) |
 | Inbox 시 상한 | 500자 | builder.py 내 `min(_state_max, 500)` |
 
-**Heartbeat 시 자동 정리**:
+**세션 경계**:
 
-1. Heartbeat 시작 전에 `current_state.md`가 3000자를 초과할 경우, "정리하여 압축하라"는 지시가 Heartbeat 프롬프트에 주입됩니다
-2. Heartbeat 완료 후 `_enforce_state_size_limit()`가 실행됩니다
-3. 3000자 초과분은 해당 일자의 에피소드 기억 (`episodes/{date}.md`)에 `## current_state.md overflow archived`로 이동됩니다
-4. 마지막 3000자를 유지하며 줄바꿈 위치에서 조정합니다 (앞쪽 20% 이내에 줄바꿈이 있으면 그 위치에서 잘라냄)
+- 일반 Heartbeat / cron / 대화 finalize에서는 `current_state.md`를 유지합니다
+- 세션 요약에 현재 상태가 포함되어도 `current_state.md`가 비어 있거나 idle일 때만 기록합니다
+- 활성 표시 task가 없는 오래된 state는 TaskBoard housekeeping에 의해 아카이브될 수 있습니다
+
+**Heartbeat 중 선택적 정리**:
+
+1. `heartbeat.current_state_max_chars`가 0보다 크고 Heartbeat 시작 전 `current_state.md`가 그 값을 초과하면 정리/압축 지시가 Heartbeat 프롬프트에 주입됩니다
+2. Heartbeat 또는 cron 완료 후 `_enforce_state_size_limit()`가 실행됩니다
+3. 설정된 상한을 초과한 내용은 당일 에피소드 메모리(`episodes/{date}.md`)에 `## current_state.md overflow archived`로 이동됩니다
+4. 마지막 설정 글자 수를 유지하며, 줄바꿈 위치를 기준으로 조정합니다(첫 20% 이내에 줄바꿈이 있으면 그 지점에서 자름)
 
 ### 프롬프트 주입
 

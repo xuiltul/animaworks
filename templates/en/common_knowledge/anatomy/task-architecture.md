@@ -62,7 +62,7 @@ Analogous to sticky notes / personal notes.
 | Property | Description |
 |----------|-------------|
 | Format | Markdown (free-form) |
-| Lifecycle | Anima creates and updates freely. Auto-archived by Heartbeat when exceeding 3,000 characters |
+| Lifecycle | Anima creates and updates freely. Preserved across normal boundaries; optional trim when `heartbeat.current_state_max_chars` is configured |
 | Managed by | Anima (full discretion) |
 | Writers | Anima (direct file operations) |
 | Readers | Anima itself, Priming (current_state.md), supervisor (read_subordinate_state) |

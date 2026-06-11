@@ -7,11 +7,9 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from core.time_utils import today_local
-
 from core.memory.activity import ActivityLogger
+from core.time_utils import today_local
 from core.tooling.handler import active_session_type
-
 
 # ── Unit tests for _extract_reflection ──────────────────────────
 
@@ -53,14 +51,7 @@ class TestExtractReflection:
         """Multiple reflection tags returns first match only."""
         from core.anima import _extract_reflection
 
-        text = (
-            "[REFLECTION]\n"
-            "最初の振り返り内容\n"
-            "[/REFLECTION]\n\n"
-            "[REFLECTION]\n"
-            "二番目の振り返り内容\n"
-            "[/REFLECTION]"
-        )
+        text = "[REFLECTION]\n最初の振り返り内容\n[/REFLECTION]\n\n[REFLECTION]\n二番目の振り返り内容\n[/REFLECTION]"
         result = _extract_reflection(text)
         assert "最初の振り返り内容" in result
         assert "二番目の振り返り内容" not in result
@@ -85,11 +76,7 @@ class TestExtractReflection:
         """Whitespace around tags is properly stripped."""
         from core.anima import _extract_reflection
 
-        text = (
-            "[REFLECTION]   \n"
-            "   振り返り内容がここにある   \n"
-            "   [/REFLECTION]"
-        )
+        text = "[REFLECTION]   \n   振り返り内容がここにある   \n   [/REFLECTION]"
         result = _extract_reflection(text)
         assert result == "振り返り内容がここにある"
 
@@ -117,7 +104,9 @@ class TestHeartbeatReflectionE2E:
     """E2E tests for the full heartbeat reflection recording flow."""
 
     async def test_heartbeat_with_reflection_records_episode_and_activity(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """Heartbeat with reflection in accumulated_text records both
         [REFLECTION] in episode AND heartbeat_reflection in activity log.
@@ -131,12 +120,16 @@ class TestHeartbeatReflectionE2E:
             "タスクの優先度が変わっている可能性がある。"
         )
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", return_value="prompt"):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core.memory.rag_search.RAGMemorySearch.index_file", return_value=None),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", return_value="prompt"),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
@@ -181,13 +174,13 @@ class TestHeartbeatReflectionE2E:
             for line in log_content.strip().splitlines()
             if json.loads(line).get("type") == "heartbeat_reflection"
         ]
-        assert len(reflection_events) >= 1, (
-            "At least one heartbeat_reflection event should be logged"
-        )
+        assert len(reflection_events) >= 1, "At least one heartbeat_reflection event should be logged"
         assert "チームの連携パターンに変化が見られる" in reflection_events[0]["content"]
 
     async def test_heartbeat_with_short_reflection_not_recorded(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """Reflection shorter than _MIN_REFLECTION_LENGTH (50 chars) is not recorded."""
         alice_dir = make_anima("alice")
@@ -197,12 +190,16 @@ class TestHeartbeatReflectionE2E:
         short_reflection = "短い振り返り"
         assert len(short_reflection) < 50
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", return_value="prompt"):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core.memory.rag_search.RAGMemorySearch.index_file", return_value=None),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", return_value="prompt"),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
@@ -242,12 +239,12 @@ class TestHeartbeatReflectionE2E:
                 for line in log_content.strip().splitlines()
                 if line.strip() and json.loads(line).get("type") == "heartbeat_reflection"
             ]
-            assert len(reflection_events) == 0, (
-                "Short reflections should not produce heartbeat_reflection events"
-            )
+            assert len(reflection_events) == 0, "Short reflections should not produce heartbeat_reflection events"
 
     async def test_heartbeat_without_reflection_no_reflection_event(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """Heartbeat without [REFLECTION] tags records normal episode
         but no heartbeat_reflection activity event.
@@ -255,12 +252,16 @@ class TestHeartbeatReflectionE2E:
         alice_dir = make_anima("alice")
         shared_dir = data_dir / "shared"
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", return_value="prompt"):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core.memory.rag_search.RAGMemorySearch.index_file", return_value=None),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", return_value="prompt"),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
             dp.agent.reset_reply_tracking = MagicMock()
             dp.agent.replied_to = set()
@@ -308,7 +309,9 @@ class TestLoadRecentReflections:
     """Tests for _load_recent_reflections() method."""
 
     async def test_returns_formatted_reflections_from_activity_log(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """_load_recent_reflections() returns formatted reflections from activity log."""
         alice_dir = make_anima("alice")
@@ -327,12 +330,15 @@ class TestLoadRecentReflections:
             summary="ワークフロー効率化",
         )
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", return_value="prompt"):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", return_value="prompt"),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
 
             result = dp._load_recent_reflections()
@@ -347,7 +353,9 @@ class TestLoadRecentReflections:
             assert line.startswith("- "), f"Each line should start with '- ': {line}"
 
     async def test_returns_empty_when_no_reflections(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """_load_recent_reflections() returns empty string when no reflections exist."""
         alice_dir = make_anima("alice")
@@ -357,12 +365,15 @@ class TestLoadRecentReflections:
         activity = ActivityLogger(alice_dir)
         activity.log("heartbeat_end", summary="Normal heartbeat")
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", return_value="prompt"):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", return_value="prompt"),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
 
             result = dp._load_recent_reflections()
@@ -370,7 +381,9 @@ class TestLoadRecentReflections:
         assert result == "", "Should return empty string when no reflections exist"
 
     async def test_returns_empty_when_no_activity_log(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """_load_recent_reflections() returns empty string when activity log dir
         does not exist."""
@@ -381,12 +394,15 @@ class TestLoadRecentReflections:
         activity_dir = alice_dir / "activity_log"
         assert not activity_dir.exists()
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", return_value="prompt"):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", return_value="prompt"),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
 
             result = dp._load_recent_reflections()
@@ -394,7 +410,9 @@ class TestLoadRecentReflections:
         assert result == ""
 
     async def test_limits_to_recent_reflections_n(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """_load_recent_reflections() limits output to _RECENT_REFLECTIONS_N (3) entries."""
         alice_dir = make_anima("alice")
@@ -409,20 +427,21 @@ class TestLoadRecentReflections:
                 summary=f"振り返り{i + 1}",
             )
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", return_value="prompt"):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", return_value="prompt"),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
 
             result = dp._load_recent_reflections()
 
         lines = result.strip().splitlines()
-        assert len(lines) == 3, (
-            f"Should return at most 3 reflections, got {len(lines)}"
-        )
+        assert len(lines) == 3, f"Should return at most 3 reflections, got {len(lines)}"
         # Should return the most recent 3 (3, 4, 5)
         assert "振り返り3" in result
         assert "振り返り4" in result
@@ -433,7 +452,9 @@ class TestBuildHeartbeatPromptReflection:
     """Tests for reflection injection in _build_heartbeat_prompt()."""
 
     async def test_includes_reflection_section_when_reflections_exist(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """_build_heartbeat_prompt() includes reflection section when reflections exist."""
         alice_dir = make_anima("alice")
@@ -456,12 +477,15 @@ class TestBuildHeartbeatPromptReflection:
                 )
             return "prompt"
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", side_effect=_mock_load_prompt):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", side_effect=_mock_load_prompt),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
 
             parts = await dp._build_heartbeat_prompt()
@@ -471,19 +495,24 @@ class TestBuildHeartbeatPromptReflection:
         assert "チームの連携パターンが変化している" in full_prompt
 
     async def test_no_reflection_section_when_no_reflections(
-        self, data_dir, make_anima,
+        self,
+        data_dir,
+        make_anima,
     ):
         """_build_heartbeat_prompt() does NOT include reflection section
         when no reflections exist."""
         alice_dir = make_anima("alice")
         shared_dir = data_dir / "shared"
 
-        with patch("core.anima.AgentCore") as MockAgent, \
-             patch("core._anima_heartbeat.ConversationMemory") as MockConv, \
-             patch("core._anima_heartbeat.load_prompt", return_value="prompt"):
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core._anima_heartbeat.ConversationMemory") as MockConv,
+            patch("core._anima_heartbeat.load_prompt", return_value="prompt"),
+        ):
             MockConv.return_value.load.return_value = MagicMock(turns=[])
 
             from core.anima import DigitalAnima
+
             dp = DigitalAnima(alice_dir, shared_dir)
 
             parts = await dp._build_heartbeat_prompt()

@@ -37,8 +37,8 @@ _JP_NUMBER_WORDS: dict[str, int] = {
     "八": 8,
     "九": 9,
     "十": 10,
-    "十一": 11,
-    "十二": 12,
+    "十" + "一": 11,
+    "十" + "二": 12,
 }
 _STOPWORDS = frozenset(
     {

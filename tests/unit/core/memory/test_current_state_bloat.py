@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-"""Tests for current_state.md session-boundary archive and reset.
+"""Tests for current_state.md archive/reset compatibility and bloat controls.
 
 Issue: 20260326_current-state-session-boundary-archive
-Issue #143: Session-boundary auto-archive replaces hard-trim and cleanup instructions.
+Issue #143: Archive/reset compatibility remains available outside normal session boundaries.
 
 Covers:
 - archive_and_reset_state: skip, archive, reset, failure handling

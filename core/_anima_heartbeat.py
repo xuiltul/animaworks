@@ -683,8 +683,10 @@ class HeartbeatMixin:
                     exc_info=True,
                 )
 
-            # Archive current_state.md and reset (session boundary cleanup)
-            self.memory.archive_and_reset_state()
+            # Keep current_state.md across normal heartbeat boundaries. It is
+            # working memory, not a disposable session scratchpad; only trim it
+            # when an explicit size limit is configured.
+            self._enforce_state_size_limit()
 
             return result
         finally:

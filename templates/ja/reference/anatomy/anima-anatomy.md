@@ -250,7 +250,7 @@ command: /usr/local/bin/backup.sh
 ### state/current_state.md — 今の状態
 
 今まさに取り組んでいるタスクや状況（1つ）。タスクの目標・進捗・ブロッカーを記録する。
-サイズ上限は3000文字。超過した場合、Heartbeat時に古い内容が当日のエピソードに自動アーカイブされる。
+通常の Heartbeat / cron / 会話境界では保持される。プロンプト注入は3000文字で制限され、ディスク trim は `heartbeat.current_state_max_chars` 設定時のみ実行される。
 
 > **旧 `pending.md` について**: 以前存在した `state/pending.md`（バックログ）は廃止済み。内容は `current_state.md` に統合された後、ファイルが削除される（自動マイグレーション）。タスクのバックログ管理は `task_queue.jsonl`（Layer 2）に一本化されている。
 

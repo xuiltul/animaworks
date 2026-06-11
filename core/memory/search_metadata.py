@@ -33,7 +33,7 @@ def _format_fact_metadata(result: dict[str, Any]) -> str:
     recorded_at = _format_date(result.get("recorded_at"))
     parts: list[str] = []
     if valid_at:
-        parts.append(f"valid: {valid_at}〜{valid_until or '現在'}")
+        parts.append(f"valid: {valid_at}〜{valid_until or 'present'}")
     if recorded_at:
         parts.append(f"recorded: {recorded_at}")
     return " | ".join(parts)

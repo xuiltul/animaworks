@@ -253,6 +253,31 @@ def _parse_session_summary(raw: str) -> ParsedSessionSummary:
     )
 
 
+def _normalize_current_status(status: str) -> str:
+    """Normalize LLM-extracted session status before writing it to state."""
+    value = status.strip()
+    if value.lower() in {"idle", "status: idle"}:
+        return "status: idle"
+    return value
+
+
+def _maybe_update_idle_current_state(memory_mgr: Any, current_status: str) -> None:
+    """Write finalized status only when current_state.md has no richer context.
+
+    Session finalization already writes an episode summary. Replacing an
+    existing working-memory document here can erase agent-maintained plans,
+    blockers, and operating context. Keep non-idle state intact; use the
+    extracted status only to initialize an empty/idle state.
+    """
+    new_status = _normalize_current_status(current_status)
+    if not new_status:
+        return
+
+    current_state = memory_mgr.read_current_state().strip()
+    if current_state.lower() in {"", "idle", "status: idle"}:
+        memory_mgr.update_state(new_status)
+
+
 async def finalize_session(
     anima_dir: Path,
     state: ConversationState,
@@ -350,8 +375,8 @@ async def finalize_session(
 
     save_fn()
 
-    new_status = parsed.current_status.strip() if parsed.current_status else "status: idle"
-    memory_mgr.archive_and_reset_state(new_status or "status: idle")
+    if parsed.current_status:
+        _maybe_update_idle_current_state(memory_mgr, parsed.current_status)
 
     logger.info(
         (

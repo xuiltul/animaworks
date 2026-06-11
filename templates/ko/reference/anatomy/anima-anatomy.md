@@ -250,7 +250,7 @@ command: /usr/local/bin/backup.sh
 ### state/current_state.md — 현재 상태
 
 지금 바로 진행 중인 작업이나 관찰한 상황을 기록합니다(1건). 작업의 목표, 진행 상황, 차단 요소를 기록합니다.
-사이즈 상한은 3000자입니다. 초과 시 Heartbeat에서 오래된 내용이 해당 일자의 에피소드에 자동 아카이브됩니다.
+일반 Heartbeat / cron / 대화 경계에서 유지됩니다. 프롬프트 주입은 3000자로 제한되며, 디스크 trim은 `heartbeat.current_state_max_chars`가 설정된 경우에만 실행됩니다.
 
 > **레거시 `pending.md`에 대해**: 이전의 `state/pending.md` (백로그)는 폐지되었습니다. 내용은 `current_state.md`에 통합되고 파일은 삭제됩니다 (자동 마이그레이션). 백로그 관리는 `task_queue.jsonl` (Layer 2)로 일원화되었습니다.
 

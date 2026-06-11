@@ -187,7 +187,7 @@ class TestSearchViaNeo4j:
         assert result is not None
         assert "Alice → Bob" in result
         assert "score=0.95" in result
-        assert "valid: 2026-06-03〜現在 | recorded: 2026-06-03" in result
+        assert "valid: 2026-06-03〜present | recorded: 2026-06-03" in result
         assert "graph" in result
         handler._create_neo4j_backend.assert_called_once()
         mock_backend.close.assert_awaited_once()

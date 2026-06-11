@@ -148,7 +148,7 @@ class TestSearchMemoryCountHeader:
 
         output = handler._handle_search_memory({"query": "locomo"})
 
-        assert "valid: 2026-06-03〜現在 | recorded: 2026-06-03" in output
+        assert "valid: 2026-06-03〜present | recorded: 2026-06-03" in output
         assert "confidence" not in output
 
     def test_metadata_counts_toward_output_limit(self, monkeypatch) -> None:

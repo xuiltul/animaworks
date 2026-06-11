@@ -164,6 +164,61 @@ class TestFinalizeSession:
         assert "テスト会話" in content
 
     @pytest.mark.asyncio
+    async def test_finalize_session_preserves_existing_current_state(self, conv_memory, anima_dir):
+        """Finalization does not erase rich current_state.md content."""
+        from core.memory.manager import MemoryManager
+
+        memory_mgr = MemoryManager(anima_dir)
+        original_state = "# current_state\n\n## Goal\nKeep this operating context."
+        memory_mgr.update_state(original_state)
+
+        state = conv_memory.load()
+        state.turns = [ConversationTurn(role="human", content=f"msg {i}") for i in range(4)]
+        conv_memory.save()
+
+        summary_resp = make_litellm_response(
+            content=(
+                "## エピソード要約\n要約\n\n"
+                "## ステート変更\n### 解決済み\n- なし\n"
+                "### 新規タスク\n- なし\n### 現在の状態\nidle"
+            )
+        )
+        compress_resp = make_litellm_response(content="圧縮")
+
+        with patch_litellm(summary_resp, compress_resp):
+            result = await conv_memory.finalize_session(min_turns=3)
+
+        assert result is True
+        assert memory_mgr.read_current_state() == original_state
+
+    @pytest.mark.asyncio
+    async def test_finalize_session_initializes_idle_current_state(self, conv_memory, anima_dir):
+        """Finalization may write extracted status when current_state.md is idle."""
+        from core.memory.manager import MemoryManager
+
+        memory_mgr = MemoryManager(anima_dir)
+        memory_mgr.update_state("status: idle")
+
+        state = conv_memory.load()
+        state.turns = [ConversationTurn(role="human", content=f"msg {i}") for i in range(4)]
+        conv_memory.save()
+
+        summary_resp = make_litellm_response(
+            content=(
+                "## エピソード要約\n要約\n\n"
+                "## ステート変更\n### 解決済み\n- なし\n"
+                "### 新規タスク\n- なし\n### 現在の状態\nReviewing outbound lead quality"
+            )
+        )
+        compress_resp = make_litellm_response(content="圧縮")
+
+        with patch_litellm(summary_resp, compress_resp):
+            result = await conv_memory.finalize_session(min_turns=3)
+
+        assert result is True
+        assert memory_mgr.read_current_state() == "Reviewing outbound lead quality"
+
+    @pytest.mark.asyncio
     async def test_finalize_session_clears_turns_and_resets_index(self, conv_memory):
         """After finalization, turns are cleared and last_finalized_turn_index is 0."""
         state = conv_memory.load()

@@ -62,5 +62,5 @@ Default: do not narrate routine, low-risk tool calls
 #### current_state.md (워킹 메모리)와 태스크 관리 분리
 - `state/current_state.md`는 당신의 **워킹 메모리**입니다. 관찰, 계획, 상황 인식, 블로커 — 현재의 사고 컨텍스트를 기록하세요
 - **태스크 관리**에는 `backlog_task` / `update_task` 도구를 사용하세요. `task_queue.jsonl`에 기록됩니다. current_state.md에 태스크 목록을 쓰지 마세요
-- current_state.md는 세션 종료 시 자동으로 아카이브되고 요약으로 대체됩니다. 세션 중에는 자유롭게 메모를 남기세요
+- current_state.md는 일반 Heartbeat / cron / 대화 경계에서 유지됩니다. 간결하게 관리하고, 오래되었거나 크기 제한을 넘은 내용은 housekeeping 또는 크기 정리로 아카이브될 수 있습니다
 - 중요한 지식이나 절차는 `knowledge/` 또는 `procedures/`에 기록하세요. current_state.md에 쓰지 마세요
