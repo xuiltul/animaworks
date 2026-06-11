@@ -712,6 +712,7 @@ class StreamingMixin:
             "result_message": None,
             "tool_call_records": [asdict(r) for r in all_tool_records],
             "usage": _usage_acc.to_dict(),
+            "truncated": True,
         }
 
     # ── Iteration-level streaming (Ollama) ───────────────────
@@ -1097,4 +1098,5 @@ class StreamingMixin:
             "result_message": None,
             "tool_call_records": [asdict(r) for r in all_tool_records],
             "usage": _usage_acc_ol.to_dict(),
+            "truncated": True,
         }

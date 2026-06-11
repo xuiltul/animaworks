@@ -176,15 +176,6 @@ class Messenger:
         origin_chain: list[str] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> Message:
-        if to == self.anima_name and msg_type not in ("ack", "error", "system_alert"):
-            logger.warning("Rejected self-addressed message from %s", self.anima_name)
-            return Message(
-                from_person="system",
-                to_person=self.anima_name,
-                type="error",
-                content=t("handler.dm_self_addressed_error"),
-            )
-
         # ── Conversation depth check (internal Anima only) ──
         if msg_type not in ("ack", "error", "system_alert"):
             animas_dir = self.shared_dir.parent / "animas"

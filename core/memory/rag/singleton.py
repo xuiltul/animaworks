@@ -394,6 +394,12 @@ def get_embedding_model_name() -> str:
     return _get_configured_model_name()
 
 
+def get_embedding_e5_prefix_enabled() -> bool:
+    """Return whether configured E5 prefixes are part of the embedding input."""
+    enabled, _query_prefix, _document_prefix = _get_embedding_prefix_settings()
+    return enabled
+
+
 def _reset_for_testing():
     """Reset singletons for test isolation."""
     global _cuda_unavailable_warned, _direct_disabled_warned, _embedding_model, _embedding_model_name, _init_failed

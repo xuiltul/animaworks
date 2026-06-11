@@ -15,7 +15,10 @@ import json
 import logging
 import os
 import re
+import threading
 import uuid
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -40,6 +43,16 @@ _MAX_INSTRUCTION_CHARS = 10_000
 _STALE_TASK_THRESHOLD_SEC = 1800
 # Relative deadline pattern: digits + unit (m=minutes, h=hours, d=days)
 _RELATIVE_DEADLINE_RE = re.compile(r"^(\d+)([mhd])$")
+_QUEUE_LOCKS: dict[Path, threading.RLock] = {}
+_QUEUE_LOCKS_GUARD = threading.Lock()
+
+
+def _process_lock(path: Path) -> threading.RLock:
+    resolved = path.resolve()
+    with _QUEUE_LOCKS_GUARD:
+        if resolved not in _QUEUE_LOCKS:
+            _QUEUE_LOCKS[resolved] = threading.RLock()
+        return _QUEUE_LOCKS[resolved]
 
 
 def _parse_deadline(value: str) -> str:
@@ -151,6 +164,47 @@ class TaskQueueManager:
 
     # ── Write operations ─────────────────────────────────────
 
+    def _build_task_entry(
+        self,
+        *,
+        source: Literal["human", "anima"],
+        original_instruction: str,
+        assignee: str,
+        summary: str,
+        deadline: str | None = None,
+        relay_chain: list[str] | None = None,
+        task_id: str | None = None,
+        meta: dict[str, Any] | None = None,
+        status: str = "pending",
+    ) -> TaskEntry:
+        if source not in _VALID_SOURCES:
+            raise ValueError(f"Invalid source: {source!r} (must be 'human' or 'anima')")
+        if status not in ("pending", "in_progress"):
+            raise ValueError(f"Invalid status: {status!r} (must be 'pending' or 'in_progress')")
+        if deadline is not None and deadline != "":
+            parsed_deadline: str | None = _parse_deadline(deadline)
+        elif deadline == "":
+            raise ValueError("deadline is required when provided. Use relative format ('30m', '2h', '1d') or ISO8601.")
+        else:
+            parsed_deadline = None
+        if len(original_instruction) > _MAX_INSTRUCTION_CHARS:
+            original_instruction = original_instruction[:_MAX_INSTRUCTION_CHARS]
+            logger.warning("original_instruction truncated to %d chars", _MAX_INSTRUCTION_CHARS)
+        now = now_iso()
+        return TaskEntry(
+            task_id=task_id if task_id else uuid.uuid4().hex[:12],
+            ts=now,
+            source=source,
+            original_instruction=original_instruction,
+            assignee=assignee,
+            status=status,
+            summary=summary,
+            deadline=parsed_deadline,
+            relay_chain=relay_chain or [],
+            updated_at=now,
+            meta=meta or {},
+        )
+
     def add_task(
         self,
         *,
@@ -189,35 +243,58 @@ class TaskQueueManager:
             ValueError: If source is invalid or deadline format is invalid
                 when deadline is explicitly provided (non-empty).
         """
-        if source not in _VALID_SOURCES:
-            raise ValueError(f"Invalid source: {source!r} (must be 'human' or 'anima')")
-        if status not in ("pending", "in_progress"):
-            raise ValueError(f"Invalid status: {status!r} (must be 'pending' or 'in_progress')")
-        if deadline is not None and deadline != "":
-            parsed_deadline: str | None = _parse_deadline(deadline)
-        elif deadline == "":
-            raise ValueError("deadline is required when provided. Use relative format ('30m', '2h', '1d') or ISO8601.")
-        else:
-            parsed_deadline = None
-        if len(original_instruction) > _MAX_INSTRUCTION_CHARS:
-            original_instruction = original_instruction[:_MAX_INSTRUCTION_CHARS]
-            logger.warning("original_instruction truncated to %d chars", _MAX_INSTRUCTION_CHARS)
-        now = now_iso()
-        resolved_task_id = task_id if task_id else uuid.uuid4().hex[:12]
-        entry = TaskEntry(
-            task_id=resolved_task_id,
-            ts=now,
+        entry = self._build_task_entry(
             source=source,
             original_instruction=original_instruction,
             assignee=assignee,
-            status=status,
             summary=summary,
-            deadline=parsed_deadline,
-            relay_chain=relay_chain or [],
-            updated_at=now,
-            meta=meta or {},
+            deadline=deadline,
+            relay_chain=relay_chain,
+            meta=meta,
+            task_id=task_id,
+            status=status,
         )
         self._append(entry.model_dump())
+        logger.info(
+            "Task added: id=%s source=%s assignee=%s summary=%s",
+            entry.task_id,
+            source,
+            assignee,
+            summary[:50],
+        )
+        return entry
+
+    def add_task_if_absent(
+        self,
+        predicate: Callable[[TaskEntry], bool],
+        *,
+        source: Literal["human", "anima"],
+        original_instruction: str,
+        assignee: str,
+        summary: str,
+        deadline: str | None = None,
+        relay_chain: list[str] | None = None,
+        task_id: str | None = None,
+        meta: dict[str, Any] | None = None,
+        status: str = "pending",
+    ) -> TaskEntry | None:
+        """Atomically add a task only when no active task matches ``predicate``."""
+        with self._locked_queue():
+            for task in self._load_all().values():
+                if task.status in _ACTIVE_STATUSES and predicate(task):
+                    return None
+            entry = self._build_task_entry(
+                source=source,
+                original_instruction=original_instruction,
+                assignee=assignee,
+                summary=summary,
+                deadline=deadline,
+                relay_chain=relay_chain,
+                task_id=task_id,
+                meta=meta,
+                status=status,
+            )
+            self._append_unlocked(entry.model_dump())
         logger.info(
             "Task added: id=%s source=%s assignee=%s summary=%s",
             entry.task_id,
@@ -783,8 +860,45 @@ class TaskQueueManager:
 
     # ── Internal ─────────────────────────────────────────────────
 
+    @contextmanager
+    def _locked_queue(self) -> Iterator[None]:
+        self._queue_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self._queue_path.with_suffix(self._queue_path.suffix + ".lock")
+        thread_lock = _process_lock(lock_path)
+        with thread_lock:
+            try:
+                lock_file = lock_path.open("a+", encoding="utf-8")
+            except OSError:
+                logger.debug("Task queue lock file unavailable for %s", lock_path, exc_info=True)
+                yield
+                return
+            with lock_file:
+                locked = False
+                try:
+                    from core.platform.locks import acquire_file_lock
+
+                    acquire_file_lock(lock_file, exclusive=True)
+                    locked = True
+                except OSError:
+                    logger.debug("OS file lock unavailable for %s", lock_path, exc_info=True)
+                try:
+                    yield
+                finally:
+                    if locked:
+                        try:
+                            from core.platform.locks import release_file_lock
+
+                            release_file_lock(lock_file)
+                        except OSError:
+                            logger.debug("Failed to release task queue lock %s", lock_path, exc_info=True)
+
     def _append(self, data: dict[str, Any]) -> None:
         """Append a JSON line to the queue file with fsync."""
+        with self._locked_queue():
+            self._append_unlocked(data)
+
+    def _append_unlocked(self, data: dict[str, Any]) -> None:
+        """Append a JSON line while the queue lock is already held."""
         try:
             self._queue_path.parent.mkdir(parents=True, exist_ok=True)
             line = json.dumps(data, ensure_ascii=False)

@@ -221,17 +221,6 @@ async def _meeting_stream(
                                 redirect_to = str(evt_payload.get("to") or "")
                                 redirect_content = str(evt_payload.get("content") or "")
                                 if redirect_to in room.participants and redirect_content:
-                                    redirect_role = "chair" if redirect_from == room.chair else "participant"
-                                    room_manager.append_message(
-                                        room_id,
-                                        redirect_from,
-                                        redirect_role,
-                                        f"@{redirect_to} {redirect_content}",
-                                        meta={
-                                            "type": "meeting_redirect",
-                                            "to": redirect_to,
-                                        },
-                                    )
                                     if (
                                         redirect_to != target_name
                                         and redirect_to in room.participants

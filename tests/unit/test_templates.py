@@ -175,11 +175,21 @@ class TestPrimingChannelsReference:
 
     def test_current_priming_docs_have_no_obsolete_channel_or_skill_tool_references(self):
         paths = list(Path(".").glob("README*.md"))
+        historical_dirs = {
+            "analysis",
+            "drafts",
+            "implemented",
+            "investigations",
+            "legacy",
+            "records",
+            "reports",
+            "research",
+        }
         paths.extend(
             path
             for root in (Path("docs"), Path("templates"))
             for path in root.rglob("*.md")
-            if not any(part in {"legacy", "implemented", "research"} for part in path.parts)
+            if not any(part in historical_dirs for part in path.parts)
         )
         pattern = re.compile(
             r"Channel D|channel D|channel_d|D:\s*Skill Match|"

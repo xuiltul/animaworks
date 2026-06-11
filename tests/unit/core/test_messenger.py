@@ -156,12 +156,13 @@ class TestSend:
                 content = f.read_text(encoding="utf-8").strip()
                 assert content == ""
 
-    def test_self_addressed_message_is_rejected(self, shared_dir, messenger):
+    def test_self_addressed_message_is_delivered_by_programmatic_messenger(self, shared_dir, messenger):
         msg = messenger.send("alice", "note to self", intent="report")
 
-        assert msg.type == "error"
-        assert msg.content == t("handler.dm_self_addressed_error")
-        assert not list((shared_dir / "inbox" / "alice").glob("*.json"))
+        assert msg.type == "message"
+        assert msg.to_person == "alice"
+        assert msg.content == "note to self"
+        assert len(list((shared_dir / "inbox" / "alice").glob("*.json"))) == 1
 
     def test_system_alert_to_self_is_allowed(self, shared_dir, messenger):
         msg = messenger.send("alice", "runtime alert", msg_type="system_alert")

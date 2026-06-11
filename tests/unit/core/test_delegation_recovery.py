@@ -5,15 +5,20 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
 
 from core.delegation_recovery import (
+    _add_alert_task,
     bounce_disabled_delegations,
     build_supervision_context,
     detect_dormant_animas,
     record_dormant_offboarding_proposals,
+    surface_disabled_delegations_for_supervisor,
 )
+from core.memory.task_queue import TaskQueueManager
 from core.time_utils import now_local
 
 
@@ -88,6 +93,78 @@ def test_bounce_disabled_delegations_creates_delegator_task(tmp_path: Path) -> N
     repeated = bounce_disabled_delegations(animas_dir, older_than_days=14, now=now_local())
 
     assert repeated == []
+
+
+def test_surface_disabled_delegations_updates_tracking_summary_once(tmp_path: Path) -> None:
+    animas_dir = tmp_path / "animas"
+    boss_dir = _write_status(animas_dir, "boss", enabled=True)
+    worker_dir = _write_status(animas_dir, "worker", enabled=False, supervisor="boss")
+    worker_task = TaskQueueManager(worker_dir).add_task(
+        source="anima",
+        original_instruction="Write the report",
+        assignee="worker",
+        summary="Write report",
+        relay_chain=["boss"],
+        task_id="delegated-3",
+    )
+    tracking = TaskQueueManager(boss_dir).add_delegated_task(
+        original_instruction="Write the report",
+        assignee="worker",
+        summary="[delegated->worker] Write report",
+        deadline="1h",
+        relay_chain=["boss", "worker"],
+        meta={"delegated_to": "worker", "delegated_task_id": worker_task.task_id},
+        task_id="tracking-3",
+    )
+
+    surface_disabled_delegations_for_supervisor("boss", animas_dir)
+    surface_disabled_delegations_for_supervisor("boss", animas_dir)
+
+    boss_records = _read_queue(boss_dir)
+    reassignment_updates = [
+        record
+        for record in boss_records
+        if record.get("_event") == "update"
+        and record.get("task_id") == tracking.task_id
+        and record.get("meta", {}).get("needs_reassignment") is True
+    ]
+    current = TaskQueueManager(boss_dir).get_task_by_id(tracking.task_id)
+    assert len(reassignment_updates) == 1
+    assert current is not None
+    assert current.summary.count("needs reassignment") == 1
+
+
+def test_concurrent_add_alert_task_creates_single_active_alert(tmp_path: Path) -> None:
+    animas_dir = tmp_path / "animas"
+    boss_dir = _write_status(animas_dir, "boss", enabled=True)
+    _write_status(animas_dir, "worker", enabled=False, supervisor="boss")
+    barrier = threading.Barrier(8)
+
+    def add_alert():
+        barrier.wait(timeout=5)
+        return _add_alert_task(
+            boss_dir,
+            kind="delegation_bounced",
+            target_name="worker",
+            delegated_task_id="delegated-race",
+            summary="Bounced delegation",
+            instruction="Handle bounced delegation",
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(lambda _idx: add_alert(), range(8)))
+
+    created = [result for result in results if result is not None]
+    boss_records = _read_queue(boss_dir)
+    alert_creates = [
+        record
+        for record in boss_records
+        if record.get("meta", {}).get("kind") == "delegation_bounced"
+        and record.get("meta", {}).get("delegated_task_id") == "delegated-race"
+        and record.get("_event") != "update"
+    ]
+    assert len(created) == 1
+    assert len(alert_creates) == 1
 
 
 def test_dormant_detection_records_offboarding_proposal(tmp_path: Path) -> None:

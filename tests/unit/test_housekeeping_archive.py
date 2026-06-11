@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from core.memory.housekeeping import _rotate_archive_superseded
+from core.memory.housekeeping import _rotate_archive_superseded, _rotate_daemon_log
 
 
 class TestRotateArchiveSuperseded:
@@ -62,3 +62,21 @@ class TestRotateArchiveSuperseded:
 
         result = _rotate_archive_superseded(animas, 7)
         assert result["deleted_files"] == 3
+
+
+def test_rotate_daemon_log_copytruncate_preserves_live_append_fd(tmp_path):
+    log_path = tmp_path / "server-daemon.log"
+    log_path.write_text("old\n", encoding="utf-8")
+
+    with log_path.open("a", encoding="utf-8") as live_fd:
+        live_fd.write("before rotate\n")
+        live_fd.flush()
+
+        result = _rotate_daemon_log(log_path, max_size_mb=0, keep_generations=3)
+
+        live_fd.write("after rotate\n")
+        live_fd.flush()
+
+    assert result["rotated"] is True
+    assert (tmp_path / "server-daemon.log.1").read_text(encoding="utf-8") == "old\nbefore rotate\n"
+    assert log_path.read_text(encoding="utf-8") == "after rotate\n"

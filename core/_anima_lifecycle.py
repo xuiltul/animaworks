@@ -135,9 +135,8 @@ def _consolidation_model_config(base_model_config: Any, consolidation_model: str
     return base_model_config.model_copy(update=updates)
 
 
-def _phase_b_reached_max_iterations(summary: str) -> bool:
-    lowered = summary.lower()
-    return "max iterations reached" in lowered or "max turns" in lowered or "max_turns" in lowered
+def _phase_b_reached_max_iterations(result: CycleResult) -> bool:
+    return bool(result.truncated)
 
 
 class LifecycleMixin:
@@ -622,7 +621,7 @@ class LifecycleMixin:
 
         autolearn = self._run_autonomous_skill_learning()
         summary = result.summary or ""
-        truncated = _phase_b_reached_max_iterations(summary)
+        truncated = _phase_b_reached_max_iterations(result)
         if truncated:
             summary = (
                 summary

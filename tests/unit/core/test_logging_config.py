@@ -6,12 +6,15 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 import structlog
 
 from core.logging_config import (
-    _anima_log_rollover_name,
+    _AnimaDailyFileHandler,
     get_request_id,
     set_request_id,
     setup_logging,
@@ -146,7 +149,24 @@ class TestSetupLogging:
         structlog.contextvars.clear_contextvars()
 
 
-def test_anima_log_rollover_name_removes_double_log_suffix(tmp_path):
-    default_name = str(tmp_path / "20260611.log.20260612.log")
+def test_anima_daily_file_handler_switches_to_new_date_without_renaming_old_log(tmp_path):
+    tz = ZoneInfo("Asia/Tokyo")
+    day1 = datetime(2026, 6, 11, 23, 59, tzinfo=tz)
+    day2 = datetime(2026, 6, 12, 0, 1, tzinfo=tz)
 
-    assert _anima_log_rollover_name(default_name) == str(tmp_path / "20260612.log")
+    with patch("core.logging_config.now_local", return_value=day1):
+        handler = _AnimaDailyFileHandler(tmp_path, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger("test.anima.daily")
+
+    try:
+        with patch("core.logging_config.now_local", return_value=day1):
+            handler.emit(logger.makeRecord(logger.name, logging.INFO, __file__, 1, "before midnight", (), None))
+        with patch("core.logging_config.now_local", return_value=day2):
+            handler.emit(logger.makeRecord(logger.name, logging.INFO, __file__, 1, "after midnight", (), None))
+    finally:
+        handler.close()
+
+    assert (tmp_path / "20260611.log").read_text(encoding="utf-8").strip() == "before midnight"
+    assert (tmp_path / "20260612.log").read_text(encoding="utf-8").strip() == "after midnight"
+    assert not (tmp_path / "20260611.log.20260612.log").exists()

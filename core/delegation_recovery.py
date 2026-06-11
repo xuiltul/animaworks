@@ -104,19 +104,22 @@ def _add_alert_task(
     delegated_task_id: str = "",
     extra_meta: dict[str, Any] | None = None,
 ) -> TaskEntry | None:
-    if _active_alert_exists(
-        delegator_dir,
-        kind=kind,
-        target_name=target_name,
-        delegated_task_id=delegated_task_id,
-    ):
-        return None
     meta: dict[str, Any] = {"kind": kind, "target": target_name}
     if delegated_task_id:
         meta["delegated_task_id"] = delegated_task_id
     if extra_meta:
         meta.update(extra_meta)
-    return TaskQueueManager(delegator_dir).add_task(
+
+    def _matches(task: TaskEntry) -> bool:
+        task_meta = task.meta or {}
+        if task_meta.get("kind") != kind:
+            return False
+        if task_meta.get("target") != target_name:
+            return False
+        return not delegated_task_id or task_meta.get("delegated_task_id") == delegated_task_id
+
+    return TaskQueueManager(delegator_dir).add_task_if_absent(
+        _matches,
         source="anima",
         original_instruction=instruction,
         assignee=delegator_dir.name,
@@ -164,7 +167,7 @@ def surface_disabled_delegations_for_supervisor(
                 delegated_to=target_dir.name,
                 delegated_task_id=task.task_id,
             )
-            if tracking:
+            if tracking and not bool((tracking.meta or {}).get("needs_reassignment")):
                 TaskQueueManager(supervisor_dir).update_meta(
                     tracking.task_id,
                     {
@@ -247,6 +250,8 @@ def bounce_disabled_delegations(
                 ),
                 extra_meta={"age_days": round(_task_age_days(task, current), 2)},
             )
+            if created is None:
+                continue
             target_tqm.update_status(
                 task.task_id,
                 "blocked",

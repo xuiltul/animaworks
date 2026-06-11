@@ -207,7 +207,11 @@ def create_internal_router() -> APIRouter:
                 logger.warning("Vector worker unavailable for %s: %s", path, exc)
             return JSONResponse(status_code=503, content={"detail": "Vector worker unavailable"})
         if response.status_code >= 400:
-            headers = dict(getattr(response, "headers", None) or {})
+            source_headers = dict(getattr(response, "headers", None) or {})
+            headers = {}
+            retry_after = source_headers.get("Retry-After") or source_headers.get("retry-after")
+            if retry_after:
+                headers["Retry-After"] = retry_after
             return JSONResponse(status_code=response.status_code, content=response.data, headers=headers)
         return response.data
 

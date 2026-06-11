@@ -261,19 +261,19 @@ class RoomManager:
             text: Message text.
             meta: Optional machine-readable metadata for non-standard entries.
         """
-        room = self.get_room(room_id)
-        if room is None:
+        from core.meeting_room_store import append_room_message
+
+        if self.get_room(room_id) is None:
             raise ValueError(t("room_manager.room_not_found", room_id=room_id))
-        entry = {
-            "speaker": speaker,
-            "role": role,
-            "text": text,
-            "ts": datetime.now().isoformat(),
-        }
-        if meta:
-            entry["meta"] = meta
-        room.conversation.append(entry)
-        self.save_room(room_id)
+        append_room_message(
+            self._data_dir,
+            room_id,
+            speaker,
+            role,
+            text,
+            meta=meta,
+        )
+        self.load_room(room_id)
 
     @staticmethod
     def _format_entries(messages: list[dict]) -> str:

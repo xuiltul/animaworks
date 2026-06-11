@@ -12,6 +12,7 @@ all data types that lack their own rotation mechanisms.
 
 import asyncio
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -382,10 +383,10 @@ def _rotate_daemon_log(
     max_size_mb: int,
     keep_generations: int,
 ) -> dict[str, Any]:
-    """Size-based rotation for server-daemon.log using rename strategy.
+    """Size-based rotation for daemon logs using copytruncate strategy.
 
-    Renames current log to .1, shifts .1 → .2, etc., and deletes
-    generations beyond *keep_generations*.
+    Copies current log to .1, shifts .1 → .2, etc., then truncates the
+    original path so live processes keep writing through their open fd.
     """
     if not log_path.exists():
         return {"skipped": True, "reason": "file_not_found"}
@@ -412,9 +413,10 @@ def _rotate_daemon_log(
             else:
                 src.rename(dst)
 
-    # Current → .1
+    # Current → .1, then truncate in place for live redirected stdout/stderr fds.
     gen1 = parent / f"{stem}.1"
-    log_path.rename(gen1)
+    shutil.copyfile(log_path, gen1)
+    os.truncate(log_path, 0)
 
     # Delete over-limit generations
     deleted += _delete_daemon_log_generations(parent, stem, keep_generations)

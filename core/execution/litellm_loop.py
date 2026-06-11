@@ -426,6 +426,7 @@ class LiteLLMExecutor(
             text="\n".join(all_response_text) or "(max iterations reached)",
             tool_call_records=all_tool_records,
             usage=usage_acc,
+            truncated=True,
         )
 
     # ── Streaming execution ──────────────────────────────────

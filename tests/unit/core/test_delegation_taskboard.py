@@ -80,7 +80,7 @@ def test_delegate_task_records_taskboard_metadata(monkeypatch, tmp_path: Path) -
     assert by_anima["boss"].task_id in boss_queue
 
 
-def test_delegate_task_aborts_when_taskboard_write_fails(monkeypatch, tmp_path: Path) -> None:
+def test_delegate_task_keeps_queue_entries_when_taskboard_write_fails(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
     animas_dir = tmp_path / "animas"
     boss_dir = animas_dir / "boss"
@@ -114,6 +114,45 @@ def test_delegate_task_aborts_when_taskboard_write_fails(monkeypatch, tmp_path: 
             }
         )
 
-    assert "PersistenceFailed" in result
+    assert "worker" in result
+    assert (worker_dir / "state" / "task_queue.jsonl").exists()
+    assert (boss_dir / "state" / "task_queue.jsonl").exists()
+
+
+def test_delegate_task_invalid_deadline_does_not_write_taskboard(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
+    animas_dir = tmp_path / "animas"
+    boss_dir = animas_dir / "boss"
+    worker_dir = animas_dir / "worker"
+    (boss_dir / "state").mkdir(parents=True)
+    (worker_dir / "state").mkdir(parents=True)
+    _write_status(boss_dir)
+    _write_status(worker_dir, supervisor="boss")
+    messenger = Messenger(tmp_path / "shared", "boss")
+    harness = _DelegationHarness(boss_dir, messenger)
+
+    config = SimpleNamespace(
+        animas={
+            "boss": SimpleNamespace(supervisor=None, aliases=[]),
+            "worker": SimpleNamespace(supervisor="boss", aliases=[]),
+        },
+        heartbeat=SimpleNamespace(depth_window_s=600, max_depth=6),
+    )
+    with (
+        patch("core.config.models.load_config", return_value=config),
+        patch("core.paths.get_animas_dir", return_value=animas_dir),
+        patch("core.paths.get_data_dir", return_value=tmp_path),
+    ):
+        result = harness._handle_delegate_task(
+            {
+                "name": "worker",
+                "instruction": "Prepare the incident summary",
+                "summary": "Incident summary",
+                "deadline": "tomorrow",
+            }
+        )
+
+    assert "InvalidArguments" in result
+    assert not TaskBoardStore(tmp_path / "shared" / "taskboard.sqlite3").list_metadata()
     assert not (worker_dir / "state" / "task_queue.jsonl").exists()
     assert not (boss_dir / "state" / "task_queue.jsonl").exists()

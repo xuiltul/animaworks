@@ -19,8 +19,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.messenger import Messenger
 from core.supervisor.pending_executor import PendingTaskExecutor
-
 
 # ── Helpers ──────────────────────────────────────────────────
 
@@ -89,8 +89,6 @@ class TestCommandPendingFileLifecycle:
         task = {"task_id": "cmd-fail", "tool_name": "bad_tool", "subcommand": "", "raw_args": []}
         (pending_dir / "cmd-fail.json").write_text(json.dumps(task))
 
-        original_execute = executor.execute_pending_task
-
         async def failing_execute(task_desc):
             raise RuntimeError("Simulated failure")
 
@@ -134,9 +132,11 @@ class TestLLMPendingFileLifecycle:
         task = {"task_type": "llm", "task_id": "llm-1", "description": "test"}
         (llm_dir / "llm-1.json").write_text(json.dumps(task))
 
-        with patch.object(executor, "execute_pending_task", new_callable=AsyncMock):
-            with patch("core.supervisor.pending_executor.asyncio.wait_for", side_effect=_stop_after_first(executor)):
-                await executor.watcher_loop()
+        with (
+            patch.object(executor, "execute_pending_task", new_callable=AsyncMock),
+            patch("core.supervisor.pending_executor.asyncio.wait_for", side_effect=_stop_after_first(executor)),
+        ):
+            await executor.watcher_loop()
 
         assert not (llm_dir / "llm-1.json").exists()
         assert not (llm_dir / "processing" / "llm-1.json").exists()
@@ -243,14 +243,16 @@ class TestExecuteLLMTaskFailureHandling:
         """When reply_to is a dict with 'name', sends failure notification."""
         executor = _make_executor(tmp_path)
 
-        with patch.object(executor, "_run_llm_task", side_effect=RuntimeError("oops")):
-            with patch("core.i18n.t", return_value="failure msg"):
-                task_desc = {
-                    "task_id": "fail-notify",
-                    "description": "failing task",
-                    "reply_to": {"name": "manager-anima", "content": "please notify"},
-                }
-                await executor._execute_llm_task(task_desc)
+        with (
+            patch.object(executor, "_run_llm_task", side_effect=RuntimeError("oops")),
+            patch("core.i18n.t", return_value="failure msg"),
+        ):
+            task_desc = {
+                "task_id": "fail-notify",
+                "description": "failing task",
+                "reply_to": {"name": "manager-anima", "content": "please notify"},
+            }
+            await executor._execute_llm_task(task_desc)
 
         executor._anima.messenger.send.assert_called_once()
         call_kwargs = executor._anima.messenger.send.call_args
@@ -261,14 +263,16 @@ class TestExecuteLLMTaskFailureHandling:
         """When reply_to is a string, uses it as the recipient."""
         executor = _make_executor(tmp_path)
 
-        with patch.object(executor, "_run_llm_task", side_effect=RuntimeError("oops")):
-            with patch("core.i18n.t", return_value="failure msg"):
-                task_desc = {
-                    "task_id": "fail-str",
-                    "description": "task",
-                    "reply_to": "some-anima",
-                }
-                await executor._execute_llm_task(task_desc)
+        with (
+            patch.object(executor, "_run_llm_task", side_effect=RuntimeError("oops")),
+            patch("core.i18n.t", return_value="failure msg"),
+        ):
+            task_desc = {
+                "task_id": "fail-str",
+                "description": "task",
+                "reply_to": "some-anima",
+            }
+            await executor._execute_llm_task(task_desc)
 
         executor._anima.messenger.send.assert_called_once()
         call_kwargs = executor._anima.messenger.send.call_args
@@ -293,14 +297,16 @@ class TestExecuteLLMTaskFailureHandling:
         executor = _make_executor(tmp_path)
         executor._anima.messenger.send.side_effect = ConnectionError("network error")
 
-        with patch.object(executor, "_run_llm_task", side_effect=RuntimeError("boom")):
-            with patch("core.i18n.t", return_value="msg"):
-                task_desc = {
-                    "task_id": "fail-notif-err",
-                    "description": "task",
-                    "reply_to": {"name": "boss"},
-                }
-                await executor._execute_llm_task(task_desc)
+        with (
+            patch.object(executor, "_run_llm_task", side_effect=RuntimeError("boom")),
+            patch("core.i18n.t", return_value="msg"),
+        ):
+            task_desc = {
+                "task_id": "fail-notif-err",
+                "description": "task",
+                "reply_to": {"name": "boss"},
+            }
+            await executor._execute_llm_task(task_desc)
 
         result_path = executor._anima_dir / "state" / "task_results" / "fail-notif-err.md"
         assert result_path.exists()
@@ -316,6 +322,37 @@ class TestExecuteLLMTaskFailureHandling:
 
         assert executor._anima._status_slots["background"] == "idle"
         assert executor._anima._task_slots["background"] == ""
+
+    @pytest.mark.asyncio
+    async def test_completion_notification_can_be_self_addressed(self, tmp_path: Path) -> None:
+        """Task completion notifications may target the submitting anima itself."""
+        executor = _make_executor(tmp_path)
+        shared_dir = tmp_path / "shared"
+        executor._anima.messenger = Messenger(shared_dir, "test-anima")
+
+        async def _run_cycle_streaming(*_args, **_kwargs):
+            yield {
+                "type": "cycle_done",
+                "cycle_result": {"summary": "task finished", "action": "responded"},
+            }
+
+        executor._anima.agent.run_cycle_streaming = _run_cycle_streaming
+        task_desc = {
+            "task_id": "self-complete",
+            "title": "Self completion",
+            "description": "notify the submitter",
+            "reply_to": "test-anima",
+        }
+
+        result = await executor._run_llm_task(task_desc)
+
+        assert result == "task finished"
+        inbox_files = list((shared_dir / "inbox" / "test-anima").glob("*.json"))
+        assert len(inbox_files) == 1
+        delivered = json.loads(inbox_files[0].read_text(encoding="utf-8"))
+        assert delivered["from_person"] == "test-anima"
+        assert delivered["to_person"] == "test-anima"
+        assert "self-complete" in delivered["content"]
 
 
 # ── TestI18nTemplate ─────────────────────────────────────────

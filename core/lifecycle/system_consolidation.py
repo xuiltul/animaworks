@@ -204,9 +204,9 @@ async def run_weekly_full_contradiction_scan(
             model=model,
             max_llm_checks=max_llm_checks,
         )
-        resolved = await detector.resolve_contradictions(pairs, model) if pairs else 0
+        resolved = await detector.resolve_contradictions(pairs, model) if pairs else {}
         logger.info(
-            "Weekly full contradiction scan for %s: detected=%d resolved=%d stats=%s",
+            "Weekly full contradiction scan for %s: detected=%d resolved=%s stats=%s",
             anima_name,
             len(pairs),
             resolved,

@@ -84,22 +84,17 @@ class CommsToolsMixin:
         if effective_to in current_replied:
             return t("handler.dm_already_sent", to=effective_to)
 
-        from core.config.models import resolve_outbound_limits
-        from core.paths import get_animas_dir as _get_animas_dir
-
-        _anima_dir = _get_animas_dir() / self._anima_name if _get_animas_dir().exists() else None
-        limits = resolve_outbound_limits(self._anima_name, _anima_dir)
-        max_recipients = limits["max_recipients_per_run"]
-        if len(current_replied) >= max_recipients and effective_to not in current_replied:
-            return t("handler.dm_max_recipients", limit=max_recipients)
-
         if meeting_target:
-            record_meeting_redirect(
-                from_name=self._anima_name,
-                to_name=meeting_target,
-                content=content,
-                intent=intent,
-            )
+            try:
+                record_meeting_redirect(
+                    from_name=self._anima_name,
+                    to_name=meeting_target,
+                    content=content,
+                    intent=intent,
+                )
+            except Exception as e:
+                logger.warning("Meeting redirect delivery failed: %s -> %s: %s", self._anima_name, meeting_target, e)
+                return _error_result("DeliveryFailed", f"Failed to deliver meeting redirect: {e}")
             self._replied_to.setdefault(active_session_type.get(), set()).add(meeting_target)
             self._persist_replied_to(meeting_target, success=True)
             try:
@@ -113,6 +108,15 @@ class CommsToolsMixin:
             except Exception:
                 logger.warning("Activity logging failed for meeting redirect to %s", meeting_target)
             return t("handler.meeting_dm_redirected", to=meeting_target)
+
+        from core.config.models import resolve_outbound_limits
+        from core.paths import get_animas_dir as _get_animas_dir
+
+        _anima_dir = _get_animas_dir() / self._anima_name if _get_animas_dir().exists() else None
+        limits = resolve_outbound_limits(self._anima_name, _anima_dir)
+        max_recipients = limits["max_recipients_per_run"]
+        if len(current_replied) >= max_recipients and effective_to not in current_replied:
+            return t("handler.dm_max_recipients", limit=max_recipients)
 
         # ── Resolve recipient ──
         try:

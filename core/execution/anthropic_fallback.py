@@ -470,6 +470,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
             text="\n".join(all_response_text) or "(max iterations reached)",
             tool_call_records=all_tool_records,
             usage=usage_acc,
+            truncated=True,
         )
 
     # ── Streaming execution ───────────────────────────────────
@@ -535,6 +536,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
         all_tool_records: list[ToolCallRecord] = []
         _MAX_ITERATIONS = max_turns_override or self._model_config.max_turns
         _usage_acc_s = TokenUsage()
+        max_iterations_reached = False
 
         from core.config.models import resolve_max_tokens
         from core.execution.base import is_adaptive_model, is_anthropic_claude, resolve_thinking_effort
@@ -768,6 +770,7 @@ class AnthropicFallbackExecutor(BaseExecutor):
                         messages[-1]["content"] += "\n\n" + formatted
             else:
                 # for-else: max iterations reached without break
+                max_iterations_reached = True
                 logger.warning(
                     "Streaming max iterations (%d) reached",
                     _MAX_ITERATIONS,
@@ -780,4 +783,5 @@ class AnthropicFallbackExecutor(BaseExecutor):
             "result_message": None,
             "tool_call_records": [asdict(r) for r in all_tool_records],
             "usage": _usage_acc_s.to_dict(),
+            "truncated": max_iterations_reached,
         }

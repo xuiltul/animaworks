@@ -13,8 +13,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from cli.commands.index_cmd import (
+    _check_model_change,
     _index_shared_collections,
     _is_anima_enabled,
+    _save_global_index_meta,
     index_command,
     setup_index_command,
 )
@@ -41,6 +43,32 @@ class TestIsAnimaEnabled:
     def test_corrupted_json_treated_as_enabled(self, tmp_path: Path) -> None:
         (tmp_path / "status.json").write_text("{bad")
         assert _is_anima_enabled(tmp_path) is True
+
+
+class TestGlobalIndexMeta:
+    def test_save_global_index_meta_records_e5_prefix(self, tmp_path: Path) -> None:
+        with patch("core.memory.rag.singleton.get_embedding_e5_prefix_enabled", return_value=True):
+            _save_global_index_meta(tmp_path, "test-embedding-model")
+
+        data = json.loads((tmp_path / "index_meta.json").read_text(encoding="utf-8"))
+        assert data["embedding_model"] == "test-embedding-model"
+        assert data["embedding_e5_prefix"] is True
+
+    def test_check_model_change_rejects_e5_prefix_mismatch_without_full(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / "index_meta.json").write_text(
+            json.dumps({"embedding_model": "test-embedding-model", "embedding_e5_prefix": False}),
+            encoding="utf-8",
+        )
+
+        with (
+            patch("core.memory.rag.singleton.get_embedding_model_name", return_value="test-embedding-model"),
+            patch("core.memory.rag.singleton.get_embedding_e5_prefix_enabled", return_value=True),
+            pytest.raises(SystemExit),
+        ):
+            _check_model_change(tmp_path, full=False)
 
 
 # ── setup_index_command (--shared flag registration) ──────

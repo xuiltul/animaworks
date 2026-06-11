@@ -443,6 +443,7 @@ class AssistedExecutor(BaseExecutor):
         max_iterations = max_turns_override or self._model_config.max_turns
         intent_reprompt_count = 0
         usage_acc = TokenUsage()
+        max_iterations_reached = False
 
         # ── 2. Tool-call loop ────────────────────────────────
         for iteration in range(max_iterations):
@@ -599,6 +600,7 @@ class AssistedExecutor(BaseExecutor):
                 messages[-1]["content"] += "\n\n" + SystemReminderQueue.format_reminder(reminder)
         else:
             # max_turns reached
+            max_iterations_reached = True
             logger.warning(
                 "Mode B max iterations (%d) reached",
                 max_iterations,
@@ -615,6 +617,7 @@ class AssistedExecutor(BaseExecutor):
             text=final_text or "(max iterations reached)",
             tool_call_records=all_tool_records,
             usage=usage_acc,
+            truncated=max_iterations_reached,
         )
 
     async def execute_streaming(
@@ -665,6 +668,7 @@ class AssistedExecutor(BaseExecutor):
         max_iterations = max_turns_override or self._model_config.max_turns
         intent_reprompt_count = 0
         _usage_acc_bs = TokenUsage()
+        max_iterations_reached = False
 
         # ── 2. Tool-call loop ────────────────────────────────
         async with stream_error_boundary(
@@ -864,6 +868,7 @@ class AssistedExecutor(BaseExecutor):
                     messages[-1]["content"] += "\n\n" + SystemReminderQueue.format_reminder(reminder)
             else:
                 # max_turns reached
+                max_iterations_reached = True
                 logger.warning(
                     "Mode B streaming max iterations (%d) reached",
                     max_iterations,
@@ -877,4 +882,5 @@ class AssistedExecutor(BaseExecutor):
             "result_message": None,
             "tool_call_records": [asdict(r) for r in all_tool_records],
             "usage": _usage_acc_bs.to_dict(),
+            "truncated": max_iterations_reached,
         }

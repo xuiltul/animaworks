@@ -83,8 +83,15 @@ def _build_meeting_context(
 ) -> dict[str, Any]:
     if not room_id and thread_id.startswith("meeting-"):
         room_id = thread_id.removeprefix("meeting-")
+    try:
+        from core.paths import get_shared_dir
+
+        meetings_dir = str(get_shared_dir() / "meetings")
+    except Exception:
+        meetings_dir = ""
     return {
         "room_id": room_id,
+        "meetings_dir": meetings_dir,
         "participants": [str(p) for p in (participants or []) if str(p)],
         "redirects": [],
     }
@@ -116,6 +123,7 @@ def _collect_meeting_redirects() -> list[dict[str, str]]:
         redirects.append(
             {
                 "room_id": str(item.get("room_id") or room_id),
+                "redirect_id": str(item.get("redirect_id") or ""),
                 "from": str(item.get("from") or ""),
                 "to": to_name,
                 "content": content,

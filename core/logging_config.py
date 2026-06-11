@@ -20,7 +20,7 @@ Provides:
 from __future__ import annotations
 
 import logging
-from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import structlog
@@ -42,13 +42,38 @@ def get_request_id() -> str:
     return ctx.get("request_id", "-")
 
 
-def _anima_log_rollover_name(default_name: str) -> str:
-    """Normalize TimedRotatingFileHandler names to avoid double .log suffixes."""
-    path = Path(default_name)
-    parts = path.name.split(".")
-    if len(parts) >= 4 and parts[-1] == "log" and parts[-3] == "log" and parts[-2].isdigit():
-        return str(path.with_name(f"{parts[-2]}.log"))
-    return default_name
+class _AnimaDailyFileHandler(logging.FileHandler):
+    """Write each local day to ``YYYYMMDD.log`` without renaming old files."""
+
+    def __init__(self, log_dir: Path, *, encoding: str = "utf-8") -> None:
+        self.log_dir = log_dir
+        self.current_day = now_local().strftime("%Y%m%d")
+        super().__init__(self.log_dir / f"{self.current_day}.log", encoding=encoding)
+
+    def _update_current_link(self) -> None:
+        current_link = self.log_dir / "current.log"
+        if current_link.exists() or current_link.is_symlink():
+            current_link.unlink()
+        try:
+            current_link.symlink_to(f"{self.current_day}.log")
+        except OSError:
+            current_link.write_text(f"{self.current_day}.log", encoding="utf-8")
+
+    def doRollover(self) -> None:  # noqa: N802 - stdlib handler API
+        new_day = now_local().strftime("%Y%m%d")
+        if new_day == self.current_day:
+            return
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+        self.current_day = new_day
+        self.baseFilename = str(self.log_dir / f"{self.current_day}.log")
+        self.stream = self._open()
+        self._update_current_link()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.doRollover()
+        super().emit(record)
 
 
 # ── Shared Processors ──────────────────────────────────────────
@@ -234,15 +259,8 @@ def setup_anima_logging(
     # Create anima name filter
     anima_filter = AnimaNameFilter(anima_name)
 
-    # File handler with timed rotation
-    file_handler = TimedRotatingFileHandler(
-        filename=log_file,
-        when="midnight",
-        interval=1,
-        backupCount=30,  # Keep 30 days
-        encoding="utf-8",
-        utc=False,
-    )
+    # File handler with date-name rotation. Retention is handled by housekeeping.
+    file_handler = _AnimaDailyFileHandler(anima_log_dir, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(
         logging.Formatter(
@@ -251,8 +269,6 @@ def setup_anima_logging(
         )
     )
     file_handler.addFilter(anima_filter)
-    file_handler.suffix = "%Y%m%d.log"  # Match filename format
-    file_handler.namer = _anima_log_rollover_name
     root.addHandler(file_handler)
 
     # Create/update current.log symlink

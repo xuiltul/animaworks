@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextvars
 import logging
 import re
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -150,7 +151,9 @@ def record_meeting_redirect(
     intent: str = "",
 ) -> dict[str, str]:
     """Record a meeting-local DM redirect for the process_message stream."""
+    redirect_id = uuid.uuid4().hex
     redirect = {
+        "redirect_id": redirect_id,
         "from": from_name,
         "to": to_name,
         "content": content,
@@ -159,6 +162,21 @@ def record_meeting_redirect(
     }
     ctx = meeting_context.get()
     if isinstance(ctx, dict):
+        room_id = str(ctx.get("room_id") or "")
+        meetings_dir = str(ctx.get("meetings_dir") or "")
+        if room_id and meetings_dir:
+            from core.meeting_room_store import append_meeting_redirect
+
+            append_meeting_redirect(
+                Path(meetings_dir),
+                room_id,
+                from_name=from_name,
+                to_name=to_name,
+                content=content,
+                intent=intent,
+                redirect_id=redirect_id,
+            )
+            redirect["room_id"] = room_id
         redirects = ctx.setdefault("redirects", [])
         if isinstance(redirects, list):
             redirects.append(redirect)

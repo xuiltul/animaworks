@@ -610,20 +610,30 @@ class SchedulerMixin:
 
         base_dir = self._get_data_dir()
 
-        from core.memory.rag.singleton import get_embedding_model_name
+        from core.memory.rag.singleton import get_embedding_e5_prefix_enabled, get_embedding_model_name
 
         current_model = get_embedding_model_name()
+        current_e5_prefix = get_embedding_e5_prefix_enabled()
         global_meta_path = base_dir / "index_meta.json"
         if global_meta_path.is_file():
             try:
                 meta = json.loads(global_meta_path.read_text(encoding="utf-8"))
                 previous_model = meta.get("embedding_model")
+                previous_e5_prefix = bool(meta.get("embedding_e5_prefix", False))
                 if previous_model and previous_model != current_model:
                     logger.warning(
                         "Embedding model changed: %s -> %s. "
                         "Skipping daily indexing — run 'animaworks index --full' to rebuild.",
                         previous_model,
                         current_model,
+                    )
+                    return
+                if previous_e5_prefix != current_e5_prefix:
+                    logger.warning(
+                        "Embedding E5 prefix setting changed: %s -> %s. "
+                        "Skipping daily indexing — run 'animaworks index --full' to rebuild.",
+                        previous_e5_prefix,
+                        current_e5_prefix,
                     )
                     return
             except (json.JSONDecodeError, OSError):

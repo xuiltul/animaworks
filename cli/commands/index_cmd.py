@@ -119,17 +119,20 @@ def _check_model_change(base_dir: Path, full: bool) -> str:
     import json
     import sys
 
-    from core.memory.rag.singleton import get_embedding_model_name
+    from core.memory.rag.singleton import get_embedding_e5_prefix_enabled, get_embedding_model_name
 
     current_model = get_embedding_model_name()
+    current_e5_prefix = get_embedding_e5_prefix_enabled()
     meta_path = base_dir / "index_meta.json"
 
     if meta_path.is_file():
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             previous_model = meta.get("embedding_model")
+            previous_e5_prefix = bool(meta.get("embedding_e5_prefix", False))
         except (json.JSONDecodeError, OSError):
             previous_model = None
+            previous_e5_prefix = current_e5_prefix
 
         if previous_model and previous_model != current_model and not full:
             logger.error(
@@ -138,13 +141,22 @@ def _check_model_change(base_dir: Path, full: bool) -> str:
                 current_model,
             )
             sys.exit(1)
+        if previous_e5_prefix != current_e5_prefix and not full:
+            logger.error(
+                "Embedding E5 prefix setting changed: %s → %s.  Run 'animaworks index --full' to rebuild the index.",
+                previous_e5_prefix,
+                current_e5_prefix,
+            )
+            sys.exit(1)
 
     return current_model
 
 
 def _save_global_index_meta(base_dir: Path, model_name: str) -> None:
-    """Write the embedding model name to the global index_meta.json."""
+    """Write the embedding index signature to the global index_meta.json."""
     import json
+
+    from core.memory.rag.singleton import get_embedding_e5_prefix_enabled
 
     meta_path = base_dir / "index_meta.json"
     meta: dict = {}
@@ -154,6 +166,7 @@ def _save_global_index_meta(base_dir: Path, model_name: str) -> None:
         except (json.JSONDecodeError, OSError):
             pass
     meta["embedding_model"] = model_name
+    meta["embedding_e5_prefix"] = get_embedding_e5_prefix_enabled()
     meta_path.write_text(
         json.dumps(meta, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
