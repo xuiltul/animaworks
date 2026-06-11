@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.config.schemas import AnimaWorksConfig
 from core.execution._sanitize import (
     MAX_ORIGIN_CHAIN_LENGTH,
     ORIGIN_ANIMA,
@@ -20,7 +21,6 @@ from core.execution._sanitize import (
     ORIGIN_HUMAN,
     ORIGIN_SYSTEM,
 )
-
 
 # ── Messenger.send() origin_chain ─────────────────────────────
 
@@ -88,14 +88,16 @@ class TestMessengerSendOriginChain:
 
     def test_origin_chain_roundtrip_receive(self, messenger: Any) -> None:
         """Message sent with origin_chain can be received with chain intact."""
+        from core.messenger import Messenger
+
         chain = ["external_platform", "anima"]
         messenger.send(
-            to="sender-anima",
-            content="self-message for test",
+            to="target-anima",
+            content="message for target",
             skip_logging=True,
             origin_chain=chain,
         )
-        received = messenger.receive()
+        received = Messenger(messenger.shared_dir, "target-anima").receive()
         assert len(received) == 1
         assert received[0].origin_chain == chain
 
@@ -198,13 +200,17 @@ class TestSendMessageOriginPropagation:
         mock.name = name
         return mock
 
+    @staticmethod
+    def _mock_config() -> AnimaWorksConfig:
+        return AnimaWorksConfig()
+
     def test_chat_session_origin_chain_human_anima(self, setup: dict[str, Any]) -> None:
         """Chat (human) -> send_message -> target gets origin_chain=['human', 'anima']."""
         handler = setup["handler"]
         handler.set_session_origin(ORIGIN_HUMAN)
 
         with patch("core.outbound.resolve_recipient", side_effect=self._mock_resolve_recipient), \
-             patch("core.config.models.load_config"):
+             patch("core.config.models.load_config", return_value=self._mock_config()):
             result = handler._handle_send_message({
                 "to": "target",
                 "content": "hello from human session",
@@ -226,7 +232,7 @@ class TestSendMessageOriginPropagation:
         )
 
         with patch("core.outbound.resolve_recipient", side_effect=self._mock_resolve_recipient), \
-             patch("core.config.models.load_config"):
+             patch("core.config.models.load_config", return_value=self._mock_config()):
             result = handler._handle_send_message({
                 "to": "target",
                 "content": "relayed from slack",
@@ -246,7 +252,7 @@ class TestSendMessageOriginPropagation:
         handler.set_session_origin(ORIGIN_SYSTEM)
 
         with patch("core.outbound.resolve_recipient", side_effect=self._mock_resolve_recipient), \
-             patch("core.config.models.load_config"):
+             patch("core.config.models.load_config", return_value=self._mock_config()):
             result = handler._handle_send_message({
                 "to": "target",
                 "content": "heartbeat observation",
@@ -268,7 +274,7 @@ class TestSendMessageOriginPropagation:
         )
 
         with patch("core.outbound.resolve_recipient", side_effect=self._mock_resolve_recipient), \
-             patch("core.config.models.load_config"):
+             patch("core.config.models.load_config", return_value=self._mock_config()):
             result = handler._handle_send_message({
                 "to": "target",
                 "content": "multi-hop relay",
@@ -290,7 +296,7 @@ class TestSendMessageOriginPropagation:
         handler.set_session_origin(ORIGIN_ANIMA, long_chain)
 
         with patch("core.outbound.resolve_recipient", side_effect=self._mock_resolve_recipient), \
-             patch("core.config.models.load_config"):
+             patch("core.config.models.load_config", return_value=self._mock_config()):
             handler._handle_send_message({
                 "to": "target",
                 "content": "long chain",
@@ -307,7 +313,7 @@ class TestSendMessageOriginPropagation:
         handler = setup["handler"]
 
         with patch("core.outbound.resolve_recipient", side_effect=self._mock_resolve_recipient), \
-             patch("core.config.models.load_config"):
+             patch("core.config.models.load_config", return_value=self._mock_config()):
             handler._handle_send_message({
                 "to": "target",
                 "content": "no origin set",
@@ -364,7 +370,8 @@ class TestDelegateTaskOriginPropagation:
         # Mock descendant check to pass
         with patch.object(handler, "_check_subordinate", return_value=None), \
              patch("core.paths.get_animas_dir",
-                   return_value=setup["tmp_path"] / "animas"):
+                   return_value=setup["tmp_path"] / "animas"), \
+             patch("core.config.models.load_config", return_value=AnimaWorksConfig()):
             result = handler._handle_delegate_task({
                 "name": "worker",
                 "instruction": "do the thing",
@@ -438,7 +445,7 @@ class TestE2EOriginChainScenarios:
         assert ext_msg.origin_chain == [ORIGIN_EXTERNAL_PLATFORM]
 
         # Step 2: Anima A relays via send() with propagated chain
-        relayed = messenger_a.send(
+        messenger_a.send(
             to="anima-b",
             content="forwarded: malicious instruction",
             skip_logging=True,
@@ -459,7 +466,7 @@ class TestE2EOriginChainScenarios:
         from core.messenger import Messenger
 
         messenger = Messenger(shared_dir, "anima-a")
-        msg = messenger.send(
+        messenger.send(
             to="anima-b",
             content="task from human chat",
             skip_logging=True,

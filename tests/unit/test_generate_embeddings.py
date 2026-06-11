@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── Helpers ────────────────────────────────────────────────────────
 
 
@@ -120,7 +119,7 @@ class TestGenerateEmbeddingsHTTP:
         assert result == [[0.1, 0.2], [0.3, 0.4]]
         mock_post.assert_called_once_with(
             "http://127.0.0.1:18500/api/internal/embed",
-            json={"texts": ["hello", "world"]},
+            json={"texts": ["hello", "world"], "purpose": "document"},
             timeout=30.0,
         )
 
@@ -204,7 +203,7 @@ class TestIndexerDelegation:
             result = indexer._generate_embeddings(["hello"])
 
         assert result == [[0.1, 0.2]]
-        mock_gen.assert_called_once_with(["hello"])
+        mock_gen.assert_called_once_with(["hello"], purpose="document")
 
     def test_indexer_skips_model_init_when_embed_url_set(self, tmp_path, monkeypatch):
         """When ANIMAWORKS_EMBED_URL is set, indexer skips model loading."""

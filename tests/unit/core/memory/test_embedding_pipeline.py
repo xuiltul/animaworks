@@ -239,7 +239,7 @@ class TestRetrieveWithEmbeddings:
 
             await backend.retrieve("test query", scope="fact", limit=5)
 
-            mock_embed.assert_awaited_once_with(["test query"])
+            mock_embed.assert_awaited_once_with(["test query"], purpose="query")
             mock_search_inst.search.assert_awaited_once()
             call_kwargs = mock_search_inst.search.call_args
             assert call_kwargs.kwargs.get("query_embedding") == _FAKE_384

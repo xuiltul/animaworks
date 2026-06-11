@@ -457,7 +457,10 @@ class TestNeurogenesisSourceSync:
         ) as mock_embeddings:
             pairs = forgetting_engine._find_similar_pairs(chunks, "test_anima_knowledge", store)
 
-        mock_embeddings.assert_called_once_with(["alpha", "alpha duplicate", "gamma"])
+        mock_embeddings.assert_called_once_with(
+            ["alpha", "alpha duplicate", "gamma"],
+            purpose="query",
+        )
         assert [(a["id"], b["id"], score) for a, b, score in pairs] == [("a", "b", 0.86)]
 
     def test_sync_replaces_only_target_chunk(self, forgetting_engine, anima_dir):

@@ -364,7 +364,8 @@ def build_supervision_context(
     disabled_alerts = surface_disabled_delegations_for_supervisor(supervisor_name, animas_dir)
     bounced = bounce_disabled_delegations(animas_dir, older_than_days=bounce_days)
     dormant = [
-        item for item in record_dormant_offboarding_proposals(animas_dir, dormant_days=dormant_days)
+        item
+        for item in record_dormant_offboarding_proposals(animas_dir, dormant_days=dormant_days)
         if item.get("supervisor") == supervisor_name
     ]
 
