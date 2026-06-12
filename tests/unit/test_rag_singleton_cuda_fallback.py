@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from core.config.schemas import AnimaWorksConfig, GPUConfig, RAGConfig
+
 
 @pytest.fixture(autouse=True)
 def _reset_singletons(monkeypatch):
@@ -89,3 +91,53 @@ def test_cuda_device_count_failure_uses_cpu_without_cuda_constructor(tmp_path, m
         cache_folder=str(tmp_path / "models"),
         device="cpu",
     )
+
+
+def test_runtime_cuda_encode_failure_falls_back_to_cpu_and_records_status(
+    tmp_path,
+    monkeypatch,
+    mock_sentence_transformers,
+):
+    """CUDA failures during encode should degrade embedding to CPU and retry once."""
+    import numpy as np
+
+    monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
+    _install_mock_torch(monkeypatch)
+
+    config = AnimaWorksConfig(
+        rag=RAGConfig(use_gpu=True, embedding_model="model-x"),
+        gpu=GPUConfig(embedding_batch_size=7),
+    )
+    gpu_model = MagicMock()
+    gpu_model.encode.side_effect = RuntimeError("CUDA device lost")
+    cpu_model = MagicMock()
+    cpu_model.encode.return_value = np.array([[0.5, 0.25]])
+    mock_sentence_transformers.side_effect = [gpu_model, cpu_model]
+
+    with patch("core.config.load_config", return_value=config):
+        from core.gpu import get_gpu_status
+        from core.memory.rag.singleton import thread_safe_encode
+
+        result = thread_safe_encode(["hello"])
+        status = get_gpu_status()
+
+    assert result == [[0.5, 0.25]]
+    assert mock_sentence_transformers.call_args_list == [
+        call("model-x", cache_folder=str(tmp_path / "models"), device="cuda"),
+        call("model-x", cache_folder=str(tmp_path / "models"), device="cpu"),
+    ]
+    gpu_model.encode.assert_called_once_with(
+        ["hello"],
+        convert_to_numpy=True,
+        show_progress_bar=False,
+        batch_size=7,
+    )
+    cpu_model.encode.assert_called_once_with(
+        ["hello"],
+        convert_to_numpy=True,
+        show_progress_bar=False,
+        batch_size=7,
+    )
+    assert status["embedding_device"] == "cpu"
+    assert status["degraded"] is True
+    assert "CUDA device lost" in str(status["last_error"])

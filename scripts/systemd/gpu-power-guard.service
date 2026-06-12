@@ -1,0 +1,13 @@
+[Unit]
+Description=Apply NVIDIA GPU persistence mode and power limit
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+Environment=GPU_POWER_LIMIT_W=280
+ExecStart=/usr/local/bin/gpu-power-guard.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

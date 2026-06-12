@@ -73,6 +73,7 @@ docs/paper/evaluation_results.md
 !docs/cli-reference.ja.md
 !docs/features.md
 !docs/features.ja.md
+!docs/gpu-operations.md
 !docs/memory.md
 !docs/memory.ja.md
 !docs/security.md

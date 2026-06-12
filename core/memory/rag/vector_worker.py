@@ -259,7 +259,9 @@ def create_app() -> FastAPI:
 
     @app.get("/status")
     async def status() -> dict[str, Any]:
-        return {"status": "ok", "write_circuit_breakers": _breaker_status()}
+        from core.gpu import get_gpu_status
+
+        return {"status": "ok", "write_circuit_breakers": _breaker_status(), "gpu": get_gpu_status()}
 
     @app.post("/query")
     async def vector_query(body: VectorQueryRequest):

@@ -300,6 +300,15 @@ class RAGConfig(BaseModel):
     access_boost_half_life_days: float = 30.0
 
 
+class GPUConfig(BaseModel):
+    """GPU device preferences for local ML components."""
+
+    embedding_device: Literal["auto", "cuda", "cpu"] = "auto"
+    nli_device: Literal["auto", "cuda", "cpu"] = "cpu"
+    reranker_device: Literal["auto", "cuda", "cpu"] = "cpu"
+    embedding_batch_size: int = Field(default=32, ge=1)
+
+
 class Neo4jConfig(BaseModel):
     """Neo4j connection settings."""
 
@@ -398,6 +407,7 @@ class ConsolidationConfig(BaseModel):
     knowledge_self_correction_timeout_seconds: int = Field(default=300, ge=1)
     knowledge_self_correction_recent_hours: int = Field(default=24, ge=1)
     weekly_full_contradiction_max_pairs: int = Field(default=50, ge=0)
+    post_processing_cooldown_seconds: int = Field(default=30, ge=0)
 
 
 class ImageGenConfig(BaseModel):
@@ -963,6 +973,7 @@ class AnimaWorksConfig(BaseModel):
     animas: dict[str, AnimaModelConfig] = {}
     consolidation: ConsolidationConfig = ConsolidationConfig()
     rag: RAGConfig = RAGConfig()
+    gpu: GPUConfig = GPUConfig()
     memory: MemoryConfig = MemoryConfig()
     skills: SkillsConfig = SkillsConfig()
     prompt: PromptConfig = PromptConfig()
@@ -1015,6 +1026,7 @@ __all__ = [
     "ExternalMessagingChannelConfig",
     "ExternalMessagingConfig",
     "GatewaySystemConfig",
+    "GPUConfig",
     "HeartbeatConfig",
     "HousekeepingConfig",
     "HumanNotificationConfig",

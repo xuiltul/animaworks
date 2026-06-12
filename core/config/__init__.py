@@ -14,6 +14,7 @@ from core.config.models import (
     AnimaWorksConfig,
     CredentialConfig,
     GatewaySystemConfig,
+    GPUConfig,
     MemoryConfig,
     Neo4jConfig,
     Neo4jEdgeTypeConfig,

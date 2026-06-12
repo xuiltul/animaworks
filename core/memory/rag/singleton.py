@@ -36,9 +36,9 @@ _vector_stores: dict[str | None, VectorStore | None] = {}
 _http_stores: dict[tuple[str, str | None], HttpVectorStore] = {}
 _embedding_model: SentenceTransformer | None = None
 _embedding_model_name: str | None = None
+_embedding_model_device: str | None = None
 _init_failed: bool = False
 _direct_disabled_warned: bool = False
-_cuda_unavailable_warned: bool = False
 
 EmbeddingPurpose = Literal["document", "query"]
 
@@ -165,26 +165,38 @@ def _prefix_texts_for_embedding(texts: list[str], *, purpose: EmbeddingPurpose) 
     return [text if text.startswith(prefix) else f"{prefix}{text}" for text in texts]
 
 
-def _cuda_available_safely() -> bool:
-    """Return whether CUDA can be initialized without raising.
-
-    Some hosts expose CUDA libraries while the installed driver/GPU pair is
-    incompatible.  In that state PyTorch can raise ``cudaGetDeviceCount``
-    during lazy CUDA initialization.  Treat that as "CUDA unavailable" so RAG
-    embeddings continue on CPU instead of surfacing a 500 from the internal
-    embedding endpoint.
-    """
-    global _cuda_unavailable_warned
-
+def _get_embedding_batch_size() -> int:
     try:
-        import torch
+        from core.config import load_config
 
-        return bool(torch.cuda.is_available() and torch.cuda.device_count() > 0)
-    except Exception as exc:
-        if not _cuda_unavailable_warned:
-            logger.warning("CUDA unavailable for embedding model; using CPU: %s", exc)
-            _cuda_unavailable_warned = True
-        return False
+        batch_size = int(getattr(load_config().gpu, "embedding_batch_size", 32))
+        return batch_size if batch_size > 0 else 32
+    except Exception:
+        return 32
+
+
+def _load_embedding_model_on_device(resolved_name: str, device: str) -> SentenceTransformer:
+    global _embedding_model, _embedding_model_device, _embedding_model_name
+
+    from sentence_transformers import SentenceTransformer
+
+    from core.gpu import record_component_device
+    from core.paths import get_data_dir
+
+    cache_dir = get_data_dir() / "models"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Loading embedding model (singleton): %s on %s", resolved_name, device)
+    _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device=device)
+    _embedding_model_name = resolved_name
+    _embedding_model_device = device
+    record_component_device("embedding", device)
+    logger.info("Embedding model loaded (singleton)")
+    return _embedding_model
+
+
+def _reload_embedding_model_on_device(resolved_name: str, device: str) -> SentenceTransformer:
+    with _lock:
+        return _load_embedding_model_on_device(resolved_name, device)
 
 
 def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
@@ -201,49 +213,54 @@ def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
     global _embedding_model, _embedding_model_name
 
     resolved_name = model_name or _get_configured_model_name()
+    from core.gpu import is_component_degraded, record_gpu_failure, resolve_device
+
+    device = "cpu" if is_component_degraded("embedding") else resolve_device("embedding")
 
     # Fast path: already loaded with the same model name
-    if _embedding_model is not None and _embedding_model_name == resolved_name:
+    if (
+        _embedding_model is not None
+        and _embedding_model_name == resolved_name
+        and _embedding_model_device == device
+    ):
         return _embedding_model
 
     with _lock:
         # Double-check after acquiring lock
-        if _embedding_model is not None and _embedding_model_name == resolved_name:
+        if (
+            _embedding_model is not None
+            and _embedding_model_name == resolved_name
+            and _embedding_model_device == device
+        ):
             return _embedding_model
 
         # Different model requested → discard and reload
-        if _embedding_model is not None and _embedding_model_name != resolved_name:
+        if _embedding_model is not None and (
+            _embedding_model_name != resolved_name or _embedding_model_device != device
+        ):
             logger.info(
-                "Embedding model changed: %s → %s; reloading",
+                "Embedding model changed: %s/%s -> %s/%s; reloading",
                 _embedding_model_name,
+                _embedding_model_device,
                 resolved_name,
+                device,
             )
-
-        from sentence_transformers import SentenceTransformer
-
-        from core.paths import get_data_dir
-
-        cache_dir = get_data_dir() / "models"
-        cache_dir.mkdir(parents=True, exist_ok=True)
         try:
-            from core.config import load_config
-
-            _use_gpu = load_config().rag.use_gpu
-        except Exception:
-            _use_gpu = False
-        device = "cuda" if _use_gpu and _cuda_available_safely() else "cpu"
-        logger.info("Loading embedding model (singleton): %s on %s", resolved_name, device)
-        try:
-            _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device=device)
-        except Exception as e:
+            return _load_embedding_model_on_device(resolved_name, device)
+        except Exception as exc:
             if device == "cuda":
-                logger.warning("GPU embedding model load failed, falling back to CPU: %s", e)
-                _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device="cpu")
-            else:
-                raise
-        _embedding_model_name = resolved_name
-        logger.info("Embedding model loaded (singleton)")
-    return _embedding_model
+                record_gpu_failure("embedding", exc)
+                logger.warning("GPU embedding model load failed, falling back to CPU: %s", exc)
+                return _load_embedding_model_on_device(resolved_name, "cpu")
+            raise
+
+
+def _coerce_embeddings(embeddings) -> list[list[float]]:
+    import numpy as np
+
+    if isinstance(embeddings, np.ndarray):
+        return [emb.tolist() for emb in embeddings]
+    return embeddings
 
 
 def thread_safe_encode(
@@ -259,19 +276,34 @@ def thread_safe_encode(
     that can SEGV when run concurrently under glibc 2.43+.  All native
     operations share a single lock to prevent parallel native execution.
     """
-    import numpy as np
+    from core.gpu import is_cuda_failure, record_gpu_failure
 
     model = get_embedding_model()
     prefixed_texts = _prefix_texts_for_embedding(texts, purpose=purpose)
-    with _native_ops_lock:
-        embeddings = model.encode(
-            prefixed_texts,
-            convert_to_numpy=convert_to_numpy,
-            show_progress_bar=show_progress_bar,
-        )
-    if isinstance(embeddings, np.ndarray):
-        return [emb.tolist() for emb in embeddings]
-    return embeddings
+    batch_size = _get_embedding_batch_size()
+    try:
+        with _native_ops_lock:
+            embeddings = model.encode(
+                prefixed_texts,
+                convert_to_numpy=convert_to_numpy,
+                show_progress_bar=show_progress_bar,
+                batch_size=batch_size,
+            )
+        return _coerce_embeddings(embeddings)
+    except Exception as exc:
+        if not is_cuda_failure(exc):
+            raise
+        logger.error("GPU failure detected - falling back to CPU embedding", exc_info=True)
+        record_gpu_failure("embedding", exc)
+        cpu_model = _reload_embedding_model_on_device(_get_configured_model_name(), "cpu")
+        with _native_ops_lock:
+            embeddings = cpu_model.encode(
+                prefixed_texts,
+                convert_to_numpy=convert_to_numpy,
+                show_progress_bar=show_progress_bar,
+                batch_size=batch_size,
+            )
+        return _coerce_embeddings(embeddings)
 
 
 def native_ops_lock() -> threading.Lock:
@@ -402,12 +434,15 @@ def get_embedding_e5_prefix_enabled() -> bool:
 
 def _reset_for_testing():
     """Reset singletons for test isolation."""
-    global _cuda_unavailable_warned, _direct_disabled_warned, _embedding_model, _embedding_model_name, _init_failed
+    global _direct_disabled_warned, _embedding_model, _embedding_model_device, _embedding_model_name, _init_failed
+    from core.gpu import reset_gpu_status_for_testing
+
     with _lock:
         _vector_stores.clear()
         _http_stores.clear()
         _embedding_model = None
         _embedding_model_name = None
+        _embedding_model_device = None
         _init_failed = False
         _direct_disabled_warned = False
-        _cuda_unavailable_warned = False
+        reset_gpu_status_for_testing()

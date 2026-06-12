@@ -78,6 +78,7 @@ class TestGenerateEmbeddingsLocal:
             ["hello", "world"],
             convert_to_numpy=True,
             show_progress_bar=False,
+            batch_size=32,
         )
 
     def test_local_mode_returns_lists(

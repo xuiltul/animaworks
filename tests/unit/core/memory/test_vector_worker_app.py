@@ -105,6 +105,26 @@ def test_vector_worker_upsert_failure_opens_backoff(monkeypatch) -> None:
     assert store.upsert.call_count == 2
 
 
+def test_vector_worker_status_includes_gpu_section(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
+
+    from core.memory.rag.vector_worker import create_app
+
+    gpu = {
+        "embedding_device": "cpu",
+        "degraded": False,
+        "last_error": None,
+        "detected_at": None,
+    }
+    with (
+        patch("core.gpu.get_gpu_status", return_value=gpu),
+        TestClient(create_app()) as client,
+    ):
+        status = client.get("/status").json()
+
+    assert status["gpu"] == gpu
+
+
 def test_vector_worker_read_endpoints(monkeypatch) -> None:
     monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
 

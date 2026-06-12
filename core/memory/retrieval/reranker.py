@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,10 @@ class CrossEncoderReranker:
         self._model_name = model_name
         self._model = None
         self._available = True
+        from core.gpu import is_component_degraded, resolve_device
+
+        self._device = "cpu" if is_component_degraded("reranker") else resolve_device("reranker")
+        self._lock = threading.Lock()
 
     def _ensure_model(self) -> bool:
         if not self._available:
@@ -28,11 +33,29 @@ class CrossEncoderReranker:
         try:
             from sentence_transformers import CrossEncoder
 
-            self._model = CrossEncoder(self._model_name)
-            logger.info("Cross-encoder loaded: %s", self._model_name)
+            self._model = CrossEncoder(self._model_name, device=self._device)
+            from core.gpu import record_component_device
+
+            record_component_device("reranker", self._device)
+            logger.info("Cross-encoder loaded: %s on %s", self._model_name, self._device)
             return True
-        except Exception:
-            logger.warning("Cross-encoder unavailable: %s", self._model_name, exc_info=True)
+        except Exception as exc:
+            if self._device == "cuda":
+                from core.gpu import record_gpu_failure
+
+                record_gpu_failure("reranker", exc)
+                try:
+                    self._device = "cpu"
+                    self._model = CrossEncoder(self._model_name, device="cpu")
+                    from core.gpu import record_component_device
+
+                    record_component_device("reranker", "cpu")
+                    logger.warning("Cross-encoder GPU load failed; falling back to CPU: %s", exc)
+                    return True
+                except Exception:
+                    logger.warning("Cross-encoder CPU fallback unavailable: %s", self._model_name, exc_info=True)
+            else:
+                logger.warning("Cross-encoder unavailable: %s", self._model_name, exc_info=True)
             self._available = False
             return False
 
@@ -41,9 +64,27 @@ class CrossEncoderReranker:
             return None
         try:
             pairs = [[query, t] for t in texts]
-            scores = self._model.predict(pairs)
+            with self._lock:
+                scores = self._model.predict(pairs)
             return [float(s) for s in scores]
-        except Exception:
+        except Exception as exc:
+            from core.gpu import is_cuda_failure, record_component_device, record_gpu_failure
+
+            if self._device == "cuda" and is_cuda_failure(exc):
+                logger.error("GPU failure detected - falling back to CPU reranker", exc_info=True)
+                record_gpu_failure("reranker", exc)
+                try:
+                    from sentence_transformers import CrossEncoder
+
+                    self._device = "cpu"
+                    self._model = CrossEncoder(self._model_name, device="cpu")
+                    record_component_device("reranker", "cpu")
+                    pairs = [[query, t] for t in texts]
+                    with self._lock:
+                        scores = self._model.predict(pairs)
+                    return [float(s) for s in scores]
+                except Exception:
+                    logger.warning("Cross-encoder CPU fallback scoring failed", exc_info=True)
             logger.warning("Cross-encoder scoring failed", exc_info=True)
             return None
 

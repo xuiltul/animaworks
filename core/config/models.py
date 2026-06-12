@@ -77,6 +77,7 @@ from core.config.schemas import (
     ExternalMessagingConfig,
     ExternalToolsPermission,
     GatewaySystemConfig,
+    GPUConfig,
     HeartbeatConfig,
     HousekeepingConfig,
     HumanNotificationConfig,

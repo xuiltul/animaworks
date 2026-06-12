@@ -6,6 +6,7 @@ from __future__ import annotations
 #
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
+import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +63,19 @@ def evaluate_daily_consolidation_gate(
         carryover_count=carryover_count,
         threshold=threshold,
     )
+
+
+def resolve_post_processing_cooldown_seconds(consolidation_cfg: Any) -> float:
+    """Return configured cooldown between daily post-processing runs."""
+    default = ConsolidationConfig().post_processing_cooldown_seconds
+    value = (
+        getattr(consolidation_cfg, "post_processing_cooldown_seconds", default)
+        if consolidation_cfg is not None
+        else default
+    )
+    if not isinstance(value, int | float):
+        return float(default)
+    return float(max(0, value))
 
 
 async def run_daily_consolidation_post_processing(
@@ -338,12 +352,14 @@ class SystemConsolidationMixin:
             min_episodes = getattr(consolidation_cfg, "min_episodes_threshold", min_episodes)
             max_turns = getattr(consolidation_cfg, "max_turns", max_turns)
             model = getattr(consolidation_cfg, "llm_model", model)
+        cooldown_seconds = resolve_post_processing_cooldown_seconds(consolidation_cfg)
 
         if not enabled:
             logger.info("Daily consolidation is disabled in config")
             return
 
-        for anima_name, anima in self.animas.items():
+        anima_items = list(self.animas.items())
+        for index, (anima_name, anima) in enumerate(anima_items):
             gate = evaluate_daily_consolidation_gate(
                 anima.memory.anima_dir,
                 anima_name,
@@ -414,6 +430,13 @@ class SystemConsolidationMixin:
                         },
                     }
                 )
+
+            if cooldown_seconds > 0 and index < len(anima_items) - 1:
+                logger.info(
+                    "Daily consolidation post-processing cooldown before next anima: %.1fs",
+                    cooldown_seconds,
+                )
+                await asyncio.sleep(cooldown_seconds)
 
     async def _handle_weekly_integration(self) -> None:
         """Run weekly integration for all animas.

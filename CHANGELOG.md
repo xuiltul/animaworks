@@ -7,6 +7,10 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Default local NLI and cross-encoder reranker execution to CPU via the new `gpu` config section, while preserving `rag.use_gpu` compatibility for embeddings.
+
 ## [0.8.0] - 2026-05-22
 
 ### Added

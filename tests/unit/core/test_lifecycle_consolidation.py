@@ -151,5 +151,13 @@ class TestLifecycleConsolidationIntegration:
         assert "auto_consolidated: true" in content
 
 
+def test_resolve_post_processing_cooldown_seconds() -> None:
+    from core.lifecycle.system_consolidation import resolve_post_processing_cooldown_seconds
+
+    assert resolve_post_processing_cooldown_seconds(SimpleNamespace(post_processing_cooldown_seconds=12)) == 12.0
+    assert resolve_post_processing_cooldown_seconds(SimpleNamespace(post_processing_cooldown_seconds=-1)) == 0.0
+    assert resolve_post_processing_cooldown_seconds(SimpleNamespace(post_processing_cooldown_seconds="bad")) == 30.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

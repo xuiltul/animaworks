@@ -141,6 +141,23 @@ class TestSystemStatus:
         assert data["vector_worker"]["status"] == "ok"
         assert data["vector_worker"]["write_circuit_breakers"][0]["collection"] == "shared_common_knowledge"
 
+    async def test_status_includes_gpu_section(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        animas_dir.mkdir()
+        app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
+        expected_gpu = {
+            "embedding_device": "cpu",
+            "degraded": True,
+            "last_error": "RuntimeError: CUDA device lost",
+            "detected_at": "2026-06-12T03:06:00+00:00",
+        }
+        transport = ASGITransport(app=app)
+        with patch("server.routes.system._gpu_status", return_value=expected_gpu):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/system/status")
+
+        assert resp.json()["gpu"] == expected_gpu
+
     async def test_status_empty(self, tmp_path):
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir()
