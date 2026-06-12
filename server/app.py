@@ -7,6 +7,7 @@ from __future__ import annotations
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 import asyncio
+import html
 import inspect
 import logging
 import os
@@ -20,15 +21,17 @@ import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.responses import JSONResponse as StarletteJSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from core import startup_progress
 from core.auth.manager import find_user, load_auth, validate_session
 from core.config import load_config
+from core.i18n import t
 from core.supervisor import ProcessSupervisor
 from server.localhost import _is_safe_localhost_request
 from server.routes import create_router
@@ -176,6 +179,200 @@ class BasePathMiddleware:
         await self.app(updated_scope, receive, send)
 
 
+def _startup_default_preflight_runner(*, force_all_vectordb: bool = False) -> None:
+    from cli.commands.server import _run_rag_startup_preflight
+
+    _run_rag_startup_preflight(force_all_vectordb=force_all_vectordb)
+
+
+def _format_startup_elapsed(seconds: object) -> str:
+    try:
+        total = max(0, int(float(seconds)))
+    except (TypeError, ValueError):
+        total = 0
+    minutes, secs = divmod(total, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:d}:{secs:02d}"
+
+
+def _startup_progress_label(snapshot: dict[str, object]) -> str:
+    done = snapshot.get("done_count")
+    total = snapshot.get("total_count")
+    if isinstance(done, int) and isinstance(total, int) and total > 0:
+        return f"{done}/{total}"
+    if isinstance(done, int):
+        return str(done)
+    return "-"
+
+
+def _render_startup_progress_html(snapshot: dict[str, object]) -> str:
+    phase = str(snapshot.get("phase") or "starting")
+    status = str(snapshot.get("status") or "starting")
+    detail = str(snapshot.get("detail") or "")
+    error = snapshot.get("error")
+    title = t("startup.page_title")
+    phase_label = t(f"startup.phase.{phase}")
+    status_text = t("startup.failed") if status == "failed" else t("startup.in_progress")
+    elapsed = _format_startup_elapsed(snapshot.get("elapsed_seconds"))
+    progress = _startup_progress_label(snapshot)
+    escaped_detail = html.escape(detail) if detail else html.escape(t("startup.detail_pending"))
+    error_html = ""
+    if error:
+        error_html = f'<p class="error">{html.escape(str(error))}</p>'
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="3">
+  <title>{html.escape(title)}</title>
+  <style>
+    :root {{
+      color-scheme: light dark;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #18202a;
+      --muted: #667085;
+      --border: #d8dee8;
+      --accent: #2563eb;
+      --danger: #b42318;
+    }}
+    @media (prefers-color-scheme: dark) {{
+      :root {{
+        --bg: #101418;
+        --panel: #171d23;
+        --text: #edf2f7;
+        --muted: #a6b0bd;
+        --border: #2d3743;
+        --accent: #60a5fa;
+        --danger: #f97066;
+      }}
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    main {{
+      width: min(640px, calc(100vw - 32px));
+      padding: 28px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
+    }}
+    h1 {{
+      margin: 0 0 10px;
+      font-size: 1.35rem;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }}
+    .status {{
+      margin: 0 0 22px;
+      color: var(--muted);
+      line-height: 1.5;
+    }}
+    dl {{
+      display: grid;
+      grid-template-columns: 128px 1fr;
+      gap: 10px 18px;
+      margin: 0;
+    }}
+    dt {{
+      color: var(--muted);
+      font-size: 0.88rem;
+    }}
+    dd {{
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }}
+    .bar {{
+      height: 8px;
+      margin: 24px 0 0;
+      overflow: hidden;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+    }}
+    .bar span {{
+      display: block;
+      width: 34%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      animation: pulse 1.8s ease-in-out infinite alternate;
+    }}
+    .error {{
+      margin: 18px 0 0;
+      color: var(--danger);
+      overflow-wrap: anywhere;
+    }}
+    @keyframes pulse {{
+      from {{ transform: translateX(-20%); opacity: 0.65; }}
+      to {{ transform: translateX(220%); opacity: 1; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>{html.escape(title)}</h1>
+    <p class="status">{html.escape(status_text)}</p>
+    <dl>
+      <dt>{html.escape(t("startup.label_phase"))}</dt>
+      <dd>{html.escape(phase_label)}</dd>
+      <dt>{html.escape(t("startup.label_detail"))}</dt>
+      <dd>{escaped_detail}</dd>
+      <dt>{html.escape(t("startup.label_progress"))}</dt>
+      <dd>{html.escape(progress)}</dd>
+      <dt>{html.escape(t("startup.label_elapsed"))}</dt>
+      <dd>{html.escape(elapsed)}</dd>
+    </dl>
+    {error_html}
+    <div class="bar" aria-hidden="true"><span></span></div>
+  </main>
+</body>
+</html>
+"""
+
+
+def _startup_status_payload(snapshot: dict[str, object]) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "status": snapshot.get("status"),
+        "phase": snapshot.get("phase"),
+        "detail": snapshot.get("detail"),
+        "progress": {
+            "done_count": snapshot.get("done_count"),
+            "total_count": snapshot.get("total_count"),
+            "elapsed_seconds": snapshot.get("elapsed_seconds"),
+        },
+    }
+    if snapshot.get("error"):
+        payload["error"] = snapshot.get("error")
+    return payload
+
+
+def _startup_gate_exempt(path: str, *, setup_complete: bool) -> bool:
+    if not setup_complete:
+        return True
+    if path in {"/startup-status", "/health", "/api/system/health"}:
+        return True
+    return path.startswith(("/startup-status/", "/health/", "/api/system/health/"))
+
+
+def _request_accepts_html(request: Request) -> bool:
+    accept = request.headers.get("accept", "")
+    path = request.url.path
+    return "text/html" in accept or (not path.startswith("/api/") and path != "/ws")
+
+
 async def _reconcile_assets_at_startup(animas_dir: Path) -> None:
     """Background task: generate missing anima assets after startup."""
     try:
@@ -202,11 +399,11 @@ async def _reconcile_assets_at_startup(animas_dir: Path) -> None:
         logger.exception("Startup asset reconciliation failed")
 
 
-async def _startup_animas_background(app: FastAPI) -> None:
+async def _startup_animas_background(app: FastAPI, *, suppress_errors: bool = True) -> None:
     """Background task: start anima processes and post-startup services.
 
-    Runs after the web server is already accepting requests so that the
-    dashboard is reachable immediately.
+    Runs inside startup initialization after RAG preflight, while the
+    readiness gate keeps dashboard/API routes on the progress page.
     """
     try:
         # Register anima lifecycle callbacks for reconciliation
@@ -404,14 +601,84 @@ async def _startup_animas_background(app: FastAPI) -> None:
 
     except asyncio.CancelledError:
         logger.info("Anima background startup cancelled (shutdown)")
+        raise
     except Exception:
         logger.exception("Background anima startup failed")
+        if not suppress_errors:
+            raise
+
+
+async def _prepare_startup_vector_worker(app: FastAPI) -> None:
+    vector_worker = getattr(app.state, "vector_worker", None)
+    previous_vector_url_present = "ANIMAWORKS_VECTOR_URL" in os.environ
+    previous_vector_url = os.environ.get("ANIMAWORKS_VECTOR_URL")
+    app.state._previous_vector_url_present = previous_vector_url_present
+    app.state._previous_vector_url = previous_vector_url
+    await _call_optional_async(vector_worker, "start")
+    vector_worker_url = getattr(vector_worker, "base_url", None)
+    if isinstance(vector_worker_url, str) and vector_worker_url:
+        os.environ["ANIMAWORKS_VECTOR_URL"] = vector_worker_url
+        logger.info("Server RAG vector access routed through vector worker: %s", vector_worker_url)
+
+    _embed_config = load_config()
+    _server_port = getattr(_embed_config.server, "port", 18500)
+    app.state.child_env_urls = {
+        "ANIMAWORKS_EMBED_URL": f"http://127.0.0.1:{_server_port}/api/internal/embed",
+        "ANIMAWORKS_VECTOR_URL": f"http://127.0.0.1:{_server_port}/api/internal/vector",
+    }
+    app.state.supervisor.child_env_urls = app.state.child_env_urls
+
+
+async def _start_usage_governor_if_enabled(app: FastAPI) -> None:
+    from core.config.models import load_config as _load_cfg_gov
+
+    if _load_cfg_gov().server.usage_governor.enabled:
+        from core.paths import get_data_dir
+        from server.usage_governor import UsageGovernor
+
+        governor = UsageGovernor(app, get_data_dir(), app.state.animas_dir)
+        app.state.usage_governor = governor
+        await governor.start()
+    else:
+        logger.info("Usage Governor is disabled (server.usage_governor.enabled=false)")
+
+
+async def _run_startup_initialization(app: FastAPI) -> None:
+    """Run heavyweight startup work after the ASGI app is accepting requests."""
+    try:
+        startup_progress.set_phase("preflight", detail=t("startup.detail_vector_worker"), reset_counts=True)
+        await _prepare_startup_vector_worker(app)
+
+        preflight_runner = getattr(app.state, "startup_preflight_runner", _startup_default_preflight_runner)
+        force_all_vectordb = bool(getattr(app.state, "force_startup_repair_all_vectordb", False))
+        startup_progress.set_phase("preflight", detail=t("startup.detail_preflight"), reset_counts=True)
+        await asyncio.to_thread(preflight_runner, force_all_vectordb=force_all_vectordb)
+
+        startup_progress.raise_if_cancelled()
+        startup_progress.set_phase(
+            "spawning_animas",
+            detail=t("startup.detail_spawning"),
+            done_count=0,
+            total_count=len(getattr(app.state, "anima_names", []) or []),
+        )
+        await _startup_animas_background(app, suppress_errors=False)
+        await _start_usage_governor_if_enabled(app)
+        startup_progress.set_phase("ready", detail=t("startup.detail_ready"), reset_counts=True)
+        logger.info("Server startup initialization complete")
+    except asyncio.CancelledError:
+        logger.info("Startup initialization cancelled (shutdown)")
+        raise
+    except Exception as exc:
+        message = f"{type(exc).__name__}: {exc}"
+        startup_progress.set_phase("failed", detail=t("startup.detail_failed"), error=message)
+        logger.exception("Startup initialization failed")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Only start anima processes when setup is complete
     if app.state.setup_complete:
+        startup_progress.begin_startup(t("startup.detail_starting"))
         # ── Global permissions cache ────────────────────────
         from core.config.global_permissions import GlobalPermissionsCache
         from core.paths import get_global_permissions_path
@@ -556,50 +823,16 @@ async def lifespan(app: FastAPI):
         msg_log_scheduler.start()
         app.state.msg_log_scheduler = msg_log_scheduler
 
-        vector_worker = getattr(app.state, "vector_worker", None)
-        previous_vector_url_present = "ANIMAWORKS_VECTOR_URL" in os.environ
-        previous_vector_url = os.environ.get("ANIMAWORKS_VECTOR_URL")
-        app.state._previous_vector_url_present = previous_vector_url_present
-        app.state._previous_vector_url = previous_vector_url
-        await _call_optional_async(vector_worker, "start")
-        vector_worker_url = getattr(vector_worker, "base_url", None)
-        if isinstance(vector_worker_url, str) and vector_worker_url:
-            os.environ["ANIMAWORKS_VECTOR_URL"] = vector_worker_url
-            logger.info("Server RAG vector access routed through vector worker: %s", vector_worker_url)
-
-        # ── URLs for child processes ─
-        # ProcessSupervisor passes these to child processes via subprocess.Popen(env=).
-        # Child processes use the server internal API; the server itself uses
-        # the vector worker base URL set above.
-        _embed_config = load_config()
-        _server_port = getattr(_embed_config.server, "port", 18500)
-        app.state.child_env_urls = {
-            "ANIMAWORKS_EMBED_URL": f"http://127.0.0.1:{_server_port}/api/internal/embed",
-            "ANIMAWORKS_VECTOR_URL": f"http://127.0.0.1:{_server_port}/api/internal/vector",
-        }
-        app.state.supervisor.child_env_urls = app.state.child_env_urls
-
-        # ── Start anima processes in background (parallel) ──
-        # Web server is already accepting requests at this point.
+        # ── Startup initialization ─────────────────────────
+        # Heavy RAG preflight/reindex and anima spawning run after lifespan
+        # yields so uvicorn can bind and serve the progress page immediately.
         app.state._anima_startup_task = asyncio.create_task(
-            _startup_animas_background(app),
+            _run_startup_initialization(app),
         )
 
-        # ── Usage Governor (throttles cloud-provider animas based on quota) ──
-        from core.config.models import load_config as _load_cfg_gov
-
-        if _load_cfg_gov().server.usage_governor.enabled:
-            from core.paths import get_data_dir
-            from server.usage_governor import UsageGovernor
-
-            governor = UsageGovernor(app, get_data_dir(), app.state.animas_dir)
-            app.state.usage_governor = governor
-            await governor.start()
-        else:
-            logger.info("Usage Governor is disabled (server.usage_governor.enabled=false)")
-
-        logger.info("Server started (anima processes launching in background)")
+        logger.info("Server started (startup initialization running in background)")
     else:
+        startup_progress.set_phase("ready", detail=t("startup.detail_setup_mode"), reset_counts=True)
         logger.info("Server started in setup mode (setup not yet complete)")
     yield
     # Shutdown
@@ -607,9 +840,15 @@ async def lifespan(app: FastAPI):
         # Cancel background startup if still running
         startup_task = getattr(app.state, "_anima_startup_task", None)
         if startup_task and not startup_task.done():
-            startup_task.cancel()
+            startup_progress.request_cancel()
             try:
-                await startup_task
+                await asyncio.wait_for(asyncio.shield(startup_task), timeout=10.0)
+            except TimeoutError:
+                startup_task.cancel()
+                try:
+                    await startup_task
+                except asyncio.CancelledError:
+                    pass
             except asyncio.CancelledError:
                 pass
 
@@ -627,9 +866,9 @@ async def lifespan(app: FastAPI):
         await app.state.supervisor.shutdown_all()
         vector_worker = getattr(app.state, "vector_worker", None)
         await _call_optional_async(vector_worker, "stop")
-        if getattr(app.state, "_previous_vector_url_present", False):
+        if getattr(app.state, "_previous_vector_url_present", False) is True:
             previous = getattr(app.state, "_previous_vector_url", None)
-            if previous is not None:
+            if isinstance(previous, str):
                 os.environ["ANIMAWORKS_VECTOR_URL"] = previous
         else:
             os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
@@ -638,7 +877,12 @@ async def lifespan(app: FastAPI):
     logger.info("Server stopped")
 
 
-def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
+def create_app(
+    animas_dir: Path,
+    shared_dir: Path,
+    *,
+    force_startup_repair_all_vectordb: bool = False,
+) -> FastAPI:
     app = FastAPI(title="AnimaWorks", version="0.1.0", lifespan=lifespan)
 
     ws_manager = WebSocketManager()
@@ -715,6 +959,8 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
     app.state.shared_dir = shared_dir
     app.state.setup_complete = config.setup_complete
     app.state.vector_worker = vector_worker
+    app.state.force_startup_repair_all_vectordb = force_startup_repair_all_vectordb
+    app.state.startup_preflight_runner = _startup_default_preflight_runner
 
     # Meeting room manager
     from server.room_manager import RoomManager
@@ -801,6 +1047,7 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
     # Paths that don't require authentication
     _AUTH_WHITELIST_PREFIXES = (
         "/api/auth/login",
+        "/api/system/health",
         "/api/setup",
         "/api/approve",
         "/health",
@@ -859,6 +1106,41 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
         request.state.user = user
         return await call_next(request)
 
+    # ── Startup readiness gate ─────────────────────────────
+    # Added after auth_guard so it runs before auth, but before
+    # BasePathMiddleware is appended so base-path deployments are stripped
+    # before this path logic runs.
+    @app.middleware("http")
+    async def startup_readiness_gate(request: Request, call_next):  # type: ignore[no-untyped-def]
+        path = request.url.path
+        if _startup_gate_exempt(path, setup_complete=request.app.state.setup_complete):
+            return await call_next(request)
+
+        progress = startup_progress.snapshot()
+        if progress.get("phase") == "ready":
+            return await call_next(request)
+
+        headers = {"Retry-After": "5", "Cache-Control": "no-store"}
+        if _request_accepts_html(request):
+            return HTMLResponse(
+                _render_startup_progress_html(progress),
+                status_code=503,
+                headers=headers,
+            )
+        return JSONResponse(
+            _startup_status_payload(progress),
+            status_code=503,
+            headers=headers,
+        )
+
+    @app.get("/startup-status", include_in_schema=False)
+    async def _startup_status():
+        return JSONResponse(startup_progress.snapshot(), headers={"Cache-Control": "no-store"})
+
+    @app.get("/health", include_in_schema=False)
+    async def _health():
+        return {"status": "ok"}
+
     # ── Route registration ─────────────────────────────────
     # Always mount both routers; the middleware handles access control.
     app.include_router(create_router())
@@ -873,8 +1155,6 @@ def create_app(animas_dir: Path, shared_dir: Path) -> FastAPI:
     # include the server-start timestamp.  This guarantees the browser
     # loads fresh resources after every restart — no manual cache-clear
     # needed, even on plain HTTP (where Clear-Site-Data is ignored).
-    from fastapi.responses import HTMLResponse
-
     _index_raw = (static_dir / "index.html").read_text(encoding="utf-8")
 
     @app.get("/", include_in_schema=False)

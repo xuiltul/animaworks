@@ -186,19 +186,26 @@ class TestLifespan:
         mock_app.state.slack_socket_manager = None  # prevent await on auto-generated MagicMock
         mock_app.state.discord_gateway_manager = None
         mock_app.state.usage_governor = None
+        mock_app.state.vector_worker = None
+        mock_app.state.startup_preflight_runner = lambda *, force_all_vectordb=False: None
+        mock_app.state.force_startup_repair_all_vectordb = False
 
         mock_scheduler = MagicMock()
         mock_scheduler_cls.return_value = mock_scheduler
 
+        async def fake_startup_animas(app, *, suppress_errors=True):
+            await app.state.supervisor.start_all(app.state.anima_names)
+
         with patch("core.org_sync.sync_org_structure"), \
              patch("core.org_sync.detect_orphan_animas"), \
              patch("server.app._reconcile_assets_at_startup", new_callable=AsyncMock), \
+             patch("server.app._prepare_startup_vector_worker", new_callable=AsyncMock), \
+             patch("server.app._start_usage_governor_if_enabled", new_callable=AsyncMock), \
+             patch("server.app._startup_animas_background", new=fake_startup_animas), \
              patch("core.config.global_permissions.GlobalPermissionsCache.get") as mock_gp:
             mock_gp.return_value = MagicMock(loaded=True, check_integrity=MagicMock(return_value=True))
             async with lifespan(mock_app):
-                # start_all はバックグラウンドタスクで起動されるため、
-                # 1ティック進めて実行機会を与える。
-                await asyncio.sleep(0)
+                await asyncio.wait_for(mock_app.state._anima_startup_task, timeout=1.0)
                 mock_supervisor.start_all.assert_awaited_once_with(["alice"])
 
         mock_supervisor.shutdown_all.assert_awaited_once()

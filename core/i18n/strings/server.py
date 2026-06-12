@@ -10,6 +10,116 @@
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
+    "startup.page_title": {
+        "ja": "AnimaWorks を起動中",
+        "en": "Starting AnimaWorks",
+        "ko": "AnimaWorks 시작 중",
+    },
+    "startup.in_progress": {
+        "ja": "初期化が完了するまでこのページは自動更新されます。",
+        "en": "This page will refresh automatically until initialization completes.",
+        "ko": "초기화가 완료될 때까지 이 페이지가 자동으로 새로고침됩니다.",
+    },
+    "startup.failed": {
+        "ja": "初期化に失敗しました。サーバーは起動していますが、詳細を確認してください。",
+        "en": "Initialization failed. The server is running, but needs attention.",
+        "ko": "초기화에 실패했습니다. 서버는 실행 중이지만 확인이 필요합니다.",
+    },
+    "startup.label_phase": {
+        "ja": "フェーズ",
+        "en": "Phase",
+        "ko": "단계",
+    },
+    "startup.label_detail": {
+        "ja": "処理対象",
+        "en": "Current item",
+        "ko": "현재 항목",
+    },
+    "startup.label_progress": {
+        "ja": "進捗",
+        "en": "Progress",
+        "ko": "진행률",
+    },
+    "startup.label_elapsed": {
+        "ja": "経過時間",
+        "en": "Elapsed",
+        "ko": "경과 시간",
+    },
+    "startup.detail_pending": {
+        "ja": "準備中",
+        "en": "Preparing",
+        "ko": "준비 중",
+    },
+    "startup.detail_starting": {
+        "ja": "起動準備中",
+        "en": "Preparing startup",
+        "ko": "시작 준비 중",
+    },
+    "startup.detail_vector_worker": {
+        "ja": "ベクターワーカーを起動中",
+        "en": "Starting vector worker",
+        "ko": "벡터 워커 시작 중",
+    },
+    "startup.detail_preflight": {
+        "ja": "RAG preflight を実行中",
+        "en": "Running RAG preflight",
+        "ko": "RAG preflight 실행 중",
+    },
+    "startup.detail_spawning": {
+        "ja": "Anima プロセスを起動中",
+        "en": "Starting Anima processes",
+        "ko": "Anima 프로세스 시작 중",
+    },
+    "startup.detail_ready": {
+        "ja": "起動完了",
+        "en": "Startup complete",
+        "ko": "시작 완료",
+    },
+    "startup.detail_failed": {
+        "ja": "起動初期化に失敗",
+        "en": "Startup initialization failed",
+        "ko": "시작 초기화 실패",
+    },
+    "startup.detail_setup_mode": {
+        "ja": "セットアップモード",
+        "en": "Setup mode",
+        "ko": "설정 모드",
+    },
+    "startup.phase.starting": {
+        "ja": "起動準備",
+        "en": "Starting",
+        "ko": "시작 준비",
+    },
+    "startup.phase.preflight": {
+        "ja": "RAG preflight",
+        "en": "RAG preflight",
+        "ko": "RAG preflight",
+    },
+    "startup.phase.repairing": {
+        "ja": "RAG repair",
+        "en": "RAG repair",
+        "ko": "RAG repair",
+    },
+    "startup.phase.indexing": {
+        "ja": "インデックス作成",
+        "en": "Indexing",
+        "ko": "인덱싱",
+    },
+    "startup.phase.spawning_animas": {
+        "ja": "Anima 起動",
+        "en": "Starting Animas",
+        "ko": "Anima 시작",
+    },
+    "startup.phase.ready": {
+        "ja": "準備完了",
+        "en": "Ready",
+        "ko": "준비 완료",
+    },
+    "startup.phase.failed": {
+        "ja": "失敗",
+        "en": "Failed",
+        "ko": "실패",
+    },
     "chat.anima_restarting": {
         "ja": "Animaが再起動中です。しばらく待ってから再試行してください。",
         "en": "Anima is restarting. Please wait and retry.",

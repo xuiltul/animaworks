@@ -241,6 +241,9 @@ class MemoryIndexer:
         Returns:
             Number of chunks indexed
         """
+        from core import startup_progress
+
+        startup_progress.raise_if_cancelled()
         if not file_path.exists():
             logger.warning("File not found: %s", file_path)
             return 0
@@ -377,8 +380,38 @@ class MemoryIndexer:
         patterns = {"facts": "*.jsonl", "skills": "SKILL.md", "common_skills": "SKILL.md"}
         md_files = sorted(directory.rglob(patterns.get(memory_type, "*.md")))
         total_chunks = 0
-        for md_file in md_files:
+        try:
+            from core import startup_progress
+
+            track_startup = startup_progress.is_active()
+        except Exception:
+            startup_progress = None  # type: ignore[assignment]
+            track_startup = False
+
+        if track_startup and startup_progress is not None:
+            startup_progress.set_phase(
+                "indexing",
+                detail=str(directory),
+                done_count=0,
+                total_count=len(md_files),
+            )
+
+        for index, md_file in enumerate(md_files):
+            if startup_progress is not None:
+                startup_progress.raise_if_cancelled()
+                if track_startup:
+                    startup_progress.update_progress(
+                        detail=str(md_file),
+                        done_count=index,
+                        total_count=len(md_files),
+                    )
             total_chunks += self.index_file(md_file, memory_type, force=force)
+            if track_startup and startup_progress is not None:
+                startup_progress.update_progress(
+                    detail=str(md_file),
+                    done_count=index + 1,
+                    total_count=len(md_files),
+                )
 
         logger.info(
             "Indexed directory %s: %d total chunks (type=%s)",

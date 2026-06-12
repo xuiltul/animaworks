@@ -11,6 +11,7 @@ internal consistency errors, the safest recovery is to quarantine the
 broken vectordb and rebuild it from source memory files.
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -273,7 +274,32 @@ class RAGRepairService:
     ) -> dict[str, RepairResult]:
         """Synchronously repair multiple animas while preserving per-anima guards."""
         results: dict[str, RepairResult] = {}
-        for anima_name in sorted(dict.fromkeys(anima_names)):
+        targets = sorted(dict.fromkeys(anima_names))
+        try:
+            from core import startup_progress
+
+            track_startup = startup_progress.is_active()
+        except Exception:
+            startup_progress = None  # type: ignore[assignment]
+            track_startup = False
+
+        if track_startup and startup_progress is not None:
+            startup_progress.set_phase(
+                "repairing",
+                detail=", ".join(targets),
+                done_count=0,
+                total_count=len(targets),
+            )
+
+        for index, anima_name in enumerate(targets):
+            if startup_progress is not None:
+                startup_progress.raise_if_cancelled()
+                if track_startup:
+                    startup_progress.update_progress(
+                        detail=anima_name,
+                        done_count=index,
+                        total_count=len(targets),
+                    )
             results[anima_name] = self.repair_anima_if_allowed(
                 anima_name,
                 reason=reason,
@@ -281,6 +307,12 @@ class RAGRepairService:
                 source=source,
                 include_shared=include_shared,
             )
+            if track_startup and startup_progress is not None:
+                startup_progress.update_progress(
+                    detail=anima_name,
+                    done_count=index + 1,
+                    total_count=len(targets),
+                )
         return results
 
     @staticmethod
@@ -513,8 +545,10 @@ class RAGRepairService:
         include_shared: bool = False,
     ) -> RepairResult:
         """Synchronously quarantine and rebuild one anima's RAG index."""
+        from core import startup_progress
         from core.paths import get_animas_dir
 
+        startup_progress.raise_if_cancelled()
         anima_dir = get_animas_dir() / anima_name
         if not anima_dir.is_dir():
             return RepairResult(
@@ -560,6 +594,9 @@ class RAGRepairService:
                     last_source=source,
                     last_error=None,
                 )
+                if startup_progress.is_active():
+                    startup_progress.set_phase("repairing", detail=anima_name)
+                startup_progress.raise_if_cancelled()
                 quarantine_path = quarantine_vectordb(anima_name)
                 repair_state.update_repair_state(
                     anima_name,
@@ -568,6 +605,9 @@ class RAGRepairService:
                     pid=os.getpid(),
                     last_quarantine_path=str(quarantine_path) if quarantine_path else None,
                 )
+                if startup_progress.is_active():
+                    startup_progress.set_phase("indexing", detail=anima_name, reset_counts=True)
+                startup_progress.raise_if_cancelled()
                 chunks = full_reindex(anima_name, include_shared=include_shared)
                 from core.memory.rag.singleton import reset_vector_store
 
@@ -606,6 +646,8 @@ class RAGRepairService:
                     stage="complete",
                     state_path=str(repair_state.state_path(anima_name)),
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 from core.memory.rag.singleton import reset_vector_store
 

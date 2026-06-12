@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import atexit
 import logging
 import os
@@ -380,16 +381,22 @@ def _pin_native_threads() -> None:
 def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
     """Repair suspected corrupt RAG DBs before the server imports Chroma."""
     try:
+        from core import startup_progress
         from core.config import load_config
         from core.paths import get_animas_dir
 
+        startup_progress.set_phase("preflight", detail="Checking RAG vector databases", reset_counts=True)
+        startup_progress.raise_if_cancelled()
         config = load_config()
         rag = config.rag
         if not config.setup_complete:
+            startup_progress.update_progress(detail="Setup is not complete", done_count=0, total_count=0)
             return
         if not bool(getattr(rag, "repair_enabled", True)):
+            startup_progress.update_progress(detail="RAG repair is disabled", done_count=0, total_count=0)
             return
         if not bool(getattr(rag, "startup_repair_preflight_enabled", True)):
+            startup_progress.update_progress(detail="RAG startup preflight is disabled", done_count=0, total_count=0)
             return
 
         from core.memory.rag.repair import get_repair_service
@@ -402,6 +409,7 @@ def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
             quick_check_timeout_seconds=quick_check_timeout,
             quick_check_source="startup_quick_check",
         )
+        startup_progress.raise_if_cancelled()
         reason = "startup_chroma_crash_preflight"
         if not suspects and force_all_vectordb:
             animas_dir = get_animas_dir()
@@ -413,10 +421,12 @@ def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
             reason = "startup_unclean_exit_preflight"
         if not suspects:
             logger.info("RAG startup preflight: no suspect DBs found")
+            startup_progress.update_progress(detail="No suspect vector databases found", done_count=0, total_count=0)
             return
 
         joined = ", ".join(suspects)
         print(f"RAG startup preflight: repairing suspected vector DB(s): {joined}")
+        startup_progress.set_phase("repairing", detail=joined, done_count=0, total_count=len(suspects))
         results = service.repair_animas_if_allowed(
             suspects,
             reason=reason,
@@ -439,6 +449,8 @@ def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
                     result.stage,
                     result.error,
                 )
+    except asyncio.CancelledError:
+        raise
     except Exception:
         logger.exception("RAG startup preflight failed unexpectedly; continuing server startup")
 
@@ -466,12 +478,16 @@ def _run_rag_startup_preflight_via_worker(*, force_all_vectordb: bool = False) -
             config=config,
             log_dir=get_data_dir() / "logs",
         )
+    except asyncio.CancelledError:
+        raise
     except Exception:
         logger.exception("RAG startup preflight vector worker unavailable; continuing server startup")
         return
 
     try:
         _run_rag_startup_preflight(force_all_vectordb=force_all_vectordb)
+    except asyncio.CancelledError:
+        raise
     finally:
         worker.stop()
 
@@ -509,7 +525,6 @@ def _start_foreground(args: argparse.Namespace) -> None:
         print(f"Killed {orphan_count} orphan runner process(es) from previous server.")
 
     ensure_runtime_dir()
-    _run_rag_startup_preflight_via_worker(force_all_vectordb=unclean_previous_exit)
     _write_pid_file()
     atexit.register(_remove_pid_file)
     _start_pid_watchdog()
@@ -523,10 +538,14 @@ def _start_foreground(args: argparse.Namespace) -> None:
     if not config.setup_complete:
         print(f"Open http://{display_host}:{args.port}/setup/ to configure your animas and settings.")
     else:
-        print(f"Dashboard ready at http://{display_host}:{args.port}/")
+        print(f"Dashboard starting at http://{display_host}:{args.port}/")
 
     try:
-        app = create_app(get_animas_dir(), get_shared_dir())
+        app = create_app(
+            get_animas_dir(),
+            get_shared_dir(),
+            force_startup_repair_all_vectordb=unclean_previous_exit,
+        )
         uvicorn.run(
             app,
             host=args.host,
