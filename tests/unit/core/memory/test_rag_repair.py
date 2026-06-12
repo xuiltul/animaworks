@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -134,6 +134,31 @@ def test_has_recent_corruption_reads_state_file(data_dir: Path):
     assert RAGRepairService(enabled=True).has_recent_corruption("sora") is True
 
 
+def test_has_recent_corruption_ignores_signal_before_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    now = datetime.now(UTC)
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "last_success_at": now.isoformat(),
+                "recent_signals": [
+                    {
+                        "at": (now - timedelta(minutes=1)).isoformat(),
+                        "collection": "sora_knowledge",
+                        "reason": "chroma_error_finding_id",
+                        "source": "query",
+                        "shared": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert RAGRepairService(enabled=True).has_recent_corruption("sora") is False
+
+
 def test_discover_suspect_animas_from_state_and_native_log(data_dir: Path):
     for name in ("rin", "sora"):
         anima_dir = data_dir / "animas" / name
@@ -211,6 +236,286 @@ def test_discover_suspect_animas_includes_quick_check_corruption(data_dir: Path,
             "record_repair": False,
         }
     ]
+
+
+def test_discover_suspect_animas_ignores_signals_before_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    now = datetime.now(UTC)
+
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "status": "success",
+                "reason": "startup_chroma_crash_preflight",
+                "last_success_at": now.isoformat(),
+                "recent_signals": [
+                    {
+                        "at": (now - timedelta(minutes=1)).isoformat(),
+                        "collection": "sora_knowledge",
+                        "reason": "hnsw_corruption",
+                        "source": "upsert",
+                        "shared": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_logs=False,
+        include_quick_check=False,
+    )
+
+    assert suspects == []
+
+
+def test_discover_suspect_animas_keeps_signals_after_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    now = datetime.now(UTC)
+
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "status": "success",
+                "reason": "startup_chroma_crash_preflight",
+                "last_success_at": (now - timedelta(minutes=1)).isoformat(),
+                "recent_signals": [
+                    {
+                        "at": now.isoformat(),
+                        "collection": "sora_knowledge",
+                        "reason": "hnsw_corruption",
+                        "source": "upsert",
+                        "shared": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_logs=False,
+        include_quick_check=False,
+    )
+
+    assert suspects == ["sora"]
+
+
+def test_discover_suspect_animas_ignores_failed_state_before_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    now = datetime.now(UTC)
+
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "reason": "startup_chroma_crash_preflight",
+                "last_success_at": now.isoformat(),
+                "updated_at": (now - timedelta(minutes=1)).isoformat(),
+                "last_failure_at": (now - timedelta(minutes=1)).isoformat(),
+                "last_attempt_at": (now - timedelta(minutes=1)).isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_logs=False,
+        include_quick_check=False,
+    )
+
+    assert suspects == []
+
+
+def test_discover_suspect_animas_keeps_failed_state_after_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    now = datetime.now(UTC)
+
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "reason": "startup_chroma_crash_preflight",
+                "last_success_at": (now - timedelta(minutes=1)).isoformat(),
+                "updated_at": now.isoformat(),
+                "last_failure_at": now.isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_logs=False,
+        include_quick_check=False,
+    )
+
+    assert suspects == ["sora"]
+
+
+def test_discover_suspect_animas_ignores_logs_before_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "vectordb").mkdir()
+    now = datetime.now(UTC)
+
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "status": "success",
+                "last_success_at": now.isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    log_path = data_dir / "logs" / "server-daemon.log"
+    log_path.parent.mkdir(exist_ok=True)
+    log_path.write_text(
+        f"{(now - timedelta(minutes=1)).isoformat()} tokio-rt-worker segfault in chromadb_rust_bindings.abi3.so\n",
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_quick_check=False,
+        log_paths=[log_path],
+    )
+
+    assert suspects == []
+
+
+def test_discover_suspect_animas_keeps_logs_after_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "vectordb").mkdir()
+    now = datetime.now(UTC)
+
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "status": "success",
+                "last_success_at": (now - timedelta(minutes=1)).isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    log_path = data_dir / "logs" / "server-daemon.log"
+    log_path.parent.mkdir(exist_ok=True)
+    log_path.write_text(
+        f"{now.isoformat()} tokio-rt-worker segfault in chromadb_rust_bindings.abi3.so\n",
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_quick_check=False,
+        log_paths=[log_path],
+    )
+
+    assert suspects == ["sora"]
+
+
+def test_discover_suspect_animas_ignores_timestampless_logs_after_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "vectordb").mkdir()
+    now = datetime.now(UTC)
+
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "status": "success",
+                "last_success_at": now.isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    log_path = data_dir / "logs" / "server-daemon.log"
+    log_path.parent.mkdir(exist_ok=True)
+    log_path.write_text(
+        "tokio-rt-worker segfault in chromadb_rust_bindings.abi3.so\n",
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_quick_check=False,
+        log_paths=[log_path],
+    )
+
+    assert suspects == []
+
+
+def test_discover_suspect_animas_keeps_timestampless_logs_without_success(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "vectordb").mkdir()
+
+    log_path = data_dir / "logs" / "server-daemon.log"
+    log_path.parent.mkdir(exist_ok=True)
+    log_path.write_text(
+        "tokio-rt-worker segfault in chromadb_rust_bindings.abi3.so\n",
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_quick_check=False,
+        log_paths=[log_path],
+    )
+
+    assert suspects == ["sora"]
+
+
+def test_discover_suspect_animas_ignores_legacy_unclean_exit_state(data_dir: Path):
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    now = datetime.now(UTC)
+
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps(
+            {
+                "status": "failed",
+                "reason": "startup_unclean_exit_preflight",
+                "updated_at": now.isoformat(),
+                "last_failure_at": now.isoformat(),
+                "recent_signals": [
+                    {
+                        "at": now.isoformat(),
+                        "collection": "sora_knowledge",
+                        "reason": "startup_unclean_exit_preflight",
+                        "source": "startup_preflight",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    suspects = RAGRepairService(enabled=True).discover_suspect_animas(
+        window_minutes=60,
+        include_logs=False,
+        include_quick_check=False,
+    )
+
+    assert suspects == []
 
 
 def test_repair_animas_if_allowed_runs_each_target(data_dir: Path):

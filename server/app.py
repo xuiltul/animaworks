@@ -650,9 +650,8 @@ async def _run_startup_initialization(app: FastAPI) -> None:
         await _prepare_startup_vector_worker(app)
 
         preflight_runner = getattr(app.state, "startup_preflight_runner", _startup_default_preflight_runner)
-        force_all_vectordb = bool(getattr(app.state, "force_startup_repair_all_vectordb", False))
         startup_progress.set_phase("preflight", detail=t("startup.detail_preflight"), reset_counts=True)
-        await asyncio.to_thread(preflight_runner, force_all_vectordb=force_all_vectordb)
+        await asyncio.to_thread(preflight_runner, force_all_vectordb=False)
 
         startup_progress.raise_if_cancelled()
         startup_progress.set_phase(
@@ -961,7 +960,7 @@ def create_app(
     app.state.shared_dir = shared_dir
     app.state.setup_complete = config.setup_complete
     app.state.vector_worker = vector_worker
-    app.state.force_startup_repair_all_vectordb = force_startup_repair_all_vectordb
+    app.state.force_startup_repair_all_vectordb = False
     app.state.startup_preflight_runner = _startup_default_preflight_runner
 
     # Meeting room manager

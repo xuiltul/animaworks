@@ -54,7 +54,6 @@ _KNOWN_CORRUPTION_REASONS = {
     "hnsw_corruption",
     "native_segfault",
     "startup_chroma_crash_preflight",
-    "startup_unclean_exit_preflight",
     "vector_worker_crash",
 }
 
@@ -181,10 +180,21 @@ class RAGRepairService:
         cutoff = utc_now() - self.window
         with self._lock:
             in_memory = list(self._signals.get(anima_name, []))
-        if self._contains_recent_signal(in_memory, cutoff, include_shared=include_shared):
-            return True
         state = repair_state.read_state(anima_name)
-        return self._contains_recent_signal(state.get("recent_signals", []), cutoff, include_shared=include_shared)
+        last_success = parse_dt(state.get("last_success_at"))
+        if self._contains_recent_signal(
+            in_memory,
+            cutoff,
+            include_shared=include_shared,
+            last_success=last_success,
+        ):
+            return True
+        return self._contains_recent_signal(
+            state.get("recent_signals", []),
+            cutoff,
+            include_shared=include_shared,
+            last_success=last_success,
+        )
 
     def list_repairable_animas(self, *, animas_dir: Path | None = None) -> list[str]:
         """Return enabled anima names that can safely be considered for repair."""
@@ -225,10 +235,12 @@ class RAGRepairService:
         cutoff = utc_now() - (timedelta(minutes=window_minutes) if window_minutes is not None else self.window)
         repairable = self.list_repairable_animas(animas_dir=animas_dir)
         repairable_set = set(repairable)
+        last_success_by_anima: dict[str, datetime | None] = {}
         suspects: set[str] = set()
 
         for anima_name in repairable:
             state = repair_state.read_state(anima_name, animas_dir=animas_dir)
+            last_success_by_anima[anima_name] = parse_dt(state.get("last_success_at"))
             if self._state_is_suspect(state, cutoff):
                 suspects.add(anima_name)
 
@@ -254,12 +266,24 @@ class RAGRepairService:
                 cutoff=cutoff,
                 log_paths=log_paths,
             ):
+                log_at = self._log_line_timestamp(line)
                 owners = self._owners_from_log_line(line, repairable=repairable)
                 if owners:
-                    suspects.update(owner for owner in owners if owner in repairable_set)
+                    suspects.update(
+                        owner
+                        for owner in owners
+                        if owner in repairable_set
+                        and self._after_last_success_or_unknown(log_at, last_success_by_anima.get(owner))
+                    )
                 elif "chromadb_rust_bindings" in line.lower() or "native_segfault" in line.lower():
                     suspects.update(
-                        anima_name for anima_name in repairable if (animas_dir / anima_name / "vectordb").exists()
+                        anima_name
+                        for anima_name in repairable
+                        if (animas_dir / anima_name / "vectordb").exists()
+                        and self._after_last_success_or_unknown(
+                            log_at,
+                            last_success_by_anima.get(anima_name),
+                        )
                     )
 
         return [name for name in repairable if name in suspects]
@@ -316,10 +340,35 @@ class RAGRepairService:
         return results
 
     @staticmethod
-    def _contains_recent_signal(signals: list[dict[str, Any]], cutoff: datetime, *, include_shared: bool) -> bool:
+    def _after_last_success(at: datetime, last_success: datetime | None) -> bool:
+        return last_success is None or at > last_success
+
+    @staticmethod
+    def _after_last_success_or_unknown(at: datetime | None, last_success: datetime | None) -> bool:
+        return last_success is None if at is None else RAGRepairService._after_last_success(at, last_success)
+
+    @staticmethod
+    def _signal_reason_is_corruption(signal: dict[str, Any]) -> bool:
+        reason = signal.get("reason")
+        if not isinstance(reason, str) or not reason:
+            return True
+        return reason in _KNOWN_CORRUPTION_REASONS
+
+    @staticmethod
+    def _contains_recent_signal(
+        signals: list[dict[str, Any]],
+        cutoff: datetime,
+        *,
+        include_shared: bool,
+        last_success: datetime | None = None,
+    ) -> bool:
         for signal in signals:
+            if not RAGRepairService._signal_reason_is_corruption(signal):
+                continue
             at = parse_dt(signal.get("at"))
             if at is None or at < cutoff:
+                continue
+            if not RAGRepairService._after_last_success(at, last_success):
                 continue
             if include_shared or not bool(signal.get("shared")):
                 return True
@@ -342,11 +391,14 @@ class RAGRepairService:
     def _state_is_suspect(state: dict[str, Any], cutoff: datetime) -> bool:
         if not state:
             return False
+        last_success = parse_dt(state.get("last_success_at"))
         signals = state.get("recent_signals")
         if isinstance(signals, list):
             for signal in signals:
+                if not RAGRepairService._signal_reason_is_corruption(signal):
+                    continue
                 at = parse_dt(signal.get("at"))
-                if at is not None and at >= cutoff:
+                if at is not None and at >= cutoff and RAGRepairService._after_last_success(at, last_success):
                     return True
 
         reason = state.get("reason") or state.get("last_reason")
@@ -357,7 +409,7 @@ class RAGRepairService:
             return False
         for key in ("updated_at", "last_failure_at", "last_attempt_at", "requested_at"):
             at = parse_dt(state.get(key))
-            if at is not None and at >= cutoff:
+            if at is not None and at >= cutoff and RAGRepairService._after_last_success(at, last_success):
                 return True
         return False
 
@@ -401,11 +453,15 @@ class RAGRepairService:
         return lines
 
     @staticmethod
-    def _log_line_is_recent(line: str, cutoff: datetime) -> bool:
+    def _log_line_timestamp(line: str) -> datetime | None:
         match = _TIMESTAMP_RE.search(line)
         if not match:
-            return True
-        at = parse_dt(match.group("ts").replace("Z", "+00:00"))
+            return None
+        return parse_dt(match.group("ts").replace("Z", "+00:00"))
+
+    @staticmethod
+    def _log_line_is_recent(line: str, cutoff: datetime) -> bool:
+        at = RAGRepairService._log_line_timestamp(line)
         return at is None or at >= cutoff
 
     @staticmethod

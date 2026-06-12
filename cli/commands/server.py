@@ -383,7 +383,6 @@ def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
     try:
         from core import startup_progress
         from core.config import load_config
-        from core.paths import get_animas_dir
 
         startup_progress.set_phase("preflight", detail="Checking RAG vector databases", reset_counts=True)
         startup_progress.raise_if_cancelled()
@@ -411,14 +410,8 @@ def _run_rag_startup_preflight(*, force_all_vectordb: bool = False) -> None:
         )
         startup_progress.raise_if_cancelled()
         reason = "startup_chroma_crash_preflight"
-        if not suspects and force_all_vectordb:
-            animas_dir = get_animas_dir()
-            suspects = [
-                name
-                for name in service.list_repairable_animas(animas_dir=animas_dir)
-                if (animas_dir / name / "vectordb").exists()
-            ]
-            reason = "startup_unclean_exit_preflight"
+        if force_all_vectordb:
+            logger.info("Ignoring startup full repair request from unclean previous exit; using corruption suspects only")
         if not suspects:
             logger.info("RAG startup preflight: no suspect DBs found")
             startup_progress.update_progress(detail="No suspect vector databases found", done_count=0, total_count=0)
@@ -503,14 +496,12 @@ def _start_foreground(args: argparse.Namespace) -> None:
     from server.app import create_app
 
     existing_pid = _read_pid()
-    unclean_previous_exit = False
     if existing_pid is not None and _is_process_alive(existing_pid):
         print(f"Error: Server is already running (pid={existing_pid}).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
         sys.exit(1)
     elif existing_pid is not None:
         logger.info("Stale PID file found (pid=%d). Cleaning up.", existing_pid)
-        unclean_previous_exit = True
         _remove_pid_file()
 
     orphan_pid = _find_server_pid_by_process()
@@ -521,7 +512,6 @@ def _start_foreground(args: argparse.Namespace) -> None:
 
     orphan_count = _kill_orphan_runners()
     if orphan_count:
-        unclean_previous_exit = True
         print(f"Killed {orphan_count} orphan runner process(es) from previous server.")
 
     ensure_runtime_dir()
@@ -541,11 +531,7 @@ def _start_foreground(args: argparse.Namespace) -> None:
         print(f"Dashboard starting at http://{display_host}:{args.port}/")
 
     try:
-        app = create_app(
-            get_animas_dir(),
-            get_shared_dir(),
-            force_startup_repair_all_vectordb=unclean_previous_exit,
-        )
+        app = create_app(get_animas_dir(), get_shared_dir())
         uvicorn.run(
             app,
             host=args.host,
