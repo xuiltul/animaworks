@@ -14,7 +14,9 @@ from core.memory.rag.http_store import HttpVectorStore
 from core.memory.rag.store import Document, SearchResult
 
 
-def _make_store(base_url: str = "http://localhost:18500/api/internal/vector", anima_name: str = "rin") -> HttpVectorStore:
+def _make_store(
+    base_url: str = "http://localhost:18500/api/internal/vector", anima_name: str = "rin"
+) -> HttpVectorStore:
     return HttpVectorStore(base_url=base_url, anima_name=anima_name)
 
 
@@ -104,10 +106,7 @@ def test_upsert_batches_large_payloads():
     mock_response.raise_for_status = MagicMock()
     mock_client.post.return_value = mock_response
 
-    docs = [
-        Document(id=f"doc{i}", content=f"content{i}", embedding=[0.1, 0.2], metadata={})
-        for i in range(600)
-    ]
+    docs = [Document(id=f"doc{i}", content=f"content{i}", embedding=[0.1, 0.2], metadata={}) for i in range(600)]
 
     with patch("httpx.Client", return_value=mock_client):
         store = _make_store()
@@ -278,6 +277,33 @@ def test_delete_collection():
     assert payload["anima_name"] == "rin"
     assert payload["collection"] == "old_col"
     assert mock_client.post.call_args[0][0] == "/delete-collection"
+
+
+def test_reset_store_posts_owner_and_clears_local_circuit():
+    """reset_store asks the worker to drop cached handles for this anima."""
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"status": "ok"}
+    mock_client.post.return_value = mock_response
+
+    with patch("httpx.Client", return_value=mock_client):
+        store = _make_store()
+        store._write_circuit_retry_at["rin_knowledge"] = 999.0
+        assert store.reset_store() is True
+
+    assert store._write_circuit_retry_at == {}
+    mock_client.post.assert_called_once_with("/reset-store", json={"anima_name": "rin"})
+
+
+def test_reset_store_returns_false_on_old_or_unavailable_worker():
+    """reset_store must not raise when the worker lacks /reset-store."""
+    mock_client = MagicMock()
+    mock_client.post.side_effect = httpx.HTTPError("404 Not Found")
+
+    with patch("httpx.Client", return_value=mock_client):
+        store = _make_store()
+        assert store.reset_store() is False
 
 
 # ── test_close ─────────────────────────────────────────────────────

@@ -125,6 +125,39 @@ def test_vector_worker_status_includes_gpu_section(monkeypatch) -> None:
     assert status["gpu"] == gpu
 
 
+def test_vector_worker_reset_store_clears_cache_and_owner_breakers(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
+
+    from core.memory.rag import vector_worker
+    from core.memory.rag.vector_worker import create_app
+
+    reset = MagicMock()
+    with (
+        patch("core.memory.rag.singleton.reset_vector_store", reset),
+        TestClient(create_app()) as client,
+    ):
+        vector_worker._write_circuit_breakers["sora:knowledge"] = {
+            "owner": "sora",
+            "collection": "knowledge",
+            "operation": "upsert",
+            "consecutive_failures": 3,
+        }
+        vector_worker._write_circuit_breakers["other:knowledge"] = {
+            "owner": "other",
+            "collection": "knowledge",
+            "operation": "upsert",
+            "consecutive_failures": 3,
+        }
+
+        resp = client.post("/reset-store", json={"anima_name": "sora"})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+    reset.assert_called_once_with("sora")
+    assert "sora:knowledge" not in vector_worker._write_circuit_breakers
+    assert "other:knowledge" in vector_worker._write_circuit_breakers
+
+
 def test_vector_worker_read_endpoints(monkeypatch) -> None:
     monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
 

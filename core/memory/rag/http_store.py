@@ -131,6 +131,14 @@ class HttpVectorStore(VectorStore):
             is not None
         )
 
+    def reset_store(self) -> bool:
+        """Ask the worker to drop cached handles for this store's owner."""
+        data = self._post("/reset-store", {"anima_name": self._anima_name})
+        if data is None:
+            return False
+        self._write_circuit_retry_at.clear()
+        return True
+
     def delete_collection(self, name: str) -> bool:
         """Delete a collection."""
         return (

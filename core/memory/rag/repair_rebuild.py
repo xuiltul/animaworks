@@ -15,12 +15,29 @@ from pathlib import Path
 logger = logging.getLogger("animaworks.rag.repair")
 
 
+def reset_worker_vector_store(anima_name: str) -> bool:
+    """Reset the vector worker's cached store for an anima when configured."""
+    if not os.environ.get("ANIMAWORKS_VECTOR_URL"):
+        return False
+    try:
+        from core.memory.rag.http_store import HttpVectorStore
+        from core.memory.rag.singleton import get_vector_store
+
+        store = get_vector_store(anima_name)
+        if isinstance(store, HttpVectorStore):
+            return store.reset_store()
+    except Exception:
+        logger.debug("Failed to reset vector worker store for %s", anima_name, exc_info=True)
+    return False
+
+
 def quarantine_vectordb(anima_name: str) -> Path | None:
     import gc
 
     from core.memory.rag.singleton import reset_vector_store
     from core.paths import get_anima_vectordb_dir
 
+    reset_worker_vector_store(anima_name)
     reset_vector_store(anima_name)
     gc.collect()
 

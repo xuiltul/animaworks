@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from core.memory.rag import repair_state
-from core.memory.rag.repair_rebuild import full_reindex, quarantine_vectordb
+from core.memory.rag.repair_rebuild import full_reindex, quarantine_vectordb, reset_worker_vector_store
 from core.memory.rag.repair_types import RepairResult
 from core.memory.rag.repair_utils import (
     SINGLE_SHOT_REASONS,
@@ -674,6 +674,7 @@ class RAGRepairService:
                     pid=os.getpid(),
                     last_chunks_indexed=chunks,
                 )
+                reset_worker_vector_store(anima_name)
                 reset_vector_store(anima_name)
                 repair_state.update_repair_state(
                     anima_name,

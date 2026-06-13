@@ -13,12 +13,15 @@ Provides persistent vector storage for memory embeddings with:
 """
 
 import logging
+import threading
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 logger = logging.getLogger("animaworks.rag.store")
+_T = TypeVar("_T")
 
 # ── Data structures ────────────────────────────────────────────────
 
@@ -145,6 +148,8 @@ class ChromaVectorStore(VectorStore):
     Stores embeddings in SQLite at ~/.animaworks/vectordb/chroma.sqlite3
     """
 
+    _self_heal_reset_lock = threading.Lock()
+
     def __init__(self, persist_dir: Path | None = None, anima_name: str | None = None) -> None:
         """Initialize ChromaDB client.
 
@@ -212,7 +217,7 @@ class ChromaVectorStore(VectorStore):
             from core.memory.rag.repair import record_chroma_error
 
             record_chroma_error(
-                anima_name=self.anima_name,
+                anima_name=self._anima_name(),
                 collection=collection,
                 error=error,
                 source=source,
@@ -220,42 +225,185 @@ class ChromaVectorStore(VectorStore):
         except Exception:
             logger.debug("Failed to record RAG repair signal", exc_info=True)
 
+    def _anima_name(self) -> str | None:
+        return getattr(self, "anima_name", None)
+
+    def _owner_label(self) -> str:
+        return self._anima_name() or "shared"
+
+    def _with_self_heal(
+        self,
+        operation: str,
+        collection: str,
+        action: Callable[[ChromaVectorStore], _T],
+    ) -> _T:
+        try:
+            return action(self)
+        except Exception as error:
+            from core.memory.rag.repair_utils import classify_corruption_error
+
+            reason = classify_corruption_error(error)
+            if reason is None:
+                raise
+            self._report_chroma_error(collection, error, operation)
+            fresh_store = self._reset_for_self_heal(operation, collection, reason, error)
+            if fresh_store is None:
+                raise
+            try:
+                return action(fresh_store)
+            except Exception as retry_error:
+                fresh_store._report_chroma_error(collection, retry_error, operation)
+                logger.warning(
+                    "ChromaDB self-heal retry failed during %s: owner=%s db_path=%s collection=%s error=%s",
+                    operation,
+                    fresh_store._owner_label(),
+                    fresh_store.persist_dir,
+                    collection,
+                    retry_error,
+                )
+                raise
+
+    def _reset_for_self_heal(
+        self,
+        operation: str,
+        collection: str,
+        reason: str,
+        error: Exception,
+    ) -> ChromaVectorStore | None:
+        with type(self)._self_heal_reset_lock:
+            logger.warning(
+                "ChromaDB corruption detected during %s; resetting vector store before one retry: "
+                "owner=%s db_path=%s collection=%s reason=%s error=%s",
+                operation,
+                self._owner_label(),
+                self.persist_dir,
+                collection,
+                reason,
+                error,
+            )
+            try:
+                from core.memory.rag.singleton import reset_vector_store
+
+                reset_vector_store(self._anima_name())
+            except Exception:
+                logger.debug(
+                    "Failed to reset singleton vector store during self-heal: owner=%s db_path=%s",
+                    self._owner_label(),
+                    self.persist_dir,
+                    exc_info=True,
+                )
+            self.close()
+            try:
+                return type(self)(persist_dir=self.persist_dir, anima_name=self._anima_name())
+            except Exception as recreate_error:
+                logger.warning(
+                    "Failed to recreate ChromaDB vector store after reset: owner=%s db_path=%s "
+                    "collection=%s operation=%s error=%s",
+                    self._owner_label(),
+                    self.persist_dir,
+                    collection,
+                    operation,
+                    recreate_error,
+                )
+                return None
+
+    def _create_collection_once(self, name: str) -> bool:
+        self.client.create_collection(
+            name=name,
+            metadata={"hnsw:space": "cosine"},
+        )
+        logger.info("Created collection '%s' (space=cosine)", name)
+        return True
+
     def create_collection(self, name: str) -> bool:
         """Create a new collection or get existing one."""
         try:
-            self.client.create_collection(
-                name=name,
-                metadata={"hnsw:space": "cosine"},
-            )
-            logger.info("Created collection '%s' (space=cosine)", name)
-            return True
+            return self._with_self_heal("create_collection", name, lambda store: store._create_collection_once(name))
         except Exception as e:
             if "already exists" in str(e).lower():
                 logger.debug("Collection '%s' already exists: %s", name, e)
                 return True
             self._report_chroma_error(name, e, "create_collection")
-            logger.warning("Failed to create collection '%s': %s", name, e)
+            logger.warning(
+                "Failed to create collection '%s': owner=%s db_path=%s error=%s",
+                name,
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
             return False
+
+    def _delete_collection_once(self, name: str) -> bool:
+        self.client.delete_collection(name=name)
+        logger.info("Deleted collection '%s'", name)
+        return True
 
     def delete_collection(self, name: str) -> bool:
         """Delete a collection."""
         try:
-            self.client.delete_collection(name=name)
-            logger.info("Deleted collection '%s'", name)
-            return True
+            return self._with_self_heal("delete_collection", name, lambda store: store._delete_collection_once(name))
         except Exception as e:
             self._report_chroma_error(name, e, "delete_collection")
-            logger.warning("Failed to delete collection '%s': %s", name, e)
+            logger.warning(
+                "Failed to delete collection '%s': owner=%s db_path=%s error=%s",
+                name,
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
             return False
+
+    def _list_collections_once(self) -> list[str]:
+        collections = self.client.list_collections()
+        return [c.name for c in collections]
 
     def list_collections(self) -> list[str]:
         """List all collections."""
         try:
-            collections = self.client.list_collections()
-            return [c.name for c in collections]
+            return self._with_self_heal(
+                "list_collections",
+                "<list_collections>",
+                lambda store: store._list_collections_once(),
+            )
         except Exception as e:
             self._report_chroma_error("<list_collections>", e, "list_collections")
+            logger.warning(
+                "Failed to list collections: owner=%s db_path=%s error=%s",
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
             raise
+
+    def _upsert_once(self, collection: str, documents: list[Document]) -> bool:
+        coll = self.client.get_or_create_collection(
+            name=collection,
+            metadata={"hnsw:space": "cosine"},
+        )
+
+        ids = [doc.id for doc in documents]
+        contents = [doc.content for doc in documents]
+        embeddings = [doc.embedding for doc in documents]
+        metadatas = [self._serialize_metadata(doc.metadata) for doc in documents]
+
+        if any(emb is None for emb in embeddings):
+            logger.warning(
+                "Upsert to '%s' failed: missing embeddings owner=%s db_path=%s",
+                collection,
+                self._owner_label(),
+                self.persist_dir,
+            )
+            return False
+
+        coll.upsert(
+            ids=ids,
+            documents=contents,
+            embeddings=cast(Any, embeddings),
+            metadatas=cast(Any, metadatas),
+        )
+
+        logger.debug("Upserted %d documents to collection '%s'", len(documents), collection)
+        return True
 
     def upsert(self, collection: str, documents: list[Document]) -> bool:
         """Upsert documents into collection."""
@@ -263,48 +411,27 @@ class ChromaVectorStore(VectorStore):
             return True
 
         try:
-            coll = self.client.get_or_create_collection(
-                name=collection,
-                metadata={"hnsw:space": "cosine"},
-            )
-
-            ids = [doc.id for doc in documents]
-            contents = [doc.content for doc in documents]
-            embeddings = [doc.embedding for doc in documents]
-            metadatas = [self._serialize_metadata(doc.metadata) for doc in documents]
-
-            if any(emb is None for emb in embeddings):
-                logger.warning("Upsert to '%s' failed: missing embeddings", collection)
-                return False
-
-            coll.upsert(
-                ids=ids,
-                documents=contents,
-                embeddings=cast(Any, embeddings),
-                metadatas=cast(Any, metadatas),
-            )
-
-            logger.debug("Upserted %d documents to collection '%s'", len(documents), collection)
-            return True
+            return self._with_self_heal("upsert", collection, lambda store: store._upsert_once(collection, documents))
         except Exception as e:
             self._report_chroma_error(collection, e, "upsert")
-            logger.warning("Failed to upsert %d documents to '%s': %s", len(documents), collection, e)
+            logger.warning(
+                "Failed to upsert %d documents to '%s': owner=%s db_path=%s error=%s",
+                len(documents),
+                collection,
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
             return False
 
-    def query(
+    def _query_once(
         self,
         collection: str,
         embedding: list[float],
         top_k: int = 10,
         filter_metadata: dict[str, str | int | float] | None = None,
     ) -> list[SearchResult]:
-        """Query by embedding similarity."""
-        try:
-            coll = self.client.get_collection(name=collection)
-        except Exception as e:
-            self._report_chroma_error(collection, e, "get_collection")
-            logger.warning("Collection '%s' not found: %s", collection, e)
-            return []
+        coll = self.client.get_collection(name=collection)
 
         # Build where clause for metadata filtering
         where = None
@@ -312,16 +439,11 @@ class ChromaVectorStore(VectorStore):
             where = {k: v for k, v in filter_metadata.items()}
 
         # Query ChromaDB
-        try:
-            results = coll.query(
-                query_embeddings=[embedding],
-                n_results=top_k,
-                where=cast(Any, where),
-            )
-        except Exception as e:
-            self._report_chroma_error(collection, e, "query")
-            logger.warning("ChromaDB query failed for collection '%s': %s", collection, e)
-            return []
+        results = coll.query(
+            query_embeddings=[embedding],
+            n_results=top_k,
+            where=cast(Any, where),
+        )
 
         # Parse results
         search_results: list[SearchResult] = []
@@ -346,49 +468,99 @@ class ChromaVectorStore(VectorStore):
         )
         return search_results
 
+    def query(
+        self,
+        collection: str,
+        embedding: list[float],
+        top_k: int = 10,
+        filter_metadata: dict[str, str | int | float] | None = None,
+    ) -> list[SearchResult]:
+        """Query by embedding similarity."""
+        try:
+            return self._with_self_heal(
+                "query",
+                collection,
+                lambda store: store._query_once(collection, embedding, top_k, filter_metadata),
+            )
+        except Exception as e:
+            self._report_chroma_error(collection, e, "query")
+            logger.warning(
+                "ChromaDB query failed for collection '%s': owner=%s db_path=%s error=%s",
+                collection,
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
+            return []
+
+    def _delete_documents_once(self, collection: str, ids: list[str]) -> bool:
+        coll = self.client.get_collection(name=collection)
+        coll.delete(ids=ids)
+        logger.debug("Deleted %d documents from collection '%s'", len(ids), collection)
+        return True
+
     def delete_documents(self, collection: str, ids: list[str]) -> bool:
         """Delete documents by ID."""
         if not ids:
             return True
 
         try:
-            coll = self.client.get_collection(name=collection)
-            coll.delete(ids=ids)
-            logger.debug("Deleted %d documents from collection '%s'", len(ids), collection)
-            return True
+            return self._with_self_heal(
+                "delete_documents",
+                collection,
+                lambda store: store._delete_documents_once(collection, ids),
+            )
         except Exception as e:
             self._report_chroma_error(collection, e, "delete_documents")
-            logger.warning("Failed to delete documents from '%s': %s", collection, e)
+            logger.warning(
+                "Failed to delete documents from '%s': owner=%s db_path=%s error=%s",
+                collection,
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
             return False
+
+    def _update_metadata_once(
+        self,
+        collection: str,
+        ids: list[str],
+        metadatas: list[dict[str, str | int | float]],
+    ) -> bool:
+        coll = self.client.get_collection(name=collection)
+        serialized = [self._serialize_metadata(dict(m)) for m in metadatas]
+        coll.update(ids=ids, metadatas=cast(Any, serialized))
+        logger.debug("Updated metadata for %d documents in '%s'", len(ids), collection)
+        return True
 
     def update_metadata(self, collection: str, ids: list[str], metadatas: list[dict[str, str | int | float]]) -> bool:
         """Update metadata for existing documents."""
         if not ids:
             return True
         try:
-            coll = self.client.get_collection(name=collection)
-            serialized = [self._serialize_metadata(dict(m)) for m in metadatas]
-            coll.update(ids=ids, metadatas=cast(Any, serialized))
-            logger.debug("Updated metadata for %d documents in '%s'", len(ids), collection)
-            return True
+            return self._with_self_heal(
+                "update_metadata",
+                collection,
+                lambda store: store._update_metadata_once(collection, ids, metadatas),
+            )
         except Exception as e:
             self._report_chroma_error(collection, e, "update_metadata")
-            logger.warning("Failed to update metadata in '%s': %s", collection, e)
+            logger.warning(
+                "Failed to update metadata in '%s': owner=%s db_path=%s error=%s",
+                collection,
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
             return False
 
-    def get_by_metadata(
+    def _get_by_metadata_once(
         self,
         collection: str,
         where: dict[str, str | int | float],
         limit: int = 20,
     ) -> list[SearchResult]:
-        """Retrieve documents by metadata filter without embedding search."""
-        try:
-            coll = self.client.get_collection(name=collection)
-        except Exception as e:
-            self._report_chroma_error(collection, e, "get_by_metadata_collection")
-            logger.debug("Collection '%s' not found for get_by_metadata: %s", collection, e)
-            return []
+        coll = self.client.get_collection(name=collection)
 
         # ChromaDB: empty dict means no filter; pass None for "return all"
         where_arg: Any = where if where else None
@@ -418,16 +590,32 @@ class ChromaVectorStore(VectorStore):
         )
         return search_results
 
-    def get_by_ids(self, collection: str, ids: list[str]) -> list[Document]:
-        """Fetch documents by their IDs."""
-        if not ids:
-            return []
+    def get_by_metadata(
+        self,
+        collection: str,
+        where: dict[str, str | int | float],
+        limit: int = 20,
+    ) -> list[SearchResult]:
+        """Retrieve documents by metadata filter without embedding search."""
         try:
-            coll = self.client.get_collection(name=collection)
+            return self._with_self_heal(
+                "get_by_metadata",
+                collection,
+                lambda store: store._get_by_metadata_once(collection, where, limit),
+            )
         except Exception as e:
-            self._report_chroma_error(collection, e, "get_by_ids_collection")
-            logger.debug("Collection '%s' not found for get_by_ids: %s", collection, e)
+            self._report_chroma_error(collection, e, "get_by_metadata")
+            logger.debug(
+                "get_by_metadata failed for collection '%s': owner=%s db_path=%s error=%s",
+                collection,
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
             return []
+
+    def _get_by_ids_once(self, collection: str, ids: list[str]) -> list[Document]:
+        coll = self.client.get_collection(name=collection)
         data = coll.get(ids=ids, include=["documents", "metadatas"])
         documents: list[Document] = []
         for i, doc_id in enumerate(data["ids"]):
@@ -436,6 +624,27 @@ class ChromaVectorStore(VectorStore):
             meta_dict = cast(Any, dict(meta_raw)) if meta_raw else {}
             documents.append(Document(id=doc_id, content=content, metadata=meta_dict))
         return documents
+
+    def get_by_ids(self, collection: str, ids: list[str]) -> list[Document]:
+        """Fetch documents by their IDs."""
+        if not ids:
+            return []
+        try:
+            return self._with_self_heal(
+                "get_by_ids",
+                collection,
+                lambda store: store._get_by_ids_once(collection, ids),
+            )
+        except Exception as e:
+            self._report_chroma_error(collection, e, "get_by_ids")
+            logger.debug(
+                "get_by_ids failed for collection '%s': owner=%s db_path=%s error=%s",
+                collection,
+                self._owner_label(),
+                self.persist_dir,
+                e,
+            )
+            return []
 
     def needs_cosine_migration(self) -> list[str]:
         """Return collection names still using L2 (non-cosine) distance."""

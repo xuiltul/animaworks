@@ -29,6 +29,9 @@ def test_classifies_native_and_sqlite_corruption():
     assert classify_corruption_error("database disk image is malformed") == "sqlite_malformed"
     assert classify_corruption_error(-11) == "native_segfault"
     assert classify_corruption_error("hnsw index panic: corrupt graph") == "hnsw_corruption"
+    assert classify_corruption_error("disk I/O error (code: 522)") == "chroma_corruption"
+    assert classify_corruption_error("Failed to get segments for collection") == "chroma_corruption"
+    assert classify_corruption_error("no such table: embeddings_queue") == "chroma_corruption"
 
 
 def test_does_not_classify_operational_noise():
@@ -585,6 +588,34 @@ def test_background_duplicate_request_is_not_started_twice(data_dir: Path):
     assert state["status"] == "requested"
 
 
+def test_quarantine_resets_worker_before_local_cache_and_move(data_dir: Path, monkeypatch):
+    from core.memory.rag.http_store import HttpVectorStore
+    from core.memory.rag.repair_rebuild import quarantine_vectordb
+
+    anima_dir = data_dir / "animas" / "sora"
+    vectordb = anima_dir / "vectordb"
+    vectordb.mkdir(parents=True)
+    (vectordb / "broken.bin").write_text("broken", encoding="utf-8")
+
+    events: list[str] = []
+    store = HttpVectorStore("http://worker", anima_name="sora")
+    store.reset_store = MagicMock(side_effect=lambda: events.append("worker") or True)  # type: ignore[method-assign]
+    local_reset = MagicMock(side_effect=lambda anima_name: events.append("local"))
+
+    monkeypatch.setenv("ANIMAWORKS_VECTOR_URL", "http://worker")
+    monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name=None: store)
+    monkeypatch.setattr("core.memory.rag.singleton.reset_vector_store", local_reset)
+
+    archive = quarantine_vectordb("sora")
+
+    assert events == ["worker", "local"]
+    store.reset_store.assert_called_once_with()
+    local_reset.assert_called_once_with("sora")
+    assert archive is not None
+    assert not vectordb.exists()
+    assert (archive / "broken.bin").read_text(encoding="utf-8") == "broken"
+
+
 def test_repair_quarantines_vectordb_and_reindexes(data_dir: Path, monkeypatch):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "knowledge").mkdir(parents=True)
@@ -611,6 +642,8 @@ def test_repair_quarantines_vectordb_and_reindexes(data_dir: Path, monkeypatch):
     monkeypatch.setattr("core.memory.rag.MemoryIndexer", FakeIndexer)
     monkeypatch.setenv("ANIMAWORKS_VECTOR_URL", "http://worker")
     monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name=None: object())
+    worker_reset = MagicMock(return_value=True)
+    monkeypatch.setattr("core.memory.rag.repair_service.reset_worker_vector_store", worker_reset)
 
     service = RAGRepairService(enabled=True, threshold=2, window_minutes=5, cooldown_minutes=60)
     result = service.repair_anima(
@@ -622,6 +655,7 @@ def test_repair_quarantines_vectordb_and_reindexes(data_dir: Path, monkeypatch):
 
     assert result.ok
     assert result.chunks_indexed == 4
+    worker_reset.assert_called_once_with("sora")
     assert not vectordb.exists()
     archive_dirs = list((anima_dir / "archive").glob("vectordb-corrupt-*"))
     assert len(archive_dirs) == 1

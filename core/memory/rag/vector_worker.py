@@ -111,6 +111,13 @@ def _breaker_key(anima_name: str | None, collection: str) -> str:
     return f"{owner}:{collection}"
 
 
+def _clear_owner_write_circuit_breakers(anima_name: str | None) -> None:
+    owner = anima_name or "shared"
+    for key, state in list(_write_circuit_breakers.items()):
+        if state.get("owner", "shared") == owner or key.startswith(f"{owner}:"):
+            _write_circuit_breakers.pop(key, None)
+
+
 def _before_vector_write(anima_name: str | None, collection: str) -> JSONResponse | None:
     key = _breaker_key(anima_name, collection)
     state = _write_circuit_breakers.get(key)
@@ -262,6 +269,14 @@ def create_app() -> FastAPI:
         from core.gpu import get_gpu_status
 
         return {"status": "ok", "write_circuit_breakers": _breaker_status(), "gpu": get_gpu_status()}
+
+    @app.post("/reset-store")
+    async def vector_reset_store(body: VectorListCollectionsRequest) -> dict[str, str]:
+        from core.memory.rag.singleton import reset_vector_store
+
+        await _run_native(reset_vector_store, body.anima_name)
+        _clear_owner_write_circuit_breakers(body.anima_name)
+        return {"status": "ok"}
 
     @app.post("/query")
     async def vector_query(body: VectorQueryRequest):

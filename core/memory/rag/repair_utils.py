@@ -70,6 +70,8 @@ def classify_corruption_error(error: BaseException | str | int | None) -> str | 
 
     if "error executing plan" in lower and "error finding id" in lower:
         return "chroma_error_finding_id"
+    if "disk i/o error" in lower or "failed to get segments" in lower or "no such table" in lower:
+        return "chroma_corruption"
     if "database disk image is malformed" in lower:
         return "sqlite_malformed"
     if "sigsegv" in lower or "segmentation fault" in lower or "segfault" in lower:
