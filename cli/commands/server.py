@@ -33,6 +33,9 @@ _SERVER_CMD_MARKERS = ("main.py start", "animaworks start", "-m cli start")
 
 _DAEMON_STARTUP_TIMEOUT = 10
 _DAEMON_POLL_INTERVAL = 0.3
+# systemd unit templates set RestartPreventExitStatus=3 so an
+# already-running process does not trigger Restart=on-failure loops.
+EXIT_ALREADY_RUNNING = 3
 
 
 # ── PID helpers ───────────────────────────────────────────
@@ -261,7 +264,7 @@ def _spawn_daemon(args: argparse.Namespace) -> None:
     if existing_pid is not None and _is_process_alive(existing_pid):
         print(f"Error: Server is already running (pid={existing_pid}).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
-        sys.exit(1)
+        sys.exit(EXIT_ALREADY_RUNNING)
     elif existing_pid is not None:
         _remove_pid_file()
 
@@ -269,7 +272,7 @@ def _spawn_daemon(args: argparse.Namespace) -> None:
     if orphan_pid is not None and _is_process_alive(orphan_pid):
         print(f"Error: Server is already running (pid={orphan_pid}, PID file was missing).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
-        sys.exit(1)
+        sys.exit(EXIT_ALREADY_RUNNING)
 
     cmd = [sys.executable, "-m", "cli", "start", "--foreground", "--host", args.host, "--port", str(args.port)]
 
@@ -501,7 +504,7 @@ def _start_foreground(args: argparse.Namespace) -> None:
     if existing_pid is not None and _is_process_alive(existing_pid):
         print(f"Error: Server is already running (pid={existing_pid}).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
-        sys.exit(1)
+        sys.exit(EXIT_ALREADY_RUNNING)
     elif existing_pid is not None:
         logger.info("Stale PID file found (pid=%d). Cleaning up.", existing_pid)
         _remove_pid_file()
@@ -510,7 +513,7 @@ def _start_foreground(args: argparse.Namespace) -> None:
     if orphan_pid is not None and _is_process_alive(orphan_pid):
         print(f"Error: Server is already running (pid={orphan_pid}, PID file was missing).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
-        sys.exit(1)
+        sys.exit(EXIT_ALREADY_RUNNING)
 
     orphan_count = _kill_orphan_runners()
     if orphan_count:

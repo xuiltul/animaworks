@@ -337,22 +337,47 @@ class TestCmdStart:
     @patch("cli.commands.server._is_process_alive", return_value=True)
     @patch("cli.commands.server._read_pid", return_value=999)
     def test_already_running(self, mock_pid, mock_alive):
-        from cli.commands.server import cmd_start
+        from cli.commands.server import EXIT_ALREADY_RUNNING, cmd_start
 
         args = argparse.Namespace(host="0.0.0.0", port=18500)
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc:
             cmd_start(args)
+        assert exc.value.code == EXIT_ALREADY_RUNNING
 
     @patch("cli.commands.server._find_server_pid_by_process", return_value=777)
     @patch("cli.commands.server._is_process_alive", side_effect=lambda pid: pid == 777)
     @patch("cli.commands.server._read_pid", return_value=None)
     def test_already_running_orphan(self, mock_pid, mock_alive, mock_find):
         """Detect running orphan process (no PID file) and refuse to start."""
-        from cli.commands.server import cmd_start
+        from cli.commands.server import EXIT_ALREADY_RUNNING, cmd_start
 
         args = argparse.Namespace(host="0.0.0.0", port=18500)
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc:
             cmd_start(args)
+        assert exc.value.code == EXIT_ALREADY_RUNNING
+
+    @patch("cli.commands.server._pin_native_threads")
+    @patch("cli.commands.server._is_process_alive", return_value=True)
+    @patch("cli.commands.server._read_pid", return_value=999)
+    def test_foreground_already_running(self, mock_pid, mock_alive, mock_pin):
+        from cli.commands.server import EXIT_ALREADY_RUNNING, cmd_start
+
+        args = argparse.Namespace(host="0.0.0.0", port=18500, foreground=True)
+        with pytest.raises(SystemExit) as exc:
+            cmd_start(args)
+        assert exc.value.code == EXIT_ALREADY_RUNNING
+
+    @patch("cli.commands.server._pin_native_threads")
+    @patch("cli.commands.server._find_server_pid_by_process", return_value=777)
+    @patch("cli.commands.server._is_process_alive", side_effect=lambda pid: pid == 777)
+    @patch("cli.commands.server._read_pid", return_value=None)
+    def test_foreground_already_running_orphan(self, mock_pid, mock_alive, mock_find, mock_pin):
+        from cli.commands.server import EXIT_ALREADY_RUNNING, cmd_start
+
+        args = argparse.Namespace(host="0.0.0.0", port=18500, foreground=True)
+        with pytest.raises(SystemExit) as exc:
+            cmd_start(args)
+        assert exc.value.code == EXIT_ALREADY_RUNNING
 
     @patch("cli.commands.server._remove_pid_file")
     @patch("cli.commands.server._start_pid_watchdog")

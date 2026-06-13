@@ -1,0 +1,21 @@
+[Unit]
+Description=AnimaWorks - Digital Anima Framework
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=20
+
+[Service]
+Type=simple
+WorkingDirectory=/home/main/dev/animaworks-bak
+ExecStart=/home/main/dev/animaworks-bak/.venv/bin/animaworks start --foreground
+ExecStop=/home/main/dev/animaworks-bak/.venv/bin/animaworks stop
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=3
+Environment=HOME=/home/main
+Environment=PATH=/home/main/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TOKENIZERS_PARALLELISM=false
+
+[Install]
+WantedBy=default.target
