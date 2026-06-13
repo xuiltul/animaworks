@@ -178,6 +178,38 @@ async def test_poll_requested_rag_repairs_starts_one_supervised_task(tmp_path: P
 
 
 @pytest.mark.asyncio
+async def test_poll_requested_rag_repairs_caps_concurrency(tmp_path: Path) -> None:
+    """Only ``repair_max_concurrent`` repairs may start per poll.
+
+    The vector worker is single-threaded; starting every requested rebuild at
+    once saturates it and the reindex upserts fail, leaving stub DBs.
+    """
+    sup = _make_supervisor(tmp_path)
+    for name in ("aoi", "rin", "sora"):
+        anima_dir = _create_anima(sup, name)
+        (anima_dir / "state" / "rag_repair.json").write_text(
+            json.dumps({"status": "requested", "reason": "chroma_corruption"}),
+            encoding="utf-8",
+        )
+    sup._rag_repair_poll_interval_seconds = lambda: 0.0
+    sup._rag_repair_max_concurrent = lambda: 1
+    started: list[str] = []
+
+    async def run_repair(name: str, state: dict[str, object]) -> None:
+        # Simulate an in-flight repair that does not release its slot yet.
+        started.append(name)
+        await asyncio.sleep(0.05)
+
+    sup._run_supervised_rag_repair = run_repair
+
+    await sup._poll_requested_rag_repairs()
+    await asyncio.sleep(0)  # let the scheduled task start
+
+    assert len(started) == 1
+    assert sup._rag_repairs_in_progress == {started[0]}
+
+
+@pytest.mark.asyncio
 async def test_reconcile_does_not_start_anima_during_rag_repair(tmp_path: Path) -> None:
     sup = _make_supervisor(tmp_path)
     _create_enabled_anima(sup)

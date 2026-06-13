@@ -69,6 +69,47 @@ def quarantine_vectordb(anima_name: str) -> Path | None:
     return dest
 
 
+class RebuildVerificationError(RuntimeError):
+    """Raised when a just-rebuilt vector DB is still missing its data.
+
+    A rebuild that reports indexed chunks but whose collections are absent left
+    a schema-less stub (e.g. upserts silently failed under worker contention).
+    Treating this as a failure lets the caller mark the repair failed so the
+    cooldown engages instead of reporting a false success that immediately
+    re-triggers another repair.
+    """
+
+
+def verify_rebuilt_vectordb(anima_name: str, *, expected_chunks: int) -> None:
+    """Confirm a freshly rebuilt vector DB actually holds its collections.
+
+    Raises ``RebuildVerificationError`` when ``expected_chunks`` is positive but
+    the store has no collections (or cannot be listed) — the signature of a stub
+    left behind by failed upserts. A genuinely empty anima (``expected_chunks``
+    == 0) is considered healthy.
+    """
+    if expected_chunks <= 0:
+        return
+    from core.memory.rag.singleton import get_vector_store
+
+    store = get_vector_store(anima_name)
+    if store is None:
+        raise RebuildVerificationError(
+            f"vector store unavailable for {anima_name} after rebuild (indexed {expected_chunks} chunks)"
+        )
+    try:
+        collections = store.list_collections()
+    except Exception as exc:  # noqa: BLE001 — any failure here means the DB is unusable
+        raise RebuildVerificationError(
+            f"rebuilt vector DB for {anima_name} is unreadable (indexed {expected_chunks} chunks): {exc}"
+        ) from exc
+    if not collections:
+        raise RebuildVerificationError(
+            f"rebuilt vector DB for {anima_name} has no collections despite indexing {expected_chunks} chunks "
+            "(stub left by failed upserts)"
+        )
+
+
 def full_reindex(anima_name: str, *, include_shared: bool) -> int:
     from core.memory.bm25 import rebuild_longterm_bm25_index
     from core.memory.rag import MemoryIndexer

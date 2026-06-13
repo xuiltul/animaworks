@@ -21,7 +21,12 @@ from pathlib import Path
 from typing import Any
 
 from core.memory.rag import repair_state
-from core.memory.rag.repair_rebuild import full_reindex, quarantine_vectordb, reset_worker_vector_store
+from core.memory.rag.repair_rebuild import (
+    full_reindex,
+    quarantine_vectordb,
+    reset_worker_vector_store,
+    verify_rebuilt_vectordb,
+)
 from core.memory.rag.repair_types import RepairResult
 from core.memory.rag.repair_utils import (
     SINGLE_SHOT_REASONS,
@@ -124,6 +129,19 @@ class RAGRepairService:
         if owner is None:
             logger.warning(
                 "RAG corruption signal could not be mapped to an anima: collection=%s reason=%s",
+                collection,
+                reason,
+            )
+            return False
+
+        # Suppress signals while a repair is already in flight for this owner.
+        # During a rebuild the DB is transiently empty, so reads/writes surface
+        # "no such table" errors; recording them would re-trigger another repair
+        # the instant the current one releases its lock — the destructive loop.
+        if is_repair_locked(owner) or self._has_active_repair_state(owner):
+            logger.debug(
+                "Ignoring RAG corruption signal during active repair: owner=%s collection=%s reason=%s",
+                owner,
                 collection,
                 reason,
             )
@@ -676,6 +694,11 @@ class RAGRepairService:
                 )
                 reset_worker_vector_store(anima_name)
                 reset_vector_store(anima_name)
+                # Verify the rebuilt DB actually holds its data before declaring
+                # success. A stub (chunks indexed but no collections) must be a
+                # failure so the cooldown engages instead of a false success that
+                # immediately re-triggers another repair.
+                verify_rebuilt_vectordb(anima_name, expected_chunks=chunks)
                 repair_state.update_repair_state(
                     anima_name,
                     status="success",

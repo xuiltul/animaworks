@@ -20,6 +20,20 @@ from core.memory.rag.repair import (
 from core.memory.rag.sqlite_health import SQLiteHealthResult
 
 
+class _RebuiltStore:
+    """Fake vector store standing in for a healthy rebuilt DB.
+
+    The post-rebuild verification calls ``list_collections``; returning a
+    non-empty list lets repairs that indexed chunks report success.
+    """
+
+    def __init__(self, collections: list[str] | None = None) -> None:
+        self._collections = collections if collections is not None else ["rebuilt"]
+
+    def list_collections(self) -> list[str]:
+        return list(self._collections)
+
+
 def test_classifies_today_error_finding_id():
     err = "Error executing plan: Internal error: Error finding id"
     assert classify_corruption_error(err) == "chroma_error_finding_id"
@@ -648,7 +662,7 @@ def test_repair_quarantines_vectordb_and_reindexes(data_dir: Path, monkeypatch):
 
     monkeypatch.setattr("core.memory.rag.MemoryIndexer", FakeIndexer)
     monkeypatch.setenv("ANIMAWORKS_VECTOR_URL", "http://worker")
-    monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name=None: object())
+    monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name=None: _RebuiltStore())
     worker_reset = MagicMock(return_value=True)
     monkeypatch.setattr("core.memory.rag.repair_service.reset_worker_vector_store", worker_reset)
 
@@ -705,7 +719,7 @@ def test_repair_reindexes_shared_collections_when_requested(data_dir: Path, monk
 
     monkeypatch.setattr("core.memory.rag.MemoryIndexer", FakeIndexer)
     monkeypatch.setenv("ANIMAWORKS_VECTOR_URL", "http://worker")
-    monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name=None: object())
+    monkeypatch.setattr("core.memory.rag.singleton.get_vector_store", lambda anima_name=None: _RebuiltStore())
 
     result = RAGRepairService(enabled=True).repair_anima(
         "sora",
@@ -743,6 +757,77 @@ def test_repair_failure_records_state_and_resets(data_dir: Path, monkeypatch):
     state = json.loads((anima_dir / "state" / "rag_repair.json").read_text(encoding="utf-8"))
     assert state["status"] == "failed"
     assert state["last_error"] == "boom"
+
+
+def test_repair_marks_failed_when_rebuilt_db_is_stub(data_dir: Path, monkeypatch):
+    """A rebuild that indexes chunks but leaves no collections is a failure.
+
+    Without this the repair reports a false success, resets consecutive_failures,
+    and the cooldown never engages — the destructive re-quarantine loop.
+    """
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "knowledge").mkdir(parents=True)
+    (anima_dir / "knowledge" / "topic.md").write_text("# Topic\n\n## A\n\nbody", encoding="utf-8")
+    (anima_dir / "state").mkdir()
+    vectordb = anima_dir / "vectordb"
+    vectordb.mkdir()
+
+    class FakeIndexer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def index_directory(self, *args, **kwargs):
+            return 3
+
+        def index_conversation_summary(self, *args, **kwargs):
+            return 0
+
+    monkeypatch.setattr("core.memory.rag.MemoryIndexer", FakeIndexer)
+    monkeypatch.setenv("ANIMAWORKS_VECTOR_URL", "http://worker")
+    # Stub store: chunks were "indexed" but the DB has no collections.
+    monkeypatch.setattr(
+        "core.memory.rag.singleton.get_vector_store",
+        lambda anima_name=None: _RebuiltStore(collections=[]),
+    )
+    monkeypatch.setattr("core.memory.rag.repair_service.reset_worker_vector_store", MagicMock(return_value=True))
+
+    service = RAGRepairService(enabled=True, threshold=2, window_minutes=5, cooldown_minutes=60)
+    result = service.repair_anima("sora", reason="chroma_corruption", source="test")
+
+    assert result.status == "failed"
+    state = json.loads((anima_dir / "state" / "rag_repair.json").read_text(encoding="utf-8"))
+    assert state["status"] == "failed"
+    assert state["consecutive_failures"] == 1
+
+
+def test_record_chroma_error_suppressed_during_active_repair(data_dir: Path):
+    """Corruption signals must be ignored while a repair is already in flight.
+
+    Reads during a rebuild see a transiently empty DB; recording those signals
+    would re-trigger another repair the instant the current one finishes.
+    """
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "state" / "rag_repair.json").write_text(
+        json.dumps({"status": "repairing"}),
+        encoding="utf-8",
+    )
+
+    service = RAGRepairService(enabled=True, threshold=2, window_minutes=5, cooldown_minutes=60)
+    service.request_repair = MagicMock(return_value=True)  # type: ignore[method-assign]
+
+    assert (
+        service.record_chroma_error(
+            anima_name="sora",
+            collection="sora_knowledge",
+            error="database disk image is malformed",
+            source="query",
+        )
+        is False
+    )
+    service.request_repair.assert_not_called()
+    state = json.loads((anima_dir / "state" / "rag_repair.json").read_text(encoding="utf-8"))
+    assert not state.get("recent_signals")
 
 
 def test_repair_missing_anima_fails(data_dir: Path):

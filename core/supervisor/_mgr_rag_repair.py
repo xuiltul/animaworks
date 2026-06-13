@@ -121,21 +121,33 @@ class RAGRepairMixin:
         self._last_rag_repair_poll_at = now
 
         in_progress: set[str] = getattr(self, "_rag_repairs_in_progress", set())
+        max_concurrent = self._rag_repair_max_concurrent()
         for anima_dir in sorted(self.animas_dir.iterdir() if self.animas_dir.exists() else []):
             if not anima_dir.is_dir():
                 continue
+            # Cap concurrent repairs: the vector worker is single-threaded, so many
+            # rebuilds at once saturate it, make reindex upserts fail, and leave
+            # stub DBs that re-trigger repair. Remaining "requested" animas are
+            # picked up on later polls, one (or few) at a time.
+            if len(in_progress) >= max_concurrent:
+                break
             anima_name = anima_dir.name
             if anima_name in in_progress or anima_name in self._restarting:
                 continue
             state = self._read_rag_repair_state(anima_name)
             if state.get("status") == "requested":
+                in_progress.add(anima_name)
+                self._rag_repairs_in_progress = in_progress
                 asyncio.create_task(self._run_supervised_rag_repair(anima_name, state))
 
     async def _run_supervised_rag_repair(self, anima_name: str, state: dict[str, object]) -> None:
-        """Stop one anima, repair its RAG DB in a CLI subprocess, then restart it."""
+        """Stop one anima, repair its RAG DB in a CLI subprocess, then restart it.
+
+        The caller (``_poll_requested_rag_repairs``) has already reserved this
+        anima in ``_rag_repairs_in_progress`` for concurrency accounting; this
+        method only clears it again in ``finally``.
+        """
         in_progress: set[str] = getattr(self, "_rag_repairs_in_progress", set())
-        if anima_name in in_progress:
-            return
         in_progress.add(anima_name)
         self._rag_repairs_in_progress = in_progress
 
@@ -373,6 +385,14 @@ class RAGRepairMixin:
             return float(getattr(load_config().rag, "repair_poll_interval_seconds", 5))
         except Exception:
             return 5.0
+
+    def _rag_repair_max_concurrent(self) -> int:
+        try:
+            from core.config import load_config
+
+            return max(1, int(getattr(load_config().rag, "repair_max_concurrent", 1)))
+        except Exception:
+            return 1
 
     def _rag_repair_state_path(self, anima_name: str) -> Path:
         return repair_state.state_path(anima_name, animas_dir=self.animas_dir)

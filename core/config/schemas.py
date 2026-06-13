@@ -252,6 +252,11 @@ class RAGConfig(BaseModel):
     repair_max_consecutive_failures: int = 2
     repair_timeout_seconds: int = 1800
     repair_poll_interval_seconds: int = 5
+    # Max RAG repairs allowed to run at once. The vector worker is single-threaded;
+    # running many rebuilds concurrently saturates it, makes reindex upserts fail,
+    # and leaves schema-less stub DBs that re-trigger repair — a destructive loop.
+    # Serialize repairs (1) by default so each rebuild runs in isolation.
+    repair_max_concurrent: int = 1
     startup_repair_preflight_enabled: bool = True
     startup_repair_window_minutes: int = 1440
     quick_check_timeout_seconds: float = 10.0
