@@ -54,6 +54,18 @@ def quarantine_vectordb(anima_name: str) -> Path | None:
         suffix += 1
         dest = archive_dir / f"vectordb-corrupt-{stamp}-{suffix}"
     shutil.move(str(source), str(dest))
+
+    # Recreate an empty vectordb dir and drop any worker handle that a concurrent
+    # read may have pinned during the move. The pre-move reset above only releases
+    # handles so the OS move succeeds; it does not stop a priming read arriving
+    # mid-move from lazily re-creating the worker's cached store against the
+    # now-missing path. Such a store opens a schema-less stub ("no such table:
+    # collections") that the upcoming reindex would reuse, writing an empty DB and
+    # leaving reads broken indefinitely. Resetting here forces the reindex to
+    # rebuild a clean store bound to the recreated directory.
+    source.mkdir(parents=True, exist_ok=True)
+    reset_worker_vector_store(anima_name)
+    reset_vector_store(anima_name)
     return dest
 
 

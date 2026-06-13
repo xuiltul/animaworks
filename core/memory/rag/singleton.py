@@ -100,24 +100,19 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
             if _init_failed:
                 return None
             if anima_name not in _vector_stores:
+                # Importing the ChromaDB store is an environment-level concern
+                # (e.g. the known Python 3.14 + pydantic.v1 incompatibility). A
+                # failure here means ChromaDB can never work in this process, so
+                # latch the global flag and disable RAG everywhere.
                 try:
                     from core.memory.rag.store import create_chroma_vector_store
-
-                    if anima_name:
-                        from core.paths import get_anima_vectordb_dir
-
-                        persist_dir = get_anima_vectordb_dir(anima_name)
-                    else:
-                        persist_dir = None  # ChromaVectorStore defaults to ~/.animaworks/vectordb
-                    store = create_chroma_vector_store(persist_dir=persist_dir, anima_name=anima_name)
-                    _vector_stores[anima_name] = store
                 except Exception as exc:
                     _init_failed = True
                     import sys
 
                     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
                     logger.warning(
-                        "ChromaDB initialization failed (Python %s). "
+                        "ChromaDB import failed (Python %s). "
                         "RAG features (semantic search, vector indexing) will be disabled. "
                         "Other memory features continue to work normally. "
                         "Error: %s",
@@ -129,6 +124,30 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
                             "This is likely caused by a known pydantic.v1 compatibility issue "
                             "with Python 3.14+. See: https://github.com/chroma-core/chroma/issues/5996"
                         )
+                    return None
+
+                # Opening one anima's on-disk DB is a per-anima concern. A corrupt
+                # chroma.sqlite3 (e.g. a schema-less stub left by an interrupted
+                # repair: "no such table: tenants/databases") must NOT latch the
+                # global flag — doing so would take vector writes down for every
+                # other anima too. Return None for this anima only; a subsequent
+                # repair/reset lets it retry without poisoning the worker.
+                try:
+                    if anima_name:
+                        from core.paths import get_anima_vectordb_dir
+
+                        persist_dir = get_anima_vectordb_dir(anima_name)
+                    else:
+                        persist_dir = None  # ChromaVectorStore defaults to ~/.animaworks/vectordb
+                    store = create_chroma_vector_store(persist_dir=persist_dir, anima_name=anima_name)
+                    _vector_stores[anima_name] = store
+                except Exception as exc:
+                    logger.warning(
+                        "Vector store init failed for %s; RAG disabled for this anima only "
+                        "(other animas unaffected). Error: %s",
+                        anima_name or "shared",
+                        exc,
+                    )
                     return None
     return _vector_stores.get(anima_name)
 

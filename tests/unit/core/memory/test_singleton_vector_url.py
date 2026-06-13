@@ -71,6 +71,31 @@ def test_returns_none_when_chroma_init_fails(monkeypatch):
     assert store is None
 
 
+def test_per_anima_db_failure_does_not_poison_other_animas(monkeypatch):
+    """A corrupt per-anima DB must not latch the global flag and disable others.
+
+    Regression: a single anima's schema-less stub ("no such table: tenants")
+    used to set the process-global _init_failed, returning None for every other
+    anima and turning one corrupt DB into a worker-wide vector-write outage.
+    """
+    os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
+    monkeypatch.setenv("ANIMAWORKS_ALLOW_DIRECT_CHROMA", "1")
+
+    healthy = MagicMock()
+
+    def _create(*args, anima_name=None, **kwargs):
+        if anima_name == "broken":
+            raise RuntimeError("no such table: tenants")
+        return healthy
+
+    with patch("core.memory.rag.store.create_chroma_vector_store", side_effect=_create):
+        broken = get_vector_store("broken")
+        other = get_vector_store("healthy")
+
+    assert broken is None
+    assert other is healthy
+
+
 def test_http_store_cache_is_keyed_by_base_url():
     """Changing vector URLs must not reuse an HttpVectorStore for another worker."""
     with patch.dict(os.environ, {"ANIMAWORKS_VECTOR_URL": "http://localhost:1111/vector"}):

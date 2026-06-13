@@ -608,11 +608,18 @@ def test_quarantine_resets_worker_before_local_cache_and_move(data_dir: Path, mo
 
     archive = quarantine_vectordb("sora")
 
-    assert events == ["worker", "local"]
-    store.reset_store.assert_called_once_with()
-    local_reset.assert_called_once_with("sora")
+    # Worker cache is reset before the move (release handles for the OS move) and
+    # again after the move (discard any handle a concurrent read pinned while the
+    # directory was missing), with the local cache reset each time.
+    assert events == ["worker", "local", "worker", "local"]
+    assert store.reset_store.call_count == 2
+    assert local_reset.call_count == 2
+    local_reset.assert_called_with("sora")
     assert archive is not None
-    assert not vectordb.exists()
+    # The vectordb dir is recreated empty so racing reads open a valid (empty) DB
+    # rather than a schema-less stub; the corrupt contents live in the archive.
+    assert vectordb.exists()
+    assert not any(vectordb.iterdir())
     assert (archive / "broken.bin").read_text(encoding="utf-8") == "broken"
 
 
@@ -656,7 +663,9 @@ def test_repair_quarantines_vectordb_and_reindexes(data_dir: Path, monkeypatch):
     assert result.ok
     assert result.chunks_indexed == 4
     worker_reset.assert_called_once_with("sora")
-    assert not vectordb.exists()
+    # quarantine recreates an empty vectordb dir; the corrupt file is archived.
+    assert vectordb.exists()
+    assert not (vectordb / "broken.bin").exists()
     archive_dirs = list((anima_dir / "archive").glob("vectordb-corrupt-*"))
     assert len(archive_dirs) == 1
     assert (archive_dirs[0] / "broken.bin").read_text(encoding="utf-8") == "broken"
