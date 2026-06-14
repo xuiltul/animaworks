@@ -329,6 +329,16 @@ class AnimaRunner:
                     recovery.trigger,
                 )
 
+                has_recovered_payload = bool(recovery.recovered_text.strip()) or bool(recovery.tool_calls)
+                if session_type == "heartbeat" and not has_recovered_payload:
+                    StreamingJournal.confirm_recovery(self._anima_dir, session_type, thread_id=thread_id)
+                    logger.info(
+                        "Discarded empty heartbeat streaming journal for %s thread=%s; no response content was lost",
+                        self.anima_name,
+                        thread_id,
+                    )
+                    continue
+
                 # Only chat sessions write to conversation.json;
                 # heartbeat/task/task_exec/inbox are background and must not
                 # pollute the human↔anima conversation history.

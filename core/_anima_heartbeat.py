@@ -515,6 +515,7 @@ class HeartbeatMixin:
         # Streaming journal for heartbeat crash recovery
         journal = StreamingJournal(self.anima_dir, session_type="heartbeat")
         journal.open(trigger="heartbeat")
+        journal_finalized = False
 
         # ── Background model swap ──
         original_config = None
@@ -584,6 +585,7 @@ class HeartbeatMixin:
                         total_turns=cycle_result.get("total_turns", 0),
                     )
                     journal.finalize(summary=result.summary[:500])
+                    journal_finalized = True
 
             # ── Hard timeout: write recovery note ──
             if _hard_exceeded:
@@ -603,6 +605,10 @@ class HeartbeatMixin:
                     action="responded",
                     summary=accumulated_text or "(no result)",
                 )
+
+            if not journal_finalized:
+                journal.finalize(summary=result.summary[:500])
+                journal_finalized = True
 
             self._last_activity = now_local()
 
