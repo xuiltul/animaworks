@@ -31,6 +31,7 @@ _native_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=1,
     thread_name_prefix="vector-worker-native",
 )
+_NOFILE_INFINITY_FALLBACK = 1_048_576
 
 
 class VectorQueryRequest(BaseModel):
@@ -93,6 +94,45 @@ async def _run_native(fn, *args, **kwargs):
     loop = asyncio.get_running_loop()
     call = functools.partial(fn, *args, **kwargs)
     return await loop.run_in_executor(_native_executor, call)
+
+
+def _raise_fd_soft_limit() -> tuple[int, int]:
+    try:
+        import resource
+    except ImportError:
+        logger.debug("resource module unavailable; skipping vector worker RLIMIT_NOFILE raise")
+        return (0, 0)
+
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    except Exception:
+        logger.warning("Failed to inspect vector worker RLIMIT_NOFILE", exc_info=True)
+        return (0, 0)
+
+    infinity = getattr(resource, "RLIM_INFINITY", -1)
+    target = _NOFILE_INFINITY_FALLBACK if hard == infinity else hard
+    if soft == infinity or soft >= target:
+        return soft, hard
+
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+    except Exception:
+        logger.warning(
+            "Failed to raise vector worker RLIMIT_NOFILE soft limit: %s -> %s (hard=%s)",
+            soft,
+            target,
+            hard,
+            exc_info=True,
+        )
+        return soft, hard
+
+    logger.info(
+        "Raised vector worker RLIMIT_NOFILE soft limit: %s -> %s (hard=%s)",
+        soft,
+        target,
+        hard,
+    )
+    return target, hard
 
 
 def _vector_write_failed(operation: str, collection: str) -> JSONResponse:
@@ -450,6 +490,7 @@ def main() -> None:
 
     import uvicorn
 
+    _raise_fd_soft_limit()
     uvicorn.run(
         create_app(),
         host=args.host,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,71 @@ from core.memory.rag.sqlite_health import SQLiteHealthResult
 
 def _doc(doc_id: str = "doc1", content: str = "hello", metadata: dict | None = None) -> SimpleNamespace:
     return SimpleNamespace(id=doc_id, content=content, metadata=metadata or {"kind": "test"})
+
+
+def test_raise_fd_soft_limit_raises_to_hard(monkeypatch) -> None:
+    from core.memory.rag import vector_worker
+
+    calls: list[tuple[int, tuple[int, int]]] = []
+    fake_resource = SimpleNamespace(
+        RLIMIT_NOFILE=7,
+        RLIM_INFINITY=-1,
+        getrlimit=lambda _limit: (1024, 4096),
+        setrlimit=lambda limit, value: calls.append((limit, value)),
+    )
+    monkeypatch.setitem(sys.modules, "resource", fake_resource)
+
+    assert vector_worker._raise_fd_soft_limit() == (4096, 4096)
+    assert calls == [(7, (4096, 4096))]
+
+
+def test_raise_fd_soft_limit_skips_when_already_at_target(monkeypatch) -> None:
+    from core.memory.rag import vector_worker
+
+    calls: list[tuple[int, tuple[int, int]]] = []
+    fake_resource = SimpleNamespace(
+        RLIMIT_NOFILE=7,
+        RLIM_INFINITY=-1,
+        getrlimit=lambda _limit: (4096, 4096),
+        setrlimit=lambda limit, value: calls.append((limit, value)),
+    )
+    monkeypatch.setitem(sys.modules, "resource", fake_resource)
+
+    assert vector_worker._raise_fd_soft_limit() == (4096, 4096)
+    assert calls == []
+
+
+def test_raise_fd_soft_limit_returns_original_when_setrlimit_fails(monkeypatch) -> None:
+    from core.memory.rag import vector_worker
+
+    def fail_setrlimit(_limit: int, _value: tuple[int, int]) -> None:
+        raise OSError("permission denied")
+
+    fake_resource = SimpleNamespace(
+        RLIMIT_NOFILE=7,
+        RLIM_INFINITY=-1,
+        getrlimit=lambda _limit: (1024, 4096),
+        setrlimit=fail_setrlimit,
+    )
+    monkeypatch.setitem(sys.modules, "resource", fake_resource)
+
+    assert vector_worker._raise_fd_soft_limit() == (1024, 4096)
+
+
+def test_raise_fd_soft_limit_uses_finite_target_for_unlimited_hard(monkeypatch) -> None:
+    from core.memory.rag import vector_worker
+
+    calls: list[tuple[int, tuple[int, int]]] = []
+    fake_resource = SimpleNamespace(
+        RLIMIT_NOFILE=7,
+        RLIM_INFINITY=-1,
+        getrlimit=lambda _limit: (1024, -1),
+        setrlimit=lambda limit, value: calls.append((limit, value)),
+    )
+    monkeypatch.setitem(sys.modules, "resource", fake_resource)
+
+    assert vector_worker._raise_fd_soft_limit() == (vector_worker._NOFILE_INFINITY_FALLBACK, -1)
+    assert calls == [(7, (vector_worker._NOFILE_INFINITY_FALLBACK, -1))]
 
 
 def test_vector_worker_shutdown_closes_cached_stores(monkeypatch) -> None:
