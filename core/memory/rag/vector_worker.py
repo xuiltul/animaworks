@@ -20,6 +20,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.platform.fd_limits import raise_fd_soft_limit
+
 logger = logging.getLogger("animaworks.rag.vector_worker")
 
 _CIRCUIT_FAILURE_THRESHOLD = int(os.environ.get("ANIMAWORKS_VECTOR_CIRCUIT_FAILURE_THRESHOLD", "3"))
@@ -450,6 +452,7 @@ def main() -> None:
 
     import uvicorn
 
+    raise_fd_soft_limit(logger=logger, process_label="vector worker")
     uvicorn.run(
         create_app(),
         host=args.host,

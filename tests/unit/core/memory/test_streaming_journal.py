@@ -458,6 +458,29 @@ class TestRecoverStreamingJournal:
         assert tool_call[1]["tool"] == "web_search"
         assert tool_call[1]["meta"]["recovered"] is True
 
+    def test_empty_heartbeat_recovery_is_confirmed_without_activity_error(self, anima_dir: Path):
+        """Empty heartbeat journals are startup leftovers, not user-visible recovery errors."""
+        journal = StreamingJournal(anima_dir, session_type="heartbeat")
+        journal.open(trigger="heartbeat")
+        journal.close()
+
+        runner = _make_runner(anima_dir)
+
+        with (
+            patch(
+                "core.memory.conversation.ConversationMemory",
+            ) as conv_cls,
+            patch(
+                "core.memory.activity.ActivityLogger",
+            ) as activity_cls,
+        ):
+            runner._recover_streaming_journal()
+
+        conv_cls.assert_not_called()
+        activity_cls.assert_not_called()
+        assert not (anima_dir / "shortterm" / "streaming_journal_heartbeat.jsonl").exists()
+        assert not (anima_dir / "state" / "recovery_note.md").exists()
+
     def test_recover_no_orphan_noop(self, anima_dir: Path):
         """When no orphaned journal exists, nothing is called.
 

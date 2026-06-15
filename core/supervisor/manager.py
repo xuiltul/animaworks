@@ -611,14 +611,21 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
         if self.ws_manager:
             await self.ws_manager.broadcast({"type": event_type, "data": data})
 
-    async def stop_anima(self, anima_name: str) -> None:
-        """Stop a single Anima process."""
+    async def stop_anima(self, anima_name: str, *, drain_streams: bool = True) -> None:
+        """Stop a single Anima process.
+
+        Args:
+            drain_streams: When True (default), wait for an in-flight chat
+                stream to finish before stopping (protects user responses from
+                rolling restarts / RAG repair). Full shutdown passes False for
+                a prompt exit.
+        """
         handle = self.processes.get(anima_name)
         if not handle:
             logger.warning("Process not found: %s", anima_name)
             return
 
-        await handle.stop(timeout=10.0)
+        await handle.stop(timeout=10.0, drain_streams=drain_streams)
         del self.processes[anima_name]
         self._recently_stopped[anima_name] = time.monotonic()
         logger.info("Anima process stopped: %s", anima_name)
@@ -754,8 +761,10 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
             except asyncio.CancelledError:
                 pass
 
-        # Stop all processes
-        tasks = [self.stop_anima(name) for name in list(self.processes.keys())]
+        # Stop all processes. Full shutdown should exit promptly, so skip the
+        # in-flight stream drain here (it protects rolling restarts, not the
+        # whole-server stop).
+        tasks = [self.stop_anima(name, drain_streams=False) for name in list(self.processes.keys())]
         await asyncio.gather(*tasks, return_exceptions=True)
 
         logger.info("All processes shut down")

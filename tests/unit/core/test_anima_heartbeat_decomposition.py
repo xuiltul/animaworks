@@ -792,6 +792,7 @@ class TestExecuteHeartbeatCycle:
             assert isinstance(result, CycleResult)
             assert result.trigger == "heartbeat"
             assert result.action == "responded"
+            MockSJ.return_value.finalize.assert_called_once_with(summary="Some text")
         finally:
             _stop_patches(mocks)
 

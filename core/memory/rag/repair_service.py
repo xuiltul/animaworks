@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from core.memory.rag import repair_state
-from core.memory.rag.repair_rebuild import full_reindex, quarantine_vectordb, reset_worker_vector_store
+from core.memory.rag.repair_rebuild import atomic_rebuild_vectordb
 from core.memory.rag.repair_types import RepairResult
 from core.memory.rag.repair_utils import (
     SINGLE_SHOT_REASONS,
@@ -56,6 +56,14 @@ _KNOWN_CORRUPTION_REASONS = {
     "startup_chroma_crash_preflight",
     "vector_worker_crash",
 }
+
+# Corruption reasons whose claim is about the SQLite store itself and can
+# therefore be definitively refuted by a passing ``PRAGMA quick_check``. A
+# poisoned chromadb process cache makes a healthy on-disk DB raise these even
+# though the file is intact (the false-positive that drives the repair churn).
+# Segment/process-level reasons (hnsw_corruption, native_segfault) are NOT in
+# this set because a SQLite check cannot vouch for hnsw segment files.
+_SQLITE_REFUTABLE_REASONS = {"chroma_corruption", "sqlite_malformed"}
 
 
 class RAGRepairService:
@@ -129,6 +137,40 @@ class RAGRepairService:
             )
             return False
 
+        # Suppress signals while a repair is already in flight for this owner.
+        # During a rebuild the DB is transiently empty, so reads/writes surface
+        # "no such table" errors; recording them would re-trigger another repair
+        # the instant the current one releases its lock — the destructive loop.
+        if is_repair_locked(owner) or self._has_active_repair_state(owner):
+            logger.debug(
+                "Ignoring RAG corruption signal during active repair: owner=%s collection=%s reason=%s",
+                owner,
+                collection,
+                reason,
+            )
+            return False
+
+        # Cache-poisoning false-positive guard. chromadb's process-global system
+        # cache can be transiently poisoned (e.g. by a sibling store's close()),
+        # making a perfectly healthy on-disk DB raise sqlite-level corruption
+        # errors ("Failed to get segments", "file is not a database", torn-read
+        # "database corrupt"). Quarantining and rebuilding a healthy DB on those
+        # false signals is what drives the destructive repair churn that
+        # saturates the vector worker. If quick_check confirms the SQLite store
+        # is intact, treat the error as transient and let the store-level
+        # self-heal (cache reset + one retry) recover, without escalating to a
+        # repair.
+        if reason in _SQLITE_REFUTABLE_REASONS and self._sqlite_quick_check_ok(owner):
+            logger.info(
+                "Ignoring RAG corruption signal; on-disk SQLite passed quick_check "
+                "(transient cache poisoning): owner=%s collection=%s reason=%s error=%s",
+                owner,
+                collection,
+                reason,
+                error,
+            )
+            return False
+
         signal = {
             "at": iso(),
             "collection": collection,
@@ -153,6 +195,23 @@ class RAGRepairService:
             include_shared=True,
             background=True,
         )
+
+    @staticmethod
+    def _sqlite_quick_check_ok(owner: str) -> bool:
+        """Return True only if the owner's Chroma SQLite passes quick_check.
+
+        Ambiguous results (busy / timeout / unavailable / missing / corrupt)
+        return False so a potentially real corruption signal is not suppressed.
+        """
+        try:
+            from core.memory.rag.sqlite_health import quick_check_chroma_sqlite
+            from core.paths import get_anima_vectordb_dir
+
+            result = quick_check_chroma_sqlite(get_anima_vectordb_dir(owner))
+        except Exception:
+            logger.debug("quick_check gate failed for owner=%s", owner, exc_info=True)
+            return False
+        return result.status == "ok"
 
     def _record_signal(self, anima_name: str, signal: dict[str, Any]) -> None:
         cutoff = utc_now() - self.window
@@ -651,31 +710,13 @@ class RAGRepairService:
                     last_error=None,
                 )
                 if startup_progress.is_active():
-                    startup_progress.set_phase("repairing", detail=anima_name)
-                startup_progress.raise_if_cancelled()
-                quarantine_path = quarantine_vectordb(anima_name)
-                repair_state.update_repair_state(
-                    anima_name,
-                    status="repairing",
-                    stage="reindex",
-                    pid=os.getpid(),
-                    last_quarantine_path=str(quarantine_path) if quarantine_path else None,
-                )
-                if startup_progress.is_active():
                     startup_progress.set_phase("indexing", detail=anima_name, reset_counts=True)
                 startup_progress.raise_if_cancelled()
-                chunks = full_reindex(anima_name, include_shared=include_shared)
-                from core.memory.rag.singleton import reset_vector_store
-
-                repair_state.update_repair_state(
-                    anima_name,
-                    status="repairing",
-                    stage="reset_store",
-                    pid=os.getpid(),
-                    last_chunks_indexed=chunks,
-                )
-                reset_worker_vector_store(anima_name)
-                reset_vector_store(anima_name)
+                # Build the new DB in a staging dir and atomically swap it in.
+                # The live DB stays intact during the (slow) reindex, so a failed
+                # build never destroys the existing data, readers never see a
+                # half-built DB, and the worker is only reset at the swap.
+                chunks, quarantine_path = atomic_rebuild_vectordb(anima_name, include_shared=include_shared)
                 repair_state.update_repair_state(
                     anima_name,
                     status="success",

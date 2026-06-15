@@ -28,6 +28,15 @@ SINGLE_SHOT_REASONS = {
     "native_segfault",
 }
 
+RESOURCE_EXHAUSTION_SIGNATURES = (
+    "too many open files",
+    "os error 24",
+    "errno 24",
+    "emfile",
+    "enfile",
+    "unable to open database file",
+)
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -63,6 +72,8 @@ def classify_corruption_error(error: BaseException | str | int | None) -> str | 
     text = str(error)
     lower = text.lower()
 
+    if any(signature in lower for signature in RESOURCE_EXHAUSTION_SIGNATURES):
+        return None
     if "connection refused" in lower or "connecterror" in lower:
         return None
     if "collection" in lower and "not found" in lower:
@@ -70,12 +81,14 @@ def classify_corruption_error(error: BaseException | str | int | None) -> str | 
 
     if "error executing plan" in lower and "error finding id" in lower:
         return "chroma_error_finding_id"
-    if "disk i/o error" in lower or "failed to get segments" in lower or "no such table" in lower:
-        return "chroma_corruption"
     if "database disk image is malformed" in lower:
         return "sqlite_malformed"
     if "sigsegv" in lower or "segmentation fault" in lower or "segfault" in lower:
         return "native_segfault"
+    if "failed to get segments" in lower or "no such table" in lower:
+        return "chroma_corruption"
+    if "disk i/o error" in lower:
+        return None
     if "hnsw" in lower and any(token in lower for token in ("error", "panic", "corrupt", "segmentation")):
         return "hnsw_corruption"
     if any(token in lower for token in ("corrupt", "corruption", "malformed")) and any(

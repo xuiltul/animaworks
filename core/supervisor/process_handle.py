@@ -31,6 +31,13 @@ from core.time_utils import ensure_aware, now_local
 logger = logging.getLogger(__name__)
 
 
+# Default upper bound on how long stop() waits for an in-flight interactive
+# stream (a user-facing chat response) to finish before shutting the process
+# down. A rolling restart / recovery sweep must not cut a chat off
+# mid-generation — the graceful grace period inside stop() is only ~5s.
+DEFAULT_STREAM_DRAIN_TIMEOUT_SEC = 120.0
+
+
 # ── Process State ──────────────────────────────────────────────────
 
 
@@ -430,17 +437,62 @@ class ProcessHandle:
                 return {"success": False, "is_busy": False, "transport_error": is_transport_error}
             return False
 
-    async def stop(self, timeout: float = 10.0) -> None:
+    async def _drain_active_stream(self, timeout: float) -> None:
+        """Wait for an in-flight interactive stream to finish before stopping.
+
+        Protects a user-facing chat response from being cut off mid-generation
+        by a graceful stop (rolling restart, RAG repair, reconcile). Bounded by
+        ``timeout``; if the stream does not finish in time (e.g. a genuinely
+        stuck turn) the stop proceeds anyway. Hang recovery uses ``kill()``
+        directly and never reaches this path.
+        """
+        if timeout <= 0 or not self.is_streaming:
+            return
+        started = self.streaming_started_at
+        logger.info(
+            "Draining in-flight stream before stop: anima=%s started_at=%s timeout=%.0fs",
+            self.anima_name,
+            started.isoformat() if started else None,
+            timeout,
+        )
+        try:
+            async with asyncio.timeout(timeout):
+                while self.is_streaming and self.process and self.process.poll() is None:
+                    await asyncio.sleep(0.2)
+        except TimeoutError:
+            logger.warning(
+                "Stream drain timed out for %s after %.0fs; proceeding with stop",
+                self.anima_name,
+                timeout,
+            )
+            return
+        logger.info("In-flight stream drained for %s; proceeding with stop", self.anima_name)
+
+    async def stop(
+        self,
+        timeout: float = 10.0,
+        *,
+        drain_streams: bool = True,
+        drain_timeout: float | None = None,
+    ) -> None:
         """
         Stop the child process gracefully.
 
         Shutdown flow:
+        0. Drain any in-flight interactive stream (bounded by ``drain_timeout``)
         1. Send IPC shutdown command (wait 5s)
         2. If not exited, send SIGTERM (wait timeout/2)
         3. If still not exited, send SIGKILL
 
         Args:
             timeout: Total timeout in seconds for graceful shutdown
+            drain_streams: When True (default), wait for an in-flight
+                user-facing chat stream to finish before stopping so a rolling
+                restart / RAG repair / reconcile does not cut a response off
+                mid-generation. Hang recovery uses ``kill()`` directly and
+                never reaches this path.
+            drain_timeout: Upper bound for the stream drain (defaults to
+                :data:`DEFAULT_STREAM_DRAIN_TIMEOUT_SEC`).
         """
         if self.state in (ProcessState.STOPPED, ProcessState.FAILED):
             if self.process and self.process.poll() is None:
@@ -456,6 +508,11 @@ class ProcessHandle:
                 return
 
         logger.info("Stopping process: %s", self.anima_name)
+
+        if drain_streams:
+            await self._drain_active_stream(
+                drain_timeout if drain_timeout is not None else DEFAULT_STREAM_DRAIN_TIMEOUT_SEC
+            )
 
         if not self.process:
             self.state = ProcessState.STOPPED

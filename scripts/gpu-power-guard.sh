@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -u
+set -euo pipefail
 
 log() {
   printf 'gpu-power-guard: %s\n' "$*" >&2
@@ -23,13 +23,31 @@ if ! nvidia-smi -L >/dev/null 2>&1; then
 fi
 
 if ! nvidia-smi -pm 1 >/dev/null 2>&1; then
-  warn "failed to enable NVIDIA persistence mode; skipping GPU power limit"
-  exit 0
+  warn "failed to enable NVIDIA persistence mode"
+  exit 1
 fi
 
 if ! nvidia-smi -pl "${power_limit_w}" >/dev/null 2>&1; then
   warn "failed to set NVIDIA GPU power limit to ${power_limit_w}W"
-  exit 0
+  exit 1
 fi
 
-log "enabled persistence mode and set NVIDIA GPU power limit to ${power_limit_w}W"
+if ! nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits |
+  awk -v target="${power_limit_w}" '
+    BEGIN { ok = 1; seen = 0 }
+    {
+      seen = 1
+      gsub(/[[:space:]]/, "", $0)
+      value = $0 + 0
+      if (value < target - 0.5 || value > target + 0.5) {
+        ok = 0
+      }
+    }
+    END { exit (seen && ok) ? 0 : 1 }
+  '; then
+  warn "NVIDIA GPU power limit verification failed; expected ${power_limit_w}W"
+  nvidia-smi --query-gpu=index,name,power.limit --format=csv,noheader,nounits >&2 || true
+  exit 1
+fi
+
+log "enabled persistence mode and verified NVIDIA GPU power limit at ${power_limit_w}W"

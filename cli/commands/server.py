@@ -498,7 +498,10 @@ def _start_foreground(args: argparse.Namespace) -> None:
 
     from core.init import ensure_runtime_dir
     from core.paths import get_animas_dir, get_shared_dir
+    from core.platform.fd_limits import raise_fd_soft_limit
     from server.app import create_app
+
+    raise_fd_soft_limit(logger=logger, process_label="server")
 
     existing_pid = _read_pid()
     if existing_pid is not None and _is_process_alive(existing_pid):

@@ -38,7 +38,9 @@ sudo systemctl enable --now gpu-power-guard.service
 
 The script is safe on non-GPU systems. If `nvidia-smi` is missing, no NVIDIA GPU
 is present, or an `nvidia-smi` command fails, it prints a warning and exits with
-status `0`.
+status `0` only when no GPU action is possible. If a GPU is present but the power
+limit cannot be applied or verified, the script exits non-zero so systemd reports
+the guard as failed.
 
 To change the limit, edit the unit environment value or create a systemd drop-in:
 

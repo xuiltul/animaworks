@@ -256,4 +256,12 @@ def create_internal_router() -> APIRouter:
     async def vector_quick_check(body: VectorQuickCheckRequest, request: Request):
         return await _require_vector_worker(request, "/quick-check", body)
 
+    @router.post("/internal/vector/reset-store")
+    async def vector_reset_store(body: VectorListCollectionsRequest, request: Request):
+        # Forwarded to the worker so repair/quarantine can drop the worker's
+        # cached (and possibly stale or corrupt) ChromaVectorStore. Without this
+        # route the proxy returned 405 and the reset never reached the worker,
+        # leaving stale handles and latched init-failures in place.
+        return await _require_vector_worker(request, "/reset-store", body)
+
     return router

@@ -12,14 +12,16 @@ def test_chroma_vector_store_close_is_idempotent(tmp_path: Path) -> None:
     from core.memory.rag.store import ChromaVectorStore
 
     store = ChromaVectorStore.__new__(ChromaVectorStore)
-    store.client = MagicMock()
+    client = MagicMock()
+    store.client = client
     store.persist_dir = tmp_path
     store._closed = False
 
     store.close()
     store.close()
 
-    store.client.close.assert_called_once()
+    client.close.assert_called_once()
+    assert store.client is None
 
 
 def test_chroma_vector_store_startup_quick_check_blocks_corrupt_db(

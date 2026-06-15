@@ -83,6 +83,52 @@ def test_quick_check_reports_database_error_from_runner(tmp_path: Path) -> None:
     assert result.error == "database disk image is malformed"
 
 
+def test_quick_check_unavailable_database_is_not_corruption(tmp_path: Path) -> None:
+    db_path = chroma_sqlite_path(tmp_path)
+    db_path.write_bytes(b"not sqlite")
+
+    def unavailable_runner(_path: Path, _timeout: float) -> tuple[str, ...]:
+        raise sqlite3.OperationalError("unable to open database file")
+
+    result = quick_check_chroma_sqlite(tmp_path, runner=unavailable_runner)
+
+    assert result.ok is False
+    assert result.status == "unavailable"
+    assert result.corrupt is False
+    assert result.error == "unable to open database file"
+
+
+def test_quick_check_operational_corruption_remains_corrupt(tmp_path: Path) -> None:
+    db_path = chroma_sqlite_path(tmp_path)
+    db_path.write_bytes(b"not sqlite")
+
+    def corrupt_runner(_path: Path, _timeout: float) -> tuple[str, ...]:
+        raise sqlite3.OperationalError("database disk image is malformed")
+
+    result = quick_check_chroma_sqlite(tmp_path, runner=corrupt_runner)
+
+    assert result.ok is False
+    assert result.status == "corrupt"
+    assert result.corrupt is True
+    assert result.error == "database disk image is malformed"
+
+
+def test_configure_pragmas_unavailable_database_is_not_corruption(tmp_path: Path) -> None:
+    db_path = chroma_sqlite_path(tmp_path)
+    db_path.write_bytes(b"not sqlite")
+
+    with patch(
+        "core.memory.rag.sqlite_health._connect",
+        side_effect=sqlite3.OperationalError("too many open files"),
+    ):
+        result = configure_chroma_sqlite_pragmas(tmp_path)
+
+    assert result.ok is False
+    assert result.status == "unavailable"
+    assert result.corrupt is False
+    assert result.error == "too many open files"
+
+
 def test_quick_check_reports_timeout_from_runner(tmp_path: Path) -> None:
     db_path = chroma_sqlite_path(tmp_path)
     db_path.write_bytes(b"not sqlite")

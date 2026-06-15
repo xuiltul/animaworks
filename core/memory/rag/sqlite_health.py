@@ -64,10 +64,14 @@ def quick_check_chroma_sqlite(
     except sqlite3.OperationalError as exc:
         if _sqlite_busy_or_locked(exc):
             return SQLiteHealthResult(db_path=db_path, ok=False, status="busy", error=str(exc))
+        if _sqlite_unavailable(exc):
+            return SQLiteHealthResult(db_path=db_path, ok=False, status="unavailable", error=str(exc))
         return SQLiteHealthResult(db_path=db_path, ok=False, status="corrupt", error=str(exc))
     except sqlite3.DatabaseError as exc:
         return SQLiteHealthResult(db_path=db_path, ok=False, status="corrupt", error=str(exc))
     except OSError as exc:
+        if _sqlite_unavailable(exc):
+            return SQLiteHealthResult(db_path=db_path, ok=False, status="unavailable", error=str(exc))
         return SQLiteHealthResult(db_path=db_path, ok=False, status="unreadable", error=str(exc))
 
     normalized = tuple(item.strip() for item in details if item.strip())
@@ -102,10 +106,14 @@ def configure_chroma_sqlite_pragmas(
     except sqlite3.OperationalError as exc:
         if _sqlite_busy_or_locked(exc):
             return SQLiteHealthResult(db_path=db_path, ok=False, status="busy", error=str(exc))
+        if _sqlite_unavailable(exc):
+            return SQLiteHealthResult(db_path=db_path, ok=False, status="unavailable", error=str(exc))
         return SQLiteHealthResult(db_path=db_path, ok=False, status="corrupt", error=str(exc))
     except sqlite3.DatabaseError as exc:
         return SQLiteHealthResult(db_path=db_path, ok=False, status="corrupt", error=str(exc))
     except OSError as exc:
+        if _sqlite_unavailable(exc):
+            return SQLiteHealthResult(db_path=db_path, ok=False, status="unavailable", error=str(exc))
         return SQLiteHealthResult(db_path=db_path, ok=False, status="unreadable", error=str(exc))
 
     if journal_mode != "wal":
@@ -283,3 +291,8 @@ def _connect(db_path: Path, timeout_seconds: float) -> sqlite3.Connection:
 def _sqlite_busy_or_locked(exc: sqlite3.OperationalError) -> bool:
     lower = str(exc).lower()
     return "locked" in lower or "busy" in lower
+
+
+def _sqlite_unavailable(exc: Exception) -> bool:
+    lower = str(exc).lower()
+    return "unable to open database file" in lower or "too many open files" in lower

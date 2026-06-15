@@ -13,6 +13,7 @@ ExecStop=/home/main/dev/animaworks-bak/.venv/bin/animaworks stop
 Restart=on-failure
 RestartSec=10
 RestartPreventExitStatus=3
+LimitNOFILE=524288
 Environment=HOME=/home/main
 Environment=PATH=/home/main/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=TOKENIZERS_PARALLELISM=false

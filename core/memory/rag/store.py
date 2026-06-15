@@ -142,6 +142,17 @@ class VectorStore(ABC):
 # ── ChromaDB implementation ─────────────────────────────────────────
 
 
+def _stop_chroma_client_system(client: Any) -> None:
+    """Best-effort fallback for Chroma clients without a working close()."""
+    system = getattr(client, "_system", None) or getattr(client, "_server", None)
+    stop = getattr(system, "stop", None)
+    if callable(stop):
+        try:
+            stop()
+        except Exception:
+            logger.debug("Failed to stop ChromaDB system", exc_info=True)
+
+
 class ChromaVectorStore(VectorStore):
     """ChromaDB-backed vector store.
 
@@ -204,12 +215,21 @@ class ChromaVectorStore(VectorStore):
         if self._closed:
             return
         self._closed = True
-        close = getattr(self.client, "close", None)
-        if callable(close):
-            try:
-                close()
-            except Exception:
-                logger.debug("Failed to close ChromaDB client at %s", self.persist_dir, exc_info=True)
+        client = getattr(self, "client", None)
+        try:
+            if client is None:
+                return
+            close = getattr(client, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    logger.debug("Failed to close ChromaDB client at %s", self.persist_dir, exc_info=True)
+                    _stop_chroma_client_system(client)
+            else:
+                _stop_chroma_client_system(client)
+        finally:
+            self.client = None
 
     def _report_chroma_error(self, collection: str, error: Exception, source: str) -> None:
         """Record Chroma errors that may indicate persistent-index corruption."""
@@ -262,6 +282,8 @@ class ChromaVectorStore(VectorStore):
                     retry_error,
                 )
                 raise
+            finally:
+                fresh_store.close()
 
     def _reset_for_self_heal(
         self,

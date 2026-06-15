@@ -34,6 +34,36 @@ class TestParseHeartbeatConfig:
         assert start == 9
         assert end == 22
 
+    def test_ignores_time_ranges_outside_active_hours_section(self):
+        content = """# Heartbeat
+## 活動時間
+24時間（サーバー設定タイムゾーン）
+
+## 通知履歴
+- 2026-05-17 09:10 JST: #2841,#2842,#2843:1-2日
+"""
+        start, end = parse_heartbeat_config(content)
+        assert start is None
+        assert end is None
+
+    def test_invalid_hours_inside_active_hours_section_are_ignored(self):
+        content = """# Heartbeat
+## 活動時間
+43:1-2
+"""
+        start, end = parse_heartbeat_config(content)
+        assert start is None
+        assert end is None
+
+    def test_english_active_hours_heading(self):
+        content = """# Heartbeat
+## Active Hours
+9:00 - 22:00 (server timezone)
+"""
+        start, end = parse_heartbeat_config(content)
+        assert start == 9
+        assert end == 22
+
     def test_defaults_when_no_match(self):
         content = "some random content without patterns"
         start, end = parse_heartbeat_config(content)
