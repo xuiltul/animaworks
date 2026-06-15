@@ -113,6 +113,7 @@ markers = [
     "ollama: tests requiring Ollama server access",
     "locomo: LoCoMo benchmark smoke (requires OPENAI_API_BASE; run with -m locomo)",
     "timeout: set per-test timeout in seconds (requires pytest-timeout)",
+    "flaky: marks tests that may be retried by pytest-rerunfailures",
 ]
 
 [tool.ruff]
