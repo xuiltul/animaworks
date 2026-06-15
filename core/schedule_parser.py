@@ -39,9 +39,7 @@ _HEARTBEAT_ACTIVE_HOUR_HEADINGS = {
     "활동시간",
 }
 
-_HEARTBEAT_TIME_RANGE_RE = re.compile(
-    r"(?<![\d#])(\d{1,2}):\d{0,2}\s*-\s*(\d{1,2})(?::\d{0,2})?(?!\d)"
-)
+_HEARTBEAT_TIME_RANGE_RE = re.compile(r"(?<![\d#])(\d{1,2}):\d{0,2}\s*-\s*(\d{1,2})(?::\d{0,2})?(?!\d)")
 _MARKDOWN_HEADING_RE = re.compile(r"^#{1,6}\s+\S")
 
 
