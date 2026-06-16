@@ -22,6 +22,8 @@ from typing import Any, TypeVar, cast
 
 logger = logging.getLogger("animaworks.rag.store")
 _T = TypeVar("_T")
+_SQLITE_REFUTABLE_SELF_HEAL_REASONS = {"chroma_corruption", "sqlite_malformed"}
+_SQLITE_LIGHTWEIGHT_RETRY_STATUSES = {"ok", "busy"}
 
 # ── Data structures ────────────────────────────────────────────────
 
@@ -265,6 +267,10 @@ class ChromaVectorStore(VectorStore):
             reason = classify_corruption_error(error)
             if reason is None:
                 raise
+
+            if self._should_retry_without_reset(reason, operation, collection, error):
+                return self._retry_without_reset(operation, collection, action)
+
             self._report_chroma_error(collection, error, operation)
             fresh_store = self._reset_for_self_heal(operation, collection, reason, error)
             if fresh_store is None:
@@ -284,6 +290,77 @@ class ChromaVectorStore(VectorStore):
                 raise
             finally:
                 fresh_store.close()
+
+    def _should_retry_without_reset(
+        self,
+        reason: str,
+        operation: str,
+        collection: str,
+        error: Exception,
+    ) -> bool:
+        if reason == "chroma_transient":
+            logger.info(
+                "ChromaDB transient error during %s; retrying once without resetting vector store: "
+                "owner=%s db_path=%s collection=%s reason=%s error=%s",
+                operation,
+                self._owner_label(),
+                self.persist_dir,
+                collection,
+                reason,
+                error,
+            )
+            return True
+        if reason not in _SQLITE_REFUTABLE_SELF_HEAL_REASONS:
+            return False
+
+        with type(self)._self_heal_reset_lock:
+            try:
+                from core.memory.rag.sqlite_health import quick_check_chroma_sqlite
+
+                health = quick_check_chroma_sqlite(self.persist_dir)
+            except Exception:
+                logger.debug(
+                    "Failed to run Chroma SQLite quick_check during self-heal: owner=%s db_path=%s",
+                    self._owner_label(),
+                    self.persist_dir,
+                    exc_info=True,
+                )
+                return False
+
+            if health.status in _SQLITE_LIGHTWEIGHT_RETRY_STATUSES:
+                logger.info(
+                    "ChromaDB self-heal avoided vector-store reset after SQLite quick_check: "
+                    "owner=%s db_path=%s collection=%s operation=%s reason=%s sqlite_status=%s error=%s",
+                    self._owner_label(),
+                    self.persist_dir,
+                    collection,
+                    operation,
+                    reason,
+                    health.status,
+                    error,
+                )
+                return True
+            return False
+
+    def _retry_without_reset(
+        self,
+        operation: str,
+        collection: str,
+        action: Callable[[ChromaVectorStore], _T],
+    ) -> _T:
+        try:
+            return action(self)
+        except Exception as retry_error:
+            self._report_chroma_error(collection, retry_error, operation)
+            logger.warning(
+                "ChromaDB lightweight self-heal retry failed during %s: owner=%s db_path=%s collection=%s error=%s",
+                operation,
+                self._owner_label(),
+                self.persist_dir,
+                collection,
+                retry_error,
+            )
+            raise
 
     def _reset_for_self_heal(
         self,

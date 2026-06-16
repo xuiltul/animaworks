@@ -17,6 +17,7 @@ from core.memory.rag.repair import (
     classify_corruption_error,
     collection_owner,
 )
+from core.memory.rag.repair_utils import SINGLE_SHOT_REASONS
 from core.memory.rag.sqlite_health import SQLiteHealthResult
 
 
@@ -44,7 +45,7 @@ def test_classifies_native_and_sqlite_corruption():
     assert classify_corruption_error(-11) == "native_segfault"
     assert classify_corruption_error("segmentation fault") == "native_segfault"
     assert classify_corruption_error("hnsw index panic: corrupt graph") == "hnsw_corruption"
-    assert classify_corruption_error("Failed to get segments for collection") == "chroma_corruption"
+    assert classify_corruption_error("Failed to get segments for collection") == "chroma_transient"
     assert classify_corruption_error("no such table: embeddings_queue") == "chroma_corruption"
 
 
@@ -53,10 +54,32 @@ def test_does_not_classify_operational_noise():
     assert classify_corruption_error("Collection 'foo' not found") is None
 
 
-def test_does_not_classify_resource_exhaustion_or_transient_io_errors():
+def test_does_not_classify_resource_exhaustion_as_corruption():
     assert classify_corruption_error("hnsw segment reader: Too many open files (os error 24)") is None
     assert classify_corruption_error("unable to open database file") is None
-    assert classify_corruption_error("Internal error: error returned from database: (code: 522) disk I/O error") is None
+    assert (
+        classify_corruption_error("Internal error: error returned from database: (code: 522) disk I/O error")
+        == "chroma_transient"
+    )
+
+
+def test_chroma_transient_is_not_single_shot_and_does_not_start_repair(data_dir: Path):
+    service = RAGRepairService(enabled=True, threshold=1, window_minutes=5, cooldown_minutes=60)
+    service.request_repair = MagicMock(return_value=True)  # type: ignore[method-assign]
+    service._sqlite_quick_check_ok = MagicMock(return_value=True)  # type: ignore[method-assign]
+
+    assert "chroma_transient" not in SINGLE_SHOT_REASONS
+    assert (
+        service.record_chroma_error(
+            anima_name="sora",
+            collection="sora_knowledge",
+            error="Failed to get segments for collection",
+            source="upsert",
+        )
+        is False
+    )
+    service.request_repair.assert_not_called()
+    service._sqlite_quick_check_ok.assert_not_called()
 
 
 def test_collection_owner_uses_default_anima_for_shared_collection():
@@ -115,8 +138,8 @@ def test_chroma_corruption_suppressed_when_sqlite_quick_check_ok(data_dir: Path)
     """A healthy on-disk SQLite refutes a chroma_corruption signal.
 
     chromadb's process-global cache can be transiently poisoned, making an
-    intact DB raise "Failed to get segments". A passing quick_check means the
-    store is fine, so we must not escalate to a (destructive) repair.
+    intact DB raise sqlite-shaped structural errors. A passing quick_check
+    means the store is fine, so we must not escalate to a destructive repair.
     """
     service = RAGRepairService(enabled=True, threshold=1, window_minutes=5, cooldown_minutes=60)
     service.request_repair = MagicMock(return_value=True)  # type: ignore[method-assign]
@@ -126,7 +149,7 @@ def test_chroma_corruption_suppressed_when_sqlite_quick_check_ok(data_dir: Path)
         service.record_chroma_error(
             anima_name="sora",
             collection="sora_knowledge",
-            error="Error getting collection: Failed to get segments",
+            error="Error getting collection: no such table: collections",
             source="upsert",
         )
         is False
@@ -144,7 +167,7 @@ def test_chroma_corruption_still_repairs_when_sqlite_check_not_ok(data_dir: Path
         service.record_chroma_error(
             anima_name="sora",
             collection="sora_knowledge",
-            error="Error getting collection: Failed to get segments",
+            error="Error getting collection: no such table: collections",
             source="upsert",
         )
         is True

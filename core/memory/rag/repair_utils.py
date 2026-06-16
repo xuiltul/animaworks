@@ -85,10 +85,12 @@ def classify_corruption_error(error: BaseException | str | int | None) -> str | 
         return "sqlite_malformed"
     if "sigsegv" in lower or "segmentation fault" in lower or "segfault" in lower:
         return "native_segfault"
-    if "failed to get segments" in lower or "no such table" in lower:
+    if "failed to get segments" in lower:
+        return "chroma_transient"
+    if "no such table" in lower:
         return "chroma_corruption"
     if "disk i/o error" in lower:
-        return None
+        return "chroma_transient"
     if "hnsw" in lower and any(token in lower for token in ("error", "panic", "corrupt", "segmentation")):
         return "hnsw_corruption"
     if any(token in lower for token in ("corrupt", "corruption", "malformed")) and any(

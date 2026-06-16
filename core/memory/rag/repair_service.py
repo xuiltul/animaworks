@@ -127,6 +127,8 @@ class RAGRepairService:
         reason = classify_corruption_error(error)
         if not reason:
             return False
+        if reason == "chroma_transient":
+            return False
 
         owner, is_shared = collection_owner(collection, anima_name)
         if owner is None:
