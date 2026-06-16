@@ -248,7 +248,7 @@ class TestModeBSkillInjection:
         agent._executor._call_llm = capture_call
 
         with patch_litellm(main_resp):
-            await agent.run_cycle("I need a shared skill for all animas")
+            await agent.run_cycle("I need help with a shared skill for all animas")
 
         assert len(captured_system) >= 1
         sys_prompt = captured_system[0]

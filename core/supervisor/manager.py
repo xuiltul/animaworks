@@ -497,6 +497,12 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
                 )
                 return
 
+            # The bootstrap IPC completed successfully.  Validation outcomes such
+            # as ``needs_repair`` should surface to operators, but they are not
+            # retryable transport/execution failures and must not consume the
+            # retry budget that protects against infinite restart loops.
+            success = True
+
             result = response.result or {}
             bootstrap_status: dict[str, Any] = {}
             try:
