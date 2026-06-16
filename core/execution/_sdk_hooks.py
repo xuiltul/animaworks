@@ -494,6 +494,7 @@ def _build_pre_tool_hook(
     _sub_activity_dirs, _sub_mgmt_files, _peer_activity_dirs, _desc_read_files, _desc_read_dirs = (
         _cache_subordinate_paths(anima_dir)
     )
+    intercepted_task_ids: set[str] = set()
     _trust_order = {"trusted": 2, "medium": 1, "untrusted": 0}
 
     # SDK tools → TOOL_TRUST_LEVELS mapping (SDK uses PascalCase names)
