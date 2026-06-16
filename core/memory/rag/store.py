@@ -300,7 +300,7 @@ class ChromaVectorStore(VectorStore):
     ) -> bool:
         if reason == "chroma_transient":
             logger.info(
-                "ChromaDB transient error during %s; retrying once without resetting vector store: "
+                "ChromaDB transient error during %s; resetting vector store before one retry: "
                 "owner=%s db_path=%s collection=%s reason=%s error=%s",
                 operation,
                 self._owner_label(),
@@ -309,7 +309,7 @@ class ChromaVectorStore(VectorStore):
                 reason,
                 error,
             )
-            return True
+            return False
         if reason not in _SQLITE_REFUTABLE_SELF_HEAL_REASONS:
             return False
 

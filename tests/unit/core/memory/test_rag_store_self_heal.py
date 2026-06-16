@@ -70,10 +70,10 @@ def test_chroma_store_self_heals_corruption_and_retries_once(tmp_path: Path) -> 
     good_client.close.assert_called_once()
 
 
-def test_chroma_store_retries_transient_error_without_reset(tmp_path: Path) -> None:
-    collection = MagicMock()
-    client = _upsert_client_with_side_effects(RuntimeError("Failed to get segments"), collection)
-    _FakeChromaVectorStore.clients = [client]
+def test_chroma_store_resets_transient_error_and_retries(tmp_path: Path) -> None:
+    bad_client = _failing_upsert_client("Failed to get segments")
+    good_client = _successful_upsert_client()
+    _FakeChromaVectorStore.clients = [bad_client, good_client]
 
     reset = MagicMock()
     with (
@@ -91,9 +91,11 @@ def test_chroma_store_retries_transient_error_without_reset(tmp_path: Path) -> N
         )
 
     assert ok is True
-    reset.assert_not_called()
-    assert client.get_or_create_collection.call_count == 2
-    client.close.assert_not_called()
+    reset.assert_called_once_with("sora")
+    assert bad_client.get_or_create_collection.call_count == 1
+    assert good_client.get_or_create_collection.call_count == 1
+    bad_client.close.assert_called_once()
+    good_client.close.assert_called_once()
 
 
 def test_chroma_store_retries_sqlite_refutable_error_when_quick_check_ok(tmp_path: Path) -> None:
@@ -125,7 +127,8 @@ def test_chroma_store_retries_sqlite_refutable_error_when_quick_check_ok(tmp_pat
 
 def test_chroma_store_self_heal_returns_false_after_lightweight_retry_failure(tmp_path: Path) -> None:
     bad_client = _failing_upsert_client("Failed to get segments")
-    _FakeChromaVectorStore.clients = [bad_client]
+    retry_client = _failing_upsert_client("Failed to get segments")
+    _FakeChromaVectorStore.clients = [bad_client, retry_client]
 
     reset = MagicMock()
     with (
@@ -139,14 +142,17 @@ def test_chroma_store_self_heal_returns_false_after_lightweight_retry_failure(tm
         )
 
     assert ok is False
-    reset.assert_not_called()
-    assert bad_client.get_or_create_collection.call_count == 2
-    bad_client.close.assert_not_called()
+    reset.assert_called_once_with("sora")
+    assert bad_client.get_or_create_collection.call_count == 1
+    assert retry_client.get_or_create_collection.call_count == 1
+    bad_client.close.assert_called_once()
+    retry_client.close.assert_called_once()
 
 
 def test_chroma_store_lightweight_retry_failure_raises_from_self_heal(tmp_path: Path) -> None:
     client = MagicMock()
-    _FakeChromaVectorStore.clients = [client]
+    retry_client = MagicMock()
+    _FakeChromaVectorStore.clients = [client, retry_client]
     calls = 0
 
     def action(_store: ChromaVectorStore) -> bool:
@@ -164,8 +170,9 @@ def test_chroma_store_lightweight_retry_failure_raises_from_self_heal(tmp_path: 
             store._with_self_heal("upsert", "sora_knowledge", action)
 
     assert calls == 2
-    reset.assert_not_called()
-    client.close.assert_not_called()
+    reset.assert_called_once_with("sora")
+    client.close.assert_called_once()
+    retry_client.close.assert_called_once()
 
 
 def test_chroma_store_resets_when_chroma_corruption_fails_quick_check(tmp_path: Path) -> None:

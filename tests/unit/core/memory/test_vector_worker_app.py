@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -259,6 +260,81 @@ def test_vector_worker_read_endpoints(monkeypatch) -> None:
     assert by_meta.json()["results"][0]["score"] == 0.75
     assert by_ids.json()["documents"][0]["metadata"] == {"kind": "test"}
     assert collections.json()["collections"] == ["knowledge"]
+
+
+def test_vector_worker_resolves_store_inside_native_executor(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
+
+    from core.memory.rag.vector_worker import create_app
+
+    doc = _doc()
+    result = SimpleNamespace(document=doc, score=0.75)
+    store = MagicMock()
+    call_threads: list[tuple[str, str]] = []
+
+    def get_store(_anima_name=None):
+        call_threads.append(("get_store", threading.current_thread().name))
+        return store
+
+    def query(*_args, **_kwargs):
+        call_threads.append(("query", threading.current_thread().name))
+        return [result]
+
+    store.query.side_effect = query
+
+    with (
+        patch("core.memory.rag.singleton.get_vector_store", side_effect=get_store),
+        TestClient(create_app()) as client,
+    ):
+        resp = client.post(
+            "/query",
+            json={"anima_name": "sora", "collection": "knowledge", "embedding": [0.1], "top_k": 1},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["results"][0]["id"] == "doc1"
+    assert [name for name, _thread in call_threads] == ["get_store", "query"]
+    assert all(thread.startswith("vector-worker-native") for _name, thread in call_threads)
+
+
+def test_vector_worker_drops_native_store_after_each_action(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
+
+    from core.memory.rag.vector_worker import create_app
+
+    store = MagicMock()
+    store.list_collections.return_value = ["knowledge"]
+    reset = MagicMock()
+
+    with (
+        patch("core.memory.rag.singleton.get_vector_store", return_value=store),
+        patch("core.memory.rag.singleton.reset_vector_store", reset),
+        TestClient(create_app()) as client,
+    ):
+        resp = client.post("/list-collections", json={"anima_name": "sora"})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"collections": ["knowledge"]}
+    reset.assert_called_once_with("sora")
+
+
+def test_vector_worker_native_exception_does_not_escape_asgi(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
+
+    from core.memory.rag.vector_worker import create_app
+
+    store = MagicMock()
+    store.list_collections.side_effect = RuntimeError("file is not a database")
+
+    with (
+        patch("core.memory.rag.singleton.get_vector_store", return_value=store),
+        patch("core.memory.rag.singleton.reset_vector_store"),
+        TestClient(create_app()) as client,
+    ):
+        resp = client.post("/list-collections", json={"anima_name": "natsume"})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"collections": []}
 
 
 def test_vector_worker_write_endpoints_success(monkeypatch) -> None:
