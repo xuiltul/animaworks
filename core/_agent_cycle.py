@@ -999,6 +999,8 @@ class CycleMixin:
                     trigger=trigger,
                     thread_id=thread_id,
                 ):
+                    if self._progress_callback:
+                        self._progress_callback()
                     if chunk["type"] == "done":
                         full_text_parts.append(chunk["full_text"])
                         text_parts_this_attempt.append(chunk["full_text"])
@@ -1041,14 +1043,10 @@ class CycleMixin:
                                 retry_count=retry_count,
                             )
                         )
-                        if self._progress_callback:
-                            self._progress_callback()
                         yield chunk
                     else:
                         if chunk["type"] == "text_delta":
                             text_parts_this_attempt.append(chunk.get("text", ""))
-                            if self._progress_callback:
-                                self._progress_callback()
                         elif chunk["type"] == "thinking_delta":
                             thinking_text_parts.append(chunk.get("text", ""))
                         yield chunk

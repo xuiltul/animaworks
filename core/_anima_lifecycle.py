@@ -151,8 +151,11 @@ class LifecycleMixin:
         try:
             while True:
                 await asyncio.sleep(interval)
-                self._last_progress_at = now_local()
-                self._write_busy_status_sidecar()
+                if hasattr(self, "_mark_busy_progress"):
+                    self._mark_busy_progress()
+                else:
+                    self._last_progress_at = now_local()
+                    self._write_busy_status_sidecar()
         except asyncio.CancelledError:
             pass
 

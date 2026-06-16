@@ -12,6 +12,7 @@ for batched tasks submitted via ``submit_tasks`` tool.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 from datetime import UTC, datetime
@@ -1371,8 +1372,14 @@ class PendingTaskExecutor:
         )
 
         try:
+            keepalive_task: asyncio.Future[Any] | None = None
             async with self._anima._background_lock:
                 self._anima._mark_busy_start()
+                keepalive = getattr(self._anima, "_keepalive_while_busy", None)
+                if callable(keepalive):
+                    keepalive_result = keepalive()
+                    if inspect.isawaitable(keepalive_result):
+                        keepalive_task = asyncio.ensure_future(keepalive_result)
                 self._anima._status_slots["background"] = "task_exec"
                 self._anima._task_slots["background"] = task_id
                 try:
@@ -1382,6 +1389,9 @@ class PendingTaskExecutor:
                     if status == "done":
                         await self._handle_goal_completion(task_desc, result)
                 finally:
+                    if keepalive_task is not None:
+                        keepalive_task.cancel()
+                        await asyncio.gather(keepalive_task, return_exceptions=True)
                     self._anima._status_slots["background"] = "idle"
                     self._anima._task_slots["background"] = ""
         except Exception as exc:

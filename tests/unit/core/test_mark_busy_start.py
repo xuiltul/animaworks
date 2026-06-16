@@ -107,6 +107,27 @@ class TestMarkBusyStart:
         dp._clear_busy_status_sidecar_if_idle()
         assert not sidecar.exists()
 
+    def test_progress_callback_refreshes_busy_sidecar(self, data_dir, make_anima):
+        """Streaming progress should refresh the IPC-independent busy marker."""
+        anima_dir = make_anima("alice")
+        shared_dir = data_dir / "shared"
+        dp = _make_digital_anima(anima_dir, shared_dir)
+
+        async def _hold_lock():
+            async with dp._background_lock:
+                dp._mark_busy_start()
+                sidecar = data_dir / "run" / "animas" / "alice.busy.json"
+                before = json.loads(sidecar.read_text(encoding="utf-8"))
+
+                dp._last_progress_at = now_jst() - timedelta(minutes=20)
+                dp._agent_progress_callback()
+
+                after = json.loads(sidecar.read_text(encoding="utf-8"))
+                assert after["last_progress_at"] != before["last_progress_at"]
+                assert after["last_progress_at"] == dp._last_progress_at.isoformat()
+
+        asyncio.run(_hold_lock())
+
 
 class TestHeartbeatCallsMarkBusyStart:
     """Verify that heartbeat acquisition triggers _mark_busy_start()."""

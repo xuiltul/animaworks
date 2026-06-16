@@ -104,7 +104,7 @@ class DigitalAnima(
 
             mono = time.monotonic()
             if mono - self._progress_last_mono >= self._progress_min_interval:
-                self._last_progress_at = now_local()
+                self._mark_busy_progress()
                 self._progress_last_mono = mono
 
         self._agent_progress_callback = _throttled_progress
@@ -219,6 +219,11 @@ class DigitalAnima(
 
     # ── Progress tracking ────────────────────────────────────────
 
+    def _has_active_busy_lock(self) -> bool:
+        """Return True while any local execution lane is actively holding work."""
+        any_conversation_locked = any(lock.locked() for lock in self._conversation_locks.values())
+        return any_conversation_locked or self._background_lock.locked() or self._inbox_lock.locked()
+
     def _mark_busy_start(self) -> None:
         """Reset progress timestamp at the start of a new busy period.
 
@@ -229,6 +234,15 @@ class DigitalAnima(
         self._last_progress_at = now
         self._busy_since = now
         self._write_busy_status_sidecar()
+
+    def _mark_busy_progress(self) -> None:
+        """Record forward progress for health checks and the busy sidecar."""
+        now = now_local()
+        self._last_progress_at = now
+        if self._busy_since is None:
+            self._busy_since = now
+        if self._has_active_busy_lock():
+            self._write_busy_status_sidecar()
 
     def _busy_status_sidecar_path(self) -> Path | None:
         """Path used by the supervisor as an IPC-independent busy signal."""
@@ -264,8 +278,7 @@ class DigitalAnima(
     def _clear_busy_status_sidecar_if_idle(self) -> None:
         """Remove the busy marker once all local execution locks are idle."""
         try:
-            any_conversation_locked = any(lock.locked() for lock in self._conversation_locks.values())
-            if any_conversation_locked or self._background_lock.locked() or self._inbox_lock.locked():
+            if self._has_active_busy_lock():
                 return
 
             path = self._busy_status_sidecar_path()
