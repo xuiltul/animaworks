@@ -18,6 +18,68 @@ def _open_fd_count() -> int:
     return len(os.listdir(fd_dir))
 
 
+def _count_open_taskboard_fds(db_path: Path) -> int:
+    fd_dir = Path("/proc/self/fd")
+    if not fd_dir.exists():
+        pytest.skip("/proc/self/fd is not available on this platform")
+
+    targets = {
+        str(db_path.resolve()),
+        str(db_path.with_name(f"{db_path.name}-wal").resolve()),
+        str(db_path.with_name(f"{db_path.name}-shm").resolve()),
+    }
+    count = 0
+    for fd in fd_dir.iterdir():
+        try:
+            if os.readlink(fd) in targets:
+                count += 1
+        except OSError:
+            continue
+    return count
+
+
+def test_store_closes_sqlite_connections(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    real_connect = sqlite3.connect
+    closed_connections = 0
+
+    class TrackingConnection(sqlite3.Connection):
+        def close(self) -> None:
+            nonlocal closed_connections
+            closed_connections += 1
+            super().close()
+
+    def tracking_connect(*args: object, **kwargs: object) -> sqlite3.Connection:
+        kwargs["factory"] = TrackingConnection
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr("core.taskboard.store.sqlite3.connect", tracking_connect)
+
+    store = TaskBoardStore(tmp_path / "taskboard.sqlite3")
+    store.upsert_metadata(anima_name="sakura", task_id="task-1", actor="alice")
+    store.get_metadata("sakura", "task-1")
+    store.list_metadata()
+    store.list_events(anima_name="sakura", task_id="task-1")
+
+    assert closed_connections == 5
+
+
+def test_store_releases_wal_file_descriptors_after_operations(tmp_path: Path) -> None:
+    db_path = tmp_path / "taskboard.sqlite3"
+    store = TaskBoardStore(db_path)
+
+    assert _count_open_taskboard_fds(db_path) == 0
+
+    for index in range(50):
+        task_id = f"task-{index}"
+        store.upsert_metadata(anima_name="kotoha", task_id=task_id, actor="fd-test")
+        store.get_metadata("kotoha", task_id)
+        store.record_surface(anima_name="kotoha", task_id=task_id, actor="fd-test")
+        store.list_metadata("kotoha")
+        store.list_events(anima_name="kotoha", task_id=task_id)
+
+    assert _count_open_taskboard_fds(db_path) == 0
+
+
 def test_get_taskboard_db_path_uses_shared_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
 

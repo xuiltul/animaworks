@@ -109,6 +109,14 @@ class TaskBoardStore:
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
+        """Open a short-lived SQLite connection and always close it.
+
+        ``sqlite3.Connection`` implements a context manager, but its ``__exit__``
+        only commits or rolls back the active transaction; it does not close the
+        connection. TaskBoard opens many WAL-mode connections from long-running
+        Anima processes, so every call site must release the main DB/WAL/SHM file
+        descriptors deterministically.
+        """
         conn = self._connect()
         try:
             with conn:
