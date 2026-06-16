@@ -187,6 +187,7 @@ def main() -> None:
     print(f"  Step 3 (Boost):       {'✅' if boosted_found else '❌'} +{WEIGHT_IMPORTANCE} score boost")
     print(f"  Step 4 (Forgetting):  {'✅' if protected_count > 0 else '❌'} {protected_count} protected")
     print("  Step 5 (Priming):     (see above)")
+    print()
     atexit.unregister(worker.stop)
     worker.stop()
 
