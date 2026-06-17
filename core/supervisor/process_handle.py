@@ -175,6 +175,7 @@ class ProcessHandle:
 
             child_env = os.environ.copy()
             child_env.update(self._child_env_urls)
+            child_env["ANIMAWORKS_EXPECT_STARTUP_ACK"] = "1"
 
             self.process = subprocess.Popen(
                 cmd,

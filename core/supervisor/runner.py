@@ -73,6 +73,7 @@ class AnimaRunner:
         self.shutdown_event = asyncio.Event()
         self._ready_event = asyncio.Event()
         self._startup_ack_event = asyncio.Event()
+        self._expects_startup_ack = os.environ.get("ANIMAWORKS_EXPECT_STARTUP_ACK") == "1"
         self._started_at = now_local()
         self._lock_file: Any | None = None
 
@@ -260,14 +261,20 @@ class AnimaRunner:
                 name=f"startup-idle-compress-{self.anima_name}",
             )
 
-            await self._wait_for_startup_ack()
-            if self.shutdown_event.is_set():
+            if self._expects_startup_ack:
+                await self._wait_for_startup_ack()
+                if self.shutdown_event.is_set():
+                    logger.info(
+                        "Shutdown requested before autonomous services started: %s",
+                        self.anima_name,
+                    )
+                    await self.shutdown_event.wait()
+                    return
+            else:
                 logger.info(
-                    "Shutdown requested before autonomous services started: %s",
+                    "Startup ack not required by parent; starting autonomous services: %s",
                     self.anima_name,
                 )
-                await self.shutdown_event.wait()
-                return
 
             # Start autonomous scheduler (heartbeat + cron)
             self._start_autonomous_services()

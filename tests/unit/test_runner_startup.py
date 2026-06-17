@@ -60,6 +60,22 @@ class TestAnimaRunnerPingReadiness:
         assert result["anima"] == "test-anima"
         assert "uptime_sec" in result
 
+    def test_runner_does_not_require_startup_ack_without_parent_env(self, tmp_path, monkeypatch):
+        """Existing parent processes remain compatible until the server restarts."""
+        monkeypatch.delenv("ANIMAWORKS_EXPECT_STARTUP_ACK", raising=False)
+
+        runner = self._make_runner(tmp_path)
+
+        assert runner._expects_startup_ack is False
+
+    def test_runner_requires_startup_ack_with_parent_env(self, tmp_path, monkeypatch):
+        """New parent processes opt into the startup ack gate explicitly."""
+        monkeypatch.setenv("ANIMAWORKS_EXPECT_STARTUP_ACK", "1")
+
+        runner = self._make_runner(tmp_path)
+
+        assert runner._expects_startup_ack is True
+
     @pytest.mark.asyncio
     async def test_startup_ack_handler_allows_autonomous_start(self, tmp_path):
         """startup_ack should release the runner startup gate."""
@@ -78,6 +94,7 @@ class TestAnimaRunnerPingReadiness:
     async def test_run_starts_ipc_before_anima_init(self, tmp_path):
         """IPC server should start before DigitalAnima is constructed."""
         runner = self._make_runner(tmp_path)
+        runner._expects_startup_ack = True
         call_order: list[str] = []
 
         mock_ipc_server = AsyncMock()
@@ -127,6 +144,7 @@ class TestAnimaRunnerPingReadiness:
     async def test_run_gates_autonomous_services_until_startup_ack(self, tmp_path):
         """Scheduler and watcher tasks must not start until parent ack arrives."""
         runner = self._make_runner(tmp_path)
+        runner._expects_startup_ack = True
 
         mock_ipc_server = AsyncMock()
         mock_ipc_server.start = AsyncMock()
@@ -189,6 +207,7 @@ class TestAnimaRunnerPingReadiness:
         from core._anima_inbox import _append_episode_off_loop
 
         runner = self._make_runner(tmp_path)
+        runner._expects_startup_ack = True
         inbox_started = asyncio.Event()
         inbox_finished = asyncio.Event()
 

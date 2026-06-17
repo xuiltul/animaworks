@@ -287,6 +287,7 @@ class TestStartBaseException:
 
         mock_ready.assert_awaited_once_with(timeout=300.0)
         mock_ack.assert_awaited_once()
+        assert mock_popen.call_args.kwargs["env"]["ANIMAWORKS_EXPECT_STARTUP_ACK"] == "1"
         assert handle.state == ProcessState.RUNNING
 
     @pytest.mark.asyncio
