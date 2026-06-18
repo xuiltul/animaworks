@@ -71,6 +71,40 @@ def test_returns_none_when_chroma_init_fails(monkeypatch):
     assert store is None
 
 
+def test_failed_native_store_init_is_cached_until_reset(monkeypatch):
+    """Repeated calls for one broken anima should not re-run heavy startup checks."""
+    os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
+    monkeypatch.setenv("ANIMAWORKS_ALLOW_DIRECT_CHROMA", "1")
+    from core.memory.rag import singleton
+
+    with patch("core.memory.rag.store.create_chroma_vector_store", side_effect=RuntimeError("corrupt db")) as create:
+        assert get_vector_store("broken") is None
+        assert get_vector_store("broken") is None
+        singleton.reset_vector_store("broken")
+        assert get_vector_store("broken") is None
+
+    assert create.call_count == 2
+
+
+def test_failed_native_store_init_cache_is_per_anima(monkeypatch):
+    """One anima's cached init failure must not suppress a healthy sibling."""
+    os.environ.pop("ANIMAWORKS_VECTOR_URL", None)
+    monkeypatch.setenv("ANIMAWORKS_ALLOW_DIRECT_CHROMA", "1")
+    healthy = MagicMock()
+
+    def _create(*args, anima_name=None, **kwargs):
+        if anima_name == "broken":
+            raise RuntimeError("corrupt db")
+        return healthy
+
+    with patch("core.memory.rag.store.create_chroma_vector_store", side_effect=_create) as create:
+        assert get_vector_store("broken") is None
+        assert get_vector_store("broken") is None
+        assert get_vector_store("healthy") is healthy
+
+    assert create.call_count == 2
+
+
 def test_reset_native_store_drops_all_native_siblings(monkeypatch):
     """Resetting one native store must drop every cached native store.
 

@@ -33,6 +33,7 @@ _BATCH_LIMIT = 1000
 _lock = threading.Lock()
 _native_ops_lock = threading.Lock()
 _vector_stores: dict[str | None, VectorStore | None] = {}
+_vector_store_init_failed: set[str | None] = set()
 _http_stores: dict[tuple[str, str | None], HttpVectorStore] = {}
 _embedding_model: SentenceTransformer | None = None
 _embedding_model_name: str | None = None
@@ -95,9 +96,14 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
     if _init_failed:
         return None
 
+    if anima_name in _vector_store_init_failed:
+        return None
+
     if anima_name not in _vector_stores:
         with _lock:
             if _init_failed:
+                return None
+            if anima_name in _vector_store_init_failed:
                 return None
             if anima_name not in _vector_stores:
                 # Importing the ChromaDB store is an environment-level concern
@@ -142,6 +148,7 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
                     store = create_chroma_vector_store(persist_dir=persist_dir, anima_name=anima_name)
                     _vector_stores[anima_name] = store
                 except Exception as exc:
+                    _vector_store_init_failed.add(anima_name)
                     logger.warning(
                         "Vector store init failed for %s; RAG disabled for this anima only "
                         "(other animas unaffected). Error: %s",
@@ -432,6 +439,7 @@ def reset_vector_store(anima_name: str | None = None) -> None:
     global _init_failed
 
     with _lock:
+        _vector_store_init_failed.discard(anima_name)
         target = _vector_stores.pop(anima_name, None)
         closed_native = target is not None
         _close_store(target, anima_name)
@@ -459,6 +467,7 @@ def close_all_vector_stores() -> None:
         http_stores = list(_http_stores.items())
         _vector_stores.clear()
         _http_stores.clear()
+        _vector_store_init_failed.clear()
         _init_failed = False
 
     for anima_name, store in stores:
@@ -577,6 +586,7 @@ def _reset_for_testing():
 
     with _lock:
         _vector_stores.clear()
+        _vector_store_init_failed.clear()
         _http_stores.clear()
         _embedding_model = None
         _embedding_model_name = None
