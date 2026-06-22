@@ -722,7 +722,43 @@ class TestResolveContradictions:
 
         # This should not raise; the error is counted
         results = await detector.resolve_contradictions(pairs, "test-model")
-        assert results["errors"] >= 0  # May or may not error depending on metadata read
+        assert results["errors"] == 1
+        assert results["superseded"] == 0
+        assert file_a.exists()
+
+    @pytest.mark.asyncio
+    async def test_resolve_skips_stale_pair_without_exception_log(
+        self,
+        detector: ContradictionDetector,
+        anima_dir: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Stale contradiction pairs are skipped before metadata reads."""
+        knowledge_dir = anima_dir / "knowledge"
+        file_a = knowledge_dir / "already-archived.md"
+        file_b = _write_knowledge(knowledge_dir, "current.md", "Current content")
+
+        pair = ContradictionPair(
+            file_a=file_a,
+            file_b=file_b,
+            text_a="Archived content",
+            text_b="Current content",
+            confidence=0.80,
+            resolution="coexist",
+            reason="Stale pair should be skipped",
+        )
+
+        results = await detector.resolve_contradictions([pair], "test-model")
+
+        assert results == {
+            "superseded": 0,
+            "merged": 0,
+            "coexisted": 0,
+            "errors": 1,
+        }
+        assert file_b.exists()
+        assert "Skipping contradiction resolution for stale pair" in caplog.text
+        assert "Failed to resolve contradiction" not in caplog.text
 
 
 # ── Scan Contradictions Tests ───────────────────────────────

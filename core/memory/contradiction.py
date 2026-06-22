@@ -599,6 +599,17 @@ class ContradictionDetector:
             try:
                 strategy = pair.resolution
 
+                missing = [file_path for file_path in (pair.file_a, pair.file_b) if not file_path.exists()]
+                if missing:
+                    logger.warning(
+                        "Skipping contradiction resolution for stale pair: %s vs %s (missing: %s)",
+                        pair.file_a.name,
+                        pair.file_b.name,
+                        ", ".join(path.name for path in missing),
+                    )
+                    results["errors"] += 1
+                    continue
+
                 # Auto-increment failure_count on the older file (file_b)
                 # BEFORE applying the resolution, since supersede/merge may
                 # archive file_b making it inaccessible at its original path.
