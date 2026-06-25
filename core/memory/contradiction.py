@@ -645,6 +645,14 @@ class ContradictionDetector:
                 # Record activity log event for successful resolutions
                 self._log_resolution(pair, strategy)
 
+            except FileNotFoundError as exc:
+                logger.warning(
+                    "Skipping contradiction resolution for stale pair: %s vs %s (missing during apply: %s)",
+                    pair.file_a.name,
+                    pair.file_b.name,
+                    exc.filename or exc,
+                )
+                results["errors"] += 1
             except Exception:
                 logger.exception(
                     "Failed to resolve contradiction: %s vs %s",
