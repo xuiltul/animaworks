@@ -121,6 +121,7 @@ class TestAppendCronLog:
         path = anima_dir / "state" / "cron_logs" / f"{_jst_today().isoformat()}.jsonl"
         lines = path.read_text(encoding="utf-8").strip().splitlines()
         total_expected = n_threads * entries_per_thread
+        assert total_expected > CronLogger._MAX_LINES
         assert len(lines) <= CronLogger._MAX_LINES
         for line in lines:
             entry = json.loads(line)
