@@ -515,6 +515,16 @@ class ExternalMessagingChannelConfig(BaseModel):
     channel_members: dict[str, list[str]] = {}  # channel_id → [anima_name, ...] (Discord only)
 
 
+class ZoomRTMSConfig(BaseModel):
+    """Configuration for Zoom RTMS (Real-Time Media Streams) ingestion."""
+
+    enabled: bool = False
+    default_anima: str = ""  # fallback anima for unmapped meetings
+    meeting_mapping: dict[str, str] = {}  # meeting_id → anima_name
+    chunk_interval_seconds: int = 300  # flush interval for buffered transcript
+    chunk_max_chars: int = 4000  # max chars per chunk (flush on whichever comes first)
+
+
 class ExternalMessagingConfig(BaseModel):
     """Configuration for external messaging integration (inbound + outbound)."""
 
@@ -523,6 +533,7 @@ class ExternalMessagingConfig(BaseModel):
     slack: ExternalMessagingChannelConfig = ExternalMessagingChannelConfig()
     chatwork: ExternalMessagingChannelConfig = ExternalMessagingChannelConfig()
     discord: ExternalMessagingChannelConfig = ExternalMessagingChannelConfig()
+    zoom: ZoomRTMSConfig = ZoomRTMSConfig()
 
 
 class MediaProxyConfig(BaseModel):

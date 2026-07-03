@@ -33,6 +33,7 @@ class ConfigReloadManager:
             results["config"] = self._reload_config_cache()
             results["credentials"] = self._reload_credentials()
             results["slack"] = await self._reload_slack()
+            results["zoom"] = self._reload_zoom()
             results["animas"] = await self._reload_animas()
             return results
 
@@ -46,7 +47,8 @@ class ConfigReloadManager:
         async with self._lock:
             result = self._reload_credentials()
             slack_result = await self._reload_slack()
-            return {**result, "slack": slack_result}
+            zoom_result = self._reload_zoom()
+            return {**result, "slack": slack_result, "zoom": zoom_result}
 
     async def reload_animas(self) -> dict[str, Any]:
         """Sync Anima processes with disk state."""
@@ -86,6 +88,18 @@ class ConfigReloadManager:
             return await manager.reload()
         except Exception as exc:
             logger.exception("Failed to reload Slack")
+            return {"status": "error", "error": str(exc)}
+
+    def _reload_zoom(self) -> dict[str, Any]:
+        """Refresh Zoom RTMS gateway config (mappings, thresholds, creds)."""
+        manager = getattr(self._app.state, "zoom_gateway_manager", None)
+        if manager is None:
+            return {"status": "skipped", "reason": "no_manager"}
+        try:
+            manager.reload()
+            return {"status": "ok"}
+        except Exception as exc:
+            logger.exception("Failed to reload Zoom RTMS gateway")
             return {"status": "error", "error": str(exc)}
 
     async def _reload_animas(self) -> dict[str, Any]:

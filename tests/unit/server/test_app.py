@@ -185,6 +185,7 @@ class TestLifespan:
         mock_app.state.stream_registry = StreamRegistry()
         mock_app.state.slack_socket_manager = None  # prevent await on auto-generated MagicMock
         mock_app.state.discord_gateway_manager = None
+        mock_app.state.zoom_gateway_manager = None
         mock_app.state.usage_governor = None
         mock_app.state.vector_worker = None
         mock_app.state.startup_preflight_runner = lambda *, force_all_vectordb=False: None

@@ -31,6 +31,7 @@ def _merge_strings() -> dict[str, dict[str, str]]:
         tooling,
         tooling_schema,
         tooling_schema_ext,
+        zoom,
     )
 
     merged: dict[str, dict[str, str]] = {}
@@ -54,6 +55,7 @@ def _merge_strings() -> dict[str, dict[str, str]]:
         misc_routes,
         misc_machine,
         migrate,
+        zoom,
     ):
         merged.update(mod.STRINGS)
     return merged

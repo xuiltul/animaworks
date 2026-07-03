@@ -172,6 +172,17 @@ async def _vector_worker_status(request: Request) -> dict:
     return {"enabled": True, "status": "unavailable", "write_circuit_breakers": []}
 
 
+async def _zoom_gateway_status(request: Request) -> dict:
+    manager = getattr(request.app.state, "zoom_gateway_manager", None)
+    if manager is None:
+        return {"status": "missing", "active_meetings": 0}
+    try:
+        return await manager.health_check()
+    except Exception:
+        logger.warning("Failed to fetch Zoom RTMS gateway status", exc_info=True)
+        return {"status": "unavailable", "active_meetings": 0}
+
+
 def _gpu_status() -> dict[str, object]:
     try:
         from core.gpu import get_gpu_status
@@ -244,6 +255,7 @@ def create_system_router() -> APIRouter:
             "processes": process_statuses,
             "scheduler_running": supervisor.is_scheduler_running(),
             "slack_socket_mode": "running" if slack_socket_ok else ("failed" if slack_enabled else "disabled"),
+            "zoom_gateway": await _zoom_gateway_status(request),
             "vector_worker": await _vector_worker_status(request),
             "gpu": _gpu_status(),
         }

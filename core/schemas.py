@@ -113,8 +113,8 @@ class AnimaConfig(BaseModel):
     model_config_data: ModelConfig = Field(default_factory=ModelConfig)
 
 
-EXTERNAL_PLATFORM_SOURCES: frozenset[str] = frozenset({"slack", "chatwork", "googlechat", "discord"})
-"""Message ``source`` values representing external platforms (Slack, Chatwork, Discord, etc.)."""
+EXTERNAL_PLATFORM_SOURCES: frozenset[str] = frozenset({"slack", "chatwork", "googlechat", "discord", "zoom"})
+"""Message ``source`` values representing external platforms (Slack, Chatwork, Discord, Zoom, etc.)."""
 
 
 class Message(BaseModel):

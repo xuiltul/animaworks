@@ -328,4 +328,98 @@ def create_webhooks_router() -> APIRouter:
 
         return {"ok": True}
 
+    # ── Zoom RTMS ──────────────────────────────────────────
+
+    def _zoom_secret_token() -> str | None:
+        """Resolve the Zoom webhook secret token."""
+        try:
+            return get_credential(
+                "zoom",
+                "zoom_webhook",
+                env_var="ZOOM_SECRET_TOKEN",
+            )
+        except ToolConfigError:
+            logger.error("ZOOM_SECRET_TOKEN not configured")
+            return None
+
+    def _verify_zoom_signature(body: bytes, timestamp: str, signature: str, secret_token: str) -> bool:
+        """Verify a Zoom webhook signature.
+
+        Zoom signs each request as ``v0={HMAC-SHA256(secret_token,
+        "v0:{timestamp}:{body}")}`` using the ``x-zm-request-timestamp``
+        header.  Requests older than 5 minutes are rejected (replay
+        prevention), matching the Slack verification path.
+        """
+        try:
+            if abs(time.time() - int(timestamp)) > 300:
+                logger.warning("Zoom request timestamp too old: %s", timestamp)
+                return False
+        except (ValueError, TypeError):
+            return False
+
+        message = f"v0:{timestamp}:{body.decode('utf-8')}"
+        expected = (
+            "v0="
+            + hmac.new(
+                secret_token.encode("utf-8"),
+                message.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+        )
+        return hmac.compare_digest(expected, signature)
+
+    @router.post("/zoom")
+    async def zoom_webhook(request: Request) -> dict:
+        """Handle Zoom RTMS webhook notifications.
+
+        Supports:
+        - ``endpoint.url_validation`` challenge (initial setup)
+        - ``meeting.rtms_started`` / ``meeting.rtms_stopped`` → RTMS manager
+        """
+        body = await request.body()
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON") from None
+
+        event = data.get("event", "")
+        payload = data.get("payload", {}) or {}
+
+        secret_token = _zoom_secret_token()
+        if secret_token is None:
+            raise HTTPException(status_code=503, detail="Zoom not configured")
+
+        # Verify the signature FIRST for every event, including the URL
+        # validation challenge.  Zoom signs validation requests too, and
+        # answering the challenge without verification would turn this
+        # endpoint into a signing oracle (an attacker could submit
+        # plainToken="v0:{ts}:{body}" to mint a valid x-zm-signature).
+        signature = request.headers.get("x-zm-signature", "")
+        timestamp = request.headers.get("x-zm-request-timestamp", "")
+        if not _verify_zoom_signature(body, timestamp, signature, secret_token):
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        # URL validation challenge — respond with an HMAC of the plainToken.
+        if event == "endpoint.url_validation":
+            plain_token = str(payload.get("plainToken", ""))
+            encrypted_token = hmac.new(
+                secret_token.encode("utf-8"),
+                plain_token.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            return {"plainToken": plain_token, "encryptedToken": encrypted_token}
+
+        manager = getattr(request.app.state, "zoom_gateway_manager", None)
+        if manager is None:
+            logger.debug("Zoom webhook received but RTMS manager is not running")
+            return {"ok": True}
+
+        obj = payload.get("object", {}) or {}
+        if event == "meeting.rtms_started":
+            await manager.handle_rtms_started(obj)
+        elif event == "meeting.rtms_stopped":
+            await manager.handle_rtms_stopped(obj)
+
+        return {"ok": True}
+
     return router
