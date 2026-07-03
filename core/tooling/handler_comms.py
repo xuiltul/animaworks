@@ -468,7 +468,11 @@ class CommsToolsMixin:
                 loop = None
 
             if loop is not None and loop.is_running():
-                # Inside an async context — schedule as task
+                # Inside an async context — schedule as task. Cycle-context
+                # inheritance is intentional: this is the outbound delivery of a
+                # board post the agent just made this cycle, so the sync (and its
+                # failure logs) belong to that cycle. It is a short-lived one-shot,
+                # not detached later maintenance.
                 loop.create_task(coro)
             else:
                 # Sync context (MCP tool handler thread pool) —

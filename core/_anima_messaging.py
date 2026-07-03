@@ -11,6 +11,7 @@ references are resolved at runtime via MRO when mixed into ``DigitalAnima``.
 """
 
 import asyncio
+import contextvars
 import json
 import logging
 import re
@@ -622,7 +623,14 @@ class MessagingMixin:
                             run_idle_compaction,
                         )
 
-                        _aio.create_task(run_idle_compaction(_anima, _tid))
+                        # Idle compaction is maintenance that fires long after the
+                        # cycle ends (same class as SessionCompactor's timer), so
+                        # detach from any bound cycle context to avoid tagging its
+                        # logs with a stale, unrelated cycle_id.
+                        _aio.create_task(
+                            run_idle_compaction(_anima, _tid),
+                            context=contextvars.Context(),
+                        )
 
                     self._session_compactor.schedule(
                         self.name,
@@ -1192,6 +1200,10 @@ class MessagingMixin:
                 loop = None
 
             if loop and loop.is_running():
+                # Cycle-context inheritance is intentional: this persists the
+                # turn the agent just produced, so it is a direct continuation of
+                # the cycle's work and its logs belong to that cycle. It runs
+                # near-immediately, not as detached later maintenance.
                 loop.create_task(self._neo4j_ingest_turn(text, source=source, metadata=metadata))
             else:
                 asyncio.run(self._neo4j_ingest_turn(text, source=source, metadata=metadata))
