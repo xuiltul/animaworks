@@ -984,6 +984,11 @@ def _build_post_tool_hook(anima_dir: Path) -> Callable:
 
         import asyncio
 
+        # Cycle-context inheritance is intentional here: this task is spawned
+        # synchronously within the active cycle as a direct continuation of the
+        # tool action the agent just took (updating frontmatter for a knowledge
+        # file it wrote this cycle). It runs near-immediately and its logs belong
+        # to this cycle, so we let it inherit the cycle_id rather than detach.
         asyncio.create_task(_update_knowledge_frontmatter(Path(file_path)))
         return {"async_": True}
 

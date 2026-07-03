@@ -15,6 +15,7 @@ import logging
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -147,17 +148,25 @@ class CycleMixin:
         externalized to short-term memory and automatically continued.
         S and C modes rely on the SDK's built-in context management.
         """
-        async with self._get_agent_lock(thread_id):
-            return await self._run_cycle_inner(
-                prompt,
-                trigger,
-                images=images,
-                prior_messages=prior_messages,
-                message_intent=message_intent,
-                max_turns_override=max_turns_override,
-                thread_id=thread_id,
-                model_config_override=model_config_override,
-            )
+        from core.logging_config import bind_cycle_context, clear_cycle_context
+
+        # Correlate every log line emitted during this cycle. Tokens restore any
+        # outer cycle's context so nested cycles don't leak their id upward.
+        cycle_tokens = bind_cycle_context(uuid4().hex[:8], trigger)
+        try:
+            async with self._get_agent_lock(thread_id):
+                return await self._run_cycle_inner(
+                    prompt,
+                    trigger,
+                    images=images,
+                    prior_messages=prior_messages,
+                    message_intent=message_intent,
+                    max_turns_override=max_turns_override,
+                    thread_id=thread_id,
+                    model_config_override=model_config_override,
+                )
+        finally:
+            clear_cycle_context(cycle_tokens)
 
     async def _run_cycle_inner(
         self,
@@ -752,44 +761,52 @@ class CycleMixin:
         Yields stream chunks. Session chaining is handled seamlessly.
         Final event is ``{"type": "cycle_done", "cycle_result": {...}}``.
         """
-        session_type = resolve_runtime_session_type(trigger)
-        ctx = RuntimeSessionContext.create(
-            session_type=session_type,
-            thread_id=thread_id,
-            trigger=trigger,
-        )
-        async with self._get_agent_lock(thread_id):
-            with runtime_session_scope(ctx):
-                self._tool_handler.bind_runtime_session(ctx)
-                token = self._tool_handler.set_active_session_type(session_type)
-                try:
-                    async for chunk in self._run_cycle_streaming_inner(
-                        prompt,
-                        trigger,
-                        images=images,
-                        prior_messages=prior_messages,
-                        message_intent=message_intent,
-                        max_turns_override=max_turns_override,
-                        thread_id=thread_id,
-                        model_config_override=model_config_override,
-                    ):
-                        if chunk.get("type") == "cycle_done":
-                            cycle_result = chunk.get("cycle_result")
-                            if isinstance(cycle_result, dict):
-                                cycle_result["session_type"] = cycle_result.get("session_type") or ctx.session_type
-                                cycle_result["thread_id"] = cycle_result.get("thread_id") or ctx.thread_id
-                                cycle_result["request_id"] = cycle_result.get("request_id") or ctx.request_id
-                                cycle_result["tool_session_id"] = (
-                                    cycle_result.get("tool_session_id") or ctx.tool_session_id
-                                )
-                        yield chunk
-                finally:
-                    from core.tooling.handler import active_session_type
+        from core.logging_config import bind_cycle_context, clear_cycle_context
 
+        # Correlate every log line emitted during this cycle. Tokens restore any
+        # outer cycle's context so nested cycles don't leak their id upward.
+        cycle_tokens = bind_cycle_context(uuid4().hex[:8], trigger)
+        try:
+            session_type = resolve_runtime_session_type(trigger)
+            ctx = RuntimeSessionContext.create(
+                session_type=session_type,
+                thread_id=thread_id,
+                trigger=trigger,
+            )
+            async with self._get_agent_lock(thread_id):
+                with runtime_session_scope(ctx):
+                    self._tool_handler.bind_runtime_session(ctx)
+                    token = self._tool_handler.set_active_session_type(session_type)
                     try:
-                        active_session_type.reset(token)
-                    except (TypeError, ValueError):
-                        pass
+                        async for chunk in self._run_cycle_streaming_inner(
+                            prompt,
+                            trigger,
+                            images=images,
+                            prior_messages=prior_messages,
+                            message_intent=message_intent,
+                            max_turns_override=max_turns_override,
+                            thread_id=thread_id,
+                            model_config_override=model_config_override,
+                        ):
+                            if chunk.get("type") == "cycle_done":
+                                cycle_result = chunk.get("cycle_result")
+                                if isinstance(cycle_result, dict):
+                                    cycle_result["session_type"] = cycle_result.get("session_type") or ctx.session_type
+                                    cycle_result["thread_id"] = cycle_result.get("thread_id") or ctx.thread_id
+                                    cycle_result["request_id"] = cycle_result.get("request_id") or ctx.request_id
+                                    cycle_result["tool_session_id"] = (
+                                        cycle_result.get("tool_session_id") or ctx.tool_session_id
+                                    )
+                            yield chunk
+                    finally:
+                        from core.tooling.handler import active_session_type
+
+                        try:
+                            active_session_type.reset(token)
+                        except (TypeError, ValueError):
+                            pass
+        finally:
+            clear_cycle_context(cycle_tokens)
 
     async def _run_cycle_streaming_inner(
         self,

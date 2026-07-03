@@ -56,6 +56,20 @@ def _get_frontend_logger() -> logging.Logger:
     handler.suffix = "%Y%m%d"
     # Raw passthrough: message is already a JSON string
     handler.setFormatter(logging.Formatter("%(message)s"))
+    # This logger has propagate=False, so it bypasses the root pipeline. The
+    # /system/frontend-logs endpoint writes external input verbatim, so attach
+    # the standard redaction (and cycle) filters here explicitly. Honour the
+    # config redaction switch, failing open to on (symmetric with the other
+    # setup paths).
+    from core.logging_config import attach_standard_log_filters
+
+    try:
+        from core.config import load_config
+
+        _redaction_enabled = load_config().logging.redaction_enabled
+    except Exception:
+        _redaction_enabled = True
+    attach_standard_log_filters(handler, redaction_enabled=_redaction_enabled)
     _frontend_logger.addHandler(handler)
 
     return _frontend_logger

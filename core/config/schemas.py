@@ -627,6 +627,12 @@ class ActivityLogConfig(BaseModel):
     rotation_time: str = "05:00"  # 実行時刻 (configured TZ)
 
 
+class LoggingConfig(BaseModel):
+    """Configuration for the logging subsystem."""
+
+    redaction_enabled: bool = True  # Mask secrets in log output; disable for raw-log debugging.
+
+
 class MachineConfig(BaseModel):
     """Configuration for machine tool (external agent CLI)."""
 
@@ -1011,6 +1017,7 @@ class AnimaWorksConfig(BaseModel):
     external_messaging: ExternalMessagingConfig = ExternalMessagingConfig()
     background_task: BackgroundTaskConfig = BackgroundTaskConfig()
     activity_log: ActivityLogConfig = ActivityLogConfig()
+    logging: LoggingConfig = LoggingConfig()
     heartbeat: HeartbeatConfig = HeartbeatConfig()
     voice: VoiceConfig = VoiceConfig()
     housekeeping: HousekeepingConfig = HousekeepingConfig()
@@ -1061,6 +1068,7 @@ __all__ = [
     "InteractionConfig",
     "LlmRateGuardConfig",
     "LocalLLMConfig",
+    "LoggingConfig",
     "MachineConfig",
     "MediaProxyConfig",
     "MemoryConfig",

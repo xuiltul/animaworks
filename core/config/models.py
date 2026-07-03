@@ -85,6 +85,7 @@ from core.config.schemas import (
     InboxConfig,
     LlmRateGuardConfig,
     LocalLLMConfig,
+    LoggingConfig,
     MachineConfig,
     MediaProxyConfig,
     MemoryConfig,
