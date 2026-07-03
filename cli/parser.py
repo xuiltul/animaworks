@@ -15,23 +15,26 @@ def cli_main() -> None:
 
     load_dotenv()
 
+    from core.config import load_config
     from core.logging_config import setup_logging
     from core.paths import get_data_dir
+    from core.time_utils import configure_timezone
+
+    # Fail-open: a corrupt config must not crash before logging is even set up
+    # (mirrors runner.py). Fall back to the secure default (redaction on).
+    config_path = get_data_dir() / "config.json"
+    try:
+        _cfg = load_config(config_path) if config_path.exists() else None
+    except Exception:
+        _cfg = None
 
     setup_logging(
         level=os.environ.get("ANIMAWORKS_LOG_LEVEL", "INFO"),
         log_dir=get_data_dir() / "logs",
+        redaction_enabled=_cfg.logging.redaction_enabled if _cfg else True,
     )
 
-    from core.config import load_config
-    from core.time_utils import configure_timezone
-
-    config_path = get_data_dir() / "config.json"
-    if config_path.exists():
-        _cfg = load_config(config_path)
-        configure_timezone(_cfg.system.timezone)
-    else:
-        configure_timezone("")
+    configure_timezone(_cfg.system.timezone if _cfg else "")
 
     parser = argparse.ArgumentParser(description="AnimaWorks - Digital Anima Framework")
     parser.add_argument("--gateway-url", default=None, help="Gateway URL")

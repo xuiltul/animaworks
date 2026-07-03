@@ -15,6 +15,7 @@ runs (SDK compact, conversation compress, shortterm save, etc.).
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 from collections.abc import Callable
@@ -90,11 +91,16 @@ class SessionCompactor:
             logger.debug("SessionCompactor LRU evict: %s", oldest)
 
         loop = asyncio.get_running_loop()
+        # Detach from the scheduling cycle's context: this timer fires minutes
+        # after the cycle ends, so inheriting its cycle_id would misattribute
+        # the idle-compaction logs to an unrelated, long-finished cycle. A fresh
+        # empty Context makes the fired work log as cycle-less (cycle_id "-").
         handle = loop.call_later(
             self._idle_minutes * 60,
             self._fire,
             key,
             callback,
+            context=contextvars.Context(),
         )
         self._timers[key] = handle
 

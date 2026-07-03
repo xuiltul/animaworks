@@ -1012,7 +1012,7 @@ class AnimaRunner:
 # ── CLI Entry Point ────────────────────────────────────────────────
 
 
-def setup_logging(anima_name: str, log_dir: Path) -> None:
+def setup_logging(anima_name: str, log_dir: Path, redaction_enabled: bool = True) -> None:
     """Setup logging for child process with anima-specific log files."""
     from core.logging_config import setup_anima_logging
 
@@ -1021,6 +1021,7 @@ def setup_logging(anima_name: str, log_dir: Path) -> None:
         log_dir=log_dir,
         level="INFO",
         also_to_console=False,  # Child processes log to file only
+        redaction_enabled=redaction_enabled,
     )
 
 
@@ -1065,9 +1066,17 @@ async def main() -> None:
     """Main entry point."""
     args = parse_args()
 
-    setup_logging(args.anima_name, args.log_dir)
-
     from core.config import load_config
+
+    # Best-effort read of the redaction switch before logging is configured.
+    # Falls back to the secure default (on) if config can't be loaded yet.
+    try:
+        _redaction_enabled = load_config().logging.redaction_enabled
+    except Exception:
+        _redaction_enabled = True
+
+    setup_logging(args.anima_name, args.log_dir, redaction_enabled=_redaction_enabled)
+
     from core.platform.fd_limits import raise_fd_soft_limit
     from core.time_utils import configure_timezone
 
