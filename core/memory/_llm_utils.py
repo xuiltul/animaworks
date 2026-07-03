@@ -491,6 +491,12 @@ async def _try_codex_sdk(
                 logger.debug("Failed to close Codex one-shot client", exc_info=True)
 
 
+# Inline retry stays on the live-response budget: a wait longer than this
+# (e.g. a large Retry-After) skips the same-process retry and falls back
+# immediately, while the full block is still reported to the fleet guard.
+_MAX_INLINE_RETRY_WAIT_S = 15.0
+
+
 async def _litellm_stage_with_guard(
     prompt: str,
     *,
@@ -499,6 +505,8 @@ async def _litellm_stage_with_guard(
     max_tokens: int,
     llm_kwargs: dict[str, Any],
     log_prefix: str,
+    guard: Any,
+    family: str,
 ) -> tuple[str, str | None]:
     """Run the LiteLLM one-shot stage under the fleet rate guard.
 
@@ -510,15 +518,7 @@ async def _litellm_stage_with_guard(
         blind-fallback behavior; used for skipped/blocked/rate/unknown paths).
     """
     from core.execution.backoff import decorrelated_jitter
-    from core.execution.error_classifier import (
-        FailoverReason,
-        classify_llm_error,
-        provider_family_of,
-    )
-    from core.execution.rate_guard import get_rate_guard
-
-    guard = get_rate_guard()
-    family = provider_family_of(resolved_model)
+    from core.execution.error_classifier import FailoverReason, classify_llm_error
 
     blocked = guard.blocked_remaining(family)
     if blocked > 0:
@@ -546,9 +546,13 @@ async def _litellm_stage_with_guard(
 
     if reason in (FailoverReason.RATE_LIMIT, FailoverReason.OVERLOADED):
         cfg = guard.config
+        # Report the full block to the fleet (report_block clamps to the max).
         guard.report_block(family, hint.backoff_s or cfg.default_block_seconds, reason.value)
-        if hint.retryable:
-            await asyncio.sleep(min(hint.backoff_s or decorrelated_jitter(0.0), 120.0))
+        # Compute the wait once; retry in-process only when it fits the live
+        # budget, otherwise fall back immediately.
+        wait_s = hint.backoff_s if hint.backoff_s is not None else decorrelated_jitter(0.0)
+        if hint.retryable and wait_s <= _MAX_INLINE_RETRY_WAIT_S:
+            await asyncio.sleep(wait_s)
             try:
                 result = await _try_litellm(
                     prompt,
@@ -572,10 +576,40 @@ async def _litellm_stage_with_guard(
                     log_prefix,
                     retry_reason.value,
                 )
+        else:
+            logger.info(
+                "%s LiteLLM one-shot %s; block %.0fs exceeds inline budget, trying fallback",
+                log_prefix,
+                reason.value,
+                wait_s,
+            )
+        return "fallback", None
+
+    if reason in (FailoverReason.AUTH, FailoverReason.BILLING):
+        logger.error(
+            "%s LiteLLM one-shot %s — human attention required: %s",
+            log_prefix,
+            reason.value,
+            error,
+        )
         return "fallback", None
 
     logger.warning("%s LiteLLM one-shot failed (%s: %s), trying fallback", log_prefix, reason.value, error)
     return "fallback", None
+
+
+def _sdk_stage_guarded(guard: Any, family: str, log_prefix: str, backend: str) -> bool:
+    """Return True when the SDK *backend* should be skipped (family guarded).
+
+    Aligns the one-shot chain with the "all backends guarded → None" edge case:
+    an Anthropic 429 must not be retried against the same shared credential via
+    the Agent SDK, nor an OpenAI block via the Codex SDK.
+    """
+    blocked = guard.blocked_remaining(family)
+    if blocked > 0:
+        logger.info("%s %s skipped: %s rate-guarded for %.0fs", log_prefix, backend, family, blocked)
+        return True
+    return False
 
 
 async def one_shot_completion(
@@ -606,6 +640,12 @@ async def one_shot_completion(
     llm_kwargs = get_llm_kwargs_for_model(model, credential=credential)
     resolved_model = llm_kwargs["model"]
 
+    from core.execution.error_classifier import provider_family_of
+    from core.execution.rate_guard import get_rate_guard
+
+    guard = get_rate_guard()
+    family = provider_family_of(resolved_model)
+
     # 1. Try LiteLLM (under the fleet rate guard)
     outcome, text = await _litellm_stage_with_guard(
         prompt,
@@ -614,14 +654,16 @@ async def one_shot_completion(
         max_tokens=max_tokens,
         llm_kwargs=llm_kwargs,
         log_prefix="one-shot",
+        guard=guard,
+        family=family,
     )
     if outcome == "success":
         return text
     if outcome == "terminal":
         return None
 
-    # 2. Try Agent SDK (Anthropic models only)
-    if _is_anthropic_model(resolved_model):
+    # 2. Try Agent SDK (Anthropic models only), unless the family is guarded.
+    if _is_anthropic_model(resolved_model) and not _sdk_stage_guarded(guard, family, "one-shot", "Agent SDK"):
         try:
             return await _try_agent_sdk(
                 prompt,
@@ -632,7 +674,7 @@ async def one_shot_completion(
         except Exception as e:
             logger.warning("Agent SDK one-shot fallback also failed: %s", e)
 
-    if _is_codex_model(resolved_model):
+    if _is_codex_model(resolved_model) and not _sdk_stage_guarded(guard, family, "one-shot", "Codex SDK"):
         try:
             return await _try_codex_sdk(
                 prompt,
@@ -658,6 +700,12 @@ async def one_shot_completion_with_model_config(
     llm_kwargs = get_llm_kwargs_for_model_config(model_config)
     resolved_model = llm_kwargs["model"]
 
+    from core.execution.error_classifier import provider_family_of
+    from core.execution.rate_guard import get_rate_guard
+
+    guard = get_rate_guard()
+    family = provider_family_of(resolved_model)
+
     outcome, text = await _litellm_stage_with_guard(
         prompt,
         system_prompt=system_prompt,
@@ -665,13 +713,17 @@ async def one_shot_completion_with_model_config(
         max_tokens=max_tokens,
         llm_kwargs=llm_kwargs,
         log_prefix="active-model one-shot",
+        guard=guard,
+        family=family,
     )
     if outcome == "success":
         return text
     if outcome == "terminal":
         return None
 
-    if _is_anthropic_model(resolved_model):
+    if _is_anthropic_model(resolved_model) and not _sdk_stage_guarded(
+        guard, family, "active-model one-shot", "Agent SDK"
+    ):
         try:
             return await _try_agent_sdk(
                 prompt,
@@ -682,7 +734,9 @@ async def one_shot_completion_with_model_config(
         except Exception as e:
             logger.warning("Agent SDK active-model one-shot fallback also failed: %s", e)
 
-    if _is_codex_model(resolved_model):
+    if _is_codex_model(resolved_model) and not _sdk_stage_guarded(
+        guard, family, "active-model one-shot", "Codex SDK"
+    ):
         try:
             return await _try_codex_sdk(
                 prompt,

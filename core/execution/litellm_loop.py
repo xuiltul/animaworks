@@ -242,6 +242,12 @@ class LiteLLMExecutor(
                         hint.backoff_s or _guard.config.default_block_seconds,
                         reason.value,
                     )
+                elif reason in (FailoverReason.AUTH, FailoverReason.BILLING):
+                    logger.error(
+                        "A LiteLLM %s — human attention required: %s",
+                        reason.value,
+                        e,
+                    )
                 logger.exception("LiteLLM API error")
                 raise LLMAPIError(f"LiteLLM API error: {e}") from e
 
