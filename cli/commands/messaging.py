@@ -15,12 +15,13 @@ logger = logging.getLogger("animaworks")
 
 
 def cmd_send(args: argparse.Namespace) -> None:
-    """Send a message from one anima to another (filesystem based)."""
+    """Send a message from an anima or a human user to an anima (filesystem based)."""
     from core.init import ensure_runtime_dir
     from core.messenger import Messenger
     from core.paths import get_shared_dir
 
     ensure_runtime_dir()
+    source = _resolve_sender_source(args.from_person)
     messenger = Messenger(get_shared_dir(), args.from_person)
     msg = messenger.send(
         to=args.to_person,
@@ -28,10 +29,39 @@ def cmd_send(args: argparse.Namespace) -> None:
         thread_id=args.thread_id or "",
         reply_to=args.reply_to or "",
         intent=getattr(args, "intent", "") or "",
+        source=source,
     )
-    print(f"Sent: {msg.from_person} -> {msg.to_person} (id: {msg.id}, thread: {msg.thread_id})")
+    sender_label = msg.from_person if source == "anima" else f"{msg.from_person} (human)"
+    print(f"Sent: {sender_label} -> {msg.to_person} (id: {msg.id}, thread: {msg.thread_id})")
     _persist_replied_to_for_a1(args.to_person)
     _notify_server_message_sent(args.from_person, args.to_person, args.message, msg.id)
+
+
+def _resolve_sender_source(name: str) -> str:
+    """Resolve a sender name to a message source ("anima" or "human").
+
+    A sender is an anima when it is registered in config or has an anima
+    directory.  Anything else is treated as a human sender so the receiving
+    anima accepts the message instead of ignoring it as an unknown anima
+    (see Messenger inbox validation of source=="anima" senders).
+    """
+    from core.paths import get_animas_dir
+
+    known: set[str] = set()
+    try:
+        from core.config.models import load_config
+
+        known = set(load_config().animas.keys())
+    except Exception:
+        pass
+    if name in known:
+        return "anima"
+    try:
+        if (get_animas_dir() / name / "identity.md").exists():
+            return "anima"
+    except Exception:
+        pass
+    return "human"
 
 
 def _persist_replied_to_for_a1(to: str) -> None:

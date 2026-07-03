@@ -201,8 +201,8 @@ def cli_main() -> None:
     p_hb.set_defaults(func=_lazy_heartbeat)
 
     # ── Send ──────────────────────────────────────────────
-    p_send = sub.add_parser("send", help="Send message between animas")
-    p_send.add_argument("from_person", help="Sender name")
+    p_send = sub.add_parser("send", help="Send message to an anima (sender may be an anima or a human user)")
+    p_send.add_argument("from_person", help="Sender name (non-anima names are sent as human)")
     p_send.add_argument("to_person", help="Recipient name")
     p_send.add_argument("message", help="Message content")
     p_send.add_argument("--thread-id", default=None, help="Thread ID")

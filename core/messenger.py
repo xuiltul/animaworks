@@ -175,9 +175,12 @@ class Messenger:
         intent: str = "",
         origin_chain: list[str] | None = None,
         meta: dict[str, Any] | None = None,
+        source: str = "anima",
     ) -> Message:
         # ── Conversation depth check (internal Anima only) ──
-        if msg_type not in ("ack", "error", "system_alert"):
+        # Human-sourced messages bypass the cascade limiter: they originate
+        # outside the anima conversation graph, like the chat API path.
+        if source == "anima" and msg_type not in ("ack", "error", "system_alert"):
             animas_dir = self.shared_dir.parent / "animas"
             is_internal = (animas_dir / to).is_dir() if animas_dir.exists() else False
             if is_internal:
@@ -220,6 +223,7 @@ class Messenger:
             intent=intent,
             origin_chain=origin_chain or [],
             meta=meta or {},
+            source=source,
         )
         # New thread: use message id as thread_id
         if not msg.thread_id:
