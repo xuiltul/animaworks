@@ -17,6 +17,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.memory.fact_observability import warn_rate_limited
 from core.time_utils import now_local, today_local
 
 logger = logging.getLogger("animaworks.token_usage")
@@ -24,6 +25,21 @@ logger = logging.getLogger("animaworks.token_usage")
 # ── Default pricing (USD per 1M tokens, as of 2026-03) ─────
 # Override via ~/.animaworks/pricing.json
 DEFAULT_PRICING: dict[str, dict[str, float]] = {
+    # Opus 4.7 / 4.8 share Opus 4.5/4.6 pricing ($5/$25 per 1M in/out).
+    # Source: ~/.claude/skills/claude-api (SKILL.md model table, 2026-07).
+    # cache_read = 0.1x input, cache_write = 1.25x input (5-min TTL).
+    "claude-opus-4-8": {
+        "input": 5.0,
+        "output": 25.0,
+        "cache_read": 0.50,
+        "cache_write": 6.25,
+    },
+    "claude-opus-4-7": {
+        "input": 5.0,
+        "output": 25.0,
+        "cache_read": 0.50,
+        "cache_write": 6.25,
+    },
     "claude-opus-4-6": {
         "input": 5.0,
         "output": 25.0,
@@ -204,6 +220,13 @@ class TokenUsageLogger:
         bare = re.sub(r"^[a-z]{2}\.anthropic\.", "", bare)
         matches = [(p, v) for p, v in table.items() if bare.startswith(p)]
         if not matches:
+            warn_rate_limited(
+                logger,
+                f"token_usage.unknown_pricing.{bare}",
+                "No pricing entry for model %r; cost will be estimated as 0.0. "
+                "Add it to DEFAULT_PRICING or pricing.json.",
+                bare,
+            )
             return None
         return max(matches, key=lambda x: len(x[0]))[1]
 

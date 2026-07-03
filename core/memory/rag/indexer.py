@@ -254,9 +254,12 @@ class MemoryIndexer:
         except ValueError:
             file_key = str(file_path)
 
-        # Check .ragignore exclusion
+        # Check .ragignore exclusion. Remove any previously-indexed chunks so
+        # a file that matches .ragignore only after indexing does not linger
+        # in the collection (mirrors the curator-denied path below).
         if self.is_ragignored(file_path):
             logger.debug("Skipping ragignored file: %s", file_path)
+            self.delete_indexed_file(file_path, memory_type)
             return 0
 
         if memory_type in ("skills", "common_skills") and file_path.name == "SKILL.md":

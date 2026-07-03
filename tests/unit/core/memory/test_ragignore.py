@@ -187,3 +187,33 @@ class TestIndexFileSkipsRagignored:
 
         assert result == 0
         mock_store.upsert.assert_not_called()
+
+    def test_index_file_purges_existing_chunks_when_newly_ragignored(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """F6: a file that matches .ragignore only after being indexed has its
+        stale chunks removed instead of lingering in the collection."""
+        from unittest.mock import MagicMock
+
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
+        (anima_dir / "knowledge").mkdir()
+        ragignore = tmp_path / ".ragignore"
+        ragignore.write_text("excluded.md\n", encoding="utf-8")
+
+        excluded = anima_dir / "knowledge" / "excluded.md"
+        excluded.write_text("# Excluded content\n\nBody.", encoding="utf-8")
+
+        mock_store = MagicMock()
+        with (
+            patch("core.paths.get_data_dir", return_value=tmp_path),
+            patch.object(MemoryIndexer, "_init_embedding_model"),
+        ):
+            indexer = MemoryIndexer(mock_store, anima_name="test", anima_dir=anima_dir)
+            indexer.delete_indexed_file = MagicMock(return_value=2)
+            result = indexer.index_file(excluded, "knowledge")
+
+        assert result == 0
+        mock_store.upsert.assert_not_called()
+        indexer.delete_indexed_file.assert_called_once_with(excluded, "knowledge")

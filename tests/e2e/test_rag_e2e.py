@@ -421,12 +421,10 @@ def test_e2e_incremental_index_and_graph(anima_dir, vector_store, indexer, retri
     chunks_added = indexer.index_file(new_file, "knowledge")
     assert chunks_added > 0, "New file should produce chunks"
 
-    # Incremental graph update
-    graph.graph.add_node(
-        "query-optimization", path=str(new_file),
-        memory_type="knowledge", stem="query-optimization",
-    )
-    graph.update_graph_incremental([new_file], "test_anima")
+    # Rebuild the graph to pick up the new file. Incremental graph update
+    # was removed with the file watcher (2026-07); the daily indexing cron
+    # performs this rebuild in production.
+    graph.build_graph("test_anima", knowledge_dir)
 
     assert graph.graph.number_of_nodes() == initial_nodes + 1
     assert "query-optimization" in graph.graph

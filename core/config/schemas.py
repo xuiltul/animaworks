@@ -222,7 +222,10 @@ class RAGConfig(BaseModel):
     use_gpu: bool = False
     enable_spreading_activation: bool = True
     max_graph_hops: int = 2
-    enable_file_watcher: bool = True
+    enable_file_watcher: bool = Field(
+        default=True,
+        description="Deprecated: no effect (file watcher removed 2026-07). Kept for config.json compatibility.",
+    )
     graph_cache_enabled: bool = True
     implicit_link_threshold: float = 0.75
     spreading_memory_types: list[str] = ["knowledge", "episodes"]
@@ -680,6 +683,7 @@ class HousekeepingConfig(BaseModel):
     taskboard_suppressed_retention_days: int = Field(default=30, ge=1)
     suppressed_messages_max_size_mb: int = Field(default=10, ge=1)
     suppressed_messages_keep_generations: int = Field(default=5, ge=1)
+    archive_superseded_retention_days: int = Field(default=7, ge=1)
 
 
 class InboxConfig(BaseModel):

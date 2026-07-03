@@ -42,6 +42,11 @@ def test_production_chroma_construction_has_no_unapproved_call_sites() -> None:
             continue
         if path in allowed:
             continue
+        # git ls-files --cached can list a file that is still staged in the
+        # index but has been removed from the working tree (e.g. deleted in a
+        # worktree before the removal is committed). Skip such phantom paths.
+        if not path.is_file():
+            continue
         text = path.read_text(encoding="utf-8")
         if any(needle in text for needle in needles):
             offenders.append(str(path.relative_to(repo)))

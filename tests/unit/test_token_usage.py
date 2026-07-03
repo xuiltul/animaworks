@@ -138,6 +138,35 @@ class TestEstimateCost:
         cost = tul.estimate_cost("unknown-model-xyz", input_tokens=1_000_000)
         assert cost == 0.0
 
+    def test_claude_opus_4_8_pricing(self, tul: TokenUsageLogger):
+        cost = tul.estimate_cost(
+            "claude-opus-4-8",
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            cache_read_tokens=1_000_000,
+            cache_write_tokens=1_000_000,
+        )
+        expected = 5.0 + 25.0 + 0.50 + 6.25
+        assert cost == pytest.approx(expected)
+
+    def test_claude_opus_4_8_not_legacy_opus_4(self, tul: TokenUsageLogger):
+        """opus-4-8 must resolve to its own $5 input, not the legacy $15 opus-4."""
+        cost = tul.estimate_cost("claude-opus-4-8", input_tokens=1_000_000)
+        assert cost == pytest.approx(5.0)
+
+    def test_claude_opus_4_7_pricing(self, tul: TokenUsageLogger):
+        cost = tul.estimate_cost("claude-opus-4-7", input_tokens=1_000_000, output_tokens=1_000_000)
+        assert cost == pytest.approx(5.0 + 25.0)
+
+    def test_unknown_model_warns(self, tul: TokenUsageLogger, caplog):
+        from core.memory.fact_observability import reset_warning_rate_limits
+
+        reset_warning_rate_limits()
+        with caplog.at_level("WARNING", logger="animaworks.token_usage"):
+            cost = tul.estimate_cost("totally-unknown-model-abc", input_tokens=1_000_000)
+        assert cost == 0.0
+        assert "totally-unknown-model-abc" in caplog.text
+
     def test_provider_prefix_stripped(self, tul: TokenUsageLogger):
         cost = tul.estimate_cost("openai/gpt-4o", input_tokens=1_000_000)
         assert cost > 0.0

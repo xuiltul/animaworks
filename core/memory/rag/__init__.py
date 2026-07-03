@@ -18,7 +18,6 @@ from core.memory.rag.graph import KnowledgeGraph, create_knowledge_graph
 from core.memory.rag.indexer import MemoryIndexer
 from core.memory.rag.retriever import MemoryRetriever
 from core.memory.rag.store import ChromaVectorStore, VectorStore
-from core.memory.rag.watcher import FileWatcher, create_file_watcher
 
 __all__ = [
     "VectorStore",
@@ -27,6 +26,4 @@ __all__ = [
     "MemoryRetriever",
     "KnowledgeGraph",
     "create_knowledge_graph",
-    "FileWatcher",
-    "create_file_watcher",
 ]

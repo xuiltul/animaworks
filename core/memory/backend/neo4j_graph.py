@@ -34,7 +34,7 @@ class Neo4jGraphBackend(MemoryBackend):
 
     Supports ingest_text/ingest_file via LLM extraction pipeline
     and hybrid retrieval (BM25 + Vector + BFS + cross-encoder reranking).
-    delete is still a stub (Issue #3).
+    delete() soft-deletes an episode/entity/fact by prefixed ID.
     """
 
     def __init__(
