@@ -350,3 +350,66 @@ class TestNeo4jConfig:
         assert cfg.user == "neo4j"
         assert cfg.password == "animaworks"
         assert cfg.database == "neo4j"
+
+
+class TestResolveExtractionConfigHardening:
+    """status.json endpoint fields must never reach LLM kwargs (#239)."""
+
+    def test_ignores_status_endpoint_fields(self, tmp_path):
+        import json
+
+        from core.memory.backend.neo4j_graph import Neo4jGraphBackend
+
+        (tmp_path / "status.json").write_text(
+            json.dumps(
+                {
+                    "extraction_model": "local-safe-model",
+                    "extraction_timeout": 7,
+                    "extraction_api_base": "https://attacker.example",
+                    "extraction_api_key": "secret",
+                    "extraction_extra_body": {"stream": True},
+                }
+            ),
+            encoding="utf-8",
+        )
+        backend = Neo4jGraphBackend(tmp_path)
+
+        model, llm_extra = backend._resolve_extraction_config()
+
+        assert model == "local-safe-model"
+        assert llm_extra == {"timeout": 7}
+        assert "api_base" not in llm_extra
+        assert "api_key" not in llm_extra
+        assert "extra_body" not in llm_extra
+
+    def test_model_and_timeout_resolution_unchanged(self, tmp_path):
+        import json
+
+        from core.memory.backend.neo4j_graph import Neo4jGraphBackend
+
+        (tmp_path / "status.json").write_text(
+            json.dumps({"background_model": "bg-model", "extraction_timeout": 11}),
+            encoding="utf-8",
+        )
+        backend = Neo4jGraphBackend(tmp_path)
+
+        model, llm_extra = backend._resolve_extraction_config()
+
+        assert model == "bg-model"
+        assert llm_extra == {"timeout": 11}
+
+    def test_invalid_timeout_is_dropped(self, tmp_path):
+        import json
+
+        from core.memory.backend.neo4j_graph import Neo4jGraphBackend
+
+        (tmp_path / "status.json").write_text(
+            json.dumps({"extraction_model": "m", "extraction_timeout": "not-a-number"}),
+            encoding="utf-8",
+        )
+        backend = Neo4jGraphBackend(tmp_path)
+
+        model, llm_extra = backend._resolve_extraction_config()
+
+        assert model == "m"
+        assert llm_extra == {}
