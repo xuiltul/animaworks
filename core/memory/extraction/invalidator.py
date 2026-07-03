@@ -33,12 +33,14 @@ class EdgeInvalidator:
         model: str = "claude-sonnet-4-6",
         locale: str = "ja",
         llm_extra: dict[str, object] | None = None,
+        credential: str = "",
     ) -> None:
         self._driver = driver
         self._group_id = group_id
         self._model = model
         self._locale = locale
         self._llm_extra = llm_extra or {}
+        self._credential = credential
 
     async def find_and_invalidate(
         self,
@@ -165,7 +167,7 @@ class EdgeInvalidator:
 
         from core.memory._llm_utils import get_memory_llm_kwargs_for_model
 
-        llm_kwargs = get_memory_llm_kwargs_for_model(self._model, self._llm_extra)
+        llm_kwargs = get_memory_llm_kwargs_for_model(self._model, self._llm_extra, credential=self._credential)
         resolved_model = llm_kwargs.pop("model", self._model)
         effective_timeout = llm_kwargs.pop("timeout", 30)
         response = await litellm.acompletion(

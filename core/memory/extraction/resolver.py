@@ -49,6 +49,7 @@ class EntityResolver:
         vector_min_score: float = 0.5,
         jaccard_threshold: float = 0.4,
         llm_extra: dict[str, object] | None = None,
+        credential: str = "",
     ) -> None:
         self._driver = driver
         self._group_id = group_id
@@ -58,6 +59,7 @@ class EntityResolver:
         self._vector_min_score = vector_min_score
         self._jaccard_threshold = jaccard_threshold
         self._llm_extra = llm_extra or {}
+        self._credential = credential
         self._session_cache: dict[str, ResolvedEntity] = {}
 
     def clear_cache(self) -> None:
@@ -242,7 +244,7 @@ class EntityResolver:
 
         from core.memory._llm_utils import get_memory_llm_kwargs_for_model
 
-        llm_kwargs = get_memory_llm_kwargs_for_model(self._model, self._llm_extra)
+        llm_kwargs = get_memory_llm_kwargs_for_model(self._model, self._llm_extra, credential=self._credential)
         resolved_model = llm_kwargs.pop("model", self._model)
         effective_timeout = llm_kwargs.pop("timeout", 30)
         response = await litellm.acompletion(
