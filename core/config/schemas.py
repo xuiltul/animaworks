@@ -974,6 +974,10 @@ class SkillPromotionConfig(BaseModel):
     confidence_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     failure_count_max: int = Field(default=1, ge=0)
     last_used_within_days: int = Field(default=180, ge=1)
+    # DEPRECATED no-op flags. Retained only for config.json backward compat so
+    # existing files validate. They are never read: promotion always writes to
+    # quarantine and requires human approval before activation. A warning is
+    # emitted at load time (see core.config.io) when set to a non-default value.
     auto_activate: bool = False
     require_approval_on_warn: bool = True
 

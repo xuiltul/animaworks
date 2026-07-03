@@ -56,8 +56,21 @@ class PromotionPolicy:
     confidence_threshold: float = 0.8
     failure_count_max: int = 1
     last_used_within_days: int = 180
-    auto_activate: bool = False
-    require_approval_on_warn: bool = True
+
+    @classmethod
+    def from_config(cls, pcfg: Any) -> PromotionPolicy:
+        """Build a policy from a ``SkillPromotionConfig`` (threshold fields only).
+
+        The deprecated no-op config flags are intentionally not mapped:
+        promotion always writes to quarantine and requires human approval
+        before activation.
+        """
+        return cls(
+            success_count_threshold=pcfg.success_count_threshold,
+            confidence_threshold=pcfg.confidence_threshold,
+            failure_count_max=pcfg.failure_count_max,
+            last_used_within_days=pcfg.last_used_within_days,
+        )
 
 
 @dataclass(slots=True)

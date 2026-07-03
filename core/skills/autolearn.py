@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,10 +17,12 @@ from core.memory.frontmatter import parse_frontmatter
 from core.paths import get_common_skills_dir
 from core.skills.index import SkillIndex
 from core.skills.models import SkillMetadata
-from core.skills.promotion import ProcedureToSkillConverter, SkillPromotionResult
+from core.skills.promotion import ProcedureToSkillConverter, PromotionPolicy, SkillPromotionResult
 from core.skills.promotion_utils import normalise_risk
 from core.skills.router_metadata import fill_routing_metadata_gaps
 from core.time_utils import now_iso
+
+logger = logging.getLogger(__name__)
 
 AUTO_SKILL_SKIPPED = "auto_skill_skipped"
 AUTO_CREATED_REPORT_KEY = "skill_auto.created"
@@ -56,9 +59,30 @@ class AutonomousSkillLearner:
         common_skills_dir: Path | None = None,
     ) -> None:
         self.anima_dir = anima_dir
-        self.converter = converter or ProcedureToSkillConverter(anima_dir)
+        self.converter = converter or self._default_converter(anima_dir)
         self.common_skills_dir = common_skills_dir or get_common_skills_dir()
         self.audit_path = anima_dir / "state" / "skill_promotion.jsonl"
+
+    @staticmethod
+    def _default_converter(anima_dir: Path) -> ProcedureToSkillConverter:
+        """Build the default converter with a config-derived promotion policy.
+
+        Falls back to the built-in :class:`PromotionPolicy` defaults (identical
+        to prior behaviour) when config loading fails, so the autonomous path
+        never stops promoting because of a transient config error.
+        """
+        policy: PromotionPolicy | None = None
+        try:
+            from core.config.models import load_config
+
+            policy = PromotionPolicy.from_config(load_config().skills.promotion)
+        except Exception:
+            logger.warning(
+                "Failed to load promotion config for autonomous skill learner; "
+                "falling back to default PromotionPolicy",
+                exc_info=True,
+            )
+        return ProcedureToSkillConverter(anima_dir, policy=policy)
 
     def run(self) -> AutoSkillLearnResult:
         """Create all currently eligible low-risk probation skills."""

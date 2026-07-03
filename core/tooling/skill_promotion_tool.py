@@ -27,15 +27,7 @@ def handle_promote_procedure_to_skill(handler: Any, args: dict[str, Any]) -> str
     from core.skills.promotion import ProcedureToSkillConverter, PromotionPolicy
 
     action = args.get("action", "draft")
-    pcfg = load_config().skills.promotion
-    policy = PromotionPolicy(
-        success_count_threshold=pcfg.success_count_threshold,
-        confidence_threshold=pcfg.confidence_threshold,
-        failure_count_max=pcfg.failure_count_max,
-        last_used_within_days=pcfg.last_used_within_days,
-        auto_activate=pcfg.auto_activate,
-        require_approval_on_warn=pcfg.require_approval_on_warn,
-    )
+    policy = PromotionPolicy.from_config(load_config().skills.promotion)
     converter = ProcedureToSkillConverter(
         handler._anima_dir,
         policy=policy,

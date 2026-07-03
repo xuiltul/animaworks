@@ -117,6 +117,91 @@ def curator_allows_access(
     return True, "allowed"
 
 
+def _curator_proposal_count(report: dict[str, Any]) -> int:
+    """Count actionable curator proposals (lifecycle suggestions + duplicates)."""
+    count = 0
+    for key in ("suggestions", "duplicates"):
+        value = report.get(key)
+        if isinstance(value, list):
+            count += len(value)
+    return count
+
+
+def _load_last_reviewed_at(anima_dir: Path) -> datetime | None:
+    path = anima_dir / "state" / "skill_curator" / "last_reviewed.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    return _parse_time(str(data.get("reviewed_at") or "") or None)
+
+
+def latest_unreviewed_report(anima_dir: Path) -> dict[str, Any] | None:
+    """Return the newest curator report that has proposals and is not yet acked.
+
+    A report qualifies when it holds at least one lifecycle suggestion or
+    duplicate candidate and is newer than the last ``curate_skills`` review
+    marker (``state/skill_curator/last_reviewed.json``). Any read/parse failure
+    is swallowed and returns ``None`` so heartbeat construction is never blocked.
+    """
+    report_dir = anima_dir / "state" / "skill_curator"
+    try:
+        report_paths = sorted(report_dir.glob("report-*.json"))
+    except OSError:
+        return None
+    if not report_paths:
+        return None
+    report_path = report_paths[-1]
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.debug("Failed to read curator report %s", report_path, exc_info=True)
+        return None
+    if not isinstance(report, dict) or _curator_proposal_count(report) < 1:
+        return None
+    reviewed_at = _load_last_reviewed_at(anima_dir)
+    if reviewed_at is not None:
+        try:
+            report_mtime = datetime.fromtimestamp(report_path.stat().st_mtime, UTC)
+        except OSError:
+            report_mtime = None
+        if report_mtime is not None and report_mtime <= reviewed_at:
+            return None
+    return report
+
+
+def summarize_curator_report(report: dict[str, Any]) -> tuple[int, str, str]:
+    """Summarise a curator report as ``(count, breakdown, top_items)``.
+
+    ``breakdown`` and ``top_items`` use neutral English/identifier tokens (state
+    names, skill names) so they are safe to interpolate into any locale prompt.
+    """
+    suggestions = [s for s in (report.get("suggestions") or []) if isinstance(s, dict)]
+    duplicates = [d for d in (report.get("duplicates") or []) if isinstance(d, dict)]
+    count = len(suggestions) + len(duplicates)
+
+    breakdown_counts: dict[str, int] = {}
+    for suggestion in suggestions:
+        state = str(suggestion.get("suggested_state") or "unknown")
+        breakdown_counts[state] = breakdown_counts.get(state, 0) + 1
+    parts = [f"{state} x{n}" for state, n in sorted(breakdown_counts.items())]
+    if duplicates:
+        parts.append(f"duplicates x{len(duplicates)}")
+    breakdown = ", ".join(parts) if parts else "none"
+
+    names: list[str] = []
+    for entry in (*suggestions, *duplicates):
+        name = str(entry.get("skill_name") or "").strip()
+        if name and name not in names:
+            names.append(name)
+        if len(names) >= 3:
+            break
+    top_items = ", ".join(names) if names else "-"
+    return count, breakdown, top_items
+
+
 class SkillCurator:
     """Manage skill lifecycle state through append-only events."""
 

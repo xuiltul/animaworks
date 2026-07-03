@@ -420,7 +420,20 @@ class SkillsToolsMixin:
         except Exception as exc:
             logger.exception("curate_skills failed")
             return _error_result("CuratorFailed", str(exc))
+        self._mark_curator_reviewed()
         return _json.dumps(report, ensure_ascii=False, indent=2, default=str)
+
+    def _mark_curator_reviewed(self) -> None:
+        """Record the curator review time so heartbeat stops re-injecting reports."""
+        try:
+            marker_dir = self._anima_dir / "state" / "skill_curator"
+            marker_dir.mkdir(parents=True, exist_ok=True)
+            (marker_dir / "last_reviewed.json").write_text(
+                _json.dumps({"reviewed_at": now_iso()}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            logger.debug("Failed to update curator review marker", exc_info=True)
 
     def _handle_archive_skill(self, args: dict[str, Any]) -> str:
         return self._handle_curator_state_change(args, "archived")
