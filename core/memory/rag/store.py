@@ -269,7 +269,15 @@ class ChromaVectorStore(VectorStore):
                 raise
 
             if self._should_retry_without_reset(reason, operation, collection, error):
-                return self._retry_without_reset(operation, collection, action)
+                try:
+                    return self._retry_without_reset(operation, collection, action)
+                except Exception as retry_error:
+                    if reason != "chroma_transient" or classify_corruption_error(retry_error) != "chroma_transient":
+                        raise
+                    # Two consecutive transient failures mean this client is
+                    # latched (e.g. a poisoned segment cache), not a one-shot
+                    # compaction glitch; escalate to a rate-limited reset.
+                    error = retry_error
 
             self._report_chroma_error(collection, error, operation)
             fresh_store = self._reset_for_self_heal(operation, collection, reason, error)
@@ -300,7 +308,7 @@ class ChromaVectorStore(VectorStore):
     ) -> bool:
         if reason == "chroma_transient":
             logger.info(
-                "ChromaDB transient error during %s; resetting vector store before one retry: "
+                "ChromaDB transient error during %s; retrying once without resetting vector store: "
                 "owner=%s db_path=%s collection=%s reason=%s error=%s",
                 operation,
                 self._owner_label(),
@@ -309,7 +317,7 @@ class ChromaVectorStore(VectorStore):
                 reason,
                 error,
             )
-            return False
+            return True
         if reason not in _SQLITE_REFUTABLE_SELF_HEAL_REASONS:
             return False
 
@@ -370,6 +378,30 @@ class ChromaVectorStore(VectorStore):
         error: Exception,
     ) -> ChromaVectorStore | None:
         with type(self)._self_heal_reset_lock:
+            try:
+                from core.memory.rag.singleton import reset_vector_store_after_error
+
+                did_reset = reset_vector_store_after_error(self._anima_name(), source=f"self_heal:{operation}")
+            except Exception:
+                logger.debug(
+                    "Failed to reset singleton vector store during self-heal: owner=%s db_path=%s",
+                    self._owner_label(),
+                    self.persist_dir,
+                    exc_info=True,
+                )
+                did_reset = False
+            if not did_reset:
+                logger.warning(
+                    "ChromaDB self-heal reset suppressed by cooldown during %s: "
+                    "owner=%s db_path=%s collection=%s reason=%s error=%s",
+                    operation,
+                    self._owner_label(),
+                    self.persist_dir,
+                    collection,
+                    reason,
+                    error,
+                )
+                return None
             logger.warning(
                 "ChromaDB corruption detected during %s; resetting vector store before one retry: "
                 "owner=%s db_path=%s collection=%s reason=%s error=%s",
@@ -380,17 +412,6 @@ class ChromaVectorStore(VectorStore):
                 reason,
                 error,
             )
-            try:
-                from core.memory.rag.singleton import reset_vector_store
-
-                reset_vector_store(self._anima_name())
-            except Exception:
-                logger.debug(
-                    "Failed to reset singleton vector store during self-heal: owner=%s db_path=%s",
-                    self._owner_label(),
-                    self.persist_dir,
-                    exc_info=True,
-                )
             self.close()
             try:
                 return type(self)(persist_dir=self.persist_dir, anima_name=self._anima_name())

@@ -18,6 +18,7 @@ via HTTP, eliminating per-process GPU model loading.
 import logging
 import os
 import threading
+import time
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -47,6 +48,11 @@ EmbeddingPriority = Literal["interactive", "bulk"]
 _priority_condition = threading.Condition(threading.Lock())
 _interactive_waiters = 0
 _bulk_yield_count = 0
+
+_ERROR_RESET_COOLDOWN_ENV = "ANIMAWORKS_VECTOR_ERROR_RESET_COOLDOWN_SECONDS"
+_DEFAULT_ERROR_RESET_COOLDOWN_SECONDS = 60.0
+_error_reset_lock = threading.Lock()
+_last_error_reset_monotonic: float | None = None
 
 
 def _get_http_store(base_url: str, anima_name: str | None) -> HttpVectorStore:
@@ -480,6 +486,49 @@ def reset_vector_store(anima_name: str | None = None) -> None:
         _init_failed = False
 
 
+def _error_reset_cooldown_seconds() -> float:
+    try:
+        value = float(os.environ.get(_ERROR_RESET_COOLDOWN_ENV, _DEFAULT_ERROR_RESET_COOLDOWN_SECONDS))
+    except ValueError:
+        return _DEFAULT_ERROR_RESET_COOLDOWN_SECONDS
+    return max(0.0, value)
+
+
+def reset_vector_store_after_error(anima_name: str | None = None, *, source: str = "") -> bool:
+    """Rate-limited ``reset_vector_store`` for error-recovery paths.
+
+    Every error-triggered reset closes ALL cached native clients (see
+    ``reset_vector_store``), interrupting chromadb's in-flight compactions on
+    sibling DBs. Under an error storm those interruptions surface fresh
+    transient 522/"Failed to get segments" errors, which trigger further
+    resets — the self-sustaining churn that has repeatedly escalated into real
+    on-disk corruption and fleet-wide quarantines. A process-wide cooldown
+    caps that feedback loop. Deliberate resets (rebuild swaps, explicit
+    ``/reset-store``) must keep calling ``reset_vector_store`` directly and
+    are never throttled.
+
+    Returns True when the reset ran, False when suppressed by the cooldown.
+    """
+    global _last_error_reset_monotonic
+
+    cooldown = _error_reset_cooldown_seconds()
+    with _error_reset_lock:
+        now = time.monotonic()
+        last = _last_error_reset_monotonic
+        if last is not None and (now - last) < cooldown:
+            logger.warning(
+                "Skipping error-triggered vector store reset for %s (source=%s): cooldown %.0fs, %.0fs remaining",
+                anima_name or "shared",
+                source or "unknown",
+                cooldown,
+                cooldown - (now - last),
+            )
+            return False
+        _last_error_reset_monotonic = now
+    reset_vector_store(anima_name)
+    return True
+
+
 def close_all_vector_stores() -> None:
     """Close all cached vector-store clients before process shutdown."""
     global _init_failed
@@ -603,9 +652,11 @@ def get_embedding_e5_prefix_enabled() -> bool:
 def _reset_for_testing():
     """Reset singletons for test isolation."""
     global _bulk_yield_count, _direct_disabled_warned, _embedding_model, _embedding_model_device, _embedding_model_name
-    global _init_failed, _interactive_waiters
+    global _init_failed, _interactive_waiters, _last_error_reset_monotonic
     from core.gpu import reset_gpu_status_for_testing
 
+    with _error_reset_lock:
+        _last_error_reset_monotonic = None
     with _lock:
         _vector_stores.clear()
         _vector_store_init_failed.clear()

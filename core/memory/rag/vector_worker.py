@@ -210,7 +210,7 @@ def _try_recover_latched_store(anima_name: str | None) -> Any | None:
 
 
 def _call_vector_store(anima_name: str | None, action: Callable[[Any], Any]) -> Any | None:
-    from core.memory.rag.singleton import get_vector_store, reset_vector_store
+    from core.memory.rag.singleton import get_vector_store, reset_vector_store_after_error
 
     try:
         store = get_vector_store(anima_name)
@@ -222,7 +222,7 @@ def _call_vector_store(anima_name: str | None, action: Callable[[Any], Any]) -> 
     except Exception:
         logger.warning("Vector worker native store action failed for owner=%s", anima_name or "shared", exc_info=True)
         try:
-            reset_vector_store(anima_name)
+            reset_vector_store_after_error(anima_name, source="worker_action_failure")
         except Exception:
             logger.debug(
                 "Vector worker failed to reset native store after action failure for owner=%s",

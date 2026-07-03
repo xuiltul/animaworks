@@ -16,6 +16,18 @@ from core.paths import TEMPLATES_DIR
 
 
 @pytest.fixture(autouse=True)
+def _reset_vector_error_reset_cooldown() -> None:
+    """Clear the process-wide vector-store error-reset cooldown between tests."""
+    from core.memory.rag import singleton
+
+    with singleton._error_reset_lock:
+        singleton._last_error_reset_monotonic = None
+    yield
+    with singleton._error_reset_lock:
+        singleton._last_error_reset_monotonic = None
+
+
+@pytest.fixture(autouse=True)
 def _reset_config_caches_for_unit_tests() -> None:
     """Clear runtime config singletons so data-dir monkeypatching is isolated."""
     from core.config import invalidate_cache, invalidate_vault_cache

@@ -204,3 +204,28 @@ def test_clear_vector_store_init_failed_only_clears_per_anima_latch() -> None:
     assert singleton.is_vector_store_init_failed(None) is True
     assert singleton.is_global_vector_store_init_failed() is True
     assert singleton.clear_vector_store_init_failed("sora") is False
+
+
+def test_reset_vector_store_after_error_applies_process_wide_cooldown(monkeypatch) -> None:
+    """A second error-triggered reset within the cooldown must be suppressed."""
+    from core.memory.rag import singleton
+
+    calls: list[str | None] = []
+    monkeypatch.setattr(singleton, "reset_vector_store", calls.append)
+
+    assert singleton.reset_vector_store_after_error("sora", source="test") is True
+    assert singleton.reset_vector_store_after_error("mei", source="test") is False
+    assert calls == ["sora"]
+
+
+def test_reset_vector_store_after_error_cooldown_configurable(monkeypatch) -> None:
+    """Setting the cooldown env to 0 disables throttling."""
+    from core.memory.rag import singleton
+
+    monkeypatch.setenv("ANIMAWORKS_VECTOR_ERROR_RESET_COOLDOWN_SECONDS", "0")
+    calls: list[str | None] = []
+    monkeypatch.setattr(singleton, "reset_vector_store", calls.append)
+
+    assert singleton.reset_vector_store_after_error("sora", source="test") is True
+    assert singleton.reset_vector_store_after_error("sora", source="test") is True
+    assert calls == ["sora", "sora"]

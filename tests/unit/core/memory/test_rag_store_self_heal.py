@@ -70,7 +70,29 @@ def test_chroma_store_self_heals_corruption_and_retries_once(tmp_path: Path) -> 
     good_client.close.assert_called_once()
 
 
-def test_chroma_store_resets_transient_error_and_retries(tmp_path: Path) -> None:
+def test_chroma_store_retries_transient_error_without_reset(tmp_path: Path) -> None:
+    collection = MagicMock()
+    client = _upsert_client_with_side_effects(RuntimeError("Failed to get segments"), collection)
+    _FakeChromaVectorStore.clients = [client]
+
+    reset = MagicMock()
+    with (
+        patch("core.memory.rag.singleton.reset_vector_store", reset),
+        patch("core.memory.rag.repair.record_chroma_error"),
+    ):
+        store = _FakeChromaVectorStore(persist_dir=tmp_path, anima_name="sora")
+        ok = store.upsert(
+            "sora_knowledge",
+            [Document(id="doc1", content="hello", embedding=[0.1], metadata={})],
+        )
+
+    assert ok is True
+    reset.assert_not_called()
+    assert client.get_or_create_collection.call_count == 2
+    client.close.assert_not_called()
+
+
+def test_chroma_store_escalates_repeated_transient_error_to_reset(tmp_path: Path) -> None:
     bad_client = _failing_upsert_client("Failed to get segments")
     good_client = _successful_upsert_client()
     _FakeChromaVectorStore.clients = [bad_client, good_client]
@@ -79,10 +101,6 @@ def test_chroma_store_resets_transient_error_and_retries(tmp_path: Path) -> None
     with (
         patch("core.memory.rag.singleton.reset_vector_store", reset),
         patch("core.memory.rag.repair.record_chroma_error"),
-        patch(
-            "core.memory.rag.sqlite_health.quick_check_chroma_sqlite",
-            return_value=_sqlite_health(tmp_path, status="ok", ok=True),
-        ),
     ):
         store = _FakeChromaVectorStore(persist_dir=tmp_path, anima_name="sora")
         ok = store.upsert(
@@ -92,10 +110,31 @@ def test_chroma_store_resets_transient_error_and_retries(tmp_path: Path) -> None
 
     assert ok is True
     reset.assert_called_once_with("sora")
-    assert bad_client.get_or_create_collection.call_count == 1
+    assert bad_client.get_or_create_collection.call_count == 2
     assert good_client.get_or_create_collection.call_count == 1
     bad_client.close.assert_called_once()
     good_client.close.assert_called_once()
+
+
+def test_chroma_store_transient_reset_suppressed_by_cooldown(tmp_path: Path) -> None:
+    bad_client = _failing_upsert_client("Failed to get segments")
+    _FakeChromaVectorStore.clients = [bad_client]
+
+    reset_after_error = MagicMock(return_value=False)
+    with (
+        patch("core.memory.rag.singleton.reset_vector_store_after_error", reset_after_error),
+        patch("core.memory.rag.repair.record_chroma_error"),
+    ):
+        store = _FakeChromaVectorStore(persist_dir=tmp_path, anima_name="sora")
+        ok = store.upsert(
+            "sora_knowledge",
+            [Document(id="doc1", content="hello", embedding=[0.1], metadata={})],
+        )
+
+    assert ok is False
+    reset_after_error.assert_called_once()
+    assert bad_client.get_or_create_collection.call_count == 2
+    bad_client.close.assert_not_called()
 
 
 def test_chroma_store_retries_sqlite_refutable_error_when_quick_check_ok(tmp_path: Path) -> None:
@@ -143,7 +182,7 @@ def test_chroma_store_self_heal_returns_false_after_lightweight_retry_failure(tm
 
     assert ok is False
     reset.assert_called_once_with("sora")
-    assert bad_client.get_or_create_collection.call_count == 1
+    assert bad_client.get_or_create_collection.call_count == 2
     assert retry_client.get_or_create_collection.call_count == 1
     bad_client.close.assert_called_once()
     retry_client.close.assert_called_once()
@@ -169,7 +208,7 @@ def test_chroma_store_lightweight_retry_failure_raises_from_self_heal(tmp_path: 
         with pytest.raises(RuntimeError, match="Failed to get segments"):
             store._with_self_heal("upsert", "sora_knowledge", action)
 
-    assert calls == 2
+    assert calls == 3
     reset.assert_called_once_with("sora")
     client.close.assert_called_once()
     retry_client.close.assert_called_once()
