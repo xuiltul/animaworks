@@ -695,6 +695,49 @@ class RAGRepairService:
 
             quarantine_path: Path | None = None
             try:
+                # Post-stop re-verification: the signal-time gate in
+                # record_chroma_error runs inside the process whose stale WAL
+                # view / poisoned chroma cache raised the error, so a healthy
+                # on-disk DB can still arrive here flagged sqlite_malformed.
+                # Supervised repair runs this in a fresh CLI subprocess after
+                # the anima was stopped, so a passing quick_check now
+                # definitively refutes the corruption claim: skip the
+                # destructive quarantine/rebuild and only drop the cached
+                # worker store that held the poisoned handle.
+                if reason in _SQLITE_REFUTABLE_REASONS and self._sqlite_quick_check_ok(anima_name):
+                    from core.memory.rag.repair_rebuild import reset_worker_vector_store
+                    from core.memory.rag.singleton import reset_vector_store
+
+                    reset_worker_vector_store(anima_name)
+                    reset_vector_store(anima_name)
+                    repair_state.update_repair_state(
+                        anima_name,
+                        status="success",
+                        stage="skipped_healthy",
+                        pid=None,
+                        last_attempt_at=iso(),
+                        reason=reason,
+                        collection=collection,
+                        source=source,
+                        include_shared=include_shared,
+                        last_success_at=iso(),
+                        last_error=None,
+                        consecutive_failures=0,
+                    )
+                    logger.warning(
+                        "RAG repair skipped; SQLite passed quick_check after stop "
+                        "(false-positive signal, worker store reset instead): anima=%s reason=%s",
+                        anima_name,
+                        reason,
+                    )
+                    return RepairResult(
+                        status="success",
+                        anima_name=anima_name,
+                        reason=reason,
+                        stage="skipped_healthy",
+                        state_path=str(repair_state.state_path(anima_name)),
+                    )
+
                 repair_state.update_repair_state(
                     anima_name,
                     status="repairing",

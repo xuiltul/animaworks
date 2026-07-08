@@ -202,7 +202,13 @@ class RAGRepairMixin:
                 },
             )
             if anima_name in self.processes:
-                await self.stop_anima(anima_name)
+                # RAG repair is not urgent: give an in-flight response the full
+                # streaming budget instead of the default drain timeout, so a
+                # user-facing turn is not cut off by a repair-triggered stop.
+                await self.stop_anima(
+                    anima_name,
+                    drain_timeout=float(self._max_streaming_duration_sec),
+                )
             return True
         except Exception as exc:
             self._write_rag_repair_state(

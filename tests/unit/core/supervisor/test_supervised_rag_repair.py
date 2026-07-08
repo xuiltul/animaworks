@@ -49,7 +49,9 @@ async def test_supervised_rag_repair_stops_repairs_and_restarts(tmp_path: Path) 
     calls: list[tuple[str, str]] = []
     sup.processes["sora"] = object()
 
-    async def stop_anima(name: str) -> None:
+    async def stop_anima(name: str, *, drain_timeout: float | None = None) -> None:
+        # RAG repair stop must extend the drain to the full streaming budget
+        assert drain_timeout == float(sup._max_streaming_duration_sec)
         calls.append(("stop", name))
         sup.processes.pop(name, None)
 
@@ -87,7 +89,7 @@ async def test_supervised_rag_repair_stop_failure_does_not_run_repair(tmp_path: 
     sup.processes["sora"] = object()
     repair_called = False
 
-    async def stop_anima(name: str) -> None:
+    async def stop_anima(name: str, *, drain_timeout: float | None = None) -> None:
         raise RuntimeError("stop failed")
 
     async def repair_cli(name: str, *, reason: str, include_shared: bool) -> dict[str, object]:

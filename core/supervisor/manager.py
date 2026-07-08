@@ -617,7 +617,13 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
         if self.ws_manager:
             await self.ws_manager.broadcast({"type": event_type, "data": data})
 
-    async def stop_anima(self, anima_name: str, *, drain_streams: bool = True) -> None:
+    async def stop_anima(
+        self,
+        anima_name: str,
+        *,
+        drain_streams: bool = True,
+        drain_timeout: float | None = None,
+    ) -> None:
         """Stop a single Anima process.
 
         Args:
@@ -625,13 +631,16 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
                 stream to finish before stopping (protects user responses from
                 rolling restarts / RAG repair). Full shutdown passes False for
                 a prompt exit.
+            drain_timeout: Upper bound for the in-flight stream drain. None
+                uses the process-handle default. Non-urgent stops (RAG repair)
+                pass a longer bound so a response is not cut off mid-turn.
         """
         handle = self.processes.get(anima_name)
         if not handle:
             logger.warning("Process not found: %s", anima_name)
             return
 
-        await handle.stop(timeout=10.0, drain_streams=drain_streams)
+        await handle.stop(timeout=10.0, drain_streams=drain_streams, drain_timeout=drain_timeout)
         del self.processes[anima_name]
         self._recently_stopped[anima_name] = time.monotonic()
         logger.info("Anima process stopped: %s", anima_name)

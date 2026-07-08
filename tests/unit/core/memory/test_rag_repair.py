@@ -825,6 +825,85 @@ def test_repair_rebuilds_swaps_and_archives(data_dir: Path, monkeypatch):
     assert state["last_chunks_indexed"] == 4
 
 
+def test_repair_skips_rebuild_when_sqlite_healthy_after_stop(data_dir: Path, monkeypatch):
+    """A refutable corruption signal is re-verified before the rebuild.
+
+    The signal-time gate runs inside the process whose poisoned WAL view /
+    chroma cache raised the error; by repair time this fresh process re-runs
+    quick_check, and a passing result must skip the destructive
+    quarantine/rebuild, resetting only the worker's cached store.
+    """
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    vectordb = anima_dir / "vectordb"
+    vectordb.mkdir()
+    (vectordb / "live.bin").write_text("live-data", encoding="utf-8")
+
+    rebuild = MagicMock()
+    monkeypatch.setattr("core.memory.rag.repair_service.atomic_rebuild_vectordb", rebuild)
+    worker_reset = MagicMock(return_value=True)
+    monkeypatch.setattr("core.memory.rag.repair_rebuild.reset_worker_vector_store", worker_reset)
+    reset = MagicMock()
+    monkeypatch.setattr("core.memory.rag.singleton.reset_vector_store", reset)
+
+    service = RAGRepairService(enabled=True)
+    service._sqlite_quick_check_ok = MagicMock(return_value=True)  # type: ignore[method-assign]
+
+    result = service.repair_anima("sora", reason="sqlite_malformed", source="test")
+
+    assert result.ok
+    assert result.stage == "skipped_healthy"
+    rebuild.assert_not_called()
+    worker_reset.assert_called_once_with("sora")
+    reset.assert_called_once_with("sora")
+    # Live DB untouched, nothing quarantined.
+    assert (vectordb / "live.bin").read_text(encoding="utf-8") == "live-data"
+    assert not (anima_dir / "archive").exists()
+    state = json.loads((anima_dir / "state" / "rag_repair.json").read_text(encoding="utf-8"))
+    assert state["status"] == "success"
+    assert state["stage"] == "skipped_healthy"
+    assert state["consecutive_failures"] == 0
+
+
+def test_repair_rebuilds_when_sqlite_check_fails_before_rebuild(data_dir: Path, monkeypatch):
+    """A failing/ambiguous re-check must not suppress a real repair."""
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "vectordb").mkdir()
+
+    rebuild = MagicMock(return_value=(3, None))
+    monkeypatch.setattr("core.memory.rag.repair_service.atomic_rebuild_vectordb", rebuild)
+    monkeypatch.setattr("core.memory.rag.singleton.reset_vector_store", lambda anima_name=None: None)
+
+    service = RAGRepairService(enabled=True)
+    service._sqlite_quick_check_ok = MagicMock(return_value=False)  # type: ignore[method-assign]
+
+    result = service.repair_anima("sora", reason="sqlite_malformed", source="test")
+
+    assert result.ok
+    rebuild.assert_called_once()
+
+
+def test_repair_hnsw_reason_not_gated_by_pre_rebuild_check(data_dir: Path, monkeypatch):
+    """hnsw corruption cannot be refuted by a SQLite check; always rebuild."""
+    anima_dir = data_dir / "animas" / "sora"
+    (anima_dir / "state").mkdir(parents=True)
+    (anima_dir / "vectordb").mkdir()
+
+    rebuild = MagicMock(return_value=(3, None))
+    monkeypatch.setattr("core.memory.rag.repair_service.atomic_rebuild_vectordb", rebuild)
+    monkeypatch.setattr("core.memory.rag.singleton.reset_vector_store", lambda anima_name=None: None)
+
+    service = RAGRepairService(enabled=True)
+    service._sqlite_quick_check_ok = MagicMock(return_value=True)  # type: ignore[method-assign]
+
+    result = service.repair_anima("sora", reason="hnsw_corruption", source="test")
+
+    assert result.ok
+    rebuild.assert_called_once()
+    service._sqlite_quick_check_ok.assert_not_called()
+
+
 def test_repair_reindexes_shared_collections_when_requested(data_dir: Path, monkeypatch):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
