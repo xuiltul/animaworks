@@ -38,7 +38,7 @@ async def test_chroma_signal_to_supervised_repair_lifecycle(data_dir: Path) -> N
     calls: list[str] = []
     sup.processes["sora"] = object()
 
-    async def stop_anima(name: str) -> None:
+    async def stop_anima(name: str, **_: object) -> None:
         calls.append(f"stop:{name}")
         sup.processes.pop(name, None)
 
