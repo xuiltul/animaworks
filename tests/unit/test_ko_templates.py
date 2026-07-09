@@ -169,6 +169,7 @@ _EXPECTED_FILES = [
     "common_skills/web-search-tool/SKILL.md",
     "common_skills/workspace-manager/SKILL.md",
     "common_skills/x-search-tool/SKILL.md",
+    "common_skills/zoom-meeting-scribe/SKILL.md",
     "company/vision.md",
     "prompts/a_reflection.md",
     "prompts/behavior_rules.md",
