@@ -68,12 +68,8 @@ def _idle_timeout_from_env(env_name: str, default: float) -> float:
 # GPT-5.5 (reasoning high) は長考や長時間ツール実行中に120s超イベント無しが
 # 正常動作として起こる。真のハングは supervisor の max_streaming_duration
 # (default 1800s) が別途検知するため、ここは緩めでよい。
-_BACKGROUND_EVENT_IDLE_TIMEOUT_SEC = _idle_timeout_from_env(
-    "ANIMAWORKS_CODEX_BG_IDLE_TIMEOUT_SEC", 300.0
-)
-_FOREGROUND_EVENT_IDLE_TIMEOUT_SEC = _idle_timeout_from_env(
-    "ANIMAWORKS_CODEX_FG_IDLE_TIMEOUT_SEC", 600.0
-)
+_BACKGROUND_EVENT_IDLE_TIMEOUT_SEC = _idle_timeout_from_env("ANIMAWORKS_CODEX_BG_IDLE_TIMEOUT_SEC", 300.0)
+_FOREGROUND_EVENT_IDLE_TIMEOUT_SEC = _idle_timeout_from_env("ANIMAWORKS_CODEX_FG_IDLE_TIMEOUT_SEC", 600.0)
 
 # asyncio.StreamReader default limit is 64 KB.  Codex CLI may echo the full
 # context (including system prompt) in a single JSONL line during thread

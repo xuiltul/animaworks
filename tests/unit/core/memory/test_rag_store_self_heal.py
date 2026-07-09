@@ -17,6 +17,8 @@ class _FakeChromaVectorStore(ChromaVectorStore):
     clients: list[MagicMock] = []
 
     def __init__(self, persist_dir: Path | None = None, anima_name: str | None = None) -> None:
+        if not self.clients:
+            raise RuntimeError("Chroma SQLite database corrupt before startup")
         self.client = self.clients.pop(0)
         self.persist_dir = persist_dir or Path("/tmp/vectordb")
         self.anima_name = anima_name
@@ -135,6 +137,30 @@ def test_chroma_store_transient_reset_suppressed_by_cooldown(tmp_path: Path) -> 
     reset_after_error.assert_called_once()
     assert bad_client.get_or_create_collection.call_count == 2
     bad_client.close.assert_not_called()
+
+
+def test_chroma_store_reports_recreate_failure_as_repair_signal(tmp_path: Path) -> None:
+    bad_client = _failing_upsert_client("Failed to get segments")
+    _FakeChromaVectorStore.clients = [bad_client]
+
+    reset_after_error = MagicMock(return_value=True)
+    with (
+        patch("core.memory.rag.singleton.reset_vector_store_after_error", reset_after_error),
+        patch("core.memory.rag.repair.record_chroma_error") as record,
+    ):
+        store = _FakeChromaVectorStore(persist_dir=tmp_path, anima_name="sora")
+        ok = store.upsert(
+            "sora_knowledge",
+            [Document(id="doc1", content="hello", embedding=[0.1], metadata={})],
+        )
+
+    assert ok is False
+    reset_after_error.assert_called_once()
+    assert any(
+        call.kwargs["source"] == "upsert:recreate"
+        and "Chroma SQLite database corrupt before startup" in str(call.kwargs["error"])
+        for call in record.call_args_list
+    )
 
 
 def test_chroma_store_retries_sqlite_refutable_error_when_quick_check_ok(tmp_path: Path) -> None:

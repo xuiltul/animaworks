@@ -416,6 +416,7 @@ class ChromaVectorStore(VectorStore):
             try:
                 return type(self)(persist_dir=self.persist_dir, anima_name=self._anima_name())
             except Exception as recreate_error:
+                self._report_chroma_error(collection, recreate_error, f"{operation}:recreate")
                 logger.warning(
                     "Failed to recreate ChromaDB vector store after reset: owner=%s db_path=%s "
                     "collection=%s operation=%s error=%s",
