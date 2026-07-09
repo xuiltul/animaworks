@@ -309,6 +309,20 @@ class TestBuildCommand:
             cmd = _build_command("cursor-agent", "/tmp/work")
             assert "--model" not in cmd
 
+    def test_codex_command_includes_reasoning_effort(self):
+        cmd = _build_command("codex", "/tmp/work")
+        assert 'model_reasoning_effort="high"' in cmd
+
+    def test_codex_command_sandboxed_disables_inner_sandbox(self):
+        cmd = _build_command("codex", "/tmp/work", fs_sandboxed=True)
+        assert "danger-full-access" in cmd
+        assert "workspace-write" not in cmd
+
+    def test_codex_command_not_sandboxed_keeps_workspace_write(self):
+        cmd = _build_command("codex", "/tmp/work", fs_sandboxed=False)
+        assert "workspace-write" in cmd
+        assert "danger-full-access" not in cmd
+
 
 # ── Working Directory Validation Tests ────────────────────
 
@@ -731,6 +745,111 @@ class TestDispatch:
                 assert call_kwargs is not None
                 cwd = call_kwargs.kwargs.get("cwd") or call_kwargs[1].get("cwd")
                 assert cwd == str(wd)
+
+
+# ── Sandboxed Execution Tests ─────────────────────────────
+
+
+class TestSandboxedExecution:
+    """Mode C shells run inside a Codex sandbox (HOME read-only).
+
+    Only the codex engine can run there (ephemeral CODEX_HOME + inner
+    sandbox disabled, confined by the inherited outer sandbox); other
+    engines are rejected with a hint to use engine=codex.
+    """
+
+    def setup_method(self):
+        reset_call_counts()
+
+    def _mock_proc(self, output: str = "done\n") -> MagicMock:
+        mock_proc = MagicMock()
+        _set_pipe_output(mock_proc, output)
+        mock_proc.stdin = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.pid = 99999
+        mock_proc.wait = MagicMock(return_value=None)
+        return mock_proc
+
+    def test_sandboxed_non_codex_rejected(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        with (
+            patch("core.tools.machine._is_fs_sandboxed", return_value=True),
+            patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"),
+            patch("core.tools.machine.subprocess.Popen") as mock_popen,
+        ):
+            result = json.loads(
+                dispatch(
+                    "machine_run",
+                    {
+                        "engine": "claude",
+                        "instruction": "test",
+                        "working_directory": str(wd),
+                        "anima_dir": str(tmp_path / "anima"),
+                    },
+                )
+            )
+            assert result["success"] is False
+            assert "codex" in result["error"]
+            mock_popen.assert_not_called()
+
+    def test_sandboxed_codex_executes_with_ephemeral_home(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        with (
+            patch("core.tools.machine._is_fs_sandboxed", return_value=True),
+            patch("core.tools.machine.shutil.which", return_value="/usr/bin/codex"),
+            patch(
+                "core.tools.machine.subprocess.Popen",
+                return_value=self._mock_proc(),
+            ) as mock_popen,
+        ):
+            result = json.loads(
+                dispatch(
+                    "machine_run",
+                    {
+                        "engine": "codex",
+                        "instruction": "test",
+                        "working_directory": str(wd),
+                        "anima_dir": str(tmp_path / "anima"),
+                    },
+                )
+            )
+        assert result["success"] is True
+        cmd = mock_popen.call_args[0][0]
+        assert "danger-full-access" in cmd
+        assert "workspace-write" not in cmd
+        env = mock_popen.call_args.kwargs["env"]
+        assert "CODEX_HOME" in env
+        assert not os.path.exists(env["CODEX_HOME"])  # cleaned up after run
+
+    def test_not_sandboxed_codex_uses_default_home(self, tmp_path):
+        wd = tmp_path / "workspace"
+        wd.mkdir()
+        with (
+            patch("core.tools.machine._is_fs_sandboxed", return_value=False),
+            patch("core.tools.machine.shutil.which", return_value="/usr/bin/codex"),
+            patch(
+                "core.tools.machine.subprocess.Popen",
+                return_value=self._mock_proc(),
+            ) as mock_popen,
+        ):
+            result = json.loads(
+                dispatch(
+                    "machine_run",
+                    {
+                        "engine": "codex",
+                        "instruction": "test",
+                        "working_directory": str(wd),
+                        "anima_dir": str(tmp_path / "anima"),
+                    },
+                )
+            )
+        assert result["success"] is True
+        cmd = mock_popen.call_args[0][0]
+        assert "workspace-write" in cmd
+        env = mock_popen.call_args.kwargs["env"]
+        assert "CODEX_HOME" not in env
 
 
 # ── Auto-Discovery Test ───────────────────────────────────

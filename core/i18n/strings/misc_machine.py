@@ -49,14 +49,15 @@ STRINGS: dict[str, dict[str, str]] = {
     "machine.fs_sandboxed": {
         "ja": (
             "machine: サンドボックス化されたシェル内から呼ばれています"
-            "（~/.config への書き込み不可）。エンジンはEROFSで失敗します。"
-            "シェルコマンド `animaworks-tool machine` ではなく、"
+            "（~/.config への書き込み不可）。エンジン '{engine}' はEROFSで"
+            "失敗するため実行できません。engine=codex はサンドボックス内でも"
+            "実行可能です。他のエンジンが必要な場合は、シェルコマンドではなく"
             "ネイティブの machine ツール（ツール呼び出し）を使ってください。"
         ),
         "en": (
             "machine: called from a sandboxed shell (~/.config is not writable). "
-            "Engines will fail with EROFS. Use the native machine tool call instead of "
-            "the shell command `animaworks-tool machine`."
+            "Engine '{engine}' would fail with EROFS. Use engine=codex, which works "
+            "inside the sandbox, or the native machine tool call for other engines."
         ),
     },
     "machine.invalid_engine": {

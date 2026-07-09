@@ -40,6 +40,7 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 import threading as _threading
 import time
 from pathlib import Path
@@ -131,6 +132,8 @@ _ENGINE_COMMANDS: dict[str, list[str]] = {
         "-s",
         "workspace-write",
         "--ephemeral",
+        "-c",
+        'model_reasoning_effort="high"',
     ],
     "gemini": [
         "gemini",
@@ -399,6 +402,7 @@ def _build_command(
     engine: str,
     working_directory: str,
     model: str | None = None,
+    fs_sandboxed: bool = False,
 ) -> list[str]:
     """Build the CLI command for the selected engine.
 
@@ -408,8 +412,15 @@ def _build_command(
     When *model* is not provided, falls back to ``config.json``
     ``machine.default_models[engine]`` so the engine's own default
     (e.g. cursor-agent's cli-config.json) is never used implicitly.
+
+    When *fs_sandboxed* is true (Mode C shell), the child codex cannot
+    create its own bwrap sandbox (no nested user namespaces), so its inner
+    sandbox is disabled — the inherited outer sandbox keeps confining all
+    writes (verified 2026-07-09: HOME stays read-only for the child).
     """
     base = list(_ENGINE_COMMANDS[engine])
+    if engine == "codex" and fs_sandboxed:
+        base[base.index("workspace-write")] = "danger-full-access"
 
     perm_flags = _ENGINE_PERMISSION_FLAGS.get(engine, [])
     base.extend(perm_flags)
@@ -545,6 +556,25 @@ def _is_fs_sandboxed() -> bool:
         return True
 
 
+def _prepare_ephemeral_codex_home() -> str:
+    """Create an ephemeral CODEX_HOME for sandboxed codex execution.
+
+    Inside a Mode C sandbox the default ``~/.codex`` is read-only (EROFS),
+    so the child codex gets a writable home under the temp dir (writable in
+    Codex's workspace-write sandbox).  ``auth.json`` is copied — not
+    symlinked — so token refreshes write to the copy instead of hitting
+    EROFS on the original.
+    """
+    home = tempfile.mkdtemp(prefix="aw-machine-codex-")
+    auth = Path.home() / ".codex" / "auth.json"
+    if auth.is_file():
+        try:
+            shutil.copy2(auth, Path(home) / "auth.json")
+        except OSError as exc:
+            logger.debug("machine/codex: auth.json copy failed: %s", exc)
+    return home
+
+
 def _execute(
     engine: str,
     instruction: str,
@@ -554,10 +584,11 @@ def _execute(
     anima_dir: str | None = None,
 ) -> ToolResult:
     """Execute a machine tool synchronously."""
-    if _is_fs_sandboxed():
+    fs_sandboxed = _is_fs_sandboxed()
+    if fs_sandboxed and engine != "codex":
         return ToolResult(
             success=False,
-            error=t("machine.fs_sandboxed"),
+            error=t("machine.fs_sandboxed", engine=engine),
         )
     exe = shutil.which(_ENGINE_COMMANDS[engine][0], path=_expanded_path())
     if exe is None:
@@ -574,8 +605,13 @@ def _execute(
         )
 
     full_instruction = _build_instruction(instruction, working_directory)
-    cmd = _build_command(engine, working_directory, model)
+    cmd = _build_command(engine, working_directory, model, fs_sandboxed=fs_sandboxed)
     env = _build_env(engine)
+
+    codex_home_override: str | None = None
+    if fs_sandboxed:
+        codex_home_override = _prepare_ephemeral_codex_home()
+        env["CODEX_HOME"] = codex_home_override
 
     effective_timeout = timeout or _DEFAULT_TIMEOUT_SYNC
 
@@ -669,6 +705,9 @@ def _execute(
             success=False,
             error=t("machine.unexpected_error", engine=engine, error=str(exc)),
         )
+    finally:
+        if codex_home_override:
+            shutil.rmtree(codex_home_override, ignore_errors=True)
 
 
 # ── Validation ─────────────────────────────────────────────
