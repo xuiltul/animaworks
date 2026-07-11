@@ -80,6 +80,7 @@ class AnimaDefaults(BaseModel):
     fallback_model: str | None = None
     background_model: str | None = None
     background_credential: str | None = None
+    background_thinking_effort: str | None = None  # heartbeat/cron thinking effort override
     max_tokens: int = 8192
     max_turns: int = 10000
     credential: str = "anthropic"

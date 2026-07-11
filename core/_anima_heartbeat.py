@@ -140,12 +140,16 @@ class HeartbeatMixin:
         from core.schemas import ModelConfig
 
         bg_model = self.agent.model_config.background_model
+        bg_effort = self.agent.model_config.background_thinking_effort
         if not bg_model:
             config = load_config()
             bg_model = config.heartbeat.default_model
-        if not bg_model:
-            return None
-        if bg_model == self.agent.model_config.model:
+        if not bg_model or bg_model == self.agent.model_config.model:
+            # Same model: only thinking_effort may differ for background runs.
+            if bg_effort and bg_effort != self.agent.model_config.thinking_effort:
+                return self.agent.model_config.model_copy(
+                    update={"thinking_effort": bg_effort}
+                )
             return None
 
         # Recalculate resolved_mode for the background model so that
@@ -167,6 +171,8 @@ class HeartbeatMixin:
             "model": bg_model,
             "resolved_mode": bg_resolved_mode,
         }
+        if bg_effort:
+            updates["thinking_effort"] = bg_effort
         if bg_credential:
             if bg_credential in config.credentials:
                 cred = config.credentials[bg_credential]
