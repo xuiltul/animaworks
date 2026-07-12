@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("animaworks.rag.indexer")
 
 INDEX_META_FILE = "index_meta.json"
+UPSERT_FAILURE_STATE_FILE = "rag_upsert_failures.json"
 
 
 def access_tracking_metadata() -> dict[str, str | int | float]:
@@ -76,6 +77,7 @@ class MemoryIndexer:
         *,
         collection_prefix: str | None = None,
         embedding_model: SentenceTransformer | None = None,
+        upsert_quarantine_failure_threshold: int | None = None,
     ) -> None:
         """Initialize indexer.
 
@@ -97,6 +99,17 @@ class MemoryIndexer:
         self.anima_dir = anima_dir
         self.collection_prefix = collection_prefix or anima_name
         self._embedding_model_name_override = embedding_model_name
+        if upsert_quarantine_failure_threshold is None:
+            try:
+                from core.config import load_config
+
+                upsert_quarantine_failure_threshold = load_config().rag.upsert_quarantine_failure_threshold
+            except Exception:
+                from core.config.models import RAGConfig
+
+                upsert_quarantine_failure_threshold = RAGConfig().upsert_quarantine_failure_threshold
+        self.upsert_quarantine_failure_threshold = max(1, upsert_quarantine_failure_threshold)
+        self.upsert_failure_state_path = anima_dir / "state" / UPSERT_FAILURE_STATE_FILE
 
         # Use injected embedding model or initialize via singleton.
         # When ANIMAWORKS_EMBED_URL is set (child processes), skip local
@@ -219,6 +232,97 @@ class MemoryIndexer:
                 json.dump(self.index_meta, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning("Failed to save index metadata: %s", e)
+
+    def _load_upsert_failure_state(self) -> dict:
+        """Load persistent per-file upsert failures and quarantine history."""
+        state_path = getattr(
+            self,
+            "upsert_failure_state_path",
+            self.anima_dir / "state" / UPSERT_FAILURE_STATE_FILE,
+        )
+        try:
+            data = json.loads(state_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                data.setdefault("failures", {})
+                data.setdefault("quarantined", [])
+                return data
+        except (OSError, json.JSONDecodeError):
+            pass
+        return {"failures": {}, "quarantined": []}
+
+    def _save_upsert_failure_state(self, state: dict) -> None:
+        """Persist failure counters and the inspectable quarantine list."""
+        state_path = getattr(
+            self,
+            "upsert_failure_state_path",
+            self.anima_dir / "state" / UPSERT_FAILURE_STATE_FILE,
+        )
+        try:
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = state_path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+            temporary.replace(state_path)
+        except OSError:
+            logger.warning("Failed to save RAG upsert failure state", exc_info=True)
+
+    def _clear_upsert_failure(self, source_file: str) -> None:
+        """Reset the consecutive counter after a successful upsert."""
+        state = self._load_upsert_failure_state()
+        if state["failures"].pop(source_file, None) is not None:
+            self._save_upsert_failure_state(state)
+
+    def _record_upsert_failure(self, source_file: str, file_path: Path) -> None:
+        """Increment a persistent counter and quarantine at the configured limit."""
+        state = self._load_upsert_failure_state()
+        previous = state["failures"].get(source_file, {})
+        count = int(previous.get("consecutive_failures", 0)) + 1
+        state["failures"][source_file] = {
+            "consecutive_failures": count,
+            "last_failed_at": now_iso(),
+        }
+
+        threshold = getattr(self, "upsert_quarantine_failure_threshold", 3)
+        if count < threshold:
+            self._save_upsert_failure_state(state)
+            return
+
+        try:
+            relative = file_path.relative_to(self.anima_dir)
+        except ValueError:
+            # Shared/outside sources are not owned by this Anima and must not
+            # be moved. Keep the counter inspectable for operator diagnosis.
+            self._save_upsert_failure_state(state)
+            return
+
+        quarantine_path = self.anima_dir / "quarantine" / "rag_upsert" / relative
+        try:
+            quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+            if quarantine_path.exists():
+                quarantine_path = quarantine_path.with_name(
+                    f"{quarantine_path.stem}_{datetime.now().strftime('%Y%m%d%H%M%S')}{quarantine_path.suffix}"
+                )
+            file_path.replace(quarantine_path)
+        except OSError:
+            logger.warning("Failed to quarantine RAG source after repeated upsert failures: %s", file_path)
+            self._save_upsert_failure_state(state)
+            return
+
+        state["failures"].pop(source_file, None)
+        state["quarantined"].append(
+            {
+                "source_file": source_file,
+                "quarantine_path": str(quarantine_path.relative_to(self.anima_dir)),
+                "failure_count": count,
+                "quarantined_at": now_iso(),
+            }
+        )
+        self._save_upsert_failure_state(state)
+        logger.warning(
+            "Quarantined RAG source after %d consecutive upsert failures: %s -> %s",
+            count,
+            file_path,
+            quarantine_path,
+        )
 
     # ── Main indexing API ───────────────────────────────────────────
 

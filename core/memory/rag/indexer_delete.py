@@ -70,6 +70,7 @@ def upsert_file_documents(
 
     if not indexer.vector_store.upsert(collection_name, documents):
         logger.warning("Upsert failed for %s, skipping index_meta update", file_path)
+        indexer._record_upsert_failure(source_file, file_path)
         return False
 
     indexer._mark_collection_known(collection_name)
@@ -78,6 +79,7 @@ def upsert_file_documents(
     if not delete_document_ids(indexer, collection_name, source_file, stale_ids):
         logger.warning("Stale chunk cleanup failed for %s, skipping index_meta update", file_path)
         return False
+    indexer._clear_upsert_failure(source_file)
     return True
 
 
