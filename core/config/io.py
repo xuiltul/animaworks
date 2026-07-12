@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from core.config.schemas import AnimaWorksConfig
+from core.config.vault import resolve_vault_references
 from core.exceptions import ConfigError
 
 logger = logging.getLogger("animaworks.config")
@@ -112,6 +113,7 @@ def load_config(path: Path | None = None) -> AnimaWorksConfig:
         try:
             raw_text = path.read_text(encoding="utf-8")
             data: dict[str, Any] = json.loads(raw_text)
+            data = resolve_vault_references(data, path.parent)
             config = AnimaWorksConfig.model_validate(data)
         except json.JSONDecodeError as exc:
             logger.error("Failed to parse %s: %s", path, exc)
@@ -149,6 +151,15 @@ def save_config(config: AnimaWorksConfig, path: Path | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     payload = config.model_dump(mode="json")
+    # Loading resolves vault references for runtime use.  Preserve references
+    # already present on disk when saving so a routine config update cannot
+    # accidentally write the resolved secret back as plaintext.
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            payload = _preserve_vault_references(payload, existing)
+        except (json.JSONDecodeError, OSError):
+            pass
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
     # Atomic write: write to a PID-unique sibling temp file then rename so
@@ -168,6 +179,22 @@ def save_config(config: AnimaWorksConfig, path: Path | None = None) -> None:
         _config_mtime = path.stat().st_mtime
     except OSError:
         _config_mtime = 0.0
+
+
+def _preserve_vault_references(value: Any, existing: Any) -> Any:
+    """Overlay vault reference leaves from *existing* onto *value*."""
+    if isinstance(existing, dict) and set(existing) == {"$vault"}:
+        key = existing["$vault"]
+        if isinstance(key, str) and key:
+            return existing
+    if isinstance(value, dict) and isinstance(existing, dict):
+        return {key: _preserve_vault_references(item, existing.get(key)) for key, item in value.items()}
+    if isinstance(value, list) and isinstance(existing, list):
+        return [
+            _preserve_vault_references(item, existing[index] if index < len(existing) else None)
+            for index, item in enumerate(value)
+        ]
+    return value
 
 
 __all__ = [
