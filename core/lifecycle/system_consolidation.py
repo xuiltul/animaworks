@@ -21,19 +21,23 @@ logger = logging.getLogger("animaworks.lifecycle")
 
 
 def is_consolidation_enabled(anima_dir: Path) -> bool:
-    """Resolve the per-Anima consolidation switch using normal config layers.
+    """Resolve the per-Anima consolidation switch without credential lookup.
 
     ``status.json`` remains the strongest override, followed by
     ``anima_defaults.consolidation_enabled``. Errors retain the
     backward-compatible default of enabled.
     """
     try:
-        from core.config import resolve_anima_config
-
-        resolved, _credential = resolve_anima_config(load_config(), anima_dir.name, anima_dir=anima_dir)
-        return resolved.consolidation_enabled
+        status = json.loads((anima_dir / "status.json").read_text(encoding="utf-8"))
+        override = status.get("consolidation_enabled")
+        if isinstance(override, bool):
+            return override
+    except (OSError, json.JSONDecodeError):
+        pass
+    try:
+        return load_config().anima_defaults.consolidation_enabled
     except Exception:
-        logger.debug("Failed to resolve consolidation_enabled for %s", anima_dir.name, exc_info=True)
+        logger.debug("Failed to resolve consolidation default for %s", anima_dir.name, exc_info=True)
         return True
 
 

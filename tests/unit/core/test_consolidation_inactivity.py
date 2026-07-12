@@ -31,6 +31,16 @@ def test_per_anima_consolidation_disabled(tmp_path, monkeypatch) -> None:
     assert is_consolidation_enabled(tmp_path) is False
 
 
+def test_per_anima_disable_does_not_depend_on_credential_resolution(tmp_path, monkeypatch) -> None:
+    (tmp_path / "status.json").write_text(
+        '{"consolidation_enabled": false, "credential": "missing"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("core.lifecycle.system_consolidation.load_config", lambda: AnimaWorksConfig())
+
+    assert is_consolidation_enabled(tmp_path) is False
+
+
 def test_per_anima_disable_takes_priority_over_inactivity_toggle(tmp_path, monkeypatch, caplog) -> None:
     (tmp_path / "status.json").write_text('{"consolidation_enabled": false}', encoding="utf-8")
     monkeypatch.setattr("core.lifecycle.system_consolidation.load_config", lambda: AnimaWorksConfig())

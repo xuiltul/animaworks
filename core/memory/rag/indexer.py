@@ -293,32 +293,29 @@ class MemoryIndexer:
             logger.info("Not counting transient vector service failure for %s", file_path)
             return
 
-        failures_by_collection = getattr(self, "_run_upsert_failures", None)
-        if failures_by_collection is None:
-            failures_by_collection = {}
-            self._run_upsert_failures = failures_by_collection
-        failed_sources = failures_by_collection.setdefault(collection_name, set())
-        failed_sources.add(source_file)
-
         state = self._load_upsert_failure_state()
-        if len(failed_sources) > 1:
-            for failed_source in failed_sources:
-                state["failures"].pop(failed_source, None)
-            # The first failure in this run may have reached the threshold
-            # before a second source proved the outage was collection-wide.
-            # Roll back only entries for sources observed in this run;
-            # previously quarantined sources are skipped before indexing and
-            # therefore cannot appear in ``failed_sources``.
-            state["quarantined"] = [
-                item for item in state["quarantined"] if item.get("source_file") not in failed_sources
-            ]
-            self._save_upsert_failure_state(state)
-            logger.info(
-                "Not counting likely service-wide upsert outage: collection=%s failed_sources=%d",
-                collection_name,
-                len(failed_sources),
-            )
-            return
+        if getattr(self, "_index_directory_active", False):
+            failures_by_collection = self._run_upsert_failures
+            failed_sources = failures_by_collection.setdefault(collection_name, set())
+            failed_sources.add(source_file)
+            if len(failed_sources) > 1:
+                for failed_source in failed_sources:
+                    state["failures"].pop(failed_source, None)
+                # The first failure in this run may have reached the threshold
+                # before a second source proved the outage was collection-wide.
+                # Roll back only entries for sources observed in this run;
+                # previously quarantined sources are skipped before indexing and
+                # therefore cannot appear in ``failed_sources``.
+                state["quarantined"] = [
+                    item for item in state["quarantined"] if item.get("source_file") not in failed_sources
+                ]
+                self._save_upsert_failure_state(state)
+                logger.info(
+                    "Not counting likely service-wide upsert outage: collection=%s failed_sources=%d",
+                    collection_name,
+                    len(failed_sources),
+                )
+                return
 
         previous = state["failures"].get(source_file, {})
         count = int(previous.get("consecutive_failures", 0)) + 1
@@ -531,22 +528,30 @@ class MemoryIndexer:
                 total_count=len(md_files),
             )
 
-        for index, md_file in enumerate(md_files):
-            if startup_progress is not None:
-                startup_progress.raise_if_cancelled()
-                if track_startup:
+        previous_active = getattr(self, "_index_directory_active", False)
+        previous_failures = getattr(self, "_run_upsert_failures", {})
+        self._index_directory_active = True
+        self._run_upsert_failures = {}
+        try:
+            for index, md_file in enumerate(md_files):
+                if startup_progress is not None:
+                    startup_progress.raise_if_cancelled()
+                    if track_startup:
+                        startup_progress.update_progress(
+                            detail=str(md_file),
+                            done_count=index,
+                            total_count=len(md_files),
+                        )
+                total_chunks += self.index_file(md_file, memory_type, force=force)
+                if track_startup and startup_progress is not None:
                     startup_progress.update_progress(
                         detail=str(md_file),
-                        done_count=index,
+                        done_count=index + 1,
                         total_count=len(md_files),
                     )
-            total_chunks += self.index_file(md_file, memory_type, force=force)
-            if track_startup and startup_progress is not None:
-                startup_progress.update_progress(
-                    detail=str(md_file),
-                    done_count=index + 1,
-                    total_count=len(md_files),
-                )
+        finally:
+            self._index_directory_active = previous_active
+            self._run_upsert_failures = previous_failures
 
         logger.info(
             "Indexed directory %s: %d total chunks (type=%s)",

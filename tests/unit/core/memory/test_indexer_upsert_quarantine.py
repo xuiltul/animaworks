@@ -89,6 +89,8 @@ def test_transient_circuit_failure_is_not_counted(tmp_path) -> None:
 
 def test_multiple_file_failures_are_treated_as_global_outage(tmp_path) -> None:
     indexer = _indexer(tmp_path, threshold=1)
+    indexer._index_directory_active = True
+    indexer._run_upsert_failures = {}
     first = tmp_path / "episodes" / "a.md"
     second = tmp_path / "episodes" / "b.md"
     first.parent.mkdir()
@@ -102,6 +104,22 @@ def test_multiple_file_failures_are_treated_as_global_outage(tmp_path) -> None:
     state = json.loads(indexer.upsert_failure_state_path.read_text(encoding="utf-8"))
     assert state == {"failures": {}, "quarantined": []}
     assert first.exists() and second.exists()
+
+
+def test_separate_direct_index_calls_do_not_share_outage_state(tmp_path) -> None:
+    indexer = _indexer(tmp_path, threshold=3)
+    first = tmp_path / "episodes" / "a.md"
+    second = tmp_path / "episodes" / "b.md"
+    first.parent.mkdir()
+    first.write_text("a", encoding="utf-8")
+    second.write_text("b", encoding="utf-8")
+
+    indexer._record_upsert_failure("anima_episodes", "episodes/a.md", first)
+    indexer._record_upsert_failure("anima_episodes", "episodes/b.md", second)
+
+    state = json.loads(indexer.upsert_failure_state_path.read_text(encoding="utf-8"))
+    assert state["failures"]["episodes/a.md"]["consecutive_failures"] == 1
+    assert state["failures"]["episodes/b.md"]["consecutive_failures"] == 1
 
 
 def test_skip_list_prevents_retry_without_removing_source(tmp_path) -> None:
