@@ -35,7 +35,7 @@
 
 - config読み込み時に `{"$vault": "KEY"}` を既存 `vault.json` の `shared` セクションから再帰的に解決する。
 - 平文設定は従来どおり読み込み、参照先欠落・不正参照は秘密値を含めず設定エラーにする。
-- config保存時は既存のvault参照を保持し、解決済み秘密値が平文で再保存されないようにした。
+- config保存時は既存のvault参照を保持し、解決済み秘密値が平文で再保存されないようにした。設定API/CLIでcredentialを明示更新・クリアした場合は、参照を保ったままvault側の値を更新する。
 - `scripts/migrate_credentials_to_vault.py` を追加した。デフォルトはdry-runで、`--apply` 時だけAWS/Azure等のcredentialをvaultへ移動する。適用前にconfig/vaultのバックアップを作成し、対象ファイルをmode 600にする。
 - 実ランタイムに対して移行スクリプトは実行していない。テストはすべて一時ディレクトリ内のダミー値で実施した。
 
@@ -59,12 +59,14 @@
 ## 変更ファイル
 
 - `core/config/io.py`
+- `core/config/cli.py`
 - `core/config/resolver.py`
 - `core/config/schemas.py`
 - `core/config/vault.py`
 - `core/lifecycle/knowledge_correction.py`
 - `core/lifecycle/system_consolidation.py`
 - `core/memory/contradiction.py`
+- `core/memory/rag/http_store.py`
 - `core/memory/rag/indexer.py`
 - `core/memory/rag/indexer_delete.py`
 - `core/supervisor/_mgr_scheduler.py`
@@ -74,6 +76,7 @@
 - `tests/unit/core/memory/test_contradiction.py`
 - `tests/unit/core/memory/test_contradiction_batching.py`
 - `tests/unit/core/memory/test_forgetting.py`
+- `tests/unit/core/memory/test_indexer_deletion.py`
 - `tests/unit/core/memory/test_indexer_upsert_quarantine.py`
 - `tests/unit/core/supervisor/test_consolidation_targets.py`
 - `tests/unit/core/test_consolidation_inactivity.py`
