@@ -1086,6 +1086,9 @@ def create_app(
         "/api/system/health",
         "/api/setup",
         "/api/approve",
+        # Webhook receivers authenticate via per-platform HMAC signature
+        # verification (Slack/Chatwork/Zoom), not session cookies.
+        "/api/webhooks/",
         "/health",
     )
 
