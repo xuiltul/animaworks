@@ -971,6 +971,7 @@ class TestConsolidationForgettingHooks:
 
         with (
             patch("core.config.load_config", return_value=mock_config),
+            patch("core.lifecycle.system_consolidation.should_skip_inactive_consolidation", return_value=False),
             patch("core.lifecycle.system_consolidation.evaluate_daily_consolidation_gate", return_value=gate),
             patch("core.lifecycle.system_consolidation.run_knowledge_self_correction_if_enabled", AsyncMock()),
             patch("core.lifecycle.system_consolidation.detect_communities_if_neo4j", AsyncMock()),
@@ -1024,6 +1025,7 @@ class TestConsolidationForgettingHooks:
 
         with (
             patch("core.config.load_config", return_value=mock_config),
+            patch("core.lifecycle.system_consolidation.should_skip_inactive_consolidation", return_value=False),
             patch("core.lifecycle.system_consolidation.detect_communities_if_neo4j", AsyncMock()),
             patch("core.memory.forgetting.ForgettingEngine") as MockForgettingEngine,
             patch("core.memory.consolidation.ConsolidationEngine"),

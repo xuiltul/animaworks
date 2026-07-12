@@ -27,6 +27,8 @@ class KnowledgeCorrectionLimits:
     max_reconsolidation_files: int = 5
     timeout_seconds: float = 300.0
     recent_hours: int = 24
+    contradiction_batch_size: int = 20
+    contradiction_nli_prefilter_threshold: float | None = 0.70
 
 
 def _empty_summary() -> dict[str, Any]:
@@ -114,6 +116,8 @@ async def _run_contradiction_stage(
         anima_name,
         ActivityLogger(anima_dir),
         memory_manager=mm,
+        batch_size=limits.contradiction_batch_size,
+        nli_prefilter_threshold=limits.contradiction_nli_prefilter_threshold,
     )
 
     targets = _recent_active_knowledge_files(mm, anima_dir, recent_hours=limits.recent_hours)
@@ -123,34 +127,14 @@ async def _run_contradiction_stage(
         contradiction_summary["limit_reached"] = bool(targets and limits.max_contradiction_pairs <= 0)
         return
 
-    remaining_llm_checks = limits.max_contradiction_pairs
-    seen_pairs: set[tuple[str, str]] = set()
-    pairs_to_resolve: list[ContradictionPair] = []
-
-    for target in targets:
-        if remaining_llm_checks <= 0:
-            contradiction_summary["limit_reached"] = True
-            break
-
-        pairs = await detector.scan_contradictions(
-            target_file=target,
-            model=model,
-            max_llm_checks=remaining_llm_checks,
-        )
-        stats = detector.last_scan_stats
-        used = int(stats.get("llm_checks", 0) or 0)
-        remaining_llm_checks -= used
-        contradiction_summary["llm_checks"] += used
-        contradiction_summary["limit_reached"] = bool(
-            contradiction_summary["limit_reached"] or stats.get("limit_reached", False)
-        )
-
-        for pair in pairs:
-            key = tuple(sorted((str(pair.file_a.resolve()), str(pair.file_b.resolve()))))
-            if key in seen_pairs:
-                continue
-            seen_pairs.add(key)
-            pairs_to_resolve.append(pair)
+    pairs_to_resolve: list[ContradictionPair] = await detector.scan_contradictions(
+        target_files=targets,
+        model=model,
+        max_llm_checks=limits.max_contradiction_pairs,
+    )
+    stats = detector.last_scan_stats
+    contradiction_summary["llm_checks"] = int(stats.get("llm_checks", 0) or 0)
+    contradiction_summary["limit_reached"] = bool(stats.get("limit_reached", False))
 
     contradiction_summary["detected"] = len(pairs_to_resolve)
     if pairs_to_resolve:

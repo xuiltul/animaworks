@@ -82,6 +82,7 @@ class ContradictionDetector:
     """
 
     NLI_CONTRADICTION_THRESHOLD = 0.65
+    NLI_ENTAILMENT_THRESHOLD = 0.70
     VECTOR_SIMILARITY_THRESHOLD = 0.75
 
     def __init__(
@@ -91,6 +92,8 @@ class ContradictionDetector:
         activity_logger: ActivityLogger | None = None,
         *,
         memory_manager: Any | None = None,
+        batch_size: int = 20,
+        nli_prefilter_threshold: float | None = NLI_ENTAILMENT_THRESHOLD,
     ) -> None:
         """Initialize contradiction detector.
 
@@ -107,9 +110,13 @@ class ContradictionDetector:
         self._nli_model: SharedNLIModel | None = None
         self._activity_logger = activity_logger
         self._memory_manager = memory_manager
+        self.batch_size = max(1, batch_size)
+        self.nli_prefilter_threshold = nli_prefilter_threshold
         self.last_scan_stats: dict[str, int | bool] = {
             "candidate_pairs": 0,
             "llm_checks": 0,
+            "llm_calls": 0,
+            "nli_prefiltered": 0,
             "limit_reached": False,
         }
 
@@ -297,8 +304,6 @@ class ContradictionDetector:
 
     # ── Contradiction detection ─────────────────────────────────
 
-    NLI_ENTAILMENT_THRESHOLD = 0.70
-
     async def _check_contradiction_nli(
         self,
         text_a: str,
@@ -324,15 +329,19 @@ class ContradictionDetector:
             return (False, 0.0, False)
 
         # NLI check: text_a as premise, text_b as hypothesis
-        label_ab, score_ab = nli_model.check(
-            text_b[:2000],
-            text_a[:2000],
-        )
-        # Also check the reverse direction
-        label_ba, score_ba = nli_model.check(
-            text_a[:2000],
-            text_b[:2000],
-        )
+        try:
+            label_ab, score_ab = nli_model.check(
+                text_b[:2000],
+                text_a[:2000],
+            )
+            # Also check the reverse direction
+            label_ba, score_ba = nli_model.check(
+                text_a[:2000],
+                text_b[:2000],
+            )
+        except Exception as exc:
+            logger.warning("NLI check unavailable; continuing with LLM: %s", exc)
+            return (False, 0.0, False)
 
         # If either direction shows contradiction above threshold, flag it
         is_contradiction = False
@@ -345,13 +354,15 @@ class ContradictionDetector:
             is_contradiction = True
             max_score = max(max_score, score_ba)
 
-        # Check if either direction shows clear entailment
+        # Optional prefilter: high-confidence entailment or neutral means the
+        # pair is clearly non-contradictory.  None disables the prefilter.
         is_entailment = False
-        if not is_contradiction:
-            if (label_ab == "entailment" and score_ab >= self.NLI_ENTAILMENT_THRESHOLD) or (
-                label_ba == "entailment" and score_ba >= self.NLI_ENTAILMENT_THRESHOLD
-            ):
-                is_entailment = True
+        threshold = self.nli_prefilter_threshold
+        if not is_contradiction and threshold is not None:
+            is_entailment = any(
+                label in {"entailment", "neutral"} and score >= threshold
+                for label, score in ((label_ab, score_ab), (label_ba, score_ba))
+            )
 
         return (is_contradiction, max_score, is_entailment)
 
@@ -413,6 +424,82 @@ class ContradictionDetector:
             reason="LLM check failed, conservatively assuming no contradiction",
         )
 
+    async def _check_contradiction_llm_batch(
+        self,
+        pairs: list[tuple[str, str, str, str]],
+        model: str,
+    ) -> list[ContradictionResult] | None:
+        """Classify multiple pairs in one LLM call; return None on bad output."""
+        request = [
+            {
+                "pair_id": index,
+                "file_a": file_a,
+                "text_a": text_a[:3000],
+                "file_b": file_b,
+                "text_b": text_b[:3000],
+            }
+            for index, (text_a, text_b, file_a, file_b) in enumerate(pairs)
+        ]
+        prompt = (
+            "Analyze each knowledge pair for contradiction. Return only a JSON array "
+            "with exactly one object per input, in the same order. Each object must contain "
+            "pair_id, is_contradiction, resolution (supersede/merge/coexist), reason, and "
+            "merged_content (null unless merging).\n\nPairs:\n" + json.dumps(request, ensure_ascii=False)
+        )
+        try:
+            from core.memory._llm_utils import one_shot_completion
+
+            text = await one_shot_completion(prompt, model=model, max_tokens=4096) or ""
+            json_match = re.search(r"\[.*\]", text, re.DOTALL)
+            if json_match is None:
+                raise ValueError("response did not contain a JSON array")
+            payload = json.loads(json_match.group())
+            if not isinstance(payload, list) or len(payload) != len(pairs):
+                raise ValueError("result count does not match input pair count")
+            results: list[ContradictionResult] = []
+            required_keys = {
+                "pair_id",
+                "is_contradiction",
+                "resolution",
+                "reason",
+                "merged_content",
+            }
+            valid_resolutions = {"supersede", "merge", "coexist"}
+            for index, item in enumerate(payload):
+                if not isinstance(item, dict) or not required_keys.issubset(item):
+                    raise ValueError("result object is missing required fields")
+                pair_id = item["pair_id"]
+                if type(pair_id) is not int or pair_id != index:
+                    raise ValueError("result pair_id/order mismatch")
+                is_contradiction = item["is_contradiction"]
+                if type(is_contradiction) is not bool:
+                    raise ValueError("result is_contradiction must be a boolean")
+                resolution = item["resolution"]
+                if not isinstance(resolution, str) or resolution not in valid_resolutions:
+                    raise ValueError("result resolution is invalid")
+                reason = item["reason"]
+                if not isinstance(reason, str):
+                    raise ValueError("result reason must be a string")
+                merged_content = item["merged_content"]
+                if merged_content is not None and not isinstance(merged_content, str):
+                    raise ValueError("result merged_content must be a string or null")
+                results.append(
+                    ContradictionResult(
+                        is_contradiction=is_contradiction,
+                        resolution=resolution,
+                        reason=reason,
+                        merged_content=merged_content,
+                    )
+                )
+            return results
+        except Exception as exc:
+            logger.warning(
+                "Batched LLM contradiction check failed for %d pairs; falling back to single-pair checks: %s",
+                len(pairs),
+                exc,
+            )
+            return None
+
     # ── Main scan API ───────────────────────────────────────────
 
     async def scan_contradictions(
@@ -420,6 +507,7 @@ class ContradictionDetector:
         target_file: Path | None = None,
         model: str = "",
         *,
+        target_files: list[Path] | None = None,
         max_llm_checks: int | None = None,
     ) -> list[ContradictionPair]:
         """Scan knowledge files for contradictions.
@@ -431,6 +519,9 @@ class ContradictionDetector:
         Args:
             target_file: If specified, only check this file against others.
                 If None, scan the entire knowledge directory.
+            target_files: Optional set of target files whose candidates should
+                be combined before NLI and LLM batching. Mutually exclusive
+                with target_file.
             model: LLM model for contradiction analysis
             max_llm_checks: Maximum candidate pairs allowed to reach the LLM
                 resolution stage. NLI-only entailments do not count.
@@ -441,20 +532,34 @@ class ContradictionDetector:
         self.last_scan_stats = {
             "candidate_pairs": 0,
             "llm_checks": 0,
+            "llm_calls": 0,
+            "nli_prefiltered": 0,
             "limit_reached": False,
         }
         if not model:
             from core.memory._llm_utils import get_consolidation_llm_kwargs
 
             model = get_consolidation_llm_kwargs()["model"]
+        if target_file is not None and target_files is not None:
+            raise ValueError("target_file and target_files are mutually exclusive")
         logger.info(
             "Starting contradiction scan for anima=%s target=%s",
             self.anima_name,
-            target_file.name if target_file else "all",
+            target_file.name if target_file else f"{len(target_files)} files" if target_files is not None else "all",
         )
 
         # Step 1: Find candidate pairs via vector similarity
-        candidates = self._find_candidate_pairs(target_file)
+        if target_files is None:
+            candidates = self._find_candidate_pairs(target_file)
+        else:
+            candidates = []
+            seen: set[tuple[str, str]] = set()
+            for target in target_files:
+                for candidate in self._find_candidate_pairs(target):
+                    pair_key = tuple(sorted((str(candidate[0].resolve()), str(candidate[2].resolve()))))
+                    if pair_key not in seen:
+                        seen.add(pair_key)
+                        candidates.append(candidate)
         self.last_scan_stats["candidate_pairs"] = len(candidates)
         if not candidates:
             logger.info("No candidate pairs found for contradiction check")
@@ -465,92 +570,86 @@ class ContradictionDetector:
             len(candidates),
         )
 
-        # Step 2: Check each candidate pair
+        # Step 2a: Run the local NLI gate and collect pairs that need LLM
+        # classification. The limit remains pair-based for compatibility.
         contradictions: list[ContradictionPair] = []
+        llm_candidates: list[tuple[Path, str, Path, str, float, bool]] = []
 
         for file_a, text_a, file_b, text_b in candidates:
-            # Stage 2a: NLI check (fast, local)
             is_nli_contradiction, nli_score, is_entailment = await self._check_contradiction_nli(text_a, text_b)
-
-            if is_nli_contradiction:
-                # NLI detected contradiction - use LLM for resolution
-                if self._llm_limit_reached(max_llm_checks):
-                    break
-                self.last_scan_stats["llm_checks"] = int(self.last_scan_stats["llm_checks"]) + 1
-                llm_result = await self._check_contradiction_llm(
-                    text_a,
-                    text_b,
-                    file_a.name,
-                    file_b.name,
-                    model,
-                )
-
-                if llm_result.is_contradiction:
-                    contradictions.append(
-                        ContradictionPair(
-                            file_a=file_a,
-                            file_b=file_b,
-                            text_a=text_a,
-                            text_b=text_b,
-                            confidence=nli_score,
-                            resolution=llm_result.resolution,
-                            reason=llm_result.reason,
-                            merged_content=llm_result.merged_content,
-                        )
-                    )
-                    logger.info(
-                        "Contradiction detected: %s vs %s (confidence=%.2f, resolution=%s)",
-                        file_a.name,
-                        file_b.name,
-                        nli_score,
-                        llm_result.resolution,
-                    )
-            elif is_entailment:
-                # NLI shows clear entailment — texts are consistent,
-                # skip costly LLM check
+            if is_entailment and not is_nli_contradiction:
+                self.last_scan_stats["nli_prefiltered"] = int(self.last_scan_stats["nli_prefiltered"]) + 1
                 logger.debug(
-                    "NLI entailment detected, skipping LLM: %s vs %s",
+                    "NLI non-contradiction prefilter skipping LLM: %s vs %s",
                     file_a.name,
                     file_b.name,
                 )
+                continue
+            if self._llm_limit_reached(max_llm_checks):
+                break
+            self.last_scan_stats["llm_checks"] = int(self.last_scan_stats["llm_checks"]) + 1
+            llm_candidates.append((file_a, text_a, file_b, text_b, nli_score, is_nli_contradiction))
+
+        prefiltered = int(self.last_scan_stats["nli_prefiltered"])
+        logger.info(
+            "NLI contradiction prefilter for anima=%s: skipped=%d llm_pairs=%d",
+            self.anima_name,
+            prefiltered,
+            len(llm_candidates),
+        )
+
+        # Step 2b: Batch the remaining pairs. Size 1 deliberately uses the
+        # original single-pair prompt and parser.
+        for start in range(0, len(llm_candidates), self.batch_size):
+            batch = llm_candidates[start : start + self.batch_size]
+            if len(batch) == 1:
+                file_a, text_a, file_b, text_b, _, _ = batch[0]
+                self.last_scan_stats["llm_calls"] = int(self.last_scan_stats["llm_calls"]) + 1
+                results = [await self._check_contradiction_llm(text_a, text_b, file_a.name, file_b.name, model)]
             else:
-                # NLI neutral / uncertain — fall through to LLM as fallback
-                # for cases where NLI may miss semantic contradictions
-                if self._llm_limit_reached(max_llm_checks):
-                    break
-                self.last_scan_stats["llm_checks"] = int(self.last_scan_stats["llm_checks"]) + 1
-                llm_result = await self._check_contradiction_llm(
-                    text_a,
-                    text_b,
-                    file_a.name,
-                    file_b.name,
+                self.last_scan_stats["llm_calls"] = int(self.last_scan_stats["llm_calls"]) + 1
+                results = await self._check_contradiction_llm_batch(
+                    [(text_a, text_b, file_a.name, file_b.name) for file_a, text_a, file_b, text_b, _, _ in batch],
                     model,
                 )
+                if results is None:
+                    self.last_scan_stats["llm_calls"] = int(self.last_scan_stats["llm_calls"]) + len(batch)
+                    results = [
+                        await self._check_contradiction_llm(text_a, text_b, file_a.name, file_b.name, model)
+                        for file_a, text_a, file_b, text_b, _, _ in batch
+                    ]
 
-                if llm_result.is_contradiction:
-                    contradictions.append(
-                        ContradictionPair(
-                            file_a=file_a,
-                            file_b=file_b,
-                            text_a=text_a,
-                            text_b=text_b,
-                            confidence=0.5,  # Lower confidence without NLI backing
-                            resolution=llm_result.resolution,
-                            reason=llm_result.reason,
-                            merged_content=llm_result.merged_content,
-                        )
+            for candidate, llm_result in zip(batch, results, strict=True):
+                file_a, text_a, file_b, text_b, nli_score, nli_backed = candidate
+                if not llm_result.is_contradiction:
+                    continue
+                confidence = nli_score if nli_backed else 0.5
+                contradictions.append(
+                    ContradictionPair(
+                        file_a=file_a,
+                        file_b=file_b,
+                        text_a=text_a,
+                        text_b=text_b,
+                        confidence=confidence,
+                        resolution=llm_result.resolution,
+                        reason=llm_result.reason,
+                        merged_content=llm_result.merged_content,
                     )
-                    logger.info(
-                        "Contradiction detected (LLM-only): %s vs %s (resolution=%s)",
-                        file_a.name,
-                        file_b.name,
-                        llm_result.resolution,
-                    )
+                )
+                logger.info(
+                    "Contradiction detected: %s vs %s (confidence=%.2f, resolution=%s)",
+                    file_a.name,
+                    file_b.name,
+                    confidence,
+                    llm_result.resolution,
+                )
 
         logger.info(
-            "Contradiction scan complete for anima=%s: %d contradictions found",
+            "Contradiction scan complete for anima=%s: %d contradictions found, llm_pairs=%d llm_calls=%d",
             self.anima_name,
             len(contradictions),
+            self.last_scan_stats["llm_checks"],
+            self.last_scan_stats["llm_calls"],
         )
 
         return contradictions

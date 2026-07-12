@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from core.config.schemas import AnimaWorksConfig
+from core.config.vault import resolve_vault_references
 from core.exceptions import ConfigError
 
 logger = logging.getLogger("animaworks.config")
@@ -27,15 +28,17 @@ logger = logging.getLogger("animaworks.config")
 _config: AnimaWorksConfig | None = None
 _config_path: Path | None = None
 _config_mtime: float = 0.0
+_config_vault_values: dict[tuple[str | int, ...], Any] = {}
 _promotion_flag_warned: bool = False
 
 
 def invalidate_cache() -> None:
     """Reset the module-level singleton cache."""
-    global _config, _config_path, _config_mtime, _promotion_flag_warned
+    global _config, _config_path, _config_mtime, _config_vault_values, _promotion_flag_warned
     _config = None
     _config_path = None
     _config_mtime = 0.0
+    _config_vault_values = {}
     _promotion_flag_warned = False
 
 
@@ -92,7 +95,7 @@ def load_config(path: Path | None = None) -> AnimaWorksConfig:
     so external edits (org_sync, manual changes) are picked up without
     requiring a server restart.
     """
-    global _config, _config_path, _config_mtime
+    global _config, _config_path, _config_mtime, _config_vault_values
 
     if path is None:
         path = get_config_path()
@@ -111,8 +114,10 @@ def load_config(path: Path | None = None) -> AnimaWorksConfig:
         logger.debug("Loading config from %s", path)
         try:
             raw_text = path.read_text(encoding="utf-8")
-            data: dict[str, Any] = json.loads(raw_text)
+            raw_data: dict[str, Any] = json.loads(raw_text)
+            data = resolve_vault_references(raw_data, path.parent)
             config = AnimaWorksConfig.model_validate(data)
+            _config_vault_values = _collect_vault_reference_values(raw_data, data)
         except json.JSONDecodeError as exc:
             logger.error("Failed to parse %s: %s", path, exc)
             raise ConfigError(f"Invalid JSON in {path}: {exc}") from exc
@@ -124,6 +129,7 @@ def load_config(path: Path | None = None) -> AnimaWorksConfig:
     else:
         logger.info("Config file not found at %s; using defaults", path)
         config = AnimaWorksConfig()
+        _config_vault_values = {}
 
     _config = config
     _config_path = path
@@ -141,7 +147,7 @@ def save_config(config: AnimaWorksConfig, path: Path | None = None) -> None:
     Updates the module-level singleton cache so subsequent :func:`load_config`
     calls return the freshly saved config.
     """
-    global _config, _config_path, _config_mtime
+    global _config, _config_path, _config_mtime, _config_vault_values
 
     if path is None:
         path = get_config_path()
@@ -149,6 +155,21 @@ def save_config(config: AnimaWorksConfig, path: Path | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     payload = config.model_dump(mode="json")
+    # Loading resolves vault references for runtime use.  Preserve references
+    # already present on disk when saving so a routine config update cannot
+    # accidentally write the resolved secret back as plaintext.
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            payload, vault_updates = _preserve_vault_references(
+                payload,
+                existing,
+                loaded_values=_config_vault_values if _config_path == path else {},
+            )
+            if vault_updates:
+                _apply_vault_updates(path.parent, vault_updates)
+        except (json.JSONDecodeError, OSError):
+            pass
     text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
     # Atomic write: write to a PID-unique sibling temp file then rename so
@@ -168,6 +189,92 @@ def save_config(config: AnimaWorksConfig, path: Path | None = None) -> None:
         _config_mtime = path.stat().st_mtime
     except OSError:
         _config_mtime = 0.0
+    _config_vault_values = _collect_vault_reference_values(payload, config.model_dump(mode="json"))
+
+
+def _collect_vault_reference_values(
+    references: Any,
+    resolved: Any,
+    path: tuple[str | int, ...] = (),
+) -> dict[tuple[str | int, ...], Any]:
+    """Collect resolved values corresponding to vault reference leaves."""
+    if isinstance(references, dict) and set(references) == {"$vault"}:
+        return {path: resolved}
+    found: dict[tuple[str | int, ...], Any] = {}
+    if isinstance(references, dict) and isinstance(resolved, dict):
+        for key, item in references.items():
+            if key in resolved:
+                found.update(_collect_vault_reference_values(item, resolved[key], (*path, key)))
+    elif isinstance(references, list) and isinstance(resolved, list):
+        for index, item in enumerate(references):
+            if index < len(resolved):
+                found.update(_collect_vault_reference_values(item, resolved[index], (*path, index)))
+    return found
+
+
+def _preserve_vault_references(
+    value: Any,
+    existing: Any,
+    *,
+    loaded_values: dict[tuple[str | int, ...], Any],
+    path: tuple[str | int, ...] = (),
+) -> tuple[Any, dict[str, str]]:
+    """Preserve reference leaves and identify intentional value changes."""
+    if isinstance(existing, dict) and set(existing) == {"$vault"}:
+        key = existing["$vault"]
+        if isinstance(key, str) and key:
+            updates: dict[str, str] = {}
+            if path in loaded_values and value != loaded_values[path]:
+                if not isinstance(value, str):
+                    raise ConfigError(f"Value for vault key {key} must be a string")
+                updates[key] = value
+            return existing, updates
+    if isinstance(value, dict) and isinstance(existing, dict):
+        result: dict[str, Any] = {}
+        updates: dict[str, str] = {}
+        for key, item in value.items():
+            result[key], child_updates = _preserve_vault_references(
+                item,
+                existing.get(key),
+                loaded_values=loaded_values,
+                path=(*path, key),
+            )
+            for vault_key, vault_value in child_updates.items():
+                if vault_key in updates and updates[vault_key] != vault_value:
+                    raise ConfigError(f"Conflicting updates for vault key: {vault_key}")
+                updates[vault_key] = vault_value
+        return result, updates
+    if isinstance(value, list) and isinstance(existing, list):
+        result_list: list[Any] = []
+        updates = {}
+        for index, item in enumerate(value):
+            child, child_updates = _preserve_vault_references(
+                item,
+                existing[index] if index < len(existing) else None,
+                loaded_values=loaded_values,
+                path=(*path, index),
+            )
+            result_list.append(child)
+            for vault_key, vault_value in child_updates.items():
+                if vault_key in updates and updates[vault_key] != vault_value:
+                    raise ConfigError(f"Conflicting updates for vault key: {vault_key}")
+                updates[vault_key] = vault_value
+        return result_list, updates
+    return value, {}
+
+
+def _apply_vault_updates(data_dir: Path, updates: dict[str, str]) -> None:
+    """Atomically update changed values in the vault's shared section."""
+    from core.config.vault import VaultManager
+
+    vault = VaultManager(data_dir)
+    data = vault.load_vault()
+    shared = data.setdefault("shared", {})
+    if not isinstance(shared, dict):
+        raise ConfigError("vault.json shared section must be an object")
+    for key, value in updates.items():
+        shared[key] = vault.encrypt(value)
+    vault.save_vault(data)
 
 
 __all__ = [

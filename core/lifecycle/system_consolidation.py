@@ -7,8 +7,10 @@ from __future__ import annotations
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,77 @@ from core.config import load_config
 from core.config.models import ConsolidationConfig
 
 logger = logging.getLogger("animaworks.lifecycle")
+
+
+def is_consolidation_enabled(anima_dir: Path) -> bool:
+    """Resolve the per-Anima consolidation switch without credential lookup.
+
+    ``status.json`` remains the strongest override, followed by
+    ``anima_defaults.consolidation_enabled``. Errors retain the
+    backward-compatible default of enabled.
+    """
+    try:
+        status = json.loads((anima_dir / "status.json").read_text(encoding="utf-8"))
+        override = status.get("consolidation_enabled")
+        if isinstance(override, bool):
+            return override
+    except (OSError, json.JSONDecodeError):
+        pass
+    try:
+        return load_config().anima_defaults.consolidation_enabled
+    except Exception:
+        logger.debug("Failed to resolve consolidation default for %s", anima_dir.name, exc_info=True)
+        return True
+
+
+def has_recent_activity(anima_dir: Path, *, days: int = 7, now: datetime | None = None) -> bool:
+    """Return whether activity_log contains a timestamped entry in the window."""
+    from core.time_utils import now_local
+
+    current = now or now_local()
+    cutoff = current - timedelta(days=max(1, days))
+    log_dir = anima_dir / "activity_log"
+    if not log_dir.is_dir():
+        return False
+
+    for log_path in sorted(log_dir.glob("*.jsonl"), reverse=True):
+        try:
+            lines = log_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            logger.debug("Failed to inspect activity log %s", log_path, exc_info=True)
+            continue
+        for line in reversed(lines):
+            try:
+                raw_ts = json.loads(line).get("ts")
+                timestamp = datetime.fromisoformat(raw_ts) if isinstance(raw_ts, str) else None
+                if timestamp is not None and timestamp.tzinfo is not None and timestamp >= cutoff:
+                    return True
+            except (json.JSONDecodeError, TypeError, ValueError):
+                continue
+    return False
+
+
+def should_skip_inactive_consolidation(
+    anima_dir: Path,
+    anima_name: str,
+    consolidation_cfg: Any,
+) -> bool:
+    """Apply per-Anima disable and configurable inactivity guards."""
+    if not is_consolidation_enabled(anima_dir):
+        logger.info("Consolidation skipped for %s: consolidation_enabled=false", anima_name)
+        return True
+
+    defaults = ConsolidationConfig()
+    enabled = getattr(consolidation_cfg, "inactivity_skip_enabled", defaults.inactivity_skip_enabled)
+    days = getattr(consolidation_cfg, "inactivity_days", defaults.inactivity_days)
+    if enabled and not has_recent_activity(anima_dir, days=days):
+        logger.info(
+            "Consolidation skipped for %s: no activity_log entries in the last %d days",
+            anima_name,
+            days,
+        )
+        return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -213,6 +286,12 @@ async def run_weekly_full_contradiction_scan(
             anima_name,
             ActivityLogger(anima_dir),
             memory_manager=MemoryManager(anima_dir),
+            batch_size=getattr(consolidation_cfg, "contradiction_batch_size", default_cfg.contradiction_batch_size),
+            nli_prefilter_threshold=getattr(
+                consolidation_cfg,
+                "contradiction_nli_prefilter_threshold",
+                default_cfg.contradiction_nli_prefilter_threshold,
+            ),
         )
         pairs = await detector.scan_contradictions(
             model=model,
@@ -274,6 +353,16 @@ async def run_knowledge_self_correction_if_enabled(
                 consolidation_cfg,
                 "knowledge_self_correction_recent_hours",
                 default_cfg.knowledge_self_correction_recent_hours,
+            ),
+            contradiction_batch_size=getattr(
+                consolidation_cfg,
+                "contradiction_batch_size",
+                default_cfg.contradiction_batch_size,
+            ),
+            contradiction_nli_prefilter_threshold=getattr(
+                consolidation_cfg,
+                "contradiction_nli_prefilter_threshold",
+                default_cfg.contradiction_nli_prefilter_threshold,
             ),
         )
         result = await run_post_consolidation_knowledge_correction(
@@ -362,6 +451,8 @@ class SystemConsolidationMixin:
 
         anima_items = list(self.animas.items())
         for index, (anima_name, anima) in enumerate(anima_items):
+            if should_skip_inactive_consolidation(anima.memory.anima_dir, anima_name, consolidation_cfg):
+                continue
             gate = evaluate_daily_consolidation_gate(
                 anima.memory.anima_dir,
                 anima_name,
@@ -466,6 +557,8 @@ class SystemConsolidationMixin:
             return
 
         for anima_name, anima in self.animas.items():
+            if should_skip_inactive_consolidation(anima.memory.anima_dir, anima_name, consolidation_cfg):
+                continue
             result = None
             try:
                 result = await anima.run_consolidation(

@@ -19,7 +19,6 @@ from core.config.models import (
     AnimaWorksConfig,
     CredentialConfig,
     get_config_path,
-    invalidate_cache,
     load_config,
     save_config,
 )
@@ -210,7 +209,6 @@ def cmd_config_set(args: argparse.Namespace) -> None:
     _set_nested(data, parts, coerced)
 
     new_config = AnimaWorksConfig.model_validate(data)
-    invalidate_cache()
     save_config(new_config)
 
     display_value = _mask_secret(key, coerced)
@@ -351,7 +349,6 @@ def _interactive_setup() -> None:
 
     # Step 4: Save
     print()
-    invalidate_cache()
     save_config(config)
     print(f"Configuration saved to {get_config_path()}")
 

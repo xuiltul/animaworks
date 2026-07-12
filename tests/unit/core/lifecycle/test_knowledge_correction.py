@@ -50,10 +50,13 @@ async def test_post_consolidation_correction_supersedes_recent_knowledge(
         "Deploy to the new host.",
         {"created_at": "2026-06-10T00:00:00", "failure_count": 0, "success_count": 0},
     )
+    scan_calls = 0
 
-    async def fake_scan(self, target_file=None, model="", max_llm_checks=None):  # noqa: ANN001, ARG001
+    async def fake_scan(self, target_file=None, model="", target_files=None, max_llm_checks=None):  # noqa: ANN001, ARG001
+        nonlocal scan_calls
+        scan_calls += 1
         self.last_scan_stats = {"candidate_pairs": 1, "llm_checks": 1, "limit_reached": False}
-        if target_file and target_file.name == "new-policy.md":
+        if target_files and new_path in target_files:
             return [
                 ContradictionPair(
                     file_a=old_path,
@@ -92,6 +95,7 @@ async def test_post_consolidation_correction_supersedes_recent_knowledge(
     assert meta["valid_until"]
     assert summary["contradiction"]["detected"] == 1
     assert summary["contradiction"]["resolved"]["superseded"] == 1
+    assert scan_calls == 1
 
 
 @pytest.mark.asyncio
@@ -179,6 +183,8 @@ async def test_system_consolidation_helper_uses_configured_limits(tmp_path: Path
         knowledge_self_correction_max_reconsolidation_files=3,
         knowledge_self_correction_timeout_seconds=11,
         knowledge_self_correction_recent_hours=6,
+        contradiction_batch_size=4,
+        contradiction_nli_prefilter_threshold=0.93,
     )
 
     with patch(
@@ -199,3 +205,5 @@ async def test_system_consolidation_helper_uses_configured_limits(tmp_path: Path
     assert kwargs["limits"].max_reconsolidation_files == 3
     assert kwargs["limits"].timeout_seconds == 11
     assert kwargs["limits"].recent_hours == 6
+    assert kwargs["limits"].contradiction_batch_size == 4
+    assert kwargs["limits"].contradiction_nli_prefilter_threshold == 0.93

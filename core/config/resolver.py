@@ -59,6 +59,7 @@ def _load_status_json(anima_dir: Path) -> dict[str, Any]:
         "max_outbound_per_day": "max_outbound_per_day",
         "max_recipients_per_run": "max_recipients_per_run",
         "default_workspace": "default_workspace",
+        "consolidation_enabled": "consolidation_enabled",
         "extra_mcp_servers": "extra_mcp_servers",
     }
     # Fields where None is a valid explicit value (e.g. supervisor=null

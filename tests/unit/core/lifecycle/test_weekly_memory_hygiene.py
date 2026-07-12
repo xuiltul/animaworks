@@ -55,9 +55,15 @@ async def test_weekly_full_contradiction_scan_uses_full_scan_limit(monkeypatch, 
     await run_weekly_full_contradiction_scan(
         tmp_path / "animas" / "sakura",
         "sakura",
-        SimpleNamespace(weekly_full_contradiction_max_pairs=7),
+        SimpleNamespace(
+            weekly_full_contradiction_max_pairs=7,
+            contradiction_batch_size=5,
+            contradiction_nli_prefilter_threshold=0.91,
+        ),
         model="test-model",
     )
 
     assert calls["scan"] == {"model": "test-model", "max_llm_checks": 7}
     assert calls["resolve"] == {"pairs": 2, "model": "test-model"}
+    assert calls["init_kwargs"]["batch_size"] == 5
+    assert calls["init_kwargs"]["nli_prefilter_threshold"] == 0.91

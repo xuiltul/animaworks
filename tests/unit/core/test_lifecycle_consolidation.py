@@ -135,6 +135,7 @@ class TestLifecycleConsolidationIntegration:
 
         with (
             patch("core.config.load_config", return_value=mock_config),
+            patch("core.lifecycle.system_consolidation.should_skip_inactive_consolidation", return_value=False),
             patch("core.lifecycle.system_consolidation.evaluate_daily_consolidation_gate", return_value=gate),
             patch("core.lifecycle.system_consolidation.run_daily_consolidation_post_processing", AsyncMock()),
         ):

@@ -337,6 +337,7 @@ class SchedulerMixin:
         from core.lifecycle.system_consolidation import (
             evaluate_daily_consolidation_gate,
             run_daily_consolidation_post_processing,
+            should_skip_inactive_consolidation,
         )
 
         defaults = ConsolidationConfig()
@@ -349,6 +350,8 @@ class SchedulerMixin:
             model = getattr(consolidation_cfg, "llm_model", model)
 
         for anima_name, anima_dir in self._iter_consolidation_targets():
+            if should_skip_inactive_consolidation(anima_dir, anima_name, consolidation_cfg):
+                continue
             handle = self.processes.get(anima_name)
             if not handle or handle.state != ProcessState.RUNNING:
                 logger.info(
@@ -463,7 +466,10 @@ class SchedulerMixin:
             consolidation_cfg = None
 
         from core.config.models import ConsolidationConfig as _CC
-        from core.lifecycle.system_consolidation import run_weekly_integration_post_processing
+        from core.lifecycle.system_consolidation import (
+            run_weekly_integration_post_processing,
+            should_skip_inactive_consolidation,
+        )
 
         defaults = _CC()
         max_turns = defaults.max_turns
@@ -473,6 +479,8 @@ class SchedulerMixin:
             model = getattr(consolidation_cfg, "llm_model", model)
 
         for anima_name, anima_dir in self._iter_consolidation_targets():
+            if should_skip_inactive_consolidation(anima_dir, anima_name, consolidation_cfg):
+                continue
             handle = self.processes.get(anima_name)
             if not handle or handle.state != ProcessState.RUNNING:
                 logger.info(

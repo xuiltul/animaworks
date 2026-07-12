@@ -201,6 +201,12 @@ def test_index_file_preserves_old_meta_when_stale_cleanup_fails(tmp_path: Path) 
         )
     ]
     indexer._generate_embeddings = lambda contents: [[0.1] for _content in contents]
+    failure_state = tmp_path / "state" / "rag_upsert_failures.json"
+    failure_state.parent.mkdir()
+    failure_state.write_text(
+        '{"failures": {"knowledge/shrink.md": {"consecutive_failures": 2}}, "quarantined": []}',
+        encoding="utf-8",
+    )
 
     indexed_count = indexer.index_file(file_path, "knowledge")
 
@@ -208,6 +214,8 @@ def test_index_file_preserves_old_meta_when_stale_cleanup_fails(tmp_path: Path) 
     assert vector_store.upserts
     assert vector_store.deleted == [("test_anima_knowledge", ["test_anima/knowledge/shrink.md#1"])]
     assert indexer.index_meta[source_file] == {"hash": "old", "chunks": 2}
+    state = failure_state.read_text(encoding="utf-8")
+    assert source_file not in state
 
 
 def test_index_file_deletes_stale_chunks_when_new_content_has_no_chunks(tmp_path: Path) -> None:

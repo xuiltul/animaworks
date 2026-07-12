@@ -99,6 +99,7 @@ class AnimaDefaults(BaseModel):
     max_outbound_per_day: int | None = None
     max_recipients_per_run: int | None = None
     default_workspace: str = ""
+    consolidation_enabled: bool = True
 
 
 # ── Local LLM defaults ───────────────────────────────────────────────────────
@@ -261,6 +262,7 @@ class RAGConfig(BaseModel):
     # and leaves schema-less stub DBs that re-trigger repair — a destructive loop.
     # Serialize repairs (1) by default so each rebuild runs in isolation.
     repair_max_concurrent: int = 1
+    upsert_quarantine_failure_threshold: int = Field(default=3, ge=1)
     startup_repair_preflight_enabled: bool = True
     startup_repair_window_minutes: int = 1440
     quick_check_timeout_seconds: float = 10.0
@@ -422,7 +424,11 @@ class ConsolidationConfig(BaseModel):
     knowledge_self_correction_timeout_seconds: int = Field(default=300, ge=1)
     knowledge_self_correction_recent_hours: int = Field(default=24, ge=1)
     weekly_full_contradiction_max_pairs: int = Field(default=50, ge=0)
+    contradiction_batch_size: int = Field(default=20, ge=1)
+    contradiction_nli_prefilter_threshold: float | None = Field(default=0.70, ge=0.0, le=1.0)
     post_processing_cooldown_seconds: int = Field(default=30, ge=0)
+    inactivity_skip_enabled: bool = True
+    inactivity_days: int = Field(default=7, ge=1)
 
 
 class ImageGenConfig(BaseModel):

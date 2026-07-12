@@ -93,6 +93,11 @@ class HttpVectorStore(VectorStore):
         )
         return True
 
+    def is_transient_write_failure(self, collection: str) -> bool:
+        """Return whether the last write failure opened the worker circuit."""
+        retry_at = self._write_circuit_retry_at.get(collection)
+        return retry_at is not None and retry_at > time.monotonic()
+
     def _record_write_circuit(self, collection: str, retry_after: str | None) -> None:
         try:
             delay = max(1, int(float(retry_after or "1")))

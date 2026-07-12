@@ -48,6 +48,32 @@ class VaultError(ConfigError):
     """Vault-specific errors (missing key, decryption failure)."""
 
 
+def resolve_vault_references(value: Any, data_dir: Path) -> Any:
+    """Recursively resolve ``{"$vault": "KEY"}`` references.
+
+    Config references use the existing flat ``shared`` section of
+    ``vault.json``.  Other dictionaries and plaintext scalar values are
+    returned unchanged, preserving backwards compatibility with existing
+    configuration files.
+    """
+    if isinstance(value, list):
+        return [resolve_vault_references(item, data_dir) for item in value]
+
+    if not isinstance(value, dict):
+        return value
+
+    if set(value) == {"$vault"}:
+        key = value["$vault"]
+        if not isinstance(key, str) or not key.strip():
+            raise VaultError("A $vault reference must contain a non-empty string key")
+        resolved = VaultManager(data_dir).get("shared", key)
+        if resolved is None:
+            raise VaultError(f"Vault key not found in shared section: {key}")
+        return resolved
+
+    return {key: resolve_vault_references(item, data_dir) for key, item in value.items()}
+
+
 # ── VaultManager ─────────────────────────────────────────────────────────────
 
 

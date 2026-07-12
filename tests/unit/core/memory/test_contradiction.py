@@ -927,7 +927,8 @@ class TestScanContradictions:
         # No contradictions found, but verify LLM was called for each candidate pair
         # (target vs other-a, target vs other-b)
         assert len(results) == 0
-        assert mock_llm.call_count == 2  # Two candidate pairs checked
+        # One failed batch parse followed by the two legacy pair checks.
+        assert mock_llm.call_count == 3
 
     @pytest.mark.asyncio
     async def test_scan_entailment_skips_llm(

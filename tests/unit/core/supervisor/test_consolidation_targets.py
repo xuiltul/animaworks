@@ -254,6 +254,7 @@ async def test_daily_consolidation_timeout_logs_once_and_continues(
         AsyncMock(),
     )
     monkeypatch.setattr("core.lifecycle.system_consolidation.detect_communities_if_neo4j", AsyncMock())
+    monkeypatch.setattr("core.lifecycle.system_consolidation.should_skip_inactive_consolidation", lambda *_args: False)
 
     with caplog.at_level(logging.WARNING, logger="core.supervisor._mgr_scheduler"):
         await sup._run_daily_consolidation()
@@ -279,6 +280,7 @@ async def test_weekly_consolidation_timeout_logs_once_and_continues(
     sup.processes["mio"] = handle
     postprocess = AsyncMock()
     monkeypatch.setattr("core.lifecycle.system_consolidation.run_weekly_integration_post_processing", postprocess)
+    monkeypatch.setattr("core.lifecycle.system_consolidation.should_skip_inactive_consolidation", lambda *_args: False)
 
     with caplog.at_level(logging.WARNING, logger="core.supervisor._mgr_scheduler"):
         await sup._run_weekly_integration()
@@ -287,3 +289,22 @@ async def test_weekly_consolidation_timeout_logs_once_and_continues(
     assert "consolidation_timeout anima=mio phase=phase_b type=weekly" in caplog.text
     assert "Weekly integration failed for mio" not in caplog.text
     postprocess.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method_name", ["_run_daily_consolidation", "_run_weekly_integration"])
+async def test_scheduler_skips_inactive_anima_before_ipc(
+    tmp_path: Path,
+    method_name: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sup = _make_supervisor(tmp_path)
+    _create_anima_dir(sup.animas_dir, "sleepy")
+    handle = _TimeoutHandle()
+    sup.processes["sleepy"] = handle
+
+    with caplog.at_level(logging.INFO):
+        await getattr(sup, method_name)()
+
+    assert handle.calls == []
+    assert "no activity_log entries in the last 7 days" in caplog.text
