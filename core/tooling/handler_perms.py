@@ -168,6 +168,7 @@ class PermissionsMixin:
         path: str,
         *,
         write: bool = False,
+        trusted_internal_cache_write: bool = False,
         config: PermissionsConfig | None = None,
         denied_roots: tuple[Path, ...] | None = None,
     ) -> str | None:
@@ -187,7 +188,7 @@ class PermissionsMixin:
         # expose internal copies/caches that can retain content from a denied
         # source.  Trusted search services may consume these caches, but their
         # filtered results are returned through separate handlers.
-        if effective_config.file_roots_denied:
+        if effective_config.file_roots_denied and not (write and trusted_internal_cache_write):
             internal_cache = find_internal_cache_root(path, self._anima_dir)
             if internal_cache is not None:
                 logger.warning(

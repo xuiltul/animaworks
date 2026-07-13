@@ -64,6 +64,40 @@ class TestArchiveMemoryFile:
         assert target.exists()
         assert not denied.exists()
 
+    def test_unrelated_explicit_deny_allows_trusted_archive_write(self, handler, anima_dir):
+        target = anima_dir / "knowledge" / "old-info.md"
+        target.write_text("old knowledge")
+        denied = anima_dir.parent / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle(
+                "archive_memory_file",
+                {"path": "knowledge/old-info.md", "reason": "test"},
+            )
+
+        assert "Archived" in result
+        assert not target.exists()
+        assert (anima_dir / "archive" / "superseded" / "old-info.md").exists()
+
+    def test_archive_destination_symlink_escape_is_blocked(self, handler, anima_dir):
+        target = anima_dir / "knowledge" / "old-info.md"
+        target.write_text("old knowledge")
+        outside = anima_dir.parent / "outside"
+        outside.mkdir()
+        (anima_dir / "archive").symlink_to(outside, target_is_directory=True)
+        config = PermissionsConfig(file_roots_denied=[str(anima_dir.parent / "private")])
+
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle(
+                "archive_memory_file",
+                {"path": "knowledge/old-info.md", "reason": "test"},
+            )
+
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+        assert target.exists()
+        assert not (outside / "superseded").exists()
+
     def test_archive_knowledge_file(self, handler, anima_dir):
         """Successfully archive a knowledge file."""
         target = anima_dir / "knowledge" / "old-info.md"

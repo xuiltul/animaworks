@@ -1243,7 +1243,17 @@ class MemoryToolsMixin:
             )
 
         archive_dir = self._anima_dir / "archive" / "superseded"
-        err = self._check_file_permission(str(archive_dir), write=True)
+        expected_archive_root = self._anima_dir.resolve() / "archive"
+        if not archive_dir.resolve().is_relative_to(expected_archive_root):
+            return _error_result(
+                "PermissionDenied",
+                "Archive destination resolves outside the protected archive directory",
+            )
+        err = self._check_file_permission(
+            str(archive_dir),
+            write=True,
+            trusted_internal_cache_write=True,
+        )
         if err:
             return err
         archive_dir.mkdir(parents=True, exist_ok=True)
