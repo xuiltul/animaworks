@@ -165,6 +165,9 @@ def _machine_tool_schemas() -> list[dict[str, Any]]:
     ``machine._is_fs_sandboxed``), so native MCP exposure is their only
     working path to the machine tool.
     """
+    if os.environ.get("ANIMAWORKS_FILE_DENY_ACTIVE") == "1":
+        logger.info("machine tool disabled while file deny enforcement is active")
+        return []
     try:
         from core.tools.machine import get_tool_schemas
 

@@ -16,6 +16,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from core.file_access_policy import find_denied_root, load_denied_roots
+
 # Import submodules directly to avoid circular import when package __init__ loads engine
 from core.memory.priming import (
     budget as _budget,
@@ -251,9 +253,11 @@ class PrimingEngine:
         if not effective_message.strip():
             state_path = self.anima_dir / "state" / "current_state.md"
             try:
-                if state_path.is_file():
-                    effective_message = state_path.read_text(encoding="utf-8")[:300]
-            except OSError:
+                denied_roots = load_denied_roots(self.anima_dir)
+                resolved_state_path = state_path.resolve()
+                if find_denied_root(resolved_state_path, denied_roots) is None and resolved_state_path.is_file():
+                    effective_message = resolved_state_path.read_text(encoding="utf-8")[:300]
+            except (OSError, RuntimeError):
                 pass
 
         keywords = self._extract_keywords(message or effective_message)
@@ -464,6 +468,7 @@ class PrimingEngine:
             backend,
             query,
             budget_tokens=_BUDGET_GRAPH_CONTEXT,
+            anima_dir=self.anima_dir,
         )
 
     def _extract_keywords(self, message: str) -> list[str]:

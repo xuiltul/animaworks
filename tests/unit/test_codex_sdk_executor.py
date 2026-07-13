@@ -522,6 +522,26 @@ class TestExecutorInit:
         assert "summary" not in kwargs
         assert "sandbox" not in kwargs
 
+    def test_codex_thread_kwargs_keeps_legacy_sandbox_without_denied_roots(self, executor):
+        permissions = SimpleNamespace(file_roots=["/"], file_roots_denied=[])
+
+        with patch("core.config.models.load_permissions", return_value=permissions):
+            kwargs = executor._codex_thread_kwargs("prompt")
+
+        assert kwargs["sandbox"] == "full_access"
+
+    def test_codex_thread_kwargs_omits_sandbox_with_denied_roots(self, executor):
+        permissions = SimpleNamespace(file_roots=["/"], file_roots_denied=["/private"])
+
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch.object(executor, "_sdk_sandbox") as sdk_sandbox,
+        ):
+            kwargs = executor._codex_thread_kwargs("prompt")
+
+        assert "sandbox" not in kwargs
+        sdk_sandbox.assert_not_called()
+
     def test_codex_turn_kwargs_invalid_reasoning_summary_falls_back_to_concise(self, model_config, anima_dir, caplog):
         caplog.set_level(logging.WARNING, logger="animaworks.execution.codex_sdk")
         model_config.extra_keys = {"codex_reasoning_summary": "verbose"}
@@ -554,7 +574,10 @@ class TestConfigWriting:
         assert 'approval_policy = "never"' in config_toml
         assert "[mcp_servers.aw]" in config_toml
         parsed = tomllib.loads(config_toml)
+        assert parsed["approval_policy"] == "never"
         assert parsed["mcp_servers"]["aw"]["default_tools_approval_mode"] == "approve"
+        assert parsed["mcp_servers"]["aw"]["command"] == sys.executable
+        assert parsed["mcp_servers"]["aw"]["args"] == ["-m", "core.mcp.server"]
 
     def test_write_codex_config_restricted_sandbox(self, model_config, anima_dir):
         """Restricted file_roots produces workspace-write with writable_roots."""
@@ -574,7 +597,137 @@ class TestConfigWriting:
         assert "workspace-write" in config_toml
         assert "writable_roots" in config_toml
         parsed = tomllib.loads(config_toml)
+        assert parsed["approval_policy"] == "never"
         assert parsed["sandbox_workspace_write"]["network_access"] is True
+
+    def test_write_codex_config_permission_profile_for_denied_roots(self, model_config, anima_dir, tmp_path):
+        external_root = tmp_path.parent / f"{tmp_path.name}-external"
+        writable_root = external_root / "shared"
+        task_cwd = external_root / "tasks" / "current"
+        denied_root = writable_root / 'private"with\\slash\nand-control\x01'
+        permissions = SimpleNamespace(
+            file_roots=[str(writable_root)],
+            file_roots_denied=[str(denied_root)],
+        )
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+        exc.set_task_cwd(task_cwd)
+        (anima_dir / "vectordb.staging-123").mkdir()
+        (anima_dir / "vectordb-corrupt-old").mkdir()
+
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value="/opt/codex/bin/codex"),
+        ):
+            exc._write_codex_config("prompt")
+
+        config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")
+        parsed = tomllib.loads(config_toml)
+        assert "sandbox_mode" not in parsed
+        assert "sandbox_workspace_write" not in parsed
+        assert parsed["default_permissions"] == "animaworks"
+        assert parsed["approval_policy"] == "never"
+
+        profile = parsed["permissions"]["animaworks"]
+        filesystem = profile["filesystem"]
+        assert filesystem[":root"] == "read"
+        assert filesystem[":tmpdir"] == "write"
+        assert filesystem[":slash_tmp"] == "write"
+        assert str(anima_dir.resolve()) not in filesystem
+        assert filesystem[str(writable_root.resolve())] == "write"
+        assert filesystem[str(task_cwd.resolve())] == "write"
+        assert filesystem[str(denied_root.resolve())] == "deny"
+        assert filesystem[str((anima_dir / ".codex_home").resolve())] == "deny"
+        assert filesystem[str((anima_dir / "state").resolve())] == "deny"
+        assert filesystem[str((anima_dir / "archive").resolve())] == "deny"
+        assert filesystem[str((anima_dir / "vectordb").resolve())] == "deny"
+        assert filesystem[str(anima_dir.resolve() / "vectordb-*")] == "deny"
+        assert filesystem[str(anima_dir.resolve() / "vectordb.*")] == "deny"
+        assert filesystem[str(anima_dir.resolve() / "vectordb_*")] == "deny"
+        assert filesystem[str((anima_dir / "vectordb.staging-123").resolve())] == "deny"
+        assert filesystem[str((anima_dir / "vectordb-corrupt-old").resolve())] == "deny"
+        assert profile["network"]["enabled"] is True
+        mcp_profile = parsed["permissions"]["animaworks_mcp"]
+        mcp_filesystem = mcp_profile["filesystem"]
+        assert mcp_filesystem[str(anima_dir.resolve())] == "write"
+        assert mcp_filesystem[str(writable_root.resolve())] == "write"
+        assert mcp_filesystem[str(task_cwd.resolve())] == "write"
+        assert mcp_filesystem[str(denied_root.resolve())] == "deny"
+        assert mcp_filesystem[str((anima_dir / "permissions.json").resolve())] == "read"
+        assert str((anima_dir / "state").resolve()) not in mcp_filesystem
+        assert str((anima_dir / "archive").resolve()) not in mcp_filesystem
+        assert str((anima_dir / "vectordb").resolve()) not in mcp_filesystem
+        assert mcp_profile["network"]["enabled"] is True
+        assert parsed["mcp_servers"]["aw"]["command"] == "/opt/codex/bin/codex"
+        assert parsed["mcp_servers"]["aw"]["args"] == [
+            "sandbox",
+            "-P",
+            "animaworks_mcp",
+            "--",
+            sys.executable,
+            "-m",
+            "core.mcp.server",
+        ]
+        assert parsed["mcp_servers"]["aw"]["env"]["CODEX_HOME"] == str(anima_dir / ".codex_home")
+        assert parsed["mcp_servers"]["aw"]["env"]["ANIMAWORKS_FILE_DENY_ACTIVE"] == "1"
+
+    def test_write_codex_config_root_write_profile_keeps_specific_deny(self, model_config, anima_dir, tmp_path):
+        denied_root = tmp_path / "private"
+        permissions = SimpleNamespace(
+            file_roots=["/"],
+            file_roots_denied=[str(denied_root)],
+        )
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value="/opt/codex/bin/codex"),
+        ):
+            exc._write_codex_config("prompt")
+
+        parsed = tomllib.loads((anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8"))
+        shell_filesystem = parsed["permissions"]["animaworks"]["filesystem"]
+        assert shell_filesystem[":root"] == "read"
+        assert shell_filesystem[str(denied_root.resolve())] == "deny"
+        assert shell_filesystem[":tmpdir"] == "write"
+        assert shell_filesystem[":slash_tmp"] == "write"
+        mcp_filesystem = parsed["permissions"]["animaworks_mcp"]["filesystem"]
+        assert mcp_filesystem[":root"] == "write"
+        assert mcp_filesystem[str(denied_root.resolve())] == "deny"
+        assert mcp_filesystem[str((anima_dir / "permissions.json").resolve())] == "read"
+        assert ":tmpdir" not in mcp_filesystem
+        assert ":slash_tmp" not in mcp_filesystem
+
+    def test_write_codex_config_deny_overrides_same_writable_root(self, model_config, anima_dir, tmp_path):
+        denied_root = tmp_path / "shared-private"
+        permissions = SimpleNamespace(
+            file_roots=[str(denied_root)],
+            file_roots_denied=[str(denied_root)],
+        )
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value="/opt/codex/bin/codex"),
+        ):
+            exc._write_codex_config("prompt")
+
+        parsed = tomllib.loads((anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8"))
+        filesystem = parsed["permissions"]["animaworks"]["filesystem"]
+        assert filesystem[str(denied_root.resolve())] == "deny"
+
+    def test_write_codex_config_denied_roots_require_codex_for_mcp_wrapper(self, model_config, anima_dir, tmp_path):
+        permissions = SimpleNamespace(
+            file_roots=[str(anima_dir)],
+            file_roots_denied=[str(tmp_path / "private")],
+        )
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value=None),
+            pytest.raises(RuntimeError, match="sandbox the MCP server"),
+        ):
+            exc._write_codex_config("prompt")
 
     def test_write_codex_config_includes_model_name(self, executor, anima_dir):
         """config.toml must include model = "o4-mini" (stripped prefix)."""
@@ -704,6 +857,7 @@ class TestConfigWriting:
 
         assert _escape_toml_string('path/with"quote') == 'path/with\\"quote'
         assert _escape_toml_string("path\\back") == "path\\\\back"
+        assert _escape_toml_string("line\ncontrol\x01") == "line\\ncontrol\\u0001"
 
     def test_propagate_auth_copies_when_links_unavailable(self, executor, anima_dir):
         default_codex = anima_dir.parent.parent / "home" / ".codex"

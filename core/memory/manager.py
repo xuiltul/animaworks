@@ -14,6 +14,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from core.file_access_policy import find_denied_root, load_denied_roots
 from core.i18n import t
 from core.memory._io import atomic_write_text
 from core.memory.config_reader import ConfigReader
@@ -40,7 +41,7 @@ from core.memory.skill_metadata import (
 )
 from core.paths import get_common_knowledge_dir, get_common_skills_dir, get_company_dir, get_shared_dir
 from core.schemas import ModelConfig, SkillMeta
-from core.time_utils import today_local
+from core.time_utils import now_local, today_local
 
 logger = logging.getLogger("animaworks.memory")
 
@@ -102,16 +103,20 @@ class MemoryManager:
         new_state = self.state_dir / "current_state.md"
         legacy_root = self.anima_dir / "current_task.md"
 
-        if legacy_root.exists():
+        legacy_allowed = self._resolve_host_read_path(legacy_root) is not None
+        old_allowed = self._resolve_host_read_path(old_task) is not None
+        new_allowed = self._resolve_host_read_path(new_state) is not None
+
+        if legacy_allowed and legacy_root.exists():
             logger.warning("Legacy root-level current_task.md found at %s", legacy_root)
 
-        if old_task.exists() and not new_state.exists():
+        if old_allowed and new_allowed and old_task.exists() and not new_state.exists():
             try:
                 os.rename(old_task, new_state)
                 logger.info("Migrated %s -> %s", old_task.name, new_state.name)
             except OSError:
                 logger.warning("Failed to migrate %s to %s", old_task, new_state, exc_info=True)
-        elif old_task.exists() and new_state.exists():
+        elif old_allowed and new_allowed and old_task.exists() and new_state.exists():
             try:
                 old_task.unlink()
                 logger.info("Removed stale current_task.md from %s", self.state_dir)
@@ -124,9 +129,9 @@ class MemoryManager:
     def _migrate_pending_to_state(self) -> None:
         """One-time migration: merge pending.md into current_state.md."""
         pending = self.state_dir / "pending.md"
-        if not pending.exists():
+        if self._resolve_host_read_path(pending) is None or not pending.exists():
             return
-        content = pending.read_text(encoding="utf-8").strip()
+        content = self._read(pending).strip()
         if content:
             current = self.read_current_state()
             merged = current.rstrip() + "\n\n## Migrated from pending.md\n\n" + content
@@ -254,13 +259,34 @@ class MemoryManager:
 
     # ── Read helpers ──────────────────────────────────────
 
+    def _resolve_host_read_path(self, path: Path) -> Path | None:
+        """Resolve *path* and reject configured deny roots before host reads.
+
+        Memory prompt assembly runs in the trusted AnimaWorks host process,
+        outside the model's OS sandbox.  Every host-side read therefore needs
+        the same canonical deny check to avoid becoming a confused deputy for
+        symlinks placed inside otherwise allowed memory directories.
+        """
+        try:
+            resolved = path.resolve()
+        except (OSError, RuntimeError):
+            logger.warning("Failed to resolve host memory path %s", path, exc_info=True)
+            return None
+
+        denied_root = find_denied_root(resolved, load_denied_roots(self.anima_dir))
+        if denied_root is not None:
+            logger.warning("Host memory read denied for %s by %s", resolved, denied_root)
+            return None
+        return resolved
+
     def _read(self, path: Path) -> str:
-        if not path.exists():
+        resolved = self._resolve_host_read_path(path)
+        if resolved is None or not resolved.exists():
             return ""
         try:
-            return path.read_text(encoding="utf-8")
+            return resolved.read_text(encoding="utf-8")
         except OSError:
-            logger.warning("Failed to read %s", path, exc_info=True)
+            logger.warning("Failed to read %s", resolved, exc_info=True)
             return ""
 
     def read_company_vision(self) -> str:
@@ -307,17 +333,16 @@ class MemoryManager:
         """Load recent heartbeat summaries for dialogue context injection."""
         import json as _json
 
-        history_dir = self.anima_dir / "shortterm" / "heartbeat_history"
-        if not history_dir.exists():
+        history_dir = self._resolve_host_read_path(self.anima_dir / "shortterm" / "heartbeat_history")
+        if history_dir is None or not history_dir.exists():
             return ""
 
         lines: list[str] = []
         for f in sorted(history_dir.glob("*.jsonl"), reverse=True)[:3]:
-            try:
-                file_lines = f.read_text(encoding="utf-8").strip().splitlines()
-            except OSError:
-                logger.warning("Failed to read heartbeat history %s", f, exc_info=True)
+            content = self._read(f)
+            if not content:
                 continue
+            file_lines = content.strip().splitlines()
             lines = file_lines + lines
             if len(lines) >= limit:
                 break
@@ -356,19 +381,31 @@ class MemoryManager:
     # ── List helpers ──────────────────────────────────────
 
     def list_knowledge_files(self) -> list[str]:
-        return [f.stem for f in sorted(self.knowledge_dir.glob("*.md"))]
+        return [f.stem for f in self._glob_host_readable(self.knowledge_dir, "*.md")]
 
     def list_episode_files(self) -> list[str]:
-        return [f.stem for f in sorted(self.episodes_dir.glob("*.md"), reverse=True)]
+        return [f.stem for f in self._glob_host_readable(self.episodes_dir, "*.md", reverse=True)]
 
     def list_procedure_files(self) -> list[str]:
-        return [f.stem for f in sorted(self.procedures_dir.glob("*.md"))]
+        return [f.stem for f in self._glob_host_readable(self.procedures_dir, "*.md")]
 
     def list_fact_files(self) -> list[str]:
-        return [f.stem for f in sorted(self.facts_dir.glob("*.jsonl"))]
+        return [f.stem for f in self._glob_host_readable(self.facts_dir, "*.jsonl")]
 
     def list_skill_files(self) -> list[str]:
-        return [f.parent.name for f in sorted(self.skills_dir.glob("*/SKILL.md"))]
+        return [f.parent.name for f in self._glob_host_readable(self.skills_dir, "*/SKILL.md")]
+
+    def _glob_host_readable(self, directory: Path, pattern: str, *, reverse: bool = False) -> list[Path]:
+        """Return canonical glob matches after pruning denied paths."""
+        resolved_dir = self._resolve_host_read_path(directory)
+        if resolved_dir is None or not resolved_dir.is_dir():
+            return []
+        readable: list[Path] = []
+        for candidate in resolved_dir.glob(pattern):
+            resolved = self._resolve_host_read_path(candidate)
+            if resolved is not None:
+                readable.append(resolved)
+        return sorted(readable, reverse=reverse)
 
     # ── Shared user memory ────────────────────────────────
 
@@ -378,10 +415,15 @@ class MemoryManager:
 
     def list_shared_users(self) -> list[str]:
         """List user subdirectories under shared/users/."""
-        d = self._shared_users_dir()
-        if not d.is_dir():
+        d = self._resolve_host_read_path(self._shared_users_dir())
+        if d is None or not d.is_dir():
             return []
-        return [p.name for p in sorted(d.iterdir()) if p.is_dir()]
+        users: list[str] = []
+        for candidate in sorted(d.iterdir()):
+            resolved = self._resolve_host_read_path(candidate)
+            if resolved is not None and resolved.is_dir():
+                users.append(candidate.name)
+        return users
 
     # ── Write helpers ─────────────────────────────────────
 
@@ -450,11 +492,9 @@ class MemoryManager:
         for offset in range(days):
             d = today - timedelta(days=offset)
             path = self.episodes_dir / f"{d.isoformat()}.md"
-            if path.exists():
-                try:
-                    parts.append(path.read_text(encoding="utf-8"))
-                except OSError:
-                    logger.warning("Failed to read episode %s", path, exc_info=True)
+            content = self._read(path)
+            if content:
+                parts.append(content)
         return "\n\n".join(parts)
 
     # ── Backward-compatible RAG proxies ─────────────────
@@ -589,8 +629,29 @@ class MemoryManager:
         self._resolution.append_resolution(issue, resolver)
 
     def read_resolutions(self, days: int = 7) -> list[dict[str, str]]:
-        """Facade: ResolutionTracker.read_resolutions."""
-        return self._resolution.read_resolutions(days)
+        """Read prompt-visible resolutions through the host deny boundary."""
+        import json as _json
+        from collections import deque
+
+        content = self._read(get_shared_dir() / "resolutions.jsonl")
+        if not content:
+            return []
+
+        cutoff = (now_local() - timedelta(days=days)).isoformat()
+        lines = deque(content.splitlines(), maxlen=2000)
+        entries: list[dict[str, str]] = []
+        for line in reversed(lines):
+            if not line.strip():
+                continue
+            try:
+                entry = _json.loads(line)
+            except _json.JSONDecodeError:
+                continue
+            if entry.get("ts", "") < cutoff:
+                break
+            entries.append(entry)
+        entries.reverse()
+        return entries
 
     # ── Facade: RAGMemorySearch ───────────────────────────
 
@@ -635,11 +696,21 @@ class MemoryManager:
 
     def read_knowledge_content(self, path: Path) -> str:
         """Facade: FrontmatterService.read_knowledge_content."""
-        return self._frontmatter.read_knowledge_content(path)
+        from core.memory.frontmatter import split_frontmatter
+
+        text = self._read(path)
+        _, body = split_frontmatter(text)
+        return body.strip()
 
     def read_knowledge_metadata(self, path: Path) -> dict:
         """Facade: FrontmatterService.read_knowledge_metadata."""
-        return self._frontmatter.read_knowledge_metadata(path)
+        from core.memory.frontmatter import parse_frontmatter
+
+        text = self._read(path)
+        meta, _ = parse_frontmatter(text)
+        if "superseded_at" in meta and "valid_until" not in meta:
+            meta["valid_until"] = meta.pop("superseded_at")
+        return meta
 
     def update_knowledge_metadata(self, path: Path, updates: dict) -> None:
         """Facade: FrontmatterService.update_knowledge_metadata."""
@@ -656,11 +727,21 @@ class MemoryManager:
 
     def read_procedure_content(self, path: Path) -> str:
         """Facade: FrontmatterService.read_procedure_content."""
-        return self._frontmatter.read_procedure_content(path)
+        from core.memory.frontmatter import split_frontmatter
+
+        target = path if path.is_absolute() else self.procedures_dir / path
+        text = self._read(target)
+        _, body = split_frontmatter(text)
+        return body.strip()
 
     def read_procedure_metadata(self, path: Path) -> dict:
         """Facade: FrontmatterService.read_procedure_metadata."""
-        return self._frontmatter.read_procedure_metadata(path)
+        from core.memory.frontmatter import parse_frontmatter
+
+        target = path if path.is_absolute() else self.procedures_dir / path
+        text = self._read(target)
+        meta, _ = parse_frontmatter(text)
+        return meta
 
     def list_procedure_metas(self) -> list[SkillMeta]:
         """Facade: FrontmatterService.list_procedure_metas."""

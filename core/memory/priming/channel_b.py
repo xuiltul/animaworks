@@ -14,6 +14,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from core.file_access_policy import find_denied_root, load_denied_roots
 from core.time_utils import ensure_aware, now_local, today_local
 from core.tools._async_compat import run_sync
 
@@ -58,6 +59,42 @@ _OWN_ACTION_TYPES = frozenset(
 )
 
 
+def _resolved_readable_path(path: Path, denied_roots: tuple[Path, ...]) -> Path | None:
+    """Resolve a prompt source and reject explicit deny roots before reading."""
+    if not denied_roots:
+        return path
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return None
+    return resolved if find_denied_root(resolved, denied_roots) is None else None
+
+
+def _tree_intersects_deny(path: Path, denied_roots: tuple[Path, ...]) -> bool:
+    """Return True when a bulk reader could enter a denied child subtree."""
+    if not denied_roots:
+        return False
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return True
+    return find_denied_root(resolved, denied_roots) is not None or any(
+        denied.is_relative_to(resolved) for denied in denied_roots
+    )
+
+
+def _is_channel_member_from_resolved_meta(meta_path: Path, anima_name: str) -> bool:
+    """Evaluate channel ACL without reopening an unresolved path."""
+    if not meta_path.exists():
+        return True
+    try:
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    members = data.get("members", []) if isinstance(data, dict) else []
+    return not members or anima_name in members
+
+
 async def channel_b_recent_activity(
     anima_dir: Path,
     shared_dir: Path | None,
@@ -80,8 +117,11 @@ async def channel_b_recent_activity(
     """
     from core.memory.activity import ActivityLogger
 
+    denied_roots = load_denied_roots(anima_dir)
     activity = ActivityLogger(anima_dir)
-    entries = activity.recent(days=2, limit=100)
+    entries = (
+        [] if _tree_intersects_deny(anima_dir / "activity_log", denied_roots) else activity.recent(days=2, limit=100)
+    )
 
     is_background = channel in {"heartbeat", "cron", "inbox", "task"} or channel.startswith("cron:")
 
@@ -91,7 +131,12 @@ async def channel_b_recent_activity(
         entries = [e for e in entries if e.type not in _CHAT_NOISE_TYPES]
 
     # Always read shared channels for cross-Anima visibility
-    channel_entries = read_shared_channels(anima_dir, shared_dir, limit_per_channel=5)
+    channel_entries = read_shared_channels(
+        anima_dir,
+        shared_dir,
+        limit_per_channel=5,
+        denied_roots=denied_roots,
+    )
     entries.extend(channel_entries)
 
     if entries:
@@ -100,13 +145,15 @@ async def channel_b_recent_activity(
         return activity.format_for_priming(prioritized, budget_tokens=1300)
 
     # Fallback: read old episodes if no activity log exists yet
-    return await fallback_episodes_and_channels(anima_dir, shared_dir)
+    return await fallback_episodes_and_channels(anima_dir, shared_dir, denied_roots=denied_roots)
 
 
 def read_shared_channels(
     anima_dir: Path,
     shared_dir: Path | None,
     limit_per_channel: int = 5,
+    *,
+    denied_roots: tuple[Path, ...] | None = None,
 ) -> list:
     """Read recent entries from shared channels for cross-Anima visibility.
 
@@ -125,8 +172,11 @@ def read_shared_channels(
     if not shared_dir:
         return []
 
+    effective_denied_roots = denied_roots if denied_roots is not None else load_denied_roots(anima_dir)
+
     channels_dir = shared_dir / "channels"
-    if not channels_dir.is_dir():
+    resolved_channels_dir = _resolved_readable_path(channels_dir, effective_denied_roots)
+    if resolved_channels_dir is None or not resolved_channels_dir.is_dir():
         return []
 
     anima_name = anima_dir.name
@@ -139,10 +189,25 @@ def read_shared_channels(
     try:
         from core.messenger import is_channel_member
 
-        for channel_file in sorted(channels_dir.glob("*.jsonl")):
+        for unresolved_channel_file in sorted(resolved_channels_dir.glob("*.jsonl")):
+            channel_file = _resolved_readable_path(unresolved_channel_file, effective_denied_roots)
+            if channel_file is None:
+                continue
             channel_name = channel_file.stem
 
-            if not is_channel_member(shared_dir, channel_name, anima_name):
+            meta_path = _resolved_readable_path(
+                resolved_channels_dir / f"{channel_name}.meta.json",
+                effective_denied_roots,
+            )
+            if meta_path is None:
+                continue
+
+            is_member = (
+                is_channel_member(shared_dir, channel_name, anima_name)
+                if not effective_denied_roots
+                else _is_channel_member_from_resolved_meta(meta_path, anima_name)
+            )
+            if not is_member:
                 continue
 
             try:
@@ -277,25 +342,33 @@ def prioritize_entries(
     return top_entries
 
 
-async def fallback_episodes_and_channels(anima_dir: Path, shared_dir: Path | None) -> str:
+async def fallback_episodes_and_channels(
+    anima_dir: Path,
+    shared_dir: Path | None,
+    *,
+    denied_roots: tuple[Path, ...] | None = None,
+) -> str:
     """Fallback: read old episodes + channels when activity_log is empty."""
     parts: list[str] = []
 
-    episodes = await read_old_episodes(anima_dir)
+    effective_denied_roots = denied_roots if denied_roots is not None else load_denied_roots(anima_dir)
+
+    episodes = await read_old_episodes(anima_dir, denied_roots=effective_denied_roots)
     if episodes:
         parts.append(episodes)
 
-    channels = await read_old_channels(anima_dir, shared_dir)
+    channels = await read_old_channels(anima_dir, shared_dir, denied_roots=effective_denied_roots)
     if channels:
         parts.append(channels)
 
     return "\n\n---\n\n".join(parts) if parts else ""
 
 
-async def read_old_episodes(anima_dir: Path) -> str:
+async def read_old_episodes(anima_dir: Path, *, denied_roots: tuple[Path, ...] | None = None) -> str:
     """Read old episode files (migration fallback for Channel B)."""
-    episodes_dir = anima_dir / "episodes"
-    if not episodes_dir.is_dir():
+    effective_denied_roots = denied_roots if denied_roots is not None else load_denied_roots(anima_dir)
+    episodes_dir = _resolved_readable_path(anima_dir / "episodes", effective_denied_roots)
+    if episodes_dir is None or not episodes_dir.is_dir():
         return ""
 
     parts: list[str] = []
@@ -303,9 +376,9 @@ async def read_old_episodes(anima_dir: Path) -> str:
 
     for offset in range(2):
         target_date = today - timedelta(days=offset)
-        path = episodes_dir / f"{target_date.isoformat()}.md"
+        path = _resolved_readable_path(episodes_dir / f"{target_date.isoformat()}.md", effective_denied_roots)
 
-        if not path.exists():
+        if path is None or not path.exists():
             continue
 
         try:
@@ -323,13 +396,19 @@ async def read_old_episodes(anima_dir: Path) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-async def read_old_channels(anima_dir: Path, shared_dir: Path | None) -> str:
+async def read_old_channels(
+    anima_dir: Path,
+    shared_dir: Path | None,
+    *,
+    denied_roots: tuple[Path, ...] | None = None,
+) -> str:
     """Read old shared channel files (migration fallback for Channel E)."""
     if not shared_dir:
         return ""
 
-    channels_dir = shared_dir / "channels"
-    if not channels_dir.is_dir():
+    effective_denied_roots = denied_roots if denied_roots is not None else load_denied_roots(anima_dir)
+    channels_dir = _resolved_readable_path(shared_dir / "channels", effective_denied_roots)
+    if channels_dir is None or not channels_dir.is_dir():
         return ""
 
     anima_name = anima_dir.name
@@ -340,8 +419,20 @@ async def read_old_channels(anima_dir: Path, shared_dir: Path | None) -> str:
     parts: list[str] = []
 
     for channel_name in ("general", "ops"):
-        channel_file = channels_dir / f"{channel_name}.jsonl"
-        if not channel_file.exists():
+        channel_file = _resolved_readable_path(
+            channels_dir / f"{channel_name}.jsonl",
+            effective_denied_roots,
+        )
+        if channel_file is None or not channel_file.exists():
+            continue
+
+        if (
+            _resolved_readable_path(
+                channels_dir / f"{channel_name}.meta.json",
+                effective_denied_roots,
+            )
+            is None
+        ):
             continue
 
         try:

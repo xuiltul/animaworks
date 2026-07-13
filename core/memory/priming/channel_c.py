@@ -17,6 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from core.file_access_policy import load_denied_roots, memory_source_is_allowed
 from core.memory.priming.constants import _BUDGET_IMPORTANT_KNOWLEDGE, _CHARS_PER_TOKEN
 from core.memory.priming.utils import build_queries, build_unified_searcher, normalize_trigger
 from core.memory.retrieval.unified_search import UnifiedMemorySearch
@@ -143,6 +144,7 @@ async def channel_c0_important_knowledge(
     if not knowledge_dir.is_dir():
         return ""
     try:
+        denied_roots = load_denied_roots(anima_dir)
         retriever = await asyncio.to_thread(get_retriever)
         if retriever is None:
             return ""
@@ -157,12 +159,13 @@ async def channel_c0_important_knowledge(
         budget_chars = _BUDGET_IMPORTANT_KNOWLEDGE * _CHARS_PER_TOKEN
         lines: list[tuple[int, str]] = []
         for r in results:
-            content = r.document.content
             meta = r.document.metadata
-            title, body = extract_summary(content, meta)
-            rel_path = to_read_memory_path(meta, anima_name)
-            if not rel_path:
+            doc_id = str(getattr(r.document, "id", "") or getattr(r, "doc_id", "") or "")
+            rel_path = to_read_memory_path(meta, anima_name, doc_id)
+            if not rel_path or not memory_source_is_allowed(anima_dir, rel_path, denied_roots):
                 continue
+            content = r.document.content
+            title, body = extract_summary(content, meta)
             if body:
                 metadata_line = format_result_metadata_line(
                     {**meta, "source_file": meta.get("source_file") or rel_path}
@@ -228,6 +231,7 @@ async def channel_c_related_knowledge(
         return ("", "")
 
     try:
+        denied_roots = load_denied_roots(anima_dir)
         queries = build_queries(message, keywords, recent_human_messages)
         if not queries:
             logger.debug("Channel C: No keywords and no message")
@@ -271,6 +275,9 @@ async def channel_c_related_knowledge(
                 rel_path = to_read_memory_path(metadata, anima_name, str(result.get("doc_id", "")))
                 if not rel_path:
                     logger.debug("Channel C: skipping result without readable path: %s", result.get("doc_id", ""))
+                    continue
+                if not memory_source_is_allowed(anima_dir, rel_path, denied_roots):
+                    logger.debug("Channel C: skipping result from denied or ambiguous source: %s", rel_path)
                     continue
                 line = format_pointer_result(
                     index=display_index,

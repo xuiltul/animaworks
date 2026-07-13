@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
@@ -176,6 +177,101 @@ class TestHandleRouting:
         memory.search_memory_text.return_value = []
         result = handler.handle("search_memory", {"query": "nothing"})
         assert "No results" in result
+
+    def test_search_memory_filters_hits_from_denied_source(
+        self,
+        handler: ToolHandler,
+        memory: MagicMock,
+        anima_dir: Path,
+    ):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "knowledge" / "private"
+        memory.search_memory_text.return_value = [
+            {
+                "source_file": "knowledge/private/secret.md",
+                "content": "classified result",
+                "score": 0.99,
+                "chunk_index": 0,
+                "total_chunks": 1,
+            },
+            {
+                "source_file": "knowledge/public.md",
+                "content": "public result",
+                "score": 0.8,
+                "chunk_index": 0,
+                "total_chunks": 1,
+            },
+        ]
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+
+        with patch.object(handler, "_load_permissions_config", return_value=config):
+            result = handler.handle("search_memory", {"query": "result", "scope": "all"})
+
+        assert "public result" in result
+        assert "knowledge/public.md" in result
+        assert "classified result" not in result
+        assert "knowledge/private" not in result
+
+    def test_search_memory_resolves_shared_source_before_filtering(
+        self,
+        handler: ToolHandler,
+        memory: MagicMock,
+        tmp_path: Path,
+    ):
+        from core.config.models import PermissionsConfig
+
+        common_knowledge = tmp_path / "common_knowledge"
+        denied = common_knowledge / "private"
+        memory.search_memory_text.return_value = [
+            {
+                "source_file": "common_knowledge/private/secret.md",
+                "content": "shared classified result",
+                "score": 0.9,
+            },
+            {
+                "source_file": "common_knowledge/public.md",
+                "content": "shared public result",
+                "score": 0.8,
+            },
+        ]
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+
+        with (
+            patch.object(handler, "_load_permissions_config", return_value=config),
+            patch("core.paths.get_common_knowledge_dir", return_value=common_knowledge),
+        ):
+            result = handler.handle("search_memory", {"query": "shared", "scope": "all"})
+
+        assert "shared public result" in result
+        assert "shared classified result" not in result
+        assert "common_knowledge/private" not in result
+
+    def test_neo4j_search_filters_denied_source(self, handler: ToolHandler, anima_dir: Path):
+        denied = (anima_dir / "knowledge" / "private").resolve()
+        handler._retrieve_neo4j_memories = MagicMock(
+            return_value=[
+                SimpleNamespace(
+                    source="knowledge/private/secret.md",
+                    content="graph classified result",
+                    score=0.9,
+                    metadata={},
+                ),
+                SimpleNamespace(
+                    source="knowledge/public.md",
+                    content="graph public result",
+                    score=0.8,
+                    metadata={},
+                ),
+            ]
+        )
+
+        result = handler._search_via_neo4j("graph", "knowledge", 0, denied_roots=(denied,))
+
+        assert result is not None
+        assert "graph public result" in result
+        assert "graph classified result" not in result
+        assert "knowledge/private" not in result
 
     def test_read_memory_file(self, handler: ToolHandler, anima_dir: Path):
         (anima_dir / "knowledge").mkdir(exist_ok=True)
@@ -768,6 +864,141 @@ class TestFilePermissions:
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
 
+    def test_explicit_deny_overrides_unrestricted_for_read_and_write(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = tmp_path / "private"
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            for write in (False, True):
+                result = handler._check_file_permission(str(denied / "secret.txt"), write=write)
+                parsed = json.loads(result)
+                assert parsed["error_type"] == "PermissionDenied"
+                assert parsed["context"]["denied_root"] == str(denied.resolve())
+
+    def test_explicit_deny_overrides_own_anima_grant(self, handler: ToolHandler, anima_dir: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "knowledge" / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler._check_file_permission(str(denied / "secret.md"))
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_explicit_deny_overrides_shared_grant(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        denied = shared / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with (
+            patch("core.tooling.handler_perms.load_permissions", return_value=config),
+            patch("core.paths.get_shared_dir", return_value=shared),
+        ):
+            result = handler._check_file_permission(str(denied / "secret.md"))
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_explicit_deny_overrides_supervisor_grant(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        activity = (tmp_path / "animas" / "subordinate" / "activity_log").resolve()
+        handler._subordinate_activity_dirs.append(activity)
+        config = PermissionsConfig(file_roots_denied=[str(activity)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler._check_file_permission(str(activity / "2026-07-13.jsonl"))
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_explicit_deny_resolves_symlink_target(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = tmp_path / "private"
+        denied.mkdir()
+        link = tmp_path / "public-link"
+        link.symlink_to(denied, target_is_directory=True)
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler._check_file_permission(str(link / "secret.txt"))
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_superuser_bypasses_explicit_deny(self, anima_dir: Path, memory: MagicMock):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "private"
+        superuser_handler = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[], superuser=True)
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config) as load_mock:
+            assert superuser_handler._check_file_permission(str(denied / "secret.txt")) is None
+        load_mock.assert_not_called()
+
+    def test_check_permissions_displays_explicit_denies(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = tmp_path / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            parsed = json.loads(handler.handle("check_permissions", {}))
+        assert parsed["file_access"]["denied"] == [str(denied.resolve())]
+
+    def test_deny_enabled_hides_internal_cache_canary(
+        self,
+        handler: ToolHandler,
+        anima_dir: Path,
+        tmp_path: Path,
+    ):
+        from core.config.models import PermissionsConfig
+
+        canary = "DENIED_CACHE_CANARY"
+        state = anima_dir / "state"
+        archive = anima_dir / "archive" / "vectordb-corrupt-20260713"
+        vectordb = anima_dir / "vectordb"
+        codex_home = anima_dir / ".codex_home"
+        for directory in (state, archive, vectordb, codex_home):
+            directory.mkdir(parents=True, exist_ok=True)
+        bm25 = state / "bm25_longterm_index.json"
+        bm25_tmp = state / ".bm25_longterm_index.json.random.tmp"
+        protected_files = [
+            bm25,
+            bm25_tmp,
+            archive / "chroma.sqlite3",
+            vectordb / "chroma.sqlite3",
+            codex_home / "auth.json",
+        ]
+        for path in protected_files:
+            path.write_text(canary, encoding="utf-8")
+
+        config = PermissionsConfig(
+            file_roots=["/"],
+            file_roots_denied=[str(tmp_path / "unrelated-explicit-deny")],
+        )
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            for path in protected_files:
+                read_result = json.loads(handler.handle("read_file", {"path": str(path)}))
+                assert read_result["error_type"] == "PermissionDenied"
+                assert canary not in json.dumps(read_result)
+                write_result = handler._check_file_permission(str(path), write=True)
+                assert json.loads(write_result)["error_type"] == "PermissionDenied"
+
+            search_result = handler.handle("search_code", {"pattern": "CACHE_CANARY", "path": str(anima_dir)})
+            list_result = handler.handle("list_directory", {"path": str(state)})
+
+        assert canary not in search_result
+        assert "bm25_longterm_index" not in list_result
+        assert "vectordb" not in search_result
+
+    def test_internal_cache_remains_readable_without_explicit_deny(
+        self,
+        handler: ToolHandler,
+        anima_dir: Path,
+    ):
+        cache = anima_dir / "state" / "bm25_longterm_index.json"
+        cache.parent.mkdir(parents=True)
+        cache.write_text("LEGACY_CACHE_CANARY", encoding="utf-8")
+
+        result = handler.handle("read_file", {"path": str(cache)})
+
+        assert "LEGACY_CACHE_CANARY" in result
+
 
 # ── Command permission checks ─────────────────────────────────
 
@@ -1034,6 +1265,33 @@ class TestSearchCode:
         result = handler.handle("search_code", {"pattern": "test", "path": "/etc"})
         assert "error" in result.lower() or "permission" in result.lower()
 
+    def test_search_code_prunes_denied_subtree(
+        self,
+        handler: ToolHandler,
+        anima_dir: Path,
+    ):
+        from core.config.models import PermissionsConfig
+
+        public = anima_dir / "knowledge" / "public"
+        denied = anima_dir / "knowledge" / "private"
+        public.mkdir(parents=True)
+        denied.mkdir(parents=True)
+        (public / "answer.md").write_text("needle public", encoding="utf-8")
+        (denied / "secret-name.md").write_text("needle classified", encoding="utf-8")
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle(
+                "search_code",
+                {"pattern": "needle", "path": str(anima_dir / "knowledge")},
+            )
+
+        assert "public" in result
+        assert "needle public" in result
+        assert "private" not in result
+        assert "secret-name" not in result
+        assert "classified" not in result
+
 
 # ── list_directory handler ───────────────────────────────────
 
@@ -1071,6 +1329,54 @@ class TestListDirectory:
         empty_dir.mkdir()
         result = handler.handle("list_directory", {"path": str(empty_dir)})
         assert "empty" in result.lower()
+
+    @pytest.mark.parametrize("tool_name", ["list_directory", "Glob"])
+    def test_recursive_listing_hides_denied_subtree_and_name(
+        self,
+        tool_name: str,
+        handler: ToolHandler,
+        anima_dir: Path,
+    ):
+        from core.config.models import PermissionsConfig
+
+        root = anima_dir / "knowledge"
+        allowed = root / "public"
+        denied = root / "private-customer"
+        allowed.mkdir(parents=True)
+        denied.mkdir(parents=True)
+        (allowed / "visible.md").write_text("ok", encoding="utf-8")
+        (denied / "secret-name.md").write_text("secret", encoding="utf-8")
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+        args = {"path": str(root), "pattern": "**/*"}
+        if tool_name == "list_directory":
+            args["recursive"] = True
+
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle(tool_name, args)
+
+        assert "public" in result
+        assert "visible.md" in result
+        assert "private-customer" not in result
+        assert "secret-name.md" not in result
+
+    def test_non_recursive_listing_hides_denied_child_name(
+        self,
+        handler: ToolHandler,
+        anima_dir: Path,
+    ):
+        from core.config.models import PermissionsConfig
+
+        root = anima_dir / "knowledge"
+        denied = root / "private-customer"
+        denied.mkdir(parents=True)
+        (root / "visible.md").write_text("ok", encoding="utf-8")
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle("list_directory", {"path": str(root)})
+
+        assert "visible.md" in result
+        assert "private-customer" not in result
 
 
 # ── Structured errors in existing handlers ───────────────────
@@ -1238,6 +1544,30 @@ class TestMemoryWriteSecurity:
         written = (anima_dir / "knowledge" / "safe.md").read_text(encoding="utf-8")
         assert "safe content" in written
         assert written.startswith("---")  # auto-frontmatter
+
+    def test_read_memory_file_cannot_bypass_explicit_deny(self, handler: ToolHandler, anima_dir: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "knowledge" / "private"
+        denied.mkdir(parents=True)
+        (denied / "secret.md").write_text("secret", encoding="utf-8")
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle("read_memory_file", {"path": "knowledge/private/secret.md"})
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_write_memory_file_cannot_bypass_explicit_deny(self, handler: ToolHandler, anima_dir: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "knowledge" / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle(
+                "write_memory_file",
+                {"path": "knowledge/private/secret.md", "content": "secret"},
+            )
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+        assert not (denied / "secret.md").exists()
 
     def test_write_memory_file_path_traversal_blocked(
         self,

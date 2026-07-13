@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from core.file_access_policy import find_denied_root, load_denied_roots
 from core.tools._async_compat import run_sync
 
 logger = logging.getLogger("animaworks.priming")
@@ -28,6 +29,10 @@ async def channel_a_sender_profile(anima_dir: Path, sender_name: str) -> str:
     profile_path = (shared_users_dir / sender_name / "index.md").resolve()
     if not profile_path.is_relative_to(shared_users_dir.resolve()):
         logger.warning("Channel A: path traversal in sender_name=%s", sender_name)
+        return ""
+
+    if find_denied_root(profile_path, load_denied_roots(anima_dir)) is not None:
+        logger.debug("Channel A: sender profile denied for sender=%s", sender_name)
         return ""
 
     if not profile_path.exists():

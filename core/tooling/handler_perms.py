@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.config.models import PermissionsConfig, load_permissions
+from core.file_access_policy import find_denied_root, find_internal_cache_root, resolve_denied_roots
 from core.i18n import t
 from core.tooling.handler_base import (
     _error_result,
@@ -116,6 +117,7 @@ class PermissionsMixin:
             "file_access": {
                 "read": file_read,
                 "write": file_write,
+                "denied": list(config.file_roots_denied),
             },
             "commands": commands_info,
             "restrictions": restrictions,
@@ -143,7 +145,33 @@ class PermissionsMixin:
         """Load PermissionsConfig from permissions.json (with migration fallback)."""
         return load_permissions(self._anima_dir)
 
-    def _check_file_permission(self, path: str, *, write: bool = False) -> str | None:
+    def _resolved_file_deny_roots(self, config: PermissionsConfig | None = None) -> tuple[Path, ...]:
+        """Return canonical explicit deny roots, reusable by bulk operations."""
+        if self._superuser:
+            return ()
+        effective_config = config or self._load_permissions_config()
+        return resolve_denied_roots(effective_config.file_roots_denied)
+
+    def _find_denied_file_root(
+        self,
+        path: str | Path,
+        denied_roots: tuple[Path, ...] | None = None,
+    ) -> Path | None:
+        """Return the deny root containing *path*, resolving symlinks first."""
+        if self._superuser:
+            return None
+        roots = denied_roots if denied_roots is not None else self._resolved_file_deny_roots()
+        return find_denied_root(path, roots)
+
+    def _check_file_permission(
+        self,
+        path: str,
+        *,
+        write: bool = False,
+        trusted_internal_cache_write: bool = False,
+        config: PermissionsConfig | None = None,
+        denied_roots: tuple[Path, ...] | None = None,
+    ) -> str | None:
         """Check if the file path is allowed by permissions config.
 
         Returns ``None`` if allowed, or an error message string if denied.
@@ -151,6 +179,45 @@ class PermissionsMixin:
         if self._superuser:
             return None
         resolved = Path(path).resolve()
+        effective_config = config or self._load_permissions_config()
+        effective_denied_roots = (
+            denied_roots if denied_roots is not None else self._resolved_file_deny_roots(effective_config)
+        )
+
+        # When explicit file deny is enabled, model-facing tools must not
+        # expose internal copies/caches that can retain content from a denied
+        # source.  Trusted search services may consume these caches, but their
+        # filtered results are returned through separate handlers.
+        if effective_config.file_roots_denied and not (write and trusted_internal_cache_write):
+            internal_cache = find_internal_cache_root(path, self._anima_dir)
+            if internal_cache is not None:
+                logger.warning(
+                    "permission_denied anima=%s path=%s reason=internal_cache root=%s",
+                    self._anima_name,
+                    path,
+                    internal_cache,
+                )
+                return _error_result(
+                    "PermissionDenied",
+                    f"Direct access to internal runtime cache is not allowed: '{path}'",
+                    context={"system_denied_root": str(internal_cache)},
+                )
+
+        # Explicit denies are the primary boundary and override every normal
+        # grant below, including own/shared/supervisor paths and file_roots=["/"].
+        denied = self._find_denied_file_root(resolved, effective_denied_roots)
+        if denied is not None:
+            logger.warning(
+                "permission_denied anima=%s path=%s reason=file_root_denied root=%s",
+                self._anima_name,
+                path,
+                denied,
+            )
+            return _error_result(
+                "PermissionDenied",
+                f"'{path}' is under an explicitly denied directory",
+                context={"denied_root": str(denied)},
+            )
 
         if write:
             gp_err = _is_global_permissions_write_blocked(resolved)
@@ -240,14 +307,12 @@ class PermissionsMixin:
                 f"Access to other anima's directory is not allowed: {path}",
             )
 
-        config = self._load_permissions_config()
-
         # file_roots == ["/"]: allow all (after protected file check)
-        if config.file_roots == ["/"]:
+        if effective_config.file_roots == ["/"]:
             return None
 
         # file_roots == []: only anima_dir + framework shared dirs (already handled above)
-        if not config.file_roots:
+        if not effective_config.file_roots:
             logger.warning("permission_denied anima=%s path=%s reason=outside_allowed_dirs", self._anima_name, path)
             return _error_result(
                 "PermissionDenied",
@@ -256,13 +321,13 @@ class PermissionsMixin:
             )
 
         # Otherwise: check if path is under any of the file_roots (read-write)
-        allowed_dirs = [Path(r).resolve() for r in config.file_roots if Path(r).is_absolute()]
+        allowed_dirs = [Path(r).resolve() for r in effective_config.file_roots if Path(r).is_absolute()]
         for allowed in allowed_dirs:
             if resolved.is_relative_to(allowed):
                 return None
 
         # Check file_roots_readonly — read allowed, write denied
-        readonly_dirs = [Path(r).resolve() for r in config.file_roots_readonly if Path(r).is_absolute()]
+        readonly_dirs = [Path(r).resolve() for r in effective_config.file_roots_readonly if Path(r).is_absolute()]
         for readonly in readonly_dirs:
             if resolved.is_relative_to(readonly):
                 if write:

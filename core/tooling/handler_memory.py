@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.file_access_policy import load_denied_roots, memory_source_is_allowed, resolve_memory_source_path
 from core.i18n import t
 from core.memory.scope_policy import (
     LEGACY_ONLY_SCOPES,
@@ -262,6 +263,21 @@ class MemoryToolsMixin:
     def _current_anima_name(self) -> str:
         return str(getattr(self, "_anima_name", "") or self._anima_dir.name)
 
+    def _memory_source_path(self, source: str) -> Path | None:
+        """Resolve a RAG ``source_file`` value to the file it represents."""
+        return resolve_memory_source_path(self._anima_dir, source)
+
+    def _memory_source_is_denied(self, source: str, denied_roots: tuple[Path, ...]) -> bool:
+        """Return whether a persisted search hit originated below an explicit deny root."""
+        return not memory_source_is_allowed(self._anima_dir, source, denied_roots)
+
+    @staticmethod
+    def _graph_memory_source(memory: Any) -> str:
+        metadata = getattr(memory, "metadata", {})
+        if isinstance(metadata, dict) and metadata.get("source_file"):
+            return str(metadata["source_file"])
+        return str(getattr(memory, "source", ""))
+
     def _mark_longterm_bm25_dirty(self, rel: str) -> None:
         if not rel.startswith(("knowledge/", "episodes/", "procedures/")):
             return
@@ -339,6 +355,7 @@ class MemoryToolsMixin:
         *,
         time_start: str | None = None,
         time_end: str | None = None,
+        denied_roots: tuple[Path, ...] = (),
     ) -> str | None:
         """Execute search via Neo4j backend, returning formatted string or None on failure."""
         memories = self._retrieve_neo4j_memories(
@@ -350,6 +367,13 @@ class MemoryToolsMixin:
         )
         if memories is None:
             return None
+
+        if denied_roots:
+            memories = [
+                memory
+                for memory in memories
+                if not self._memory_source_is_denied(self._graph_memory_source(memory), denied_roots)
+            ]
 
         if offset:
             memories = memories[offset:]
@@ -382,6 +406,7 @@ class MemoryToolsMixin:
         *,
         time_start: str | None = None,
         time_end: str | None = None,
+        denied_roots: tuple[Path, ...] = (),
     ) -> str | None:
         """Search Neo4j graph memory plus legacy-only scopes for scope='all'."""
         graph_memories = self._retrieve_neo4j_memories(
@@ -397,7 +422,8 @@ class MemoryToolsMixin:
         context_window = getattr(self, "_context_window", _SEARCH_CONTEXT_BASE)
         items: list[SearchResultItem] = []
         for mem in graph_memories:
-            items.append(SearchResultItem("Graph Memory", "graph", mem))
+            if not self._memory_source_is_denied(self._graph_memory_source(mem), denied_roots):
+                items.append(SearchResultItem("Graph Memory", "graph", mem))
 
         for legacy_scope in LEGACY_ONLY_SCOPES_FOR_ALL:
             try:
@@ -412,7 +438,9 @@ class MemoryToolsMixin:
                 legacy_results = []
             section_title = title_for_legacy_scope(legacy_scope)
             for result in legacy_results:
-                items.append(SearchResultItem(section_title, "legacy", result))
+                source = str(result.get("source_file", ""))
+                if not self._memory_source_is_denied(source, denied_roots):
+                    items.append(SearchResultItem(section_title, "legacy", result))
 
         return format_hybrid_search_results(
             query=query,
@@ -484,6 +512,14 @@ class MemoryToolsMixin:
             time_range = {}
         time_start = time_range.get("after") if time_range else None
         time_end = time_range.get("before") if time_range else None
+        if getattr(self, "_superuser", False):
+            denied_roots = ()
+        elif hasattr(self, "_load_permissions_config") and hasattr(self, "_resolved_file_deny_roots"):
+            config = self._load_permissions_config()
+            denied_roots = self._resolved_file_deny_roots(config)
+        else:
+            # Keep MemoryToolsMixin usable in isolation for compatibility.
+            denied_roots = load_denied_roots(Path(self._anima_dir))
         if time_start is not None and not isinstance(time_start, str):
             time_start = str(time_start)
         if time_end is not None and not isinstance(time_end, str):
@@ -500,6 +536,7 @@ class MemoryToolsMixin:
                     offset,
                     time_start=time_start,
                     time_end=time_end,
+                    denied_roots=denied_roots,
                 )
                 if neo4j_result is not None:
                     if not neo4j_result:
@@ -521,6 +558,7 @@ class MemoryToolsMixin:
                     offset,
                     time_start=time_start,
                     time_end=time_end,
+                    denied_roots=denied_roots,
                 )
             if neo4j_result is not None:
                 if not neo4j_result and anima_hint:
@@ -534,6 +572,12 @@ class MemoryToolsMixin:
             offset=offset,
             context_window=getattr(self, "_context_window", _SEARCH_CONTEXT_BASE),
         )
+        if denied_roots:
+            results = [
+                result
+                for result in results
+                if not self._memory_source_is_denied(str(result.get("source_file", "")), denied_roots)
+            ]
         logger.debug(
             "search_memory query=%s scope=%s offset=%d results=%d",
             query,
@@ -655,8 +699,12 @@ class MemoryToolsMixin:
             logger.debug("Failed to record skill view event for %s", rel, exc_info=True)
 
     def _handle_read_memory_file(self, args: dict[str, Any]) -> str:
-        norm = _normalize_memory_path(args["path"], self._anima_dir)
+        raw_path = args["path"]
+        norm = _normalize_memory_path(raw_path, self._anima_dir)
         if norm.channel_redirect:
+            err = self._check_file_permission(raw_path)
+            if err:
+                return err
             return self._handle_read_channel({"channel": norm.channel_redirect})
         rel = args["path"] = norm.rel
 
@@ -734,6 +782,9 @@ class MemoryToolsMixin:
                         "Use relative paths like 'knowledge/foo.md'. "
                         "For shared channels use read_channel/post_channel.",
                     )
+        err = self._check_file_permission(str(path))
+        if err:
+            return err
         if path.exists() and path.is_file():
             # Block loading of skills with blocked trust_level or dangerous scan verdict
             if self._is_skill_path(rel):
@@ -787,8 +838,12 @@ class MemoryToolsMixin:
         return f"File not found: {rel}{hint}"
 
     def _handle_write_memory_file(self, args: dict[str, Any]) -> str:
-        norm = _normalize_memory_path(args["path"], self._anima_dir)
+        raw_path = args["path"]
+        norm = _normalize_memory_path(raw_path, self._anima_dir)
         if norm.channel_redirect:
+            err = self._check_file_permission(raw_path, write=True)
+            if err:
+                return err
             return self._handle_post_channel(
                 {
                     "channel": norm.channel_redirect,
@@ -844,6 +899,10 @@ class MemoryToolsMixin:
                         break
                 if not subordinate_allowed:
                     return err
+
+        err = self._check_file_permission(str(path), write=True)
+        if err:
+            return err
 
         # Tool creation permission check
         if rel.startswith("tools/") and rel.endswith(".py"):
@@ -1162,6 +1221,10 @@ class MemoryToolsMixin:
 
         target = self._anima_dir / rel
 
+        err = self._check_file_permission(str(target), write=True)
+        if err:
+            return err
+
         err = _is_protected_write(self._anima_dir, target)
         if err:
             return err
@@ -1180,6 +1243,19 @@ class MemoryToolsMixin:
             )
 
         archive_dir = self._anima_dir / "archive" / "superseded"
+        expected_archive_root = self._anima_dir.resolve() / "archive"
+        if not archive_dir.resolve().is_relative_to(expected_archive_root):
+            return _error_result(
+                "PermissionDenied",
+                "Archive destination resolves outside the protected archive directory",
+            )
+        err = self._check_file_permission(
+            str(archive_dir),
+            write=True,
+            trusted_internal_cache_write=True,
+        )
+        if err:
+            return err
         archive_dir.mkdir(parents=True, exist_ok=True)
         dest = archive_dir / target.name
 

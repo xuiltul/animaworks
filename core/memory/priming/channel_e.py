@@ -15,12 +15,24 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from core.file_access_policy import find_denied_root, load_denied_roots
 from core.i18n import t
 from core.memory.priming.constants import _BUDGET_PENDING_TASKS
 from core.paths import get_animas_dir
 from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.priming")
+
+
+def _resolved_readable_path(path: Path, denied_roots: tuple[Path, ...]) -> Path | None:
+    """Resolve a prompt source and reject explicit deny roots before use."""
+    if not denied_roots:
+        return path
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return None
+    return resolved if find_denied_root(resolved, denied_roots) is None else None
 
 
 def format_elapsed(started_at: str) -> str:
@@ -58,13 +70,25 @@ async def channel_e_pending_tasks(
     """
     parts: list[str] = []
     resolver = None
+    denied_roots = load_denied_roots(anima_dir)
+    unresolved_queue_path = anima_dir / "state" / "task_queue.jsonl"
+    queue_path = _resolved_readable_path(unresolved_queue_path, denied_roots)
+    if denied_roots and unresolved_queue_path.is_symlink():
+        queue_path = None
+
+    from core.taskboard.attention_resolver import taskboard_db_path_for_anima
+
+    taskboard_path = _resolved_readable_path(taskboard_db_path_for_anima(anima_dir), denied_roots)
 
     try:
-        from core.taskboard.attention_resolver import resolver_for_anima_dir
+        if queue_path is None or taskboard_path is None:
+            raise PermissionError("pending task source is explicitly denied")
+        from core.taskboard.attention_resolver import AttentionResolver
         from core.taskboard.formatting import format_tasks_for_priming
         from core.taskboard.projector import project_anima
+        from core.taskboard.store import TaskBoardStore
 
-        resolver = resolver_for_anima_dir(anima_dir)
+        resolver = AttentionResolver(TaskBoardStore(taskboard_path))
         board_tasks = await asyncio.to_thread(
             project_anima,
             anima_dir,
@@ -83,6 +107,8 @@ async def channel_e_pending_tasks(
         from core.memory.task_queue import TaskQueueManager
 
         try:
+            if queue_path is None:
+                raise PermissionError("task queue is explicitly denied")
             manager = TaskQueueManager(anima_dir)
             queue_summary = await asyncio.to_thread(
                 manager.format_for_priming,
@@ -108,11 +134,15 @@ async def channel_e_pending_tasks(
         parts.append("\n".join(lines))
 
     # ── Overflow inbox summary ──
-    overflow_dir = anima_dir / "state" / "overflow_inbox"
-    if overflow_dir.is_dir():
+    overflow_dir = _resolved_readable_path(anima_dir / "state" / "overflow_inbox", denied_roots)
+    if overflow_dir is not None and overflow_dir.is_dir():
         try:
             files = sorted(
-                [f for f in overflow_dir.iterdir() if f.suffix == ".md"],
+                [
+                    resolved
+                    for f in overflow_dir.iterdir()
+                    if f.suffix == ".md" and (resolved := _resolved_readable_path(f, denied_roots)) is not None
+                ],
                 key=lambda f: f.name,
                 reverse=True,
             )
@@ -131,12 +161,17 @@ async def channel_e_pending_tasks(
         except Exception:
             logger.debug("Channel E: overflow_inbox read failed", exc_info=True)
 
-    results_dir = anima_dir / "state" / "task_results"
-    if results_dir.is_dir():
+    results_dir = _resolved_readable_path(anima_dir / "state" / "task_results", denied_roots)
+    if results_dir is not None and results_dir.is_dir():
         try:
             now = now_local()
             result_files = []
-            for rf in sorted(results_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True):
+            readable_result_files = [
+                resolved
+                for candidate in results_dir.glob("*.md")
+                if (resolved := _resolved_readable_path(candidate, denied_roots)) is not None
+            ]
+            for rf in sorted(readable_result_files, key=lambda p: p.stat().st_mtime, reverse=True):
                 if _should_show_task_result(anima_dir, rf, resolver, now):
                     result_files.append(rf)
                 if len(result_files) >= 5:

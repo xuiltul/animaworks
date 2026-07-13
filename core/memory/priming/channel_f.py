@@ -17,6 +17,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from core.file_access_policy import load_denied_roots, memory_source_is_allowed
 from core.memory.priming.utils import build_queries, build_unified_searcher, normalize_trigger
 from core.memory.retrieval.unified_search import UnifiedMemorySearch
 from core.time_utils import now_local
@@ -102,6 +103,7 @@ async def channel_f_episodes(
     7-day ``time_start`` window so recent episodes are preferred.
     """
     try:
+        denied_roots = load_denied_roots(anima_dir)
         queries = build_queries(message, keywords, recent_human_messages)
         if not queries:
             return ""
@@ -146,6 +148,9 @@ async def channel_f_episodes(
                         path = to_episode_memory_path(source)
                         if not path:
                             logger.debug("Channel F: skipping Neo4j episode without readable path: %s", mem.source)
+                            continue
+                        if not memory_source_is_allowed(anima_dir, path, denied_roots):
+                            logger.debug("Channel F: skipping Neo4j episode from denied source: %s", path)
                             continue
                         accessed_memories.append(mem)
                         parts.append(
@@ -194,6 +199,9 @@ async def channel_f_episodes(
             path = to_episode_memory_path(source)
             if not path:
                 logger.debug("Channel F: skipping episode without readable path: %s", result.get("doc_id", ""))
+                continue
+            if not memory_source_is_allowed(anima_dir, path, denied_roots):
+                logger.debug("Channel F: skipping episode from denied source: %s", path)
                 continue
             parts.append(
                 format_episode_pointer(

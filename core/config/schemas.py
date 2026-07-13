@@ -954,9 +954,27 @@ class PermissionsConfig(BaseModel):
     version: int = 1
     file_roots: list[str] = Field(default_factory=lambda: ["/"])
     file_roots_readonly: list[str] = Field(default_factory=list)
+    file_roots_denied: list[str] = Field(default_factory=list)
     commands: CommandsPermission = Field(default_factory=CommandsPermission)
     external_tools: ExternalToolsPermission = Field(default_factory=ExternalToolsPermission)
     tool_creation: ToolCreationPermission = Field(default_factory=ToolCreationPermission)
+
+    @field_validator("file_roots_denied")
+    @classmethod
+    def _validate_file_roots_denied(cls, roots: list[str]) -> list[str]:
+        """Require unambiguous absolute deny roots and store canonical paths."""
+        normalized: list[str] = []
+        for root in roots:
+            if any(char in root for char in "*?["):
+                raise ValueError(f"file_roots_denied does not support glob patterns: {root!r}")
+            path = Path(root)
+            if not path.is_absolute():
+                raise ValueError(f"file_roots_denied entries must be absolute paths: {root!r}")
+            try:
+                normalized.append(str(path.resolve()))
+            except (OSError, RuntimeError) as exc:
+                raise ValueError(f"file_roots_denied entry cannot be resolved: {root!r}") from exc
+        return normalized
 
 
 def load_permissions(anima_dir: Path) -> PermissionsConfig:
@@ -966,12 +984,27 @@ def load_permissions(anima_dir: Path) -> PermissionsConfig:
       1. permissions.json exists -> load and validate
       2. permissions.md only -> auto-migrate, return config
       3. Neither exists -> return default (open)
-      4. Invalid JSON -> warning + return default (open)
+      4. Existing but unreadable/invalid permissions.json -> raise (fail closed)
+
+    Once ``permissions.json`` exists, the whole document is a security
+    boundary.  Read, JSON parsing, and schema validation failures therefore
+    propagate instead of silently replacing the configured policy with open
+    defaults.  Only a genuinely absent file retains the legacy open default.
     """
     json_path = anima_dir / "permissions.json"
     md_path = anima_dir / "permissions.md"
 
-    if json_path.is_file():
+    try:
+        json_path.lstat()
+    except FileNotFoundError:
+        json_exists = False
+    except OSError:
+        logger.error("Failed to stat permissions.json at %s — refusing fail-open fallback", json_path, exc_info=True)
+        raise
+    else:
+        json_exists = True
+
+    if json_exists:
         try:
             data = json.loads(json_path.read_text(encoding="utf-8"))
             config = PermissionsConfig.model_validate(data)
@@ -979,12 +1012,13 @@ def load_permissions(anima_dir: Path) -> PermissionsConfig:
             if version is not None and version != 1:
                 logger.warning("permissions.json version %s is unknown; using known fields only", version)
             return config
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.warning("Failed to parse permissions.json at %s: %s — using open defaults", json_path, exc)
-            return PermissionsConfig()
         except Exception as exc:
-            logger.warning("Invalid permissions.json at %s: %s — using open defaults", json_path, exc)
-            return PermissionsConfig()
+            logger.error(
+                "Failed to load permissions.json at %s — refusing fail-open fallback: %s",
+                json_path,
+                exc,
+            )
+            raise
 
     if md_path.is_file():
         from core.config.migrate import migrate_permissions_md_to_json
@@ -1014,6 +1048,8 @@ def _format_permissions_for_prompt(config: PermissionsConfig, anima_name: str) -
             lines.append(f"- Read/write access: {', '.join(config.file_roots)}")
         if config.file_roots_readonly:
             lines.append(f"- Read-only access: {', '.join(config.file_roots_readonly)}")
+    if config.file_roots_denied:
+        lines.append(f"- Denied file access (read/write; overrides all grants): {', '.join(config.file_roots_denied)}")
     if config.commands.allow_all:
         lines.append("- Commands: all allowed (global permission blocks still apply)")
     else:

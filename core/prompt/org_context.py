@@ -13,11 +13,23 @@ import re
 from pathlib import Path
 from typing import Any
 
+from core.file_access_policy import find_denied_root, load_denied_roots
 from core.paths import get_data_dir, load_prompt
 from core.prompt.sections import _load_fallback_strings, _load_section_strings
 
 # Modes that use MCP-style tool access (built-in + mcp__aw__*).
 _MCP_MODES = frozenset({"s", "c", "d", "g"})
+
+
+def _resolved_visible_path(path: Path, denied_roots: tuple[Path, ...]) -> Path | None:
+    """Resolve an organization source and reject explicit deny roots."""
+    if not denied_roots:
+        return path
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return None
+    return resolved if find_denied_root(resolved, denied_roots) is None else None
 
 
 def _is_mcp_mode(execution_mode: str) -> bool:
@@ -27,12 +39,19 @@ def _is_mcp_mode(execution_mode: str) -> bool:
 
 def _discover_other_animas(anima_dir: Path) -> list[str]:
     """List sibling anima directories."""
-    animas_root = anima_dir.parent
+    denied_roots = load_denied_roots(anima_dir)
+    animas_root = _resolved_visible_path(anima_dir.parent, denied_roots)
+    if animas_root is None:
+        return []
     self_name = anima_dir.name
     others = []
     for d in sorted(animas_root.iterdir()):
-        if d.is_dir() and d.name != self_name and (d / "identity.md").exists():
-            others.append(d.name)
+        resolved_dir = _resolved_visible_path(d, denied_roots)
+        if resolved_dir is None or not resolved_dir.is_dir() or resolved_dir.name == self_name:
+            continue
+        identity_path = _resolved_visible_path(resolved_dir / "identity.md", denied_roots)
+        if identity_path is not None and identity_path.is_file():
+            others.append(resolved_dir.name)
     return others
 
 
@@ -69,14 +88,14 @@ def _shorten_model_name(model: str | None) -> str | None:
     return m
 
 
-def _get_live_status(name: str, animas_dir: Path) -> str:
+def _get_live_status(name: str, animas_dir: Path, denied_roots: tuple[Path, ...] = ()) -> str:
     """Return a one-word live status for an anima: 'running', 'stopped', or 'disabled'."""
     try:
-        sock = get_data_dir() / "run" / "sockets" / f"{name}.sock"
-        if sock.exists():
+        sock = _resolved_visible_path(get_data_dir() / "run" / "sockets" / f"{name}.sock", denied_roots)
+        if sock is not None and sock.exists():
             return "running"
-        status_path = animas_dir / name / "status.json"
-        if status_path.exists():
+        status_path = _resolved_visible_path(animas_dir / name / "status.json", denied_roots)
+        if status_path is not None and status_path.exists():
             import json as _json
 
             data = _json.loads(status_path.read_text(encoding="utf-8"))
@@ -121,6 +140,7 @@ def _build_full_org_tree(
     anima_name: str,
     all_animas: dict[str, Any],
     animas_dir: Path | None = None,
+    denied_roots: tuple[Path, ...] = (),
 ) -> str:
     """Build an indented full organization tree for top-level animas."""
     _ss = _load_section_strings()
@@ -141,7 +161,7 @@ def _build_full_org_tree(
         spec = acfg.speciality if acfg else None
         mdl = acfg.model if acfg else None
         als = acfg.aliases if acfg else None
-        st = _get_live_status(name, animas_dir) if animas_dir else None
+        st = _get_live_status(name, animas_dir, denied_roots) if animas_dir else None
         label = _format_anima_entry(name, spec, mdl, als or None, st)
         if is_root:
             marker = ""
@@ -166,7 +186,7 @@ def _build_full_org_tree(
     return "\n".join(lines)
 
 
-def _scan_all_animas(animas_dir: Path) -> dict[str, Any]:
+def _scan_all_animas(animas_dir: Path, denied_roots: tuple[Path, ...] = ()) -> dict[str, Any]:
     """Scan anima directories and merge with config.json for a complete org map.
 
     Reads ``status.json`` from each anima directory and merges with
@@ -176,21 +196,31 @@ def _scan_all_animas(animas_dir: Path) -> dict[str, Any]:
     from core.config import load_config
     from core.config.models import AnimaModelConfig
 
-    try:
-        config = load_config()
-    except Exception:
+    resolved_animas_dir = _resolved_visible_path(animas_dir, denied_roots)
+    if resolved_animas_dir is None:
+        return {}
+
+    config_path = _resolved_visible_path(resolved_animas_dir.parent / "config.json", denied_roots)
+    if config_path is None:
         config = None
+    else:
+        try:
+            config = load_config()
+        except Exception:
+            config = None
 
     config_animas = config.animas if config else {}
     result: dict[str, AnimaModelConfig] = {}
 
-    if not animas_dir.is_dir():
+    if not resolved_animas_dir.is_dir():
         return config_animas
 
-    for d in sorted(animas_dir.iterdir()):
-        if not d.is_dir() or d.name.startswith((".", "_", "tmp")):
+    for unresolved_dir in sorted(resolved_animas_dir.iterdir()):
+        d = _resolved_visible_path(unresolved_dir, denied_roots)
+        if d is None or not d.is_dir() or d.name.startswith((".", "_", "tmp")):
             continue
-        if not (d / "identity.md").exists():
+        identity_path = _resolved_visible_path(d / "identity.md", denied_roots)
+        if identity_path is None or not identity_path.is_file():
             continue
 
         name = d.name
@@ -202,8 +232,8 @@ def _scan_all_animas(animas_dir: Path) -> dict[str, Any]:
         # status.json is the SSoT; config.animas is fallback only.
         status_has_supervisor = False
         status_has_speciality = False
-        status_path = d / "status.json"
-        if status_path.exists():
+        status_path = _resolved_visible_path(d / "status.json", denied_roots)
+        if status_path is not None and status_path.exists():
             try:
                 import json
 
@@ -235,7 +265,8 @@ def _scan_all_animas(animas_dir: Path) -> dict[str, Any]:
         result[name] = AnimaModelConfig(supervisor=supervisor, speciality=speciality, model=model, aliases=aliases)
 
     for name, cfg in config_animas.items():
-        if name not in result:
+        config_anima_dir = _resolved_visible_path(resolved_animas_dir / name, denied_roots)
+        if name not in result and config_anima_dir is not None:
             result[name] = cfg
 
     return result
@@ -252,7 +283,9 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     _fs = _load_fallback_strings()
 
     animas_dir = get_data_dir() / "animas"
-    all_animas = _scan_all_animas(animas_dir)
+    current_anima_dir = animas_dir / anima_name
+    denied_roots = load_denied_roots(current_anima_dir)
+    all_animas = _scan_all_animas(animas_dir, denied_roots)
 
     if not all_animas:
         return ""
@@ -265,7 +298,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     # Top-level anima with subordinates: show full org tree
     if is_top_level and len(all_animas) > 1:
         anima_speciality = my_speciality or _fs.get("unset", "(not set)")
-        tree_text = _build_full_org_tree(anima_name, all_animas, animas_dir)
+        tree_text = _build_full_org_tree(anima_name, all_animas, animas_dir, denied_roots)
         parts = [
             load_prompt(
                 "builder/org_context_toplevel",
@@ -300,7 +333,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             continue
         pcfg = all_animas[name]
         if pcfg.supervisor == anima_name:
-            st = _get_live_status(name, animas_dir)
+            st = _get_live_status(name, animas_dir, denied_roots)
             subordinates.append(
                 _format_anima_entry(name, pcfg.speciality, pcfg.model, pcfg.aliases or None, st, animas_dir)
             )
@@ -313,7 +346,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
                 continue
             pcfg = all_animas[name]
             if pcfg.supervisor == my_supervisor:
-                st = _get_live_status(name, animas_dir)
+                st = _get_live_status(name, animas_dir, denied_roots)
                 peers.append(
                     _format_anima_entry(name, pcfg.speciality, pcfg.model, pcfg.aliases or None, st, animas_dir)
                 )
