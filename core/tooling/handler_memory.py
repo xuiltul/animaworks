@@ -655,8 +655,12 @@ class MemoryToolsMixin:
             logger.debug("Failed to record skill view event for %s", rel, exc_info=True)
 
     def _handle_read_memory_file(self, args: dict[str, Any]) -> str:
-        norm = _normalize_memory_path(args["path"], self._anima_dir)
+        raw_path = args["path"]
+        norm = _normalize_memory_path(raw_path, self._anima_dir)
         if norm.channel_redirect:
+            err = self._check_file_permission(raw_path)
+            if err:
+                return err
             return self._handle_read_channel({"channel": norm.channel_redirect})
         rel = args["path"] = norm.rel
 
@@ -734,6 +738,9 @@ class MemoryToolsMixin:
                         "Use relative paths like 'knowledge/foo.md'. "
                         "For shared channels use read_channel/post_channel.",
                     )
+        err = self._check_file_permission(str(path))
+        if err:
+            return err
         if path.exists() and path.is_file():
             # Block loading of skills with blocked trust_level or dangerous scan verdict
             if self._is_skill_path(rel):
@@ -787,8 +794,12 @@ class MemoryToolsMixin:
         return f"File not found: {rel}{hint}"
 
     def _handle_write_memory_file(self, args: dict[str, Any]) -> str:
-        norm = _normalize_memory_path(args["path"], self._anima_dir)
+        raw_path = args["path"]
+        norm = _normalize_memory_path(raw_path, self._anima_dir)
         if norm.channel_redirect:
+            err = self._check_file_permission(raw_path, write=True)
+            if err:
+                return err
             return self._handle_post_channel(
                 {
                     "channel": norm.channel_redirect,
@@ -844,6 +855,10 @@ class MemoryToolsMixin:
                         break
                 if not subordinate_allowed:
                     return err
+
+        err = self._check_file_permission(str(path), write=True)
+        if err:
+            return err
 
         # Tool creation permission check
         if rel.startswith("tools/") and rel.endswith(".py"):
@@ -1162,6 +1177,10 @@ class MemoryToolsMixin:
 
         target = self._anima_dir / rel
 
+        err = self._check_file_permission(str(target), write=True)
+        if err:
+            return err
+
         err = _is_protected_write(self._anima_dir, target)
         if err:
             return err
@@ -1180,6 +1199,9 @@ class MemoryToolsMixin:
             )
 
         archive_dir = self._anima_dir / "archive" / "superseded"
+        err = self._check_file_permission(str(archive_dir), write=True)
+        if err:
+            return err
         archive_dir.mkdir(parents=True, exist_ok=True)
         dest = archive_dir / target.name
 

@@ -116,6 +116,7 @@ class PermissionsMixin:
             "file_access": {
                 "read": file_read,
                 "write": file_write,
+                "denied": list(config.file_roots_denied),
             },
             "commands": commands_info,
             "restrictions": restrictions,
@@ -151,6 +152,24 @@ class PermissionsMixin:
         if self._superuser:
             return None
         resolved = Path(path).resolve()
+        config = self._load_permissions_config()
+
+        # Explicit denies are the primary boundary and override every normal
+        # grant below, including own/shared/supervisor paths and file_roots=["/"].
+        for denied_root in config.file_roots_denied:
+            denied = Path(denied_root).resolve()
+            if resolved.is_relative_to(denied):
+                logger.warning(
+                    "permission_denied anima=%s path=%s reason=file_root_denied root=%s",
+                    self._anima_name,
+                    path,
+                    denied,
+                )
+                return _error_result(
+                    "PermissionDenied",
+                    f"'{path}' is under an explicitly denied directory",
+                    context={"denied_root": str(denied)},
+                )
 
         if write:
             gp_err = _is_global_permissions_write_blocked(resolved)
@@ -239,8 +258,6 @@ class PermissionsMixin:
                 "PermissionDenied",
                 f"Access to other anima's directory is not allowed: {path}",
             )
-
-        config = self._load_permissions_config()
 
         # file_roots == ["/"]: allow all (after protected file check)
         if config.file_roots == ["/"]:

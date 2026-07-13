@@ -37,6 +37,7 @@ from core.config.models import (
     invalidate_cache,
     load_config,
     load_model_config,
+    load_permissions,
     read_anima_supervisor,
     register_anima_in_config,
     resolve_anima_config,
@@ -182,6 +183,44 @@ class TestImageGenConfig:
 
 
 class TestFormatPermissionsForPrompt:
+    def test_file_roots_denied_defaults_empty(self):
+        assert PermissionsConfig().file_roots_denied == []
+
+    def test_file_roots_denied_requires_absolute_paths(self):
+        with pytest.raises(ValueError, match="absolute paths"):
+            PermissionsConfig(file_roots_denied=["relative/private"])
+
+    @pytest.mark.parametrize("root", ["/home/main/*/private", "/home/main/private?.txt"])
+    def test_file_roots_denied_rejects_globs(self, root: str):
+        with pytest.raises(ValueError, match="glob patterns"):
+            PermissionsConfig(file_roots_denied=[root])
+
+    def test_file_roots_denied_is_normalized(self, tmp_path: Path):
+        root = tmp_path / "missing" / ".." / "private"
+        config = PermissionsConfig(file_roots_denied=[str(root)])
+        assert config.file_roots_denied == [str(root.resolve())]
+
+    def test_invalid_explicit_deny_config_fails_closed(self, tmp_path: Path):
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
+        (anima_dir / "permissions.json").write_text(
+            json.dumps({"file_roots_denied": ["relative/private"]}),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="absolute paths"):
+            load_permissions(anima_dir)
+
+    def test_prompt_displays_denied_roots(self, tmp_path: Path):
+        denied = tmp_path / "private"
+        prompt = _format_permissions_for_prompt(
+            PermissionsConfig(file_roots_denied=[str(denied)]),
+            "sora",
+        )
+        assert "Denied file access" in prompt
+        assert str(denied.resolve()) in prompt
+        assert "overrides all grants" in prompt
+
     def test_windows_prompt_mentions_native_runtime(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr("core.config.schemas.sys.platform", "win32")
         config = PermissionsConfig(

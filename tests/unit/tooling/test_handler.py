@@ -768,6 +768,82 @@ class TestFilePermissions:
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
 
+    def test_explicit_deny_overrides_unrestricted_for_read_and_write(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = tmp_path / "private"
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            for write in (False, True):
+                result = handler._check_file_permission(str(denied / "secret.txt"), write=write)
+                parsed = json.loads(result)
+                assert parsed["error_type"] == "PermissionDenied"
+                assert parsed["context"]["denied_root"] == str(denied.resolve())
+
+    def test_explicit_deny_overrides_own_anima_grant(self, handler: ToolHandler, anima_dir: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "knowledge" / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler._check_file_permission(str(denied / "secret.md"))
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_explicit_deny_overrides_shared_grant(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        denied = shared / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with (
+            patch("core.tooling.handler_perms.load_permissions", return_value=config),
+            patch("core.paths.get_shared_dir", return_value=shared),
+        ):
+            result = handler._check_file_permission(str(denied / "secret.md"))
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_explicit_deny_overrides_supervisor_grant(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        activity = (tmp_path / "animas" / "subordinate" / "activity_log").resolve()
+        handler._subordinate_activity_dirs.append(activity)
+        config = PermissionsConfig(file_roots_denied=[str(activity)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler._check_file_permission(str(activity / "2026-07-13.jsonl"))
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_explicit_deny_resolves_symlink_target(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = tmp_path / "private"
+        denied.mkdir()
+        link = tmp_path / "public-link"
+        link.symlink_to(denied, target_is_directory=True)
+        config = PermissionsConfig(file_roots=["/"], file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler._check_file_permission(str(link / "secret.txt"))
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_superuser_bypasses_explicit_deny(self, anima_dir: Path, memory: MagicMock):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "private"
+        superuser_handler = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[], superuser=True)
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config) as load_mock:
+            assert superuser_handler._check_file_permission(str(denied / "secret.txt")) is None
+        load_mock.assert_not_called()
+
+    def test_check_permissions_displays_explicit_denies(self, handler: ToolHandler, tmp_path: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = tmp_path / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            parsed = json.loads(handler.handle("check_permissions", {}))
+        assert parsed["file_access"]["denied"] == [str(denied.resolve())]
+
 
 # ── Command permission checks ─────────────────────────────────
 
@@ -1238,6 +1314,30 @@ class TestMemoryWriteSecurity:
         written = (anima_dir / "knowledge" / "safe.md").read_text(encoding="utf-8")
         assert "safe content" in written
         assert written.startswith("---")  # auto-frontmatter
+
+    def test_read_memory_file_cannot_bypass_explicit_deny(self, handler: ToolHandler, anima_dir: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "knowledge" / "private"
+        denied.mkdir(parents=True)
+        (denied / "secret.md").write_text("secret", encoding="utf-8")
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle("read_memory_file", {"path": "knowledge/private/secret.md"})
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+
+    def test_write_memory_file_cannot_bypass_explicit_deny(self, handler: ToolHandler, anima_dir: Path):
+        from core.config.models import PermissionsConfig
+
+        denied = anima_dir / "knowledge" / "private"
+        config = PermissionsConfig(file_roots_denied=[str(denied)])
+        with patch("core.tooling.handler_perms.load_permissions", return_value=config):
+            result = handler.handle(
+                "write_memory_file",
+                {"path": "knowledge/private/secret.md", "content": "secret"},
+            )
+        assert json.loads(result)["error_type"] == "PermissionDenied"
+        assert not (denied / "secret.md").exists()
 
     def test_write_memory_file_path_traversal_blocked(
         self,

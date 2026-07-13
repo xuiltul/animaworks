@@ -905,9 +905,27 @@ class PermissionsConfig(BaseModel):
     version: int = 1
     file_roots: list[str] = Field(default_factory=lambda: ["/"])
     file_roots_readonly: list[str] = Field(default_factory=list)
+    file_roots_denied: list[str] = Field(default_factory=list)
     commands: CommandsPermission = Field(default_factory=CommandsPermission)
     external_tools: ExternalToolsPermission = Field(default_factory=ExternalToolsPermission)
     tool_creation: ToolCreationPermission = Field(default_factory=ToolCreationPermission)
+
+    @field_validator("file_roots_denied")
+    @classmethod
+    def _validate_file_roots_denied(cls, roots: list[str]) -> list[str]:
+        """Require unambiguous absolute deny roots and store canonical paths."""
+        normalized: list[str] = []
+        for root in roots:
+            if any(char in root for char in "*?["):
+                raise ValueError(f"file_roots_denied does not support glob patterns: {root!r}")
+            path = Path(root)
+            if not path.is_absolute():
+                raise ValueError(f"file_roots_denied entries must be absolute paths: {root!r}")
+            try:
+                normalized.append(str(path.resolve()))
+            except (OSError, RuntimeError) as exc:
+                raise ValueError(f"file_roots_denied entry cannot be resolved: {root!r}") from exc
+        return normalized
 
 
 def load_permissions(anima_dir: Path) -> PermissionsConfig:
@@ -918,6 +936,10 @@ def load_permissions(anima_dir: Path) -> PermissionsConfig:
       2. permissions.md only -> auto-migrate, return config
       3. Neither exists -> return default (open)
       4. Invalid JSON -> warning + return default (open)
+
+    A non-empty ``file_roots_denied`` is a security boundary.  Validation
+    errors for a config that attempts to set it are therefore propagated
+    instead of falling back to open defaults.
     """
     json_path = anima_dir / "permissions.json"
     md_path = anima_dir / "permissions.md"
@@ -934,6 +956,13 @@ def load_permissions(anima_dir: Path) -> PermissionsConfig:
             logger.warning("Failed to parse permissions.json at %s: %s — using open defaults", json_path, exc)
             return PermissionsConfig()
         except Exception as exc:
+            if isinstance(data, dict) and data.get("file_roots_denied"):
+                logger.error(
+                    "Invalid file_roots_denied at %s — refusing fail-open fallback: %s",
+                    json_path,
+                    exc,
+                )
+                raise
             logger.warning("Invalid permissions.json at %s: %s — using open defaults", json_path, exc)
             return PermissionsConfig()
 
@@ -965,6 +994,8 @@ def _format_permissions_for_prompt(config: PermissionsConfig, anima_name: str) -
             lines.append(f"- Read/write access: {', '.join(config.file_roots)}")
         if config.file_roots_readonly:
             lines.append(f"- Read-only access: {', '.join(config.file_roots_readonly)}")
+    if config.file_roots_denied:
+        lines.append(f"- Denied file access (read/write; overrides all grants): {', '.join(config.file_roots_denied)}")
     if config.commands.allow_all:
         lines.append("- Commands: all allowed (global permission blocks still apply)")
     else:

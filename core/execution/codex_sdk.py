@@ -195,7 +195,25 @@ def _resolve_codex_provider_config(model_config: ModelConfig) -> _CodexProviderC
 
 def _escape_toml_string(value: str) -> str:
     """Escape a string for safe embedding in a TOML double-quoted value."""
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    escapes = {
+        "\\": "\\\\",
+        '"': '\\"',
+        "\b": "\\b",
+        "\t": "\\t",
+        "\n": "\\n",
+        "\f": "\\f",
+        "\r": "\\r",
+    }
+    result: list[str] = []
+    for char in value:
+        escaped = escapes.get(char)
+        if escaped is not None:
+            result.append(escaped)
+        elif ord(char) < 0x20 or ord(char) == 0x7F:
+            result.append(f"\\u{ord(char):04X}")
+        else:
+            result.append(char)
+    return "".join(result)
 
 
 def _default_home_dir() -> str:
@@ -968,11 +986,44 @@ class CodexSDKExecutor(BaseExecutor):
 
         permissions_config = load_permissions(self._anima_dir)
 
-        if "/" in permissions_config.file_roots:
-            sandbox_mode = "danger-full-access"
-            sandbox_section = ""
+        denied_roots = list(getattr(permissions_config, "file_roots_denied", []))
+        if denied_roots:
+            # Permission profiles and the legacy sandbox settings are mutually
+            # exclusive.  Start with broad read access, retain the legacy
+            # writable roots (including temp for workspace-write parity), and
+            # carve denied subtrees out with more-specific ``deny`` rules.
+            root_is_writable = "/" in permissions_config.file_roots
+            filesystem_rules: dict[str, str] = {
+                ":root": "write" if root_is_writable else "read",
+            }
+            if not root_is_writable:
+                filesystem_rules[":tmpdir"] = "write"
+                filesystem_rules[":slash_tmp"] = "write"
+
+                writable_roots = [str(self._anima_dir.resolve())]
+                writable_roots.extend(str(Path(root).resolve()) for root in permissions_config.file_roots)
+                if self._task_cwd:
+                    writable_roots.append(str(self._task_cwd.resolve()))
+                for root in writable_roots:
+                    filesystem_rules[root] = "write"
+
+            for root in denied_roots:
+                filesystem_rules[str(Path(root).resolve())] = "deny"
+
+            filesystem_lines = "\n".join(f'"{esc(path)}" = "{access}"' for path, access in filesystem_rules.items())
+            sandbox_lines = (
+                'default_permissions = "animaworks"\n'
+                'approval_policy = "never"\n'
+                "\n"
+                "[permissions.animaworks.filesystem]\n"
+                f"{filesystem_lines}\n"
+                "\n"
+                "[permissions.animaworks.network]\n"
+                "enabled = true\n"
+            )
+        elif "/" in permissions_config.file_roots:
+            sandbox_lines = 'sandbox_mode = "danger-full-access"\napproval_policy = "never"\n'
         else:
-            sandbox_mode = "workspace-write"
             writable_roots = [str(self._anima_dir)]
             for root in permissions_config.file_roots:
                 resolved = str(Path(root).resolve())
@@ -983,7 +1034,14 @@ class CodexSDKExecutor(BaseExecutor):
                 if cwd_str not in writable_roots:
                     writable_roots.append(cwd_str)
             roots_list = ", ".join(f'"{esc(r)}"' for r in writable_roots)
-            sandbox_section = f"\n[sandbox_workspace_write]\nwritable_roots = [{roots_list}]\nnetwork_access = true\n"
+            sandbox_lines = (
+                'sandbox_mode = "workspace-write"\n'
+                'approval_policy = "never"\n'
+                "\n"
+                "[sandbox_workspace_write]\n"
+                f"writable_roots = [{roots_list}]\n"
+                "network_access = true\n"
+            )
 
         mcp_env = self._build_mcp_env()
         mcp_env_lines = "\n".join(f'{k} = "{esc(v)}"' for k, v in mcp_env.items())
@@ -1004,9 +1062,7 @@ class CodexSDKExecutor(BaseExecutor):
         reasoning_effort = (self._model_config.extra_keys or {}).get(
             "codex_reasoning_effort"
         ) or self._model_config.thinking_effort
-        effort_line = (
-            f'model_reasoning_effort = "{esc(reasoning_effort)}"\n' if reasoning_effort else ""
-        )
+        effort_line = f'model_reasoning_effort = "{esc(reasoning_effort)}"\n' if reasoning_effort else ""
 
         config_toml = (
             f'model = "{esc(provider_config.model)}"\n'
@@ -1016,9 +1072,7 @@ class CodexSDKExecutor(BaseExecutor):
             f'developer_instructions = "{esc(self._CODEX_DEVELOPER_INSTRUCTIONS)}"\n'
             f'personality = "friendly"\n'
             f'model_verbosity = "high"\n'
-            f'sandbox_mode = "{sandbox_mode}"\n'
-            f'approval_policy = "never"\n'
-            f"{sandbox_section}"
+            f"{sandbox_lines}"
             f"{provider_section}"
             f"\n"
             f"[mcp_servers.aw]\n"
@@ -1089,15 +1143,20 @@ class CodexSDKExecutor(BaseExecutor):
 
     def _codex_thread_kwargs(self, system_prompt: str) -> dict[str, Any]:
         provider_config = _resolve_codex_provider_config(self._model_config)
-        return {
+        kwargs: dict[str, Any] = {
             "approval_mode": self._sdk_approval_mode(),
             "base_instructions": system_prompt or None,
             "cwd": str(self._task_cwd or self._anima_dir),
             "developer_instructions": self._CODEX_DEVELOPER_INSTRUCTIONS,
             "model": provider_config.model,
             "model_provider": provider_config.provider,
-            "sandbox": self._sdk_sandbox(),
         }
+        from core.config.models import load_permissions
+
+        permissions_config = load_permissions(self._anima_dir)
+        if not getattr(permissions_config, "file_roots_denied", []):
+            kwargs["sandbox"] = self._sdk_sandbox()
+        return kwargs
 
     def _codex_turn_kwargs(self) -> dict[str, Any]:
         provider_config = _resolve_codex_provider_config(self._model_config)
