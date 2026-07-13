@@ -308,6 +308,43 @@ class PendingTaskExecutor:
             )
             return None
 
+    def _format_active_sibling_tasks(
+        self,
+        current_task_id: str,
+        *,
+        limit: int = 8,
+    ) -> str:
+        """Format one-line summaries of other in_progress tasks for prompt injection.
+
+        Gives each worker visibility into what sibling workers of the same
+        anima are doing, so it can avoid touching the same PR/branch/resource.
+        Returns an empty string when there are no siblings.
+        """
+        try:
+            from core.memory.task_queue import TaskQueueManager
+
+            entries = TaskQueueManager(self._anima_dir).list_tasks(status="in_progress")
+        except Exception:
+            logger.debug(
+                "Could not list sibling tasks for: %s",
+                current_task_id,
+                exc_info=True,
+            )
+            return ""
+        lines: list[str] = []
+        for entry in entries:
+            if entry.task_id == current_task_id:
+                continue
+            summary = (entry.summary or "").strip()
+            summary = summary.splitlines()[0] if summary else "-"
+            if len(summary) > 160:
+                summary = summary[:160] + "..."
+            updated = (entry.updated_at or "")[:16]
+            lines.append(f"- [{entry.task_id[:8]}] {summary} ({updated})")
+            if len(lines) >= limit:
+                break
+        return "\n".join(lines)
+
     async def _handle_goal_completion(self, task_desc: dict[str, Any], result_summary: str) -> None:
         """Run persistent-goal judging after a TaskExec task has completed."""
         task_id = task_desc.get("task_id", "")
@@ -1342,6 +1379,7 @@ class PendingTaskExecutor:
             acceptance_criteria=criteria_text,
             constraints=constraints_text,
             file_paths=paths_text,
+            active_workers=self._format_active_sibling_tasks(task_id) or _none,
         )
 
         lane_getter = getattr(type(self._anima), "_agent_for_lane", None)
