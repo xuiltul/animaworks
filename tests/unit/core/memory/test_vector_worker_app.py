@@ -175,6 +175,82 @@ def test_vector_worker_upsert_failure_opens_backoff(monkeypatch) -> None:
     assert store.upsert.call_count == 2
 
 
+def test_vector_worker_create_success_does_not_reset_upsert_failures(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
+
+    from core.memory.rag import vector_worker
+    from core.memory.rag.vector_worker import create_app
+
+    monkeypatch.setattr(vector_worker, "_CIRCUIT_FAILURE_THRESHOLD", 3)
+    monkeypatch.setattr(vector_worker, "_CIRCUIT_BACKOFF_BASE_SECONDS", 30.0)
+    monkeypatch.setattr(vector_worker, "_CIRCUIT_BACKOFF_MAX_SECONDS", 30.0)
+    store = MagicMock()
+    store.create_collection.return_value = True
+    store.upsert.return_value = False
+    collection_payload = {
+        "anima_name": None,
+        "collection": "shared_common_knowledge",
+    }
+    upsert_payload = {
+        **collection_payload,
+        "documents": [{"id": "doc1", "content": "hello", "embedding": [0.1], "metadata": {}}],
+    }
+
+    with (
+        patch("core.memory.rag.singleton.get_vector_store", return_value=store),
+        TestClient(create_app()) as client,
+    ):
+        failures = []
+        for _ in range(3):
+            created = client.post("/create-collection", json=collection_payload)
+            failures.append(client.post("/upsert", json=upsert_payload))
+        blocked = client.post("/upsert", json=upsert_payload)
+
+    assert created.status_code == 200
+    assert [response.json()["consecutive_failures"] for response in failures] == [1, 2, 3]
+    assert int(failures[-1].headers["Retry-After"]) > 0
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == "Vector write circuit breaker open"
+    assert store.create_collection.call_count == 3
+    assert store.upsert.call_count == 3
+
+
+def test_vector_worker_successful_data_writes_reset_failures(monkeypatch) -> None:
+    monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
+
+    from core.memory.rag import vector_worker
+    from core.memory.rag.vector_worker import create_app
+
+    monkeypatch.setattr(vector_worker, "_CIRCUIT_FAILURE_THRESHOLD", 3)
+    store = MagicMock()
+    store.upsert.side_effect = [False, True, False]
+    store.delete_documents.return_value = True
+    payload = {
+        "anima_name": "sora",
+        "collection": "knowledge",
+        "documents": [{"id": "doc1", "content": "hello", "embedding": [0.1], "metadata": {}}],
+    }
+
+    with (
+        patch("core.memory.rag.singleton.get_vector_store", return_value=store),
+        TestClient(create_app()) as client,
+    ):
+        first_failed = client.post("/upsert", json=payload)
+        upsert_succeeded = client.post("/upsert", json=payload)
+        failed_after_upsert = client.post("/upsert", json=payload)
+        delete_succeeded = client.post(
+            "/delete-documents",
+            json={"anima_name": "sora", "collection": "knowledge", "ids": ["doc1"]},
+        )
+        status = client.get("/status").json()
+
+    assert first_failed.json()["consecutive_failures"] == 1
+    assert upsert_succeeded.json() == {"status": "ok"}
+    assert failed_after_upsert.json()["consecutive_failures"] == 1
+    assert delete_succeeded.json() == {"status": "ok"}
+    assert status["write_circuit_breakers"] == []
+
+
 def test_vector_worker_write_defers_during_active_repair(monkeypatch, data_dir) -> None:
     monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
     state_dir = data_dir / "animas" / "sora" / "state"

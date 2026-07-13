@@ -147,9 +147,7 @@ class HeartbeatMixin:
         if not bg_model or bg_model == self.agent.model_config.model:
             # Same model: only thinking_effort may differ for background runs.
             if bg_effort and bg_effort != self.agent.model_config.thinking_effort:
-                return self.agent.model_config.model_copy(
-                    update={"thinking_effort": bg_effort}
-                )
+                return self.agent.model_config.model_copy(update={"thinking_effort": bg_effort})
             return None
 
         # Recalculate resolved_mode for the background model so that

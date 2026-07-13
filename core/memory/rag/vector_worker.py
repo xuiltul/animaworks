@@ -572,7 +572,7 @@ def create_app() -> FastAPI:
             return JSONResponse(status_code=503, content={"detail": "Vector store unavailable"})
         if _is_vector_action_error(ok) or not ok:
             return _write_failure_response(body.anima_name, body.collection, "create-collection")
-        return _write_success_response(body.anima_name, body.collection)
+        return {"status": "ok"}
 
     @app.post("/delete-collection")
     async def vector_delete_collection(body: VectorCollectionRequest):
