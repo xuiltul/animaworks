@@ -2,6 +2,12 @@
 import { api } from "../modules/api.js";
 import { escapeHtml, smartTimestamp, renderMarkdown } from "../modules/state.js";
 import { getIcon, getDisplaySummary, GROUP_TYPE_CATEGORIES } from "../shared/activity-types.js";
+import {
+  createContextBadge,
+  decorateContextElement,
+  getParallelTaskCounts,
+  renderRunningTasksStrip,
+} from "../shared/activity-context.js";
 import { t } from "/shared/i18n.js";
 
 let _refreshInterval = null;
@@ -48,6 +54,8 @@ export function render(container) {
         <span class="activity-count" id="activityCount"></span>
       </div>
 
+      <div class="running-tasks-strip" id="activityRunningTasks" hidden></div>
+
       <div class="activity-filters">
         <select class="activity-anima-select" id="activityAnimaSelect">
           <option value="">${t("activity.all_animas")}</option>
@@ -66,7 +74,11 @@ export function render(container) {
   _buildAnimaSelect();
   _buildTypeChips();
   _loadEvents(true);
-  _refreshInterval = setInterval(() => _loadEvents(true), 30000);
+  _loadRunningTasks();
+  _refreshInterval = setInterval(() => {
+    _loadEvents(true);
+    _loadRunningTasks();
+  }, 30000);
 }
 
 export function destroy() {
@@ -100,6 +112,7 @@ async function _buildAnimaSelect() {
     _groups = [];
     _expandedGroups.clear();
     _loadEvents(true);
+    _loadRunningTasks();
   });
 }
 
@@ -194,6 +207,19 @@ async function _loadEvents(reset) {
   }
 }
 
+async function _loadRunningTasks() {
+  const strip = document.getElementById("activityRunningTasks");
+  if (!strip) return;
+  let url = "/api/activity/running-tasks";
+  if (_selectedAnima) url += `?anima=${encodeURIComponent(_selectedAnima)}`;
+  try {
+    const data = await api(url);
+    renderRunningTasksStrip(strip, data, t);
+  } catch (err) {
+    console.error("Failed to load running activity tasks:", err);
+  }
+}
+
 // ── Rendering ──────────────────────────────
 
 function _updateCount() {
@@ -213,12 +239,14 @@ function _renderList() {
   }
 
   list.innerHTML = "";
+  const allEvents = _groups.flatMap((grp) => grp.events || []);
+  const parallelCounts = getParallelTaskCounts(allEvents);
   for (const grp of _groups) {
-    const header = _createGroupHeader(grp);
+    const header = _createGroupHeader(grp, parallelCounts);
     list.appendChild(header);
 
     if (_expandedGroups.has(grp.id)) {
-      const eventsContainer = _createGroupEvents(grp);
+      const eventsContainer = _createGroupEvents(grp, parallelCounts);
       list.appendChild(eventsContainer);
     }
   }
@@ -231,10 +259,25 @@ function _formatTimeRange(startTs, endTs) {
   return start === end ? `[${start}]` : `[${start}-${end}]`;
 }
 
-function _createGroupHeader(grp) {
+function _parallelBadge(count) {
+  if (count < 2) return null;
+  const badge = document.createElement("span");
+  badge.className = "activity-parallel-badge";
+  badge.textContent = t("activity.parallel_count", { count });
+  return badge;
+}
+
+function _groupParallelCount(grp, parallelCounts) {
+  let count = 0;
+  for (const evt of grp.events || []) count = Math.max(count, parallelCounts.get(evt) || 0);
+  return count;
+}
+
+function _createGroupHeader(grp, parallelCounts) {
   const header = document.createElement("div");
   const isExpanded = _expandedGroups.has(grp.id);
   header.className = "activity-group-header" + (isExpanded ? " expanded" : "");
+  const parallelCount = _groupParallelCount(grp, parallelCounts);
 
   if (grp.type === "single") {
     const evt = grp.events[0];
@@ -248,6 +291,11 @@ function _createGroupHeader(grp) {
       `<span class="activity-row-icon">${icon}</span>` +
       `<span class="activity-row-anima">${escapeHtml(anima)}</span>` +
       `<span class="activity-row-summary">${escapeHtml(summary)}</span>`;
+    decorateContextElement(header, evt.ctx);
+    const contextBadge = createContextBadge(evt.ctx);
+    if (contextBadge) header.querySelector(".activity-row-summary")?.before(contextBadge);
+    const parallelBadge = _parallelBadge(parallelCount);
+    if (parallelBadge) header.querySelector(".activity-row-summary")?.before(parallelBadge);
 
     header.addEventListener("click", () => {
       if (_expandedGroups.has(grp.id)) {
@@ -287,6 +335,16 @@ function _createGroupHeader(grp) {
     openBadge +
     `<span class="activity-group-count">${t("activity.count_items", { count })}</span>`;
 
+  const contexts = new Set((grp.events || []).map((evt) => evt.ctx).filter(Boolean));
+  if (contexts.size === 1) {
+    const ctx = contexts.values().next().value;
+    decorateContextElement(header, ctx);
+    const contextBadge = createContextBadge(ctx);
+    if (contextBadge) header.querySelector(".activity-group-label")?.after(contextBadge);
+  }
+  const parallelBadge = _parallelBadge(parallelCount);
+  if (parallelBadge) header.querySelector(".activity-group-label")?.after(parallelBadge);
+
   header.addEventListener("click", () => {
     if (_expandedGroups.has(grp.id)) {
       _expandedGroups.delete(grp.id);
@@ -299,7 +357,7 @@ function _createGroupHeader(grp) {
   return header;
 }
 
-function _createGroupEvents(grp) {
+function _createGroupEvents(grp, parallelCounts) {
   const container = document.createElement("div");
   container.className = "activity-group-events";
 
@@ -310,7 +368,7 @@ function _createGroupEvents(grp) {
   for (let i = 0; i < toShow.length; i++) {
     const evt = toShow[i];
     const isLast = i === toShow.length - 1 && events.length <= maxInitial;
-    const row = _createEventRow(evt, isLast);
+    const row = _createEventRow(evt, isLast, parallelCounts.get(evt) || 0);
     container.appendChild(row);
   }
 
@@ -323,7 +381,8 @@ function _createGroupEvents(grp) {
       moreBtn.remove();
       const remaining = events.slice(maxInitial);
       for (let i = 0; i < remaining.length; i++) {
-        const row = _createEventRow(remaining[i], i === remaining.length - 1);
+        const evt = remaining[i];
+        const row = _createEventRow(evt, i === remaining.length - 1, parallelCounts.get(evt) || 0);
         container.appendChild(row);
       }
     });
@@ -333,7 +392,7 @@ function _createGroupEvents(grp) {
   return container;
 }
 
-function _createEventRow(evt, isLast) {
+function _createEventRow(evt, isLast, parallelCount) {
   const row = document.createElement("div");
   row.className = "activity-group-event";
 
@@ -361,6 +420,12 @@ function _createEventRow(evt, isLast) {
     `<span class="activity-row-time">${escapeHtml(time)}</span>` +
     `<span class="activity-row-icon">${icon}</span>` +
     `<span class="activity-row-summary">${summary}</span>`;
+
+  decorateContextElement(row, evt.ctx);
+  const contextBadge = createContextBadge(evt.ctx);
+  if (contextBadge) row.querySelector(".activity-row-summary")?.before(contextBadge);
+  const parallelBadge = _parallelBadge(parallelCount);
+  if (parallelBadge) row.querySelector(".activity-row-summary")?.before(parallelBadge);
 
   return row;
 }

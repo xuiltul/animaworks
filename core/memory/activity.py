@@ -28,7 +28,7 @@ import math
 import os  # noqa: F401  — kept at module level for mock.patch compat
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from core.exceptions import MemoryWriteError
@@ -83,6 +83,24 @@ from core.time_utils import ensure_aware, now_iso, now_local  # noqa: F401
 
 logger = logging.getLogger("animaworks.activity")
 
+if TYPE_CHECKING:
+    from core.execution.session_context import RuntimeSessionContext
+
+
+def activity_context_from_trigger(trigger: str, session_type: str = "") -> str:
+    """Return the stable activity context label for a runtime session."""
+    trigger = (trigger or "").strip()
+    session_type = (session_type or "").strip()
+    if trigger.startswith("task:") or trigger.startswith("cron:"):
+        return trigger
+    if trigger == "heartbeat" or trigger.startswith("consolidation:"):
+        return "heartbeat"
+    if trigger == "inbox" or trigger.startswith("inbox:"):
+        return "inbox"
+    if trigger.startswith("message:") or trigger in {"", "manual", "chat", "bootstrap", "greet:user"}:
+        return "chat" if session_type == "chat" or trigger else session_type
+    return trigger or session_type
+
 
 # ── ActivityLogger ────────────────────────────────────────────
 
@@ -133,6 +151,24 @@ class ActivityLogger(
         self.anima_dir = anima_dir
         self._log_dir = anima_dir / "activity_log"
         self._anima_name = anima_dir.name
+        self._ctx = ""
+
+    def bind_runtime_session(self, ctx: RuntimeSessionContext) -> None:
+        """Bind the execution context used by subsequent activity entries."""
+        self._ctx = activity_context_from_trigger(ctx.trigger, ctx.session_type)
+
+    def _resolve_context(self, ctx: str | None) -> str:
+        """Resolve an explicit, bound, or context-local execution label."""
+        if ctx is not None:
+            return ctx
+        if self._ctx:
+            return self._ctx
+        from core.execution.session_context import current_runtime_session
+
+        runtime_ctx = current_runtime_session()
+        if runtime_ctx is None:
+            return ""
+        return activity_context_from_trigger(runtime_ctx.trigger, runtime_ctx.session_type)
 
     # ── Recording ─────────────────────────────────────────────
 
@@ -147,6 +183,7 @@ class ActivityLogger(
         channel: str = "",
         tool: str = "",
         via: str = "",
+        ctx: str | None = None,
         meta: dict[str, Any] | None = None,
         origin: str = "",
         origin_chain: list[str] | None = None,
@@ -164,6 +201,8 @@ class ActivityLogger(
             channel: Channel name (``chat``, ``general``, etc.).
             tool: Tool name (for ``tool_use`` events).
             via: Delivery channel (for ``human_notify`` events).
+            ctx: Execution context override.  When omitted, the context bound
+                by :meth:`bind_runtime_session` is used.
             meta: Arbitrary metadata dict.
             origin: Origin category (e.g. ``"human"``, ``"external_platform"``).
             origin_chain: Intermediate origins the data traversed.
@@ -190,6 +229,7 @@ class ActivityLogger(
             channel=channel,
             tool=tool,
             via=via,
+            ctx=self._resolve_context(ctx),
             meta=meta or {},
             origin=origin,
             origin_chain=origin_chain or [],
@@ -237,6 +277,7 @@ class ActivityLogger(
                     "from_person": entry.from_person,
                     "to_person": entry.to_person,
                     "channel": entry.channel,
+                    "ctx": entry.ctx,
                     "ts": entry.ts,
                     "meta": entry.meta,
                 },

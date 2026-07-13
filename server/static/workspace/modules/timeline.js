@@ -12,6 +12,9 @@
 import { buildTimelineDOM, renderList, createEventElement, updateLoadMoreButton } from "./timeline-dom.js";
 import { replayEvent, ensureHighlightFns } from "./timeline-replay.js";
 import { fetchHistory as _fetchHistory, fetchMore as _fetchMore, hasMore, totalCount, resetPagination } from "./timeline-history.js";
+import { renderRunningTasksStrip } from "../../shared/activity-context.js";
+import { basePath } from "/shared/base-path.js";
+import { t } from "/shared/i18n.js";
 
 // ── Timestamp helper ──────────────────────────────
 
@@ -65,15 +68,19 @@ let _listEl = null;
 let _countEl = null;
 /** @type {HTMLElement|null} */
 let _bodyEl = null;
+/** @type {HTMLElement|null} */
+let _runningTasksEl = null;
+let _runningTasksInterval = null;
 
 /** @type {object|null} */
 let _interactionManager = null;
 
 // ── Internal helpers ───────────────────────────────
 
-function _makeElement(evt) {
+function _makeElement(evt, parallelCount = 0) {
   return createEventElement(evt, {
     onReplay: (e, el) => replayEvent(e, el, { interactionManager: _interactionManager }),
+    parallelCount,
   });
 }
 
@@ -96,6 +103,17 @@ function _updateCount() {
   if (!_countEl) return;
   const total = totalCount();
   _countEl.textContent = total > 0 ? `${_events.length}/${total}` : _events.length.toString();
+}
+
+async function _refreshRunningTasks() {
+  if (!_runningTasksEl) return;
+  try {
+    const response = await fetch(`${basePath}/api/activity/running-tasks`);
+    if (!response.ok) return;
+    renderRunningTasksStrip(_runningTasksEl, await response.json(), t);
+  } catch (err) {
+    console.warn("[timeline] Failed to load running tasks:", err);
+  }
 }
 
 // ── Public API ─────────────────────────────────────
@@ -122,6 +140,10 @@ export function initTimeline(officePanel, interactionManager) {
   _listEl = dom.listEl;
   _countEl = dom.countEl;
   _bodyEl = dom.bodyEl;
+  _runningTasksEl = dom.runningTasksEl;
+
+  _refreshRunningTasks();
+  _runningTasksInterval = setInterval(_refreshRunningTasks, 15000);
 
   ensureHighlightFns();
 }
@@ -141,10 +163,7 @@ export function addTimelineEvent(event) {
     _countEl.textContent = _events.length.toString();
   }
 
-  if (_listEl && (_currentFilter.length === 0 || _currentFilter.includes(event.type))) {
-    const el = _makeElement(event);
-    _listEl.insertBefore(el, _listEl.firstChild);
-  }
+  if (_listEl) _render();
 }
 
 /**
@@ -189,6 +208,10 @@ async function _loadMoreAndRender() {
  * Clean up the timeline DOM and state.
  */
 export function dispose() {
+  if (_runningTasksInterval) {
+    clearInterval(_runningTasksInterval);
+    _runningTasksInterval = null;
+  }
   if (_container && _container.parentNode) {
     _container.parentNode.removeChild(_container);
   }
@@ -198,5 +221,6 @@ export function dispose() {
   _listEl = null;
   _countEl = null;
   _bodyEl = null;
+  _runningTasksEl = null;
   _interactionManager = null;
 }

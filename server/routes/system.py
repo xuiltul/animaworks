@@ -152,6 +152,66 @@ def _parse_cron_jobs(animas_dir: Path, anima_names: list[str]) -> list[dict]:
     return jobs
 
 
+def _collect_running_background_tasks(
+    animas_dir: Path,
+    shared_dir: Path,
+    anima_names: list[str],
+) -> list[dict[str, object]]:
+    """Join background-worker busy lanes with task queue titles.
+
+    Busy sidecars are the runtime source of truth for which worker slots are
+    active.  ``task_queue.jsonl`` supplies the human-readable task title.  A
+    malformed or concurrently replaced sidecar is treated as an empty state so
+    the activity page remains available while workers update their marker.
+    """
+    from core.memory.task_queue import TaskQueueManager
+
+    sidecar_dir = shared_dir.parent / "run" / "animas"
+    result: list[dict[str, object]] = []
+
+    for name in anima_names:
+        tasks: list[dict[str, object]] = []
+        sidecar_path = sidecar_dir / f"{name}.busy.json"
+        try:
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            sidecar = {}
+
+        if isinstance(sidecar, dict) and sidecar.get("is_busy") is not False:
+            task_queue = TaskQueueManager(animas_dir / name)
+            started_at = str(sidecar.get("busy_since") or "")
+            lanes = sidecar.get("lanes", [])
+            workers_by_slot: dict[int, dict[str, object]] = {}
+            if isinstance(lanes, list):
+                for lane in lanes:
+                    if not isinstance(lane, str) or not lane.startswith("background-worker:"):
+                        continue
+                    parts = lane.split(":", 2)
+                    if len(parts) != 3 or not parts[2]:
+                        continue
+                    try:
+                        slot_id = int(parts[1])
+                    except ValueError:
+                        continue
+                    task_id = parts[2]
+                    # The worker sidecar can briefly outlive a terminal queue
+                    # update.  Look up all statuses so its title remains stable
+                    # until the slot is actually released.
+                    queue_entry = task_queue.get_task_by_id(task_id)
+                    title = queue_entry.summary if queue_entry is not None else task_id
+                    workers_by_slot[slot_id] = {
+                        "slot_id": slot_id,
+                        "task_id": task_id,
+                        "title": title,
+                        "started_at": started_at,
+                    }
+            tasks = [workers_by_slot[slot] for slot in sorted(workers_by_slot)]
+
+        result.append({"name": name, "tasks": tasks})
+
+    return result
+
+
 async def _vector_worker_status(request: Request) -> dict:
     manager = getattr(request.app.state, "vector_worker", None)
     if manager is None:
@@ -458,6 +518,25 @@ def create_system_router() -> APIRouter:
         return {"pending": pending, "in_progress": in_progress, "total_active": pending + in_progress}
 
     # ── Activity ───────────────────────────────────────────
+
+    @router.get("/activity/running-tasks")
+    async def get_running_activity_tasks(
+        request: Request,
+        anima: str | None = None,
+    ):
+        """Return active background TaskExec workers grouped by Anima."""
+        animas_dir = request.app.state.animas_dir
+        shared_dir = request.app.state.shared_dir
+        anima_names = request.app.state.anima_names
+        target_names = [anima] if anima and anima in anima_names else list(anima_names)
+
+        running = _collect_running_background_tasks(
+            animas_dir,
+            shared_dir,
+            target_names,
+        )
+        total = sum(len(item["tasks"]) for item in running)
+        return {"animas": running, "total": total}
 
     @router.get("/activity/recent")
     async def get_recent_activity(

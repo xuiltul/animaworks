@@ -351,7 +351,7 @@ def _emit(
     group_index = ctx["group_index"]
     event_index = ctx["event_index"]
     source_id = _source_id(event, group_index, event_index)
-    return {
+    item = {
         "id": f"sem:{ctx['group_id']}:{source_id}",
         "ts": _first(event.get("ts"), event.get("timestamp")),
         "actor": _trim(actor, 80),
@@ -373,6 +373,10 @@ def _emit(
             "source_types": ctx["source_types"],
         },
     }
+    activity_ctx = _first(event.get("ctx"))
+    if activity_ctx:
+        item["ctx"] = activity_ctx
+    return item
 
 
 def _fallback_event(event: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:

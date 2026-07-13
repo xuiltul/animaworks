@@ -445,6 +445,7 @@ class ToolHandler(
         self._runtime_session_context = ctx
         self._session_id = ctx.tool_session_id
         self._trigger = ctx.trigger
+        self._activity.bind_runtime_session(ctx)
         if not same_context:
             self._pending_notifications = []
             self._read_paths.clear()

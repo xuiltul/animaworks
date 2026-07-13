@@ -66,6 +66,81 @@
   word-wrap: break-word;
 }
 
+.has-activity-context {
+  border-left: 3px solid var(--activity-ctx-color);
+}
+
+.activity-context-badge,
+.activity-parallel-badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 0.08rem 0.4rem;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.activity-context-badge {
+  color: var(--activity-ctx-color);
+  border: 1px solid var(--activity-ctx-color);
+  background: var(--aw-color-bg-primary);
+}
+
+.activity-parallel-badge {
+  color: var(--aw-color-warning-text);
+  background: var(--aw-color-warning-bg);
+  border: 1px solid currentColor;
+  font-weight: 600;
+}
+
+.running-tasks-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.65rem;
+  margin: 0.6rem 0 0.2rem;
+  overflow-x: auto;
+  border: 1px solid var(--aw-color-border-light);
+  border-radius: 8px;
+  background: var(--aw-color-bg-subtle);
+}
+
+.running-tasks-strip[hidden] {
+  display: none;
+}
+
+.running-tasks-heading {
+  flex-shrink: 0;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--aw-color-text-secondary);
+}
+
+.running-task-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  max-width: 20rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  background: var(--aw-color-bg-primary);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  font-size: 0.75rem;
+}
+
+.running-task-slot {
+  color: var(--activity-ctx-color);
+  font-weight: 700;
+}
+
+.running-task-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--aw-color-text-secondary);
+}
+
 /* ============================================
    Activity Timeline Page
    ============================================ */
@@ -291,6 +366,14 @@
   cursor: pointer;
   transition: background 0.15s;
   font-size: 0.88rem;
+}
+
+.activity-group-header.has-activity-context {
+  padding-left: calc(0.75rem - 3px);
+}
+
+.activity-group-event.has-activity-context {
+  padding-left: calc(0.5rem - 3px);
 }
 
 .activity-group-header:hover,

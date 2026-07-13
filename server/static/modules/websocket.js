@@ -118,7 +118,7 @@ function handleWsMessage(raw) {
           if (data.active_label !== undefined) existing.active_label = data.active_label;
         }
         renderAnimaDropdown();
-        addActivity("system", animaName, `${t("websocket.status")} ${statusVal || t("common.unknown")}`);
+        addActivity("system", animaName, `${t("websocket.status")} ${statusVal || t("common.unknown")}`, data.ctx);
       }
       break;
     }
@@ -126,7 +126,7 @@ function handleWsMessage(raw) {
     case "anima.heartbeat": {
       const animaName = data.name || data.anima;
       if (animaName) {
-        addActivity("heartbeat", animaName, data.summary || t("websocket.heartbeat"));
+        addActivity("heartbeat", animaName, data.summary || t("websocket.heartbeat"), data.ctx);
         if (animaName === state.selectedAnima) {
           refreshSelectedAnima();
         }
@@ -137,7 +137,7 @@ function handleWsMessage(raw) {
     case "anima.cron": {
       const animaName = data.name || data.anima;
       if (animaName) {
-        addActivity("cron", animaName, data.summary || data.task || t("websocket.cron"));
+        addActivity("cron", animaName, data.summary || data.task || t("websocket.cron"), data.ctx);
       }
       break;
     }
@@ -285,14 +285,14 @@ function handleWsMessage(raw) {
       const evtType = data.event || data.type || "";
       const toolName = data.tool_name || data.tool || "tool";
       if (animaName && evtType === "tool_start") {
-        addActivity("tool", animaName, t("chat.tool_running", { tool: toolName }));
+        addActivity("tool", animaName, t("chat.tool_running", { tool: toolName }), data.ctx);
       } else if (animaName && evtType === "tool_detail") {
-        addActivity("tool", animaName, `${toolName}: ${data.detail || ""}`);
+        addActivity("tool", animaName, `${toolName}: ${data.detail || ""}`, data.ctx);
       } else if (animaName && (evtType === "tool_end" || evtType === "tool_use")) {
         const suffix = data.is_error ? ` (${t("common.error")})` : "";
-        addActivity("tool", animaName, `${t("chat.tool_done", { tool: toolName })}${suffix}`);
+        addActivity("tool", animaName, `${t("chat.tool_done", { tool: toolName })}${suffix}`, data.ctx);
       } else if (animaName && evtType) {
-        addActivity("tool", animaName, `${data.summary || evtType}`);
+        addActivity("tool", animaName, `${data.summary || evtType}`, data.ctx);
       }
       document.dispatchEvent(
         new CustomEvent("anima-tool-activity", { detail: { ...data, event: evtType, tool_name: toolName } })

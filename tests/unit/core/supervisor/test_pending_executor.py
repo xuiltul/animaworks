@@ -157,6 +157,45 @@ class TestTaskExecLaneIsolation:
         background_manager.submit.assert_called_once()
         chat_manager.submit.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_llm_task_activity_has_context_and_synthetic_identity(self, tmp_path):
+        executor = _make_lane_executor(tmp_path)
+        background_agent = executor._anima.background_agent
+
+        async def _stream_success(*args, **kwargs):
+            yield {
+                "type": "cycle_done",
+                "cycle_result": {"summary": "completed", "action": "complete"},
+            }
+
+        background_agent.run_cycle_streaming = MagicMock(side_effect=_stream_success)
+        background_agent.reset_reply_tracking = MagicMock()
+        background_agent.reset_read_paths = MagicMock()
+        background_agent.set_interrupt_event = MagicMock()
+        background_agent.set_task_cwd = MagicMock()
+
+        with (
+            patch("core.paths.load_prompt", return_value="test prompt"),
+            patch("core.memory.activity.ActivityLogger") as mock_activity,
+        ):
+            result = await executor._run_llm_task({"description": "Synthetic task title\nmore detail"})
+
+        assert result == "completed"
+        start_call, end_call = mock_activity.return_value.log.call_args_list
+        assert start_call.args == ("task_exec_start",)
+        assert start_call.kwargs["ctx"] == "task:unknown"
+        assert start_call.kwargs["meta"] == {
+            "task_id": "unknown",
+            "title": "Synthetic task title",
+            "submitted_by": "unknown",
+        }
+        assert end_call.args == ("task_exec_end",)
+        assert end_call.kwargs["ctx"] == "task:unknown"
+        assert end_call.kwargs["meta"]["task_id"] == "unknown"
+        assert end_call.kwargs["meta"]["title"] == "Synthetic task title"
+        assert end_call.kwargs["meta"]["status"] == "completed"
+        assert end_call.kwargs["meta"]["result"] == "completed"
+
 
 class TestExecutePendingTask:
     """Test pending task execution."""
@@ -527,3 +566,11 @@ class TestLlmTaskFailurePropagation:
             mock_activity.return_value.log = MagicMock()
             with pytest.raises(RuntimeError, match="stream retry exhausted"):
                 await executor._run_llm_task(task_desc)
+
+        start_call, end_call = mock_activity.return_value.log.call_args_list
+        assert start_call.args == ("task_exec_start",)
+        assert end_call.args == ("task_exec_end",)
+        assert end_call.kwargs["ctx"] == "task:llm-fail-1"
+        assert end_call.kwargs["meta"]["status"] == "failed"
+        assert end_call.kwargs["meta"]["error"] == "stream retry exhausted"
+        assert end_call.kwargs["meta"]["error_type"] == "RuntimeError"

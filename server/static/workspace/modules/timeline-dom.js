@@ -7,6 +7,11 @@
  */
 
 import { getIcon, getDisplaySummary } from "../../shared/activity-types.js";
+import {
+  createContextBadge,
+  decorateContextElement,
+  getParallelTaskCounts,
+} from "../../shared/activity-context.js";
 import { renderSimpleMarkdown } from "./utils.js";
 import { t } from "/shared/i18n.js";
 import { resolveEventPersons } from "./activity-normalize.js";
@@ -59,7 +64,7 @@ export function resolvePersons(event) {
  * @param {Array<{label:string, types:string[]}>} opts.filterDefs
  * @param {(index: number) => void} opts.onFilterClick
  * @param {() => void} opts.onLoadMore
- * @returns {{ container: HTMLElement, listEl: HTMLElement, countEl: HTMLElement, bodyEl: HTMLElement }}
+ * @returns {{ container: HTMLElement, listEl: HTMLElement, countEl: HTMLElement, bodyEl: HTMLElement, runningTasksEl: HTMLElement }}
  */
 export function buildTimelineDOM(officePanel, opts) {
   const { filterDefs, onFilterClick, onLoadMore } = opts;
@@ -133,7 +138,13 @@ export function buildTimelineDOM(officePanel, opts) {
   body.appendChild(list);
   body.appendChild(loadMoreBtn);
 
+  const runningTasks = document.createElement("div");
+  runningTasks.className = "running-tasks-strip ws-running-tasks-strip";
+  runningTasks.id = "wsRunningTasks";
+  runningTasks.hidden = true;
+
   timeline.appendChild(bar);
+  timeline.appendChild(runningTasks);
   timeline.appendChild(body);
 
   officePanel.appendChild(timeline);
@@ -145,7 +156,7 @@ export function buildTimelineDOM(officePanel, opts) {
     toggleBtn.textContent = expanded ? "\u25BC" : "\u25B2"; // ▼ or ▲
   });
 
-  return { container: timeline, listEl: list, countEl: count, bodyEl: body };
+  return { container: timeline, listEl: list, countEl: count, bodyEl: body, runningTasksEl: runningTasks };
 }
 
 // ── Render helpers ─────────────────────────────────
@@ -165,9 +176,10 @@ export function renderList(listEl, events, currentFilter, createElementFn) {
   const filtered = currentFilter.length === 0
     ? events
     : events.filter((e) => currentFilter.includes(e.type));
+  const parallelCounts = getParallelTaskCounts(events);
 
   for (const evt of filtered) {
-    listEl.appendChild(createElementFn(evt));
+    listEl.appendChild(createElementFn(evt, parallelCounts.get(evt) || 0));
   }
 }
 
@@ -180,7 +192,7 @@ export function renderList(listEl, events, currentFilter, createElementFn) {
  * @returns {HTMLElement}
  */
 export function createEventElement(evt, opts) {
-  const { onReplay } = opts;
+  const { onReplay, parallelCount = 0 } = opts;
 
   const detailText = (evt.content && evt.content.trim()) || (evt.summary && evt.summary.length > 80 ? evt.summary : "");
   const hasContent = !!detailText;
@@ -191,6 +203,7 @@ export function createEventElement(evt, opts) {
 
   const el = document.createElement("div");
   el.className = "tl-event";
+  decorateContextElement(el, evt.ctx);
 
   // Time
   const timeEl = document.createElement("span");
@@ -226,6 +239,14 @@ export function createEventElement(evt, opts) {
   el.appendChild(timeEl);
   el.appendChild(iconEl);
   el.appendChild(animasEl);
+  const contextBadge = createContextBadge(evt.ctx);
+  if (contextBadge) el.appendChild(contextBadge);
+  if (parallelCount > 1) {
+    const parallelBadge = document.createElement("span");
+    parallelBadge.className = "activity-parallel-badge";
+    parallelBadge.textContent = t("activity.parallel_count", { count: parallelCount });
+    el.appendChild(parallelBadge);
+  }
   el.appendChild(summaryEl);
 
   wrapper.appendChild(el);

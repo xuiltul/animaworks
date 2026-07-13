@@ -107,6 +107,7 @@ export function setupWebSocket(deps) {
       anima: `${data.from_person} → ${data.to_person}`,
       ts: data.ts || localISOString(),
       summary: `${data.from_person} → ${data.to_person}: ${data.summary || ""}`,
+      ctx: data.ctx || "",
       meta: {
         text: data.summary || "",
         message_id: data.message_id || "",
@@ -117,7 +118,7 @@ export function setupWebSocket(deps) {
   }));
 
   wsUnsubscribers.push(onEvent("anima.heartbeat", (data) => {
-    applyOrBufferReplay((d) => addActivity("heartbeat", d.name, d.summary || "heartbeat completed"), data);
+    applyOrBufferReplay((d) => addActivity("heartbeat", d.name, d.summary || "heartbeat completed", undefined, d.ctx), data);
     applyOrBufferReplay((d) => {
       const { selectedAnima } = getState();
       if (d.name === selectedAnima) {
@@ -130,6 +131,7 @@ export function setupWebSocket(deps) {
       anima: d.name,
       ts: d.ts || localISOString(),
       summary: d.summary || "heartbeat completed",
+      ctx: d.ctx || "",
     }), data);
     applyOrBufferReplay((d) => {
       updateCardActivity(d.name, {
@@ -140,13 +142,14 @@ export function setupWebSocket(deps) {
   }));
 
   wsUnsubscribers.push(onEvent("anima.cron", (data) => {
-    applyOrBufferReplay((data) => addActivity("cron", data.name, data.summary || `cron: ${data.task || ""}`), data);
+    applyOrBufferReplay((data) => addActivity("cron", data.name, data.summary || `cron: ${data.task || ""}`, undefined, data.ctx), data);
     applyOrBufferReplay((data) => addTimelineEvent({
       id: Date.now().toString(),
       type: "cron",
       anima: data.name,
       ts: data.ts || localISOString(),
       summary: data.summary || `cron: ${data.task || ""}`,
+      ctx: data.ctx || "",
     }), data);
     applyOrBufferReplay((data) => {
       updateCardActivity(data.name, {
@@ -160,16 +163,6 @@ export function setupWebSocket(deps) {
   wsUnsubscribers.push(onEvent("anima.tool_activity", (data) => {
     const evtType = data.event || data.type || "";
     const toolName = data.tool_name || data.tool || "tool";
-    if (evtType === "tool_start") {
-      applyOrBufferReplay((d) => addActivity("tool", d.name, t("chat.tool_running", { tool: d.toolName })), { ...data, toolName });
-    } else if (evtType === "tool_detail") {
-      applyOrBufferReplay((d) => addActivity("tool", d.name, `${d.toolName}: ${d.detail || ""}`), { ...data, toolName });
-    } else if (evtType === "tool_end" || evtType === "tool_use") {
-      const suffix = data.is_error ? " (error)" : "";
-      applyOrBufferReplay((d) => addActivity("tool", d.name, suffix ? t("chat.tool_done_suffix", { tool: d.toolName, suffix }) : t("chat.tool_done", { tool: d.toolName })), { ...data, toolName });
-    } else if (evtType) {
-      applyOrBufferReplay((d) => addActivity("tool", d.name, `${d.summary || evtType}`), data);
-    }
     const isStreamingTool = evtType === "tool_start" || evtType === "tool_end" || evtType === "tool_detail";
     if (!isStreamingTool || VISIBLE_TOOL_NAMES.has(toolName)) {
       const _cardUpdatePayload = {
@@ -185,6 +178,16 @@ export function setupWebSocket(deps) {
         channel: data.channel || "",
       };
       applyOrBufferReplay((d) => updateCardActivity(d.name, d.payload), { name: data.name, payload: _cardUpdatePayload });
+    }
+    if (evtType === "tool_start") {
+      applyOrBufferReplay((d) => addActivity("tool", d.name, t("chat.tool_running", { tool: d.toolName }), undefined, d.ctx), { ...data, toolName });
+    } else if (evtType === "tool_detail") {
+      applyOrBufferReplay((d) => addActivity("tool", d.name, `${d.toolName}: ${d.detail || ""}`, undefined, d.ctx), { ...data, toolName });
+    } else if (evtType === "tool_end" || evtType === "tool_use") {
+      const suffix = data.is_error ? " (error)" : "";
+      applyOrBufferReplay((d) => addActivity("tool", d.name, suffix ? t("chat.tool_done_suffix", { tool: d.toolName, suffix }) : t("chat.tool_done", { tool: d.toolName }), undefined, d.ctx), { ...data, toolName });
+    } else if (evtType) {
+      applyOrBufferReplay((d) => addActivity("tool", d.name, `${d.summary || evtType}`, undefined, d.ctx), data);
     }
     if (evtType === "message_sent" && data.to_person) {
       applyOrBufferReplay((d) => {
@@ -203,6 +206,7 @@ export function setupWebSocket(deps) {
         anima: `${d.name} → ${d.to_person}`,
         ts: d.ts || localISOString(),
         summary: `${d.name} → ${d.to_person}: ${d.summary || ""}`,
+        ctx: d.ctx || "",
         meta: { from_person: d.name, to_person: d.to_person },
       }), data);
     }

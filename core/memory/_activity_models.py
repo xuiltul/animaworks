@@ -67,6 +67,7 @@ class ActivityEntry:
     meta: dict[str, Any] = field(default_factory=dict)
     origin: str = ""
     origin_chain: list[str] = field(default_factory=list)
+    ctx: str = ""
     _line_number: int = field(default=0, init=False, repr=False)
     _anima_name: str = field(default="", init=False, repr=False)
     _tool_result_data: dict[str, Any] | None = field(default=None, init=False, repr=False)
@@ -98,6 +99,7 @@ class ActivityEntry:
             "channel": self.channel,
             "tool": self.tool,
             "via": self.via,
+            "ctx": self.ctx,
             "meta": self.meta,
         }
         return d

@@ -50,6 +50,16 @@ _QUEUE_ACTIVE_STATUSES = {"pending", "in_progress", "blocked", "delegated"}
 _TASKBOARD_QUEUE_CANCEL_REASONS = {"expired", "archived", "tombstoned"}
 
 
+def _task_activity_identity(task_desc: dict[str, Any]) -> tuple[str, str, str]:
+    """Return stable task id, title, and description for execution events."""
+    task_id = str(task_desc.get("task_id") or "unknown")
+    description = str(task_desc.get("description") or "")
+    title = str(task_desc.get("title") or "").strip()
+    if not title:
+        title = next((line.strip() for line in description.splitlines() if line.strip()), "")[:100]
+    return task_id, title or task_id, description
+
+
 def _detect_task_auth_failure(result: str) -> str | None:
     """Return an auth-failure summary when the result is a terminal auth error."""
     text = (result or "").strip()
@@ -1157,13 +1167,81 @@ class PendingTaskExecutor:
         *,
         worker_slot: BackgroundWorkerSlot | None = None,
     ) -> str:
+        """Run an LLM task and record its complete activity lifecycle."""
+        from core.memory.activity import ActivityLogger
+
+        task_id, title, _description = _task_activity_identity(task_desc)
+        submitted_by = str(task_desc.get("submitted_by") or "unknown")
+        trigger = f"task:{task_id}"
+        task_meta = {
+            "task_id": task_id,
+            "title": title,
+            "submitted_by": submitted_by,
+        }
+        activity = ActivityLogger(self._anima_dir)
+        activity.log(
+            "task_exec_start",
+            summary=t("pending_executor.task_exec_start", title=title),
+            ctx=trigger,
+            meta=task_meta,
+        )
+
+        try:
+            result = await self._run_llm_task_under_agent_session_context(
+                task_desc,
+                completed_results,
+                worker_slot=worker_slot,
+            )
+        except asyncio.CancelledError:
+            activity.log(
+                "task_exec_end",
+                summary=t("pending_executor.task_exec_end", title=title, result="cancelled"),
+                ctx=trigger,
+                meta={**task_meta, "status": "cancelled"},
+                safe=True,
+            )
+            raise
+        except Exception as exc:
+            error = str(exc).strip()[:200] or type(exc).__name__
+            activity.log(
+                "task_exec_end",
+                summary=t("pending_executor.task_exec_end", title=title, result=error),
+                ctx=trigger,
+                meta={
+                    **task_meta,
+                    "status": "failed",
+                    "error": error,
+                    "error_type": type(exc).__name__,
+                },
+                safe=True,
+            )
+            raise
+
+        status = {
+            _SENTINEL_CANCELLED: "cancelled",
+            _SENTINEL_EXPIRED: "expired",
+            _SENTINEL_DEFERRED: "deferred",
+        }.get(result, "completed")
+        activity.log(
+            "task_exec_end",
+            summary=t("pending_executor.task_exec_end", title=title, result=result[:200]),
+            ctx=trigger,
+            meta={**task_meta, "status": status, "result": result[:200]},
+        )
+        return result
+
+    async def _run_llm_task_under_agent_session_context(
+        self,
+        task_desc: dict[str, Any],
+        completed_results: dict[str, str] | None = None,
+        *,
+        worker_slot: BackgroundWorkerSlot | None = None,
+    ) -> str:
         """Core LLM task execution logic shared by parallel and serial paths.
 
         Returns the result summary string.
         """
-        task_id = task_desc.get("task_id", "unknown")
-        title = task_desc.get("title", "Untitled task")
-        description = task_desc.get("description", "")
+        task_id, title, description = _task_activity_identity(task_desc)
         context = task_desc.get("context", "")
         acceptance_criteria = task_desc.get("acceptance_criteria", [])
         constraints = task_desc.get("constraints", [])
@@ -1236,16 +1314,10 @@ class PendingTaskExecutor:
         if completed_results:
             dep_context = self._build_dependency_context(task_desc, completed_results)
 
-        from core.memory.activity import ActivityLogger
         from core.memory.streaming_journal import StreamingJournal
         from core.paths import load_prompt
 
-        activity = ActivityLogger(self._anima_dir)
-        activity.log(
-            "task_exec_start",
-            summary=t("pending_executor.task_exec_start", title=title),
-            meta={"task_id": task_id, "submitted_by": submitted_by},
-        )
+        trigger = f"task:{task_id}"
 
         _none = t("pending_executor.none_value")
         criteria_text = "\n".join(f"- {c}" for c in acceptance_criteria) if acceptance_criteria else _none
@@ -1281,7 +1353,6 @@ class PendingTaskExecutor:
         if "machine" in description.lower():
             prompt += "\n\n" + t("pending_executor.machine_directive")
 
-        trigger = f"task:{task_id}"
         journal = StreamingJournal(self._anima_dir, session_type="task", thread_id=task_id)
         journal.open(trigger=trigger)
 
@@ -1387,12 +1458,6 @@ class PendingTaskExecutor:
         auth_failure = _detect_task_auth_failure(result_summary or accumulated_text)
         if auth_failure:
             raise TaskExecError(auth_failure)
-
-        activity.log(
-            "task_exec_end",
-            summary=t("pending_executor.task_exec_end", title=title, result=result_summary[:200]),
-            meta={"task_id": task_id},
-        )
 
         # Send completion notification
         if reply_to:
