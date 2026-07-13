@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -54,7 +55,7 @@ def test_generated_profile_denies_direct_and_symlink_reads(tmp_path: Path, monke
             {
                 "version": 1,
                 "file_roots": [str(allowed_dir)],
-                "file_roots_denied": [str(denied_dir)],
+                "file_roots_denied": [str(denied_dir), str(anima_dir / ".codex_home")],
             }
         ),
         encoding="utf-8",
@@ -72,6 +73,8 @@ def test_generated_profile_denies_direct_and_symlink_reads(tmp_path: Path, monke
     executor = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
     monkeypatch.setattr(executor, "_propagate_auth", lambda: None)
     executor._write_codex_config("test instructions")
+    codex_secret = anima_dir / ".codex_home" / "auth-canary.json"
+    codex_secret.write_text("AUTH_SECRET\n", encoding="utf-8")
 
     script = """
 set -eu
@@ -81,6 +84,11 @@ printf 'WRITE_OK\n' > "$1/writable.txt"
 test ! -s "$1/direct-leak.txt"
 ! cat "$1/secret-link" > "$1/symlink-leak.txt" 2>/dev/null
 test ! -s "$1/symlink-leak.txt"
+! "$3" -c 'from pathlib import Path; import sys; Path(sys.argv[1]).read_text()' "$2/secret.txt" 2>/dev/null
+! printf '{"version": 1, "file_roots": ["/"]}\n' > "$4" 2>/dev/null
+! rm "$4" 2>/dev/null
+! cat "$5" > "$1/codex-home-leak.txt" 2>/dev/null
+test ! -s "$1/codex-home-leak.txt"
 """
     env = os.environ.copy()
     env["CODEX_HOME"] = str(anima_dir / ".codex_home")
@@ -97,6 +105,9 @@ test ! -s "$1/symlink-leak.txt"
             "read-deny-smoke",
             str(allowed_dir),
             str(denied_dir),
+            sys.executable,
+            str(anima_dir / "permissions.json"),
+            str(codex_secret),
         ],
         cwd=anima_dir,
         env=env,
@@ -108,3 +119,26 @@ test ! -s "$1/symlink-leak.txt"
 
     assert result.returncode == 0, result.stderr
     assert (allowed_dir / "writable.txt").read_text(encoding="utf-8") == "WRITE_OK\n"
+    persisted_permissions = json.loads((anima_dir / "permissions.json").read_text(encoding="utf-8"))
+    assert persisted_permissions["file_roots_denied"] == [str(denied_dir), str(anima_dir / ".codex_home")]
+
+    # The exact generated MCP command must itself be runnable under the same
+    # profile.  stdio EOF makes the server exit after startup, without an API
+    # request, while still exercising the real outer sandbox wrapper.
+    parsed_config = tomllib.loads((anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8"))
+    mcp_config = parsed_config["mcp_servers"]["aw"]
+    mcp_env = os.environ.copy()
+    mcp_env.update(mcp_config["env"])
+    assert mcp_env["CODEX_HOME"] == str(anima_dir / ".codex_home")
+    mcp_result = subprocess.run(
+        [mcp_config["command"], *mcp_config["args"]],
+        cwd=anima_dir,
+        env=mcp_env,
+        input="",
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert mcp_result.returncode == 0, mcp_result.stderr
+    assert "AnimaWorks MCP server starting" in mcp_result.stderr

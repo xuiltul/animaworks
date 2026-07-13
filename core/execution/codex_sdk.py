@@ -1010,6 +1010,13 @@ class CodexSDKExecutor(BaseExecutor):
             for root in denied_roots:
                 filesystem_rules[str(Path(root).resolve())] = "deny"
 
+            # The sandboxed Anima must not be able to remove or weaken the
+            # policy that will be used to build its next session's profile.
+            # A file-specific read rule is more specific than the writable
+            # Anima root (and remains read-only even when ``:root`` is write).
+            permissions_path = str((self._anima_dir / "permissions.json").resolve())
+            filesystem_rules[permissions_path] = "read"
+
             filesystem_lines = "\n".join(f'"{esc(path)}" = "{access}"' for path, access in filesystem_rules.items())
             sandbox_lines = (
                 'default_permissions = "animaworks"\n'
@@ -1044,7 +1051,33 @@ class CodexSDKExecutor(BaseExecutor):
             )
 
         mcp_env = self._build_mcp_env()
+        if denied_roots:
+            # The nested ``codex sandbox`` resolves the named profile from
+            # this per-Anima CODEX_HOME.  Set it explicitly rather than
+            # relying on the MCP launcher inheriting the parent environment.
+            mcp_env["CODEX_HOME"] = str(self._codex_home)
         mcp_env_lines = "\n".join(f'{k} = "{esc(v)}"' for k, v in mcp_env.items())
+        if denied_roots:
+            mcp_command = get_codex_executable()
+            if not mcp_command:
+                raise RuntimeError(
+                    "Codex CLI executable is required to sandbox the MCP server when file_roots_denied is configured"
+                )
+            mcp_args = [
+                "sandbox",
+                "-P",
+                "animaworks",
+                "--",
+                sys.executable,
+                "-m",
+                "core.mcp.server",
+            ]
+        else:
+            # Preserve the pre-profile MCP command exactly for Animas that do
+            # not opt in to read-deny enforcement.
+            mcp_command = sys.executable
+            mcp_args = ["-m", "core.mcp.server"]
+        mcp_args_toml = ", ".join(f'"{esc(arg)}"' for arg in mcp_args)
         provider_section = ""
         if provider_config.is_azure:
             provider_section = (
@@ -1076,8 +1109,8 @@ class CodexSDKExecutor(BaseExecutor):
             f"{provider_section}"
             f"\n"
             f"[mcp_servers.aw]\n"
-            f'command = "{esc(sys.executable)}"\n'
-            f'args = ["-m", "core.mcp.server"]\n'
+            f'command = "{esc(mcp_command)}"\n'
+            f"args = [{mcp_args_toml}]\n"
             f'default_tools_approval_mode = "approve"\n'
             f"\n"
             f"[mcp_servers.aw.env]\n"

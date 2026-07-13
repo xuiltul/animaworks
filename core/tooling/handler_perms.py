@@ -144,7 +144,33 @@ class PermissionsMixin:
         """Load PermissionsConfig from permissions.json (with migration fallback)."""
         return load_permissions(self._anima_dir)
 
-    def _check_file_permission(self, path: str, *, write: bool = False) -> str | None:
+    def _resolved_file_deny_roots(self, config: PermissionsConfig | None = None) -> tuple[Path, ...]:
+        """Return canonical explicit deny roots, reusable by bulk operations."""
+        if self._superuser:
+            return ()
+        effective_config = config or self._load_permissions_config()
+        return tuple(Path(root).resolve() for root in effective_config.file_roots_denied)
+
+    def _find_denied_file_root(
+        self,
+        path: str | Path,
+        denied_roots: tuple[Path, ...] | None = None,
+    ) -> Path | None:
+        """Return the deny root containing *path*, resolving symlinks first."""
+        if self._superuser:
+            return None
+        roots = denied_roots if denied_roots is not None else self._resolved_file_deny_roots()
+        resolved = Path(path).resolve()
+        return next((root for root in roots if resolved.is_relative_to(root)), None)
+
+    def _check_file_permission(
+        self,
+        path: str,
+        *,
+        write: bool = False,
+        config: PermissionsConfig | None = None,
+        denied_roots: tuple[Path, ...] | None = None,
+    ) -> str | None:
         """Check if the file path is allowed by permissions config.
 
         Returns ``None`` if allowed, or an error message string if denied.
@@ -152,24 +178,26 @@ class PermissionsMixin:
         if self._superuser:
             return None
         resolved = Path(path).resolve()
-        config = self._load_permissions_config()
+        effective_config = config or self._load_permissions_config()
+        effective_denied_roots = (
+            denied_roots if denied_roots is not None else self._resolved_file_deny_roots(effective_config)
+        )
 
         # Explicit denies are the primary boundary and override every normal
         # grant below, including own/shared/supervisor paths and file_roots=["/"].
-        for denied_root in config.file_roots_denied:
-            denied = Path(denied_root).resolve()
-            if resolved.is_relative_to(denied):
-                logger.warning(
-                    "permission_denied anima=%s path=%s reason=file_root_denied root=%s",
-                    self._anima_name,
-                    path,
-                    denied,
-                )
-                return _error_result(
-                    "PermissionDenied",
-                    f"'{path}' is under an explicitly denied directory",
-                    context={"denied_root": str(denied)},
-                )
+        denied = self._find_denied_file_root(resolved, effective_denied_roots)
+        if denied is not None:
+            logger.warning(
+                "permission_denied anima=%s path=%s reason=file_root_denied root=%s",
+                self._anima_name,
+                path,
+                denied,
+            )
+            return _error_result(
+                "PermissionDenied",
+                f"'{path}' is under an explicitly denied directory",
+                context={"denied_root": str(denied)},
+            )
 
         if write:
             gp_err = _is_global_permissions_write_blocked(resolved)
@@ -260,11 +288,11 @@ class PermissionsMixin:
             )
 
         # file_roots == ["/"]: allow all (after protected file check)
-        if config.file_roots == ["/"]:
+        if effective_config.file_roots == ["/"]:
             return None
 
         # file_roots == []: only anima_dir + framework shared dirs (already handled above)
-        if not config.file_roots:
+        if not effective_config.file_roots:
             logger.warning("permission_denied anima=%s path=%s reason=outside_allowed_dirs", self._anima_name, path)
             return _error_result(
                 "PermissionDenied",
@@ -273,13 +301,13 @@ class PermissionsMixin:
             )
 
         # Otherwise: check if path is under any of the file_roots (read-write)
-        allowed_dirs = [Path(r).resolve() for r in config.file_roots if Path(r).is_absolute()]
+        allowed_dirs = [Path(r).resolve() for r in effective_config.file_roots if Path(r).is_absolute()]
         for allowed in allowed_dirs:
             if resolved.is_relative_to(allowed):
                 return None
 
         # Check file_roots_readonly — read allowed, write denied
-        readonly_dirs = [Path(r).resolve() for r in config.file_roots_readonly if Path(r).is_absolute()]
+        readonly_dirs = [Path(r).resolve() for r in effective_config.file_roots_readonly if Path(r).is_absolute()]
         for readonly in readonly_dirs:
             if resolved.is_relative_to(readonly):
                 if write:

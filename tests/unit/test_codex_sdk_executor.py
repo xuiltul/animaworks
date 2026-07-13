@@ -575,6 +575,8 @@ class TestConfigWriting:
         parsed = tomllib.loads(config_toml)
         assert parsed["approval_policy"] == "never"
         assert parsed["mcp_servers"]["aw"]["default_tools_approval_mode"] == "approve"
+        assert parsed["mcp_servers"]["aw"]["command"] == sys.executable
+        assert parsed["mcp_servers"]["aw"]["args"] == ["-m", "core.mcp.server"]
 
     def test_write_codex_config_restricted_sandbox(self, model_config, anima_dir):
         """Restricted file_roots produces workspace-write with writable_roots."""
@@ -608,7 +610,10 @@ class TestConfigWriting:
         exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
         exc.set_task_cwd(task_cwd)
 
-        with patch("core.config.models.load_permissions", return_value=permissions):
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value="/opt/codex/bin/codex"),
+        ):
             exc._write_codex_config("prompt")
 
         config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")
@@ -627,7 +632,19 @@ class TestConfigWriting:
         assert filesystem[str(writable_root.resolve())] == "write"
         assert filesystem[str(task_cwd.resolve())] == "write"
         assert filesystem[str(denied_root.resolve())] == "deny"
+        assert filesystem[str((anima_dir / "permissions.json").resolve())] == "read"
         assert profile["network"]["enabled"] is True
+        assert parsed["mcp_servers"]["aw"]["command"] == "/opt/codex/bin/codex"
+        assert parsed["mcp_servers"]["aw"]["args"] == [
+            "sandbox",
+            "-P",
+            "animaworks",
+            "--",
+            sys.executable,
+            "-m",
+            "core.mcp.server",
+        ]
+        assert parsed["mcp_servers"]["aw"]["env"]["CODEX_HOME"] == str(anima_dir / ".codex_home")
 
     def test_write_codex_config_root_write_profile_keeps_specific_deny(self, model_config, anima_dir, tmp_path):
         denied_root = tmp_path / "private"
@@ -637,13 +654,17 @@ class TestConfigWriting:
         )
         exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
 
-        with patch("core.config.models.load_permissions", return_value=permissions):
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value="/opt/codex/bin/codex"),
+        ):
             exc._write_codex_config("prompt")
 
         parsed = tomllib.loads((anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8"))
         filesystem = parsed["permissions"]["animaworks"]["filesystem"]
         assert filesystem[":root"] == "write"
         assert filesystem[str(denied_root.resolve())] == "deny"
+        assert filesystem[str((anima_dir / "permissions.json").resolve())] == "read"
         assert ":tmpdir" not in filesystem
         assert ":slash_tmp" not in filesystem
 
@@ -655,12 +676,29 @@ class TestConfigWriting:
         )
         exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
 
-        with patch("core.config.models.load_permissions", return_value=permissions):
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value="/opt/codex/bin/codex"),
+        ):
             exc._write_codex_config("prompt")
 
         parsed = tomllib.loads((anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8"))
         filesystem = parsed["permissions"]["animaworks"]["filesystem"]
         assert filesystem[str(denied_root.resolve())] == "deny"
+
+    def test_write_codex_config_denied_roots_require_codex_for_mcp_wrapper(self, model_config, anima_dir, tmp_path):
+        permissions = SimpleNamespace(
+            file_roots=[str(anima_dir)],
+            file_roots_denied=[str(tmp_path / "private")],
+        )
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value=None),
+            pytest.raises(RuntimeError, match="sandbox the MCP server"),
+        ):
+            exc._write_codex_config("prompt")
 
     def test_write_codex_config_includes_model_name(self, executor, anima_dir):
         """config.toml must include model = "o4-mini" (stripped prefix)."""

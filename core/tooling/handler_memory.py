@@ -262,6 +262,42 @@ class MemoryToolsMixin:
     def _current_anima_name(self) -> str:
         return str(getattr(self, "_anima_name", "") or self._anima_dir.name)
 
+    def _memory_source_path(self, source: str) -> Path | None:
+        """Resolve a RAG ``source_file`` value to the file it represents."""
+        source = source.strip()
+        if not source or source == "unknown":
+            return None
+        path = Path(source)
+        if path.is_absolute():
+            return path.resolve()
+
+        from core.paths import get_common_knowledge_dir, get_common_skills_dir, get_data_dir, get_reference_dir
+
+        shared_prefixes = {
+            "common_knowledge": get_common_knowledge_dir(),
+            "common_skills": get_common_skills_dir(),
+            "reference": get_reference_dir(),
+        }
+        if path.parts:
+            shared_root = shared_prefixes.get(path.parts[0])
+            if shared_root is not None:
+                return shared_root.joinpath(*path.parts[1:]).resolve()
+            if path.parts[0] == "shared":
+                return (get_data_dir() / path).resolve()
+        return (self._anima_dir / path).resolve()
+
+    def _memory_source_is_denied(self, source: str, denied_roots: tuple[Path, ...]) -> bool:
+        """Return whether a persisted search hit originated below an explicit deny root."""
+        source_path = self._memory_source_path(source)
+        return source_path is not None and self._find_denied_file_root(source_path, denied_roots) is not None
+
+    @staticmethod
+    def _graph_memory_source(memory: Any) -> str:
+        metadata = getattr(memory, "metadata", {})
+        if isinstance(metadata, dict) and metadata.get("source_file"):
+            return str(metadata["source_file"])
+        return str(getattr(memory, "source", ""))
+
     def _mark_longterm_bm25_dirty(self, rel: str) -> None:
         if not rel.startswith(("knowledge/", "episodes/", "procedures/")):
             return
@@ -339,6 +375,7 @@ class MemoryToolsMixin:
         *,
         time_start: str | None = None,
         time_end: str | None = None,
+        denied_roots: tuple[Path, ...] = (),
     ) -> str | None:
         """Execute search via Neo4j backend, returning formatted string or None on failure."""
         memories = self._retrieve_neo4j_memories(
@@ -350,6 +387,13 @@ class MemoryToolsMixin:
         )
         if memories is None:
             return None
+
+        if denied_roots:
+            memories = [
+                memory
+                for memory in memories
+                if not self._memory_source_is_denied(self._graph_memory_source(memory), denied_roots)
+            ]
 
         if offset:
             memories = memories[offset:]
@@ -382,6 +426,7 @@ class MemoryToolsMixin:
         *,
         time_start: str | None = None,
         time_end: str | None = None,
+        denied_roots: tuple[Path, ...] = (),
     ) -> str | None:
         """Search Neo4j graph memory plus legacy-only scopes for scope='all'."""
         graph_memories = self._retrieve_neo4j_memories(
@@ -397,7 +442,8 @@ class MemoryToolsMixin:
         context_window = getattr(self, "_context_window", _SEARCH_CONTEXT_BASE)
         items: list[SearchResultItem] = []
         for mem in graph_memories:
-            items.append(SearchResultItem("Graph Memory", "graph", mem))
+            if not self._memory_source_is_denied(self._graph_memory_source(mem), denied_roots):
+                items.append(SearchResultItem("Graph Memory", "graph", mem))
 
         for legacy_scope in LEGACY_ONLY_SCOPES_FOR_ALL:
             try:
@@ -412,7 +458,9 @@ class MemoryToolsMixin:
                 legacy_results = []
             section_title = title_for_legacy_scope(legacy_scope)
             for result in legacy_results:
-                items.append(SearchResultItem(section_title, "legacy", result))
+                source = str(result.get("source_file", ""))
+                if not self._memory_source_is_denied(source, denied_roots):
+                    items.append(SearchResultItem(section_title, "legacy", result))
 
         return format_hybrid_search_results(
             query=query,
@@ -484,6 +532,8 @@ class MemoryToolsMixin:
             time_range = {}
         time_start = time_range.get("after") if time_range else None
         time_end = time_range.get("before") if time_range else None
+        config = self._load_permissions_config()
+        denied_roots = self._resolved_file_deny_roots(config)
         if time_start is not None and not isinstance(time_start, str):
             time_start = str(time_start)
         if time_end is not None and not isinstance(time_end, str):
@@ -500,6 +550,7 @@ class MemoryToolsMixin:
                     offset,
                     time_start=time_start,
                     time_end=time_end,
+                    denied_roots=denied_roots,
                 )
                 if neo4j_result is not None:
                     if not neo4j_result:
@@ -521,6 +572,7 @@ class MemoryToolsMixin:
                     offset,
                     time_start=time_start,
                     time_end=time_end,
+                    denied_roots=denied_roots,
                 )
             if neo4j_result is not None:
                 if not neo4j_result and anima_hint:
@@ -534,6 +586,12 @@ class MemoryToolsMixin:
             offset=offset,
             context_window=getattr(self, "_context_window", _SEARCH_CONTEXT_BASE),
         )
+        if denied_roots:
+            results = [
+                result
+                for result in results
+                if not self._memory_source_is_denied(str(result.get("source_file", "")), denied_roots)
+            ]
         logger.debug(
             "search_memory query=%s scope=%s offset=%d results=%d",
             query,
