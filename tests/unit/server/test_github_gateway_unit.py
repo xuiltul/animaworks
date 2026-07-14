@@ -16,6 +16,7 @@ from server import github_gateway
 from server.github_gateway import GitHubWebhookManager, locked_dispatch_state
 
 REPO = "FutureSync/AI-Schreiber"
+BOT_LOGIN = "example-bot"
 OTHER_REPO = "elsewhere/project"
 SHA_1 = "1" * 40
 SHA_2 = "2" * 40
@@ -122,6 +123,7 @@ async def gateway(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         repos=[REPO],
         reviewer_anima="sumire",
         dispatcher_anima="rin",
+        bot_login=BOT_LOGIN,
         quiet_seconds=3600,
     )
     manager = GitHubWebhookManager(
@@ -281,16 +283,41 @@ class TestReviewAndCommentDispatch:
         manager, sends, state_file = gateway
         await manager.handle_event(
             event,
-            _comment_payload(event=event, author=github_gateway.BOT_LOGIN),
+            _comment_payload(event=event, author=BOT_LOGIN),
         )
         assert sends == []
         assert not state_file.exists()
+
+    async def test_unset_bot_login_does_not_exclude_anyone(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        shared_dir = tmp_path / "shared"
+        state_file = shared_dir / github_gateway.STATE_FILENAME
+        manager = GitHubWebhookManager(
+            config=GitHubWebhookConfig(enabled=True, repos=[REPO]),
+            shared_dir=shared_dir,
+            state_file=state_file,
+        )
+        sends: list[dict[str, str]] = []
+        monkeypatch.setattr(
+            manager,
+            "_send",
+            lambda to, content, kind, key: sends.append({"to": to, "kind": kind}),
+        )
+        await manager.start()
+        try:
+            await manager.handle_event(
+                "issue_comment", _comment_payload(event="issue_comment", author=BOT_LOGIN)
+            )
+        finally:
+            await manager.stop()
+        assert len(sends) == 1
 
     async def test_bot_review_is_ignored(self, gateway) -> None:
         manager, sends, state_file = gateway
         await manager.handle_event(
             "pull_request_review",
-            _review_payload(author=github_gateway.BOT_LOGIN),
+            _review_payload(author=BOT_LOGIN),
         )
         assert sends == []
         assert not state_file.exists()

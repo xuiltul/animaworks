@@ -19,20 +19,29 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-SHARED_DIR = Path("/home/main/.animaworks/shared")
+# Deployment-specific values come from the environment so no site-specific
+# repos, accounts, or paths are baked into the public source tree.
+SHARED_DIR = Path(
+    os.environ.get("ANIMAWORKS_SHARED_DIR", "~/.animaworks/shared")
+).expanduser()
 STATE_FILE = SHARED_DIR / "pr-review-dispatch-state.json"
 STATE_LOCK = STATE_FILE.with_suffix(".lock")
 LOG_FILE = SHARED_DIR / "pr-review-dispatch.log"
 GH_CONFIG_DIR = os.environ.get("GH_CONFIG_DIR", str(SHARED_DIR / "gh-bot"))
 
-REPOS = ["FutureSync/AI-Schreiber", "FutureSync/AI-Schreiber-app"]
-QUIET_SECONDS = 180
-BOT_LOGIN = "animaworks-dev-team"
-REVIEWER = "sumire"
-DISPATCHER = "rin"
+# Comma-separated "owner/repo" list; the poller refuses to run without it.
+REPOS = [r.strip() for r in os.environ.get("PR_DISPATCH_REPOS", "").split(",") if r.strip()]
+QUIET_SECONDS = float(os.environ.get("PR_DISPATCH_QUIET_SECONDS", "180"))
+# Bot account whose own comments are ignored; empty disables the exclusion.
+BOT_LOGIN = os.environ.get("PR_DISPATCH_BOT_LOGIN", "")
+REVIEWER = os.environ.get("PR_DISPATCH_REVIEWER", "sumire")
+DISPATCHER = os.environ.get("PR_DISPATCH_DISPATCHER", "rin")
 ALERT_EVERY = 5
 
-sys.path.insert(0, "/home/main/dev/animaworks-bak")
+sys.path.insert(
+    0,
+    os.environ.get("ANIMAWORKS_REPO_ROOT", str(Path(__file__).resolve().parents[1])),
+)
 
 
 def now_utc() -> datetime:
@@ -209,7 +218,7 @@ def check_comments(state: dict) -> None:
             comments = json.loads(gh(["api", f"{endpoint}?since={since}&per_page=100"]))
             for comment in comments:
                 author = (comment.get("user") or {}).get("login", "")
-                if author == BOT_LOGIN:
+                if BOT_LOGIN and author == BOT_LOGIN:
                     continue
                 dedupe_key = f"{kind}:{comment.get('id')}"
                 if dedupe_key in seen:
@@ -280,6 +289,11 @@ def check_ci(state: dict) -> None:
 
 
 def main() -> int:
+    if not REPOS:
+        sys.stderr.write(
+            "PR_DISPATCH_REPOS is not set (comma-separated owner/repo list); refusing to run.\n"
+        )
+        return 2
     with locked_state() as state:
         try:
             check_commits(state)

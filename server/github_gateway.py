@@ -25,7 +25,6 @@ from core.paths import get_shared_dir
 
 logger = logging.getLogger("animaworks.github_gateway")
 
-BOT_LOGIN = "animaworks-dev-team"
 STATE_FILENAME = "pr-review-dispatch-state.json"
 
 
@@ -268,7 +267,7 @@ class GitHubWebhookManager:
             return
         review = payload.get("review") or {}
         author = str((review.get("user") or {}).get("login") or "")
-        if author.casefold() == BOT_LOGIN.casefold():
+        if self._is_bot(author):
             return
         review_id = review.get("id")
         if review_id is None:
@@ -293,7 +292,7 @@ class GitHubWebhookManager:
             return
         comment = payload.get("comment") or {}
         author = str((comment.get("user") or {}).get("login") or "")
-        if author.casefold() == BOT_LOGIN.casefold():
+        if self._is_bot(author):
             return
         comment_id = comment.get("id")
         if comment_id is None:
@@ -386,6 +385,11 @@ class GitHubWebhookManager:
             now = _now_iso()
             for _, _, key in fresh:
                 notified[key] = now
+
+    def _is_bot(self, author: str) -> bool:
+        """True when the author is the configured bot account itself."""
+        bot = self._config.bot_login
+        return bool(bot) and author.casefold() == bot.casefold()
 
     def _send(self, to: str, content: str, kind: str, key: str) -> None:
         Messenger(self._require_shared_dir(), "pr-review-dispatch").send(

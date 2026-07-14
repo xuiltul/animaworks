@@ -539,6 +539,7 @@ class GitHubWebhookConfig(BaseModel):
     repos: list[str] = Field(default_factory=list)
     reviewer_anima: str = "sumire"
     dispatcher_anima: str = "rin"
+    bot_login: str = ""
     quiet_seconds: float = Field(default=180, ge=0)
 
 
