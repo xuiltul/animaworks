@@ -532,6 +532,16 @@ class ZoomRTMSConfig(BaseModel):
     chunk_max_chars: int = 4000  # max chars per chunk (flush on whichever comes first)
 
 
+class GitHubWebhookConfig(BaseModel):
+    """Configuration for GitHub webhook-driven PR dispatch."""
+
+    enabled: bool = False
+    repos: list[str] = Field(default_factory=list)
+    reviewer_anima: str = "sumire"
+    dispatcher_anima: str = "rin"
+    quiet_seconds: float = Field(default=180, ge=0)
+
+
 class ExternalMessagingConfig(BaseModel):
     """Configuration for external messaging integration (inbound + outbound)."""
 
@@ -1126,6 +1136,7 @@ class AnimaWorksConfig(BaseModel):
     server: ServerConfig = ServerConfig()
     llm_rate_guard: LlmRateGuardConfig = LlmRateGuardConfig()
     external_messaging: ExternalMessagingConfig = ExternalMessagingConfig()
+    github_webhook: GitHubWebhookConfig = GitHubWebhookConfig()
     background_task: BackgroundTaskConfig = BackgroundTaskConfig()
     activity_log: ActivityLogConfig = ActivityLogConfig()
     logging: LoggingConfig = LoggingConfig()
@@ -1170,6 +1181,7 @@ __all__ = [
     "ExternalMessagingChannelConfig",
     "ExternalMessagingConfig",
     "GatewaySystemConfig",
+    "GitHubWebhookConfig",
     "GPUConfig",
     "HeartbeatConfig",
     "HousekeepingConfig",

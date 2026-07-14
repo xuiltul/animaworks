@@ -611,6 +611,21 @@ async def _startup_animas_background(app: FastAPI, *, suppress_errors: bool = Tr
             )
             app.state.zoom_gateway_manager = None
 
+        # ── GitHub Webhook Gateway ─────────────────────────────
+        try:
+            from server.github_gateway import GitHubWebhookManager
+
+            github_manager = GitHubWebhookManager()
+            await github_manager.start()
+            app.state.github_gateway_manager = github_manager
+        except Exception as exc:
+            logger.error(
+                "GitHub Webhook Gateway startup failed: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+            app.state.github_gateway_manager = None
+
         # ── Slack channel → board sync (initial) ──────────────
         if app.state.slack_socket_manager is not None:
             try:
@@ -894,6 +909,8 @@ async def lifespan(app: FastAPI):
             await app.state.discord_gateway_manager.stop()
         if getattr(app.state, "zoom_gateway_manager", None):
             await app.state.zoom_gateway_manager.stop()
+        if getattr(app.state, "github_gateway_manager", None):
+            await app.state.github_gateway_manager.stop()
         governor = getattr(app.state, "usage_governor", None)
         if governor:
             await governor.stop()
