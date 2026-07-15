@@ -20,6 +20,7 @@ from core.memory.rag.store import Document, SearchResult, VectorStore
 logger = logging.getLogger(__name__)
 
 _UPSERT_BATCH_LIMIT = 500
+_FAILURE_LOG_INTERVAL_SECONDS = 60.0
 
 
 def _parse_search_results(data: list[dict[str, Any]]) -> list[SearchResult]:
@@ -69,6 +70,9 @@ class HttpVectorStore(VectorStore):
         self._anima_name = anima_name
         self._client: Any = None
         self._write_circuit_retry_at: dict[str, float] = {}
+        self._write_circuit_warned: set[str] = set()
+        self._write_circuit_suppressed: dict[str, int] = {}
+        self._post_failure_states: dict[tuple[str, int | str, str], dict[str, Any]] = {}
 
     def _get_client(self):
         """Lazy-initialize httpx client."""
@@ -85,12 +89,26 @@ class HttpVectorStore(VectorStore):
         now = time.monotonic()
         if retry_at <= now:
             self._write_circuit_retry_at.pop(collection, None)
+            if collection in self._write_circuit_warned:
+                logger.info(
+                    "Vector write circuit closed; resuming writes: anima=%s collection=%s suppressed=%d writes",
+                    self._anima_name or "shared",
+                    collection,
+                    self._write_circuit_suppressed.pop(collection, 0),
+                )
+                self._write_circuit_warned.discard(collection)
             return False
-        logger.warning(
-            "Skipping vector write while worker circuit is open: collection=%s retry_after=%ss",
-            collection,
-            int(retry_at - now),
-        )
+        if collection not in self._write_circuit_warned:
+            logger.warning(
+                "Skipping vector write while worker circuit is open: anima=%s collection=%s retry_after=%ss",
+                self._anima_name or "shared",
+                collection,
+                int(retry_at - now),
+            )
+            self._write_circuit_warned.add(collection)
+            self._write_circuit_suppressed[collection] = 0
+        else:
+            self._write_circuit_suppressed[collection] = self._write_circuit_suppressed.get(collection, 0) + 1
         return True
 
     def is_transient_write_failure(self, collection: str) -> bool:
@@ -105,6 +123,55 @@ class HttpVectorStore(VectorStore):
             delay = 1
         self._write_circuit_retry_at[collection] = time.monotonic() + delay
 
+    def _clear_post_failures(self, path: str, collection: str, *, keep: tuple[str, int | str, str] | None = None) -> None:
+        for key in list(self._post_failure_states):
+            if key[0] == path and key[2] == collection and key != keep:
+                self._post_failure_states.pop(key, None)
+
+    def _log_post_failure(
+        self,
+        path: str,
+        status: int | str,
+        collection: str,
+        retry_after: str | None,
+        error: Exception,
+    ) -> None:
+        key = (path, status, collection)
+        self._clear_post_failures(path, collection, keep=key)
+        now = time.monotonic()
+        state = self._post_failure_states.get(key)
+        if state is None:
+            logger.warning(
+                "HTTP vector request failed: path=%s status=%s collection=%s retry_after=%s error=%s",
+                path,
+                status,
+                collection or "-",
+                retry_after or "-",
+                error,
+            )
+            self._post_failure_states[key] = {
+                "last_logged_at": now,
+                "suppressed_count": 0,
+                "first_retry_after": retry_after,
+            }
+            return
+
+        state["suppressed_count"] = int(state.get("suppressed_count") or 0) + 1
+        if now - float(state.get("last_logged_at") or 0.0) < _FAILURE_LOG_INTERVAL_SECONDS:
+            return
+        logger.warning(
+            "HTTP vector request failures continue: path=%s status=%s collection=%s "
+            "retry_after=%s suppressed=%d error=%s",
+            path,
+            status,
+            collection or "-",
+            state.get("first_retry_after") or "-",
+            state["suppressed_count"],
+            error,
+        )
+        state["last_logged_at"] = now
+        state["suppressed_count"] = 0
+
     def _post(
         self,
         path: str,
@@ -115,15 +182,20 @@ class HttpVectorStore(VectorStore):
         """POST to endpoint and return JSON, or None on error."""
         if write_collection and self._write_circuit_open(write_collection):
             return None
+        resp = None
+        retry_after = None
         try:
             resp = self._get_client().post(path, json=payload)
             retry_after = resp.headers.get("Retry-After")
             if write_collection and (resp.status_code in {429, 503} or (resp.status_code == 500 and retry_after)):
                 self._record_write_circuit(write_collection, retry_after)
             resp.raise_for_status()
-            return resp.json()
+            data = resp.json()
+            self._clear_post_failures(path, write_collection or "")
+            return data
         except Exception as e:
-            logger.warning("HTTP vector request failed %s: %s", path, e)
+            status: int | str = getattr(resp, "status_code", "exception") if resp is not None else "exception"
+            self._log_post_failure(path, status, write_collection or "", retry_after, e)
             return None
 
     def create_collection(self, name: str) -> bool:
@@ -143,6 +215,8 @@ class HttpVectorStore(VectorStore):
         if data is None:
             return False
         self._write_circuit_retry_at.clear()
+        self._write_circuit_warned.clear()
+        self._write_circuit_suppressed.clear()
         return True
 
     def delete_collection(self, name: str) -> bool:

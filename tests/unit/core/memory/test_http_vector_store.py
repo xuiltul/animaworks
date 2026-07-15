@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -327,3 +328,43 @@ def test_close_no_client():
     store = _make_store()
     store.close()
     assert store._client is None
+
+
+def test_circuit_open_logs_once_and_reports_suppressed_on_resume(caplog):
+    store = _make_store(anima_name="sora")
+    store._write_circuit_retry_at["sora_knowledge"] = 10.0
+
+    with caplog.at_level(logging.INFO, logger="core.memory.rag.http_store"):
+        with patch("core.memory.rag.http_store.time.monotonic", return_value=1.0):
+            assert store._write_circuit_open("sora_knowledge") is True
+            assert store._write_circuit_open("sora_knowledge") is True
+            assert store._write_circuit_open("sora_knowledge") is True
+        with patch("core.memory.rag.http_store.time.monotonic", return_value=11.0):
+            assert store._write_circuit_open("sora_knowledge") is False
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert sum("Skipping vector write" in message for message in messages) == 1
+    assert any("suppressed=2 writes" in message for message in messages)
+
+
+def test_http_failures_are_aggregated_by_path_status_and_collection(caplog):
+    store = _make_store(anima_name="sora")
+    response = MagicMock(status_code=503)
+    response.headers = {"Retry-After": "30"}
+    response.raise_for_status.side_effect = httpx.HTTPError("service unavailable")
+    store._client = MagicMock()
+    store._client.post.return_value = response
+
+    with (
+        caplog.at_level(logging.WARNING, logger="core.memory.rag.http_store"),
+        patch("core.memory.rag.http_store.time.monotonic", side_effect=[1.0, 10.0, 70.0]),
+    ):
+        assert store._post("/query", {}) is None
+        assert store._post("/query", {}) is None
+        assert store._post("/query", {}) is None
+
+    messages = [record.getMessage() for record in caplog.records if "HTTP vector request" in record.getMessage()]
+    assert len(messages) == 2
+    assert "status=503" in messages[0]
+    assert "retry_after=30" in messages[0]
+    assert "suppressed=2" in messages[1]
