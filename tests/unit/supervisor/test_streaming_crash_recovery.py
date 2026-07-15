@@ -115,6 +115,74 @@ class TestHealthCheckDuringStreaming:
             await asyncio.sleep(0.1)
             mock_hang.assert_called_once()
 
+    def _write_busy_sidecar(
+        self,
+        supervisor: ProcessSupervisor,
+        anima_name: str,
+        pid: int,
+        last_progress_at,
+    ) -> None:
+        import json
+
+        path = supervisor.run_dir / "animas" / f"{anima_name}.busy.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "is_busy": True,
+                    "pid": pid,
+                    "last_progress_at": last_progress_at.isoformat(),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    @pytest.mark.asyncio
+    async def test_streaming_over_max_with_fresh_progress_not_killed(
+        self, supervisor: ProcessSupervisor, streaming_handle: ProcessHandle
+    ):
+        """A stream past max duration survives while progress is fresh."""
+        streaming_handle._streaming_started_at = now_jst() - timedelta(hours=1)
+        supervisor._max_streaming_duration_sec = 60
+        supervisor.processes["test"] = streaming_handle
+        self._write_busy_sidecar(supervisor, "test", 12345, now_jst())
+
+        with patch.object(supervisor, "_handle_process_hang", new_callable=AsyncMock) as mock_hang:
+            await supervisor._check_process_health("test", streaming_handle)
+            await asyncio.sleep(0.1)
+            mock_hang.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_streaming_stalled_progress_killed_before_max(
+        self, supervisor: ProcessSupervisor, streaming_handle: ProcessHandle
+    ):
+        """A stream with stale progress is killed even before max duration."""
+        streaming_handle._streaming_started_at = now_jst() - timedelta(minutes=20)
+        supervisor._max_streaming_duration_sec = 7200
+        supervisor.processes["test"] = streaming_handle
+        stale = now_jst() - timedelta(seconds=supervisor.health_config.busy_hang_threshold_sec + 60)
+        self._write_busy_sidecar(supervisor, "test", 12345, stale)
+
+        with patch.object(supervisor, "_handle_process_hang", new_callable=AsyncMock) as mock_hang:
+            await supervisor._check_process_health("test", streaming_handle)
+            await asyncio.sleep(0.1)
+            mock_hang.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_streaming_sidecar_pid_mismatch_falls_back_to_timeout(
+        self, supervisor: ProcessSupervisor, streaming_handle: ProcessHandle
+    ):
+        """A sidecar from another PID is ignored; legacy timeout applies."""
+        streaming_handle._streaming_started_at = now_jst() - timedelta(hours=1)
+        supervisor._max_streaming_duration_sec = 60
+        supervisor.processes["test"] = streaming_handle
+        self._write_busy_sidecar(supervisor, "test", 99999, now_jst())
+
+        with patch.object(supervisor, "_handle_process_hang", new_callable=AsyncMock) as mock_hang:
+            await supervisor._check_process_health("test", streaming_handle)
+            await asyncio.sleep(0.1)
+            mock_hang.assert_called_once()
+
     @pytest.mark.asyncio
     async def test_streaming_normal_not_triggered(
         self, supervisor: ProcessSupervisor, streaming_handle: ProcessHandle

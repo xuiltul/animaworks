@@ -74,6 +74,59 @@ class HealthMixin:
             data["last_progress_at"] = last_progress
         return data
 
+    def _streaming_progress_idle_sec(
+        self,
+        anima_name: str,
+        handle: ProcessHandle,
+    ) -> float | None:
+        """Return seconds since the runner last reported progress, if known.
+
+        Reads the busy sidecar written by the child process (updated via the
+        agent progress callback and the busy keepalive).  Returns ``None``
+        when no trustworthy progress information exists.
+        """
+        sidecar = self._read_busy_sidecar(anima_name, handle)
+        if not sidecar:
+            return None
+        last_progress_iso = sidecar.get("last_progress_at")
+        if not last_progress_iso:
+            return None
+        try:
+            last_progress = ensure_aware(_dt.fromisoformat(str(last_progress_iso)))
+        except (ValueError, TypeError):
+            logger.warning(
+                "Invalid last_progress_at from %s: %r",
+                anima_name,
+                last_progress_iso,
+            )
+            return None
+        return (now_local() - last_progress).total_seconds()
+
+    def _warn_streaming_overrun(
+        self,
+        anima_name: str,
+        streaming_sec: float,
+        idle_sec: float,
+    ) -> None:
+        """Log (throttled) that a stream exceeded max duration but is healthy."""
+        warned = getattr(self, "_streaming_overrun_warned_at", None)
+        if warned is None:
+            warned = {}
+            self._streaming_overrun_warned_at = warned
+        now_mono = time.monotonic()
+        last = warned.get(anima_name)
+        if last is not None and now_mono - last < 300.0:
+            return
+        warned[anima_name] = now_mono
+        logger.warning(
+            "Streaming exceeds max duration for %s (%.0fs > %ds) but progress "
+            "is fresh (idle=%.0fs) — not killing",
+            anima_name,
+            streaming_sec,
+            self._max_streaming_duration_sec,
+            idle_sec,
+        )
+
     def _log_hang_context(self, anima_name: str, handle: ProcessHandle) -> None:
         """Emit a one-line JSON context for hang forensics.
 
@@ -290,13 +343,33 @@ class HealthMixin:
                 )
                 asyncio.create_task(self._handle_process_failure(anima_name, handle))
                 return
-            # Streaming duration timeout
+            # Streaming stall detection: progress-aware, mirroring
+            # _handle_busy_health.  A long stream is healthy as long as the
+            # runner keeps reporting progress (busy sidecar last_progress_at,
+            # updated by the agent progress callback); wall-clock duration
+            # alone must not kill a working task.
             started_at = handle.streaming_started_at
             if started_at is not None:
                 streaming_sec = (now_local() - ensure_aware(started_at)).total_seconds()
-                if streaming_sec > self._max_streaming_duration_sec:
+                idle_sec = self._streaming_progress_idle_sec(anima_name, handle)
+                if idle_sec is not None:
+                    if idle_sec > self.health_config.busy_hang_threshold_sec:
+                        logger.error(
+                            "Streaming stalled (no progress) for %s (idle=%.0fs > %ds, streaming=%.0fs)",
+                            anima_name,
+                            idle_sec,
+                            int(self.health_config.busy_hang_threshold_sec),
+                            streaming_sec,
+                        )
+                        self._log_hang_context(anima_name, handle)
+                        asyncio.create_task(self._handle_process_hang(anima_name, handle))
+                    elif streaming_sec > self._max_streaming_duration_sec:
+                        self._warn_streaming_overrun(anima_name, streaming_sec, idle_sec)
+                elif streaming_sec > self._max_streaming_duration_sec:
+                    # No progress information available (sidecar missing or
+                    # stale-PID) — fall back to the legacy absolute timeout.
                     logger.error(
-                        "Streaming timeout for %s (%.0fs > %ds)",
+                        "Streaming timeout for %s (%.0fs > %ds, no progress info)",
                         anima_name,
                         streaming_sec,
                         self._max_streaming_duration_sec,
