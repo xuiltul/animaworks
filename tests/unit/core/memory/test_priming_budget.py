@@ -16,6 +16,15 @@ from core.memory.priming import PrimingEngine
 from core.time_utils import today_local
 
 
+@pytest.fixture(autouse=True)
+def _default_config(monkeypatch):
+    """Isolate from the live config: priming budget overrides in the real
+    ~/.animaworks/config.json would otherwise leak into these assertions."""
+    from core.config.models import AnimaWorksConfig
+
+    monkeypatch.setattr("core.config.models.load_config", lambda: AnimaWorksConfig())
+
+
 @pytest.fixture
 def temp_anima_dir():
     """Create temporary anima directory."""
