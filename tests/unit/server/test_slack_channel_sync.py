@@ -22,6 +22,38 @@ def _mock_config() -> SimpleNamespace:
     )
 
 
+def test_update_config_mapping_skips_save_when_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _mock_config()
+    cfg.external_messaging.slack.board_mapping = {"C123": "general"}
+    save_calls: list[object] = []
+    monkeypatch.setattr("core.config.models.load_config", lambda: cfg)
+    monkeypatch.setattr("core.config.models.save_config", lambda updated: save_calls.append(updated))
+
+    sync = SlackChannelSync()
+    sync.board_mapping = {"C123": "general"}
+    sync._update_config_mapping()
+
+    assert save_calls == []
+
+
+def test_update_config_mapping_saves_when_changed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _mock_config()
+    save_calls: list[object] = []
+    monkeypatch.setattr("core.config.models.load_config", lambda: cfg)
+    monkeypatch.setattr("core.config.models.save_config", lambda updated: save_calls.append(updated))
+
+    sync = SlackChannelSync()
+    sync.board_mapping = {"C123": "general"}
+    sync._update_config_mapping()
+
+    assert save_calls == [cfg]
+    assert cfg.external_messaging.slack.board_mapping == {"C123": "general"}
+
+
 @pytest.mark.asyncio
 async def test_sync_marks_missing_slack_channel_and_skips_reverse_recreate(
     tmp_path: Path,
@@ -33,6 +65,7 @@ async def test_sync_marks_missing_slack_channel_and_skips_reverse_recreate(
     (channels_dir / "general.jsonl").write_text("", encoding="utf-8")
 
     cfg = _mock_config()
+    cfg.external_messaging.slack.board_mapping = {"C123": "general"}
     save_calls: list[object] = []
 
     monkeypatch.setattr("server.slack_channel_sync.get_shared_dir", lambda: shared_dir)

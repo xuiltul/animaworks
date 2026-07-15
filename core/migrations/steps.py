@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import shutil
+from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
 from typing import Any
@@ -134,6 +135,80 @@ def step_credentials_migration(data_dir: Path, dry_run: bool, verbose: bool) -> 
     except Exception as exc:
         logger.exception("step_credentials_migration failed")
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
+def step_vault_reencrypt(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Back up and re-encrypt every vault entry, rolling back on failure."""
+    vault_path = data_dir / "vault.json"
+    key_path = data_dir / "vault.key"
+    if not vault_path.is_file():
+        return StepResult(changed=0, skipped=1, details=["vault.json not found"])
+    if dry_run:
+        return StepResult(
+            changed=1,
+            skipped=0,
+            details=["Would back up vault files and re-encrypt all entries"],
+        )
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    vault_backup = vault_path.with_name(f"{vault_path.name}.bak-{timestamp}")
+    key_backup = key_path.with_name(f"{key_path.name}.bak-{timestamp}")
+    key_existed = key_path.is_file()
+    details: list[str] = []
+
+    shutil.copy2(vault_path, vault_backup)
+    details.append(f"Backed up {vault_path.name} to {vault_backup.name}")
+    if key_existed:
+        shutil.copy2(key_path, key_backup)
+        details.append(f"Backed up {key_path.name} to {key_backup.name}")
+
+    try:
+        from core.config.vault import VaultError, VaultManager
+
+        original = json.loads(vault_path.read_text(encoding="utf-8"))
+        if not isinstance(original, dict):
+            raise VaultError("vault.json root must be an object")
+
+        vault = VaultManager(data_dir)
+        if not key_existed:
+            if not vault.generate_key():
+                raise VaultError("Vault key generation is unavailable")
+        elif vault._load_key() is None:
+            raise VaultError("Existing vault key could not be loaded")
+
+        encrypted: dict[str, dict[str, str]] = {}
+        entry_count = 0
+        for section, entries in original.items():
+            if not isinstance(entries, dict):
+                raise VaultError(f"Vault section {section!r} must be an object")
+            encrypted_section: dict[str, str] = {}
+            for key, value in entries.items():
+                if not isinstance(value, str):
+                    raise VaultError(f"Vault entry {section!r}/{key!r} must be a string")
+                encrypted_section[key] = vault.encrypt(value)
+                entry_count += 1
+            encrypted[section] = encrypted_section
+
+        vault.save_vault(encrypted)
+        persisted = json.loads(vault_path.read_text(encoding="utf-8"))
+        if persisted != encrypted:
+            raise VaultError("Persisted vault content did not match encrypted data")
+        for section, entries in persisted.items():
+            for key, ciphertext in entries.items():
+                if vault.decrypt(ciphertext) != original[section][key]:
+                    raise VaultError(f"Round-trip verification failed for {section!r}/{key!r}")
+
+        details.append(f"Re-encrypted and verified {entry_count} vault entries")
+        return StepResult(changed=1, skipped=0, details=details)
+    except Exception as exc:
+        shutil.copy2(vault_backup, vault_path)
+        if key_existed:
+            shutil.copy2(key_backup, key_path)
+        else:
+            key_path.unlink(missing_ok=True)
+        details.append("Rolled back vault.json and vault.key")
+        logger.exception("step_vault_reencrypt failed; rollback complete")
+        return StepResult(changed=0, skipped=0, details=details, error=str(exc))
 
 
 def step_enable_skill_catalog_router(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
@@ -1090,6 +1165,12 @@ def register_all_steps(runner: Any) -> None:
             "model_config_to_status", "Model config → status.json", "structural", step_model_config_to_status
         ),
         MigrationStep("credentials_migration", "Credentials → vault", "structural", step_credentials_migration),
+        MigrationStep(
+            "vault_reencrypt_20260715",
+            "Re-encrypt vault entries with a verified key",
+            "structural",
+            step_vault_reencrypt,
+        ),
         MigrationStep(
             "enable_skill_catalog_router",
             "Enable skill catalog router in config",

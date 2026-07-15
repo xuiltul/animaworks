@@ -469,7 +469,10 @@ class SlackChannelSync:
             from core.config.models import load_config, save_config
 
             cfg = load_config()
-            cfg.external_messaging.slack.board_mapping = dict(self.board_mapping)
+            new_mapping = dict(self.board_mapping)
+            if cfg.external_messaging.slack.board_mapping == new_mapping:
+                return
+            cfg.external_messaging.slack.board_mapping = new_mapping
             save_config(cfg)
         except Exception:
             logger.warning("Failed to persist board_mapping to config", exc_info=True)
