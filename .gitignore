@@ -16,6 +16,8 @@ build/
 # Project
 site/
 site-docs/
+.plan-*.md
+.report-*.md
 .env
 demo/.env
 tmp/
