@@ -74,16 +74,17 @@ def _review_payload(
     author: str = "reviewer",
     review_id: int = 202,
     state: str = "changes_requested",
+    body: str = "The race remains.",
 ) -> dict[str, Any]:
     return {
         "action": action,
         "repository": {"full_name": REPO},
-        "pull_request": {"number": 17},
+        "pull_request": {"number": 17, "head": {"sha": SHA_1}},
         "review": {
             "id": review_id,
             "user": {"login": author},
             "state": state,
-            "body": "The race remains.",
+            "body": body,
             "html_url": f"https://github.test/reviews/{review_id}",
         },
     }
@@ -313,14 +314,28 @@ class TestReviewAndCommentDispatch:
             await manager.stop()
         assert len(sends) == 1
 
-    async def test_bot_review_is_ignored(self, gateway) -> None:
+    @pytest.mark.parametrize("verdict", ["HOLD", "PASS"])
+    async def test_bot_review_is_forwarded_as_frc_result(self, gateway, verdict: str) -> None:
         manager, sends, state_file = gateway
-        await manager.handle_event(
-            "pull_request_review",
-            _review_payload(author=BOT_LOGIN),
+        payload = _review_payload(
+            author=BOT_LOGIN,
+            body=f"{verdict}\n\nFRC review details here.",
         )
-        assert sends == []
-        assert not state_file.exists()
+        await manager.handle_event("pull_request_review", payload)
+        await manager.handle_event("pull_request_review", payload)
+        assert len(sends) == 1
+        assert sends[0]["to"] == "rin"
+        assert sends[0]["key"] == "review:202"
+        assert sends[0]["kind"] == "frc-result"
+        content = sends[0]["content"]
+        assert "【FRC結果検知】" in content
+        assert f"- 判定: {verdict}" in content
+        assert f"{REPO}#17" in content
+        assert SHA_1 in content
+        assert "https://github.test/reviews/202" in content
+        assert "FRC review details here." in content
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        assert "review:202" in state["seen_comments"]
 
     @pytest.mark.parametrize(
         ("event", "dedupe_key"),

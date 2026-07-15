@@ -267,13 +267,23 @@ class GitHubWebhookManager:
             return
         review = payload.get("review") or {}
         author = str((review.get("user") or {}).get("login") or "")
-        if self._is_bot(author):
-            return
         review_id = review.get("id")
         if review_id is None:
             return
         pr = payload.get("pull_request") or {}
         number = int(pr.get("number") or 0)
+        if self._is_bot(author):
+            # bot自身のreviewはFRC判定(HOLD/PASS)の投稿なので、除外せずrinへ転送する
+            await asyncio.to_thread(
+                self._dispatch_frc_result_once,
+                f"review:{review_id}",
+                repo,
+                number,
+                str((pr.get("head") or {}).get("sha") or ""),
+                str(review.get("body") or ""),
+                str(review.get("html_url") or ""),
+            )
+            return
         state = str(review.get("state") or "").upper()
         emphasis = "【CHANGES_REQUESTED】 " if state == "CHANGES_REQUESTED" else ""
         await asyncio.to_thread(
@@ -337,6 +347,40 @@ class GitHubWebhookManager:
                 "に従って実施してください。"
             )
             self._send(self._config.dispatcher_anima, content, "comment", dedupe_key)
+            seen[dedupe_key] = _now_iso()
+
+    def _dispatch_frc_result_once(
+        self,
+        dedupe_key: str,
+        repo: str,
+        number: int,
+        head_sha: str,
+        body: str,
+        url: str,
+    ) -> None:
+        with locked_dispatch_state(self._require_state_file()) as state:
+            seen = state["seen_comments"]
+            if dedupe_key in seen:
+                return
+            head = body.lstrip().upper()
+            if head.startswith("HOLD"):
+                verdict = "HOLD"
+            elif head.startswith("PASS"):
+                verdict = "PASS"
+            else:
+                verdict = "判定不明"
+            summary = body.replace("\n", " ")[:200]
+            content = (
+                "【FRC結果検知】\n\n"
+                f"- 判定: {verdict}\n"
+                f"- PR: {repo}#{number}\n"
+                f"- HEAD: {head_sha}\n"
+                f"- URL: {url}\n"
+                f"- 本文冒頭: {summary}\n\n"
+                "HOLDの場合は procedures/pr-event-detection-patrol.md に従って"
+                "natsumeへの修正ディスパッチを実施してください。"
+            )
+            self._send(self._config.dispatcher_anima, content, "frc-result", dedupe_key)
             seen[dedupe_key] = _now_iso()
 
     async def _handle_workflow_run(self, repo: str, payload: dict[str, Any]) -> None:
