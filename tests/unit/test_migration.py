@@ -167,6 +167,60 @@ class TestMigrationSteps:
         (d / "state").mkdir()
         return d
 
+    def test_step_vault_reencrypt_generates_key_and_encrypts_plaintext(self, data_dir: Path) -> None:
+        from core.config.vault import VaultManager
+        from core.migrations.steps import step_vault_reencrypt
+
+        original = {
+            "shared": {"API_TOKEN": "plain-token"},
+            "sakura": {"SERVICE_KEY": "plain-service-key"},
+        }
+        (data_dir / "vault.json").write_text(json.dumps(original), encoding="utf-8")
+
+        result = step_vault_reencrypt(data_dir, dry_run=False, verbose=True)
+
+        assert result.error is None
+        assert result.changed == 1
+        assert (data_dir / "vault.key").is_file()
+        encrypted = json.loads((data_dir / "vault.json").read_text(encoding="utf-8"))
+        assert encrypted["shared"]["API_TOKEN"] != original["shared"]["API_TOKEN"]
+        assert encrypted["sakura"]["SERVICE_KEY"] != original["sakura"]["SERVICE_KEY"]
+        vault = VaultManager(data_dir)
+        assert vault.get("shared", "API_TOKEN") == original["shared"]["API_TOKEN"]
+        assert vault.get("sakura", "SERVICE_KEY") == original["sakura"]["SERVICE_KEY"]
+        assert len(list(data_dir.glob("vault.json.bak-*"))) == 1
+
+    def test_step_vault_reencrypt_rolls_back_on_verification_failure(self, data_dir: Path) -> None:
+        from core.config.vault import VaultManager
+        from core.migrations.steps import step_vault_reencrypt
+
+        original_text = json.dumps({"shared": {"API_TOKEN": "plain-token"}})
+        (data_dir / "vault.json").write_text(original_text, encoding="utf-8")
+
+        with patch.object(VaultManager, "decrypt", return_value="corrupted"):
+            result = step_vault_reencrypt(data_dir, dry_run=False, verbose=True)
+
+        assert result.error is not None
+        assert "Round-trip verification failed" in result.error
+        assert (data_dir / "vault.json").read_text(encoding="utf-8") == original_text
+        assert not (data_dir / "vault.key").exists()
+
+    def test_step_vault_reencrypt_backs_up_existing_key(self, data_dir: Path) -> None:
+        from core.config.vault import VaultManager
+        from core.migrations.steps import step_vault_reencrypt
+
+        vault = VaultManager(data_dir)
+        vault.generate_key()
+        original_key = vault.key_path.read_bytes()
+        vault.save_vault({"shared": {"API_TOKEN": "plain-token"}})
+
+        result = step_vault_reencrypt(data_dir, dry_run=False, verbose=True)
+
+        assert result.error is None
+        key_backups = list(data_dir.glob("vault.key.bak-*"))
+        assert len(key_backups) == 1
+        assert key_backups[0].read_bytes() == original_key
+
     def test_step_current_task_rename(self, data_dir: Path) -> None:
         from core.migrations.steps import step_current_task_rename
 

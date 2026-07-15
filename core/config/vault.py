@@ -28,6 +28,10 @@ from typing import Any
 
 logger = logging.getLogger("animaworks.config.vault")
 
+_missing_key_log_lock = threading.Lock()
+_missing_key_error_logged = False
+_missing_key_decrypt_warned = False
+
 # ── PyNaCl import guard ──────────────────────────────────────────────────────
 
 try:
@@ -126,6 +130,9 @@ class VaultManager:
         Returns:
             True if the key was generated, False if PyNaCl is missing.
         """
+        if self.has_key:
+            raise VaultError(f"Vault key already exists: {self._key_path}")
+
         if not _HAS_NACL:
             logger.warning(
                 "PyNaCl is not installed; vault key generation skipped. Install with: pip install PyNaCl>=1.5.0"
@@ -151,7 +158,14 @@ class VaultManager:
         """
         if self._private_key is not None:
             return self._private_key
-        if not _HAS_NACL or not self._key_path.is_file():
+        if not _HAS_NACL:
+            return None
+        if not self._key_path.is_file():
+            global _missing_key_error_logged
+            with _missing_key_log_lock:
+                if not _missing_key_error_logged:
+                    logger.error("Vault key file not found: %s", self._key_path)
+                    _missing_key_error_logged = True
             return None
         try:
             raw = base64.b64decode(self._key_path.read_text(encoding="utf-8").strip())
@@ -202,7 +216,13 @@ class VaultManager:
 
         sk = self._load_key()
         if sk is None:
-            logger.warning("Vault key not found; returning value as-is")
+            global _missing_key_decrypt_warned
+            with _missing_key_log_lock:
+                if not _missing_key_decrypt_warned:
+                    logger.warning("Vault key not found; returning value as-is")
+                    _missing_key_decrypt_warned = True
+                else:
+                    logger.debug("Vault key not found; returning value as-is")
             return ciphertext
 
         try:

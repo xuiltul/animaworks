@@ -22,7 +22,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
 
@@ -75,15 +74,15 @@ class TestKeyGeneration:
         decoded = base64.b64decode(raw)
         assert len(decoded) == 32  # Curve25519 private key = 32 bytes
 
-    def test_generate_key_idempotent(self, vault, data_dir: Path):
+    def test_generate_key_refuses_to_overwrite(self, vault, data_dir: Path):
         key1 = vault.key_path.read_text(encoding="utf-8").strip()
-        from core.config.vault import VaultManager
+        from core.config.vault import VaultError, VaultManager
 
         vm2 = VaultManager(data_dir)
-        vm2.generate_key()
+        with pytest.raises(VaultError, match="already exists"):
+            vm2.generate_key()
         key2 = vm2.key_path.read_text(encoding="utf-8").strip()
-        # Second generate overwrites — keys differ
-        assert key1 != key2
+        assert key1 == key2
 
 
 # ── Encrypt / Decrypt round-trip ─────────────────────────────────────────────
@@ -332,6 +331,24 @@ class TestNoKeyFallback:
     def test_decrypt_without_key_returns_as_is(self, vault_no_key):
         result = vault_no_key.decrypt("some-value")
         assert result == "some-value"
+
+    def test_decrypt_missing_key_warns_once_per_process(self, data_dir: Path, caplog, monkeypatch):
+        import core.config.vault as vault_module
+
+        monkeypatch.setattr(vault_module, "_missing_key_error_logged", False)
+        monkeypatch.setattr(vault_module, "_missing_key_decrypt_warned", False)
+        first = vault_module.VaultManager(data_dir)
+        second = vault_module.VaultManager(data_dir)
+
+        first.decrypt("first-value")
+        second.decrypt("second-value")
+
+        warning_messages = [
+            record.message
+            for record in caplog.records
+            if record.levelname == "WARNING" and "returning value as-is" in record.message
+        ]
+        assert warning_messages == ["Vault key not found; returning value as-is"]
 
 
 # ── PyNaCl not installed fallback ────────────────────────────────────────────
