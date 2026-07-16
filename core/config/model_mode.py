@@ -5,7 +5,7 @@
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 
-"""Model execution mode resolution (S/C/D/G/A/B) from model name patterns."""
+"""Model execution mode resolution (S/C/D/G/X/A/B) from model name patterns."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ logger = logging.getLogger("animaworks.config")
 # but the resolver sorts by specificity automatically.
 #
 # Mode values: S = SDK (Agent SDK / Claude Code), C = Codex (Codex CLI wrapper),
-#              D = Cursor Agent CLI, G = Gemini CLI,
+#              D = Cursor Agent CLI, G = Gemini CLI, X = Grok Build CLI,
 #              A = Autonomous (tool_use), B = Basic (no tool_use)
 #
 # IMPORTANT: When status.json omits "execution_mode", resolve_execution_mode()
@@ -37,6 +37,8 @@ DEFAULT_MODEL_MODE_PATTERNS: dict[str, str] = {
     # ── C: Codex SDK (Codex CLI wrapper) ─────────────────
     "codex/*": "C",
     "openai-codex/*": "C",
+    # ── X: Grok Build CLI ────────────────────────────────
+    "grok/*": "X",
     # ── D: Cursor Agent CLI ──────────────────────────────
     "cursor/*": "D",
     # ── G: Gemini CLI ────────────────────────────────────
@@ -134,13 +136,16 @@ KNOWN_MODELS: list[dict[str, str]] = [
     {"name": "codex/o4-mini", "mode": "C", "note": "Codex CLI経由・高速"},
     {"name": "codex/o3", "mode": "C", "note": "Codex CLI経由・推論"},
     {"name": "codex/gpt-4.1", "mode": "C", "note": "Codex CLI経由・コーディング"},
+    # ── Grok Build (Mode X) ─────────────────────────────────────────────────
+    {"name": "grok/grok-4.5", "mode": "X", "note": "Grok Build CLI経由・500Kコンテキスト"},
+    {"name": "grok/grok-composer-2.5-fast", "mode": "X", "note": "Grok Build CLI経由・高速"},
     # ── Ollama Local (Mode B: tool_use 非対応) ────────────────────────────────
     {"name": "ollama/gemma3:4b", "mode": "B", "note": "軽量ローカル"},
     {"name": "ollama/gemma3:12b", "mode": "B", "note": "中型ローカル"},
 ]
 
 # ── Legacy mode value mapping ──────────────────────────────
-# Maps legacy A1/A1F/A2 and text-based values to canonical S/C/D/G/A/B scheme.
+# Maps legacy A1/A1F/A2 and text-based values to canonical S/C/D/G/X/A/B scheme.
 _LEGACY_MODE_MAP: dict[str, str] = {
     "autonomous": "A",
     "assisted": "B",
@@ -272,17 +277,17 @@ def _match_pattern_table(
 
 
 def _normalise_mode(raw: str) -> str:
-    """Normalise a mode value to S/C/D/G/A/B, applying legacy mapping if needed.
+    """Normalise a mode value to S/C/D/G/X/A/B, applying legacy mapping if needed.
 
     Accepts legacy values (``"A1"``, ``"A2"``, ``"autonomous"``, etc.) and
-    canonical values (``"S"``, ``"C"``, ``"D"``, ``"G"``, ``"A"``, ``"B"``).
+    canonical values (``"S"``, ``"C"``, ``"D"``, ``"G"``, ``"X"``, ``"A"``, ``"B"``).
     """
     lower = raw.strip().lower()
     mapped = _LEGACY_MODE_MAP.get(lower)
     if mapped:
         return mapped
     upper = raw.strip().upper()
-    if upper in ("S", "C", "A", "B", "D", "G"):
+    if upper in ("S", "C", "A", "B", "D", "G", "X"):
         return upper
     # Unrecognised — return as-is (upper) for forward compat
     logger.warning("Unrecognised execution mode '%s'; passing through as '%s'", raw, upper)
@@ -342,7 +347,8 @@ def resolve_execution_mode(
 
     Returns:
         One of ``"S"`` (SDK), ``"C"`` (Codex), ``"D"`` (Cursor Agent),
-        ``"G"`` (Gemini CLI), ``"A"`` (Autonomous), or ``"B"`` (Basic).
+        ``"G"`` (Gemini CLI), ``"X"`` (Grok Build CLI),
+        ``"A"`` (Autonomous), or ``"B"`` (Basic).
     """
     # 1. Per-anima explicit override
     if explicit_override:
@@ -365,7 +371,7 @@ def resolve_execution_mode(
     # 4. Code defaults
     result = _match_pattern_table(model_name, DEFAULT_MODEL_MODE_PATTERNS)
     if result is not None:
-        return result  # Already S/C/D/G/A/B in the table
+        return result  # Already S/C/D/G/X/A/B in the table
 
     return "B"  # unknown model → safe side
 

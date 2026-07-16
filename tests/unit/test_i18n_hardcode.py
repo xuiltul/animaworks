@@ -89,7 +89,7 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     # Japanese day-of-week names for cron migration + permissions.md section headers for migration
     "core/config/migrate.py": 9,
     # model catalog "note" descriptions (最高性能・推奨, etc.)
-    "core/config/model_mode.py": 28,
+    "core/config/model_mode.py": 30,
     # cron instruction prompt to Anima
     "core/prompt/messaging.py": 2,
     "core/prompt/org_context.py": 3,

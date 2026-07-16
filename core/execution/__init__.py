@@ -14,6 +14,7 @@ Each engine implements one execution mode:
   - ``CodexSDKExecutor``  (C): Codex SDK -- Codex CLI wrapper for OpenAI models
   - ``CursorAgentExecutor`` (D): Cursor Agent CLI -- cursor-agent subprocess
   - ``GeminiCLIExecutor`` (G): Gemini CLI -- gemini subprocess with stream-json
+  - ``GrokCLIExecutor`` (X): Grok Build CLI -- ACP subprocess over stdio
   - ``LiteLLMExecutor``   (A): LiteLLM + tool_use loop -- any model with tool support
   - ``AssistedExecutor``  (B):  1-shot LLM call -- framework handles memory I/O
   - ``AnthropicFallbackExecutor``: Anthropic SDK direct -- fallback when Agent SDK unavailable
@@ -44,6 +45,12 @@ try:
 except ImportError:  # pragma: no cover
     GeminiCLIExecutor = None  # type: ignore[assignment,misc]
 
+# GrokCLIExecutor requires grok CLI (optional).
+try:
+    from core.execution.grok_cli import GrokCLIExecutor
+except ImportError:  # pragma: no cover
+    GrokCLIExecutor = None  # type: ignore[assignment,misc]
+
 from core.execution.anthropic_fallback import AnthropicFallbackExecutor
 from core.execution.assisted import AssistedExecutor
 from core.execution.base import BaseExecutor, ExecutionResult
@@ -58,5 +65,6 @@ __all__ = [
     "CursorAgentExecutor",
     "ExecutionResult",
     "GeminiCLIExecutor",
+    "GrokCLIExecutor",
     "LiteLLMExecutor",
 ]

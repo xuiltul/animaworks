@@ -10,6 +10,9 @@
   "codex/gpt-4.1":           { "mode": "C", "context_window": 1000000 },
   "codex/*":                 { "mode": "C", "context_window": 128000 },
 
+  "grok/grok-4.5":          { "mode": "X", "context_window": 500000 },
+  "grok/*":                 { "mode": "X", "context_window": 500000 },
+
   "cursor/*":                { "mode": "D", "context_window": 1000000 },
 
   "gemini/*":                { "mode": "G", "context_window": 1000000 },

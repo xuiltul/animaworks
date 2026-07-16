@@ -31,6 +31,7 @@ from core.i18n import t
 from core.paths import get_animas_dir
 from core.platform.claude_code import is_claude_code_available
 from core.platform.codex import is_codex_cli_available, is_codex_login_available
+from core.platform.grok import is_grok_authenticated
 
 logger = logging.getLogger("animaworks.routes.config")
 
@@ -330,17 +331,18 @@ def create_config_router() -> APIRouter:
                     if m not in seen:
                         models.append({"id": m, "label": m, "credential": "google"})
                         seen.add(m)
-            elif provider == "grok":
-                for m in ("grok/grok-4.5", "grok/grok-composer-2.5-fast"):
-                    if m not in seen:
-                        models.append({"id": m, "label": m, "credential": "grok"})
-                        seen.add(m)
-
         # Codex CLI models (standalone — no openai credential entry needed)
         if is_codex_login_available():
             for m in _known_codex_models():
                 if m not in seen:
                     models.append({"id": m, "label": m, "credential": "codex"})
+                    seen.add(m)
+
+        # Grok Build CLI models (standalone — CLI OAuth, no credential entry needed)
+        if is_grok_authenticated():
+            for m in ("grok/grok-4.5", "grok/grok-composer-2.5-fast"):
+                if m not in seen:
+                    models.append({"id": m, "label": m, "credential": "grok"})
                     seen.add(m)
 
         # nanoGPT models (dynamic fetch)

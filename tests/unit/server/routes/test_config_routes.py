@@ -245,17 +245,14 @@ class TestOpenAIAuthSettings:
         assert "openai-codex/gpt-5.3-codex" not in ids
 
     async def test_available_models_include_grok_build_models(self):
-        config = AnimaWorksConfig(
-            credentials={
-                "grok": CredentialConfig(api_key="test-grok-key"),
-            }
-        )
+        config = AnimaWorksConfig()
         app = _make_test_app()
         transport = ASGITransport(app=app)
 
         with (
             patch("server.routes.config_routes.load_config", return_value=config),
             patch("server.routes.config_routes.is_codex_login_available", return_value=False),
+            patch("server.routes.config_routes.is_grok_authenticated", return_value=True),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/api/system/available-models")

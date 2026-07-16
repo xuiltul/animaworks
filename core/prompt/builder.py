@@ -59,7 +59,7 @@ from core.time_utils import now_local
 logger = logging.getLogger("animaworks.prompt_builder")
 
 # Re-exported constants
-_MCP_MODES = frozenset({"s", "c", "d", "g"})
+_MCP_MODES = frozenset({"s", "c", "d", "g", "x"})
 _CURRENT_STATE_MAX_CHARS = 3000
 
 # ── Prompt tier constants ─────────────────────────────────────
