@@ -222,12 +222,15 @@ class GrokCLIExecutor(BaseExecutor):
                 "name": "aw",
                 "command": sys.executable,
                 "args": ["-m", "core.mcp.server"],
-                "env": {
-                    "ANIMAWORKS_ANIMA_DIR": str(self._anima_dir),
-                    "ANIMAWORKS_PROJECT_DIR": str(PROJECT_DIR),
-                    "PYTHONPATH": str(PROJECT_DIR),
-                    "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                },
+                # ACP expects EnvVariable objects, not a plain mapping
+                # (a dict fails schema validation: "did not match any variant
+                # of untagged enum McpServer").
+                "env": [
+                    {"name": "ANIMAWORKS_ANIMA_DIR", "value": str(self._anima_dir)},
+                    {"name": "ANIMAWORKS_PROJECT_DIR", "value": str(PROJECT_DIR)},
+                    {"name": "PYTHONPATH", "value": str(PROJECT_DIR)},
+                    {"name": "PATH", "value": os.environ.get("PATH", "/usr/bin:/bin")},
+                ],
             }
         ]
 

@@ -230,12 +230,14 @@ class TestACPProtocol:
         aw = new["mcpServers"][0]
         assert aw["name"] == "aw"
         assert aw["args"] == ["-m", "core.mcp.server"]
-        assert set(aw["env"]) == {
+        # ACP requires EnvVariable objects ([{name, value}]), not a mapping
+        assert {entry["name"] for entry in aw["env"]} == {
             "ANIMAWORKS_ANIMA_DIR",
             "ANIMAWORKS_PROJECT_DIR",
             "PYTHONPATH",
             "PATH",
         }
+        assert all(isinstance(entry["value"], str) for entry in aw["env"])
         assert requests[2]["params"] == {
             "sessionId": "session-new",
             "prompt": [{"type": "text", "text": "hello"}],
