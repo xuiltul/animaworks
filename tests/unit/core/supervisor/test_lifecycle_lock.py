@@ -267,3 +267,77 @@ class TestRespawnDisabledCleanSkip:
         assert name not in supervisor._permanently_failed
         assert name not in supervisor._failure_reasons
         supervisor.stop_anima.assert_awaited_once_with(name)
+
+
+class TestShutdownDuringInFlightStart:
+    """shutdown_all racing an in-flight start must not orphan the runner."""
+
+    @pytest.mark.asyncio
+    async def test_shutdown_during_slow_start_stops_and_unregisters(
+        self,
+        supervisor: ProcessSupervisor,
+    ) -> None:
+        """_shutdown set while handle.start() awaits → handle stopped, not registered."""
+        name = "test-anima"
+        _write_status(supervisor.animas_dir, name, enabled=True)
+
+        start_entered = asyncio.Event()
+        allow_start_finish = asyncio.Event()
+
+        async def slow_start(*_args, **_kwargs):
+            start_entered.set()
+            await allow_start_finish.wait()
+
+        with patch("core.supervisor.manager.ProcessHandle") as MockHandle:
+            mock_handle = AsyncMock()
+            mock_handle.start = AsyncMock(side_effect=slow_start)
+            mock_handle.stop = AsyncMock()
+            mock_handle.get_pid = MagicMock(return_value=222)
+            MockHandle.return_value = mock_handle
+
+            start_task = asyncio.create_task(supervisor.start_anima(name))
+            await asyncio.wait_for(start_entered.wait(), timeout=2.0)
+
+            # shutdown_all's snapshot happens while start is suspended: the
+            # process is not yet registered, so only the flag protects us.
+            supervisor._shutdown = True
+            allow_start_finish.set()
+            await start_task
+
+        assert name not in supervisor.processes
+        mock_handle.stop.assert_awaited_once()
+
+
+class TestDisableMidRespawnCountRollback:
+    """_restart_counts must not stay incremented on a disabled clean-skip."""
+
+    @pytest.mark.asyncio
+    async def test_disable_mid_respawn_rolls_back_restart_count(
+        self,
+        supervisor: ProcessSupervisor,
+    ) -> None:
+        """Disable lands between count increment and respawn → count rolled back."""
+        from core.supervisor.process_handle import ProcessState
+
+        name = "test-anima"
+        _write_status(supervisor.animas_dir, name, enabled=True)
+        supervisor.restart_policy.max_retries = 3
+        supervisor._maybe_repair_rag_before_restart = AsyncMock(return_value=False)
+
+        old_handle = MagicMock()
+        old_handle.state = ProcessState.FAILED
+
+        async def respawn_with_disable(anima_name: str):
+            # Simulate disable arriving while respawn is in flight; the
+            # production path then clean-skips and returns None.
+            _write_status(supervisor.animas_dir, anima_name, enabled=False)
+            return None
+
+        supervisor._respawn_anima_transaction = AsyncMock(side_effect=respawn_with_disable)
+
+        with patch("core.supervisor.manager.asyncio.sleep", new_callable=AsyncMock):
+            await supervisor._handle_process_failure(name, old_handle)
+
+        assert name not in supervisor._restart_counts
+        assert name not in supervisor._permanently_failed
+        assert name not in supervisor._restarting

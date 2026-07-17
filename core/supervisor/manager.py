@@ -367,6 +367,13 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
 
                 try:
                     await handle.start()
+                    # Re-check after the await: shutdown_all may have taken its
+                    # stop snapshot while we were starting. No await between
+                    # this check and registration, so the window is closed.
+                    if self._shutdown:
+                        logger.info("Shutdown during start; stopping %s", anima_name)
+                        await handle.stop(timeout=10.0, drain_streams=False)
+                        return
                     self.processes[anima_name] = handle
                     self._start_fail_counts.pop(anima_name, None)
                     self._start_failed_times.pop(anima_name, None)

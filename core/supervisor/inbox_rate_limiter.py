@@ -52,6 +52,8 @@ def _read_anima_enabled(anima_dir: Path) -> bool:
         return True
     try:
         data = json.loads(status_file.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return True
         return bool(data.get("enabled", True))
     except (json.JSONDecodeError, OSError):
         return True

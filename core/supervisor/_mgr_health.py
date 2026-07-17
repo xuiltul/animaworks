@@ -590,8 +590,13 @@ class HealthMixin:
                 )
             else:
                 # Disabled mid-respawn is a clean skip (respawn returns None
-                # without marking permanently failed).
+                # without marking permanently failed). Roll back the count
+                # increment so a later re-enable starts from a clean slate.
                 if not self.read_anima_enabled(self.animas_dir / anima_name):
+                    if count == 0:
+                        self._restart_counts.pop(anima_name, None)
+                    else:
+                        self._restart_counts[anima_name] = count
                     logger.info(
                         "Restart skipped (anima disabled): %s",
                         anima_name,
@@ -641,6 +646,8 @@ class HealthMixin:
             return True  # Backward compatibility: no file = enabled
         try:
             data = json.loads(status_file.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return True  # Malformed (non-object) status = enabled
             return bool(data.get("enabled", True))
         except (json.JSONDecodeError, OSError):
             return True  # Treat unreadable file as enabled

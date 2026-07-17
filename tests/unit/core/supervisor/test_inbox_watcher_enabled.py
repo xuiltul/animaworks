@@ -226,3 +226,31 @@ class TestDeferredTriggerEnabledGuard:
 
         limiter._anima.process_inbox_message.assert_not_awaited()
         assert limiter._pending_trigger is False
+
+
+class TestReadAnimaEnabledMalformed:
+    """Non-object status.json must default to enabled without raising."""
+
+    def test_list_status_json_defaults_true(self, tmp_path: Path) -> None:
+        from core.supervisor.inbox_rate_limiter import _read_anima_enabled
+
+        anima_dir = tmp_path / "alice"
+        anima_dir.mkdir()
+        (anima_dir / "status.json").write_text("[]", encoding="utf-8")
+        assert _read_anima_enabled(anima_dir) is True
+
+    def test_null_status_json_defaults_true(self, tmp_path: Path) -> None:
+        from core.supervisor.inbox_rate_limiter import _read_anima_enabled
+
+        anima_dir = tmp_path / "alice"
+        anima_dir.mkdir()
+        (anima_dir / "status.json").write_text("null", encoding="utf-8")
+        assert _read_anima_enabled(anima_dir) is True
+
+    def test_manager_read_anima_enabled_non_dict_defaults_true(self, tmp_path: Path) -> None:
+        from core.supervisor.manager import ProcessSupervisor
+
+        anima_dir = tmp_path / "alice"
+        anima_dir.mkdir()
+        (anima_dir / "status.json").write_text("[1, 2]", encoding="utf-8")
+        assert ProcessSupervisor.read_anima_enabled(anima_dir) is True
