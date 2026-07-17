@@ -158,6 +158,7 @@ class TestHandleProcessFailureSetsRestarting:
         from core.supervisor.manager import ProcessSupervisor
 
         supervisor = ProcessSupervisor.__new__(ProcessSupervisor)
+        supervisor._shutdown = False
         supervisor._restarting = set()
         supervisor._restart_counts = {}
         supervisor.animas_dir = tmp_path / "animas"
