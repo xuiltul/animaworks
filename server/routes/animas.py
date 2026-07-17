@@ -442,12 +442,12 @@ def create_animas_router() -> APIRouter:
         existing["enabled"] = False
         status_file.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-        # Stop immediately
+        # Always call stop_anima (no-op if not running). Under lifecycle lock
+        # this waits for an in-flight start, then stops the new process.
         supervisor = request.app.state.supervisor
-        if name in supervisor.processes:
-            await supervisor.stop_anima(name)
-            if name in request.app.state.anima_names:
-                request.app.state.anima_names.remove(name)
+        await supervisor.stop_anima(name)
+        if name in request.app.state.anima_names:
+            request.app.state.anima_names.remove(name)
 
         return {"name": name, "enabled": False}
 
@@ -501,21 +501,20 @@ def create_animas_router() -> APIRouter:
         """Start a stopped anima process."""
         supervisor = request.app.state.supervisor
         anima_names = request.app.state.anima_names
+        animas_dir = request.app.state.animas_dir
+        anima_dir = animas_dir / name
 
-        if name not in anima_names:
+        # Disk existence (same style as enable/disable), not anima_names list.
+        if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
             raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
 
         # Refuse start while disabled; enable API writes enabled=true then starts.
         from core.supervisor.manager import ProcessSupervisor
 
-        anima_dir = request.app.state.animas_dir / name
         if not ProcessSupervisor.read_anima_enabled(anima_dir):
             raise HTTPException(
                 status_code=409,
-                detail=(
-                    f"Anima '{name}' is disabled. "
-                    f"Call POST /api/animas/{name}/enable first."
-                ),
+                detail=(f"Anima '{name}' is disabled. Call POST /api/animas/{name}/enable first."),
             )
 
         proc_status = supervisor.get_process_status(name)
@@ -524,6 +523,8 @@ def create_animas_router() -> APIRouter:
             return {"status": "already_running", "current_status": current}
 
         await supervisor.start_anima(name)
+        if name not in anima_names:
+            anima_names.append(name)
         return {"status": "started", "name": name}
 
     @router.post("/animas/{name}/stop")
