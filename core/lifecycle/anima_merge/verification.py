@@ -152,7 +152,16 @@ def source_reference_report(data_dir: Path, source: str) -> dict[str, Any]:
             continue
         relative = path.relative_to(data_dir).as_posix()
         checked.append(relative)
-        _scan_json(_read_json(path), source, relative, residual, allowed)
+        # notification_textは配信済み通知の文面(不変履歴)。routing上意味を持つのは
+        # anima/channel等のフィールドのみなので、文面中の名前言及は残存参照として扱わない。
+        _scan_json(
+            _read_json(path),
+            source,
+            relative,
+            residual,
+            allowed,
+            allow=lambda _location, key: key == "notification_text",
+        )
 
     taskboard = data_dir / "shared" / "taskboard.sqlite3"
     if taskboard.is_file():

@@ -1390,3 +1390,20 @@ def test_merge_episodes_records_identical_files_as_deduplicated(tmp_path: Path) 
         if s.startswith("episodes/") and s not in set(deduped) and s.lower().endswith(".md")
     ]
     assert selected == []
+
+
+def test_source_reference_report_allows_notification_text_history(tmp_path: Path) -> None:
+    (tmp_path / "run").mkdir(parents=True)
+    _write(
+        tmp_path / "run" / "notification_map.json",
+        json.dumps(
+            {
+                "1.0": {"anima": "target", "channel": "C1", "notification_text": "source が報告しました"},
+                "2.0": {"anima": "source", "channel": "C1", "notification_text": "ok"},
+            }
+        ),
+    )
+    report = source_reference_report(tmp_path, "source")
+    residual = report["residual_references"]
+    assert not any("notification_text" in ref for ref in residual)
+    assert any("2.0" in ref and "anima" in ref for ref in residual)
