@@ -4,14 +4,18 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Resumable Anima merge lifecycle through target index rebuilding."""
+"""Resumable Anima merge lifecycle through tombstone finalization."""
 
-from .journal import MergeJournal, MergePhase
+from .finalize import AnimaMergeFinalizeService, FinalizeResult
+from .journal import FinalizePhase, MergeJournal, MergePhase
 from .service import AnimaMergeError, AnimaMergeService, MergeResult
 
 __all__ = [
+    "AnimaMergeFinalizeService",
     "AnimaMergeError",
     "AnimaMergeService",
+    "FinalizePhase",
+    "FinalizeResult",
     "MergeJournal",
     "MergePhase",
     "MergeResult",

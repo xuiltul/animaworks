@@ -14,6 +14,21 @@ import pytest
 
 from core.supervisor.ipc import IPCClient, IPCRequest
 
+
+@pytest.fixture(autouse=True)
+def _isolate_process_global_tool_executors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep complete runner lifecycles from leaking shutdown across tests.
+
+    A real worker exits after ``AnimaRunner._cleanup`` retires the global Mode
+    A pools. This module runs multiple worker lifecycles inside one pytest
+    process, while the shutdown contract itself has a dedicated unit test.
+    """
+
+    monkeypatch.setattr(
+        "core.execution._litellm_tools.shutdown_tool_executors",
+        MagicMock(),
+    )
+
 # ── AnimaRunner ping readiness ───────────────────────────
 
 

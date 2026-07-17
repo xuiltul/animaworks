@@ -4,15 +4,26 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import cli.parser as cli_parser
 from cli.commands.anima_merge import cmd_anima_merge
-from core.lifecycle.anima_merge import AnimaMergeError, AnimaMergeService, MergePhase
+from core.lifecycle.anima_merge import (
+    AnimaMergeError,
+    AnimaMergeFinalizeService,
+    AnimaMergeService,
+    FinalizePhase,
+    MergePhase,
+)
+from core.lifecycle.anima_merge.verification import source_reference_report
 from core.memory.facts import FactRecord, append_fact_records, iter_fact_records
 from core.taskboard.store import TaskBoardStore
+from core.time_utils import now_local
 
 
 def _write(path: Path, content: str) -> Path:
@@ -22,6 +33,11 @@ def _write(path: Path, content: str) -> Path:
 
 
 def _stub_rebuild_substeps(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_rebuild_only(monkeypatch)
+    _stub_verify_probes(monkeypatch)
+
+
+def _stub_rebuild_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         AnimaMergeService,
         "_rebuild_vectordb",
@@ -30,6 +46,18 @@ def _stub_rebuild_substeps(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(AnimaMergeService, "_rebuild_entities", lambda self: {"entities": 2})
     monkeypatch.setattr(AnimaMergeService, "_rebuild_bm25", lambda self: {"documents": 4})
     monkeypatch.setattr(AnimaMergeService, "_rebuild_graph_cache", lambda self: {"rebuilt": True})
+
+
+def _stub_verify_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep pre-Phase-4 tests focused on their original merge concern."""
+
+    monkeypatch.setattr(AnimaMergeService, "_search_memory_probe", lambda self, query, scope: [{}])
+    monkeypatch.setattr(
+        AnimaMergeService,
+        "_probe_results_match",
+        staticmethod(lambda results, probe: bool(results)),
+    )
+    monkeypatch.setattr(AnimaMergeService, "_verify_entity_probe", lambda self, query, expected: True)
 
 
 def _setup_data_dir(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -648,6 +676,10 @@ def test_anima_merge_dry_run_only_writes_manifest_and_estimates_rebuild(tmp_path
     assert estimate["target"] == "target"
     assert estimate["estimated_inputs"]["facts"] == 2
     assert estimate["neo4j_action"] == "skip_not_configured"
+    verify = manifest["verify"]
+    assert verify["probe_categories"]["facts"] == 2
+    assert verify["probe_categories"]["knowledge"] == 2
+    assert verify["smoke_check"] == "run_if_server_online"
 
 
 def test_anima_merge_rebuilds_entities_and_bm25_from_merged_source_memory(
@@ -657,6 +689,7 @@ def test_anima_merge_rebuilds_entities_and_bm25_from_merged_source_memory(
     data_dir, source, target = _setup_data_dir(tmp_path)
     _add_collision_fixture(data_dir, source, target)
     _add_memory_fixture(source, target)
+    _stub_verify_probes(monkeypatch)
     monkeypatch.setattr(
         AnimaMergeService,
         "_rebuild_vectordb",
@@ -761,6 +794,7 @@ def test_anima_merge_neo4j_rebuild_resets_and_ingests_target_group_only(
             )
         ],
     )
+    _stub_verify_probes(monkeypatch)
     monkeypatch.setattr(
         AnimaMergeService,
         "_rebuild_vectordb",
@@ -878,3 +912,422 @@ def test_anima_merge_rejects_incomplete_live_reference_reload(
 
     with pytest.raises(AnimaMergeError, match="did not reload configuration"):
         service._sync_live_reference_state()
+
+
+# ── Phase 4: VERIFY / TOMBSTONE / merge-finalize ─────────────
+
+
+def _register_source_and_target(data_dir: Path) -> None:
+    _write(
+        data_dir / "config.json",
+        json.dumps(
+            {
+                "animas": {
+                    "source": {"supervisor": None},
+                    "target": {"supervisor": None},
+                }
+            }
+        )
+        + "\n",
+    )
+
+
+def test_anima_merge_verify_probes_all_source_memory_categories(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir, source, target = _setup_data_dir(tmp_path)
+    _register_source_and_target(data_dir)
+    _write(source / "knowledge" / "phase4.md", "phasefour unique knowledge\n")
+    _write(source / "episodes" / "2026-07-16.md", "phasefour unique episode\n")
+    _write(source / "procedures" / "phase4.md", "phasefour unique procedure\n")
+    _write(source / "skills" / "phase4" / "SKILL.md", "phasefour unique skill\n")
+    _write(
+        source / "state" / "conversation.json",
+        json.dumps({"compressed_summary": "phasefour unique conversation"}) + "\n",
+    )
+    append_fact_records(
+        source,
+        [
+            FactRecord(
+                text="phasefour unique fact",
+                source_entity="PhaseFourSourceEntity",
+                target_entity="PhaseFourTargetEntity",
+                valid_at="2026-07-16T00:00:00+00:00",
+                recorded_at="2026-07-16T01:00:00+00:00",
+            )
+        ],
+    )
+    _stub_rebuild_only(monkeypatch)
+
+    def fixture_search(service: AnimaMergeService, query: str, scope: str):
+        if scope == "facts":
+            for record in iter_fact_records(service.target_dir, include_expired=True):
+                if query.lower() in record.text.lower():
+                    return [{"source_file": "facts/facts.jsonl", "fact_id": record.fact_id}]
+            return []
+        pattern = "SKILL.md" if scope == "skills" else "*.md"
+        root = service.target_dir / scope
+        for path in root.rglob(pattern):
+            content = path.read_text(encoding="utf-8")
+            if query.lower() in " ".join(content.lower().split()):
+                return [{"source_file": path.relative_to(service.target_dir).as_posix()}]
+        return []
+
+    def fixture_entity(service: AnimaMergeService, query: str, expected: str) -> bool:
+        del query
+        names = {
+            name.casefold()
+            for record in iter_fact_records(service.target_dir, include_expired=True)
+            for name in (record.source_entity, record.target_entity)
+        }
+        return expected in names
+
+    monkeypatch.setattr(AnimaMergeService, "_search_memory_probe", fixture_search)
+    monkeypatch.setattr(AnimaMergeService, "_verify_entity_probe", fixture_entity)
+
+    result = AnimaMergeService(data_dir, "source", "target").run(execute=True)
+
+    journal = json.loads(result.journal_path.read_text(encoding="utf-8"))
+    probes = journal["phases"][MergePhase.VERIFY.value]["artifacts"]["memory_probes"]
+    assert probes["passed"] == 8
+    assert set(probes["categories"]) == {
+        "knowledge",
+        "episodes",
+        "procedures",
+        "skills",
+        "facts",
+        "conversation_summary",
+        "entities",
+    }
+
+
+def test_anima_merge_verify_residual_reference_then_resume_and_tombstone(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir, source, target = _setup_data_dir(tmp_path)
+    _register_source_and_target(data_dir)
+    config = json.loads((data_dir / "config.json").read_text(encoding="utf-8"))
+    config["unexpected_routing"] = {"owner": "source"}
+    _write(data_dir / "config.json", json.dumps(config) + "\n")
+    _write(
+        data_dir / "shared" / "inbox" / "worker" / "historical.json",
+        json.dumps({"from_person": "source", "to_person": "worker", "content": "history"}) + "\n",
+    )
+    archived_inbox = _write(
+        data_dir / "shared" / "inbox" / "worker" / "processed" / "historical.json",
+        json.dumps({"from_person": "worker", "to_person": "source", "content": "history"}) + "\n",
+    )
+    _stub_rebuild_substeps(monkeypatch)
+    service = AnimaMergeService(data_dir, "source", "target")
+
+    with pytest.raises(AnimaMergeError, match="unexpected_routing.owner"):
+        service.run(execute=True)
+
+    failed = json.loads(service.journal_path.read_text(encoding="utf-8"))
+    assert failed["phases"][MergePhase.VERIFY.value]["status"] == "failed"
+    assert MergePhase.TOMBSTONE.value not in failed["phases"]
+
+    config = json.loads((data_dir / "config.json").read_text(encoding="utf-8"))
+    del config["unexpected_routing"]
+    _write(data_dir / "config.json", json.dumps(config) + "\n")
+    result = AnimaMergeService(data_dir, "source", "target").run(execute=True, resume=True)
+
+    journal = json.loads(result.journal_path.read_text(encoding="utf-8"))
+    references = journal["phases"][MergePhase.VERIFY.value]["artifacts"]["reference_integrity"]
+    assert references["residual_references"] == []
+    assert "config.json.animas.source" in references["references_allowed"]
+    assert any(path.endswith("historical.json.from_person") for path in references["references_allowed"])
+    assert archived_inbox.relative_to(data_dir).as_posix() not in references["surfaces_checked"]
+    tombstone = journal["phases"][MergePhase.TOMBSTONE.value]["artifacts"]
+    assert tombstone["source_enabled"] is False
+    assert tombstone["source_directory_retained"] is True
+    assert tombstone["source_config_retained"] is True
+    assert tombstone["rollback_window_days"] == 7
+    assert source.is_dir()
+    assert json.loads((source / "status.json").read_text(encoding="utf-8"))["enabled"] is False
+
+    from core.org_sync import sync_org_structure
+
+    sync_org_structure(data_dir / "animas", config_path=data_dir / "config.json")
+    synced = json.loads((data_dir / "config.json").read_text(encoding="utf-8"))
+    assert source.is_dir()
+    assert "source" in synced["animas"]
+    assert target.is_dir()
+
+
+def test_anima_merge_verify_scans_nonempty_taskboard_rows(tmp_path: Path) -> None:
+    data_dir, _source, _target = _setup_data_dir(tmp_path)
+    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
+    store.upsert_metadata(
+        anima_name="target",
+        task_id="task-1",
+        actor="target",
+        source_ref="animas/source/task-1",
+    )
+    store.append_event(
+        event_type="surface_recorded",
+        anima_name="target",
+        task_id="task-1",
+        actor="target",
+        payload={"created_by": "source"},
+    )
+
+    report = source_reference_report(data_dir, "source")
+
+    assert "shared/taskboard.sqlite3" in report["surfaces_checked"]
+    assert any(
+        location.endswith("taskboard_metadata[1].source_ref")
+        for location in report["residual_references"]
+    )
+    assert any(
+        ":taskboard_events[1].payload_json" in location
+        for location in report["residual_references"]
+    )
+    assert any(
+        ":taskboard_events[2].payload_json.created_by" in location
+        for location in report["references_allowed"]
+    )
+
+
+def test_anima_merge_verify_rejects_empty_probe_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir, source, _target = _setup_data_dir(tmp_path)
+    _register_source_and_target(data_dir)
+    _write(source / "knowledge" / "empty.md", "")
+    _stub_rebuild_substeps(monkeypatch)
+
+    with pytest.raises(AnimaMergeError, match="empty probe content"):
+        AnimaMergeService(data_dir, "source", "target").run(execute=True)
+
+
+def test_anima_merge_target_smoke_check_enables_and_confirms_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir, _source, _target = _setup_data_dir(tmp_path)
+    service = AnimaMergeService(data_dir, "source", "target", gateway_url="http://gateway.test")
+    monkeypatch.setattr(service, "_server_running", lambda: True)
+    monkeypatch.setattr(service, "_pid_path_alive", lambda path: path.name == "target.pid")
+    response = Mock()
+    response.raise_for_status.return_value = None
+    post = Mock(return_value=response)
+    monkeypatch.setattr("requests.post", post)
+
+    result = service._smoke_check_target()
+
+    assert result == {
+        "status": "passed",
+        "manual_required": False,
+        "target_enabled": True,
+        "process_started": True,
+    }
+    post.assert_called_once_with("http://gateway.test/api/animas/target/enable", timeout=10)
+
+
+def test_anima_merge_finalize_rejects_merge_that_is_not_done(tmp_path: Path) -> None:
+    data_dir, source, _target = _setup_data_dir(tmp_path)
+    _register_source_and_target(data_dir)
+    _write(source / "status.json", '{"enabled":false,"memory_backend":"legacy"}\n')
+    _write(
+        data_dir / "state" / "merge_journal_source_target.json",
+        json.dumps(
+            {
+                "version": 1,
+                "source": "source",
+                "target": "target",
+                "status": "running",
+                "phases": {},
+            }
+        )
+        + "\n",
+    )
+
+    with pytest.raises(AnimaMergeError, match="DONE merge journal"):
+        AnimaMergeFinalizeService(data_dir, "source", "target").run()
+
+
+def test_anima_merge_finalize_cli_defaults_to_dry_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[argparse.Namespace] = []
+    monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(cli_parser, "_lazy_anima_merge_finalize", captured.append)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["animaworks", "anima", "merge-finalize", "source", "target"],
+    )
+
+    cli_parser.cli_main()
+
+    assert len(captured) == 1
+    args = captured[0]
+    assert (args.source, args.target) == ("source", "target")
+    assert args.dry_run is False
+    assert args.execute is False
+    assert args.resume is False
+
+
+def test_anima_merge_finalize_rejects_active_rollback_window(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir, _source, _target = _setup_data_dir(tmp_path)
+    _register_source_and_target(data_dir)
+    _stub_rebuild_substeps(monkeypatch)
+    AnimaMergeService(data_dir, "source", "target").run(execute=True)
+
+    with pytest.raises(AnimaMergeError, match="Rollback window is still active"):
+        AnimaMergeFinalizeService(data_dir, "source", "target").run(execute=True)
+
+    assert (data_dir / "animas" / "source").is_dir()
+    failed = json.loads(
+        (data_dir / "state" / "merge_finalize_journal_source_target.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert failed["status"] == "failed"
+    assert failed["phases"][FinalizePhase.PREFLIGHT.value]["status"] == "failed"
+
+
+def test_anima_merge_finalize_purges_source_neo4j_group_and_chroma_collections(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir, _source, _target = _setup_data_dir(tmp_path)
+    archive = data_dir / "archive" / "merged" / "source_stamp"
+    (archive / "vectordb").mkdir(parents=True)
+    service = AnimaMergeFinalizeService(data_dir, "source", "target")
+    monkeypatch.setattr(service, "_source_backend", lambda: "neo4j")
+    backend = Mock()
+    backend.reset = AsyncMock()
+    backend.close = AsyncMock()
+    get_backend = Mock(return_value=backend)
+    monkeypatch.setattr("core.memory.backend.registry.get_backend", get_backend)
+    store = Mock()
+    store.list_collections.return_value = [
+        "source_knowledge",
+        "source_facts",
+        "shared_common_knowledge",
+    ]
+    store.delete_collection.return_value = True
+    monkeypatch.setattr("core.memory.rag.store.create_chroma_vector_store", Mock(return_value=store))
+
+    neo4j = service._purge_neo4j(archive)
+    chroma = service._purge_chroma(archive)
+
+    assert neo4j == {"status": "purged", "group_id": "source"}
+    get_backend.assert_called_once_with("neo4j", archive, group_id="source")
+    backend.reset.assert_awaited_once_with()
+    backend.close.assert_awaited_once_with()
+    assert chroma == ["source_facts", "source_knowledge"]
+    assert [call.args[0] for call in store.delete_collection.call_args_list] == [
+        "source_knowledge",
+        "source_facts",
+    ]
+    store.close.assert_called_once_with()
+
+
+def test_anima_merge_to_finalize_e2e_is_dry_run_safe_and_resume_idempotent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir, source, _target = _setup_data_dir(tmp_path)
+    _register_source_and_target(data_dir)
+    _write(source / "knowledge" / "retained.md", "retained source knowledge\n")
+    _write(source / "activity_log" / "2026-07-16.jsonl", '{"event":"archive-me"}\n')
+    _write(
+        data_dir / "shared" / "credentials.json",
+        json.dumps(
+            {
+                "SLACK_BOT_TOKEN__source": "secret-must-not-enter-journal",
+                "SLACK_BOT_TOKEN__target": "target-secret",
+            }
+        )
+        + "\n",
+    )
+    _stub_rebuild_substeps(monkeypatch)
+    merge = AnimaMergeService(data_dir, "source", "target").run(execute=True)
+    merge_journal = json.loads(merge.journal_path.read_text(encoding="utf-8"))
+    assert merge_journal["status"] == "done"
+    assert merge_journal["phases"][MergePhase.DONE.value]["status"] == "completed"
+
+    source_before = {
+        path.relative_to(source).as_posix(): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+    config_before = (data_dir / "config.json").read_bytes()
+    finalize = AnimaMergeFinalizeService(data_dir, "source", "target")
+    dry_run = finalize.run()
+    assert dry_run.dry_run is True
+    assert dry_run.plan is not None
+    assert dry_run.plan["rollback_ready"] is False
+    assert source_before == {
+        path.relative_to(source).as_posix(): path.read_bytes()
+        for path in source.rglob("*")
+        if path.is_file()
+    }
+    assert (data_dir / "config.json").read_bytes() == config_before
+    assert not finalize.journal_path.exists()
+
+    _write(data_dir / "run" / "animas" / "source.pid", "stale\n")
+    _write(
+        data_dir / "run" / "notification_map.json",
+        json.dumps({"stale": {"anima": "source"}}) + "\n",
+    )
+    merge_journal["phases"][MergePhase.TOMBSTONE.value]["artifacts"]["rollback_deadline"] = (
+        now_local() - timedelta(seconds=1)
+    ).isoformat()
+    merge.journal_path.write_text(json.dumps(merge_journal) + "\n", encoding="utf-8")
+
+    original_remove = finalize._remove_source_config
+    interrupted = False
+
+    def interrupt_after_archive():
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            raise RuntimeError("finalize interruption")
+        return original_remove()
+
+    monkeypatch.setattr(finalize, "_remove_source_config", interrupt_after_archive)
+    with pytest.raises(RuntimeError, match="finalize interruption"):
+        finalize.run(execute=True)
+
+    failed = json.loads(finalize.journal_path.read_text(encoding="utf-8"))
+    archive_path = Path(failed["phases"][FinalizePhase.ARCHIVE_SOURCE.value]["artifacts"]["archive_path"])
+    assert archive_path.is_dir()
+    assert not source.exists()
+    assert failed["phases"][FinalizePhase.REMOVE_CONFIG.value]["status"] == "failed"
+
+    completed = AnimaMergeFinalizeService(data_dir, "source", "target").run(execute=True, resume=True)
+    assert completed.archive_path == archive_path
+    assert (archive_path / "activity_log" / "2026-07-16.jsonl").is_file()
+    assert not source.exists()
+    config = json.loads((data_dir / "config.json").read_text(encoding="utf-8"))
+    assert "source" not in config["animas"]
+    assert not (data_dir / "run" / "animas" / "source.pid").exists()
+    assert json.loads((data_dir / "run" / "notification_map.json").read_text(encoding="utf-8")) == {}
+    credentials = json.loads((data_dir / "shared" / "credentials.json").read_text(encoding="utf-8"))
+    assert "SLACK_BOT_TOKEN__source" not in credentials
+    assert credentials["SLACK_BOT_TOKEN__target"] == "target-secret"
+
+    repeated = AnimaMergeFinalizeService(data_dir, "source", "target").run(execute=True, resume=True)
+    assert repeated.archive_path == archive_path
+    final_journal = json.loads(completed.journal_path.read_text(encoding="utf-8"))
+    assert final_journal["status"] == "done"
+    assert final_journal["phases"][FinalizePhase.DONE.value]["artifacts"] == {
+        "archive_path": str(archive_path),
+        "org_sync_verified": True,
+        "source_config_absent": True,
+        "source_directory_absent": True,
+    }
+    serialized = json.dumps(final_journal)
+    assert "secret-must-not-enter-journal" not in serialized
+    assert "target-secret" not in serialized

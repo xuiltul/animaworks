@@ -17,10 +17,12 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from core.anima_factory import validate_anima_name
+from core.memory._io import atomic_write_text
 from core.memory.backend.registry import resolve_backend_type
 from core.memory.facts import FactRecord, append_fact_records, iter_fact_records
 from core.platform.locks import acquire_file_lock, release_file_lock
@@ -30,10 +32,6 @@ from .journal import MergeJournal, MergePhase
 
 _DATE_PREFIX = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 _ARCHIVE_ONLY = ("activity_log", "token_usage", "prompt_logs")
-_PLACEHOLDER_PHASES = (
-    MergePhase.VERIFY,
-    MergePhase.TOMBSTONE,
-)
 
 
 class AnimaMergeError(RuntimeError):
@@ -103,12 +101,12 @@ class AnimaMergeService:
         self.lock_path = self.state_dir / "anima_merge.lock"
 
     def run(self, *, execute: bool = False, resume: bool = False) -> MergeResult:
-        """Generate a manifest, or execute the implemented merge phases."""
+        """Generate a manifest, or execute the complete merge through tombstone."""
         if resume and not execute:
             raise AnimaMergeError("--resume requires --execute")
         self._validate_names()
 
-        with self._global_lock():
+        with self._runtime_data_dir(), self._global_lock():
             issues = self.preflight()
             manifest = self.build_manifest(issues)
             manifest_json, manifest_markdown = self.write_manifest(manifest)
@@ -145,14 +143,22 @@ class AnimaMergeService:
                 MergePhase.REBUILD_INDEXES,
                 lambda: self.rebuild_indexes(journal),
             )
-            for phase in _PLACEHOLDER_PHASES:
-                if not journal.is_completed(phase):
-                    journal.skip(phase, "Not implemented in Phase 1")
+            self._run_phase(journal, MergePhase.VERIFY, lambda: self.verify(journal))
+            self._run_phase(journal, MergePhase.TOMBSTONE, lambda: self.tombstone(journal))
             if not journal.is_completed(MergePhase.DONE):
                 journal.start(MergePhase.DONE)
                 journal.complete(
                     MergePhase.DONE,
-                    {"phase_2_complete": True, "phase_3_complete": True},
+                    {
+                        "phase_2_complete": True,
+                        "phase_3_complete": True,
+                        "phase_4_complete": True,
+                        "manual_smoke_required": bool(
+                            journal.phase_artifacts(MergePhase.VERIFY)
+                            .get("smoke_check", {})
+                            .get("manual_required", False)
+                        ),
+                    },
                 )
             journal.finish()
             snapshot_raw = journal.data.get("artifacts", {}).get("snapshot_path")
@@ -184,6 +190,20 @@ class AnimaMergeService:
                 yield
             finally:
                 release_file_lock(lock_file)
+
+    @contextmanager
+    def _runtime_data_dir(self) -> Iterator[None]:
+        """Keep path-singleton dependencies inside this service's data root."""
+
+        previous = os.environ.get("ANIMAWORKS_DATA_DIR")
+        os.environ["ANIMAWORKS_DATA_DIR"] = str(self.data_dir)
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop("ANIMAWORKS_DATA_DIR", None)
+            else:
+                os.environ["ANIMAWORKS_DATA_DIR"] = previous
 
     def _open_journal(self, *, resume: bool) -> MergeJournal:
         try:
@@ -289,7 +309,25 @@ class AnimaMergeService:
             "thread_id_collisions": self._thread_id_collisions(),
             "external_references": self._external_references(),
             "rebuild_indexes": self._rebuild_estimate(target_backend),
+            "verify": self._verify_estimate(),
             "preflight_warnings": list(warnings or []),
+        }
+
+    def _verify_estimate(self) -> dict[str, Any]:
+        from .verification import estimate_probe_counts
+
+        counts = estimate_probe_counts(self.source_dir)
+        return {
+            "probe_categories": counts,
+            "estimated_probes": sum(counts.values()),
+            "reference_surfaces": [
+                "config",
+                "anima_status",
+                "taskboard",
+                "shared_inbox",
+                "reply_routing",
+            ],
+            "smoke_check": "run_if_server_online",
         }
 
     def _rebuild_estimate(self, backend: str) -> dict[str, Any]:
@@ -542,14 +580,11 @@ class AnimaMergeService:
         estimate = manifest["rebuild_indexes"]
         for category, count in estimate["estimated_inputs"].items():
             lines.append(f"- {category}: {count}")
-        lines.extend(
-            [
-                f"- Neo4j: {estimate['neo4j_action']}",
-                "",
-                "## Preflight warnings",
-                "",
-            ]
-        )
+        lines.extend([f"- Neo4j: {estimate['neo4j_action']}", "", "## VERIFY plan", ""])
+        verify = manifest["verify"]
+        for category, count in verify["probe_categories"].items():
+            lines.append(f"- {category}: {count}")
+        lines.extend(["", "## Preflight warnings", ""])
         warnings = manifest.get("preflight_warnings", [])
         lines.extend(f"- {warning}" for warning in warnings)
         if not warnings:
@@ -1125,6 +1160,279 @@ class AnimaMergeService:
         finally:
             await backend.close()
         return {"files_ingested": files, "facts_ingested": facts, "chunks_created": chunks}
+
+    # ── VERIFY and TOMBSTONE ──────────────────────────────────
+
+    def verify(self, journal: MergeJournal) -> dict[str, Any]:
+        """Verify migrated memory, active references, and the live target."""
+
+        probe_result = self._verify_memory_probes(journal)
+        from .verification import source_reference_report
+
+        try:
+            references = source_reference_report(self.data_dir, self.source)
+        except ValueError as exc:
+            raise AnimaMergeError(f"Reference-integrity scan failed: {exc}") from exc
+        residual = references["residual_references"]
+        if residual:
+            raise AnimaMergeError(
+                "VERIFY found residual source references:\n- " + "\n- ".join(residual)
+            )
+        smoke = self._smoke_check_target()
+        return {
+            "memory_probes": probe_result,
+            "reference_integrity": references,
+            "smoke_check": smoke,
+        }
+
+    def _verify_memory_probes(self, journal: MergeJournal) -> dict[str, Any]:
+        probes = self._build_memory_probes(journal)
+        results: list[dict[str, Any]] = []
+        failures: list[str] = []
+        for probe in probes:
+            query = str(probe.pop("query"))
+            if not query:
+                results.append({**probe, "status": "failed", "hits": 0})
+                failures.append(f"{probe['category']}:{probe['source']} (empty probe content)")
+                continue
+            if probe["category"] == "entities":
+                expected_entity = str(probe.pop("expected_entity"))
+                matched = self._verify_entity_probe(query, expected_entity)
+                hits = int(matched)
+            else:
+                hits_found = self._search_memory_probe(query, str(probe["scope"]))
+                matched = self._probe_results_match(hits_found, probe)
+                hits = len(hits_found)
+            status = "passed" if matched else "failed"
+            result = {**probe, "status": status, "hits": hits}
+            results.append(result)
+            if not matched:
+                failures.append(f"{probe['category']}:{probe['source']}")
+        if failures:
+            raise AnimaMergeError(
+                "VERIFY memory probes could not find migrated source content:\n- "
+                + "\n- ".join(failures)
+            )
+        by_category: dict[str, dict[str, int]] = {}
+        for result in results:
+            bucket = by_category.setdefault(result["category"], {"planned": 0, "passed": 0, "skipped": 0})
+            bucket["planned"] += 1
+            if result["status"] == "passed":
+                bucket["passed"] += 1
+            elif result["status"].startswith("skipped"):
+                bucket["skipped"] += 1
+        return {
+            "planned": len(results),
+            "passed": sum(item["status"] == "passed" for item in results),
+            "skipped": sum(item["status"].startswith("skipped") for item in results),
+            "categories": by_category,
+            "results": results,
+        }
+
+    def _build_memory_probes(self, journal: MergeJournal) -> list[dict[str, Any]]:
+        from core.memory.entity_index import normalize_entity_key
+        from core.memory.facts import fact_entity_names
+
+        from .verification import probe_query
+
+        artifacts = journal.phase_artifacts(MergePhase.MERGE_MEMORY)
+        file_mapping = artifacts.get("file_mapping", {})
+        deduplicated = set(artifacts.get("deduplicated_files", []))
+        probes: list[dict[str, Any]] = []
+        if isinstance(file_mapping, dict):
+            for category in ("knowledge", "episodes", "procedures"):
+                selected = [
+                    (str(source), str(target))
+                    for source, target in sorted(file_mapping.items())
+                    if str(source).startswith(f"{category}/") and source not in deduplicated
+                ][:3]
+                for source, target in selected:
+                    source_path = self.source_dir / source
+                    probes.append(
+                        {
+                            "category": category,
+                            "scope": category,
+                            "source": source,
+                            "target": target,
+                            "query": probe_query(self._read_probe_text(source_path)),
+                        }
+                    )
+
+        skill_mapping = artifacts.get("skill_mapping", {})
+        if isinstance(skill_mapping, dict):
+            for source, target in list(sorted(skill_mapping.items()))[:3]:
+                source_file = self.source_dir / str(source) / "SKILL.md"
+                probes.append(
+                    {
+                        "category": "skills",
+                        "scope": "skills",
+                        "source": f"{source}/SKILL.md",
+                        "target": f"{target}/SKILL.md",
+                        "query": probe_query(self._read_probe_text(source_file)),
+                    }
+                )
+
+        appended_ids = artifacts.get("facts_appended_ids", [])
+        appended = {str(value) for value in appended_ids if isinstance(value, str)}
+        source_facts = [
+            record
+            for record in iter_fact_records(self.source_dir, include_expired=True)
+            if record.fact_id in appended
+        ]
+        for record in source_facts[:3]:
+            probes.append(
+                {
+                    "category": "facts",
+                    "scope": "facts",
+                    "source": f"fact:{record.fact_id}",
+                    "target": f"fact:{record.fact_id}",
+                    "expected_fact_id": record.fact_id,
+                    "query": probe_query(record.text),
+                }
+            )
+
+        conversation_paths = artifacts.get("conversation_episodes", [])
+        if isinstance(conversation_paths, list):
+            selected = [
+                str(path)
+                for path in conversation_paths
+                if isinstance(path, str) and "merged_conversation_" in Path(path).name
+            ][:3]
+            for target in selected:
+                probes.append(
+                    {
+                        "category": "conversation_summary",
+                        "scope": "episodes",
+                        "source": "state/conversation.json:compressed_summary",
+                        "target": target,
+                        "query": probe_query(self._read_probe_text(self.target_dir / target)),
+                    }
+                )
+
+        entities: dict[str, str] = {}
+        for record in source_facts:
+            for name in fact_entity_names(record):
+                key = normalize_entity_key(name)
+                if key:
+                    entities.setdefault(key, name)
+        for key, name in list(sorted(entities.items()))[:3]:
+            probe_id = hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+            probes.append(
+                {
+                    "category": "entities",
+                    "scope": "entities",
+                    "source": f"entity:{probe_id}",
+                    "target": f"entity:{probe_id}",
+                    "expected_entity": key,
+                    "query": name,
+                }
+            )
+        return probes
+
+    @staticmethod
+    def _read_probe_text(path: Path) -> str:
+        try:
+            with path.open("r", encoding="utf-8", errors="replace") as handle:
+                return handle.read(16_384)
+        except OSError:
+            return ""
+
+    def _search_memory_probe(self, query: str, scope: str) -> list[dict[str, Any]]:
+        from core.memory.rag_search import RAGMemorySearch
+
+        search = RAGMemorySearch(
+            self.target_dir,
+            self.data_dir / "common_knowledge",
+            self.data_dir / "common_skills",
+        )
+        return search.search_memory_text(
+            query,
+            scope=scope,
+            knowledge_dir=self.target_dir / "knowledge",
+            episodes_dir=self.target_dir / "episodes",
+            procedures_dir=self.target_dir / "procedures",
+            common_knowledge_dir=self.data_dir / "common_knowledge",
+            result_limit=20,
+        )
+
+    def _verify_entity_probe(self, query: str, expected: str) -> bool:
+        from core.memory.entity_index import match_query_entities
+
+        return expected in match_query_entities(self.target_dir, query)
+
+    @staticmethod
+    def _probe_results_match(results: list[dict[str, Any]], probe: dict[str, Any]) -> bool:
+        expected_fact = probe.get("expected_fact_id")
+        expected_path = str(probe.get("target", ""))
+        for result in results:
+            if expected_fact and result.get("fact_id") == expected_fact:
+                return True
+            source_file = str(result.get("source_file", ""))
+            if expected_path and (source_file == expected_path or source_file.endswith(f"/{expected_path}")):
+                return True
+        return False
+
+    def _smoke_check_target(self) -> dict[str, Any]:
+        if not self._server_running():
+            return {
+                "status": "skipped_offline",
+                "manual_required": True,
+                "target_enabled": False,
+                "process_started": False,
+            }
+        import requests
+
+        try:
+            response = requests.post(f"{self.gateway_url}/api/animas/{self.target}/enable", timeout=10)
+            response.raise_for_status()
+        except Exception as exc:
+            raise AnimaMergeError(f"Target smoke-check enable failed: {exc}") from exc
+        pid_path = self.data_dir / "run" / "animas" / f"{self.target}.pid"
+        deadline = time.monotonic() + 30.0
+        while not self._pid_path_alive(pid_path):
+            if time.monotonic() >= deadline:
+                raise AnimaMergeError(f"Target smoke-check process did not start: {pid_path}")
+            time.sleep(0.1)
+        return {
+            "status": "passed",
+            "manual_required": False,
+            "target_enabled": True,
+            "process_started": True,
+        }
+
+    def tombstone(self, journal: MergeJournal, *, rollback_window_days: int = 7) -> dict[str, Any]:
+        """Disable source while retaining its directory and config registration."""
+
+        if rollback_window_days < 1:
+            raise AnimaMergeError("rollback_window_days must be at least 1")
+        status_path = self.source_dir / "status.json"
+        status = _read_json(status_path)
+        already_disabled = status.get("enabled") is False
+        if not already_disabled:
+            status["enabled"] = False
+            atomic_write_text(
+                status_path,
+                json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            )
+        tombstoned_at = now_local()
+        archive_plan = journal.phase_artifacts(MergePhase.MERGE_MEMORY).get("archive_plan", [])
+        return {
+            "source_enabled": False,
+            "already_disabled": already_disabled,
+            "source_directory_retained": self.source_dir.is_dir(),
+            "source_config_retained": self._source_config_present(),
+            "tombstoned_at": tombstoned_at.isoformat(),
+            "rollback_window_days": rollback_window_days,
+            "rollback_deadline": (tombstoned_at + timedelta(days=rollback_window_days)).isoformat(),
+            "archive_plan": archive_plan if isinstance(archive_plan, list) else [],
+        }
+
+    def _source_config_present(self) -> bool:
+        config_path = self.data_dir / "config.json"
+        if not config_path.is_file():
+            return False
+        config = _read_json(config_path)
+        return isinstance(config.get("animas"), dict) and self.source in config["animas"]
 
     def _map_source_episode(self, value: str, mapping: dict[str, str]) -> str:
         if value in mapping:

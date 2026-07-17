@@ -27,6 +27,16 @@ class MergePhase(StrEnum):
     DONE = "DONE"
 
 
+class FinalizePhase(StrEnum):
+    PREFLIGHT = "PREFLIGHT"
+    ARCHIVE_SOURCE = "ARCHIVE_SOURCE"
+    REMOVE_CONFIG = "REMOVE_CONFIG"
+    PURGE_NEO4J = "PURGE_NEO4J"
+    PURGE_RESIDUALS = "PURGE_RESIDUALS"
+    VERIFY_REMOVAL = "VERIFY_REMOVAL"
+    DONE = "DONE"
+
+
 class MergeJournal:
     """JSON journal whose phase records and artifacts survive interruption."""
 
@@ -75,10 +85,10 @@ class MergeJournal:
             json.dumps(self.data, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         )
 
-    def is_completed(self, phase: MergePhase) -> bool:
+    def is_completed(self, phase: StrEnum) -> bool:
         return self.data.get("phases", {}).get(phase.value, {}).get("status") in {"completed", "skipped"}
 
-    def start(self, phase: MergePhase) -> None:
+    def start(self, phase: StrEnum) -> None:
         record = self.data.setdefault("phases", {}).setdefault(phase.value, {})
         record.update({"status": "started", "started_at": now_iso()})
         record.pop("completed_at", None)
@@ -86,7 +96,7 @@ class MergeJournal:
         self.data["status"] = "running"
         self._save()
 
-    def complete(self, phase: MergePhase, artifacts: dict[str, Any] | None = None) -> None:
+    def complete(self, phase: StrEnum, artifacts: dict[str, Any] | None = None) -> None:
         record = self.data.setdefault("phases", {}).setdefault(phase.value, {})
         record.update({"status": "completed", "completed_at": now_iso()})
         if artifacts:
@@ -94,7 +104,7 @@ class MergeJournal:
             self.data.setdefault("artifacts", {}).update(artifacts)
         self._save()
 
-    def skip(self, phase: MergePhase, reason: str) -> None:
+    def skip(self, phase: StrEnum, reason: str) -> None:
         self.data.setdefault("phases", {})[phase.value] = {
             "status": "skipped",
             "completed_at": now_iso(),
@@ -102,7 +112,7 @@ class MergeJournal:
         }
         self._save()
 
-    def fail(self, phase: MergePhase, error: str) -> None:
+    def fail(self, phase: StrEnum, error: str) -> None:
         record = self.data.setdefault("phases", {}).setdefault(phase.value, {})
         record.update({"status": "failed", "failed_at": now_iso(), "error": error})
         self.data["status"] = "failed"
@@ -113,7 +123,7 @@ class MergeJournal:
         self.data["completed_at"] = now_iso()
         self._save()
 
-    def phase_artifacts(self, phase: MergePhase) -> dict[str, Any]:
+    def phase_artifacts(self, phase: StrEnum) -> dict[str, Any]:
         value = self.data.get("phases", {}).get(phase.value, {}).get("artifacts", {})
         return value if isinstance(value, dict) else {}
 
