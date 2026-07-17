@@ -1366,3 +1366,27 @@ def test_credential_discovery_tolerates_empty_store(tmp_path: Path) -> None:
     (tmp_path / "shared").mkdir()
     (tmp_path / "shared" / "credentials.json").write_text("", encoding="utf-8")
     assert discover_slack_credential_candidates(tmp_path, "source") == []
+
+
+def test_merge_episodes_records_identical_files_as_deduplicated(tmp_path: Path) -> None:
+    data_dir = tmp_path
+    for name in ("source", "target"):
+        (data_dir / "animas" / name / "episodes").mkdir(parents=True)
+        (data_dir / "animas" / name / "state").mkdir(parents=True)
+        _write(data_dir / "animas" / name / "identity.md", f"# {name}")
+        _write(data_dir / "animas" / name / "status.json", json.dumps({"enabled": True}))
+    _write(data_dir / "animas" / "source" / "episodes" / "00_registry.md", "shared registry body")
+    _write(data_dir / "animas" / "target" / "episodes" / "00_registry.md", "shared registry body")
+    _write(data_dir / "animas" / "source" / "episodes" / "2026-01-01.jsonl", '{"a":1}')
+
+    service = AnimaMergeService(data_dir, "source", "target")
+    mapping, deduped = service._merge_episodes()
+    assert deduped == ["episodes/00_registry.md"]
+    assert mapping["episodes/00_registry.md"] == "episodes/00_registry.md"
+    # 非mdのprobe除外: 選定ロジックの条件を直接確認
+    selected = [
+        s
+        for s in mapping
+        if s.startswith("episodes/") and s not in set(deduped) and s.lower().endswith(".md")
+    ]
+    assert selected == []

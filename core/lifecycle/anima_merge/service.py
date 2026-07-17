@@ -747,9 +747,9 @@ class AnimaMergeService:
 
     def merge_memory(self) -> dict[str, Any]:
         recovered = self._recover_abandoned_memory()
-        episode_mapping = self._merge_episodes()
+        episode_mapping, episode_deduped = self._merge_episodes()
         file_mapping: dict[str, str] = dict(episode_mapping)
-        deduplicated: list[str] = []
+        deduplicated: list[str] = list(episode_deduped)
         for category in ("knowledge", "procedures"):
             mapping, deduped = self._merge_markdown_tree(category)
             file_mapping.update(mapping)
@@ -797,10 +797,11 @@ class AnimaMergeService:
         shutil.copy2(source_path, candidate)
         return candidate, False
 
-    def _merge_episodes(self) -> dict[str, str]:
+    def _merge_episodes(self) -> tuple[dict[str, str], list[str]]:
         source_root = self.source_dir / "episodes"
         target_root = self.target_dir / "episodes"
         mapping: dict[str, str] = {}
+        deduplicated: list[str] = []
         target_dates = {
             match.group(1)
             for path in _files(target_root)
@@ -813,16 +814,16 @@ class AnimaMergeService:
             namespace = f"_{self.source}"
             if match and match.group(1) in target_dates and not desired.exists():
                 desired = desired.with_name(f"{desired.stem}{namespace}{desired.suffix}")
-                destination, _ = self._copy_collision_safe(source_path, desired, namespace)
-            else:
-                destination, _ = self._copy_collision_safe(source_path, desired, namespace)
+            destination, is_duplicate = self._copy_collision_safe(source_path, desired, namespace)
             source_key = f"episodes/{relative.as_posix()}"
             target_key = f"episodes/{destination.relative_to(target_root).as_posix()}"
             mapping[source_key] = target_key
+            if is_duplicate:
+                deduplicated.append(source_key)
             date_match = _DATE_PREFIX.match(destination.name)
             if date_match:
                 target_dates.add(date_match.group(1))
-        return mapping
+        return mapping, deduplicated
 
     def _merge_markdown_tree(self, category: str) -> tuple[dict[str, str], list[str]]:
         source_root = self.source_dir / category
@@ -1256,7 +1257,10 @@ class AnimaMergeService:
                 selected = [
                     (str(source), str(target))
                     for source, target in sorted(file_mapping.items())
-                    if str(source).startswith(f"{category}/") and source not in deduplicated
+                    if str(source).startswith(f"{category}/")
+                    and source not in deduplicated
+                    # indexerは*.mdのみ索引する(facts/skillsを除く)。非mdはprobe不能
+                    and str(source).lower().endswith(".md")
                 ][:3]
                 for source, target in selected:
                     source_path = self.source_dir / source
