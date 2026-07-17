@@ -279,7 +279,19 @@ class AnimaMergeService:
         status = str(data.get("status", data.get("phase", ""))).strip().lower()
         if not status:
             return True
-        return status not in {"idle", "done", "completed", "failed", "cancelled", "canceled"}
+        # repair_state.py writes: healthy(初期値)/requested/active/cooldown/disabled/
+        # locked/repairing/success/failed。cooldownは再試行待ち(DB不健全の可能性)なのでブロック対象。
+        return status not in {
+            "idle",
+            "done",
+            "completed",
+            "failed",
+            "cancelled",
+            "canceled",
+            "healthy",
+            "success",
+            "disabled",
+        }
 
     @staticmethod
     def _streaming_journals(anima_dir: Path) -> list[Path]:

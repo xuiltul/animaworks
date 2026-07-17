@@ -1331,3 +1331,30 @@ def test_anima_merge_to_finalize_e2e_is_dry_run_safe_and_resume_idempotent(
     serialized = json.dumps(final_journal)
     assert "secret-must-not-enter-journal" not in serialized
     assert "target-secret" not in serialized
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("healthy", False),
+        ("success", False),
+        ("disabled", False),
+        ("failed", False),
+        ("repairing", True),
+        ("requested", True),
+        ("active", True),
+        ("cooldown", True),
+        ("locked", True),
+        ("", True),
+    ],
+)
+def test_repair_in_progress_status_vocabulary(tmp_path: Path, status: str, expected: bool) -> None:
+    path = tmp_path / "rag_repair.json"
+    path.write_text(json.dumps({"status": status}), encoding="utf-8")
+    assert AnimaMergeService._repair_in_progress(path) is expected
+
+
+def test_repair_in_progress_unreadable_is_blocking(tmp_path: Path) -> None:
+    path = tmp_path / "rag_repair.json"
+    path.write_text("not-json", encoding="utf-8")
+    assert AnimaMergeService._repair_in_progress(path) is True
