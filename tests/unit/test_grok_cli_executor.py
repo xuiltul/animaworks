@@ -11,9 +11,11 @@ Every subprocess and binary lookup is mocked; these tests never invoke Grok.
 
 import asyncio
 import json
+import logging
 import signal
+import tomllib
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -208,6 +210,166 @@ class TestDiscoveryAndHelpers:
         assert _load_session_id(anima_dir, "chat", "thread-b") == (None, 0)
 
 
+class TestSandboxConfiguration:
+    @staticmethod
+    def _write_permissions(
+        anima_dir: Path,
+        *,
+        file_roots: list[str],
+        denied_roots: list[str] | None = None,
+    ) -> None:
+        (anima_dir / "permissions.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "file_roots": file_roots,
+                    "file_roots_denied": denied_roots or [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_denied_roots_generate_expected_profile(
+        self,
+        executor: GrokCLIExecutor,
+        anima_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        allowed = tmp_path / "allowed"
+        denied = tmp_path / "denied"
+        allowed.mkdir()
+        denied.mkdir()
+        self._write_permissions(
+            anima_dir,
+            file_roots=[str(allowed)],
+            denied_roots=[str(denied)],
+        )
+
+        assert executor._write_sandbox_config() is True
+
+        parsed = tomllib.loads((executor._workspace / ".grok" / "sandbox.toml").read_text(encoding="utf-8"))
+        profile = parsed["profiles"]["animaworks"]
+        assert profile == {
+            "extends": "workspace",
+            "read_write": [str(anima_dir.resolve()), str(allowed.resolve())],
+            "deny": [str(denied.resolve())],
+        }
+        assert "read_only" not in profile
+
+    def test_full_access_without_denied_roots_disables_sandbox(
+        self,
+        executor: GrokCLIExecutor,
+        anima_dir: Path,
+    ) -> None:
+        self._write_permissions(anima_dir, file_roots=["/"])
+
+        assert executor._write_sandbox_config() is False
+        assert not (executor._workspace / ".grok" / "sandbox.toml").exists()
+
+    def test_normal_roots_without_denied_roots_generate_profile(
+        self,
+        executor: GrokCLIExecutor,
+        anima_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        allowed = tmp_path / "normal-root"
+        allowed.mkdir()
+        self._write_permissions(anima_dir, file_roots=[str(allowed)])
+
+        assert executor._write_sandbox_config() is True
+        profile = tomllib.loads((executor._workspace / ".grok" / "sandbox.toml").read_text(encoding="utf-8"))[
+            "profiles"
+        ]["animaworks"]
+        assert profile["read_write"] == [str(anima_dir.resolve()), str(allowed.resolve())]
+        assert profile["deny"] == []
+
+    def test_model_escape_hatch_disables_sandbox(
+        self,
+        model_config: ModelConfig,
+        anima_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        denied = tmp_path / "denied"
+        denied.mkdir()
+        self._write_permissions(
+            anima_dir,
+            file_roots=[str(anima_dir)],
+            denied_roots=[str(denied)],
+        )
+        config = model_config.model_copy(update={"extra_keys": {"grok_sandbox": "off"}})
+        executor = GrokCLIExecutor(config, anima_dir)
+
+        assert executor._write_sandbox_config() is False
+        assert not (executor._workspace / ".grok" / "sandbox.toml").exists()
+
+    def test_sandbox_toml_escapes_quotes_and_backslashes(
+        self,
+        executor: GrokCLIExecutor,
+        anima_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        unusual_root = tmp_path / 'quote"and\\backslash'
+        unusual_root.mkdir()
+        self._write_permissions(anima_dir, file_roots=[str(unusual_root)])
+
+        assert executor._write_sandbox_config() is True
+        profile = tomllib.loads((executor._workspace / ".grok" / "sandbox.toml").read_text(encoding="utf-8"))[
+            "profiles"
+        ]["animaworks"]
+        assert profile["read_write"][-1] == str(unusual_root.resolve())
+
+    def test_sandbox_event_logs_enforced_profile(
+        self,
+        executor: GrokCLIExecutor,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        grok_home = tmp_path / ".grok"
+        grok_home.mkdir()
+        (grok_home / "sandbox-events.jsonl").write_text(
+            json.dumps(
+                {
+                    "event_type": "ProfileApplied",
+                    "workspace": str(executor._workspace.resolve()),
+                    "enforced": True,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        caplog.set_level(logging.DEBUG, logger="animaworks.execution.grok_cli")
+
+        with patch("core.execution.grok_cli.Path.home", return_value=tmp_path):
+            executor._log_sandbox_status()
+
+        assert "Grok sandbox enforced" in caplog.text
+
+    def test_sandbox_event_warns_when_workspace_event_is_missing(
+        self,
+        executor: GrokCLIExecutor,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        grok_home = tmp_path / ".grok"
+        grok_home.mkdir()
+        (grok_home / "sandbox-events.jsonl").write_text(
+            json.dumps(
+                {
+                    "event_type": "ProfileApplied",
+                    "workspace": "/different/workspace",
+                    "enforced": True,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        with patch("core.execution.grok_cli.Path.home", return_value=tmp_path):
+            executor._log_sandbox_status()
+
+        assert "Grok sandbox not enforced (Landlock)" in caplog.text
+
+
 class TestACPProtocol:
     @pytest.mark.asyncio
     async def test_handshake_command_and_stdin(self, executor: GrokCLIExecutor):
@@ -251,10 +413,61 @@ class TestACPProtocol:
                 "/usr/bin/grok",
                 "agent",
                 "--always-approve",
+                "--no-leader",
                 "-m",
                 "grok-4.5",
                 "stdio",
             ]
+
+    @pytest.mark.asyncio
+    async def test_sandbox_spawn_injects_env_and_controlling_pty(
+        self,
+        executor: GrokCLIExecutor,
+    ) -> None:
+        proc = _FakeProc(_success_events())
+        with (
+            patch("core.execution.grok_cli._find_grok_binary", return_value="/usr/bin/grok"),
+            patch.object(executor, "_write_sandbox_config", return_value=True),
+            patch.object(executor, "_log_sandbox_status"),
+            patch("pty.openpty", return_value=(101, 102)),
+            patch("core.execution.grok_cli.os.close") as close_fd,
+            patch("asyncio.create_subprocess_exec", return_value=proc) as create,
+        ):
+            events = [
+                event
+                async for event in executor.execute_streaming(
+                    "system",
+                    "hello",
+                    ContextTracker(model="grok/grok-4.5"),
+                    trigger="heartbeat",
+                )
+            ]
+
+        assert events[-1]["type"] == "done"
+        kwargs = create.call_args.kwargs
+        assert kwargs["env"]["GROK_SANDBOX"] == "animaworks"
+        assert kwargs["pass_fds"] == (102,)
+        assert callable(kwargs["preexec_fn"])
+        assert close_fd.call_args_list == [call(102), call(101)]
+
+    @pytest.mark.asyncio
+    async def test_disabled_sandbox_removes_inherited_env(
+        self,
+        executor: GrokCLIExecutor,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("GROK_SANDBOX", "foreign-profile")
+        proc = _FakeProc(_success_events())
+        with (
+            patch("core.execution.grok_cli._find_grok_binary", return_value="/usr/bin/grok"),
+            patch.object(executor, "_write_sandbox_config", return_value=False),
+            patch("asyncio.create_subprocess_exec", return_value=proc) as create,
+        ):
+            await executor.execute("hello", "system", trigger="heartbeat")
+
+        kwargs = create.call_args.kwargs
+        assert "GROK_SANDBOX" not in kwargs["env"]
+        assert "pass_fds" not in kwargs
 
     @pytest.mark.asyncio
     async def test_permission_request_is_approved(self, executor: GrokCLIExecutor):

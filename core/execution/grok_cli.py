@@ -21,6 +21,7 @@ import logging
 import os
 import shutil
 import signal
+import subprocess
 import sys
 from collections.abc import AsyncGenerator
 from dataclasses import asdict, dataclass, field
@@ -211,6 +212,86 @@ class GrokCLIExecutor(BaseExecutor):
     def _ensure_workspace(self) -> None:
         self._workspace.mkdir(parents=True, exist_ok=True)
 
+    def _write_sandbox_config(self) -> bool:
+        """Write the per-turn Grok sandbox profile and return whether to use it.
+
+        Grok applies one profile to both its model-facing shell and child MCP
+        server.  Unlike Mode C's shell profile, this profile deliberately does
+        not include ``shell_internal_deny_paths()``: the MCP child needs direct
+        access to Anima state and vector data.  Its deny rules therefore match
+        Mode C's MCP profile and contain only explicit ``file_roots_denied``.
+
+        Protection against writes to ``permissions.json`` is intentionally
+        omitted because Grok CLI 0.2.102 silently fails to apply Landlock when
+        ``read_only`` contains a file path.  As a residual risk, an Anima can
+        therefore rewrite its own ``permissions.json``.
+        """
+        if (self._model_config.extra_keys or {}).get("grok_sandbox") == "off":
+            return False
+
+        from core.config.models import load_permissions
+
+        permissions_config = load_permissions(self._anima_dir)
+        denied_roots = list(getattr(permissions_config, "file_roots_denied", []))
+        if not denied_roots and "/" in permissions_config.file_roots:
+            return False
+
+        read_write = [str(self._anima_dir.resolve())]
+        for root in permissions_config.file_roots:
+            resolved = str(Path(root).resolve())
+            if resolved != "/" and resolved not in read_write:
+                read_write.append(resolved)
+
+        deny = [str(Path(root).resolve()) for root in denied_roots]
+
+        def toml_array(values: list[str]) -> str:
+            # JSON double-quoted strings use the same escapes required by TOML
+            # for quotes, backslashes, and control characters.
+            return ", ".join(json.dumps(value, ensure_ascii=False) for value in values)
+
+        config = (
+            "[profiles.animaworks]\n"
+            'extends = "workspace"\n'
+            f"read_write = [{toml_array(read_write)}]\n"
+            f"deny = [{toml_array(deny)}]\n"
+        )
+        config_dir = self._workspace / ".grok"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "sandbox.toml").write_text(config, encoding="utf-8")
+        return True
+
+    def _log_sandbox_status(self) -> None:
+        """Best-effort log of the newest Grok sandbox event for this workspace."""
+        events_path = Path.home() / ".grok" / "sandbox-events.jsonl"
+        try:
+            with events_path.open("rb") as events_file:
+                events_file.seek(0, os.SEEK_END)
+                size = events_file.tell()
+                events_file.seek(max(0, size - 64 * 1024))
+                lines = events_file.read().splitlines()
+        except (FileNotFoundError, OSError):
+            return
+
+        workspace = str(self._workspace.resolve())
+        parsed_any = False
+        latest: dict[str, Any] | None = None
+        for line in reversed(lines):
+            try:
+                event = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if not isinstance(event, dict):
+                continue
+            parsed_any = True
+            if event.get("workspace") == workspace:
+                latest = event
+                break
+
+        if latest is not None and latest.get("event_type") == "ProfileApplied" and latest.get("enforced") is True:
+            logger.debug("Grok sandbox enforced for workspace %s", workspace)
+        elif parsed_any:
+            logger.warning("Grok sandbox not enforced (Landlock); deny paths remain bwrap-enforced")
+
     def _build_command(self) -> list[str]:
         binary = _find_grok_binary()
         if not binary:
@@ -219,6 +300,7 @@ class GrokCLIExecutor(BaseExecutor):
             binary,
             "agent",
             "--always-approve",
+            "--no-leader",
             "-m",
             _resolve_grok_model(self._model_config.model),
             "stdio",
@@ -487,20 +569,83 @@ class GrokCLIExecutor(BaseExecutor):
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Run one ACP connection and yield converted non-terminal events."""
         cmd = self._build_command()
+        sandbox_enabled = self._write_sandbox_config()
+        env = os.environ.copy()
+        if sandbox_enabled:
+            env["GROK_SANDBOX"] = "animaworks"
+        else:
+            env.pop("GROK_SANDBOX", None)
+
         proc: asyncio.subprocess.Process | None = None
         stderr_task: asyncio.Task[str] | None = None
         pending_tools: dict[str, dict[str, Any]] = {}
         next_id = 1
+        pty_master_fd: int | None = None
+        pty_slave_fd: int | None = None
+        pty_spawn_kwargs: dict[str, Any] = {}
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(self._workspace),
-                limit=_STDOUT_LIMIT_BYTES,
-            )
+            if sandbox_enabled:
+                try:
+                    import fcntl
+                    import pty
+                    import termios
+
+                    pty_master_fd, pty_slave_fd = pty.openpty()
+                    slave_fd = pty_slave_fd
+
+                    def attach_controlling_tty() -> None:
+                        os.setsid()
+                        fcntl.ioctl(slave_fd, termios.TIOCSCTTY, 0)
+
+                    pty_spawn_kwargs = {
+                        "preexec_fn": attach_controlling_tty,
+                        "pass_fds": (slave_fd,),
+                    }
+                except (ImportError, AttributeError, OSError):
+                    logger.warning(
+                        "Could not prepare a controlling PTY for Grok sandbox; continuing without Landlock",
+                        exc_info=True,
+                    )
+                    for fd in (pty_slave_fd, pty_master_fd):
+                        if fd is not None:
+                            os.close(fd)
+                    pty_master_fd = None
+                    pty_slave_fd = None
+                    pty_spawn_kwargs = {}
+
+            spawn_kwargs = {
+                "stdin": asyncio.subprocess.PIPE,
+                "stdout": asyncio.subprocess.PIPE,
+                "stderr": asyncio.subprocess.PIPE,
+                "cwd": str(self._workspace),
+                "limit": _STDOUT_LIMIT_BYTES,
+                "env": env,
+            }
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    **spawn_kwargs,
+                    **pty_spawn_kwargs,
+                )
+            except (OSError, subprocess.SubprocessError, TypeError) as exc:
+                if not pty_spawn_kwargs or isinstance(exc, FileNotFoundError):
+                    raise
+                logger.warning(
+                    "Could not attach a controlling PTY for Grok sandbox; continuing without Landlock",
+                    exc_info=True,
+                )
+                for fd in (pty_slave_fd, pty_master_fd):
+                    if fd is not None:
+                        os.close(fd)
+                pty_master_fd = None
+                pty_slave_fd = None
+                pty_spawn_kwargs = {}
+                proc = await asyncio.create_subprocess_exec(*cmd, **spawn_kwargs)
+
+            if pty_slave_fd is not None:
+                os.close(pty_slave_fd)
+                pty_slave_fd = None
             stderr_task = asyncio.create_task(self._drain_stderr(proc))
 
             async with asyncio.timeout(_HARD_CAP_SECONDS):
@@ -517,6 +662,8 @@ class GrokCLIExecutor(BaseExecutor):
                     },
                 )
                 await self._read_response(proc, next_id, "initialize")
+                if sandbox_enabled:
+                    self._log_sandbox_status()
                 next_id += 1
 
                 common_session_params = {
@@ -561,9 +708,7 @@ class GrokCLIExecutor(BaseExecutor):
                         await self._cancel_session(proc, state.session_id, next_id)
                         break
 
-                    line = await asyncio.wait_for(
-                        proc.stdout.readline(), _IDLE_TIMEOUT_SECONDS
-                    )
+                    line = await asyncio.wait_for(proc.stdout.readline(), _IDLE_TIMEOUT_SECONDS)
                     if not line:
                         raise _ACPError("session/prompt", "unexpected EOF")
                     message = self._parse_ndjson_event(line)
@@ -677,6 +822,12 @@ class GrokCLIExecutor(BaseExecutor):
                 if not state.error_text:
                     detail = state.stderr[:500] or f"exit {proc.returncode}"
                     state.error_text = self._translated_error(f"exit {proc.returncode}: {detail}")
+            for fd in (pty_slave_fd, pty_master_fd):
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        logger.debug("Failed closing Grok sandbox PTY fd", exc_info=True)
 
     async def execute(
         self,
