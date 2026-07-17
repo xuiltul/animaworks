@@ -374,6 +374,7 @@ class TestInitStatus:
     async def test_nothing_initialized(self, tmp_path, monkeypatch):
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr("server.routes.config_routes.is_codex_login_available", lambda: False)
+        monkeypatch.setattr("server.routes.config_routes.is_claude_code_available", lambda: False)
         # Remove API keys from environment
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
