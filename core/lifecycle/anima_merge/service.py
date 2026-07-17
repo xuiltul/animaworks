@@ -1372,9 +1372,18 @@ class AnimaMergeService:
         )
 
     def _verify_entity_probe(self, query: str, expected: str) -> bool:
-        from core.memory.entity_index import match_query_entities
+        # 検証目的は「sourceのエンティティがtargetのregistryへ移行済みか」。
+        # query側の抽出器はタイムスタンプ等の低品質エンティティ名を認識しないため、
+        # registry直接照合で判定する(query経由だと移行成功でも偽陰性になる)。
+        from core.memory.entity_index import load_entity_registry, normalize_entity_key
 
-        return expected in match_query_entities(self.target_dir, query)
+        registry = load_entity_registry(self.target_dir, rebuild_on_corrupt=False)
+        entities = registry.get("entities", {})
+        if not isinstance(entities, dict):
+            return False
+        if expected in entities:
+            return True
+        return any(normalize_entity_key(key) == expected for key in entities)
 
     @staticmethod
     def _probe_results_match(results: list[dict[str, Any]], probe: dict[str, Any]) -> bool:
