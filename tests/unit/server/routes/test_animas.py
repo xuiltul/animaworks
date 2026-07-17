@@ -459,7 +459,7 @@ class TestDisableAnima:
         assert "alice" not in app.state.anima_names
 
     async def test_disable_not_running(self, tmp_path):
-        """When anima is not running, status.json is written but stop_anima is NOT called."""
+        """When anima is not running, status.json is written and stop_anima is still called (no-op safe)."""
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
@@ -482,8 +482,8 @@ class TestDisableAnima:
         status_data = json.loads(status_file.read_text(encoding="utf-8"))
         assert status_data["enabled"] is False
 
-        # stop_anima NOT called because not running
-        supervisor.stop_anima.assert_not_awaited()
+        # Always call stop_anima so in-flight start races are covered
+        supervisor.stop_anima.assert_awaited_once_with("alice")
 
     async def test_disable_not_found(self):
         """Disable a nonexistent anima returns 404."""
@@ -504,7 +504,7 @@ class TestDisableAnima:
 
 class TestStartAnimaEndpoint:
     async def test_start_disabled_returns_409(self, tmp_path):
-        """Disabled anima: POST /start returns 409 and does not call start_anima."""
+        """Disabled anima on disk (not in anima_names): 409, not 404."""
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
@@ -514,7 +514,8 @@ class TestStartAnimaEndpoint:
             encoding="utf-8",
         )
 
-        app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
+        # Do not inject into anima_names — existence is disk-based.
+        app = _make_test_app(animas_dir=animas_dir, anima_names=[])
         supervisor = app.state.supervisor
         supervisor.processes = {}
         supervisor.get_process_status.return_value = {"status": "stopped"}
@@ -528,6 +529,23 @@ class TestStartAnimaEndpoint:
         detail = resp.json()["detail"]
         assert "disabled" in detail.lower()
         assert "enable" in detail.lower()
+        supervisor.start_anima.assert_not_awaited()
+
+    async def test_start_not_found_returns_404(self, tmp_path):
+        """Missing anima directory / identity.md → 404."""
+        animas_dir = tmp_path / "animas"
+        animas_dir.mkdir(parents=True)
+
+        app = _make_test_app(animas_dir=animas_dir, anima_names=[])
+        supervisor = app.state.supervisor
+        supervisor.start_anima = AsyncMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/animas/ghost/start")
+
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"].lower()
         supervisor.start_anima.assert_not_awaited()
 
     async def test_start_enabled_starts_process(self, tmp_path):
@@ -555,4 +573,29 @@ class TestStartAnimaEndpoint:
         data = resp.json()
         assert data["status"] == "started"
         assert data["name"] == "alice"
+        supervisor.start_anima.assert_awaited_once_with("alice")
+
+    async def test_start_enabled_appends_to_anima_names(self, tmp_path):
+        """Start success adds name to anima_names when missing (enable→start path)."""
+        animas_dir = tmp_path / "animas"
+        alice_dir = animas_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "status.json").write_text(
+            json.dumps({"enabled": True}),
+            encoding="utf-8",
+        )
+
+        app = _make_test_app(animas_dir=animas_dir, anima_names=[])
+        supervisor = app.state.supervisor
+        supervisor.processes = {}
+        supervisor.get_process_status.return_value = {"status": "stopped"}
+        supervisor.start_anima = AsyncMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/animas/alice/start")
+
+        assert resp.status_code == 200
+        assert "alice" in app.state.anima_names
         supervisor.start_anima.assert_awaited_once_with("alice")

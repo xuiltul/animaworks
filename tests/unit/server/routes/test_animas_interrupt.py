@@ -108,13 +108,19 @@ class TestStartStopRestartEndpoints:
         assert resp.status_code == 200
         assert resp.json()["status"] == "stopped"
 
-    async def test_start_already_running(self):
+    async def test_start_already_running(self, tmp_path):
         """Start an already running anima."""
+        animas_dir = tmp_path / "animas"
+        alice_dir = animas_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+
         sup = MagicMock()
         sup.get_process_status.return_value = {"status": "running"}
         sup.processes = {"alice": MagicMock()}
         sup.start_anima = AsyncMock()
         app = _make_test_app(anima_names=["alice"], supervisor=sup)
+        app.state.animas_dir = animas_dir
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/api/animas/alice/start")
