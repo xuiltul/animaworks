@@ -7,7 +7,7 @@ Covers execution modes, supported models, configuration methods, and context win
 
 ## Execution Modes
 
-AnimaWorks automatically determines the execution mode from the model name. There are 6 execution modes:
+AnimaWorks automatically determines the execution mode from the model name. There are 7 execution modes:
 
 | Mode | Name | Overview | Example Models |
 |------|------|----------|---------------|
@@ -15,6 +15,7 @@ AnimaWorks automatically determines the execution mode from the model name. Ther
 | **C** | Codex | Via Codex CLI | `codex/o4-mini`, `codex/gpt-4.1` |
 | **D** | Cursor Agent | Via Cursor Agent CLI (`cursor-agent`). MCP-integrated | `cursor/*` |
 | **G** | Gemini CLI | Via Gemini CLI. MCP-integrated | `gemini/*` |
+| **X** | Grok Build | Grok Build CLI wrapper via ACP stdio | `grok/*` |
 | **A** | Autonomous | LiteLLM + tool_use loop | `openai/gpt-4.1`, `google/gemini-2.5-pro`, `ollama/qwen3:14b` |
 | **B** | Basic | Single-shot execution. Framework handles memory I/O | `ollama/gemma3:4b`, `ollama/deepseek-r1*` |
 
@@ -25,6 +26,8 @@ AnimaWorks automatically determines the execution mode from the model name. Ther
 3. `config.json` `model_modes` (deprecated)
 4. Code default pattern matching
 5. Unknown → Mode B (safe side)
+
+Mode X requires the `grok` CLI to be installed and authenticated with `grok login` before use.
 
 ---
 
@@ -54,6 +57,13 @@ Run `animaworks models list` for the latest catalog. Key models:
 |-------|-------------|
 | `google/gemini-2.5-pro` | Highest performance |
 | `google/gemini-2.5-flash` | Fast, balanced |
+
+### Grok Build (Mode X)
+
+| Model | Description |
+|-------|-------------|
+| `grok/grok-4.5` | Grok Build CLI via ACP stdio |
+| `grok/grok-composer-2.5-fast` | Fast Grok Build model |
 
 ### Azure OpenAI (Mode A)
 
@@ -158,7 +168,7 @@ fnmatch wildcard patterns are supported.
 ```json
 {
   "pattern": {
-    "mode": "S" | "C" | "D" | "G" | "A" | "B",
+    "mode": "S" | "C" | "D" | "G" | "X" | "A" | "B",
     "context_window": token_count
   }
 }
@@ -171,6 +181,7 @@ fnmatch wildcard patterns are supported.
   "claude-opus-4-6":    { "mode": "S", "context_window": 1000000 },
   "claude-sonnet-4-6":  { "mode": "S", "context_window": 1000000 },
   "claude-*":           { "mode": "S", "context_window": 200000 },
+  "grok/*":             { "mode": "X", "context_window": 500000 },
   "openai/gpt-4.1*":   { "mode": "A", "context_window": 1000000 },
   "openai/*":           { "mode": "A", "context_window": 128000 },
   "ollama/gemma3*":     { "mode": "B", "context_window": 8192 }

@@ -63,6 +63,9 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     # Codex CLI models (same context as OpenAI API models)
     "o4-mini": 200_000,
     "o3": 200_000,  # noqa: F601
+    # xAI Grok Build CLI (Mode X)
+    "grok-4.5": 500_000,
+    "grok-composer-2.5-fast": 500_000,
     # GLM (THUDM)
     "glm-4": 131_072,
     # Qwen 3.5 (GDN hybrid — native 262K but 64K practical for 9B)

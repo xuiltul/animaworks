@@ -125,6 +125,53 @@ class TestModeCFallback:
         assert kwargs["model_config"].model == "anthropic/claude-sonnet-4-6"
 
 
+# ── Mode X executor / fallback ────────────────────────────
+
+
+class TestModeXExecutor:
+    def test_mode_x_creates_grok_executor_with_runtime_dependencies(self, tmp_path):
+        agent = _make_agent(
+            tmp_path,
+            model="grok/grok-4.5",
+            resolved_mode="X",
+        )
+        sentinel_executor = MagicMock(name="grok_executor")
+
+        with (
+            patch("core.execution.grok_cli.is_grok_cli_available", return_value=True),
+            patch("core.execution.grok_cli.GrokCLIExecutor", return_value=sentinel_executor) as mock_grok,
+        ):
+            created = agent._create_executor()
+
+        assert created is sentinel_executor
+        mock_grok.assert_called_once_with(
+            model_config=agent.model_config,
+            anima_dir=tmp_path,
+            tool_registry=agent._tool_registry,
+            personal_tools=agent._personal_tools,
+            interrupt_event=agent._interrupt_event,
+        )
+
+    def test_mode_x_fallback_remaps_grok_model_to_xai(self, tmp_path):
+        agent = _make_agent(
+            tmp_path,
+            model="grok/grok-4.5",
+            resolved_mode="X",
+        )
+        sentinel_executor = MagicMock(name="litellm_executor")
+
+        with (
+            patch("core.execution.grok_cli.is_grok_cli_available", return_value=False),
+            patch("core.execution.LiteLLMExecutor", return_value=sentinel_executor) as mock_litellm,
+        ):
+            created = agent._create_executor()
+
+        assert created is sentinel_executor
+        kwargs = mock_litellm.call_args.kwargs
+        assert kwargs["model_config"].model == "xai/grok-4.5"
+        assert agent.model_config.model == "grok/grok-4.5"
+
+
 # ── Callbacks / reply tracking ────────────────────────────
 
 

@@ -4,13 +4,11 @@
 """Tests for execution mode routing logic.
 
 Verifies that AgentCore._resolve_execution_mode() correctly routes
-to S, A, or B based on model name, SDK availability, and config.
+to S, C, D, G, X, A, or B based on model name, SDK availability, and config.
 No API calls are made in these tests.
 """
 
 from __future__ import annotations
-
-
 
 
 class TestModeRouting:
@@ -40,6 +38,30 @@ class TestModeRouting:
             model="openai/gpt-4o",
         )
         assert agent._resolve_execution_mode() == "a"
+
+    def test_cursor_model_routes_to_d(self, make_agent_core):
+        """Cursor-prefixed model → Mode D."""
+        agent = make_agent_core(
+            name="cursor-d",
+            model="cursor/auto",
+        )
+        assert agent._resolve_execution_mode() == "d"
+
+    def test_gemini_cli_model_routes_to_g(self, make_agent_core):
+        """Gemini CLI-prefixed model → Mode G."""
+        agent = make_agent_core(
+            name="gemini-g",
+            model="gemini/gemini-2.5-pro",
+        )
+        assert agent._resolve_execution_mode() == "g"
+
+    def test_grok_model_routes_to_x(self, make_agent_core):
+        """Grok Build-prefixed model → Mode X."""
+        agent = make_agent_core(
+            name="grok-x",
+            model="grok/grok-4.5",
+        )
+        assert agent._resolve_execution_mode() == "x"
 
     def test_ollama_model_routes_to_a(self, make_agent_core):
         """Ollama model with tool_use support → Mode A."""

@@ -14,7 +14,7 @@ Digital Anima is the minimal unit that encapsulates an AI agent as "a single per
 
 **Technical Direction:**
 
-- Agent execution uses **6 modes** (auto-selected from model name patterns via `resolve_execution_mode()`): **S** Claude Agent SDK, **C** Codex CLI, **D** Cursor Agent CLI, **G** Gemini CLI, **A** LiteLLM + tool_use (including Anthropic direct fallback), **B** one-shot assisted (framework handles memory I/O)
+- Agent execution uses **7 modes** (auto-selected from model name patterns via `resolve_execution_mode()`): **S** Claude Agent SDK, **C** Codex CLI, **D** Cursor Agent CLI, **G** Gemini CLI, **X** Grok Build CLI wrapper (ACP stdio), **A** LiteLLM + tool_use (including Anthropic direct fallback), **B** one-shot assisted (framework handles memory I/O)
 - Configuration is unified in **config.json** (Pydantic validation); memories are written in **Markdown**
 - User-facing UI strings are resolved via **`core/i18n`** `t()` (hardcoding prohibited)
 - Multiple Animas operate collaboratively in a **hierarchical structure** (hierarchy defined by the `supervisor` field, synchronous delegation)
@@ -28,11 +28,12 @@ Digital Anima is the minimal unit that encapsulates an AI agent as "a single per
 │                   Digital Anima                      │
 │                                                       │
 │  Identity ──── Who I am (always resident)             │
-│  Agent Core ── 6 execution modes (auto-resolved from model name)│
+│  Agent Core ── 7 execution modes (auto-resolved from model name)│
 │    ├ S: Claude Agent SDK                               │
 │    ├ C: Codex CLI                                        │
 │    ├ D: Cursor Agent CLI                                 │
 │    ├ G: Gemini CLI                                       │
+│    ├ X: Grok Build CLI (ACP stdio)                       │
 │    ├ A: LiteLLM + tool_use (cloud APIs, some Ollama, etc.)│
 │    └ B: One-shot assisted (weak models, FW-managed)     │
 │  Memory ───── Archive-based long-term memory (recall via autonomous search)│
@@ -141,6 +142,7 @@ animaworks/
 │   │   ├── codex_sdk.py       #   Mode C: Codex CLI
 │   │   ├── cursor_agent.py    #   Mode D: Cursor Agent CLI
 │   │   ├── gemini_cli.py      #   Mode G: Gemini CLI
+│   │   ├── grok_cli.py        #   Mode X: Grok Build CLI (ACP stdio)
 │   │   ├── anthropic_fallback.py # Inside Mode A: Anthropic SDK direct
 │   │   ├── litellm_loop.py    #   Mode A: LiteLLM + tool_use
 │   │   ├── assisted.py        #   Mode B: Framework-assisted
@@ -398,6 +400,7 @@ Model names include the provider prefix (following LiteLLM naming conventions):
 | Codex | `codex/{model-name}` | `codex/gpt-5.3-codex` |
 | Cursor Agent CLI | `cursor/{model-name}` | `cursor/claude-sonnet-4-6` |
 | Gemini CLI | `gemini/{model-name}` | (Follows CLI-side model notation) |
+| Grok Build CLI | `grok/{model-name}` | `grok/grok-4.5` |
 | Ollama | `ollama/{model-name}` | `ollama/qwen3:8b` |
 | vLLM (local) | `openai/{model-name}` + credential base_url | `openai/glm-4.7-flash` |
 
@@ -428,12 +431,15 @@ When `execution_mode` is not set in `status.json`, `resolve_execution_mode()` re
 | `codex/*` | C | Codex → CLI wrapper |
 | `cursor/*` | D | Cursor Agent CLI |
 | `gemini/*` | G | Gemini CLI |
+| `grok/*` | X | Grok Build CLI wrapper (ACP stdio) |
 | `openai/*`, `azure/*`, `bedrock/*`, `vertex_ai/*`, `google/*`, `mistral/*`, `xai/*`, `cohere/*`, `zai/*`, `minimax/*`, `moonshot/*`, `deepseek/deepseek-chat`, etc. | A | Cloud APIs, etc. → LiteLLM + tool_use |
 | `ollama/qwen3.5*`, `ollama/qwen3:*` (some sizes), `ollama/qwen3-coder:*`, `ollama/llama4:*`, `ollama/mistral-small3.2:*`, `ollama/devstral*`, `ollama/glm-4.7*`, `ollama/glm-5*`, `ollama/minimax*`, `ollama/kimi-k2*`, `ollama/gpt-oss*`, etc. | A | Ollama models with proven tool_use support |
 | `ollama/qwen3:0.6b`–`8b`, `ollama/gemma3*`, `ollama/deepseek-r1*`, `ollama/deepseek-v3*`, `ollama/phi4*`, etc. | B | Weaker or reasoning-specialized models with unstable tools → Basic |
 | `ollama/*` | B | Other Ollama → Basic (safe fallback) |
 
 **Note:** `bedrock/*` defaults to Mode A. For Mode S, explicitly set both `"execution_mode": "S"` and `"mode_s_auth": "bedrock"`.
+
+Mode X requires the `grok` CLI to be installed and authenticated with `grok login` before use.
 
 #### Configuration Pattern Examples
 
@@ -859,7 +865,7 @@ Activation (message or heartbeat or cron)
   ↓
 Recall: Search the archive for relevant memories
   ↓
-Think & Act: Agent Core (S/C/D/G/A/B modes) processes
+Think & Act: Agent Core (S/C/D/G/X/A/B modes) processes
   ↓
 Communicate: Summarize results and send as text or create files
   ↓
@@ -955,7 +961,7 @@ Including "Making decisions without searching memory is prohibited" in `behavior
 ## 11. Implemented Features
 
 - **Digital Anima class** — Encapsulation and autonomous operation. 1 Anima = 1 directory
-- **6 execution modes** — S: Agent SDK / C: Codex CLI / D: Cursor Agent CLI / G: Gemini CLI / A: LiteLLM + tool_use (including Anthropic direct fallback) / B: Assisted (one-shot)
+- **7 execution modes** — S: Agent SDK / C: Codex CLI / D: Cursor Agent CLI / G: Gemini CLI / X: Grok Build CLI (ACP stdio) / A: LiteLLM + tool_use (including Anthropic direct fallback) / B: Assisted (one-shot)
 - **Background model** — heartbeat/inbox/cron can run on a separate lightweight model from the main model (cost optimization)
 - **ProcessSupervisor** — Launches and monitors each Anima as an independent child process with Unix socket
 - **Archive-based memory** — episodes / knowledge / procedures / state. Details in **[memory.md](memory.md)**
@@ -983,7 +989,7 @@ Including "Making decisions without searching memory is prohibited" in `behavior
 
 ### 11.1 Internal Tools Catalog
 
-Internal tools provided by the framework. Combines Claude Code–compatible tools with AnimaWorks-specific tools. Mode S uses MCP; Mode C/D/G use each CLI's tool path; Mode A/B use native tool_use, etc. External integrations are mainly via `Bash` + `animaworks-tool` CLI.
+Internal tools provided by the framework. Combines Claude Code–compatible tools with AnimaWorks-specific tools. Mode S uses MCP; Mode C/D/G/X use each CLI's tool path; Mode A/B use native tool_use, etc. External integrations are mainly via `Bash` + `animaworks-tool` CLI.
 
 **Memory:**
 
@@ -1070,7 +1076,7 @@ Internal tools provided by the framework. Combines Claude Code–compatible tool
 |Forgetting: score-based → [IMPORTANT] tag + consolidation|Simple tag-based approach is more practical. Consolidation naturally organizes importance|
 |config.md → config.json                |From per-anima MD to unified JSON. Pydantic validation + per-anima overrides|
 |Do not build the agent loop ourselves  |Delegate to the Claude Agent SDK. No reinventing the wheel         |
-|6 execution modes (S/C/D/G/A/B)      |Claude SDK, Codex/Cursor/Gemini CLI, LiteLLM general use, Assisted for weak models. All within the Anima capsule (auto-resolved from model name patterns)|
+|7 execution modes (S/C/D/G/X/A/B)      |Claude SDK, Codex/Cursor/Gemini/Grok CLI, LiteLLM general use, Assisted for weak models. All within the Anima capsule (auto-resolved from model name patterns)|
 |agent.py refactoring                   |Split into execution/, tooling/, memory/. ProcessSupervisor for child process launch|
 |Package lifecycle as a package         |Split scheduler, Inbox, rate limiting, and system cron/consolidation into `core/lifecycle/` modules|
 |Config schema extensions               |`prompt` / `machine` / `workspaces` / `activity_level` / `activity_schedule` / `ui`, etc. Vault lives outside config in `vault.json`|

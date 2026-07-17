@@ -18,7 +18,7 @@ from core.paths import get_data_dir, load_prompt
 from core.prompt.sections import _load_fallback_strings, _load_section_strings
 
 # Modes that use MCP-style tool access (built-in + mcp__aw__*).
-_MCP_MODES = frozenset({"s", "c", "d", "g"})
+_MCP_MODES = frozenset({"s", "c", "d", "g", "x"})
 
 
 def _resolved_visible_path(path: Path, denied_roots: tuple[Path, ...]) -> Path | None:
@@ -33,7 +33,7 @@ def _resolved_visible_path(path: Path, denied_roots: tuple[Path, ...]) -> Path |
 
 
 def _is_mcp_mode(execution_mode: str) -> bool:
-    """Return True for modes using built-in tools + MCP (S, C, D, and G)."""
+    """Return True for modes using built-in tools + MCP (S, C, D, G, and X)."""
     return execution_mode in _MCP_MODES
 
 

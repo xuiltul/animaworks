@@ -274,7 +274,7 @@ class PrimingMixin:
         """Estimate tool definition overhead in tokens based on schema count."""
         registry = getattr(self, "_tool_registry", None) or []
         mode = mode or getattr(self, "_execution_mode", "a")
-        per_schema = self._TOKENS_PER_MCP_SCHEMA if mode in ("s", "c") else self._TOKENS_PER_TOOL_SCHEMA
+        per_schema = self._TOKENS_PER_MCP_SCHEMA if mode in ("s", "c", "x") else self._TOKENS_PER_TOOL_SCHEMA
         return min(max(len(registry) * per_schema, self._MIN_TOOL_OVERHEAD), self._MAX_TOOL_OVERHEAD)
 
     def _fit_prompt_to_context_window(

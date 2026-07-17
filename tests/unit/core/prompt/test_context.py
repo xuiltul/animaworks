@@ -5,16 +5,17 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
 
 from core.prompt.context import (
+    _DEFAULT_CONTEXT_WINDOW,
+    _THRESHOLD_CEILING,
     CHARS_PER_TOKEN,
     MODEL_CONTEXT_WINDOWS,
     ContextTracker,
-    _DEFAULT_CONTEXT_WINDOW,
-    _THRESHOLD_CEILING,
     _resolve_context_window,
     resolve_context_threshold,
     resolve_context_window,
@@ -43,6 +44,14 @@ class TestResolveContextWindowSSoT:
         entry = {"mode": "C", "context_window": 272_000}
         with patch(_PATCH_TARGET, return_value=entry):
             assert resolve_context_window("codex/gpt-5.4") == 272_000
+
+    def test_models_json_grok_45(self):
+        from core.paths import TEMPLATES_DIR
+
+        models_path = TEMPLATES_DIR / "_shared" / "config_defaults" / "models.json"
+        entry = json.loads(models_path.read_text(encoding="utf-8"))["grok/grok-4.5"]
+        with patch(_PATCH_TARGET, return_value=entry):
+            assert resolve_context_window("grok/grok-4.5") == 500_000
 
     def test_models_json_mistral(self):
         entry = {"mode": "A", "context_window": 256_000}

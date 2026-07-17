@@ -123,6 +123,13 @@ class CycleMixin:
         except Exception:
             logger.debug("Failed to clear non-chat Codex thread ID", exc_info=True)
 
+        try:
+            from core.execution.grok_cli import _clear_session_id as clear_grok_session_id
+
+            clear_grok_session_id(self.anima_dir, session_type, thread_id)
+        except Exception:
+            logger.debug("Failed to clear non-chat Grok session ID", exc_info=True)
+
     # ── Public API ─────────────────────────────────────────
 
     async def run_cycle(
@@ -142,11 +149,14 @@ class CycleMixin:
           - Mode B (basic):      ``AssistedExecutor``  -- text-based tool loop
           - Mode A (autonomous): ``LiteLLMExecutor`` -- LiteLLM + tool_use
           - Mode C (codex):      ``CodexSDKExecutor`` -- Codex CLI wrapper
+          - Mode D (cursor):     ``CursorAgentExecutor`` -- Cursor Agent CLI
+          - Mode G (gemini):     ``GeminiCLIExecutor`` -- Gemini CLI
+          - Mode X (grok):       ``GrokCLIExecutor`` -- Grok Build CLI
           - Mode S (SDK):        ``AgentSDKExecutor`` -- Claude Agent SDK
 
         If the context threshold is crossed (A mode only), the session is
         externalized to short-term memory and automatically continued.
-        S and C modes rely on the SDK's built-in context management.
+        SDK and CLI modes use executor-specific session management.
         """
         from core.logging_config import bind_cycle_context, clear_cycle_context
 
@@ -554,6 +564,55 @@ class CycleMixin:
                 truncated=result.truncated,
             )
 
+        # ── Mode X: Grok Build CLI ─────────────────────────
+        if mode == "x":
+            result = await active_executor.execute(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                tracker=tracker,
+                trigger=trigger,
+                images=images,
+                max_turns_override=max_turns_override,
+                thread_id=thread_id,
+            )
+            if result.replied_to_from_transcript:
+                self._tool_handler.merge_replied_to(result.replied_to_from_transcript)
+            _save_prompt_log_end(
+                self.anima_dir,
+                session_id=self._tool_handler.session_id,
+                tool_call_count=len(result.tool_call_records),
+            )
+            if uses_chat_session:
+                shortterm.clear()
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "run_cycle END (x) trigger=%s duration_ms=%d response_len=%d",
+                trigger,
+                duration_ms,
+                len(result.text),
+            )
+            _x_usage = result.usage.to_dict() if result.usage else None
+            _log_session_token_usage(
+                self.anima_dir,
+                model=active_model_config.model,
+                mode="x",
+                trigger=trigger,
+                usage=_x_usage,
+                duration_ms=duration_ms,
+            )
+            return CycleResult(
+                trigger=trigger,
+                action="responded",
+                summary=result.text,
+                duration_ms=duration_ms,
+                context_usage_ratio=tracker.usage_ratio,
+                context_window=tracker.context_window,
+                context_threshold=tracker.threshold,
+                tool_call_records=_tool_records_to_dicts(result),
+                usage=_x_usage,
+                truncated=result.truncated,
+            )
+
         # ── Mode A: LiteLLM tool_use loop ─────────────────
         if mode == "a":
             result = await active_executor.execute(
@@ -862,7 +921,7 @@ class CycleMixin:
         )
         _prompt_tier_s = _rpt(_ctx_window_s)
 
-        # ── Streaming executor (S / A / all modes) ───────────────
+        # ── All streaming-capable executors ──────────────────────
         priming_section, pending_human_notifications = await self._run_priming(
             prompt,
             trigger,
@@ -1114,7 +1173,20 @@ class CycleMixin:
                             from core.execution.codex_sdk import clear_codex_thread_ids
 
                             clear_codex_thread_ids(self.anima_dir, thread_id)
-                        elif mode != "c":
+                        elif mode == "x" and uses_chat_session:
+                            from core.execution.grok_cli import (
+                                _clear_session_id as clear_grok_session_id,
+                            )
+                            from core.execution.grok_cli import (
+                                _resolve_session_type as resolve_grok_session_type,
+                            )
+
+                            clear_grok_session_id(
+                                self.anima_dir,
+                                resolve_grok_session_type(trigger),
+                                thread_id,
+                            )
+                        elif mode not in ("c", "x"):
                             from core.execution._sdk_session import (
                                 _RESUMABLE_SESSION_TYPES,
                                 _clear_session_id,
@@ -1228,6 +1300,22 @@ class CycleMixin:
                     clear_codex_thread_ids(self.anima_dir, thread_id)
                 except Exception:
                     logger.debug("Failed to clear Codex thread ID for deferred chain", exc_info=True)
+            elif mode == "x":
+                try:
+                    from core.execution.grok_cli import (
+                        _clear_session_id as clear_grok_session_id,
+                    )
+                    from core.execution.grok_cli import (
+                        _resolve_session_type as resolve_grok_session_type,
+                    )
+
+                    clear_grok_session_id(
+                        self.anima_dir,
+                        resolve_grok_session_type(trigger),
+                        thread_id,
+                    )
+                except Exception:
+                    logger.debug("Failed to clear Grok session ID for deferred chain", exc_info=True)
         elif uses_chat_session:
             shortterm.clear()
 

@@ -359,6 +359,35 @@ class TestMigrationSteps:
         result = step_models_json_create(data_dir, dry_run=False, verbose=True)
         assert result.skipped == 1
 
+    def test_step_grok_models_json_adds_entries_and_preserves_existing(self, data_dir: Path) -> None:
+        from core.migrations.steps import step_grok_models_json
+
+        models_path = data_dir / "models.json"
+        existing = {"custom/model": {"mode": "A", "context_window": 12345}}
+        models_path.write_text(json.dumps(existing), encoding="utf-8")
+
+        result = step_grok_models_json(data_dir, dry_run=False, verbose=True)
+
+        assert result.changed == 2
+        raw = json.loads(models_path.read_text(encoding="utf-8"))
+        assert raw["custom/model"] == existing["custom/model"]
+        assert raw["grok/grok-4.5"] == {"mode": "X", "context_window": 500000}
+        assert raw["grok/*"] == {"mode": "X", "context_window": 500000}
+
+    def test_step_grok_models_json_preserves_existing_grok_entry(self, data_dir: Path) -> None:
+        from core.migrations.steps import step_grok_models_json
+
+        models_path = data_dir / "models.json"
+        custom_grok = {"mode": "A", "context_window": 999999}
+        models_path.write_text(json.dumps({"grok/*": custom_grok}), encoding="utf-8")
+
+        result = step_grok_models_json(data_dir, dry_run=False, verbose=True)
+
+        assert result.changed == 1
+        raw = json.loads(models_path.read_text(encoding="utf-8"))
+        assert raw["grok/*"] == custom_grok
+        assert raw["grok/grok-4.5"] == {"mode": "X", "context_window": 500000}
+
     def test_step_shortterm_layout(self, data_dir: Path) -> None:
         from core.migrations.steps import step_shortterm_layout
 

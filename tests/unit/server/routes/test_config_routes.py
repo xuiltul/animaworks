@@ -244,6 +244,26 @@ class TestOpenAIAuthSettings:
         assert "codex/gpt-5.3-codex" in ids
         assert "openai-codex/gpt-5.3-codex" not in ids
 
+    async def test_available_models_include_grok_build_models(self):
+        config = AnimaWorksConfig()
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        with (
+            patch("server.routes.config_routes.load_config", return_value=config),
+            patch("server.routes.config_routes.is_codex_login_available", return_value=False),
+            patch("server.routes.config_routes.is_grok_authenticated", return_value=True),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/system/available-models")
+
+        assert resp.status_code == 200
+        models = resp.json()["models"]
+        grok_models = {item["id"]: item for item in models if item["credential"] == "grok"}
+
+        assert set(grok_models) == {"grok/grok-4.5", "grok/grok-composer-2.5-fast"}
+        assert all(item["label"] == item["id"] for item in grok_models.values())
+
 
 class TestLocalLLMSettings:
     async def test_get_local_llm_returns_runtime_state(self):

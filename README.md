@@ -29,7 +29,7 @@ Humans can talk to a leader or responsible member, while task breakdown, delegat
 | **Autonomy** | Heartbeat (observe → plan → reflect) + Cron + TaskExec — runs 24/7 | Human-triggered | Human-triggered | Cron + heartbeat | Human-triggered |
 | **Org structure** | Supervisor → subordinate hierarchy, delegation, audit, dashboard | Flat roles in a crew | — | Single agent | Handoffs only |
 | **Process model** | One isolated OS process per agent, IPC, auto-restart | Shared process | Shared process | Single process | Shared process |
-| **Multi-model** | Six engines: Claude SDK / Codex / Cursor Agent / Gemini CLI / LiteLLM / Assisted (Anthropic SDK falls back inside Mode A when Agent SDK is not installed) | LiteLLM | LangChain models | OpenAI-compatible | OpenAI-centric |
+| **Multi-model** | Seven engines: Claude SDK / Codex / Cursor Agent / Gemini CLI / Grok Build / LiteLLM / Assisted (Anthropic SDK falls back inside Mode A when Agent SDK is not installed) | LiteLLM | LangChain models | OpenAI-compatible | OpenAI-centric |
 
 > AnimaWorks is not a task runner. It is an organization that thinks, remembers, forgets, and gradually grows. I build it while using it as an AI team in real business operations.
 
@@ -208,6 +208,7 @@ Works with many LLMs. Each Anima can use a different model.
 | C (Codex) | Codex CLI (SDK wrapper) | OpenAI Codex CLI models | Codex sandbox + **AnimaWorks MCP** (`core/mcp/server.py`) for internal tools |
 | D (Cursor) | Cursor Agent CLI | `cursor/*` models | MCP-integrated agent loop |
 | G (Gemini CLI) | Gemini CLI | `gemini/*` models | stream-json parsing, tool loop |
+| X (Grok Build) | Grok Build CLI wrapper (ACP stdio) | `grok/*` models | Grok Build agent loop over ACP stdio |
 | A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, Bedrock, Vertex, xAI, etc. | CC-style (Read/Write/Edit/Bash/Grep/Glob, **WebSearch/WebFetch**) + memory, messaging, tasks (**submit_tasks**, etc.), **todo_write**, skill authoring/curation, and more (varies with notifications and supervisor tools) |
 | B (Basic) | LiteLLM one-shot | Unstable tool_use locals (e.g. small Ollama) | Pseudo tool calls in the prompt; the framework handles memory I/O on the model’s behalf |
 
@@ -258,6 +259,8 @@ Three principles hold it up:
 | `GOOGLE_API_KEY` | Google AI (Gemini) | A | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 
 **OpenAI Codex (Mode C)** supports both `OPENAI_API_KEY` and local **Codex Login** (`codex login`). Choose in the setup wizard or Settings.
+
+**Grok Build (Mode X)** uses `grok/*` models through the Grok Build CLI wrapper (ACP stdio). Install the `grok` CLI and run `grok login` before use.
 
 **Azure OpenAI**, **Vertex AI (Gemini)**, **AWS Bedrock**, and **vLLM** are configured in the `credentials` section of `config.json`. See the [technical specification](docs/spec.md).
 
@@ -411,7 +414,7 @@ ask a Reviewer, commit the repair, and escalate with `call_human` after three fa
 
 | Component | Technology |
 |-----------|------------|
-| Agent execution | Claude Agent SDK / Codex CLI / Cursor Agent CLI / Gemini CLI / Anthropic SDK (fallback) / LiteLLM |
+| Agent execution | Claude Agent SDK / Codex CLI / Cursor Agent CLI / Gemini CLI / Grok Build CLI / Anthropic SDK (fallback) / LiteLLM |
 | Mode S integration | stdio **MCP** (`python -m core.mcp.server`, tool names `mcp__aw__*`) |
 | LLM providers | Anthropic, OpenAI, Google, Azure, Vertex AI, AWS Bedrock, Ollama, vLLM, and more (via LiteLLM) |
 | Web framework | FastAPI + Uvicorn |
@@ -443,9 +446,9 @@ animaworks/
 │   ├── memory/          # Memory (priming, consolidation, forgetting, RAG, activity)
 │   ├── skills/          # Skill Hub, activation, router, curator, promotion
 │   ├── taskboard/       # TaskBoard store, state, cleanup
-│   ├── execution/       # Execution engines (S/C/D/G/A/B)
+│   ├── execution/       # Execution engines (S/C/D/G/X/A/B)
 │   ├── mcp/             # stdio MCP server for Mode S
-│   ├── platform/        # Child processes, locks, Codex/Cursor/Gemini plumbing
+│   ├── platform/        # Child processes, locks, Codex/Cursor/Gemini/Grok plumbing
 │   ├── tooling/         # ToolHandler, schemas, external dispatch
 │   ├── prompt/          # System prompt builder (six-group structure)
 │   ├── supervisor/      # ProcessSupervisor, IPC, TaskExec, streaming

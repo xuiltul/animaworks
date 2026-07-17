@@ -983,6 +983,43 @@ def step_v060_resync(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult
     return StepResult(changed=total, skipped=0, details=details)
 
 
+def step_grok_models_json(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Add Mode X Grok Build entries to an existing runtime models.json."""
+    models_path = data_dir / "models.json"
+    if not models_path.exists():
+        return StepResult(changed=0, skipped=1, details=["models.json not found"])
+
+    try:
+        raw = json.loads(models_path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return StepResult(changed=0, skipped=1, details=["models.json is not an object"])
+
+        new_entries = {
+            "grok/grok-4.5": {"mode": "X", "context_window": 500000},
+            "grok/*": {"mode": "X", "context_window": 500000},
+        }
+        added = [key for key in new_entries if key not in raw]
+        if not added:
+            return StepResult(changed=0, skipped=1, details=["models.json already has Grok entries"])
+
+        if not dry_run:
+            for key in added:
+                raw[key] = new_entries[key]
+            models_path.write_text(
+                json.dumps(raw, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+
+        action = "Would add" if dry_run else "Added"
+        return StepResult(
+            changed=len(added),
+            skipped=0,
+            details=[f"{action} models.json entries: {', '.join(added)}"],
+        )
+    except (json.JSONDecodeError, OSError) as exc:
+        return StepResult(changed=0, skipped=1, details=[f"models.json update skipped: {exc}"])
+
+
 def step_cross_anima_write_guidance(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Resync common_knowledge + prompts to deploy cross-Anima write boundary guidance.
 
@@ -1231,6 +1268,12 @@ def register_all_steps(runner: Any) -> None:
             "v0.6.0: Full template resync + Mode D/G models.json",
             "template_sync",
             step_v060_resync,
+        ),
+        MigrationStep(
+            "grok_models_json",
+            "Add Mode X Grok Build models.json entries",
+            "template_sync",
+            step_grok_models_json,
         ),
         MigrationStep(
             "cross_anima_write_guidance",

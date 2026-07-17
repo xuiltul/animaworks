@@ -527,7 +527,7 @@ animaworks models list --json
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `--mode` | choice | Filter by S, A, B, C |
+| `--mode` | choice | Filter by S, C, D, G, X, A, B |
 | `--json` | flag | JSON output |
 
 ---

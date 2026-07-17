@@ -98,6 +98,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "[Gemini CLI タイムアウト: {timeout}秒以内に完了しませんでした]",
         "en": "[Gemini CLI timeout: did not complete within {timeout} seconds]",
     },
+    "grok_cli.not_installed": {
+        "ja": "Grok CLIが見つかりません。`curl -fsSL https://x.ai/cli/install.sh | bash` でインストールし、`grok login` でログインしてください。",
+        "en": "Grok CLI not found. Install with `curl -fsSL https://x.ai/cli/install.sh | bash` and run `grok login`.",
+        "ko": "Grok CLI가 없습니다. `curl -fsSL https://x.ai/cli/install.sh | bash`로 설치하고 `grok login`을 실행하세요.",
+    },
+    "grok_cli.not_authenticated": {
+        "ja": "Grok CLIが未認証です。`grok login` を実行してxAIアカウントにログインしてください。",
+        "en": "Grok CLI is not authenticated. Run `grok login` to sign in to your xAI account.",
+        "ko": "Grok CLI가 인증되지 않았습니다. `grok login`을 실행하여 xAI 계정에 로그인하세요.",
+    },
+    "grok_cli.timeout": {
+        "ja": "[Grok CLI タイムアウト: {timeout}秒以内に完了しませんでした]",
+        "en": "[Grok CLI timeout: did not complete within {timeout} seconds]",
+        "ko": "[Grok CLI 시간 초과: {timeout}초 이내에 완료되지 않음]",
+    },
     "sdk_hooks.task_no_subtask": {
         "ja": (
             "BLOCKED: TaskExecセッション内でAgent/Task/submit_tasksサブタスクは起動できません（再帰防止）。"

@@ -540,7 +540,7 @@ animaworks models list --json
 
 | オプション | 型 | 説明 |
 |-----------|-----|------|
-| `--mode` | choice | S, A, B, C でフィルタ |
+| `--mode` | choice | S, C, D, G, X, A, B でフィルタ |
 | `--json` | flag | JSON出力 |
 
 ---

@@ -10,6 +10,9 @@ import sys
 _MODE_LABELS: dict[str, str] = {
     "S": "S (SDK)",
     "C": "C (Codex)",
+    "D": "D (Cursor Agent CLI)",
+    "G": "G (Gemini CLI)",
+    "X": "X (Grok Build CLI)",
     "A": "A (Autonomous)",
     "B": "B (Basic)",
 }
@@ -180,7 +183,7 @@ def register_models_command(subparsers: argparse._SubParsersAction) -> None:
     p_list.add_argument(
         "--mode",
         default=None,
-        choices=["S", "A", "B", "C", "s", "a", "b", "c"],
+        choices=["S", "A", "B", "C", "D", "G", "X", "s", "a", "b", "c", "d", "g", "x"],
         help="Filter by execution mode",
     )
     p_list.add_argument(

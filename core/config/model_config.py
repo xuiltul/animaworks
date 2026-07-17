@@ -241,6 +241,7 @@ _FAMILY_CREDENTIAL_MAP: dict[str, str] = {
     "codex": "openai",
     "bedrock": "anthropic",
     "cursor": "anthropic",
+    "grok": "grok",
 }
 
 

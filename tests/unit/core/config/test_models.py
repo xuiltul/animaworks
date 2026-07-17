@@ -32,6 +32,7 @@ from core.config.models import (
     WorkerSystemConfig,
     _format_permissions_for_prompt,
     _match_pattern_table,
+    _normalise_mode,
     _pattern_specificity,
     get_config_path,
     invalidate_cache,
@@ -755,6 +756,21 @@ class TestResolveExecutionModeWildcard:
     def test_openai_codex_provider_routes_to_c(self):
         config = AnimaWorksConfig()
         assert resolve_execution_mode(config, "openai-codex/gpt-5.3-codex") == "C"
+
+    def test_grok_model_routes_to_x(self):
+        config = AnimaWorksConfig()
+        assert resolve_execution_mode(config, "grok/grok-4.5") == "X"
+
+    def test_grok_wildcard_routes_future_models_to_x(self):
+        config = AnimaWorksConfig()
+        assert resolve_execution_mode(config, "grok/future-model") == "X"
+
+    def test_explicit_x_override_takes_priority(self):
+        config = AnimaWorksConfig(model_modes={"grok/*": "A"})
+        assert resolve_execution_mode(config, "grok/grok-4.5", "X") == "X"
+
+    def test_normalise_lowercase_x(self):
+        assert _normalise_mode("x") == "X"
 
     def test_ollama_a_models(self):
         config = AnimaWorksConfig()
