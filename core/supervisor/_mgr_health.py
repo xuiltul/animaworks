@@ -557,6 +557,16 @@ class HealthMixin:
             # Wait and restart
             await asyncio.sleep(backoff)
 
+            # Disabled during backoff: clean stop, no error / retry pollution.
+            if not self.read_anima_enabled(self.animas_dir / anima_name):
+                logger.info(
+                    "Skip restart: anima disabled: %s",
+                    anima_name,
+                )
+                if anima_name in self.processes:
+                    await self.stop_anima(anima_name)
+                return
+
             self._restart_counts[anima_name] = count + 1
             new_handle = await self._respawn_anima_transaction(anima_name)
 
@@ -569,6 +579,14 @@ class HealthMixin:
                     self.restart_policy.max_retries,
                 )
             else:
+                # Disabled mid-respawn is a clean skip (respawn returns None
+                # without marking permanently failed).
+                if not self.read_anima_enabled(self.animas_dir / anima_name):
+                    logger.info(
+                        "Restart skipped (anima disabled): %s",
+                        anima_name,
+                    )
+                    return
                 logger.error(
                     "Restart transaction failed with no handle: %s",
                     anima_name,

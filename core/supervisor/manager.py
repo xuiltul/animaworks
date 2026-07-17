@@ -109,7 +109,7 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
         self.reconciliation_config = reconciliation_config or ReconciliationConfig()
 
         self.processes: dict[str, ProcessHandle] = {}
-        self._stop_locks: dict[str, asyncio.Lock] = {}
+        self._lifecycle_locks: dict[str, asyncio.Lock] = {}
         self._health_check_task: asyncio.Task | None = None
         self._reconciliation_task: asyncio.Task | None = None
         self._inbox_wake_task: asyncio.Task | None = None
@@ -327,81 +327,87 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
 
         After the process is ready, checks if bootstrap is needed and
         launches it as a background task automatically.
+
+        Serialized with ``stop_anima`` via per-anima lifecycle lock so that
+        disable→stop and start cannot race on the same anima.
         """
-        if not self.read_anima_enabled(self.animas_dir / anima_name):
-            logger.warning("Refusing to start disabled anima: %s", anima_name)
-            return
-        if anima_name in self.processes:
-            logger.warning("Process already exists: %s", anima_name)
-            return
-        if anima_name in self._starting:
-            logger.debug("Start already in progress: %s", anima_name)
-            return
+        lock = self._lifecycle_locks.setdefault(anima_name, asyncio.Lock())
+        async with lock:
+            # Re-check under lock: disable may have completed while we waited.
+            if not self.read_anima_enabled(self.animas_dir / anima_name):
+                logger.warning("Refusing to start disabled anima: %s", anima_name)
+                return
+            if anima_name in self.processes:
+                logger.warning("Process already exists: %s", anima_name)
+                return
+            if anima_name in self._starting:
+                logger.debug("Start already in progress: %s", anima_name)
+                return
 
-        self._starting.add(anima_name)
-        self._starting_since[anima_name] = time.monotonic()
-        self._failure_reasons.pop(anima_name, None)
-        try:
-            socket_dir = self.run_dir / "sockets"
-            socket_dir.mkdir(parents=True, exist_ok=True)
-            socket_path = socket_dir / f"{anima_name}.sock"
-
-            handle = ProcessHandle(
-                anima_name=anima_name,
-                socket_path=socket_path,
-                animas_dir=self.animas_dir,
-                shared_dir=self.shared_dir,
-                log_dir=self.log_dir,
-                child_env_urls=self.child_env_urls,
-                startup_ready_timeout=self._anima_startup_ready_timeout,
-            )
-
+            self._starting.add(anima_name)
+            self._starting_since[anima_name] = time.monotonic()
+            self._failure_reasons.pop(anima_name, None)
             try:
-                await handle.start()
-                self.processes[anima_name] = handle
-                self._start_fail_counts.pop(anima_name, None)
-                self._start_failed_times.pop(anima_name, None)
-                logger.info("Anima process started: %s (PID %s)", anima_name, handle.get_pid())
+                socket_dir = self.run_dir / "sockets"
+                socket_dir.mkdir(parents=True, exist_ok=True)
+                socket_path = socket_dir / f"{anima_name}.sock"
 
-                # Check if bootstrap is needed and launch in background
+                handle = ProcessHandle(
+                    anima_name=anima_name,
+                    socket_path=socket_path,
+                    animas_dir=self.animas_dir,
+                    shared_dir=self.shared_dir,
+                    log_dir=self.log_dir,
+                    child_env_urls=self.child_env_urls,
+                    startup_ready_timeout=self._anima_startup_ready_timeout,
+                )
+
                 try:
-                    status = await self.send_request(
-                        anima_name,
-                        "get_status",
-                        {},
-                        timeout=10.0,
-                    )
-                    needs_background = status.get("needs_background_bootstrap")
-                    if needs_background is None:
-                        needs_background = bool(status.get("needs_bootstrap"))
-                    bootstrap_state = status.get("bootstrap_state") or {}
-                    if (
-                        not needs_background
-                        and bootstrap_state.get("state") == "running"
-                        and bootstrap_state.get("mode") == "character_sheet"
-                        and status.get("status") != "bootstrapping"
-                    ):
-                        needs_background = True
-                    if needs_background:
-                        logger.info(
-                            "Bootstrap needed for %s, launching background task",
-                            anima_name,
-                        )
-                        asyncio.create_task(self._run_bootstrap(anima_name))
-                except Exception as e:
-                    logger.warning(
-                        "Could not check bootstrap status for %s: %s",
-                        anima_name,
-                        e,
-                    )
+                    await handle.start()
+                    self.processes[anima_name] = handle
+                    self._start_fail_counts.pop(anima_name, None)
+                    self._start_failed_times.pop(anima_name, None)
+                    logger.info("Anima process started: %s (PID %s)", anima_name, handle.get_pid())
 
-            except (ProcessError, AnimaNotFoundError):
-                raise
-            except Exception as e:
-                raise ProcessError(f"Failed to start process {anima_name}: {e}") from e
-        finally:
-            self._starting.discard(anima_name)
-            self._starting_since.pop(anima_name, None)
+                    # Check if bootstrap is needed and launch in background
+                    try:
+                        status = await self.send_request(
+                            anima_name,
+                            "get_status",
+                            {},
+                            timeout=10.0,
+                        )
+                        needs_background = status.get("needs_background_bootstrap")
+                        if needs_background is None:
+                            needs_background = bool(status.get("needs_bootstrap"))
+                        bootstrap_state = status.get("bootstrap_state") or {}
+                        if (
+                            not needs_background
+                            and bootstrap_state.get("state") == "running"
+                            and bootstrap_state.get("mode") == "character_sheet"
+                            and status.get("status") != "bootstrapping"
+                        ):
+                            needs_background = True
+                        if needs_background:
+                            logger.info(
+                                "Bootstrap needed for %s, launching background task",
+                                anima_name,
+                            )
+                            asyncio.create_task(self._run_bootstrap(anima_name))
+                    except Exception as e:
+                        logger.warning(
+                            "Could not check bootstrap status for %s: %s",
+                            anima_name,
+                            e,
+                        )
+
+                except (ProcessError, AnimaNotFoundError):
+                    raise
+                except Exception as e:
+                    raise ProcessError(f"Failed to start process {anima_name}: {e}") from e
+            finally:
+                self._starting.discard(anima_name)
+                self._starting_since.pop(anima_name, None)
 
     async def _run_bootstrap(self, anima_name: str) -> None:
         """Run bootstrap for an anima in the background.
@@ -639,7 +645,7 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
                 uses the process-handle default. Non-urgent stops (RAG repair)
                 pass a longer bound so a response is not cut off mid-turn.
         """
-        lock = self._stop_locks.setdefault(anima_name, asyncio.Lock())
+        lock = self._lifecycle_locks.setdefault(anima_name, asyncio.Lock())
         async with lock:
             handle = self.processes.get(anima_name)
             if not handle:
@@ -654,7 +660,15 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
                 drain_streams=drain_streams,
                 drain_timeout=drain_timeout,
             )
-            self.processes.pop(anima_name, None)
+            # Only pop if the same handle is still registered — a concurrent
+            # start (after this stop finished draining) may have replaced it.
+            if self.processes.get(anima_name) is handle:
+                self.processes.pop(anima_name, None)
+            else:
+                logger.warning(
+                    "Skip processes.pop for %s: handle replaced during stop",
+                    anima_name,
+                )
             self._recently_stopped[anima_name] = time.monotonic()
             logger.info("Anima process stopped: %s", anima_name)
 
@@ -706,18 +720,32 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
         )
 
     async def _respawn_anima_transaction(self, anima_name: str) -> ProcessHandle | None:
-        """Stop any old process and retry spawn until success or explicit error."""
+        """Stop any old process and retry spawn until success or explicit error.
+
+        Disabled animas are a clean no-op: return None without recording
+        start failures or marking permanently failed.
+        """
         last_error = ""
         max_attempts = max(1, int(self.restart_policy.max_retries))
         retry_interval = max(0.0, float(self.restart_policy.backoff_base_sec))
 
         for attempt in range(1, max_attempts + 1):
+            if not self.read_anima_enabled(self.animas_dir / anima_name):
+                logger.info("skip respawn: anima disabled: %s", anima_name)
+                if anima_name in self.processes:
+                    await self.stop_anima(anima_name)
+                return None
             try:
                 if anima_name in self.processes:
                     await self.stop_anima(anima_name)
                 await self.start_anima(anima_name)
                 new_handle = self.processes.get(anima_name)
                 if new_handle is None:
+                    # start_anima may have refused (disabled) between our
+                    # check and the spawn; treat as clean skip, not failure.
+                    if not self.read_anima_enabled(self.animas_dir / anima_name):
+                        logger.info("skip respawn: anima disabled: %s", anima_name)
+                        return None
                     raise ProcessError(f"spawn completed without a process handle for {anima_name}")
                 self._start_fail_counts.pop(anima_name, None)
                 self._start_failed_times.pop(anima_name, None)

@@ -77,10 +77,12 @@ class ReconcileMixin:
                 "Reconciliation: recovering permanently failed process %s (cooldown elapsed, resetting retries)",
                 name,
             )
-            self.processes.pop(name, None)
-            self._restart_counts.pop(name, None)
-            self._permanently_failed.discard(name)
-            self._failed_log_times.pop(name, None)
+            lock = self._lifecycle_locks.setdefault(name, asyncio.Lock())
+            async with lock:
+                self.processes.pop(name, None)
+                self._restart_counts.pop(name, None)
+                self._permanently_failed.discard(name)
+                self._failed_log_times.pop(name, None)
             try:
                 await self.start_anima(name)
                 if self.on_anima_added:
