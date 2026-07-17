@@ -497,3 +497,62 @@ class TestDisableAnima:
 
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"]
+
+
+# ── POST /animas/{name}/start ──────────────────────────
+
+
+class TestStartAnimaEndpoint:
+    async def test_start_disabled_returns_409(self, tmp_path):
+        """Disabled anima: POST /start returns 409 and does not call start_anima."""
+        animas_dir = tmp_path / "animas"
+        alice_dir = animas_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "status.json").write_text(
+            json.dumps({"enabled": False}),
+            encoding="utf-8",
+        )
+
+        app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
+        supervisor = app.state.supervisor
+        supervisor.processes = {}
+        supervisor.get_process_status.return_value = {"status": "stopped"}
+        supervisor.start_anima = AsyncMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/animas/alice/start")
+
+        assert resp.status_code == 409
+        detail = resp.json()["detail"]
+        assert "disabled" in detail.lower()
+        assert "enable" in detail.lower()
+        supervisor.start_anima.assert_not_awaited()
+
+    async def test_start_enabled_starts_process(self, tmp_path):
+        """Enabled anima: POST /start proceeds and calls start_anima."""
+        animas_dir = tmp_path / "animas"
+        alice_dir = animas_dir / "alice"
+        alice_dir.mkdir(parents=True)
+        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "status.json").write_text(
+            json.dumps({"enabled": True}),
+            encoding="utf-8",
+        )
+
+        app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
+        supervisor = app.state.supervisor
+        supervisor.processes = {}
+        supervisor.get_process_status.return_value = {"status": "stopped"}
+        supervisor.start_anima = AsyncMock()
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/animas/alice/start")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "started"
+        assert data["name"] == "alice"
+        supervisor.start_anima.assert_awaited_once_with("alice")

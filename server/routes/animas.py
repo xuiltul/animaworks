@@ -505,6 +505,19 @@ def create_animas_router() -> APIRouter:
         if name not in anima_names:
             raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
 
+        # Refuse start while disabled; enable API writes enabled=true then starts.
+        from core.supervisor.manager import ProcessSupervisor
+
+        anima_dir = request.app.state.animas_dir / name
+        if not ProcessSupervisor.read_anima_enabled(anima_dir):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Anima '{name}' is disabled. "
+                    f"Call POST /api/animas/{name}/enable first."
+                ),
+            )
+
         proc_status = supervisor.get_process_status(name)
         current = proc_status.get("status", "unknown")
         if current not in ("not_found", "stopped", "unknown"):

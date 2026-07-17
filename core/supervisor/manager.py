@@ -328,6 +328,9 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
         After the process is ready, checks if bootstrap is needed and
         launches it as a background task automatically.
         """
+        if not self.read_anima_enabled(self.animas_dir / anima_name):
+            logger.warning("Refusing to start disabled anima: %s", anima_name)
+            return
         if anima_name in self.processes:
             logger.warning("Process already exists: %s", anima_name)
             return
@@ -896,6 +899,14 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
                         continue
                     except OSError:
                         logger.debug("Failed to remove wake file %s", wake_file, exc_info=True)
+                        continue
+
+                    # Discard wake for disabled animas; leave inbox message files intact.
+                    if not self.read_anima_enabled(self.animas_dir / target_name):
+                        logger.info(
+                            "Ignoring inbox wake for disabled anima: %s",
+                            target_name,
+                        )
                         continue
 
                     if target_name not in self.processes:

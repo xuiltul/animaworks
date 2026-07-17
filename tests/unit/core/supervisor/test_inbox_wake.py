@@ -115,3 +115,60 @@ class TestInboxWakeDispatcher:
 
         await _run_briefly()
         assert (wake_dir / ".gitkeep").exists()
+
+    @pytest.mark.asyncio
+    async def test_wake_for_disabled_anima_skips_process_inbox(
+        self, tmp_path: Path,
+    ) -> None:
+        """Disabled anima: wake discarded, process_inbox not sent, inbox msgs kept."""
+        import json
+
+        sup = self._make_supervisor(tmp_path)
+
+        # Disabled status.json
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "status.json").write_text(
+            json.dumps({"enabled": False}),
+            encoding="utf-8",
+        )
+
+        # Inbox message that must remain untouched
+        inbox_dir = tmp_path / "shared" / "inbox" / "alice"
+        inbox_dir.mkdir(parents=True)
+        inbox_msg = inbox_dir / "msg_001.json"
+        inbox_msg.write_text(
+            json.dumps({"from": "bob", "body": "hello"}),
+            encoding="utf-8",
+        )
+
+        mock_handle = MagicMock()
+        mock_handle.send_request = AsyncMock(
+            return_value=MagicMock(error=None, result={"action": "processed"}),
+        )
+        sup.processes["alice"] = mock_handle
+
+        wake_dir = tmp_path / "run" / "inbox_wake"
+        wake_dir.mkdir(parents=True)
+        (wake_dir / "alice").write_text("alice", encoding="utf-8")
+
+        sup._shutdown = False
+
+        async def _run_briefly():
+            task = asyncio.create_task(sup._inbox_wake_dispatcher())
+            await asyncio.sleep(0.8)
+            sup._shutdown = True
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        await _run_briefly()
+
+        # Wake discarded
+        assert not (wake_dir / "alice").exists()
+        # process_inbox never sent
+        mock_handle.send_request.assert_not_called()
+        # Inbox message preserved
+        assert inbox_msg.exists()
