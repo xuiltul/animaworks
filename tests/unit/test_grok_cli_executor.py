@@ -559,6 +559,32 @@ class TestTerminalPaths:
         assert "login" in events[-1]["full_text"].lower() or "認証" in events[-1]["full_text"]
 
     @pytest.mark.asyncio
+    async def test_idle_timeout_kills_stalled_stream(self, executor: GrokCLIExecutor):
+        # A child that emits the handshake but then goes silent must be killed
+        # once the idle gap between events exceeds the progress timeout, and
+        # surface a single terminal done event with the timeout message.
+        proc = _FakeProc(_success_events(), returncode=None)
+        served = 0
+
+        async def stall_after_session() -> bytes:
+            # Serve only the two handshake responses (initialize + session/new),
+            # then hang so the event-loop readline trips the idle timeout while
+            # awaiting the prompt result — not EOF.
+            nonlocal served
+            if served < 2:
+                served += 1
+                return proc.stdout.lines.pop(0)
+            await asyncio.sleep(3600)
+            return b""
+
+        proc.stdout.readline = stall_after_session  # type: ignore[method-assign]
+        with patch("core.execution.grok_cli._IDLE_TIMEOUT_SECONDS", 0.01):
+            events = await _stream(executor, proc)
+        assert len([event for event in events if event["type"] == "done"]) == 1
+        assert "grok" in events[-1]["full_text"].lower()
+        assert signal.SIGTERM in proc.sent_signals
+
+    @pytest.mark.asyncio
     async def test_inflight_interrupt_sends_cancel(self, executor: GrokCLIExecutor):
         executor._interrupt_event = asyncio.Event()
         proc = _FakeProc(_success_events(), returncode=None)

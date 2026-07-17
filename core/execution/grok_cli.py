@@ -57,6 +57,13 @@ __all__ = [
 
 _GROK_BINARY_NAMES = ("grok",)
 _DEFAULT_TIMEOUT_SECONDS = 600
+# Progress-aware (sidecar-style) timeouts: instead of one absolute wall-clock
+# limit that kills healthy long-running tasks, we bound the *idle* gap between
+# ACP stream events. Every event (thinking chunk, message chunk, tool update,
+# response) counts as progress and resets the idle clock. A generous absolute
+# hard cap remains only as a runaway backstop.
+_IDLE_TIMEOUT_SECONDS = 900  # max silence between stream events before kill
+_HARD_CAP_SECONDS = 14400  # 4h absolute backstop against a wedged child
 # ACP NDJSON lines carry whole tool outputs / context blobs in one line;
 # asyncio's default 64KiB StreamReader limit truncates them (LimitOverrunError).
 _STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
@@ -384,7 +391,7 @@ class GrokCLIExecutor(BaseExecutor):
         while True:
             if self._check_interrupted():
                 raise asyncio.CancelledError
-            line = await proc.stdout.readline()
+            line = await asyncio.wait_for(proc.stdout.readline(), _IDLE_TIMEOUT_SECONDS)
             if not line:
                 raise _ACPError(method, "unexpected EOF")
             message = self._parse_ndjson_event(line)
@@ -465,7 +472,7 @@ class GrokCLIExecutor(BaseExecutor):
 
     def _translated_error(self, detail: str, *, timed_out: bool = False) -> str:
         if timed_out:
-            return t("grok_cli.timeout", timeout=_DEFAULT_TIMEOUT_SECONDS)
+            return t("grok_cli.timeout", timeout=_IDLE_TIMEOUT_SECONDS)
         if self._auth_error(detail):
             return t("grok_cli.not_authenticated")
         return f"[Grok CLI Error: {detail}]"
@@ -496,7 +503,7 @@ class GrokCLIExecutor(BaseExecutor):
             )
             stderr_task = asyncio.create_task(self._drain_stderr(proc))
 
-            async with asyncio.timeout(_DEFAULT_TIMEOUT_SECONDS):
+            async with asyncio.timeout(_HARD_CAP_SECONDS):
                 await self._send_request(
                     proc,
                     next_id,
@@ -554,7 +561,9 @@ class GrokCLIExecutor(BaseExecutor):
                         await self._cancel_session(proc, state.session_id, next_id)
                         break
 
-                    line = await proc.stdout.readline()
+                    line = await asyncio.wait_for(
+                        proc.stdout.readline(), _IDLE_TIMEOUT_SECONDS
+                    )
                     if not line:
                         raise _ACPError("session/prompt", "unexpected EOF")
                     message = self._parse_ndjson_event(line)

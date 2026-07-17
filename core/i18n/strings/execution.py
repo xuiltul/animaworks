@@ -109,9 +109,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "ko": "Grok CLI가 인증되지 않았습니다. `grok login`을 실행하여 xAI 계정에 로그인하세요.",
     },
     "grok_cli.timeout": {
-        "ja": "[Grok CLI タイムアウト: {timeout}秒以内に完了しませんでした]",
-        "en": "[Grok CLI timeout: did not complete within {timeout} seconds]",
-        "ko": "[Grok CLI 시간 초과: {timeout}초 이내에 완료되지 않음]",
+        "ja": "[Grok CLI タイムアウト: {timeout}秒間進捗がなかったため打ち切りました]",
+        "en": "[Grok CLI timeout: no progress for {timeout} seconds]",
+        "ko": "[Grok CLI 시간 초과: {timeout}초 동안 진행이 없어 중단했습니다]",
     },
     "sdk_hooks.task_no_subtask": {
         "ja": (
