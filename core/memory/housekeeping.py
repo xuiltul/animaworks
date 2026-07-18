@@ -11,6 +11,7 @@ all data types that lack their own rotation mechanisms.
 """
 
 import asyncio
+import errno
 import logging
 import os
 import re
@@ -28,6 +29,7 @@ logger = logging.getLogger("animaworks.housekeeping")
 _PRESERVED_TMP_SUBDIRS = frozenset({"attachments", "skill_hub"})
 _ANIMA_LOG_DATE_RE = re.compile(r"(20\d{6})")
 _CODEX_LOG_DB_NAME = "logs_2.sqlite"
+_PROTECTED_PREFIXES = ("current_session_", "streaming_journal")
 
 
 # ── Public API ──────────────────────────────────────────────────
@@ -45,6 +47,9 @@ async def run_housekeeping(
     dm_log_archive_retention_days: int = 30,
     cron_log_retention_days: int = 30,
     shortterm_retention_days: int = 7,
+    shortterm_archive_retention_days: int = 30,
+    shortterm_thread_gc_days: int = 30,
+    facts_lock_stale_hours: int = 24,
     curator_report_retention_days: int = 30,
     task_results_retention_days: int = 7,
     pending_failed_retention_days: int = 14,
@@ -172,13 +177,28 @@ async def run_housekeeping(
             _cleanup_shortterm,
             animas_dir,
             shortterm_retention_days,
+            shortterm_archive_retention_days,
+            shortterm_thread_gc_days,
         )
         results["shortterm"] = r
     except Exception:
         logger.exception("Housekeeping: shortterm cleanup failed")
         results["shortterm"] = {"error": True}
 
-    # 5b. Skill Curator reports
+    # 5b. Stale facts lock files
+    try:
+        r = await loop.run_in_executor(
+            None,
+            _cleanup_facts_locks,
+            animas_dir,
+            facts_lock_stale_hours,
+        )
+        results["facts_locks"] = r
+    except Exception:
+        logger.exception("Housekeeping: facts lock cleanup failed")
+        results["facts_locks"] = {"error": True}
+
+    # 5c. Skill Curator reports
     try:
         r = await loop.run_in_executor(
             None,
@@ -846,27 +866,43 @@ def _episodeify_abandoned_session(anima_dir: Path, json_path: Path) -> bool:
 def _cleanup_shortterm(
     animas_dir: Path,
     retention_days: int,
+    archive_retention_days: int = 30,
+    thread_gc_days: int = 30,
 ) -> dict[str, Any]:
     """Delete old session files from shortterm/ directories.
 
     Recurses into per-thread subdirectories (``shortterm/chat/{thread_id}/``)
-    as well as the top-level ``chat``/``heartbeat`` folders, but leaves the
-    ``archive/`` sweep to ``ShortTermMemory``'s own pruning. Before removing an
-    expired ``session_state.json`` from a chat tree, its unfinalized content is
-    saved as an episode; if that save fails, the file is kept for retry.
+    as well as the supported lifecycle folders. Archive files use their own
+    retention window. Before removing an expired ``session_state.json`` from a
+    chat tree, its unfinalized content is saved as an episode; if that save
+    fails, the file and its thread directory are kept for retry.
 
-    Skips ``current_session_*.json`` and ``streaming_journal_*.jsonl``
-    which are managed by the session lifecycle.
+    Skips ``current_session_*.json`` and ``streaming_journal*.jsonl``
+    during individual file cleanup. Stale chat thread directories are removed
+    as a unit once every file in them is older than the thread GC window. The
+    directory is rescanned immediately before deletion to reduce TOCTOU risk;
+    a write after that final scan remains an accepted residual race.
     """
     if not animas_dir.exists():
         return {"skipped": True}
 
-    cutoff = now_local() - timedelta(days=retention_days)
-    cutoff_ts = cutoff.timestamp()
+    retention_days = max(retention_days, 0)
+    archive_cleanup_enabled = archive_retention_days > 0
+    thread_gc_enabled = thread_gc_days > 0
+    skipped_substeps: dict[str, str] = {}
+    if not archive_cleanup_enabled:
+        skipped_substeps["archive_cleanup"] = "archive_retention_days_must_be_positive"
+    if not thread_gc_enabled:
+        skipped_substeps["thread_gc"] = "thread_gc_days_must_be_positive"
+    now = now_local()
+    cutoff_ts = (now - timedelta(days=retention_days)).timestamp()
+    archive_cutoff_ts = (now - timedelta(days=archive_retention_days)).timestamp() if archive_cleanup_enabled else None
+    thread_gc_cutoff_ts = (now - timedelta(days=thread_gc_days)).timestamp() if thread_gc_enabled else None
     total_deleted = 0
     total_episodified = 0
-
-    _PROTECTED_PREFIXES = ("current_session_", "streaming_journal_")
+    archive_deleted = 0
+    thread_dirs_deleted = 0
+    deleted_by_subdir = {sub: 0 for sub in ("chat", "heartbeat", "cron", "inbox", "task")}
 
     for anima_dir in sorted(animas_dir.iterdir()):
         if not anima_dir.is_dir():
@@ -874,21 +910,25 @@ def _cleanup_shortterm(
         shortterm_dir = anima_dir / "shortterm"
         if not shortterm_dir.is_dir():
             continue
-        # Walk chat/ and heartbeat/ subdirs, including per-thread subdirectories.
-        for sub in ("chat", "heartbeat"):
+        gc_protected_thread_dirs: set[Path] = set()
+        for sub in deleted_by_subdir:
             sub_dir = shortterm_dir / sub
             if not sub_dir.is_dir():
                 continue
-            for f in sub_dir.rglob("*"):
+            for f in list(sub_dir.rglob("*")):
                 if not f.is_file():
                     continue
-                # archive/ is capped by ShortTermMemory._prune_archive; leave it.
-                if "archive" in f.relative_to(sub_dir).parts:
+                relative_parts = f.relative_to(sub_dir).parts
+                is_archive = "archive" in relative_parts
+                if is_archive and not archive_cleanup_enabled:
                     continue
                 if any(f.name.startswith(p) for p in _PROTECTED_PREFIXES):
                     continue
                 try:
-                    if f.stat().st_mtime >= cutoff_ts:
+                    file_cutoff_ts = archive_cutoff_ts if is_archive else cutoff_ts
+                    if file_cutoff_ts is None:
+                        continue
+                    if f.stat().st_mtime >= file_cutoff_ts:
                         continue
                 except OSError:
                     logger.warning("Failed to stat shortterm file: %s", f)
@@ -897,11 +937,16 @@ def _cleanup_shortterm(
                 episodified = False
                 if sub == "chat" and f.name == "session_state.json":
                     if not _episodeify_abandoned_session(anima_dir, f):
+                        if len(relative_parts) > 1 and relative_parts[0] != "archive":
+                            gc_protected_thread_dirs.add(sub_dir / relative_parts[0])
                         continue  # keep the file; retry next run
                     episodified = True
                 try:
                     f.unlink()
                     total_deleted += 1
+                    deleted_by_subdir[sub] += 1
+                    if is_archive:
+                        archive_deleted += 1
                     if episodified:
                         total_episodified += 1
                 except OSError:
@@ -926,13 +971,163 @@ def _cleanup_shortterm(
                     else:
                         logger.warning("Failed to delete shortterm file: %s", f)
 
-    if total_deleted or total_episodified:
+        chat_dir = shortterm_dir / "chat"
+        if not thread_gc_enabled or thread_gc_cutoff_ts is None or not chat_dir.is_dir():
+            continue
+        for thread_dir in sorted(path for path in chat_dir.iterdir() if path.is_dir()):
+            if thread_dir.name == "archive" or thread_dir in gc_protected_thread_dirs:
+                continue
+            snapshot = _scan_shortterm_thread_for_gc(thread_dir, thread_gc_cutoff_ts)
+            if snapshot is None:
+                continue
+            files, max_mtime, recent_protected = snapshot
+            if recent_protected:
+                continue
+            if max_mtime is not None and max_mtime >= thread_gc_cutoff_ts:
+                continue
+
+            # Recheck immediately before rmtree. A write after this scan is the
+            # documented residual race.
+            rechecked = _scan_shortterm_thread_for_gc(thread_dir, thread_gc_cutoff_ts)
+            if rechecked is None:
+                continue
+            files, max_mtime, recent_protected = rechecked
+            if recent_protected or (max_mtime is not None and max_mtime >= thread_gc_cutoff_ts):
+                continue
+            deleted_file_count = len(files)
+            deleted_archive_count = sum("archive" in f.relative_to(thread_dir).parts for f in files)
+            try:
+                shutil.rmtree(thread_dir)
+            except OSError:
+                logger.warning("Failed to delete stale shortterm thread directory: %s", thread_dir)
+                continue
+            thread_dirs_deleted += 1
+            total_deleted += deleted_file_count
+            archive_deleted += deleted_archive_count
+            deleted_by_subdir["chat"] += deleted_file_count
+
+    if total_deleted or total_episodified or thread_dirs_deleted:
         logger.info(
-            "Shortterm cleanup: deleted %d files, episodified %d abandoned sessions",
+            "Shortterm cleanup: deleted=%d archive_deleted=%d thread_dirs_deleted=%d episodified=%d by_subdir=%s",
             total_deleted,
+            archive_deleted,
+            thread_dirs_deleted,
             total_episodified,
+            deleted_by_subdir,
         )
-    return {"deleted_files": total_deleted, "episodified_sessions": total_episodified}
+    return {
+        "deleted_files": total_deleted,
+        "archive_deleted": archive_deleted,
+        "thread_dirs_deleted": thread_dirs_deleted,
+        "deleted_by_subdir": deleted_by_subdir,
+        "episodified_sessions": total_episodified,
+        "skipped_substeps": skipped_substeps,
+    }
+
+
+def _scan_shortterm_thread_for_gc(
+    thread_dir: Path,
+    cutoff_ts: float,
+) -> tuple[list[Path], float | None, bool] | None:
+    """Return a conservative thread snapshot, or ``None`` on any stat failure."""
+    try:
+        files = [path for path in thread_dir.rglob("*") if path.is_file()]
+    except OSError:
+        logger.warning("Failed to scan shortterm thread directory: %s", thread_dir)
+        return None
+    max_mtime: float | None = None
+    recent_protected = False
+    for path in files:
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            logger.warning("Failed to stat shortterm thread file: %s", path)
+            return None
+        max_mtime = mtime if max_mtime is None else max(max_mtime, mtime)
+        if mtime >= cutoff_ts and any(path.name.startswith(prefix) for prefix in _PROTECTED_PREFIXES):
+            recent_protected = True
+    return files, max_mtime, recent_protected
+
+
+def _cleanup_facts_locks(animas_dir: Path, stale_hours: int) -> dict[str, Any]:
+    """Delete stale empty ``facts/*.lock`` files for every Anima."""
+    if not animas_dir.exists():
+        return {"skipped": True}
+    if stale_hours <= 0:
+        return {
+            "skipped": True,
+            "reason": "stale_hours_must_be_positive",
+            "scanned_files": 0,
+            "deleted_files": 0,
+        }
+
+    try:
+        import fcntl
+    except ImportError:
+        logger.info("Facts lock cleanup skipped: fcntl unavailable")
+        return {
+            "skipped": True,
+            "reason": "fcntl_unavailable",
+            "scanned_files": 0,
+            "deleted_files": 0,
+        }
+
+    cutoff_ts = (now_local() - timedelta(hours=stale_hours)).timestamp()
+    deleted_files = 0
+    scanned_files = 0
+    locked_files = 0
+    lock_failures = 0
+
+    for anima_dir in sorted(animas_dir.iterdir()):
+        if not anima_dir.is_dir():
+            continue
+        facts_dir = anima_dir / "facts"
+        if not facts_dir.is_dir():
+            continue
+        for lock_file in sorted(facts_dir.glob("*.lock")):
+            if not lock_file.is_file():
+                continue
+            scanned_files += 1
+            try:
+                with lock_file.open("r+b") as lock_handle:
+                    try:
+                        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except OSError as exc:
+                        if exc.errno in (errno.EACCES, errno.EAGAIN):
+                            locked_files += 1
+                        else:
+                            lock_failures += 1
+                            logger.warning("Failed to acquire facts lock file: %s", lock_file)
+                        continue
+
+                    stat = os.fstat(lock_handle.fileno())
+                    path_stat = lock_file.stat()
+                    if (stat.st_dev, stat.st_ino) != (path_stat.st_dev, path_stat.st_ino):
+                        lock_failures += 1
+                        continue
+                    if stat.st_size != 0 or stat.st_mtime >= cutoff_ts:
+                        continue
+                    # Keep LOCK_EX held until after unlink; closing the handle
+                    # at the end of this block releases the lock safely.
+                    lock_file.unlink()
+                    deleted_files += 1
+            except OSError:
+                logger.warning("Failed to inspect or delete facts lock file: %s", lock_file)
+                lock_failures += 1
+
+    if deleted_files:
+        logger.info(
+            "Facts lock cleanup: scanned=%d deleted=%d stale_hours=%d",
+            scanned_files,
+            deleted_files,
+            stale_hours,
+        )
+    return {
+        "scanned_files": scanned_files,
+        "deleted_files": deleted_files,
+        "locked_files": locked_files,
+        "lock_failures": lock_failures,
+    }
 
 
 def _cleanup_curator_reports(

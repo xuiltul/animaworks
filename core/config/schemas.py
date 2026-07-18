@@ -414,6 +414,7 @@ class ConsolidationConfig(BaseModel):
     weekly_time: str = "sun:03:00"  # Format: day:HH:MM
     duplicate_threshold: float = 0.85  # Similarity threshold for duplicate detection
     episode_retention_days: int = 30  # Days to retain uncompressed episodes
+    episode_retention_batch_limit: int = Field(default=200, ge=0)
     monthly_enabled: bool = True  # Monthly forgetting toggle
     monthly_time: str = "1:04:00"  # Format: day:HH:MM (day of month)
     indexing_enabled: bool = True  # Daily RAG indexing toggle
@@ -748,6 +749,9 @@ class HousekeepingConfig(BaseModel):
     dm_log_archive_retention_days: int = 30
     cron_log_retention_days: int = 30
     shortterm_retention_days: int = 7
+    shortterm_archive_retention_days: int = Field(default=30, ge=1)
+    shortterm_thread_gc_days: int = Field(default=30, ge=1)
+    facts_lock_stale_hours: int = Field(default=24, ge=1)
     task_results_retention_days: int = 7
     pending_failed_retention_days: int = 14
     corrupt_vectordb_keep_generations: int = Field(default=2, ge=0)

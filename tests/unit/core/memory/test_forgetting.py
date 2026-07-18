@@ -18,6 +18,7 @@ Tests cover:
 """
 
 import logging
+import os
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -904,11 +905,67 @@ class TestEpisodeRetentionArchival:
         with patch.object(forgetting_engine, "_get_vector_store", return_value=None):
             result = forgetting_engine.archive_expired_episodes(retention_days=30)
 
+        assert result["batch_limit"] == 0
+        assert result["attempted"] == 1
         assert result["archived_count"] == 1
         assert result["deleted_indexed_chunks"] == 0
         assert result["index_delete_failures"] == 0
         assert result["index_skipped_reason"] == "rag_unavailable"
         assert not old_file.exists()
+
+    def test_archives_recovered_markdown_jsonl_and_undated_by_mtime(
+        self,
+        forgetting_engine,
+        anima_dir,
+    ):
+        old_date = (now_jst().date() - timedelta(days=45)).isoformat()
+        recovered = anima_dir / "episodes" / f"recovered_{old_date}_010234.md"
+        legacy_jsonl = anima_dir / "episodes" / f"{old_date}.jsonl"
+        undated = anima_dir / "episodes" / "notes.md"
+        for path in (recovered, legacy_jsonl, undated):
+            path.write_text("old", encoding="utf-8")
+        old_timestamp = (now_jst() - timedelta(days=45)).timestamp()
+        undated.touch()
+        os.utime(undated, (old_timestamp, old_timestamp))
+
+        mock_store = MagicMock()
+        mock_store.get_by_metadata.return_value = []
+        with patch.object(forgetting_engine, "_get_vector_store", return_value=mock_store):
+            result = forgetting_engine.archive_expired_episodes(retention_days=30)
+
+        assert result["archived_count"] == 3
+        assert result["skipped_undated"] == 0
+        assert not recovered.exists()
+        assert not legacy_jsonl.exists()
+        assert not undated.exists()
+        assert (anima_dir / "archive" / "episodes" / recovered.name).exists()
+        assert (anima_dir / "archive" / "episodes" / legacy_jsonl.name).exists()
+        assert (anima_dir / "archive" / "episodes" / undated.name).exists()
+        assert any(
+            call.args[1] == {"source_file": f"episodes/{legacy_jsonl.name}"}
+            for call in mock_store.get_by_metadata.call_args_list
+        )
+
+    def test_batch_limit_reports_remaining_and_zero_is_unlimited(self, forgetting_engine, anima_dir):
+        old_date = (now_jst().date() - timedelta(days=45)).isoformat()
+        for index in range(3):
+            (anima_dir / "episodes" / f"{old_date}_{index}.md").write_text("old", encoding="utf-8")
+
+        with patch.object(forgetting_engine, "_get_vector_store", return_value=None):
+            limited = forgetting_engine.archive_expired_episodes(retention_days=30, batch_limit=1)
+
+        assert limited["archived_count"] == 1
+        assert limited["attempted"] == 1
+        assert limited["batch_limited"] is True
+        assert limited["remaining_count"] == 2
+
+        with patch.object(forgetting_engine, "_get_vector_store", return_value=None):
+            unlimited = forgetting_engine.archive_expired_episodes(retention_days=30, batch_limit=0)
+
+        assert unlimited["archived_count"] == 2
+        assert unlimited["attempted"] == 2
+        assert unlimited["batch_limited"] is False
+        assert unlimited["remaining_count"] == 0
 
 
 # ── Consolidation Integration Tests ─────────────────────────────────
@@ -1083,7 +1140,10 @@ class TestMonthlyForgettingHook:
             MockForgettingEngine.return_value = mock_forgetter
 
             config = SimpleNamespace(
-                consolidation=SimpleNamespace(episode_retention_days=17),
+                consolidation=SimpleNamespace(
+                    episode_retention_days=17,
+                    episode_retention_batch_limit=23,
+                ),
             )
             with (
                 patch("core.config.load_config", return_value=config),
@@ -1092,7 +1152,7 @@ class TestMonthlyForgettingHook:
                 result = await consolidation_engine.monthly_forget()
 
         mock_forgetter.complete_forgetting.assert_called_once()
-        mock_forgetter.archive_expired_episodes.assert_called_once_with(17)
+        mock_forgetter.archive_expired_episodes.assert_called_once_with(17, 23)
         assert result["forgotten_chunks"] == 5
         assert len(result["archived_files"]) == 3
         assert result["episode_retention"] == retention_result

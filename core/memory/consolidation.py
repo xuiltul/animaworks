@@ -1594,12 +1594,20 @@ class ConsolidationEngine:
                 from core.config.models import ConsolidationConfig
 
                 default_retention_days = ConsolidationConfig().episode_retention_days
+                default_batch_limit = ConsolidationConfig().episode_retention_batch_limit
                 consolidation_cfg = getattr(load_config(), "consolidation", None)
                 retention_days = int(
                     getattr(
                         consolidation_cfg,
                         "episode_retention_days",
                         default_retention_days,
+                    )
+                )
+                batch_limit = int(
+                    getattr(
+                        consolidation_cfg,
+                        "episode_retention_batch_limit",
+                        default_batch_limit,
                     )
                 )
             except Exception:
@@ -1611,8 +1619,9 @@ class ConsolidationEngine:
                 from core.config.models import ConsolidationConfig
 
                 retention_days = ConsolidationConfig().episode_retention_days
+                batch_limit = ConsolidationConfig().episode_retention_batch_limit
 
-            retention_result = forgetter.archive_expired_episodes(retention_days)
+            retention_result = forgetter.archive_expired_episodes(retention_days, batch_limit)
             result["episode_retention"] = retention_result
             result.setdefault("archived_files", []).extend(retention_result.get("archived_files", []))
             logger.info(

@@ -37,6 +37,9 @@ class TestHousekeepingConfig:
         assert cfg.dm_log_archive_retention_days == 30
         assert cfg.cron_log_retention_days == 30
         assert cfg.shortterm_retention_days == 7
+        assert cfg.shortterm_archive_retention_days == 30
+        assert cfg.shortterm_thread_gc_days == 30
+        assert cfg.facts_lock_stale_hours == 24
         assert cfg.task_results_retention_days == 7
         assert cfg.pending_failed_retention_days == 14
         assert cfg.corrupt_vectordb_keep_generations == 2
@@ -64,6 +67,9 @@ class TestHousekeepingConfig:
             dm_log_archive_retention_days=60,
             cron_log_retention_days=14,
             shortterm_retention_days=14,
+            shortterm_archive_retention_days=60,
+            shortterm_thread_gc_days=45,
+            facts_lock_stale_hours=12,
             corrupt_vectordb_keep_generations=4,
             tmp_retention_days=21,
             backup_retention_days=120,
@@ -80,6 +86,9 @@ class TestHousekeepingConfig:
         assert cfg.daemon_log_max_size_mb == 200
         assert cfg.anima_log_retention_days == 14
         assert cfg.anima_log_total_max_size_mb == 100
+        assert cfg.shortterm_archive_retention_days == 60
+        assert cfg.shortterm_thread_gc_days == 45
+        assert cfg.facts_lock_stale_hours == 12
         assert cfg.corrupt_vectordb_keep_generations == 4
         assert cfg.tmp_retention_days == 21
         assert cfg.backup_retention_days == 120
@@ -285,7 +294,8 @@ class TestRotateDaemonLog:
 
         result = _rotate_daemon_log(log, max_size_mb=1, keep_generations=3)
         assert result["rotated"] is True
-        assert not log.exists()  # original renamed
+        assert log.exists()  # copytruncate keeps the live file descriptor target
+        assert log.stat().st_size == 0
         assert (tmp_path / "server-daemon.log.1").exists()
 
     def test_shifts_existing_generations(self, tmp_path: Path):
@@ -441,17 +451,18 @@ class TestCleanupShortterm:
     def test_preserves_streaming_journal_files(self, tmp_path: Path):
         from core.memory.housekeeping import _cleanup_shortterm
 
-        hb_dir = tmp_path / "alice" / "shortterm" / "heartbeat"
-        hb_dir.mkdir(parents=True)
+        thread_dir = tmp_path / "alice" / "shortterm" / "chat" / "thread-123"
+        thread_dir.mkdir(parents=True)
 
-        protected = hb_dir / "streaming_journal_heartbeat.jsonl"
+        protected = thread_dir / "streaming_journal.jsonl"
         protected.write_text("{}")
-        old_time = time.time() - (30 * 86400)
+        old_time = time.time() - (14 * 86400)
         os.utime(protected, (old_time, old_time))
 
         result = _cleanup_shortterm(tmp_path, retention_days=7)
         assert result["deleted_files"] == 0
         assert protected.exists()
+        assert thread_dir.exists()
 
     def test_cleans_both_chat_and_heartbeat(self, tmp_path: Path):
         from core.memory.housekeeping import _cleanup_shortterm
@@ -482,20 +493,155 @@ class TestCleanupShortterm:
         assert result["deleted_files"] == 1
         assert not old_file.exists()
 
-    def test_leaves_archive_files_untouched(self, tmp_path: Path):
-        # archive/ is pruned by ShortTermMemory itself, not this sweep.
+    def test_archive_uses_separate_retention_window(self, tmp_path: Path):
         from core.memory.housekeeping import _cleanup_shortterm
 
         archive_dir = tmp_path / "alice" / "shortterm" / "chat" / "archive"
         archive_dir.mkdir(parents=True)
-        archived = archive_dir / "20260101_000000.json"
+        expired = archive_dir / "expired.json"
+        retained = archive_dir / "retained.json"
+        expired.write_text("{}")
+        retained.write_text("{}")
+        expired_time = time.time() - (31 * 86400)
+        retained_time = time.time() - (14 * 86400)
+        os.utime(expired, (expired_time, expired_time))
+        os.utime(retained, (retained_time, retained_time))
+
+        result = _cleanup_shortterm(tmp_path, retention_days=7, archive_retention_days=30)
+        assert result["deleted_files"] == 1
+        assert result["archive_deleted"] == 1
+        assert not expired.exists()
+        assert retained.exists()
+
+    @pytest.mark.parametrize("archive_retention_days", [0, -1])
+    def test_non_positive_archive_retention_skips_archive_cleanup(
+        self,
+        tmp_path: Path,
+        archive_retention_days: int,
+    ):
+        from core.memory.housekeeping import _cleanup_shortterm
+
+        archive_dir = tmp_path / "alice" / "shortterm" / "chat" / "archive"
+        archive_dir.mkdir(parents=True)
+        archived = archive_dir / "old.json"
         archived.write_text("{}")
-        old_time = time.time() - (30 * 86400)
+        old_time = time.time() - (90 * 86400)
         os.utime(archived, (old_time, old_time))
 
-        result = _cleanup_shortterm(tmp_path, retention_days=7)
-        assert result["deleted_files"] == 0
+        result = _cleanup_shortterm(
+            tmp_path,
+            retention_days=7,
+            archive_retention_days=archive_retention_days,
+        )
+
         assert archived.exists()
+        assert result["archive_deleted"] == 0
+        assert result["skipped_substeps"]["archive_cleanup"] == "archive_retention_days_must_be_positive"
+
+    def test_cleans_cron_inbox_and_task(self, tmp_path: Path):
+        from core.memory.housekeeping import _cleanup_shortterm
+
+        old_time = time.time() - (14 * 86400)
+        files = []
+        for sub in ("cron", "inbox", "task"):
+            sub_dir = tmp_path / "alice" / "shortterm" / sub
+            sub_dir.mkdir(parents=True)
+            old_file = sub_dir / "old.json"
+            old_file.write_text("{}")
+            os.utime(old_file, (old_time, old_time))
+            files.append(old_file)
+
+        result = _cleanup_shortterm(tmp_path, retention_days=7)
+
+        assert result["deleted_files"] == 3
+        assert result["deleted_by_subdir"] == {
+            "chat": 0,
+            "heartbeat": 0,
+            "cron": 1,
+            "inbox": 1,
+            "task": 1,
+        }
+        assert all(not path.exists() for path in files)
+
+    def test_deletes_stale_thread_directory(self, tmp_path: Path):
+        from core.memory.housekeeping import _cleanup_shortterm
+
+        thread_dir = tmp_path / "alice" / "shortterm" / "chat" / "stale-thread"
+        thread_dir.mkdir(parents=True)
+        protected = thread_dir / "current_session_chat.json"
+        protected.write_text("{}")
+        old_time = time.time() - (31 * 86400)
+        os.utime(protected, (old_time, old_time))
+
+        result = _cleanup_shortterm(tmp_path, retention_days=7, thread_gc_days=30)
+
+        assert result["thread_dirs_deleted"] == 1
+        assert result["deleted_files"] == 1
+        assert not thread_dir.exists()
+
+    def test_recent_current_session_protects_thread_directory(self, tmp_path: Path):
+        from core.memory.housekeeping import _cleanup_shortterm
+
+        thread_dir = tmp_path / "alice" / "shortterm" / "chat" / "active-thread"
+        thread_dir.mkdir(parents=True)
+        protected = thread_dir / "current_session_chat.json"
+        protected.write_text("{}")
+
+        result = _cleanup_shortterm(tmp_path, retention_days=7, thread_gc_days=30)
+
+        assert result["thread_dirs_deleted"] == 0
+        assert thread_dir.exists()
+        assert protected.exists()
+
+    @pytest.mark.parametrize("thread_gc_days", [0, -1])
+    def test_non_positive_thread_gc_skips_directory_cleanup(
+        self,
+        tmp_path: Path,
+        thread_gc_days: int,
+    ):
+        from core.memory.housekeeping import _cleanup_shortterm
+
+        thread_dir = tmp_path / "alice" / "shortterm" / "chat" / "stale-thread"
+        thread_dir.mkdir(parents=True)
+        protected = thread_dir / "current_session_chat.json"
+        protected.write_text("{}")
+        old_time = time.time() - (90 * 86400)
+        os.utime(protected, (old_time, old_time))
+
+        result = _cleanup_shortterm(tmp_path, retention_days=7, thread_gc_days=thread_gc_days)
+
+        assert thread_dir.exists()
+        assert result["thread_dirs_deleted"] == 0
+        assert result["skipped_substeps"]["thread_gc"] == "thread_gc_days_must_be_positive"
+
+    def test_thread_gc_rechecks_mtime_before_rmtree(self, tmp_path: Path, monkeypatch):
+        import core.memory.housekeeping as housekeeping
+
+        thread_dir = tmp_path / "alice" / "shortterm" / "chat" / "racing-thread"
+        thread_dir.mkdir(parents=True)
+        protected = thread_dir / "current_session_chat.json"
+        protected.write_text("{}")
+        old_time = time.time() - (31 * 86400)
+        os.utime(protected, (old_time, old_time))
+
+        original_scan = housekeeping._scan_shortterm_thread_for_gc
+        scan_count = 0
+
+        def update_after_first_scan(path, cutoff_ts):
+            nonlocal scan_count
+            scan_count += 1
+            snapshot = original_scan(path, cutoff_ts)
+            if scan_count == 1:
+                os.utime(protected, None)
+            return snapshot
+
+        monkeypatch.setattr(housekeeping, "_scan_shortterm_thread_for_gc", update_after_first_scan)
+
+        result = housekeeping._cleanup_shortterm(tmp_path, retention_days=7, thread_gc_days=30)
+
+        assert scan_count == 2
+        assert result["thread_dirs_deleted"] == 0
+        assert thread_dir.exists()
 
     def test_episodifies_abandoned_chat_session_before_delete(self, tmp_path: Path, monkeypatch):
         # F13(b): an expired session_state.json is preserved as an episode
@@ -562,6 +708,97 @@ class TestCleanupShortterm:
         assert result["episodified_sessions"] == 0
         assert result["deleted_files"] == 0
         assert state_file.exists()  # kept for retry
+
+
+# ── _cleanup_facts_locks tests ─────────────────────────────────
+
+
+class TestCleanupFactsLocks:
+    """Test stale empty facts lock cleanup."""
+
+    def test_deletes_only_stale_empty_locks(self, tmp_path: Path):
+        from core.memory.housekeeping import _cleanup_facts_locks
+
+        facts_dir = tmp_path / "alice" / "facts"
+        facts_dir.mkdir(parents=True)
+        stale_empty = facts_dir / "stale.lock"
+        recent_empty = facts_dir / "recent.lock"
+        stale_nonempty = facts_dir / "nonempty.lock"
+        stale_empty.write_bytes(b"")
+        recent_empty.write_bytes(b"")
+        stale_nonempty.write_bytes(b"locked")
+        stale_time = time.time() - (25 * 3600)
+        recent_time = time.time() - 3600
+        os.utime(stale_empty, (stale_time, stale_time))
+        os.utime(recent_empty, (recent_time, recent_time))
+        os.utime(stale_nonempty, (stale_time, stale_time))
+
+        result = _cleanup_facts_locks(tmp_path, stale_hours=24)
+
+        assert result == {
+            "scanned_files": 3,
+            "deleted_files": 1,
+            "locked_files": 0,
+            "lock_failures": 0,
+        }
+        assert not stale_empty.exists()
+        assert recent_empty.exists()
+        assert stale_nonempty.exists()
+
+    def test_preserves_lock_held_by_another_file_descriptor(self, tmp_path: Path):
+        fcntl = pytest.importorskip("fcntl")
+        from core.memory.housekeeping import _cleanup_facts_locks
+
+        facts_dir = tmp_path / "alice" / "facts"
+        facts_dir.mkdir(parents=True)
+        held_lock = facts_dir / "held.lock"
+        held_lock.write_bytes(b"")
+        stale_time = time.time() - (25 * 3600)
+        os.utime(held_lock, (stale_time, stale_time))
+
+        with held_lock.open("r+b") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = _cleanup_facts_locks(tmp_path, stale_hours=24)
+
+            assert held_lock.exists()
+            assert result["deleted_files"] == 0
+            assert result["locked_files"] == 1
+
+    @pytest.mark.parametrize("stale_hours", [0, -1])
+    def test_non_positive_stale_hours_skips_cleanup(self, tmp_path: Path, stale_hours: int):
+        from core.memory.housekeeping import _cleanup_facts_locks
+
+        facts_dir = tmp_path / "alice" / "facts"
+        facts_dir.mkdir(parents=True)
+        stale_lock = facts_dir / "stale.lock"
+        stale_lock.write_bytes(b"")
+        old_time = time.time() - (90 * 3600)
+        os.utime(stale_lock, (old_time, old_time))
+
+        result = _cleanup_facts_locks(tmp_path, stale_hours=stale_hours)
+
+        assert stale_lock.exists()
+        assert result["skipped"] is True
+        assert result["reason"] == "stale_hours_must_be_positive"
+
+    def test_fcntl_unavailable_fails_closed(self, tmp_path: Path):
+        from unittest.mock import patch
+
+        from core.memory.housekeeping import _cleanup_facts_locks
+
+        facts_dir = tmp_path / "alice" / "facts"
+        facts_dir.mkdir(parents=True)
+        stale_lock = facts_dir / "stale.lock"
+        stale_lock.write_bytes(b"")
+        old_time = time.time() - (25 * 3600)
+        os.utime(stale_lock, (old_time, old_time))
+
+        with patch.dict("sys.modules", {"fcntl": None}):
+            result = _cleanup_facts_locks(tmp_path, stale_hours=24)
+
+        assert stale_lock.exists()
+        assert result["skipped"] is True
+        assert result["reason"] == "fcntl_unavailable"
 
 
 # ── run_housekeeping integration test ──────────────────────────
@@ -631,6 +868,7 @@ class TestRunHousekeeping:
         assert "cron_logs" in results
         assert results["cron_logs"]["deleted_files"] == 1
         assert "shortterm" in results
+        assert "facts_locks" in results
         assert results["shortterm"]["deleted_files"] == 1
         assert "daemon_log" in results
         assert results["daemon_log"]["skipped"] is True
@@ -659,6 +897,7 @@ class TestRunHousekeeping:
         assert "dm_archives" in results
         assert "cron_logs" in results
         assert "shortterm" in results
+        assert "facts_locks" in results
         assert "task_results" in results
         assert "pending_failed" in results
         assert "codex_execution_logs" in results
@@ -935,8 +1174,8 @@ class TestRuntimeBloatRetention:
         old_dated.write_text("old", encoding="utf-8")
         keep_stderr = logs_dir / "stderr.log"
         keep_stderr.write_text("stderr", encoding="utf-8")
-        first_recent = logs_dir / "20260601.log"
-        second_recent = logs_dir / "20260602.log"
+        first_recent = logs_dir / f"{(today_local() - timedelta(days=2)).strftime('%Y%m%d')}.log"
+        second_recent = logs_dir / f"{(today_local() - timedelta(days=1)).strftime('%Y%m%d')}.log"
         first_recent.write_bytes(b"a" * 700_000)
         second_recent.write_bytes(b"b" * 700_000)
         old_time = time.time() - (20 * 86400)

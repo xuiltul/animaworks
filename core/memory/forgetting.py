@@ -1216,7 +1216,11 @@ class ForgettingEngine:
 
     # ── Episode Retention Archival ─────────────────────────────────
 
-    def archive_expired_episodes(self, retention_days: int) -> dict[str, Any]:
+    def archive_expired_episodes(
+        self,
+        retention_days: int,
+        batch_limit: int = 0,
+    ) -> dict[str, Any]:
         """Archive episode files older than the configured retention window.
 
         This is deterministic monthly housekeeping, independent from the
@@ -1228,9 +1232,15 @@ class ForgettingEngine:
         episodes_dir = self.anima_dir / "episodes"
         if retention_days < 0:
             retention_days = 0
+        if batch_limit < 0:
+            batch_limit = 0
         if not episodes_dir.is_dir():
             return {
                 "retention_days": retention_days,
+                "batch_limit": batch_limit,
+                "batch_limited": False,
+                "attempted": 0,
+                "remaining_count": 0,
                 "scanned": 0,
                 "archived_count": 0,
                 "archived_files": [],
@@ -1249,18 +1259,32 @@ class ForgettingEngine:
         index_delete_failures = 0
         skipped_undated = 0
         scanned = 0
+        expired_files: list[Path] = []
 
-        for episode_file in sorted(episodes_dir.glob("*.md")):
+        episode_files = sorted(path for path in episodes_dir.iterdir() if path.suffix in {".md", ".jsonl"})
+        for episode_file in episode_files:
             if not episode_file.is_file():
                 continue
             scanned += 1
             episode_date = self._episode_file_date(episode_file)
             if episode_date is None:
-                skipped_undated += 1
-                continue
+                try:
+                    episode_date = datetime.fromtimestamp(
+                        episode_file.stat().st_mtime,
+                        tz=now_local().tzinfo,
+                    ).date()
+                except OSError:
+                    skipped_undated += 1
+                    continue
             if (today - episode_date).days <= retention_days:
                 continue
+            expired_files.append(episode_file)
 
+        files_to_archive = expired_files[:batch_limit] if batch_limit else expired_files
+        batch_limited = bool(batch_limit and len(expired_files) > batch_limit)
+        attempted = len(files_to_archive)
+
+        for episode_file in files_to_archive:
             relative_path = str(episode_file.relative_to(self.anima_dir))
             if store is None:
                 deleted = 0
@@ -1281,8 +1305,14 @@ class ForgettingEngine:
             archived_files.append(relative_path)
             archive_destinations.append(str(destination.relative_to(self.anima_dir)))
 
+        remaining_count = sum(path.exists() for path in expired_files)
+
         result = {
             "retention_days": retention_days,
+            "batch_limit": batch_limit,
+            "batch_limited": batch_limited,
+            "attempted": attempted,
+            "remaining_count": remaining_count,
             "scanned": scanned,
             "archived_count": len(archived_files),
             "archived_files": archived_files,
@@ -1295,12 +1325,17 @@ class ForgettingEngine:
             result["index_skipped_reason"] = "rag_unavailable"
 
         logger.info(
-            "Episode retention archival for anima=%s: retention_days=%d scanned=%d archived=%d "
+            "Episode retention archival for anima=%s: retention_days=%d batch_limit=%d "
+            "scanned=%d attempted=%d archived=%d remaining=%d batch_limited=%s "
             "deleted_indexed_chunks=%d skipped_undated=%d index_delete_failures=%d",
             self.anima_name,
             retention_days,
+            batch_limit,
             scanned,
+            attempted,
             len(archived_files),
+            remaining_count,
+            batch_limited,
             deleted_indexed_chunks,
             skipped_undated,
             index_delete_failures,
@@ -1310,7 +1345,7 @@ class ForgettingEngine:
     @staticmethod
     def _episode_file_date(path: Path) -> date | None:
         """Return the date encoded in an episode filename, if present."""
-        match = re.match(r"^(\d{4}-\d{2}-\d{2})(?:$|[_-].*)", path.stem)
+        match = re.search(r"(\d{4}-\d{2}-\d{2})", path.stem)
         if match is None:
             return None
         try:
