@@ -251,6 +251,58 @@ def _build_slack_annotation(
     return "\n".join(parts) + "\n"
 
 
+# ASCII-only lookbehind: emails (info@mei...) must not match, but Japanese
+# text directly before "@mei" must still match (\w would match kana/kanji).
+_PLAIN_MENTION_RE = re.compile(r"(?<![A-Za-z0-9_.@])@([A-Za-z][A-Za-z0-9_-]{1,31})")
+_plain_mention_names_cache: tuple[float, frozenset[str]] = (0.0, frozenset())
+_PLAIN_MENTION_NAMES_TTL = 60.0
+
+
+def _known_anima_names() -> frozenset[str]:
+    """Return enabled Anima names (identity.md present), cached for 60s."""
+    global _plain_mention_names_cache
+    import time
+
+    cached_at, cached = _plain_mention_names_cache
+    now = time.monotonic()
+    if cached and now - cached_at < _PLAIN_MENTION_NAMES_TTL:
+        return cached
+    try:
+        from core.paths import get_animas_dir
+        from core.supervisor.manager import ProcessSupervisor
+
+        names = frozenset(
+            p.name.lower()
+            for p in get_animas_dir().iterdir()
+            if p.is_dir() and (p / "identity.md").exists() and ProcessSupervisor.read_anima_enabled(p)
+        )
+    except OSError:
+        return cached
+    _plain_mention_names_cache = (now, names)
+    return names
+
+
+def _detect_plain_anima_mentions(text: str) -> list[str]:
+    """Detect plain-text ``@<anima_name>`` mentions in a channel message.
+
+    Animas post via the shared bot with a username override, so they have no
+    Slack bot user and cannot be real-@mentioned.  Typing ``@mei`` as plain
+    text routes the message to that Anima's inbox as a direct question
+    instead of the channel-default Anima's observe feed.
+    """
+    if not text or "@" not in text:
+        return []
+    names = _known_anima_names()
+    if not names:
+        return []
+    found: list[str] = []
+    for m in _PLAIN_MENTION_RE.finditer(text):
+        name = m.group(1).lower()
+        if name in names and name not in found:
+            found.append(name)
+    return found
+
+
 def _detect_mention_intent(
     text: str,
     bot_user_id: str,
@@ -910,6 +962,36 @@ class SlackSocketModeManager:
             user_name = _get_cached_user_name(event.get("user", "")) or event.get("user", "")
             _route_to_board(channel_id, text, user_name, ts=ts)
 
+            shared_dir = get_data_dir() / "shared"
+
+            # Plain-text @<anima_name> mentions: route to the named Anima(s)
+            # as a direct question instead of the channel default's observe
+            # feed.  Animas post via the shared bot (username override), so
+            # humans cannot real-@mention them.
+            plain_targets = _detect_plain_anima_mentions(raw_text)
+            if plain_targets:
+                annotation = _build_slack_annotation(channel_id, True, channel_name=ch_name)
+                annotated = annotation + text
+                for target in plain_targets:
+                    Messenger(shared_dir, target).receive_external(
+                        content=annotated,
+                        source="slack",
+                        # Suffix keeps multi-target fanout out of the global
+                        # (source, id) dedup; thread anchoring uses
+                        # external_thread_ts which stays a valid Slack ts.
+                        source_message_id=f"{ts}#{target}",
+                        external_user_id=event.get("user", ""),
+                        external_channel_id=channel_id,
+                        external_thread_ts=thread_ts or ts,
+                        intent="question",
+                    )
+                logger.info(
+                    "Shared Socket Mode plain-mention routed: channel=%s -> anima(s)=%s",
+                    channel_id,
+                    ", ".join(plain_targets),
+                )
+                return
+
             has_mention = bool(mention_intent)
             annotation = _build_slack_annotation(
                 channel_id,
@@ -920,7 +1002,6 @@ class SlackSocketModeManager:
             annotated = annotation + text
             intent = mention_intent or _detect_slack_intent(annotated, channel_id, bot_user_id) or "observe"
 
-            shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)
             messenger.receive_external(
                 content=annotated,
