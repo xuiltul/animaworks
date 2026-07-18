@@ -17,6 +17,7 @@ import fnmatch
 import hashlib
 import json
 import logging
+import os
 import re
 import threading
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ logger = logging.getLogger("animaworks.rag.indexer")
 
 INDEX_META_FILE = "index_meta.json"
 UPSERT_FAILURE_STATE_FILE = "rag_upsert_failures.json"
+STALE_RECONCILIATION_LIMIT = 500
 
 
 def access_tracking_metadata() -> dict[str, str | int | float]:
@@ -70,6 +72,7 @@ class IndexDirectoryResult:
     files_skipped: int = 0
     transient_failures: int = 0
     failed_sources: tuple[str, ...] = ()
+    files_reconciled: int = 0
 
     @property
     def transient(self) -> bool:
@@ -556,6 +559,7 @@ class MemoryIndexer:
         files_failed = 0
         files_unchanged = 0
         files_skipped = 0
+        files_reconciled = 0
         transient_failures = 0
         failed_sources: list[str] = []
         try:
@@ -611,6 +615,7 @@ class MemoryIndexer:
                         done_count=index + 1,
                         total_count=len(md_files),
                     )
+            files_reconciled = self._reconcile_stale_entries(directory, memory_type)
         finally:
             self._index_directory_active = previous_active
             self._run_upsert_failures = previous_failures
@@ -620,11 +625,61 @@ class MemoryIndexer:
                 files_failed=files_failed,
                 files_unchanged=files_unchanged,
                 files_skipped=files_skipped,
+                files_reconciled=files_reconciled,
                 transient_failures=transient_failures,
                 failed_sources=tuple(failed_sources),
             )
             self._log_index_directory_summary(collection_name, result)
         return result
+
+    def _reconcile_stale_entries(self, directory: Path, memory_type: str) -> int:
+        """Remove stale per-anima sources lexically below *directory*.
+
+        Shared indexers are intentionally excluded: their single shared meta
+        file cannot represent stale-chunk cleanup across multiple per-anima
+        vector stores safely.
+        """
+        if self.collection_prefix == "shared":
+            return 0
+        anima_dir = getattr(self, "anima_dir", None)
+        if anima_dir is None:
+            return 0
+        try:
+            directory_key = directory.relative_to(anima_dir)
+        except ValueError:
+            logger.warning("Skipping reconciliation outside anima directory: %s", directory)
+            return 0
+
+        stale_sources: list[str] = []
+        index_meta = getattr(self, "index_meta", {})
+        for source_file in list(index_meta):
+            source_key = Path(source_file)
+            if source_key.is_absolute() or ".." in source_key.parts:
+                continue
+            if not source_key.is_relative_to(directory_key):
+                continue
+            source_path = anima_dir / source_key
+            if not os.path.lexists(source_path) or self.is_ragignored(source_path):
+                stale_sources.append(source_file)
+                if len(stale_sources) >= STALE_RECONCILIATION_LIMIT:
+                    break
+
+        collection_name = f"{self.collection_prefix}_{memory_type}"
+        reconciled_sources: list[str] = []
+        for source_file in stale_sources:
+            try:
+                deleted_count = self._delete_indexed_file_documents(collection_name, source_file)
+            except Exception:
+                logger.warning("Failed to reconcile indexed source %s", source_file, exc_info=True)
+                continue
+            if deleted_count is not None:
+                reconciled_sources.append(source_file)
+
+        for source_file in reconciled_sources:
+            index_meta.pop(source_file, None)
+        if reconciled_sources:
+            self._save_index_meta()
+        return len(reconciled_sources)
 
     @staticmethod
     def _directory_source(file_path: Path, directory: Path) -> str:
@@ -638,7 +693,7 @@ class MemoryIndexer:
         examples = list(result.failed_sources[:3])
         logger.info(
             "Index directory summary: collection=%s successful=%d failed=%d "
-            "failed_sources=%s transient=%s unchanged=%d skipped=%d chunks=%d",
+            "failed_sources=%s transient=%s unchanged=%d skipped=%d reconciled=%d chunks=%d",
             collection_name,
             result.files_indexed,
             result.files_failed,
@@ -646,6 +701,7 @@ class MemoryIndexer:
             result.transient,
             result.files_unchanged,
             result.files_skipped,
+            result.files_reconciled,
             result.chunks_indexed,
         )
 

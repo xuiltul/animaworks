@@ -22,6 +22,15 @@ from core.migrations.registry import MigrationStep, StepResult
 
 logger = logging.getLogger(__name__)
 
+_MEMORY_ARCHIVE_ROOTS = ("knowledge", "episodes", "procedures")
+_LEGACY_ARCHIVE_DIRS = ("archived", "_archived", ".archive")
+_RAGIGNORE_ARCHIVE_COMMENT = "# Archived memory files (unified)"
+_RAGIGNORE_ARCHIVE_PATTERNS = tuple(
+    f"*/{memory_root}/{archive_dir}/*"
+    for memory_root in _MEMORY_ARCHIVE_ROOTS
+    for archive_dir in ("archive", "archived")
+)
+
 
 def _prime_tooling_imports() -> None:
     """Load execution sanitizers before tooling schemas to avoid import cycles."""
@@ -277,6 +286,164 @@ def _iter_anima_dirs(data_dir: Path) -> list[Path]:
     if not animas_dir.exists():
         return []
     return [d for d in sorted(animas_dir.iterdir()) if d.is_dir() and (d / "identity.md").exists()]
+
+
+def _archive_destination(
+    relative_path: Path,
+    legacy_dir_name: str,
+    occupied_files: set[Path],
+    occupied_dirs: set[Path],
+) -> tuple[Path | None, bool]:
+    """Return an unused compatible archive-relative destination."""
+    if relative_path in occupied_dirs or any(parent in occupied_files for parent in relative_path.parents):
+        return None, False
+    if relative_path not in occupied_files:
+        return relative_path, False
+
+    stem = relative_path.stem
+    suffix = relative_path.suffix
+    parent = relative_path.parent
+    base_name = f"{stem}__from_{legacy_dir_name}"
+    candidate = parent / f"{base_name}{suffix}"
+    sequence = 2
+    while candidate in occupied_files:
+        candidate = parent / f"{base_name}_{sequence}{suffix}"
+        sequence += 1
+    if candidate in occupied_dirs:
+        return None, False
+    return candidate, True
+
+
+def step_knowledge_archive_unify(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Move legacy per-memory archive directories into ``archive/``."""
+    del verbose
+    moved = 0
+    collision_renames = 0
+    details: list[str] = []
+    try:
+        for anima_dir in _iter_anima_dirs(data_dir):
+            if anima_dir.is_symlink():
+                logger.warning("Skipping symlinked anima directory during archive migration: %s", anima_dir)
+                continue
+            for memory_root_name in _MEMORY_ARCHIVE_ROOTS:
+                memory_root = anima_dir / memory_root_name
+                if memory_root.is_symlink():
+                    logger.warning("Skipping symlinked memory root during archive migration: %s", memory_root)
+                    continue
+                archive_dir = memory_root / "archive"
+                if archive_dir.is_symlink():
+                    logger.warning("Skipping symlinked canonical archive during migration: %s", archive_dir)
+                    continue
+                archive_entries = list(archive_dir.rglob("*")) if archive_dir.is_dir() else []
+                occupied_files = {
+                    path.relative_to(archive_dir)
+                    for path in archive_entries
+                    if path.is_file() or path.is_symlink()
+                }
+                occupied_dirs = {
+                    path.relative_to(archive_dir)
+                    for path in archive_entries
+                    if path.is_dir() and not path.is_symlink()
+                }
+
+                for legacy_dir_name in _LEGACY_ARCHIVE_DIRS:
+                    legacy_dir = memory_root / legacy_dir_name
+                    if legacy_dir.is_symlink():
+                        logger.warning("Skipping symlinked legacy archive during migration: %s", legacy_dir)
+                        continue
+                    if not legacy_dir.is_dir():
+                        continue
+                    legacy_files = sorted(
+                        (
+                            path
+                            for path in legacy_dir.rglob("*")
+                            if path.is_file() or path.is_symlink()
+                        ),
+                        key=lambda path: str(path.relative_to(legacy_dir)),
+                    )
+                    for source in legacy_files:
+                        relative_path = source.relative_to(legacy_dir)
+                        destination_relative, renamed = _archive_destination(
+                            relative_path,
+                            legacy_dir_name,
+                            occupied_files,
+                            occupied_dirs,
+                        )
+                        if destination_relative is None:
+                            logger.warning(
+                                "Skipping archive migration due to file/directory collision: %s",
+                                source,
+                            )
+                            details.append(f"Skipped destination type conflict: {source}")
+                            continue
+                        occupied_files.add(destination_relative)
+                        occupied_dirs.update(destination_relative.parents)
+                        moved += 1
+                        collision_renames += int(renamed)
+                        if not dry_run:
+                            destination = archive_dir / destination_relative
+                            destination.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.move(str(source), str(destination))
+
+                    if not dry_run:
+                        for child_dir in sorted(
+                            (path for path in legacy_dir.rglob("*") if path.is_dir()),
+                            key=lambda path: len(path.parts),
+                            reverse=True,
+                        ):
+                            try:
+                                child_dir.rmdir()
+                            except OSError:
+                                pass
+                        try:
+                            legacy_dir.rmdir()
+                        except OSError:
+                            pass
+
+        action = "Would move" if dry_run else "Moved"
+        details.append(f"{action} {moved} archived memory files")
+        details.append(f"Collision-renamed files: {collision_renames}")
+        return StepResult(changed=moved, skipped=int(moved == 0), details=details)
+    except Exception as exc:
+        logger.exception("step_knowledge_archive_unify failed")
+        return StepResult(changed=0, skipped=0, details=details, error=str(exc))
+
+
+def step_ragignore_archive_patterns(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Add unified archive exclusions to an existing ``.ragignore`` file."""
+    del verbose
+    ragignore_path = data_dir / ".ragignore"
+    if ragignore_path.is_symlink():
+        logger.warning("Skipping symlinked .ragignore during migration: %s", ragignore_path)
+        return StepResult(changed=0, skipped=1, details=[".ragignore is a symlink; skip"])
+    if not ragignore_path.is_file():
+        return StepResult(changed=0, skipped=1, details=[".ragignore not found; skip"])
+
+    try:
+        content = ragignore_path.read_text(encoding="utf-8")
+        existing_lines = {line.strip() for line in content.splitlines()}
+        missing_patterns = [pattern for pattern in _RAGIGNORE_ARCHIVE_PATTERNS if pattern not in existing_lines]
+        if not missing_patterns:
+            return StepResult(changed=0, skipped=1, details=["Archive patterns already present"])
+
+        details = [f"Added .ragignore pattern: {pattern}" for pattern in missing_patterns]
+        if dry_run:
+            return StepResult(changed=1, skipped=0, details=[detail.replace("Added", "Would add") for detail in details])
+
+        additions: list[str] = []
+        if _RAGIGNORE_ARCHIVE_COMMENT not in existing_lines:
+            additions.append(_RAGIGNORE_ARCHIVE_COMMENT)
+        additions.extend(missing_patterns)
+        base_content = content.rstrip("\n")
+        separator = "\n\n" if base_content else ""
+        ragignore_path.write_text(
+            base_content + separator + "\n".join(additions) + "\n",
+            encoding="utf-8",
+        )
+        return StepResult(changed=1, skipped=0, details=details)
+    except Exception as exc:
+        logger.exception("step_ragignore_archive_patterns failed")
+        return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
 def step_legacy_flat_skill_migration(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
@@ -1310,6 +1477,18 @@ def register_all_steps(runner: Any) -> None:
             "Convert legacy flat skills to trusted SKILL.md bundles",
             "structural",
             step_legacy_flat_skill_migration,
+        ),
+        MigrationStep(
+            "knowledge_archive_unify_20260718",
+            "Unify memory archive directory names",
+            "per_anima",
+            step_knowledge_archive_unify,
+        ),
+        MigrationStep(
+            "ragignore_archive_patterns_20260718",
+            "Add unified archive patterns to .ragignore",
+            "structural",
+            step_ragignore_archive_patterns,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

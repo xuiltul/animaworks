@@ -727,7 +727,13 @@ def _ensure_runtime_only_dirs(data_dir: Path) -> None:
             "\n"
             "# Archived memory files\n"
             "*/.archive/*\n"
-            "*/_archived/*\n",
+            "*/_archived/*\n"
+            "*/knowledge/archive/*\n"
+            "*/knowledge/archived/*\n"
+            "*/episodes/archive/*\n"
+            "*/episodes/archived/*\n"
+            "*/procedures/archive/*\n"
+            "*/procedures/archived/*\n",
             encoding="utf-8",
         )
     inbox_dir = data_dir / "shared" / "inbox"
