@@ -662,6 +662,8 @@ class MemoryManager:
         *,
         offset: int = 0,
         context_window: int = 128_000,
+        time_start: str | None = None,
+        time_end: str | None = None,
     ) -> list[dict]:
         """Facade: RAGMemorySearch.search_memory_text."""
         return self._rag.search_memory_text(
@@ -673,6 +675,8 @@ class MemoryManager:
             episodes_dir=self.episodes_dir,
             procedures_dir=self.procedures_dir,
             common_knowledge_dir=self.common_knowledge_dir,
+            time_start=time_start,
+            time_end=time_end,
         )
 
     @property

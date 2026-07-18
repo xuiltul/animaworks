@@ -350,6 +350,8 @@ class RAGMemorySearch:
         procedures_dir: Path,
         common_knowledge_dir: Path,
         result_limit: int | None = None,
+        time_start: str | None = None,
+        time_end: str | None = None,
     ) -> list[dict]:
         """Search memory through the unified Legacy retrieval policy.
 
@@ -393,6 +395,8 @@ class RAGMemorySearch:
                 limit=result_limit or 10,
                 trigger="tool",
                 offset=offset,
+                time_start=time_start,
+                time_end=time_end,
             )
             self._last_search_meta = searcher.last_search_meta
             return results
@@ -456,6 +460,10 @@ class RAGMemorySearch:
             "entity_boost_enabled": False,
             "entity_boost": 0.20,
             "entity_boost_cap": 0.80,
+            "temporal_boost_enabled": True,
+            "temporal_boost": 0.05,
+            "temporal_boost_max": 0.10,
+            "temporal_half_life_days": 7.0,
             "access_boost_enabled": True,
             "access_boost_weight": 0.05,
             "access_boost_cap": 0.25,
@@ -477,6 +485,10 @@ class RAGMemorySearch:
                     "entity_boost_enabled": getattr(rag, "entity_boost_enabled", False),
                     "entity_boost": getattr(rag, "entity_boost", 0.20),
                     "entity_boost_cap": getattr(rag, "entity_boost_cap", 0.80),
+                    "temporal_boost_enabled": getattr(rag, "temporal_boost_enabled", True),
+                    "temporal_boost": getattr(rag, "temporal_boost", 0.05),
+                    "temporal_boost_max": getattr(rag, "temporal_boost_max", 0.10),
+                    "temporal_half_life_days": getattr(rag, "temporal_half_life_days", 7.0),
                     "access_boost_enabled": getattr(rag, "access_boost_enabled", True),
                     "access_boost_weight": getattr(rag, "access_boost_weight", 0.05),
                     "access_boost_cap": getattr(rag, "access_boost_cap", 0.25),

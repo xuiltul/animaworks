@@ -568,11 +568,17 @@ class MemoryToolsMixin:
                 if neo4j_result:
                     return neo4j_result
 
+        legacy_time_range: dict[str, str] = {}
+        if time_start is not None:
+            legacy_time_range["time_start"] = time_start
+        if time_end is not None:
+            legacy_time_range["time_end"] = time_end
         results = self._memory.search_memory_text(
             query,
             scope=scope,
             offset=offset,
             context_window=getattr(self, "_context_window", _SEARCH_CONTEXT_BASE),
+            **legacy_time_range,
         )
         if denied_roots:
             results = [

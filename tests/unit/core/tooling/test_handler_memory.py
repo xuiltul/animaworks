@@ -41,6 +41,26 @@ class _FakeHandler(MemoryToolsMixin):
 
 
 class TestSearchMemoryCountHeader:
+    def test_legacy_search_propagates_explicit_time_range(self) -> None:
+        handler = _FakeHandler([])
+
+        handler._handle_search_memory(
+            {
+                "query": "meeting",
+                "scope": "episodes",
+                "time_range": {"after": "2026-07-01", "before": "2026-07-18"},
+            }
+        )
+
+        handler._memory.search_memory_text.assert_called_once_with(
+            "meeting",
+            scope="episodes",
+            offset=0,
+            context_window=128_000,
+            time_start="2026-07-01",
+            time_end="2026-07-18",
+        )
+
     def test_header_shows_total_and_shown_count(self) -> None:
         results = [_make_result(f"file{i}.md", f"line {i}") for i in range(25)]
         handler = _FakeHandler(results)

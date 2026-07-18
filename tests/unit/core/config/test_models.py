@@ -299,6 +299,14 @@ class TestRAGConfig:
         assert rag.entity_boost == 0.20
         assert rag.entity_boost_cap == 0.80
 
+    def test_temporal_boost_defaults(self) -> None:
+        """Time-aware retrieval uses conservative production defaults."""
+        rag = RAGConfig()
+        assert rag.temporal_boost_enabled is True
+        assert rag.temporal_boost == 0.05
+        assert rag.temporal_boost_max == 0.10
+        assert rag.temporal_half_life_days == 7.0
+
     def test_access_boost_defaults(self) -> None:
         """Access-count LTP boost has conservative production defaults."""
         rag = RAGConfig()
