@@ -231,6 +231,109 @@ def test_unified_search_passes_access_boost_config_to_pipeline(
     assert CapturingPipeline.calls[0]["access_boost"] == "access-config"
 
 
+def test_unified_search_builds_temporal_boost_from_yesterday_query(
+    fake_rag: FakeRAGSearch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.memory.retrieval.pipeline.RetrievalPipeline", CapturingPipeline)
+    monkeypatch.setattr("core.memory.retrieval.unified_search.search_activity_log", lambda *args, **kwargs: [])
+    fake_rag.vector_returns["episodes"] = [
+        {"doc_id": "yesterday", "content": "meeting", "score": 0.8, "source_file": "2026-07-17.md"}
+    ]
+
+    _searcher(fake_rag).search(
+        "昨日のミーティング",
+        scope="episodes",
+        limit=3,
+        trigger="chat",
+        reference_time=datetime(2026, 7, 18, 12, 0),
+    )
+
+    temporal = CapturingPipeline.calls[0]["temporal_boost"]
+    assert temporal is not None
+    assert temporal.time_range.start == datetime(2026, 7, 17)
+    assert temporal.time_range.end == datetime(2026, 7, 17, 23, 59, 59, 999999)
+    assert temporal.boost == 0.05
+    assert temporal.max_boost == 0.10
+    assert temporal.half_life_days == 7.0
+
+
+def test_unified_search_temporal_boost_config_gate_disables_auto_wiring(
+    fake_rag: FakeRAGSearch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_settings = fake_rag._load_rag_pipeline_settings
+
+    def disabled_settings() -> dict[str, object]:
+        settings = original_settings()
+        settings["temporal_boost_enabled"] = False
+        return settings
+
+    monkeypatch.setattr(fake_rag, "_load_rag_pipeline_settings", disabled_settings)
+    monkeypatch.setattr("core.memory.retrieval.pipeline.RetrievalPipeline", CapturingPipeline)
+    monkeypatch.setattr("core.memory.retrieval.unified_search.search_activity_log", lambda *args, **kwargs: [])
+    fake_rag.vector_returns["episodes"] = [
+        {"doc_id": "yesterday", "content": "meeting", "score": 0.8, "source_file": "2026-07-17.md"}
+    ]
+
+    _searcher(fake_rag).search(
+        "昨日のミーティング",
+        scope="episodes",
+        limit=3,
+        trigger="chat",
+        reference_time=datetime(2026, 7, 18, 12, 0),
+    )
+
+    assert CapturingPipeline.calls[0]["temporal_boost"] is None
+
+
+def test_unified_search_explicit_range_overrides_query_expression(
+    fake_rag: FakeRAGSearch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.memory.retrieval.pipeline.RetrievalPipeline", CapturingPipeline)
+    monkeypatch.setattr("core.memory.retrieval.unified_search.search_activity_log", lambda *args, **kwargs: [])
+    fake_rag.vector_returns["episodes"] = [
+        {"doc_id": "explicit", "content": "meeting", "score": 0.8, "source_file": "2026-07-01.md"}
+    ]
+
+    _searcher(fake_rag).search(
+        "昨日のミーティング",
+        scope="episodes",
+        limit=3,
+        trigger="tool",
+        time_start="2026-07-01",
+        time_end="2026-07-02",
+        reference_time=datetime(2026, 7, 18, 12, 0),
+    )
+
+    temporal = CapturingPipeline.calls[0]["temporal_boost"]
+    assert temporal.time_range.start == datetime(2026, 7, 1)
+    assert temporal.time_range.end == datetime(2026, 7, 2, 23, 59, 59, 999999)
+
+
+def test_search_many_automatically_builds_temporal_boost_per_query(
+    fake_rag: FakeRAGSearch,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("core.memory.retrieval.pipeline.RetrievalPipeline", CapturingPipeline)
+    monkeypatch.setattr("core.memory.retrieval.unified_search.search_activity_log", lambda *args, **kwargs: [])
+    fake_rag.vector_returns["episodes"] = [
+        {"doc_id": "dated", "content": "meeting", "score": 0.8, "source_file": "2026-07-18.md"}
+    ]
+
+    _searcher(fake_rag).search_many(
+        ["2026-07-18 meeting"],
+        scope="episodes",
+        limit=3,
+        trigger="chat",
+    )
+
+    temporal = CapturingPipeline.calls[0]["temporal_boost"]
+    assert temporal.time_range.start == datetime(2026, 7, 18)
+    assert temporal.time_range.end == datetime(2026, 7, 18, 23, 59, 59, 999999)
+
+
 def test_knowledge_bm25_keyword_list_is_merged_in_pipeline(
     fake_rag: FakeRAGSearch,
     monkeypatch: pytest.MonkeyPatch,

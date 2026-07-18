@@ -182,6 +182,33 @@ class TestGraphEpisodesSearch:
 
 
 class TestSearchMemoryTextKeywordOnly:
+    def test_explicit_time_range_is_forwarded_to_unified_search(
+        self,
+        rag: RAGMemorySearch,
+        knowledge_dir: Path,
+        episodes_dir: Path,
+        procedures_dir: Path,
+        common_knowledge_dir: Path,
+    ) -> None:
+        with patch("core.memory.retrieval.unified_search.UnifiedMemorySearch") as search_cls:
+            searcher = search_cls.return_value
+            searcher.search.return_value = []
+            searcher.last_search_meta = {}
+
+            rag.search_memory_text(
+                "meeting",
+                scope="episodes",
+                knowledge_dir=knowledge_dir,
+                episodes_dir=episodes_dir,
+                procedures_dir=procedures_dir,
+                common_knowledge_dir=common_knowledge_dir,
+                time_start="2026-07-01",
+                time_end="2026-07-18",
+            )
+
+        assert searcher.search.call_args.kwargs["time_start"] == "2026-07-01"
+        assert searcher.search.call_args.kwargs["time_end"] == "2026-07-18"
+
     def test_search_memory_text_keyword_only(
         self,
         rag: RAGMemorySearch,

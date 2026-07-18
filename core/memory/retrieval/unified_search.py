@@ -12,6 +12,7 @@ existing RAG search helpers for vector, graph, keyword, and activity sources.
 
 import logging
 from dataclasses import dataclass
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,38 @@ TRIGGER_POLICIES: dict[str, TriggerPolicy] = {
         scopes=_TOOL_ALL_SCOPES,
     ),
 }
+
+
+def _explicit_time_range(*, time_start: str | None, time_end: str | None) -> Any | None:
+    """Convert schema ISO bounds into the same inclusive range used by query extraction."""
+    if not time_start and not time_end:
+        return None
+
+    from core.memory.retrieval.time_expr import TimeRange
+
+    start = _parse_time_bound(time_start, end_of_day=False)
+    end = _parse_time_bound(time_end, end_of_day=True)
+    if start is None and end is None:
+        return None
+    if start is not None and end is not None and start > end:
+        start, end = end, start
+    return TimeRange(start=start, end=end)
+
+
+def _parse_time_bound(value: str | None, *, end_of_day: bool) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed_date = date.fromisoformat(text)
+    except ValueError:
+        normalized = f"{text[:-1]}+00:00" if text.endswith("Z") else text
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+    return datetime.combine(parsed_date, time.max if end_of_day else time.min)
 
 
 class UnifiedMemorySearch:
@@ -154,7 +187,8 @@ class UnifiedMemorySearch:
             filter_ranked_lists_by_time_hint,
         )
 
-        expanded = expand_query(query, reference_time=coerce_reference_time(reference_time))
+        coerced_reference_time = coerce_reference_time(reference_time)
+        expanded = expand_query(query, reference_time=coerced_reference_time)
         # Sparse (BM25/keyword) query carries expanded ISO dates and lowercased
         # tokens; dense (vector/graph) query keeps natural text plus quoted
         # phrases only. See F19.
@@ -164,6 +198,14 @@ class UnifiedMemorySearch:
         time_hint_end = time_end or expanded.time_hint_end
         if entity_boost is None:
             entity_boost = rag._build_entity_boost_config(dense_query, settings)
+        if temporal_boost is None:
+            temporal_boost = self._build_temporal_boost_config(
+                query,
+                settings,
+                time_start=time_start,
+                time_end=time_end,
+                reference_time=coerced_reference_time,
+            )
         access_boost = None
         access_boost_builder = getattr(rag, "_build_access_boost_config", None)
         if callable(access_boost_builder):
@@ -254,6 +296,45 @@ class UnifiedMemorySearch:
         if min_score > 0.0 and self._rerank_was_applied(items):
             items = [item for item in items if float(item.get("score", 0.0) or 0.0) >= min_score]
         return items
+
+    @staticmethod
+    def _build_temporal_boost_config(
+        query: str,
+        settings: dict[str, object],
+        *,
+        time_start: str | None,
+        time_end: str | None,
+        reference_time: datetime | None,
+    ) -> Any | None:
+        """Build automatic temporal ranking config from explicit or query time intent."""
+        if not bool(settings.get("temporal_boost_enabled", True)):
+            return None
+
+        from core.memory.retrieval.temporal import TemporalBoostConfig
+        from core.memory.retrieval.time_expr import TimeRange, extract_time_range
+
+        now = reference_time or datetime.now()
+        if now.tzinfo is not None:
+            now = now.replace(tzinfo=None)
+
+        explicit = _explicit_time_range(time_start=time_start, time_end=time_end)
+        resolved = explicit or extract_time_range(query, now=now)
+        if resolved is None:
+            return None
+        return TemporalBoostConfig(
+            enabled=True,
+            boost=float(settings.get("temporal_boost", 0.05) or 0.0),
+            max_boost=float(settings.get("temporal_boost_max", 0.10) or 0.0),
+            category=None,
+            time_range=TimeRange(
+                start=resolved.start,
+                end=resolved.end,
+                recency=resolved.recency,
+            ),
+            recency=resolved.recency,
+            half_life_days=float(settings.get("temporal_half_life_days", 7.0) or 7.0),
+            now=now,
+        )
 
     @staticmethod
     def _rerank_was_applied(items: list[dict[str, Any]]) -> bool:

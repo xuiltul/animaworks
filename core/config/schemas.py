@@ -305,6 +305,10 @@ class RAGConfig(BaseModel):
     entity_boost_enabled: bool = False
     entity_boost: float = 0.20
     entity_boost_cap: float = 0.80
+    temporal_boost_enabled: bool = True
+    temporal_boost: float = 0.05
+    temporal_boost_max: float = 0.10
+    temporal_half_life_days: float = 7.0
     access_boost_enabled: bool = True
     access_boost_weight: float = 0.05
     access_boost_cap: float = 0.25
