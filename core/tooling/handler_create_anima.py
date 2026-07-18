@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json as _json
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,10 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger("animaworks.tool_handler")
+
+
+def _server_base_url() -> str:
+    return os.environ.get("ANIMAWORKS_SERVER_URL", "http://localhost:18500").rstrip("/")
 
 
 class CreateAnimaMixin:
@@ -29,7 +34,7 @@ class CreateAnimaMixin:
     def _handle_create_anima(self, args: dict[str, Any]) -> str:
         """Create a new anima from a character sheet via anima_factory."""
         from core.anima_factory import create_from_md
-        from core.paths import get_animas_dir, get_data_dir
+        from core.paths import get_animas_dir
 
         content = args.get("character_sheet_content")
         sheet_path_raw = args.get("character_sheet_path")
@@ -60,6 +65,14 @@ class CreateAnimaMixin:
                     f"Character sheet not found: {md_path}",
                     suggestion=("Use character_sheet_content to pass content directly, or ensure the file exists"),
                 )
+            # Sandbox paths may not be readable by the host server; read content
+            # now so EROFS fallback can pass character_sheet_content.
+            try:
+                content = md_path.read_text(encoding="utf-8")
+            except OSError:
+                # Still try direct create_from_md with path; fallback may fail
+                # if we cannot load content either.
+                pass
         else:
             return _error_result(
                 "MissingParameter",
@@ -67,9 +80,11 @@ class CreateAnimaMixin:
             )
 
         try:
+            # Prefer in-memory content when available so sandbox-local paths are
+            # not re-read, and EROFS fallback can reuse the same payload.
             anima_dir = create_from_md(
                 get_animas_dir(),
-                md_path,
+                md_path if not content else None,
                 name=name,
                 content=content,
                 supervisor=explicit_supervisor,
@@ -82,6 +97,101 @@ class CreateAnimaMixin:
             )
         except ValueError as e:
             return _error_result("InvalidCharacterSheet", str(e))
+        except OSError as e:
+            # Sandbox EROFS/EACCES: fall back to server internal API
+            return self._create_anima_via_server(
+                content=content,
+                name=name,
+                supervisor=explicit_supervisor,
+                original_error=e,
+            )
+
+        return self._finalize_create_anima(anima_dir)
+
+    def _create_anima_via_server(
+        self,
+        *,
+        content: str | None,
+        name: str | None,
+        supervisor: str | None,
+        original_error: OSError,
+    ) -> str:
+        """Create anima via /api/internal/anima/create when local FS is read-only."""
+        if not content:
+            return _error_result(
+                "PermissionDenied",
+                (
+                    f"Cannot create anima: filesystem error ({original_error}) "
+                    "and character sheet content is unavailable for server fallback"
+                ),
+            )
+
+        try:
+            import httpx
+        except ImportError:
+            return _error_result(
+                "PermissionDenied",
+                f"Cannot create anima: filesystem error ({original_error})",
+            )
+
+        payload: dict[str, Any] = {
+            "character_sheet_content": content,
+            "calling_anima": self._anima_name or "",
+        }
+        if name:
+            payload["name"] = name
+        if supervisor:
+            payload["supervisor"] = supervisor
+
+        try:
+            resp = httpx.post(
+                f"{_server_base_url()}/api/internal/anima/create",
+                json=payload,
+                timeout=60.0,
+            )
+        except Exception as exc:
+            return _error_result(
+                "PermissionDenied",
+                (f"Cannot create anima: filesystem error ({original_error}); server fallback unreachable ({exc})"),
+            )
+
+        if resp.status_code == 409:
+            detail = _extract_detail(resp)
+            return _error_result(
+                "AnimaExists",
+                detail,
+                suggestion="Choose a different name",
+            )
+        if resp.status_code == 422:
+            detail = _extract_detail(resp)
+            return _error_result("InvalidCharacterSheet", detail)
+        if resp.status_code >= 400:
+            detail = _extract_detail(resp)
+            return _error_result(
+                "PermissionDenied",
+                (
+                    f"Cannot create anima: filesystem error ({original_error}); "
+                    f"server fallback failed ({resp.status_code}: {detail})"
+                ),
+            )
+
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+        anima_dir_str = data.get("anima_dir", "")
+        anima_name = Path(anima_dir_str).name if anima_dir_str else (name or "unknown")
+        # Server already did supervisor fallback + config registration
+        logger.info(
+            "create_anima: created '%s' via server API (EROFS fallback) at %s",
+            anima_name,
+            anima_dir_str,
+        )
+        return f"Anima '{anima_name}' created successfully at {anima_dir_str}. Reload the server to activate."
+
+    def _finalize_create_anima(self, anima_dir: Path) -> str:
+        """Local post-create: supervisor fallback + config registration."""
+        from core.paths import get_data_dir
 
         status_path = anima_dir / "status.json"
         if status_path.exists() and self._anima_name:
@@ -110,3 +220,14 @@ class CreateAnimaMixin:
 
         logger.info("create_anima: created '%s' at %s", anima_dir.name, anima_dir)
         return f"Anima '{anima_dir.name}' created successfully at {anima_dir}. Reload the server to activate."
+
+
+def _extract_detail(resp: Any) -> str:
+    try:
+        data = resp.json()
+        if isinstance(data, dict):
+            detail = data.get("detail", data)
+            return str(detail)
+    except Exception:
+        pass
+    return resp.text or f"HTTP {resp.status_code}"

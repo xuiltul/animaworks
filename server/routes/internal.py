@@ -115,6 +115,14 @@ class InteractionMessageTsRequest(BaseModel):
     ts: str
 
 
+class AnimaCreateRequest(BaseModel):
+    character_sheet_content: str | None = None
+    character_sheet_path: str | None = None
+    name: str | None = None
+    supervisor: str | None = None
+    calling_anima: str = ""  # supervisor fallback when status.json has none
+
+
 def create_internal_router() -> APIRouter:
     router = APIRouter()
 
@@ -325,6 +333,80 @@ def create_internal_router() -> APIRouter:
             body.ts,
         )
         return {"ok": True}
+
+    @router.post("/internal/anima/create")
+    async def internal_anima_create(body: AnimaCreateRequest):
+        """Create an anima outside sandbox EROFS constraints.
+
+        Sandboxed Mode C MCP subprocesses cannot write to animas/ root.
+        They fall back here so create_from_md runs on the host server.
+        """
+        if not body.character_sheet_content and not body.character_sheet_path:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "detail": ("Either character_sheet_content or character_sheet_path is required"),
+                },
+            )
+
+        def _create() -> Path:
+            from core.anima_factory import create_from_md
+            from core.paths import get_animas_dir, get_data_dir
+
+            md_path = Path(body.character_sheet_path) if body.character_sheet_path else None
+            anima_dir = create_from_md(
+                get_animas_dir(),
+                md_path,
+                name=body.name,
+                content=body.character_sheet_content,
+                supervisor=body.supervisor,
+            )
+
+            # Supervisor fallback (same as _handle_create_anima local path)
+            status_path = anima_dir / "status.json"
+            if status_path.exists() and body.calling_anima:
+                try:
+                    status_data = json.loads(status_path.read_text(encoding="utf-8"))
+                    if not status_data.get("supervisor"):
+                        status_data["supervisor"] = body.calling_anima
+                        status_path.write_text(
+                            json.dumps(status_data, ensure_ascii=False, indent=2) + "\n",
+                            encoding="utf-8",
+                        )
+                except (OSError, json.JSONDecodeError):
+                    logger.warning(
+                        "Failed to set fallback supervisor for '%s'",
+                        anima_dir.name,
+                        exc_info=True,
+                    )
+
+            try:
+                from cli.commands.init_cmd import _register_anima_in_config
+
+                _register_anima_in_config(get_data_dir(), anima_dir.name)
+            except Exception:
+                logger.warning(
+                    "Failed to register anima '%s' in config.json",
+                    anima_dir.name,
+                    exc_info=True,
+                )
+
+            return anima_dir
+
+        try:
+            loop = asyncio.get_running_loop()
+            anima_dir = await loop.run_in_executor(_native_executor, _create)
+        except FileExistsError as exc:
+            return JSONResponse(status_code=409, content={"detail": str(exc)})
+        except ValueError as exc:
+            return JSONResponse(status_code=422, content={"detail": str(exc)})
+        except FileNotFoundError as exc:
+            return JSONResponse(status_code=422, content={"detail": str(exc)})
+        except Exception as exc:
+            logger.exception("internal anima create failed")
+            return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+        return {"status": "ok", "anima_dir": str(anima_dir)}
 
     @router.post("/internal/vector/reset-store")
     async def vector_reset_store(body: VectorListCollectionsRequest, request: Request):

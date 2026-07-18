@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 from httpx import ASGITransport, AsyncClient
@@ -12,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 
 def _make_test_app():
     from fastapi import FastAPI
+
     from server.routes.internal import create_internal_router
 
     app = FastAPI()
@@ -103,3 +105,106 @@ class TestInternalMessageSent:
                 json={"from_person": "alice", "to_person": "bob"},
             )
         assert resp.status_code == 200
+
+
+# ── POST /internal/anima/create ──────────────────────────
+
+_VALID_SHEET = """\
+# Character: yoru
+
+## 基本情報
+
+| 項目 | 設定 |
+|------|------|
+| 英名 | yoru |
+| 日本語名 | ヨル |
+| 役職/専門 | テスト |
+| 上司 | (なし) |
+| 役割 | worker |
+| 実行モード | autonomous |
+| モデル | claude-sonnet-4-6 |
+| credential | anthropic |
+
+## 人格
+
+夜勤担当。
+
+## 役割・行動方針
+
+テスト業務を担当します。
+"""
+
+
+class TestInternalAnimaCreate:
+    async def test_create_success(self, data_dir):
+        from pathlib import Path
+        from unittest.mock import patch
+
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+        animas_dir = Path(data_dir) / "animas"
+
+        with patch("cli.commands.init_cmd._register_anima_in_config"):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/internal/anima/create",
+                    json={
+                        "character_sheet_content": _VALID_SHEET,
+                        "name": "yoru",
+                        "calling_anima": "taka",
+                    },
+                )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "ok"
+        assert "yoru" in body["anima_dir"]
+        assert (animas_dir / "yoru").is_dir()
+        # supervisor fallback from calling_anima
+        status = json.loads((animas_dir / "yoru" / "status.json").read_text(encoding="utf-8"))
+        assert status.get("supervisor") == "taka"
+
+    async def test_create_duplicate_409(self, data_dir):
+        from pathlib import Path
+        from unittest.mock import patch
+
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        with patch("cli.commands.init_cmd._register_anima_in_config"):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                first = await client.post(
+                    "/api/internal/anima/create",
+                    json={"character_sheet_content": _VALID_SHEET, "name": "yoru"},
+                )
+                assert first.status_code == 200
+                second = await client.post(
+                    "/api/internal/anima/create",
+                    json={"character_sheet_content": _VALID_SHEET, "name": "yoru"},
+                )
+
+        assert second.status_code == 409
+        assert "detail" in second.json()
+        # ensure first creation still on disk
+        assert (Path(data_dir) / "animas" / "yoru").is_dir()
+
+    async def test_create_invalid_sheet_422(self, data_dir):
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/internal/anima/create",
+                json={"character_sheet_content": "# not a valid sheet\n"},
+            )
+        assert resp.status_code == 422
+        assert "detail" in resp.json()
+
+    async def test_create_missing_content_422(self, data_dir):
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/internal/anima/create",
+                json={"name": "yoru"},
+            )
+        assert resp.status_code == 422

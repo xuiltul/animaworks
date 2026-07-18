@@ -84,6 +84,8 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "unblock_skill",
         "delete_skill",
         "set_skill_lifecycle",
+        # Admin: hire subordinate (gated by newstaff skill at list/call time)
+        "create_anima",
         # Mode S: pre-completion verification
         "completion_gate",
     }
@@ -189,6 +191,7 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         is the set of internal tool names.
     """
     from core.tooling.schemas import (
+        ADMIN_TOOLS,
         KNOWLEDGE_TOOLS,
         MEMORY_TOOLS,
         PROCEDURE_TOOLS,
@@ -218,6 +221,7 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         *PROCEDURE_TOOLS,
         *KNOWLEDGE_TOOLS,
         *_supervisor_tools(),
+        *ADMIN_TOOLS,
         *_create_skill_schemas(),
         *_curator_skill_schemas(),
         *_submit_tasks_tools(),
@@ -360,6 +364,7 @@ def _make_on_complete_callback(anima_dir: Path) -> Any:
 _tool_handler: Any = None  # core.tooling.handler.ToolHandler | None
 _init_error: str | None = None
 _is_supervisor: bool | None = None
+_has_newstaff: bool | None = None
 
 
 def _has_subordinates_for_anima() -> bool:
@@ -403,6 +408,33 @@ def _has_subordinates_for_anima() -> bool:
     except Exception:
         logger.debug("Failed to check subordinate status, defaulting to False")
         _is_supervisor = False
+        return False
+
+
+def _has_newstaff_skill_for_anima() -> bool:
+    """Check if this Anima has the newstaff skill (hire permission).
+
+    Mirrors ``anthropic_fallback._has_newstaff_skill``:
+    ``ANIMAWORKS_ANIMA_DIR/skills/newstaff/SKILL.md`` or ``skills/newstaff.md``.
+
+    Evaluated once at first call and cached. Falls back to False (safe side —
+    hides create_anima when check fails).
+    """
+    global _has_newstaff
+    if _has_newstaff is not None:
+        return _has_newstaff
+
+    try:
+        anima_dir_env = os.environ.get("ANIMAWORKS_ANIMA_DIR", "")
+        if not anima_dir_env:
+            _has_newstaff = False
+            return False
+        skills_dir = Path(anima_dir_env) / "skills"
+        _has_newstaff = (skills_dir / "newstaff" / "SKILL.md").is_file() or (skills_dir / "newstaff.md").is_file()
+        return _has_newstaff
+    except Exception:
+        logger.debug("Failed to check newstaff skill, defaulting to False")
+        _has_newstaff = False
         return False
 
 
@@ -576,12 +608,14 @@ def _runtime_blocked_tool_names() -> frozenset[str]:
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
-    """Return exposed AnimaWorks tools, filtering supervisor tools dynamically."""
+    """Return exposed AnimaWorks tools, filtering supervisor/admin tools dynamically."""
     blocked = _runtime_blocked_tool_names()
     tools = [t for t in MCP_TOOLS if t.name not in blocked]
-    if _has_subordinates_for_anima():
-        return tools
-    return [t for t in tools if t.name not in _SUPERVISOR_TOOL_NAMES]
+    if not _has_subordinates_for_anima():
+        tools = [t for t in tools if t.name not in _SUPERVISOR_TOOL_NAMES]
+    if not _has_newstaff_skill_for_anima():
+        tools = [t for t in tools if t.name != "create_anima"]
+    return tools
 
 
 @server.call_tool()
@@ -618,6 +652,23 @@ async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextCon
                         "error_type": "ToolBlocked",
                         "message": (
                             "Tool 'submit_tasks' is only available in explicit background task-authoring sessions"
+                        ),
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        ]
+
+    if name == "create_anima" and not _has_newstaff_skill_for_anima():
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {
+                        "status": "error",
+                        "error_type": "ToolBlocked",
+                        "message": (
+                            "Tool 'create_anima' requires the newstaff skill. This anima does not have newstaff skill."
                         ),
                     },
                     ensure_ascii=False,

@@ -171,7 +171,10 @@ class TestListToolsHandler:
         import core.mcp.server as mcp_mod
         from core.mcp.server import MCP_TOOLS, list_tools
 
-        with patch.object(mcp_mod, "_is_supervisor", True):
+        with (
+            patch.object(mcp_mod, "_is_supervisor", True),
+            patch.object(mcp_mod, "_has_newstaff", True),
+        ):
             result = await list_tools()
 
         result_names = {t.name for t in result}
@@ -184,7 +187,10 @@ class TestListToolsHandler:
         from core.mcp.server import MCP_TOOLS, list_tools
 
         monkeypatch.setenv("ANIMAWORKS_TRIGGER", "background:manual")
-        with patch.object(mcp_mod, "_is_supervisor", True):
+        with (
+            patch.object(mcp_mod, "_is_supervisor", True),
+            patch.object(mcp_mod, "_has_newstaff", True),
+        ):
             result = await list_tools()
 
         result_names = {t.name for t in result}
@@ -196,7 +202,10 @@ class TestListToolsHandler:
         import core.mcp.server as mcp_mod
         from core.mcp.server import _SUPERVISOR_TOOL_NAMES, MCP_TOOLS, list_tools
 
-        with patch.object(mcp_mod, "_is_supervisor", False):
+        with (
+            patch.object(mcp_mod, "_is_supervisor", False),
+            patch.object(mcp_mod, "_has_newstaff", True),
+        ):
             result = await list_tools()
 
         result_names = {t.name for t in result}
@@ -205,6 +214,32 @@ class TestListToolsHandler:
             t.name for t in MCP_TOOLS if t.name not in _SUPERVISOR_TOOL_NAMES and t.name != "submit_tasks"
         }
         assert result_names == non_supervisor_names
+
+    async def test_includes_create_anima_when_newstaff_skill(self) -> None:
+        """list_tools() exposes create_anima when anima has newstaff skill."""
+        import core.mcp.server as mcp_mod
+        from core.mcp.server import list_tools
+
+        with (
+            patch.object(mcp_mod, "_is_supervisor", True),
+            patch.object(mcp_mod, "_has_newstaff", True),
+        ):
+            result = await list_tools()
+
+        assert "create_anima" in {t.name for t in result}
+
+    async def test_excludes_create_anima_without_newstaff_skill(self) -> None:
+        """list_tools() hides create_anima when anima lacks newstaff skill."""
+        import core.mcp.server as mcp_mod
+        from core.mcp.server import list_tools
+
+        with (
+            patch.object(mcp_mod, "_is_supervisor", True),
+            patch.object(mcp_mod, "_has_newstaff", False),
+        ):
+            result = await list_tools()
+
+        assert "create_anima" not in {t.name for t in result}
 
     async def test_supervisor_tool_names_from_schemas(self) -> None:
         """_SUPERVISOR_TOOL_NAMES matches SUPERVISOR_TOOLS from schemas.py."""
@@ -282,6 +317,22 @@ class TestCallToolHandler:
         payload = json.loads(result[0].text)
         assert payload["status"] == "error"
         assert payload["error_type"] == "ToolBlocked"
+
+    async def test_blocks_create_anima_without_newstaff(self) -> None:
+        """call_tool() blocks create_anima when newstaff skill is missing."""
+        import core.mcp.server as mcp_mod
+
+        with patch.object(mcp_mod, "_has_newstaff", False):
+            result = await mcp_mod.call_tool(
+                "create_anima",
+                {"character_sheet_content": "# Character: x"},
+            )
+
+        assert len(result) == 1
+        payload = json.loads(result[0].text)
+        assert payload["status"] == "error"
+        assert payload["error_type"] == "ToolBlocked"
+        assert "newstaff" in payload["message"].lower()
 
     async def test_returns_error_when_init_error_is_none(self) -> None:
         """When handler is None and _init_error is also None, uses fallback message."""
