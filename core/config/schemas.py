@@ -782,7 +782,7 @@ class HeartbeatConfig(BaseModel):
         default=30, ge=1, le=1440
     )  # heartbeat interval (config-driven, not parsed from heartbeat.md)
     current_state_max_chars: int = Field(
-        default=0,
+        default=8000,
         ge=0,
         description="Max chars for current_state.md before trim; 0 = disabled",
     )

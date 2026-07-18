@@ -10,7 +10,7 @@ from __future__ import annotations
 - Usage Governor defaults to disabled
 - Ollama keep_alive defaults to empty string (Ollama native default)
 - Ollama total_timeout defaults to 0 (unlimited)
-- Heartbeat current_state_max_chars defaults to 0 (disabled)
+- Heartbeat current_state_max_chars defaults to 8000 (auto-trim enabled)
 """
 
 from core.config.schemas import (
@@ -56,9 +56,9 @@ class TestOllamaDefaults:
 
 
 class TestCurrentStateMaxCharsDefault:
-    def test_default_zero(self):
+    def test_default_enabled(self):
         cfg = HeartbeatConfig()
-        assert cfg.current_state_max_chars == 0
+        assert cfg.current_state_max_chars == 8000
 
     def test_explicit_value(self):
         cfg = HeartbeatConfig(current_state_max_chars=3000)

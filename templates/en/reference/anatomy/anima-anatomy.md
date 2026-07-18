@@ -250,7 +250,7 @@ command: /usr/local/bin/backup.sh
 ### state/current_state.md — Current State
 
 The task or situation you are currently working on (one at a time). Records the goal, progress, and blockers.
-Preserved across normal heartbeat, cron, and conversation boundaries. Prompt injection is capped at 3000 characters; disk trimming runs only when `heartbeat.current_state_max_chars` is configured.
+Preserved across normal heartbeat, cron, and conversation boundaries. Prompt injection is capped at 3000 characters; disk trimming runs at 8000 characters by default (`heartbeat.current_state_max_chars`, 0 = disabled).
 
 > **About legacy `pending.md`**: The former `state/pending.md` (backlog) has been deprecated. Its contents were merged into `current_state.md` and the file was removed (automatic migration). Task backlog management is now unified in `task_queue.jsonl` (Layer 2).
 

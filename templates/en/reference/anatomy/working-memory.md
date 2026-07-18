@@ -39,7 +39,7 @@ Official task tracking and management is handled by `task_queue.jsonl` (Layer 2)
 | Parameter | Value | Source |
 |-----------|-----|-------|
 | Display limit | 3000 chars | `_CURRENT_STATE_MAX_CHARS` (builder.py) |
-| Disk trim limit | Disabled by default | `heartbeat.current_state_max_chars` (0 = disabled) |
+| Disk trim limit | 8000 chars (default) | `heartbeat.current_state_max_chars` (0 = disabled) |
 | Inbox limit | 500 chars | `min(_state_max, 500)` in builder.py |
 
 **Session boundaries**:

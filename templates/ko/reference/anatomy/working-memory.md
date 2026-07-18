@@ -39,7 +39,7 @@ Anima의 워킹 메모리입니다. "지금 무엇을 하고 있는지", "무엇
 | 파라미터 | 값 | 소스 |
 |----------|-----|------|
 | 표시 상한 | 3000자 | `_CURRENT_STATE_MAX_CHARS` (builder.py) |
-| 디스크 trim 상한 | 기본값 비활성 | `heartbeat.current_state_max_chars` (0 = 비활성) |
+| 디스크 trim 상한 | 8000자 (기본값) | `heartbeat.current_state_max_chars` (0 = 비활성) |
 | Inbox 시 상한 | 500자 | builder.py 내 `min(_state_max, 500)` |
 
 **세션 경계**:
