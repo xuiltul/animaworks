@@ -102,8 +102,50 @@ async def test_legacy_retrieve_episodes_uses_rag_search_path(
     mock_unified.search.assert_called_once()
     assert mock_unified.search.call_args.kwargs["limit"] == 3
     assert mock_unified.search.call_args.kwargs["scope"] == "episodes"
+    assert mock_unified.search.call_args.kwargs["trigger"] == "chat"
     assert result[0].content == "Caroline recommended Becoming Nicole."
     assert result[0].metadata["memory_type"] == "episodes"
+
+
+async def test_legacy_recent_facts_propagates_heartbeat_trigger(
+    legacy_backend: LegacyRAGBackend,
+) -> None:
+    mock_unified = MagicMock()
+    mock_unified.search.return_value = [
+        {
+            "content": "A recent heartbeat fact.",
+            "score": 0.9,
+            "source_file": "facts/recent.json",
+        }
+    ]
+    legacy_backend._unified_search = mock_unified
+
+    await legacy_backend.get_recent_facts(
+        "recent fact",
+        trigger="heartbeat",
+    )
+
+    mock_unified.search.assert_called_once()
+    assert mock_unified.search.call_args.kwargs["trigger"] == "heartbeat"
+
+
+async def test_legacy_recent_facts_defaults_to_chat_trigger(
+    legacy_backend: LegacyRAGBackend,
+) -> None:
+    mock_unified = MagicMock()
+    mock_unified.search.return_value = [
+        {
+            "content": "A recent chat fact.",
+            "score": 0.9,
+            "source_file": "facts/recent.json",
+        }
+    ]
+    legacy_backend._unified_search = mock_unified
+
+    await legacy_backend.get_recent_facts("recent fact")
+
+    mock_unified.search.assert_called_once()
+    assert mock_unified.search.call_args.kwargs["trigger"] == "chat"
 
 
 # ── Health check ───────────────────────────────────────────────────────────

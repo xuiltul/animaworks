@@ -314,6 +314,7 @@ class MemoryToolsMixin:
                         query,
                         scope=neo4j_scope,
                         limit=limit,
+                        trigger="tool",
                         time_start=time_start,
                         time_end=time_end,
                         as_of_time=as_of_time,

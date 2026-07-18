@@ -46,6 +46,7 @@ class _StubBackend(MemoryBackend):
         scope: str,
         limit: int = 10,
         min_score: float = 0.0,
+        trigger: str = "chat",
         as_of_time: str | None = None,
         time_start: str | None = None,
         time_end: str | None = None,

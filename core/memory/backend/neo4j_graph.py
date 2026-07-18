@@ -572,6 +572,7 @@ class Neo4jGraphBackend(MemoryBackend):
         scope: str,
         limit: int = 10,
         min_score: float = 0.0,
+        trigger: str = "chat",
         edge_type_filter: str | None = None,
         as_of_time: str | None = None,
         time_start: str | None = None,
@@ -703,6 +704,7 @@ class Neo4jGraphBackend(MemoryBackend):
         *,
         hours: int = 24,
         limit: int = 10,
+        trigger: str = "chat",
     ) -> list[RetrievedMemory]:
         """Return recently valid facts from Neo4j."""
         try:

@@ -131,6 +131,7 @@ async def channel_f_episodes(
                             scope="episode",
                             limit=5,
                             min_score=min_score_val,
+                            trigger=normalize_trigger(trigger),
                             time_start=time_start,
                         )
                         for m in merged_batch:

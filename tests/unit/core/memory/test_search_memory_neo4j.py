@@ -235,6 +235,7 @@ class TestSearchViaNeo4j:
 
         mock_backend.retrieve.assert_awaited_once()
         assert mock_backend.retrieve.await_args.kwargs["scope"] == "fact"
+        assert mock_backend.retrieve.await_args.kwargs["trigger"] == "tool"
 
     def test_consecutive_searches_use_separate_backends(self, mock_memory) -> None:
         handler, first_backend = _make_handler_mixin(mock_memory)

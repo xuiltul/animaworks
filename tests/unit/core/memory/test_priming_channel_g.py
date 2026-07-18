@@ -84,10 +84,20 @@ class TestCollectGraphContext:
     async def test_calls_backend_with_correct_params(self) -> None:
         backend = _make_backend()
 
-        await collect_graph_context(backend, "my query", budget_tokens=300)
+        await collect_graph_context(
+            backend,
+            "my query",
+            budget_tokens=300,
+            trigger="inbox:alice",
+        )
 
         backend.get_community_context.assert_awaited_once_with("my query", limit=3)
-        backend.get_recent_facts.assert_awaited_once_with("my query", hours=24, limit=10)
+        backend.get_recent_facts.assert_awaited_once_with(
+            "my query",
+            hours=24,
+            limit=10,
+            trigger="inbox",
+        )
 
     async def test_query_affects_returned_context(self) -> None:
         backend = MagicMock()
@@ -97,7 +107,12 @@ class TestCollectGraphContext:
                 return [_mem("[Frontend] React owners")]
             return [_mem("[Backend] Database owners")]
 
-        async def _facts(query: str, hours: int = 24, limit: int = 10):
+        async def _facts(
+            query: str,
+            hours: int = 24,
+            limit: int = 10,
+            trigger: str = "chat",
+        ):
             if "frontend" in query:
                 return [_mem("Alice -[OWNS]-> React: maintains UI")]
             return [_mem("Bob -[OWNS]-> Postgres: maintains DB")]
@@ -213,6 +228,32 @@ class TestPrimingEngineChannelG:
             result = await engine.prime_memories("test message")
 
         assert "Alice → Bob: knows" in result.graph_context
+        backend.get_recent_facts.assert_awaited_once_with(
+            "test message",
+            hours=24,
+            limit=10,
+            trigger="chat",
+        )
+
+    async def test_prime_memories_propagates_heartbeat_to_channel_g(self, tmp_path) -> None:
+        from core.memory.priming.engine import PrimingEngine
+
+        engine = PrimingEngine(tmp_path)
+
+        with (
+            patch.object(engine, "_channel_a_sender_profile", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_b_recent_activity", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_c0_important_knowledge", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_c_related_knowledge", new_callable=AsyncMock, return_value=("", "")),
+            patch.object(engine, "_channel_e_pending_tasks", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_collect_recent_outbound", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_f_episodes", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_collect_pending_human_notifications", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_g_graph_context", new_callable=AsyncMock, return_value="") as channel_g,
+        ):
+            await engine.prime_memories("heartbeat check", channel="heartbeat")
+
+        channel_g.assert_awaited_once_with("heartbeat check", trigger="heartbeat")
 
     async def test_channel_g_timeout_degrades_only_that_channel(self, tmp_path) -> None:
         from core.memory.priming.engine import PrimingEngine
@@ -221,7 +262,11 @@ class TestPrimingEngineChannelG:
         engine._config_loaded = True
         engine._channel_timeout_seconds = 0.01
 
-        async def slow_graph_context(_query: str) -> str:
+        async def slow_graph_context(
+            _query: str,
+            *,
+            trigger: str = "chat",
+        ) -> str:
             import asyncio
 
             await asyncio.sleep(1)

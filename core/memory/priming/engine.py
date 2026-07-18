@@ -292,7 +292,10 @@ class PrimingEngine:
                 "pending_human_notifications",
                 self._collect_pending_human_notifications(channel=channel),
             ),
-            self._run_priming_channel("G", self._channel_g_graph_context(effective_message)),
+            self._run_priming_channel(
+                "G",
+                self._channel_g_graph_context(effective_message, trigger=channel),
+            ),
             return_exceptions=True,
         )
 
@@ -460,7 +463,7 @@ class PrimingEngine:
     async def _collect_pending_human_notifications(self, *, channel: str = "") -> str:
         return await _outbound.collect_pending_human_notifications(self.anima_dir, channel=channel)
 
-    async def _channel_g_graph_context(self, query: str) -> str:
+    async def _channel_g_graph_context(self, query: str, *, trigger: str = "chat") -> str:
         backend = self._get_memory_backend()
         if backend is None:
             return ""
@@ -469,6 +472,7 @@ class PrimingEngine:
             query,
             budget_tokens=_BUDGET_GRAPH_CONTEXT,
             anima_dir=self.anima_dir,
+            trigger=trigger,
         )
 
     def _extract_keywords(self, message: str) -> list[str]:

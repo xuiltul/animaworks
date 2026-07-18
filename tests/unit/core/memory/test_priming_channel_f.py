@@ -197,7 +197,11 @@ class TestChannelFEpisodes:
         """Neo4j Channel F path also emits pointer cues, not episode body."""
 
         class FakeNeo4jBackend:
+            def __init__(self):
+                self.retrieve_kwargs = None
+
             async def retrieve(self, *args, **kwargs):
+                self.retrieve_kwargs = kwargs
                 mem = MagicMock()
                 mem.content = "Neo4j episode body should not be primed"
                 mem.score = 0.77
@@ -218,6 +222,7 @@ class TestChannelFEpisodes:
             result = await engine._channel_f_episodes(
                 ["deploy"],
                 message="デプロイでエラー",
+                trigger="heartbeat",
             )
 
         assert "Episode 1" in result
@@ -225,6 +230,7 @@ class TestChannelFEpisodes:
         assert "episode:abc123" not in result
         assert 'read_memory_file(path="episodes/2026-03-02.md")' in result
         assert "Neo4j episode body should not be primed" not in result
+        assert backend.retrieve_kwargs["trigger"] == "heartbeat"
 
     @pytest.mark.asyncio
     async def test_channel_f_records_only_emitted_neo4j_episode_pointers(

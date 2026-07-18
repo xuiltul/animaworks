@@ -175,6 +175,7 @@ class LegacyRAGBackend(MemoryBackend):
         scope: str,
         limit: int = 10,
         min_score: float = 0.0,
+        trigger: str = "chat",
         as_of_time: str | None = None,
         time_start: str | None = None,
         time_end: str | None = None,
@@ -186,6 +187,7 @@ class LegacyRAGBackend(MemoryBackend):
             scope,
             limit,
             min_score,
+            trigger=trigger,
             time_start=time_start,
             time_end=effective_time_end,
         )
@@ -373,9 +375,16 @@ class LegacyRAGBackend(MemoryBackend):
         *,
         hours: int = 24,
         limit: int = 10,
+        trigger: str = "chat",
     ) -> list[RetrievedMemory]:
         """Search active atomic facts, falling back to activity_log for legacy data."""
-        fact_results = await self._retrieve_via_unified_search(query, "facts", limit, 0.0)
+        fact_results = await self._retrieve_via_unified_search(
+            query,
+            "facts",
+            limit,
+            0.0,
+            trigger=trigger,
+        )
         if fact_results:
             return fact_results
 
@@ -410,6 +419,7 @@ class LegacyRAGBackend(MemoryBackend):
         limit: int,
         min_score: float,
         *,
+        trigger: str = "chat",
         time_start: str | None = None,
         time_end: str | None = None,
     ) -> list[RetrievedMemory]:
@@ -421,7 +431,7 @@ class LegacyRAGBackend(MemoryBackend):
                 query,
                 scope=scope,
                 limit=limit,
-                trigger="chat",
+                trigger=trigger,
                 min_score=min_score,
                 time_start=time_start,
                 time_end=time_end,

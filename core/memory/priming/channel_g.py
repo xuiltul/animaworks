@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from core.file_access_policy import load_denied_roots, memory_source_is_allowed
-from core.memory.priming.utils import truncate_tail
+from core.memory.priming.utils import normalize_trigger, truncate_tail
 
 if TYPE_CHECKING:
     from core.memory.backend.base import MemoryBackend
@@ -32,6 +32,7 @@ async def collect_graph_context(
     *,
     budget_tokens: int = 500,
     anima_dir: Path | None = None,
+    trigger: str = "chat",
 ) -> str:
     """Fetch community context and recent facts from *backend*.
 
@@ -39,14 +40,21 @@ async def collect_graph_context(
         backend: Active :class:`MemoryBackend` instance.
         query: Natural-language query for relevance filtering.
         budget_tokens: Maximum token budget for the combined output.
+        trigger: Runtime trigger selecting the backend retrieval policy.
 
     Returns:
         Formatted markdown string, or ``""`` when both sources are empty.
     """
     try:
+        normalized_trigger = normalize_trigger(trigger)
         communities, facts = await asyncio.gather(
             backend.get_community_context(query, limit=3),
-            backend.get_recent_facts(query, hours=24, limit=10),
+            backend.get_recent_facts(
+                query,
+                hours=24,
+                limit=10,
+                trigger=normalized_trigger,
+            ),
         )
     except Exception:
         logger.debug("Channel G: backend call failed", exc_info=True)

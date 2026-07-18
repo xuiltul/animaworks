@@ -140,7 +140,11 @@ class TestPrimeMemoriesIncludesChannelE:
         monkeypatch.setattr(engine, "_collect_recent_outbound", _empty_text)
         monkeypatch.setattr(engine, "_channel_f_episodes", lambda keywords, **kwargs: _empty_text())
         monkeypatch.setattr(engine, "_collect_pending_human_notifications", lambda **kwargs: _empty_text())
-        monkeypatch.setattr(engine, "_channel_g_graph_context", lambda message: _empty_text())
+        monkeypatch.setattr(
+            engine,
+            "_channel_g_graph_context",
+            lambda message, **kwargs: _empty_text(),
+        )
         result = await engine.prime_memories("hello", sender_name="test")
         assert result.pending_tasks != ""
         assert "Important task" in result.pending_tasks
