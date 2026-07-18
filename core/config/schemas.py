@@ -302,7 +302,7 @@ class RAGConfig(BaseModel):
         description="Maximum similar active facts considered during legacy fact reconciliation.",
     )
     entity_registry_enabled: bool = True
-    entity_boost_enabled: bool = False
+    entity_boost_enabled: bool = True
     entity_boost: float = 0.20
     entity_boost_cap: float = 0.80
     temporal_boost_enabled: bool = True

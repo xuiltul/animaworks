@@ -457,7 +457,7 @@ class RAGMemorySearch:
             "confidence_threshold": 0.35,
             "rrf_confidence_threshold": 0.02,
             "entity_registry_enabled": True,
-            "entity_boost_enabled": False,
+            "entity_boost_enabled": True,
             "entity_boost": 0.20,
             "entity_boost_cap": 0.80,
             "temporal_boost_enabled": True,
@@ -482,7 +482,7 @@ class RAGMemorySearch:
                     "confidence_threshold": rag.confidence_threshold,
                     "rrf_confidence_threshold": rag.rrf_confidence_threshold,
                     "entity_registry_enabled": getattr(rag, "entity_registry_enabled", True),
-                    "entity_boost_enabled": getattr(rag, "entity_boost_enabled", False),
+                    "entity_boost_enabled": getattr(rag, "entity_boost_enabled", True),
                     "entity_boost": getattr(rag, "entity_boost", 0.20),
                     "entity_boost_cap": getattr(rag, "entity_boost_cap", 0.80),
                     "temporal_boost_enabled": getattr(rag, "temporal_boost_enabled", True),
@@ -501,7 +501,7 @@ class RAGMemorySearch:
 
     def _build_entity_boost_config(self, query: str, settings: dict[str, object] | None = None):
         settings = settings or self._load_rag_pipeline_settings()
-        if not bool(settings.get("entity_boost_enabled", False)):
+        if not bool(settings.get("entity_boost_enabled", True)):
             return None
         registry_enabled = bool(settings.get("entity_registry_enabled", True))
         query_entities: tuple[str, ...] = ()
@@ -514,6 +514,8 @@ class RAGMemorySearch:
                 logger.debug("Failed to match query entities from registry", exc_info=True)
         from core.memory.retrieval.entity import EntityBoostConfig
 
+        related_boost_raw = settings.get("entity_related_boost")
+        related_boost = float(related_boost_raw) if related_boost_raw is not None else None
         return EntityBoostConfig(
             enabled=True,
             boost=float(settings.get("entity_boost", 0.20) or 0.0),
@@ -521,6 +523,8 @@ class RAGMemorySearch:
             category=None,
             query_entities=query_entities,
             require_query_entities=registry_enabled,
+            anima_dir=self._anima_dir if registry_enabled else None,
+            related_boost=related_boost,
         )
 
     def _build_access_boost_config(self, settings: dict[str, object] | None = None):

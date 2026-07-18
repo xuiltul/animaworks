@@ -291,11 +291,11 @@ class TestRAGConfig:
         rag = RAGConfig(min_retrieval_score=0.5)
         assert rag.min_retrieval_score == 0.5
 
-    def test_entity_boost_defaults_disabled(self) -> None:
-        """Production entity boost is config-controlled and disabled by default."""
+    def test_entity_boost_defaults_enabled(self) -> None:
+        """Production entity boost is config-controlled and enabled by default (P2-A)."""
         rag = RAGConfig()
         assert rag.entity_registry_enabled is True
-        assert rag.entity_boost_enabled is False
+        assert rag.entity_boost_enabled is True
         assert rag.entity_boost == 0.20
         assert rag.entity_boost_cap == 0.80
 

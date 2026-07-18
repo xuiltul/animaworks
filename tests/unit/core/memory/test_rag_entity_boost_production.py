@@ -209,5 +209,7 @@ def test_keyword_fallback_applies_entity_boost_to_fact_metadata(rag_search: RAGM
         )
 
     assert results[0]["fact_id"] == "fact-1"
-    assert results[0]["entity_boost"] == 0.25
-    assert results[0]["entity_overlap"] == ["caroline"]
+    # Primary match on caroline (0.25) plus optional 1-hop related (becoming nicole)
+    # when the registry links them via the shared fact.
+    assert results[0]["entity_boost"] >= 0.25
+    assert "caroline" in results[0]["entity_overlap"]
