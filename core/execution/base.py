@@ -165,6 +165,38 @@ def strip_thinking_tags(text: str) -> tuple[str, str]:
     return "", text
 
 
+_THINK_CLOSE_ONLY_RE = re.compile(r"</think>\s*")
+
+
+def resolve_streamed_leaked_thinking(full_text: str) -> tuple[str, str]:
+    """Post-stream disambiguation of a ``</think>`` found in *streamed* content.
+
+    The streaming ``StreamingThinkFilter`` only discards content preceding a
+    ``</think>`` when the stream *starts* with ``<think>``; otherwise it streams
+    the head to the client as real answer text.  The post-stream safety net,
+    however, used :func:`strip_thinking_tags` directly, which discards
+    everything before the first ``</think>`` even when there was **no opening
+    tag** — silently deleting an answer that was already shown to the user when
+    a model emits a spurious/orphan ``</think>`` *after* real content.
+
+    This resolver keeps the genuine cases handled while refusing to delete
+    already-streamed answer text:
+
+    * With an opening ``<think>`` present → behave exactly like
+      :func:`strip_thinking_tags` (real inline reasoning block).
+    * With an orphan ``</think>`` and **no** opening tag → treat the tag as
+      spurious: preserve the preceding answer and strip only the stray tag(s).
+
+    Returns ``(thinking, clean_text)``.
+    """
+    leaked, clean = strip_thinking_tags(full_text)
+    if leaked and "<think>" not in full_text:
+        # Orphan </think> with no opening tag: do not discard the answer that
+        # the streaming filter already emitted as text. Drop only the stray tag.
+        return "", _THINK_CLOSE_ONLY_RE.sub("", full_text)
+    return leaked, clean
+
+
 _UNTAGGED_THINKING_PREFIX_RE = re.compile(
     r"^(?:Thinking Process|思考プロセス|Let me think|考え|Let me analyze|Reasoning)",
     re.IGNORECASE,

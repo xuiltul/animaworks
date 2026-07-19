@@ -5,7 +5,12 @@
 
 from __future__ import annotations
 
-from core.execution.base import StreamingThinkFilter, strip_thinking_tags, strip_untagged_thinking
+from core.execution.base import (
+    StreamingThinkFilter,
+    resolve_streamed_leaked_thinking,
+    strip_thinking_tags,
+    strip_untagged_thinking,
+)
 
 # ── strip_thinking_tags ──────────────────────────────────────
 
@@ -66,6 +71,46 @@ class TestStripThinkingTags:
         assert "</think>" not in response
         assert "response1" in response
         assert "response2" in response
+
+
+class TestResolveStreamedLeakedThinking:
+    """Post-stream safety net must not delete already-streamed answers.
+
+    Regression: yoru (uncensored local qwen) emitted a full answer followed by
+    a spurious orphan ``</think>`` and a short closing line. The old safety net
+    discarded the whole answer, leaving only the closing line on screen after
+    streaming finished.
+    """
+
+    def test_genuine_inline_think_block_is_stripped(self):
+        text = "<think>reasoning</think>the real answer"
+        thinking, response = resolve_streamed_leaked_thinking(text)
+        assert thinking == "reasoning"
+        assert response == "the real answer"
+
+    def test_orphan_close_tag_preserves_answer(self):
+        # No opening <think>: the body before </think> is a real answer that was
+        # already streamed to the user and must NOT be discarded.
+        text = "本文の長い解説がここにある。\n\n</think>\n\nまとめは以上です。"
+        thinking, response = resolve_streamed_leaked_thinking(text)
+        assert thinking == ""
+        assert "本文の長い解説がここにある。" in response
+        assert "まとめは以上です。" in response
+        assert "</think>" not in response
+
+    def test_multiple_orphan_close_tags_all_removed(self):
+        text = "answer part one</think> middle </think> tail"
+        thinking, response = resolve_streamed_leaked_thinking(text)
+        assert thinking == ""
+        assert "</think>" not in response
+        assert "answer part one" in response
+        assert "tail" in response
+
+    def test_plain_text_unchanged(self):
+        text = "no tags at all, just an answer"
+        thinking, response = resolve_streamed_leaked_thinking(text)
+        assert thinking == ""
+        assert response == text
 
 
 # ── StreamingThinkFilter ─────────────────────────────────────

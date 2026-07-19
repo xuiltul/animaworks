@@ -34,6 +34,7 @@ from core.execution.base import (
     StreamingThinkFilter,
     TokenUsage,
     ToolCallRecord,
+    resolve_streamed_leaked_thinking,
     strip_thinking_tags,
     strip_untagged_thinking,
     supports_streaming_tool_use,
@@ -627,14 +628,17 @@ class StreamingMixin:
                     full_text = "\n".join(all_response_text)
                     # Safety net: strip any residual <think> tags that the
                     # streaming filter missed (e.g. vLLM returning thinking
-                    # in content without proper <think> opening tag).
-                    _leaked_think, _clean = strip_thinking_tags(full_text)
+                    # in content without proper <think> opening tag). An orphan
+                    # </think> emitted *after* real answer content must not
+                    # delete that answer — resolve_streamed_leaked_thinking
+                    # preserves it and strips only the stray tag.
+                    _leaked_think, _clean = resolve_streamed_leaked_thinking(full_text)
+                    full_text = _clean
                     if _leaked_think:
                         logger.info(
                             "A stream: post-stream strip_thinking_tags caught leaked thinking (%d chars)",
                             len(_leaked_think),
                         )
-                        full_text = _clean
                         if not _reasoning_seen:
                             _reasoning_seen = True
                             yield {"type": "thinking_start"}
@@ -759,13 +763,13 @@ class StreamingMixin:
         # If we exit the loop without returning, max iterations reached
         full_text = "\n".join(all_response_text) or "(max iterations reached)"
         # Safety net: strip any residual <think> tags (same as final-response path)
-        _leaked, _clean = strip_thinking_tags(full_text)
+        _leaked, _clean = resolve_streamed_leaked_thinking(full_text)
+        full_text = _clean
         if _leaked:
             logger.info(
                 "A stream max-iter: post-stream strip_thinking_tags caught leaked thinking (%d chars)",
                 len(_leaked),
             )
-            full_text = _clean
         elif not _reasoning_seen:
             _ut, _clean2 = strip_untagged_thinking(full_text)
             if _ut:
@@ -1182,13 +1186,13 @@ class StreamingMixin:
         # Max iterations reached
         full_text = "\n".join(all_response_text) or "(max iterations reached)"
         # Safety net: strip any residual <think> tags
-        _leaked_ol, _clean_ol = strip_thinking_tags(full_text)
+        _leaked_ol, _clean_ol = resolve_streamed_leaked_thinking(full_text)
+        full_text = _clean_ol
         if _leaked_ol:
             logger.info(
                 "A ollama max-iter: strip_thinking_tags caught leaked thinking (%d chars)",
                 len(_leaked_ol),
             )
-            full_text = _clean_ol
         logger.warning(
             "A ollama stream max iterations (%d) reached",
             max_iterations,
