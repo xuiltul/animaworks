@@ -64,6 +64,16 @@ class AdoptResult:
     symlink_created: bool
 
 
+@dataclass(frozen=True, slots=True)
+class ExportResult:
+    """Summary of a completed company export."""
+
+    output_dir: Path
+    members: tuple[str, ...]
+    skipped_symlinks: tuple[str, ...]
+    scan_hit_count: int
+
+
 def _resolve_data_dir(data_dir: Path | None) -> Path:
     if data_dir is not None:
         return data_dir
@@ -464,10 +474,7 @@ def adopt_assets(
     if not paths:
         raise CompanyError("At least one adoption path is required")
 
-    plans = [
-        _prepare_adopt(value, company_name=company_name, dest=dest, data_dir=root)
-        for value in paths
-    ]
+    plans = [_prepare_adopt(value, company_name=company_name, dest=dest, data_dir=root) for value in paths]
     destinations: set[Path] = set()
     sources = [plan.source for plan in plans]
     for plan in plans:
@@ -571,7 +578,10 @@ def _load_split_manifest(manifest_path: str | Path) -> list[dict[str, Any]]:
             if item_dest is not None and not isinstance(item_dest, str):
                 raise CompanyError(f"dest in adopt entry {adopt_index} for {name} must be a string")
             _normalize_adopt_destination(item_dest)
-            normalized_adopt.append({"path": item["path"], "dest": item_dest})
+            item_symlink = item.get("symlink", True)
+            if not isinstance(item_symlink, bool):
+                raise CompanyError(f"symlink in adopt entry {adopt_index} for {name} must be a boolean")
+            normalized_adopt.append({"path": item["path"], "dest": item_dest, "symlink": item_symlink})
         companies.append(
             {
                 "name": name,
@@ -663,6 +673,7 @@ def split_companies(
                         [plan.source],
                         company_name=name,
                         dest=item.get("dest"),
+                        leave_symlinks=item["symlink"],
                         data_dir=root,
                     )[0]
                     lines.append(
@@ -677,6 +688,369 @@ def split_companies(
         message = str(exc) if isinstance(exc, CompanyError) else f"Unexpected split failure: {exc}"
         raise SplitExecutionError(message, lines) from exc
     return lines
+
+
+def _path_is_within(path: Path, directory: Path) -> bool:
+    try:
+        path.relative_to(directory)
+    except ValueError:
+        return False
+    return True
+
+
+def _copy_export_tree(
+    source: Path,
+    destination: Path,
+    *,
+    output_root: Path,
+    skipped_symlinks: list[str],
+    excluded_names: frozenset[str] = frozenset(),
+) -> None:
+    """Copy a tree without following links that cross its ownership boundary."""
+    source_root = source.resolve()
+    excluded_roots = tuple((source / name).resolve(strict=False) for name in excluded_names)
+    destination.mkdir(parents=True, exist_ok=True)
+
+    def copy_directory(current_source: Path, current_destination: Path) -> None:
+        for item in sorted(current_source.iterdir(), key=lambda candidate: candidate.name):
+            if current_source == source and item.name in excluded_names:
+                continue
+            target = current_destination / item.name
+            if item.is_symlink():
+                try:
+                    link_value = Path(os.readlink(item))
+                    resolved_target = (item.parent / link_value).resolve(strict=False)
+                except (OSError, RuntimeError):
+                    link_value = Path()
+                    resolved_target = Path()
+                if (
+                    link_value
+                    and not link_value.is_absolute()
+                    and _path_is_within(resolved_target, source_root)
+                    and not any(_path_is_within(resolved_target, root) for root in excluded_roots)
+                ):
+                    try:
+                        target.symlink_to(link_value, target_is_directory=item.is_dir())
+                    except OSError as exc:
+                        raise CompanyError(f"Failed to preserve export symlink {item}: {exc}") from exc
+                else:
+                    skipped_symlinks.append(target.relative_to(output_root).as_posix())
+                continue
+            if item.is_dir():
+                target.mkdir()
+                copy_directory(item, target)
+                continue
+            if item.is_file():
+                try:
+                    shutil.copy2(item, target)
+                except OSError as exc:
+                    raise CompanyError(f"Failed to copy export file {item}: {exc}") from exc
+
+    try:
+        copy_directory(source, destination)
+    except OSError as exc:
+        raise CompanyError(f"Failed to copy export tree {source}: {exc}") from exc
+
+
+def _redact_credential_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _redact_credential_value(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_redact_credential_value(child) for child in value]
+    return "REDACTED"
+
+
+def _collect_vault_references(value: Any) -> set[str]:
+    references: set[str] = set()
+    if isinstance(value, dict):
+        reference = value.get("$vault")
+        if isinstance(reference, str) and reference.strip():
+            references.add(reference.strip())
+        for child in value.values():
+            references.update(_collect_vault_references(child))
+    elif isinstance(value, list):
+        for child in value:
+            references.update(_collect_vault_references(child))
+    return references
+
+
+def _credential_leaf_paths(value: Any, prefix: str = "credentials") -> list[str]:
+    if isinstance(value, dict):
+        paths: list[str] = []
+        for key, child in value.items():
+            paths.extend(_credential_leaf_paths(child, f"{prefix}.{key}"))
+        return paths
+    if isinstance(value, list):
+        paths = []
+        for index, child in enumerate(value):
+            paths.extend(_credential_leaf_paths(child, f"{prefix}[{index}]"))
+        return paths
+    return [prefix]
+
+
+def _write_export_readme(
+    output_dir: Path,
+    *,
+    company_name: str,
+    members: tuple[str, ...],
+    credentials: Any,
+    vault_references: set[str],
+    skipped_symlinks: list[str],
+) -> None:
+    credential_paths = sorted(set(_credential_leaf_paths(credentials)))
+    lines = [
+        f"# Company export: {company_name}",
+        "",
+        "This bundle contains redacted configuration only. Complete every item below in the new environment.",
+        "",
+        "## Startup checklist",
+        "",
+        "- [ ] Place `animas/`, `companies/`, `common_knowledge/`, and `common_skills/` under the new data_dir.",
+        "- [ ] Review `config.export.json`, save it as `config.json`, and insert real credential values through a secure channel.",
+        "- [ ] Migrate the required vault keys separately; no vault secret values are included here.",
+        "- [ ] Export and import the Neo4j subgraph for every member, using the Anima name as `group_id`.",
+        "- [ ] Rebuild every vectordb/index with the commands listed below.",
+        "- [ ] Create and enable the systemd units for the new installation.",
+        "- [ ] Verify file ownership and permissions, startup, messaging, company boundaries, memory search, and scheduled work.",
+        "",
+        "## Credential value locations",
+        "",
+    ]
+    if credential_paths:
+        lines.extend(f"- `{path}`" for path in credential_paths)
+    else:
+        lines.append("- (none in the source config)")
+    lines.extend(["", "## Vault keys referenced by config", ""])
+    if vault_references:
+        lines.extend(f"- `{reference}`" for reference in sorted(vault_references))
+    else:
+        lines.append("- (none detected; inspect the source vault and deployment secrets separately)")
+    lines.extend(["", "## Neo4j migration", ""])
+    for member in members:
+        lines.append(f"- [ ] Export and import records for `group_id={member}` (the group_id is the Anima name).")
+    lines.extend(["", "## Vectordb rebuild", ""])
+    lines.extend(f"- [ ] `animaworks index --anima {member}`" for member in members)
+    lines.extend(["", "## systemd and verification", ""])
+    lines.extend(
+        [
+            "- [ ] Create environment-specific systemd unit files and enable/start them.",
+            "- [ ] Confirm every exported Anima starts and can read only its own Company layer.",
+            "- [ ] Confirm credentials, Neo4j retrieval, indexes, messaging, and scheduled jobs work.",
+            "",
+            "## Skipped symlinks",
+            "",
+        ]
+    )
+    if skipped_symlinks:
+        lines.extend(f"- `{path}`" for path in skipped_symlinks)
+    else:
+        lines.append("- (none)")
+    try:
+        (output_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except OSError as exc:
+        raise CompanyError(f"Failed to write export README: {exc}") from exc
+
+
+def _other_company_scan_terms(
+    company_name: str,
+    *,
+    data_dir: Path,
+) -> list[tuple[str, str, re.Pattern[str]]]:
+    terms: list[tuple[str, str, re.Pattern[str]]] = []
+    seen: set[str] = set()
+    summaries, _ = list_companies(data_dir=data_dir)
+    for summary in summaries:
+        if summary.name == company_name:
+            continue
+        company_values = (("company", summary.name), ("display_name", summary.display_name))
+        for kind, value in company_values:
+            if value and value not in seen:
+                seen.add(value)
+                terms.append((kind, value, re.compile(re.escape(value))))
+
+        animas_root = data_dir / "animas"
+        if not animas_root.is_dir():
+            continue
+        for anima_dir in sorted(animas_root.iterdir(), key=lambda path: path.name):
+            if anima_dir.is_symlink() or not anima_dir.is_dir():
+                continue
+            if read_anima_company(anima_dir) != summary.name:
+                continue
+            if anima_dir.name in seen:
+                continue
+            seen.add(anima_dir.name)
+            pattern = re.compile(rf"(?<!\w){re.escape(anima_dir.name)}(?!\w)")
+            terms.append(("anima", anima_dir.name, pattern))
+    return terms
+
+
+def _write_scan_report(
+    output_dir: Path,
+    *,
+    company_name: str,
+    data_dir: Path,
+) -> int:
+    terms = _other_company_scan_terms(company_name, data_dir=data_dir)
+    reported_by_file: dict[str, list[str]] = {}
+    hit_count = 0
+    for path in sorted(output_dir.rglob("*")):
+        if path.is_symlink() or not path.is_file() or path.name == "scan-report.md":
+            continue
+        try:
+            with path.open("rb") as binary_stream:
+                if b"\0" in binary_stream.read(4096):
+                    continue
+        except OSError:
+            continue
+        relative = path.relative_to(output_dir).as_posix()
+        file_hits: list[str] = []
+        file_hit_count = 0
+        try:
+            with path.open("r", encoding="utf-8") as text_stream:
+                for line_number, line in enumerate(text_stream, start=1):
+                    for kind, term, pattern in terms:
+                        matches = list(pattern.finditer(line))
+                        if not matches:
+                            continue
+                        file_hit_count += len(matches)
+                        if len(file_hits) < 5:
+                            excerpt = line.strip()
+                            if len(excerpt) > 300:
+                                excerpt = excerpt[:297] + "..."
+                            file_hits.append(f"- `{relative}:{line_number}` [{kind}: `{term}`] {excerpt}")
+        except (OSError, UnicodeDecodeError):
+            continue
+        hit_count += file_hit_count
+        if file_hits:
+            reported_by_file[relative] = file_hits
+
+    lines = [
+        "# Other-company context scan",
+        "",
+        f"Total hits: {hit_count}",
+        "",
+        "This report is advisory and does not block export. Review every hit before transfer.",
+        "",
+    ]
+    if reported_by_file:
+        for relative, file_hits in reported_by_file.items():
+            lines.extend([f"## `{relative}`", "", *file_hits, ""])
+    else:
+        lines.extend(["No other-company context was detected.", ""])
+    try:
+        (output_dir / "scan-report.md").write_text("\n".join(lines), encoding="utf-8")
+    except OSError as exc:
+        raise CompanyError(f"Failed to write export scan report: {exc}") from exc
+    return hit_count
+
+
+def export_company(
+    company_name: str,
+    output_dir: str | Path,
+    *,
+    data_dir: Path | None = None,
+) -> ExportResult:
+    """Create a portable, secret-redacted bundle for one company."""
+    root = _resolve_data_dir(data_dir).resolve()
+    company_directory = _company_must_exist(company_name, root)
+    destination = Path(output_dir).expanduser().resolve()
+    animas_root = root / "animas"
+    members = (
+        tuple(
+            sorted(
+                anima_dir.name
+                for anima_dir in animas_root.iterdir()
+                if anima_dir.is_dir() and not anima_dir.is_symlink() and read_anima_company(anima_dir) == company_name
+            )
+        )
+        if animas_root.is_dir()
+        else ()
+    )
+    copied_sources = [company_directory, *(animas_root / member for member in members)]
+    copied_sources.extend(root / name for name in ("common_knowledge", "common_skills"))
+    if any(_path_is_within(destination, source.resolve(strict=False)) for source in copied_sources):
+        raise CompanyError(f"Export output directory cannot be inside copied source data: {destination}")
+    if destination.is_symlink():
+        raise CompanyError(f"Export output directory cannot be a symlink: {destination}")
+    if destination.exists():
+        if not destination.is_dir():
+            raise CompanyError(f"Export output is not a directory: {destination}")
+        try:
+            if any(destination.iterdir()):
+                raise CompanyError(f"Export output directory is not empty: {destination}")
+        except OSError as exc:
+            raise CompanyError(f"Failed to inspect export output directory {destination}: {exc}") from exc
+    else:
+        try:
+            destination.mkdir(parents=True)
+        except OSError as exc:
+            raise CompanyError(f"Failed to create export output directory {destination}: {exc}") from exc
+
+    skipped_symlinks: list[str] = []
+
+    for member in members:
+        _copy_export_tree(
+            animas_root / member,
+            destination / "animas" / member,
+            output_root=destination,
+            skipped_symlinks=skipped_symlinks,
+        )
+    _copy_export_tree(
+        company_directory,
+        destination / "companies" / company_name,
+        output_root=destination,
+        skipped_symlinks=skipped_symlinks,
+        excluded_names=frozenset({"animas"}),
+    )
+    for common_name in ("common_knowledge", "common_skills"):
+        common_source = root / common_name
+        if common_source.is_dir() and not common_source.is_symlink():
+            _copy_export_tree(
+                common_source,
+                destination / common_name,
+                output_root=destination,
+                skipped_symlinks=skipped_symlinks,
+            )
+        else:
+            (destination / common_name).mkdir(parents=True, exist_ok=True)
+            if common_source.is_symlink():
+                skipped_symlinks.append(common_name)
+
+    config_path = root / "config.json"
+    config = _read_json_object(config_path)
+    source_animas = config.get("animas")
+    config["animas"] = (
+        {member: source_animas[member] for member in members if member in source_animas}
+        if isinstance(source_animas, dict)
+        else {}
+    )
+    source_credentials = config.get("credentials", {})
+    vault_references = _collect_vault_references(source_credentials)
+    config["credentials"] = _redact_credential_value(source_credentials)
+    try:
+        _atomic_write_json(destination / "config.export.json", config)
+    except OSError as exc:
+        raise CompanyError(f"Failed to write exported config: {exc}") from exc
+
+    _write_export_readme(
+        destination,
+        company_name=company_name,
+        members=members,
+        credentials=source_credentials,
+        vault_references=vault_references,
+        skipped_symlinks=skipped_symlinks,
+    )
+    scan_hit_count = _write_scan_report(
+        destination,
+        company_name=company_name,
+        data_dir=root,
+    )
+    return ExportResult(
+        output_dir=destination,
+        members=members,
+        skipped_symlinks=tuple(skipped_symlinks),
+        scan_hit_count=scan_hit_count,
+    )
 
 
 def read_company_config(

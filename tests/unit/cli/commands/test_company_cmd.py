@@ -7,6 +7,8 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -36,6 +38,7 @@ def _run(parser: argparse.ArgumentParser, argv: list[str]) -> argparse.Namespace
         ["company", "assign", "--help"],
         ["company", "adopt", "--help"],
         ["company", "split", "--help"],
+        ["company", "export", "--help"],
     ],
 )
 def test_company_help_for_group_and_every_leaf(
@@ -93,6 +96,39 @@ def test_company_parser_accepts_all_command_shapes() -> None:
     split = parser.parse_args(["company", "split", "--manifest", "split.json", "--execute"])
     assert split.manifest == Path("split.json")
     assert split.execute is True
+
+    exported = parser.parse_args(["company", "export", "alpha", "--out", "migration"])
+    assert exported.name == "alpha"
+    assert exported.out == Path("migration")
+
+
+def test_company_export_calls_core_and_prints_summary(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parser = _parser()
+    data_dir = tmp_path / "runtime"
+    output_dir = tmp_path / "migration"
+    result = SimpleNamespace(
+        output_dir=output_dir,
+        members=("alice", "bob"),
+        skipped_symlinks=("animas/alice/external",),
+        scan_hit_count=3,
+    )
+
+    with (
+        patch("core.paths.get_data_dir", return_value=data_dir),
+        patch("core.company.export_company", return_value=result) as export_company,
+    ):
+        _run(parser, ["company", "export", "alpha", "--out", str(output_dir)])
+
+    export_company.assert_called_once_with("alpha", output_dir, data_dir=data_dir)
+    assert capsys.readouterr().out.splitlines() == [
+        f"Exported company 'alpha' to {output_dir}.",
+        "Members: 2",
+        "Skipped symlinks: 1",
+        "Scan hits: 3",
+    ]
 
 
 def test_assign_requires_exactly_one_assignment_mode(capsys: pytest.CaptureFixture[str]) -> None:

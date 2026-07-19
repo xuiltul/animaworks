@@ -248,6 +248,54 @@ class TestAdoptAssets:
 
 
 class TestSplitCompanies:
+    def test_adopt_symlink_option_is_applied_per_entry_and_defaults_true(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        without_link = tmp_path / "shared" / "without-link.txt"
+        without_link.parent.mkdir(parents=True)
+        without_link.write_text("move only", encoding="utf-8")
+        default_link = tmp_path / "shared" / "default-link.txt"
+        default_link.write_text("move and link", encoding="utf-8")
+        manifest = _write_manifest(
+            tmp_path / "split.json",
+            {
+                "companies": [
+                    {
+                        "name": "alpha",
+                        "adopt": [
+                            {"path": "shared/without-link.txt", "symlink": False},
+                            {"path": "shared/default-link.txt"},
+                        ],
+                    }
+                ]
+            },
+        )
+
+        split_companies(manifest, execute=True, data_dir=tmp_path)
+
+        destination = tmp_path / "companies" / "alpha" / "shared"
+        assert not without_link.exists()
+        assert (destination / without_link.name).read_text(encoding="utf-8") == "move only"
+        assert default_link.is_symlink()
+        assert default_link.resolve() == (destination / default_link.name).resolve()
+
+    def test_adopt_symlink_option_must_be_boolean(self, tmp_path: Path) -> None:
+        manifest = _write_manifest(
+            tmp_path / "split.json",
+            {
+                "companies": [
+                    {
+                        "name": "alpha",
+                        "adopt": [{"path": "shared/item.txt", "symlink": "false"}],
+                    }
+                ]
+            },
+        )
+
+        with pytest.raises(CompanyError, match="symlink.*boolean"):
+            split_companies(manifest, execute=False, data_dir=tmp_path)
+
     def test_dry_run_execute_and_second_execute_are_idempotent(self, tmp_path: Path) -> None:
         _make_anima(tmp_path, "alice")
         source = tmp_path / "shared" / "alpha-assets"

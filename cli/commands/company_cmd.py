@@ -92,6 +92,24 @@ def register_company_command(subparsers: argparse._SubParsersAction) -> None:
     split.add_argument("--execute", action="store_true", help="Execute the plan (default: dry-run only)")
     split.set_defaults(func=cmd_company_split)
 
+    export = company_sub.add_parser(
+        "export",
+        help="Export a company for migration",
+        description=(
+            "Collect a company's members and assets into a portable migration bundle, "
+            "with secrets redacted and remaining migration work documented."
+        ),
+    )
+    export.add_argument("name", help="Company name")
+    export.add_argument(
+        "--out",
+        required=True,
+        type=Path,
+        metavar="DIR",
+        help="Output directory (must not already contain files)",
+    )
+    export.set_defaults(func=cmd_company_export)
+
 
 def _run_company_action(action: Callable[[], Any]) -> Any:
     """Run a core action and render the shared company error contract."""
@@ -189,6 +207,18 @@ def cmd_company_split(args: argparse.Namespace) -> None:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     _print_lines(lines)
+
+
+def cmd_company_export(args: argparse.Namespace) -> None:
+    """Export one company into a portable migration bundle."""
+    from core.company import export_company
+    from core.paths import get_data_dir
+
+    result = _run_company_action(lambda: export_company(args.name, args.out, data_dir=get_data_dir()))
+    print(f"Exported company '{args.name}' to {result.output_dir}.")
+    print(f"Members: {len(result.members)}")
+    print(f"Skipped symlinks: {len(result.skipped_symlinks)}")
+    print(f"Scan hits: {result.scan_hit_count}")
 
 
 def _print_lines(lines: list[str]) -> None:
