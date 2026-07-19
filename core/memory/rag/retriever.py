@@ -469,6 +469,18 @@ class MemoryRetriever:
             except Exception:
                 logger.debug("Failed to resolve data dir for shared skill source", exc_info=True)
                 return None
+        if path.parts[:1] == ("companies",):
+            try:
+                from core.company_resources import get_company_resources, infer_data_dir
+
+                resources = get_company_resources(self.indexer.anima_dir)
+                if resources is None or path.parts[:3] != ("companies", resources.name, "skills"):
+                    return None
+                candidate = (infer_data_dir(self.indexer.anima_dir) / path).resolve()
+                candidate.relative_to(resources.skills_dir)
+                return candidate
+            except (OSError, ValueError):
+                return None
         return None
 
     # ── Score adjustment ────────────────────────────────────────────

@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.config.models import PermissionsConfig, load_permissions
-from core.file_access_policy import find_denied_root, find_internal_cache_root, resolve_denied_roots
+from core.file_access_policy import (
+    find_denied_root,
+    find_internal_cache_root,
+    resolve_effective_denied_roots,
+)
 from core.i18n import t
 from core.tooling.handler_base import (
     _error_result,
@@ -70,6 +74,7 @@ class PermissionsMixin:
             logger.debug("Failed to enumerate external tools", exc_info=True)
 
         config = self._load_permissions_config()
+        denied_roots = self._resolved_file_deny_roots(config)
 
         file_read: list[str] = [t("handler.file_read_own"), t("handler.file_read_shared")]
         file_write: list[str] = [t("handler.file_write_own")]
@@ -117,7 +122,7 @@ class PermissionsMixin:
             "file_access": {
                 "read": file_read,
                 "write": file_write,
-                "denied": list(config.file_roots_denied),
+                "denied": [str(root) for root in denied_roots],
             },
             "commands": commands_info,
             "restrictions": restrictions,
@@ -146,11 +151,11 @@ class PermissionsMixin:
         return load_permissions(self._anima_dir)
 
     def _resolved_file_deny_roots(self, config: PermissionsConfig | None = None) -> tuple[Path, ...]:
-        """Return canonical explicit deny roots, reusable by bulk operations."""
+        """Return canonical configured and company-derived deny roots."""
         if self._superuser:
             return ()
         effective_config = config or self._load_permissions_config()
-        return resolve_denied_roots(effective_config.file_roots_denied)
+        return resolve_effective_denied_roots(self._anima_dir, effective_config.file_roots_denied)
 
     def _find_denied_file_root(
         self,
@@ -188,7 +193,7 @@ class PermissionsMixin:
         # expose internal copies/caches that can retain content from a denied
         # source.  Trusted search services may consume these caches, but their
         # filtered results are returned through separate handlers.
-        if effective_config.file_roots_denied and not (write and trusted_internal_cache_write):
+        if effective_denied_roots and not (write and trusted_internal_cache_write):
             internal_cache = find_internal_cache_root(path, self._anima_dir)
             if internal_cache is not None:
                 logger.warning(

@@ -102,10 +102,23 @@ class DelegationMixin(OrgHelpersMixin):
         if err:
             return err
 
+        from core.company import get_company, get_company_display_name, is_cross_company
         from core.memory.task_queue import TaskQueueManager
         from core.paths import get_animas_dir
 
-        target_dir = get_animas_dir() / target_name
+        animas_dir = get_animas_dir()
+        if is_cross_company(self._anima_name, target_name, animas_dir=animas_dir):
+            target_company = get_company(target_name, animas_dir=animas_dir)
+            display_name = get_company_display_name(
+                target_company or "",
+                data_dir=animas_dir.parent,
+            )
+            return t(
+                "handler.cross_company_delegation_blocked",
+                display_name=display_name,
+            )
+
+        target_dir = animas_dir / target_name
 
         sub_task_id = uuid.uuid4().hex[:12]
         tracking_task_id = uuid.uuid4().hex[:12]

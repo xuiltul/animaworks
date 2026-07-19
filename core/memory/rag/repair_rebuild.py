@@ -118,6 +118,7 @@ def _reindex_into_store(
     anima_dir: Path | None = None,
 ) -> int:
     """Index an anima's memory (and optionally shared collections) into a store."""
+    from core.company_resources import get_company_resources
     from core.memory.bm25 import rebuild_longterm_bm25_index
     from core.memory.rag import MemoryIndexer
     from core.paths import get_animas_dir, get_common_knowledge_dir, get_common_skills_dir, get_data_dir
@@ -145,10 +146,29 @@ def _reindex_into_store(
             anima_dir=base_dir,
             collection_prefix="shared",
         )
-        for label, src_dir, glob, meta_key in (
+        shared_sources = [
             ("common_knowledge", get_common_knowledge_dir(), "*.md", "shared_common_knowledge_hash"),
             ("common_skills", get_common_skills_dir(), "SKILL.md", "shared_common_skills_hash"),
-        ):
+        ]
+        company_resources = get_company_resources(anima_dir, data_dir=base_dir)
+        if company_resources is not None:
+            shared_sources.extend(
+                (
+                    (
+                        "common_knowledge",
+                        company_resources.knowledge_dir,
+                        "*.md",
+                        "shared_company_knowledge_hash",
+                    ),
+                    (
+                        "common_skills",
+                        company_resources.skills_dir,
+                        "SKILL.md",
+                        "shared_company_skills_hash",
+                    ),
+                )
+            )
+        for label, src_dir, glob, meta_key in shared_sources:
             if not src_dir.is_dir():
                 continue
             total_chunks += shared_indexer.index_directory(src_dir, label, force=True).chunks_indexed

@@ -1087,10 +1087,16 @@ class CodexSDKExecutor(BaseExecutor):
         esc = _escape_toml_string
 
         from core.config.models import load_permissions
+        from core.file_access_policy import resolve_effective_denied_roots
 
         permissions_config = load_permissions(self._anima_dir)
 
-        denied_roots = list(getattr(permissions_config, "file_roots_denied", []))
+        denied_roots = list(
+            resolve_effective_denied_roots(
+                self._anima_dir,
+                getattr(permissions_config, "file_roots_denied", []),
+            )
+        )
         if denied_roots:
             from core.file_access_policy import shell_internal_deny_paths
 
@@ -1329,9 +1335,14 @@ class CodexSDKExecutor(BaseExecutor):
             "model_provider": provider_config.provider,
         }
         from core.config.models import load_permissions
+        from core.file_access_policy import resolve_effective_denied_roots
 
         permissions_config = load_permissions(self._anima_dir)
-        if not getattr(permissions_config, "file_roots_denied", []):
+        denied_roots = resolve_effective_denied_roots(
+            self._anima_dir,
+            getattr(permissions_config, "file_roots_denied", []),
+        )
+        if not denied_roots:
             kwargs["sandbox"] = self._sdk_sandbox()
         return kwargs
 

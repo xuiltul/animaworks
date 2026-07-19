@@ -10,6 +10,42 @@
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
+    "handler.cross_company_delegation_blocked": {
+        "ja": (
+            "エラー: 委任先は別会社「{display_name}」に所属しています。会社間の直接のタスク委任は禁止されています。"
+            "この用件は人間のオーナーへエスカレーションしてください。"
+        ),
+        "en": (
+            "Error: The delegate belongs to another company, {display_name}. Direct task delegation between companies "
+            "is prohibited. Escalate this matter to the human owner."
+        ),
+        "zh": (
+            "错误：委派对象属于另一家公司“{display_name}”。禁止公司之间直接委派任务。"
+            "请将此事项升级给人类所有者处理。"
+        ),
+        "ko": (
+            "오류: 위임 대상은 다른 회사인 ‘{display_name}’에 소속되어 있습니다. 회사 간 직접 업무 위임은 "
+            "금지되어 있습니다. 이 사안을 인간 소유자에게 에스컬레이션하세요."
+        ),
+    },
+    "handler.cross_company_message_blocked": {
+        "ja": (
+            "エラー: 宛先は別会社「{display_name}」に所属しています。会社間の直接連絡は禁止されています。"
+            "この用件は人間のオーナーへエスカレーションしてください。"
+        ),
+        "en": (
+            "Error: The recipient belongs to another company, {display_name}. Direct communication between companies "
+            "is prohibited. Escalate this matter to the human owner."
+        ),
+        "zh": (
+            "错误：收件人属于另一家公司“{display_name}”。禁止公司之间直接联系。"
+            "请将此事项升级给人类所有者处理。"
+        ),
+        "ko": (
+            "오류: 수신자는 다른 회사인 ‘{display_name}’에 소속되어 있습니다. 회사 간 직접 연락은 금지되어 "
+            "있습니다. 이 사안을 인간 소유자에게 에스컬레이션하세요."
+        ),
+    },
     "handler.enable_log_summary": {
         "ja": "{target_name} を復帰",
         "en": "Enabling {target_name}",

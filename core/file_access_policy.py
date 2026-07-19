@@ -29,11 +29,51 @@ def resolve_denied_roots(roots: Iterable[str | Path]) -> tuple[Path, ...]:
     return tuple(Path(root).resolve() for root in roots)
 
 
+def company_denied_roots(anima_dir: Path) -> tuple[Path, ...]:
+    """Return canonical roots for every company other than the Anima's own.
+
+    Membership is read from ``status.json`` on every call so assignment
+    changes take effect without a server restart.  Unassigned Animas retain
+    the legacy unrestricted behavior.
+    """
+    from core.company import get_company
+
+    company = get_company(anima_dir.name, animas_dir=anima_dir.parent)
+    if company is None:
+        return ()
+
+    companies_dir = anima_dir.parent.parent / "companies"
+    try:
+        candidates = tuple(companies_dir.iterdir())
+    except OSError:
+        return ()
+
+    denied: list[Path] = []
+    for candidate in sorted(candidates, key=lambda path: path.name):
+        if candidate.name == company:
+            continue
+        try:
+            if candidate.is_dir():
+                denied.append(candidate.resolve())
+        except (OSError, RuntimeError):
+            continue
+    return tuple(denied)
+
+
+def resolve_effective_denied_roots(
+    anima_dir: Path,
+    configured_roots: Iterable[str | Path],
+) -> tuple[Path, ...]:
+    """Merge configured and company-derived denies into canonical roots."""
+    merged = (*resolve_denied_roots(configured_roots), *company_denied_roots(anima_dir))
+    return tuple(dict.fromkeys(merged))
+
+
 def load_denied_roots(anima_dir: Path) -> tuple[Path, ...]:
-    """Load and canonicalize an Anima's configured file deny roots."""
+    """Load the Anima's configured and company-derived file deny roots."""
     from core.config.models import load_permissions
 
-    return resolve_denied_roots(load_permissions(anima_dir).file_roots_denied)
+    return resolve_effective_denied_roots(anima_dir, load_permissions(anima_dir).file_roots_denied)
 
 
 def find_denied_root(path: str | Path, denied_roots: tuple[Path, ...]) -> Path | None:
@@ -130,6 +170,18 @@ def resolve_memory_source_path(anima_dir: Path, source: str) -> Path | None:
         return shared_root.joinpath(*path.parts[1:]).resolve()
     if namespace == "shared":
         return (get_data_dir() / path).resolve()
+    if namespace == "companies":
+        from core.company_resources import get_company_resources, infer_data_dir
+
+        resources = get_company_resources(anima_dir)
+        if resources is None or path.parts[:2] != ("companies", resources.name):
+            return None
+        candidate = (infer_data_dir(anima_dir) / path).resolve()
+        try:
+            candidate.relative_to(resources.root)
+        except ValueError:
+            return None
+        return candidate
     if namespace in _ANIMA_MEMORY_ROOTS:
         return (anima_dir / path).resolve()
     return None

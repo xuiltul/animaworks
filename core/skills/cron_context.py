@@ -218,6 +218,11 @@ def _record_cron_usage(anima_dir: Path, meta: SkillMetadata) -> None:
 
 
 def _pointer_for_path(anima_dir: Path, common_skills_dir: Path, path: Path) -> str:
+    from core.company_resources import company_resource_pointer
+
+    company_pointer = company_resource_pointer(path)
+    if company_pointer is not None:
+        return company_pointer
     try:
         return str(path.relative_to(anima_dir))
     except ValueError:

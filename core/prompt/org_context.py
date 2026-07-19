@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from core.config.models import read_anima_company
 from core.file_access_policy import find_denied_root, load_denied_roots
 from core.paths import get_data_dir, load_prompt
 from core.prompt.sections import _load_fallback_strings, _load_section_strings
@@ -40,6 +41,7 @@ def _is_mcp_mode(execution_mode: str) -> bool:
 def _discover_other_animas(anima_dir: Path) -> list[str]:
     """List sibling anima directories."""
     denied_roots = load_denied_roots(anima_dir)
+    company = read_anima_company(anima_dir)
     animas_root = _resolved_visible_path(anima_dir.parent, denied_roots)
     if animas_root is None:
         return []
@@ -50,6 +52,9 @@ def _discover_other_animas(anima_dir: Path) -> list[str]:
         if resolved_dir is None or not resolved_dir.is_dir() or resolved_dir.name == self_name:
             continue
         identity_path = _resolved_visible_path(resolved_dir / "identity.md", denied_roots)
+        other_company = read_anima_company(resolved_dir)
+        if company is not None and other_company is not None and other_company != company:
+            continue
         if identity_path is not None and identity_path.is_file():
             others.append(resolved_dir.name)
     return others
@@ -228,6 +233,7 @@ def _scan_all_animas(animas_dir: Path, denied_roots: tuple[Path, ...] = ()) -> d
         speciality: str | None = None
         role: str | None = None
         model: str | None = None
+        company = read_anima_company(d)
 
         # status.json is the SSoT; config.animas is fallback only.
         status_has_supervisor = False
@@ -262,14 +268,44 @@ def _scan_all_animas(animas_dir: Path, denied_roots: tuple[Path, ...] = ()) -> d
 
         # Preserve aliases from config.json (not stored in status.json)
         aliases = config_animas[name].aliases if name in config_animas else []
-        result[name] = AnimaModelConfig(supervisor=supervisor, speciality=speciality, model=model, aliases=aliases)
+        result[name] = AnimaModelConfig(
+            supervisor=supervisor,
+            speciality=speciality,
+            model=model,
+            aliases=aliases,
+            company=company,
+        )
 
     for name, cfg in config_animas.items():
         config_anima_dir = _resolved_visible_path(resolved_animas_dir / name, denied_roots)
         if name not in result and config_anima_dir is not None:
-            result[name] = cfg
+            result[name] = cfg.model_copy(update={"company": read_anima_company(config_anima_dir)})
 
     return result
+
+
+def _filter_company_visible_animas(
+    anima_name: str,
+    all_animas: dict[str, Any],
+    animas_dir: Path,
+) -> dict[str, Any]:
+    """Hide assigned Animas from other companies while retaining unassigned ones."""
+    company = read_anima_company(animas_dir / anima_name)
+    if company is None:
+        return all_animas
+
+    visible = {
+        name: config
+        for name, config in all_animas.items()
+        if getattr(config, "company", None) in (None, company)
+    }
+
+    # If a visible Anima reported to a hidden supervisor, promote it to a
+    # visible root rather than losing it from the rendered tree altogether.
+    for name, config in tuple(visible.items()):
+        if config.supervisor is not None and config.supervisor not in visible:
+            visible[name] = config.model_copy(update={"supervisor": None})
+    return visible
 
 
 def _build_org_context(anima_name: str, other_animas: list[str], execution_mode: str = "s") -> str:
@@ -286,6 +322,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     current_anima_dir = animas_dir / anima_name
     denied_roots = load_denied_roots(current_anima_dir)
     all_animas = _scan_all_animas(animas_dir, denied_roots)
+    all_animas = _filter_company_visible_animas(anima_name, all_animas, animas_dir)
 
     if not all_animas:
         return ""
@@ -306,7 +343,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
                 tree_text=tree_text,
             ),
         ]
-        if other_animas:
+        if any(name in all_animas and name != anima_name for name in other_animas):
             cr_key = "communication_rules_s" if _is_mcp_mode(execution_mode) else "communication_rules"
             _cr_store = get_prompt_store()
             _cr = (_cr_store.get_section(cr_key) if _cr_store else None) or load_prompt(cr_key)
@@ -366,7 +403,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     ]
 
     # Communication rules: only when there are other animas
-    if other_animas:
+    if any(name in all_animas and name != anima_name for name in other_animas):
         cr_key = "communication_rules_s" if _is_mcp_mode(execution_mode) else "communication_rules"
         _cr_store = get_prompt_store()
         _cr = (_cr_store.get_section(cr_key) if _cr_store else None) or load_prompt(cr_key)

@@ -10,6 +10,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
+from core.company_resources import company_resource_pointer, get_company_resources, infer_data_dir
 from core.memory.fact_observability import warn_rate_limited
 
 logger = logging.getLogger("animaworks.memory")
@@ -217,12 +218,37 @@ class RAGMemorySearch:
             return
         try:
             vector_store = self._indexer.vector_store
+            self._reset_shared_for_company_change(vector_store)
             self._ensure_shared_knowledge_indexed(vector_store)
             self._ensure_shared_skills_indexed(vector_store)
+            self._ensure_company_knowledge_indexed(vector_store)
+            self._ensure_company_skills_indexed(vector_store)
         except ImportError:
             pass
         except Exception as e:
             logger.debug("Shared collection check failed: %s", e)
+
+    def _reset_shared_for_company_change(self, vector_store) -> None:
+        """Drop stale company content when this Anima's assignment changes."""
+        resources = get_company_resources(self._anima_dir)
+        current = resources.name if resources is not None else ""
+        meta_path = self._anima_dir / "index_meta.json"
+        stored = _read_shared_hash(meta_path, "shared_company_name")
+        if stored == current or (stored is None and not current):
+            return
+        for collection in ("shared_common_knowledge", "shared_common_skills"):
+            try:
+                vector_store.delete_collection(collection)
+            except Exception:
+                logger.warning("Failed to reset %s after company assignment change", collection, exc_info=True)
+        _write_shared_hash(meta_path, "shared_company_name", current)
+        for key in (
+            "shared_common_knowledge_hash",
+            "shared_common_skills_hash",
+            "shared_company_knowledge_hash",
+            "shared_company_skills_hash",
+        ):
+            _write_shared_hash(meta_path, key, "")
 
     def _ensure_shared_knowledge_indexed(self, vector_store) -> None:
         """Index common_knowledge/ into ``shared_common_knowledge`` collection.
@@ -325,6 +351,61 @@ class RAGMemorySearch:
                 )
         except Exception as e:
             logger.warning("Failed to index shared common_skills: %s", e)
+
+    def _ensure_company_knowledge_indexed(self, vector_store) -> None:
+        resources = get_company_resources(self._anima_dir)
+        if resources is None or not resources.knowledge_dir.is_dir() or not any(resources.knowledge_dir.rglob("*.md")):
+            return
+        self._index_company_directory(
+            vector_store,
+            resources.knowledge_dir,
+            "common_knowledge",
+            "*.md",
+            "shared_company_knowledge_hash",
+        )
+
+    def _ensure_company_skills_indexed(self, vector_store) -> None:
+        resources = get_company_resources(self._anima_dir)
+        if resources is None or not resources.skills_dir.is_dir() or not any(resources.skills_dir.rglob("SKILL.md")):
+            return
+        self._index_company_directory(
+            vector_store,
+            resources.skills_dir,
+            "common_skills",
+            "SKILL.md",
+            "shared_company_skills_hash",
+        )
+
+    def _index_company_directory(
+        self,
+        vector_store,
+        directory: Path,
+        memory_type: str,
+        glob: str,
+        meta_key: str,
+    ) -> None:
+        meta_path = self._anima_dir / "index_meta.json"
+        current_hash = _compute_dir_hash(directory, glob)
+        stored_hash = _read_shared_hash(meta_path, meta_key)
+        collection = f"shared_{memory_type}"
+        force = current_hash == stored_hash and not _shared_collection_exists(vector_store, collection)
+        if current_hash == stored_hash and not force:
+            return
+        try:
+            from core.memory.rag import MemoryIndexer
+
+            indexer = MemoryIndexer(
+                vector_store,
+                anima_name="shared",
+                anima_dir=infer_data_dir(self._anima_dir),
+                collection_prefix="shared",
+                embedding_model=self._indexer.embedding_model if self._indexer else None,
+            )
+            result = indexer.index_directory(directory, memory_type, force=force)
+            if result.files_failed == 0:
+                _write_shared_hash(meta_path, meta_key, current_hash)
+        except Exception as exc:
+            logger.warning("Failed to index company %s: %s", memory_type, exc)
 
     def _get_indexer(self):
         """Return the RAG indexer, initializing it on first call.
@@ -661,6 +742,11 @@ class RAGMemorySearch:
                 top_k=fetch_k,
                 include_shared=include_shared,
             )
+            rag_results = [
+                result
+                for result in rag_results
+                if self._company_source_is_visible(str(result.metadata.get("source_file", "")))
+            ]
 
             if rag_results:
                 retriever.record_access(rag_results, anima_name, kind="retrieved")
@@ -723,6 +809,20 @@ class RAGMemorySearch:
             return all_results[:result_limit]
         return all_results[offset : offset + page_size]
 
+    def _company_source_is_visible(self, source_file: str) -> bool:
+        path = Path(source_file)
+        if path.parts[:1] != ("companies",):
+            return True
+        resources = get_company_resources(self._anima_dir)
+        return (
+            resources is not None
+            and ".." not in path.parts
+            and path.parts[:3] in {
+                ("companies", resources.name, "knowledge"),
+                ("companies", resources.name, "skills"),
+            }
+        )
+
     def _keyword_search_fallback(
         self,
         query: str,
@@ -754,6 +854,9 @@ class RAGMemorySearch:
         if scope in ("common_knowledge", "all"):
             if common_knowledge_dir.is_dir():
                 dirs.append((common_knowledge_dir, "common_knowledge"))
+            company_resources = get_company_resources(self._anima_dir)
+            if company_resources is not None and company_resources.knowledge_dir.is_dir():
+                dirs.append((company_resources.knowledge_dir, "common_knowledge"))
 
         tokens = [tok for tok in query.lower().split() if tok]
         if not tokens:
@@ -807,7 +910,7 @@ class RAGMemorySearch:
                 if matched == 0:
                     continue
                 score = matched / len(tokens)
-                rel_path = f"{memory_type}/{f.name}"
+                rel_path = company_resource_pointer(f) or f"{memory_type}/{f.name}"
                 if rel_path not in file_scores or file_scores[rel_path]["score"] < score:
                     lines = content.split("\n")
                     preview = "\n".join(lines[:30])
@@ -928,6 +1031,11 @@ class RAGMemorySearch:
             # relative to the data dir parent of common_skills/.
             skill_roots.append(
                 (self._common_skills_dir, "common_skills", self._common_skills_dir.parent)
+            )
+        company_resources = get_company_resources(self._anima_dir)
+        if company_resources is not None and company_resources.skills_dir.is_dir():
+            skill_roots.append(
+                (company_resources.skills_dir, "common_skills", infer_data_dir(self._anima_dir))
             )
 
         results: list[dict] = []

@@ -5,16 +5,16 @@
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from pathlib import Path
-
-from core.time_utils import today_local
 from unittest.mock import patch
 
 import pytest
 
 from core.memory.manager import MemoryManager
 from core.schemas import ModelConfig
+from core.time_utils import today_local
 
 
 @pytest.fixture
@@ -185,6 +185,24 @@ class TestReadFile:
 class TestReadCompanyVision:
     def test_reads_vision(self, mm, data_dir):
         assert "Company Vision" in mm.read_company_vision() or mm.read_company_vision() == ""
+
+    def test_prefers_assigned_company_vision_then_falls_back(self, mm, anima_dir, data_dir):
+        (anima_dir / "status.json").write_text(json.dumps({"company": "alpha"}), encoding="utf-8")
+        company_dir = data_dir / "companies" / "alpha"
+        company_dir.mkdir(parents=True)
+        company_vision = company_dir / "vision.md"
+        company_vision.write_text("Alpha-specific vision", encoding="utf-8")
+
+        assert mm.read_company_vision() == "Alpha-specific vision"
+
+        company_vision.write_text("", encoding="utf-8")
+        assert mm.read_company_vision() == ""
+
+        company_vision.unlink()
+        assert "Company Vision" in mm.read_company_vision()
+
+    def test_unassigned_anima_uses_legacy_company_vision(self, mm):
+        assert "Company Vision" in mm.read_company_vision()
 
 
 # ── List helpers ──────────────────────────────────────────

@@ -290,6 +290,16 @@ class MemoryManager:
             return ""
 
     def read_company_vision(self) -> str:
+        from core.company import get_company
+
+        company = get_company(self.anima_dir.name, animas_dir=self.anima_dir.parent)
+        if company is not None:
+            companies_dir = (self.company_dir.parent / "companies").resolve()
+            company_dir = (companies_dir / company).resolve()
+            if company_dir.parent == companies_dir:
+                vision_path = company_dir / "vision.md"
+                if vision_path.is_file():
+                    return self._read(vision_path)
         return self._read(self.company_dir / "vision.md")
 
     def read_identity(self) -> str:

@@ -24,6 +24,7 @@ from pathlib import Path
 from core.config.models import (
     AnimaModelConfig,
     load_config,
+    read_anima_company,
     read_anima_supervisor,
     save_config,
 )
@@ -113,6 +114,7 @@ def sync_org_structure(
     # ── Phase 1: discover supervisor relationships from disk ──────
 
     discovered: dict[str, str | None] = {}
+    discovered_companies: dict[str, str | None] = {}
 
     for anima_dir in sorted(animas_dir.iterdir()):
         if not anima_dir.is_dir():
@@ -122,6 +124,7 @@ def sync_org_structure(
 
         name = anima_dir.name
         discovered[name] = read_anima_supervisor(anima_dir)
+        discovered_companies[name] = read_anima_company(anima_dir)
 
     if not discovered:
         logger.debug("No animas discovered in %s", animas_dir)
@@ -156,7 +159,10 @@ def sync_org_structure(
 
         if name not in config.animas:
             # Anima not yet in config — add with discovered supervisor
-            config.animas[name] = AnimaModelConfig(supervisor=disk_supervisor)
+            config.animas[name] = AnimaModelConfig(
+                supervisor=disk_supervisor,
+                company=discovered_companies[name],
+            )
             changed = True
             logger.info(
                 "Org sync: added anima '%s' with supervisor=%s",
@@ -176,6 +182,17 @@ def sync_org_structure(
                 disk_supervisor,
             )
             existing.supervisor = disk_supervisor
+            changed = True
+
+        disk_company = discovered_companies[name]
+        if existing.company != disk_company:
+            logger.info(
+                "Org sync: updating company for '%s': '%s' -> '%s'",
+                name,
+                existing.company,
+                disk_company,
+            )
+            existing.company = disk_company
             changed = True
 
     # ── Phase 4: prune config entries with no directory on disk ──

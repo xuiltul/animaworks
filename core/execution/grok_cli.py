@@ -230,9 +230,15 @@ class GrokCLIExecutor(BaseExecutor):
             return False
 
         from core.config.models import load_permissions
+        from core.file_access_policy import resolve_effective_denied_roots
 
         permissions_config = load_permissions(self._anima_dir)
-        denied_roots = list(getattr(permissions_config, "file_roots_denied", []))
+        denied_roots = list(
+            resolve_effective_denied_roots(
+                self._anima_dir,
+                getattr(permissions_config, "file_roots_denied", []),
+            )
+        )
         if not denied_roots and "/" in permissions_config.file_roots:
             return False
 

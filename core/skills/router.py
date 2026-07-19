@@ -478,6 +478,11 @@ def _pointer_path(meta: SkillMetadata) -> str:
             return f"common_skills/{meta.name}/SKILL.md"
         return f"skills/{meta.name}/SKILL.md"
 
+    from core.company_resources import company_resource_pointer
+
+    company_pointer = company_resource_pointer(path)
+    if company_pointer is not None:
+        return company_pointer
     parts = list(path.parts)
     for marker in ("common_skills", "skills", "procedures"):
         if marker in parts:

@@ -98,6 +98,32 @@ def read_anima_supervisor(anima_dir: Path) -> str | None:
     return None
 
 
+def read_anima_company(anima_dir: Path) -> str | None:
+    """Read an anima's company membership from ``status.json``.
+
+    Unlike supervisor resolution, company membership has no legacy
+    ``identity.md`` representation.  Missing, blank, non-string, and invalid
+    values are therefore treated as unassigned.
+    """
+    status_path = anima_dir / "status.json"
+    if not status_path.is_file():
+        return None
+
+    try:
+        data = json.loads(status_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to read %s: %s", status_path, exc)
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    raw = data.get("company")
+    if not isinstance(raw, str):
+        return None
+    company = raw.strip()
+    return company or None
+
+
 def register_anima_in_config(
     data_dir: Path,
     anima_name: str,

@@ -384,6 +384,11 @@ def _skill_catalog_pointer(meta: Any) -> str:
     is_procedure = bool(getattr(meta, "is_procedure", False))
     is_common = bool(getattr(meta, "is_common", False))
     if path is not None:
+        from core.company_resources import company_resource_pointer
+
+        company_pointer = company_resource_pointer(Path(path))
+        if company_pointer is not None:
+            return company_pointer
         parts = list(Path(path).parts)
         for marker in ("common_skills", "skills", "procedures"):
             if marker in parts:

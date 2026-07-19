@@ -14,6 +14,7 @@ from core.config.anima_registry import (
     _PAREN_EN_NAME_RE,
     _SENTINEL,
     _resolve_supervisor_name,
+    read_anima_company,
     read_anima_supervisor,
     register_anima_in_config,
     rename_anima_in_config,

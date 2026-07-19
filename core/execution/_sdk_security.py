@@ -82,6 +82,11 @@ def _check_a1_file_access(
         return None
 
     resolved = Path(file_path).resolve()
+    from core.file_access_policy import find_denied_root, load_denied_roots
+
+    denied_root = find_denied_root(resolved, load_denied_roots(anima_dir))
+    if denied_root is not None:
+        return f"Access to denied directory is not allowed: {file_path}"
 
     if write:
         data_dir = get_data_dir().resolve()

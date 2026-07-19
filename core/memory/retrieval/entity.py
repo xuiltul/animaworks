@@ -93,7 +93,7 @@ _STOPWORDS = frozenset(
 
 # mtime-based registry cache for search hot path (no rebuild, no locks beyond this).
 _REGISTRY_CACHE_LOCK = threading.Lock()
-_REGISTRY_CACHE: dict[str, "_CachedRegistry"] = {}
+_REGISTRY_CACHE: dict[str, _CachedRegistry] = {}
 
 
 @dataclass(frozen=True)

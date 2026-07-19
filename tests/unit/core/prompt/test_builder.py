@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 from core.prompt.builder import (
@@ -676,6 +677,35 @@ class TestBuildOrgContext:
 
         result = _build_org_context("unknown", ["rin"])
         assert "あなたがトップです" in result
+
+    def test_filters_other_companies_but_keeps_unassigned_animas(self, data_dir, make_anima):
+        """Company members see their own company and legacy unassigned Animas only."""
+        current = make_anima("sakura")
+        colleague = make_anima("rin", supervisor="sakura", speciality="same-company")
+        make_anima("kotoha", supervisor="sakura", speciality="unassigned")
+        foreign = make_anima("alice", supervisor="sakura", speciality="foreign-company")
+
+        for anima_dir, company in ((current, "alpha"), (colleague, "alpha"), (foreign, "beta")):
+            status_path = anima_dir / "status.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+            status["company"] = company
+            status_path.write_text(json.dumps(status), encoding="utf-8")
+
+        result = _build_org_context("sakura", ["rin", "kotoha", "alice"])
+
+        assert _discover_other_animas(current) == ["kotoha", "rin"]
+        assert "same-company" in result
+        assert "unassigned" in result
+        assert "foreign-company" not in result
+        assert "alice" not in result
+
+        # Membership is resolved from disk for every prompt build.
+        status_path = foreign / "status.json"
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        status["company"] = "alpha"
+        status_path.write_text(json.dumps(status), encoding="utf-8")
+        assert _discover_other_animas(current) == ["alice", "kotoha", "rin"]
+        assert "foreign-company" in _build_org_context("sakura", ["rin", "kotoha", "alice"])
 
 
 # ── inject_shortterm ──────────────────────────────────────

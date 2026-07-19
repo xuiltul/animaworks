@@ -13,6 +13,7 @@ from __future__ import annotations
 def _merge_strings() -> dict[str, dict[str, str]]:
     from . import (
         communication,
+        company,
         config,
         discord,
         execution,
@@ -46,6 +47,7 @@ def _merge_strings() -> dict[str, dict[str, str]]:
         config,
         lifecycle,
         communication,
+        company,
         discord,
         supervisor,
         tmp,

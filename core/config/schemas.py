@@ -62,6 +62,7 @@ class AnimaModelConfig(BaseModel):
     """Per-anima config in config.json. Organization structure only."""
 
     supervisor: str | None = None
+    company: str | None = None
     speciality: str | None = None
     model: str | None = None
     aliases: list[str] = []

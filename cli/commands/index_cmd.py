@@ -198,6 +198,7 @@ def _index_shared_collections(
 
     Returns total chunks indexed across all animas.
     """
+    from core.company_resources import get_company_resources
     from core.memory.rag import MemoryIndexer
     from core.memory.rag.repair import is_repair_locked
     from core.memory.rag.singleton import get_vector_store
@@ -212,10 +213,6 @@ def _index_shared_collections(
     if cs_dir.is_dir() and any(cs_dir.rglob("SKILL.md")):
         shared_dirs.append(("common_skills", cs_dir, "SKILL.md", "shared_common_skills_hash"))
 
-    if not shared_dirs:
-        logger.info("No shared knowledge/skills files found, skipping")
-        return 0
-
     total = 0
     for anima_dir in anima_dirs:
         anima_name = anima_dir.name
@@ -228,7 +225,50 @@ def _index_shared_collections(
             logger.warning("Vector store unavailable for %s, skipping shared indexing", anima_name)
             continue
 
-        for label, src_dir, glob, meta_key in shared_dirs:
+        anima_shared_dirs = list(shared_dirs)
+        company_resources = get_company_resources(anima_dir, data_dir=base_dir)
+        if company_resources is not None:
+            if company_resources.knowledge_dir.is_dir() and any(company_resources.knowledge_dir.rglob("*.md")):
+                anima_shared_dirs.append(
+                    (
+                        "common_knowledge",
+                        company_resources.knowledge_dir,
+                        "*.md",
+                        "shared_company_knowledge_hash",
+                    )
+                )
+            if company_resources.skills_dir.is_dir() and any(company_resources.skills_dir.rglob("SKILL.md")):
+                anima_shared_dirs.append(
+                    (
+                        "common_skills",
+                        company_resources.skills_dir,
+                        "SKILL.md",
+                        "shared_company_skills_hash",
+                    )
+                )
+
+        if not anima_shared_dirs:
+            logger.info("  %s: no shared knowledge/skills files found, skipping", anima_name)
+            continue
+
+        current_company = company_resources.name if company_resources is not None else ""
+        stored_company = _read_shared_hash(meta_path, "shared_company_name")
+        if not dry_run and stored_company != current_company and (stored_company is not None or current_company):
+            for collection in ("shared_common_knowledge", "shared_common_skills"):
+                try:
+                    vector_store.delete_collection(collection)
+                except Exception:
+                    logger.warning("  %s: failed to reset %s", anima_name, collection, exc_info=True)
+            _write_shared_hash(meta_path, "shared_company_name", current_company)
+            for key in (
+                "shared_common_knowledge_hash",
+                "shared_common_skills_hash",
+                "shared_company_knowledge_hash",
+                "shared_company_skills_hash",
+            ):
+                _write_shared_hash(meta_path, key, "")
+
+        for label, src_dir, glob, meta_key in anima_shared_dirs:
             current_hash = _compute_dir_hash(src_dir, glob)
             stored_hash = _read_shared_hash(meta_path, meta_key)
 

@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+from core.company_resources import get_company_resources
 from core.skills.loader import load_skill_metadata
 from core.skills.models import SkillMetadata, SkillScanVerdict, SkillTrustLevel
 
@@ -49,6 +50,7 @@ class SkillIndex:
         self._cached_index: list[SkillMetadata] | None = None
         self._cached_all_entries: list[SkillMetadata] | None = None
         self._curator_state_marker: tuple[int, int] | None = None
+        self._company_marker: str | None = None
 
     # ── Cache ───────────────────────────────────────────────
 
@@ -57,6 +59,7 @@ class SkillIndex:
         self._cached_index = None
         self._cached_all_entries = None
         self._curator_state_marker = None
+        self._company_marker = None
 
     @property
     def all_skills(self) -> list[SkillMetadata]:
@@ -132,6 +135,20 @@ class SkillIndex:
                         exc,
                     )
 
+        company_resources = get_company_resources(self._anima_dir) if self._anima_dir is not None else None
+        if company_resources is not None and company_resources.skills_dir.exists():
+            for skill_path in sorted(company_resources.skills_dir.glob("*/SKILL.md")):
+                try:
+                    meta = load_skill_metadata(skill_path)
+                    meta = meta.model_copy(update={"is_common": True, "is_procedure": False})
+                    _add_metadata(meta)
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to load company skill metadata from %s: %s",
+                        skill_path,
+                        exc,
+                    )
+
         if self._procedures_dir is not None and self._procedures_dir.exists():
             for proc_path in sorted(self._procedures_dir.glob("*.md")):
                 try:
@@ -197,6 +214,7 @@ class SkillIndex:
 
         self._cached_all_entries = sorted_all
         self._curator_state_marker = curator_state_marker
+        self._company_marker = company_resources.name if company_resources is not None else None
         filtered = [m for m in sorted_all if self._is_catalog_visible(m)]
         self._cached_index = filtered
         return list(filtered)
@@ -214,7 +232,12 @@ class SkillIndex:
     def _invalidate_if_curator_state_changed(self) -> None:
         if self._anima_dir is None or self._cached_all_entries is None:
             return
-        if self._read_curator_state_marker() != self._curator_state_marker:
+        company_resources = get_company_resources(self._anima_dir)
+        company_marker = company_resources.name if company_resources is not None else None
+        if (
+            self._read_curator_state_marker() != self._curator_state_marker
+            or company_marker != self._company_marker
+        ):
             self.invalidate()
 
     @staticmethod
@@ -248,9 +271,9 @@ class SkillIndex:
         """Resolve a cron skill reference to metadata.
 
         Supported refs are exact skill/procedure names and safe ``SKILL.md``
-        pointers under ``skills/`` or ``common_skills/``.  Name matches use the
-        index order, so personal skills win over common skills, which win over
-        procedures.
+        pointers under ``skills/``, ``common_skills/``, or the assigned
+        ``companies/<name>/skills/`` root.  Name matches use the index order,
+        so personal skills win over shared skills, which win over procedures.
         """
         value = str(ref).strip()
         if not self._is_safe_reference(value):
@@ -271,7 +294,7 @@ class SkillIndex:
                 return None
             return meta.model_copy(
                 update={
-                    "is_common": self._is_under(pointer_path, self._common_skills_dir),
+                    "is_common": self._is_shared_skill_path(pointer_path),
                     "is_procedure": False,
                 }
             )
@@ -294,7 +317,7 @@ class SkillIndex:
         path = Path(ref)
         if path.is_absolute() or ".." in path.parts:
             return False
-        if ref.startswith(("skills/", "common_skills/")):
+        if ref.startswith(("skills/", "common_skills/", "companies/")):
             return len(path.parts) >= 3 and path.name == "SKILL.md"
         return "/" not in ref
 
@@ -304,6 +327,14 @@ class SkillIndex:
             return self._safe_child_path(self._skills_dir.parent, path)
         if ref.startswith("common_skills/"):
             return self._safe_child_path(self._common_skills_dir.parent, path)
+        if ref.startswith("companies/") and self._anima_dir is not None:
+            resources = get_company_resources(self._anima_dir)
+            if resources is None:
+                return None
+            expected_prefix = ("companies", resources.name, "skills")
+            if path.parts[:3] != expected_prefix:
+                return None
+            return self._safe_child_path(resources.root.parent.parent, path)
         return None
 
     @staticmethod
@@ -341,6 +372,14 @@ class SkillIndex:
             return True
         except (OSError, ValueError):
             return False
+
+    def _is_shared_skill_path(self, path: Path) -> bool:
+        if self._is_under(path, self._common_skills_dir):
+            return True
+        if self._anima_dir is None:
+            return False
+        resources = get_company_resources(self._anima_dir)
+        return resources is not None and self._is_under(path, resources.skills_dir)
 
     # ── Search ────────────────────────────────────────────────
 

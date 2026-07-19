@@ -272,6 +272,11 @@ def cli_main() -> None:
 
     register_import_command(sub)
 
+    # ── Company Management ────────────────────────────────
+    from cli.commands.company_cmd import register_company_command
+
+    register_company_command(sub)
+
     # ── Config ────────────────────────────────────────────
     from core.config.cli import (
         cmd_config_dispatch,
