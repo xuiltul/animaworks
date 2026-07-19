@@ -60,6 +60,22 @@ function _extractJsonCandidates(text) {
   return candidates;
 }
 
+// True when `candidate` (an inline JSON substring of `text`) is the whole
+// message apart from trivial scaffolding — i.e. only whitespace or a
+// ```json code fence surrounds it. When real prose surrounds the JSON we
+// must NOT collapse the message to just the tool-call payload, or the prose
+// (the actual answer) is silently discarded.
+function _isSoleToolCallPayload(text, candidate) {
+  const idx = text.indexOf(candidate);
+  if (idx === -1) return false;
+  const residual = text.slice(0, idx) + text.slice(idx + candidate.length);
+  const stripped = residual
+    .replace(/```+\s*json/gi, "")
+    .replace(/```+/g, "")
+    .trim();
+  return stripped === "";
+}
+
 function _extractToolCallDisplayText(rawText) {
   if (!rawText || typeof rawText !== "string") return "";
   const text = rawText.trim();
@@ -74,6 +90,11 @@ function _extractToolCallDisplayText(rawText) {
       continue;
     }
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+
+    // Only collapse to the tool-call payload when the entire message is
+    // essentially just this tool call. An inline tool-call JSON embedded in
+    // real prose must not wipe out the surrounding answer text.
+    if (candidate !== text && !_isSoleToolCallPayload(text, candidate)) continue;
 
     const fn = parsed.function && typeof parsed.function === "object" ? parsed.function : null;
     const toolName = fn?.name || parsed.name || "";
