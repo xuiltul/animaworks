@@ -136,7 +136,8 @@ class TestConsumerFilesUseSharedFunctions:
     """Verify consumer files use getIcon() instead of TYPE_ICONS[x]."""
 
     _FILES_USING_GET_ICON = [
-        _STATIC / "pages" / "activity.js",
+        # Event-row rendering lives in group-detail (swimlane detail panel)
+        _STATIC / "pages" / "activity" / "group-detail.js",
         _STATIC / "pages" / "home.js",
         _STATIC / "pages" / "chat" / "activity-controller.js",
         _STATIC / "modules" / "activity.js",
@@ -152,8 +153,11 @@ class TestConsumerFilesUseSharedFunctions:
         )
 
     def test_activity_page_uses_get_display_summary(self) -> None:
-        content = (_STATIC / "pages" / "activity.js").read_text(encoding="utf-8")
-        assert "getDisplaySummary(" in content
+        # Summaries render in group-detail + swimlane tooltip/label helpers
+        detail = (_STATIC / "pages" / "activity" / "group-detail.js").read_text(encoding="utf-8")
+        swimlane = (_STATIC / "pages" / "activity" / "swimlane.js").read_text(encoding="utf-8")
+        assert "getDisplaySummary(" in detail
+        assert "getDisplaySummary(" in swimlane
 
     def test_home_page_uses_get_display_summary(self) -> None:
         content = (_STATIC / "pages" / "home.js").read_text(encoding="utf-8")
