@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
 from core.messenger import (
     ChannelMeta,
     Messenger,
@@ -17,6 +18,15 @@ from core.messenger import (
     load_channel_meta,
     save_channel_meta,
 )
+
+
+def _ensure_channel(shared_dir: Path, name: str) -> Path:
+    channels_dir = shared_dir / "channels"
+    channels_dir.mkdir(parents=True, exist_ok=True)
+    path = channels_dir / f"{name}.jsonl"
+    if not path.exists():
+        path.write_text("", encoding="utf-8")
+    return path
 
 
 @pytest.fixture
@@ -162,9 +172,12 @@ class TestIsChannelMember:
 
 class TestPostChannelACL:
     def test_open_channel_allows_post(self, shared_dir: Path, messenger: Messenger):
+        _ensure_channel(shared_dir, "general")
         messenger.post_channel("general", "Hello!")
         channel_file = shared_dir / "channels" / "general.jsonl"
         assert channel_file.exists()
+        lines = [ln for ln in channel_file.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        assert len(lines) == 1
 
     def test_member_can_post(self, shared_dir: Path, messenger: Messenger):
         save_channel_meta(shared_dir, "team", ChannelMeta(members=["alice", "bob"]))
@@ -177,7 +190,8 @@ class TestPostChannelACL:
         save_channel_meta(shared_dir, "private", ChannelMeta(members=["bob"]))
         (shared_dir / "channels" / "private.jsonl").write_text("", encoding="utf-8")
         alice = Messenger(shared_dir, "alice")
-        alice.post_channel("private", "Should not appear")
+        with pytest.raises(ChannelAccessDeniedError):
+            alice.post_channel("private", "Should not appear")
         content = (shared_dir / "channels" / "private.jsonl").read_text(encoding="utf-8").strip()
         assert content == ""
 
@@ -189,12 +203,20 @@ class TestPostChannelACL:
         lines = (shared_dir / "channels" / "restricted.jsonl").read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 1
 
+    def test_nonexistent_channel_raises_without_creating_file(self, shared_dir: Path, messenger: Messenger):
+        before = set((shared_dir / "channels").iterdir())
+        with pytest.raises(ChannelNotFoundError):
+            messenger.post_channel("ghost", "nope")
+        assert set((shared_dir / "channels").iterdir()) == before
+        assert not (shared_dir / "channels" / "ghost.jsonl").exists()
+
 
 # ── read_channel with ACL ────────────────────────────────
 
 
 class TestReadChannelACL:
     def test_open_channel_readable(self, shared_dir: Path, messenger: Messenger):
+        _ensure_channel(shared_dir, "general")
         messenger.post_channel("general", "msg1")
         result = messenger.read_channel("general")
         assert len(result) == 1
@@ -242,6 +264,8 @@ class TestBackwardCompatibility:
         assert is_channel_member(shared_dir, "ops", "any-anima") is True
 
     def test_post_and_read_work_without_meta(self, shared_dir: Path, messenger: Messenger):
+        # Legacy open channel = existing jsonl without meta (no implicit create)
+        _ensure_channel(shared_dir, "general")
         messenger.post_channel("general", "Legacy works!")
         result = messenger.read_channel("general")
         assert len(result) == 1

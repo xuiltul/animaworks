@@ -220,23 +220,28 @@ def create_channels_router() -> APIRouter:
         else:
             body.from_name = "human"
         shared_dir: Path = request.app.state.shared_dir
-        channels_dir = shared_dir / "channels"
 
-        # Check channel exists
-        channel_file = channels_dir / f"{name}.jsonl"
-        if not channel_file.exists():
+        # Existence/ACL enforced by Messenger.post_channel (no implicit create)
+        from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
+
+        messenger = _get_messenger(shared_dir)
+        try:
+            messenger.post_channel(
+                name,
+                body.text,
+                source="human",
+                from_name=body.from_name,
+            )
+        except ChannelNotFoundError:
             return JSONResponse(
                 status_code=404,
                 content={"detail": f"Channel '{name}' not found"},
             )
-
-        messenger = _get_messenger(shared_dir)
-        messenger.post_channel(
-            name,
-            body.text,
-            source="human",
-            from_name=body.from_name,
-        )
+        except ChannelAccessDeniedError:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": f"Access denied to channel '{name}'"},
+            )
 
         # Broadcast WebSocket event
         event_data = {

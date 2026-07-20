@@ -16,6 +16,7 @@ from core.exceptions import (
     ProcessError, AnimaNotFoundError, AnimaNotRunningError, IPCConnectionError,
     ConfigError, ConfigNotFoundError, ConfigValidationError,
     MessagingError, RecipientNotFoundError, DeliveryError,
+    ChannelNotFoundError, ChannelAccessDeniedError,
 )
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -29,6 +30,7 @@ ALL_EXCEPTIONS = [
     ProcessError, AnimaNotFoundError, AnimaNotRunningError, IPCConnectionError,
     ConfigError, ConfigNotFoundError, ConfigValidationError,
     MessagingError, RecipientNotFoundError, DeliveryError,
+    ChannelNotFoundError, ChannelAccessDeniedError,
 ]
 
 LEAF_EXCEPTIONS = [
@@ -39,6 +41,7 @@ LEAF_EXCEPTIONS = [
     AnimaNotFoundError, AnimaNotRunningError, IPCConnectionError,
     ConfigNotFoundError, ConfigValidationError,
     RecipientNotFoundError, DeliveryError,
+    ChannelNotFoundError, ChannelAccessDeniedError,
 ]
 
 FAMILY_MAP: dict[type[AnimaWorksError], list[type[AnimaWorksError]]] = {
@@ -47,7 +50,12 @@ FAMILY_MAP: dict[type[AnimaWorksError], list[type[AnimaWorksError]]] = {
     MemoryIOError: [MemoryReadError, MemoryWriteError, MemoryCorruptedError, TaskPersistenceError],
     ProcessError: [AnimaNotFoundError, AnimaNotRunningError, IPCConnectionError],
     ConfigError: [ConfigNotFoundError, ConfigValidationError],
-    MessagingError: [RecipientNotFoundError, DeliveryError],
+    MessagingError: [
+        RecipientNotFoundError,
+        DeliveryError,
+        ChannelNotFoundError,
+        ChannelAccessDeniedError,
+    ],
 }
 
 

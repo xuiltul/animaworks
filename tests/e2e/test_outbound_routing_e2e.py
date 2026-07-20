@@ -54,6 +54,10 @@ def make_anima(animas_dir: Path):
 def shared_dir(data_dir: Path) -> Path:
     d = data_dir / "shared"
     d.mkdir()
+    channels_dir = d / "channels"
+    channels_dir.mkdir()
+    for name in ("general", "ops", "warning-room"):
+        (channels_dir / f"{name}.jsonl").write_text("", encoding="utf-8")
     return d
 
 

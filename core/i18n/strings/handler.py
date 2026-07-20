@@ -233,8 +233,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Removed members from #{channel}: {members}",
     },
     "handler.channel_not_found": {
-        "ja": "Error: チャネル #{channel} が見つかりません",
-        "en": "Error: Channel #{channel} not found",
+        "ja": (
+            'Error: チャネル #{channel} が見つかりません。'
+            'manage_channel(action="create", channel="{channel}") で明示的に作成してください。'
+        ),
+        "en": (
+            'Error: Channel #{channel} not found. '
+            'Create it explicitly with manage_channel(action="create", channel="{channel}").'
+        ),
     },
     "handler.channel_open": {
         "ja": "#{channel} はオープンチャネルです（全Animaがアクセス可能）",

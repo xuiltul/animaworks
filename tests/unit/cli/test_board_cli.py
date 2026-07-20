@@ -212,6 +212,72 @@ class TestCmdBoardPost:
 
         mock_messenger_cls.assert_called_once_with(Path("/tmp/shared"), "sakura")
 
+    @patch("cli.commands.board._notify_server_board_posted")
+    @patch("cli.commands.board._fanout_board_mentions")
+    @patch("core.messenger.Messenger")
+    @patch("core.paths.get_shared_dir", return_value=Path("/tmp/shared"))
+    @patch("core.init.ensure_runtime_dir")
+    def test_post_channel_not_found_exits_1_with_stderr(
+        self, mock_ensure, mock_shared, mock_messenger_cls,
+        mock_fanout, mock_notify, capsys,
+    ):
+        """ChannelNotFoundError → exit code 1 and Error on stderr."""
+        import pytest
+
+        from cli.commands.board import cmd_board_post
+        from core.exceptions import ChannelNotFoundError
+
+        mock_messenger = MagicMock()
+        mock_messenger.post_channel.side_effect = ChannelNotFoundError(
+            "Channel 'ghost' not found. Create it with manage_channel action=create first."
+        )
+        mock_messenger_cls.return_value = mock_messenger
+
+        args = argparse.Namespace(
+            from_anima="alice", channel="ghost", text="nope",
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_board_post(args)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error:" in captured.err
+        assert "ghost" in captured.err or "not found" in captured.err.lower()
+        mock_fanout.assert_not_called()
+        mock_notify.assert_not_called()
+
+    @patch("cli.commands.board._notify_server_board_posted")
+    @patch("cli.commands.board._fanout_board_mentions")
+    @patch("core.messenger.Messenger")
+    @patch("core.paths.get_shared_dir", return_value=Path("/tmp/shared"))
+    @patch("core.init.ensure_runtime_dir")
+    def test_post_channel_access_denied_exits_1_with_stderr(
+        self, mock_ensure, mock_shared, mock_messenger_cls,
+        mock_fanout, mock_notify, capsys,
+    ):
+        """ChannelAccessDeniedError → exit code 1 and Error on stderr."""
+        import pytest
+
+        from cli.commands.board import cmd_board_post
+        from core.exceptions import ChannelAccessDeniedError
+
+        mock_messenger = MagicMock()
+        mock_messenger.post_channel.side_effect = ChannelAccessDeniedError(
+            "Channel 'secret' is closed"
+        )
+        mock_messenger_cls.return_value = mock_messenger
+
+        args = argparse.Namespace(
+            from_anima="alice", channel="secret", text="blocked",
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_board_post(args)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "Error:" in captured.err
+        assert "closed" in captured.err.lower() or "secret" in captured.err
+        mock_fanout.assert_not_called()
+        mock_notify.assert_not_called()
+
 
 # ── cmd_board_dm_history ─────────────────────────────────
 

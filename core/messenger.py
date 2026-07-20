@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from core.exceptions import (
+    ChannelAccessDeniedError,
+    ChannelNotFoundError,
     DeliveryError,
     RecipientNotFoundError,
 )  # noqa: F401
@@ -290,10 +292,43 @@ class Messenger:
         source: str = "anima",
         from_name: str | None = None,
     ) -> None:
-        """Post a message to a shared channel (append-only JSONL)."""
+        """Post a message to a shared channel (append-only JSONL).
+
+        Raises:
+            ChannelNotFoundError: Neither jsonl nor open meta exists for *channel*.
+            ChannelAccessDeniedError: ACL denied (closed tombstone or non-member).
+            RecipientNotFoundError: Invalid channel name.
+        """
         _validate_name(channel, "channel name")
 
         poster = from_name or self.anima_name
+        channels_dir = self.shared_dir / "channels"
+        filepath = channels_dir / f"{channel}.jsonl"
+        meta = load_channel_meta(self.shared_dir, channel)
+        jsonl_exists = filepath.exists()
+
+        # ── Existence check (no silent auto-create of new channels) ──
+        if not jsonl_exists:
+            if meta is None:
+                logger.warning(
+                    "Channel not found: #%s (no jsonl/meta); refusing implicit create",
+                    channel,
+                )
+                raise ChannelNotFoundError(
+                    f"Channel '{channel}' not found. "
+                    "Create it with manage_channel action=create first."
+                )
+            if meta.closed:
+                # Tombstone: refuse without resurrecting jsonl
+                logger.warning(
+                    "ACL denied (closed tombstone): %s cannot post to #%s",
+                    self.anima_name,
+                    channel,
+                )
+                raise ChannelAccessDeniedError(
+                    f"Channel '{channel}' is closed"
+                )
+            # meta-only, closed=false: allow post and create jsonl
 
         # ── ACL check ──
         if not is_channel_member(self.shared_dir, channel, self.anima_name, source=source):
@@ -302,7 +337,9 @@ class Messenger:
                 self.anima_name,
                 channel,
             )
-            return
+            raise ChannelAccessDeniedError(
+                f"Access denied to channel '{channel}'"
+            )
 
         # Validate from_name: must be a known anima or "human"
         if poster != "human":
@@ -319,9 +356,7 @@ class Messenger:
                     return
             except Exception:
                 pass
-        channels_dir = self.shared_dir / "channels"
         channels_dir.mkdir(parents=True, exist_ok=True)
-        filepath = channels_dir / f"{channel}.jsonl"
         entry = json.dumps(
             {
                 "ts": now_iso(),
@@ -944,10 +979,16 @@ class Messenger:
             source,
             msg.id,
         )
-        # Mirror to general channel if human uses @all
+        # Mirror to general channel if human uses @all (only if channel already exists)
         if source == "human" and "@all" in content:
             human_name = external_user_id or "human"
-            self.post_channel("general", content, source="human", from_name=human_name)
+            try:
+                self.post_channel("general", content, source="human", from_name=human_name)
+            except (ChannelNotFoundError, ChannelAccessDeniedError) as exc:
+                logger.warning(
+                    "Skipping @all mirror to #general: %s",
+                    exc,
+                )
         return msg
 
     async def send_async(

@@ -31,7 +31,13 @@ def _make_handler(
     shared_dir = tmp_path / "shared"
     shared_dir.mkdir(parents=True, exist_ok=True)
     (shared_dir / "inbox").mkdir(exist_ok=True)
-    (shared_dir / "channels").mkdir(exist_ok=True)
+    channels_dir = shared_dir / "channels"
+    channels_dir.mkdir(exist_ok=True)
+    # Pre-create common board channels (post_channel no longer auto-creates)
+    for name in ("general", "ops"):
+        path = channels_dir / f"{name}.jsonl"
+        if not path.exists():
+            path.write_text("", encoding="utf-8")
 
     anima_dir = tmp_path / "animas" / anima_name
     anima_dir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +169,7 @@ class TestLastPostBy:
         (shared_dir / "channels").mkdir()
 
         messenger = Messenger(shared_dir, "alice")
+        (shared_dir / "channels" / "general.jsonl").write_text("", encoding="utf-8")
         messenger.post_channel("general", "First post")
         messenger.post_channel("general", "Second post")
 

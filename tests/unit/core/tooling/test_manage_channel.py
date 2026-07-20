@@ -379,6 +379,26 @@ class TestManageChannelInvalidAction:
 
 
 class TestHandlerPostReadACL:
+    def test_post_channel_not_found_guides_to_manage_channel_create(self, tmp_path: Path):
+        """Uncreated channel: handler returns manage_channel create guidance."""
+        handler = _make_handler(tmp_path)
+        shared_dir = tmp_path / "shared"
+        channels_dir = shared_dir / "channels"
+        before = set(channels_dir.iterdir()) if channels_dir.exists() else set()
+
+        result = handler._handle_post_channel(
+            {
+                "channel": "typo-room",
+                "text": "Should be rejected",
+            }
+        )
+        assert "typo-room" in result
+        assert "manage_channel" in result
+        assert "create" in result
+        after = set(channels_dir.iterdir()) if channels_dir.exists() else set()
+        assert after == before
+        assert not (channels_dir / "typo-room.jsonl").exists()
+
     def test_post_channel_acl_denied(self, tmp_path: Path):
         handler = _make_handler(tmp_path)
         shared_dir = tmp_path / "shared"
@@ -391,6 +411,37 @@ class TestHandlerPostReadACL:
             }
         )
         assert "アクセス権" in result or "access" in result.lower()
+
+    def test_post_channel_tombstone_returns_acl_denied(self, tmp_path: Path):
+        """closed meta only (tombstone): handler returns channel_acl_denied via post_channel.
+
+        Early ACL gate is bypassed so Messenger.post_channel raises
+        ChannelAccessDeniedError and the except branch maps it to i18n.
+        """
+        handler = _make_handler(tmp_path)
+        shared_dir = tmp_path / "shared"
+        save_channel_meta(
+            shared_dir,
+            "tombstone",
+            ChannelMeta(members=[], closed=True, created_by="system"),
+        )
+        assert not (shared_dir / "channels" / "tombstone.jsonl").exists()
+
+        with (
+            patch("core.messenger.is_channel_member", return_value=True),
+            patch("core.config.models.load_config") as mock_cfg,
+        ):
+            mock_cfg.return_value = MagicMock()
+            mock_cfg.return_value.heartbeat.channel_post_cooldown_s = 0
+            result = handler._handle_post_channel(
+                {
+                    "channel": "tombstone",
+                    "text": "Should be denied",
+                }
+            )
+        assert "アクセス権" in result or "access" in result.lower()
+        assert "tombstone" in result
+        assert not (shared_dir / "channels" / "tombstone.jsonl").exists()
 
     def test_read_channel_acl_denied(self, tmp_path: Path):
         handler = _make_handler(tmp_path)

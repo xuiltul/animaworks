@@ -20,6 +20,7 @@ import time
 from typing import Any
 
 from core.config.models import load_config
+from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
 from core.messenger import Messenger
 from core.paths import get_data_dir
 from core.tools._base import _lookup_shared_credentials, _lookup_vault_credential, get_credential
@@ -436,6 +437,9 @@ def _route_to_board(channel_id: str, text: str, user_name: str, *, ts: str = "")
         shared_dir = get_data_dir() / "shared"
         messenger = Messenger(shared_dir, user_name or "slack")
         messenger.post_channel(board_name, text, source="slack", from_name=user_name or "slack")
+    except (ChannelNotFoundError, ChannelAccessDeniedError) as exc:
+        # Mapped board is missing or closed: the message is dropped, so make it visible
+        logger.warning("Board routing dropped for channel %s -> #%s: %s", channel_id, board_name, exc)
     except Exception:
         logger.debug("Board routing failed for channel %s", channel_id, exc_info=True)
 

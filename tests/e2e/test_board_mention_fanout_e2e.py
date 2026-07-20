@@ -24,7 +24,10 @@ def shared_dir(tmp_path: Path) -> Path:
     d = tmp_path / "shared"
     d.mkdir()
     (d / "inbox").mkdir()
-    (d / "channels").mkdir()
+    channels_dir = d / "channels"
+    channels_dir.mkdir()
+    for name in ("general", "ops", "dev"):
+        (channels_dir / f"{name}.jsonl").write_text("", encoding="utf-8")
     (d / "dm_logs").mkdir()
     return d
 

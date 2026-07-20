@@ -399,6 +399,31 @@ class TestPostToChannel:
                 json={"text": "test"},
             )
         assert resp.status_code == 404
+        assert not (shared_dir / "channels" / "nonexistent.jsonl").exists()
+
+    async def test_post_to_closed_tombstone_returns_403(self, tmp_path: Path):
+        """closed meta only (tombstone) → 403 via ChannelAccessDeniedError mapping."""
+        from core.messenger import ChannelMeta, save_channel_meta
+
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        (shared_dir / "channels").mkdir()
+        save_channel_meta(
+            shared_dir,
+            "sakura",
+            ChannelMeta(members=[], closed=True, created_by="system"),
+        )
+
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/channels/sakura",
+                json={"text": "should be denied"},
+            )
+        assert resp.status_code == 403
+        assert "Access denied" in resp.json()["detail"]
+        assert not (shared_dir / "channels" / "sakura.jsonl").exists()
 
     async def test_post_default_from_name(self, tmp_path: Path):
         shared_dir = tmp_path / "shared"

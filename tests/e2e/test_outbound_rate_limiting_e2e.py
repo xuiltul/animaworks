@@ -47,7 +47,12 @@ def _make_shared_dir(tmp_path: Path) -> Path:
     shared_dir = tmp_path / "shared"
     shared_dir.mkdir(parents=True, exist_ok=True)
     (shared_dir / "inbox").mkdir(exist_ok=True)
-    (shared_dir / "channels").mkdir(exist_ok=True)
+    channels_dir = shared_dir / "channels"
+    channels_dir.mkdir(exist_ok=True)
+    for name in ("general", "ops"):
+        path = channels_dir / f"{name}.jsonl"
+        if not path.exists():
+            path.write_text("", encoding="utf-8")
     (shared_dir / "dm_logs").mkdir(exist_ok=True)
     return shared_dir
 

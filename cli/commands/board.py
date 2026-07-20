@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import sys
 
 from core.i18n import t
 
@@ -46,9 +47,18 @@ def cmd_board_post(args: argparse.Namespace) -> None:
     from core.messenger import Messenger
     from core.paths import get_shared_dir
 
+    from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
+
     ensure_runtime_dir()
     messenger = Messenger(get_shared_dir(), args.from_anima)
-    messenger.post_channel(args.channel, args.text)
+    try:
+        messenger.post_channel(args.channel, args.text)
+    except ChannelNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    except ChannelAccessDeniedError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
     print(f"Posted to #{args.channel}")
 
     # Mention fanout

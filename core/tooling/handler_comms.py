@@ -432,7 +432,15 @@ class CommsToolsMixin:
                 except (ValueError, TypeError):
                     pass
 
-        self._messenger.post_channel(channel, text)
+        from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
+
+        try:
+            self._messenger.post_channel(channel, text)
+        except ChannelNotFoundError:
+            return t("handler.channel_not_found", channel=channel)
+        except ChannelAccessDeniedError:
+            return t("handler.channel_acl_denied", channel=channel)
+
         self._posted_channels.setdefault(active_session_type.get(), set()).add(channel)
         logger.info("post_channel channel=%s anima=%s", channel, self._anima_name)
 

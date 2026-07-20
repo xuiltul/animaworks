@@ -146,3 +146,11 @@ class RecipientNotFoundError(MessagingError):
 
 class DeliveryError(MessagingError):
     """Message delivery failure."""
+
+
+class ChannelNotFoundError(MessagingError):
+    """Board channel does not exist (no jsonl and no meta)."""
+
+
+class ChannelAccessDeniedError(MessagingError):
+    """Board channel ACL denied (closed tombstone or non-member)."""

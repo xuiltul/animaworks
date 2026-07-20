@@ -23,6 +23,7 @@ import time
 from typing import Any
 
 from core.config.models import load_config
+from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
 from core.i18n import t
 from core.messenger import Messenger
 from core.paths import get_data_dir, get_shared_dir
@@ -105,6 +106,9 @@ def _route_to_board(
             return
         messenger = Messenger(get_shared_dir(), user_name or "discord")
         messenger.post_channel(board_name, text, source="discord", from_name=user_name or "discord")
+    except (ChannelNotFoundError, ChannelAccessDeniedError) as exc:
+        # Mapped board is missing or closed: the message is dropped, so make it visible
+        logger.warning("Board routing dropped for channel %s -> #%s: %s", channel_id, board_name, exc)
     except Exception:
         logger.debug("Board routing failed for channel %s", channel_id, exc_info=True)
 

@@ -91,7 +91,14 @@ class TestE2EDMFlow:
 class TestE2EChannelFlow:
     """Channel posting and reading."""
 
+    @staticmethod
+    def _ensure_channel(shared_dir: Path, name: str) -> None:
+        path = shared_dir / "channels" / f"{name}.jsonl"
+        if not path.exists():
+            path.write_text("", encoding="utf-8")
+
     def test_multiple_animas_post_and_read(self, shared_dir):
+        self._ensure_channel(shared_dir, "general")
         alice = Messenger(shared_dir, "alice")
         bob = Messenger(shared_dir, "bob")
         charlie = Messenger(shared_dir, "charlie")
@@ -106,6 +113,7 @@ class TestE2EChannelFlow:
             assert len(msgs) == 3
 
     def test_channel_post_and_mention(self, shared_dir):
+        self._ensure_channel(shared_dir, "ops")
         alice = Messenger(shared_dir, "alice")
         bob = Messenger(shared_dir, "bob")
 
@@ -118,6 +126,8 @@ class TestE2EChannelFlow:
         assert "@bob" in mentions[0]["text"]
 
     def test_ops_channel_isolation(self, shared_dir):
+        self._ensure_channel(shared_dir, "general")
+        self._ensure_channel(shared_dir, "ops")
         alice = Messenger(shared_dir, "alice")
         alice.post_channel("general", "General msg")
         alice.post_channel("ops", "Ops msg")
@@ -133,7 +143,14 @@ class TestE2EChannelFlow:
 class TestE2EAtAllMirroring:
     """@all mirroring from receive_external to general channel."""
 
+    @staticmethod
+    def _ensure_channel(shared_dir: Path, name: str) -> None:
+        path = shared_dir / "channels" / f"{name}.jsonl"
+        if not path.exists():
+            path.write_text("", encoding="utf-8")
+
     def test_human_at_all_appears_in_general(self, shared_dir):
+        self._ensure_channel(shared_dir, "general")
         sakura = Messenger(shared_dir, "sakura")
 
         sakura.receive_external(
@@ -153,6 +170,7 @@ class TestE2EAtAllMirroring:
         assert "@all" in channel_msgs[0]["text"]
 
     def test_all_animas_can_see_mirrored_message(self, shared_dir):
+        self._ensure_channel(shared_dir, "general")
         sakura = Messenger(shared_dir, "sakura")
         yuki = Messenger(shared_dir, "yuki")
         mio = Messenger(shared_dir, "mio")
