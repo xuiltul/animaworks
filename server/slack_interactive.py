@@ -70,7 +70,7 @@ async def _handle_interactive_action(ack: Any, body: dict[str, Any], client: Any
         router = get_interaction_router()
 
         try:
-            req = await router.lookup(callback_id)
+            req, status = await router.lookup_verbose(callback_id)
         except Exception:
             log.exception("InteractionRouter.lookup failed for callback_id=%s", callback_id)
             if channel_id and user_id:
@@ -85,15 +85,24 @@ async def _handle_interactive_action(ack: Any, body: dict[str, Any], client: Any
             return
 
         if req is None:
+            log.warning(
+                "Interactive request inactive: callback_id=%s status=%s",
+                callback_id,
+                status,
+            )
+            inactive_key = {
+                "resolved": "interactive.already_resolved",
+                "expired": "interactive.expired",
+            }.get(status, "interactive.not_found")
             if channel_id and user_id:
                 try:
                     await client.chat_postEphemeral(
                         channel=channel_id,
                         user=user_id,
-                        text=t("interactive.expired"),
+                        text=t(inactive_key),
                     )
                 except Exception:
-                    log.debug("chat_postEphemeral for expired interaction failed", exc_info=True)
+                    log.debug("chat_postEphemeral for inactive interaction failed", exc_info=True)
             return
 
         allowed = req.allowed_users.get("slack", [])

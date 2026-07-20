@@ -172,9 +172,16 @@ class SlackChannel(NotificationChannel):
 
                 if interaction is not None and data.get("ts"):
                     try:
-                        from core.notification.interactive import get_interaction_router
+                        import asyncio as _asyncio
 
-                        await get_interaction_router().update_message_ts(
+                        from core.notification.interactive import (
+                            update_interaction_message_ts_resilient,
+                        )
+
+                        # Server-API-first: direct run/ writes fail inside
+                        # sandboxed MCP servers (read-only filesystem).
+                        await _asyncio.to_thread(
+                            update_interaction_message_ts_resilient,
                             interaction.callback_id,
                             "slack",
                             str(data["ts"]),

@@ -179,10 +179,6 @@ async def _send_slack(
         return f"ERROR: {e}", None
 
 
-def _server_base_url() -> str:
-    return os.environ.get("ANIMAWORKS_SERVER_URL", "http://localhost:18500").rstrip("/")
-
-
 def _create_interaction_via_server(
     anima_name: str,
     category: str,
@@ -197,41 +193,15 @@ def _create_interaction_via_server(
     would fail silently and the server could never resolve the buttons.
     Falls back to the local router when the server is unreachable.
     """
-    try:
-        resp = httpx.post(
-            f"{_server_base_url()}/api/internal/interaction/create",
-            json={
-                "anima_name": anima_name,
-                "category": category,
-                "options": options,
-                "allowed_users": allowed_users,
-                "callback_id": callback_id,
-            },
-            timeout=10.0,
-        )
-        if resp.status_code == 409:
-            raise ValueError(resp.json().get("detail", "callback_id already in use"))
-        resp.raise_for_status()
-        return InteractionRequest.model_validate(resp.json()["request"])
-    except ValueError:
-        raise
-    except Exception:
-        logger.warning(
-            "Interaction create via server API failed; falling back to local router",
-            exc_info=True,
-        )
-        from core.notification.interactive import get_interaction_router
+    from core.notification.interactive import create_interaction_resilient
 
-        async def _create_local() -> InteractionRequest:
-            return await get_interaction_router().create(
-                anima_name,
-                category,
-                options,
-                allowed_users=allowed_users,
-                callback_id=callback_id or None,
-            )
-
-        return asyncio.run(_create_local())
+    return create_interaction_resilient(
+        anima_name,
+        category,
+        options,
+        allowed_users=allowed_users,
+        callback_id=callback_id,
+    )
 
 
 def _persist_interaction_slack_ts(callback_id: str, ts_val: str) -> None:
@@ -240,26 +210,9 @@ def _persist_interaction_slack_ts(callback_id: str, ts_val: str) -> None:
     Prefers the server internal API for the same sandbox reason as
     :func:`_create_interaction_via_server`.
     """
-    try:
-        resp = httpx.post(
-            f"{_server_base_url()}/api/internal/interaction/message-ts",
-            json={"callback_id": callback_id, "platform": "slack", "ts": ts_val},
-            timeout=10.0,
-        )
-        resp.raise_for_status()
-        return
-    except Exception:
-        logger.warning(
-            "Interaction message-ts update via server API failed; falling back to local router",
-            exc_info=True,
-        )
+    from core.notification.interactive import update_interaction_message_ts_resilient
 
-    from core.notification.interactive import get_interaction_router
-
-    async def _update_local() -> None:
-        await get_interaction_router().update_message_ts(callback_id, "slack", ts_val)
-
-    asyncio.run(_update_local())
+    update_interaction_message_ts_resilient(callback_id, "slack", ts_val)
 
 
 def get_cli_guide() -> str:

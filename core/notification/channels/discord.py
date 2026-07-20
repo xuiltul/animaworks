@@ -33,6 +33,22 @@ def _build_discord_components(interaction: InteractionRequest) -> list[dict[str,
     return [{"type": 1, "components": buttons}]  # Action Row
 
 
+async def _persist_discord_msg_id(callback_id: str, msg_id: str) -> None:
+    """Persist the Discord message id for button invalidation.
+
+    Server-API-first: direct run/ writes fail inside sandboxed MCP servers
+    (read-only filesystem). Best-effort — failures are logged, not raised.
+    """
+    import asyncio
+
+    from core.notification.interactive import update_interaction_message_ts_resilient
+
+    try:
+        await asyncio.to_thread(update_interaction_message_ts_resilient, callback_id, "discord", msg_id)
+    except Exception:
+        logger.debug("Failed to persist interactive Discord msg_id", exc_info=True)
+
+
 @register_channel("discord")
 class DiscordChannel(NotificationChannel):
     """Send notifications to Discord via Bot Token DM or channel webhook.
@@ -133,7 +149,6 @@ class DiscordChannel(NotificationChannel):
     ) -> str:
         """Send a DM to a Discord user."""
         try:
-            from core.notification.interactive import get_interaction_router
             from core.tools._discord_client import DiscordClient
 
             client = DiscordClient(token=token)
@@ -149,7 +164,7 @@ class DiscordChannel(NotificationChannel):
             msg_id = str(result.get("id", ""))
             logger.info("Discord notification sent via DM: user=%s msg=%s", user_id, msg_id)
             if interaction is not None and msg_id:
-                await get_interaction_router().update_message_ts(interaction.callback_id, "discord", msg_id)
+                await _persist_discord_msg_id(interaction.callback_id, msg_id)
             return f"discord: DM sent to {user_id} (msg_id={msg_id})"
         except Exception as exc:
             logger.exception("Discord DM notification failed")
@@ -168,7 +183,6 @@ class DiscordChannel(NotificationChannel):
         """Send to a Discord channel via webhook manager (Anima identity)."""
         try:
             from core.discord_webhooks import get_webhook_manager
-            from core.notification.interactive import get_interaction_router
 
             wm = get_webhook_manager()
             msg_id = wm.send_as_anima(
@@ -179,7 +193,7 @@ class DiscordChannel(NotificationChannel):
             )
             logger.info("Discord notification sent via channel: ch=%s msg=%s", channel_id, msg_id)
             if interaction is not None and msg_id:
-                await get_interaction_router().update_message_ts(interaction.callback_id, "discord", msg_id)
+                await _persist_discord_msg_id(interaction.callback_id, msg_id)
             return f"discord: channel {channel_id} (msg_id={msg_id})"
         except Exception as exc:
             logger.exception("Discord channel notification failed")
@@ -197,8 +211,6 @@ class DiscordChannel(NotificationChannel):
         """Send via raw webhook URL."""
         try:
             import httpx
-
-            from core.notification.interactive import get_interaction_router
 
             payload: dict[str, Any] = {"content": text[:2000]}
             if anima_name:
@@ -221,7 +233,7 @@ class DiscordChannel(NotificationChannel):
                 msg_id = str(data.get("id", "")) if isinstance(data, dict) else ""
                 logger.info("Discord notification sent via webhook")
                 if interaction is not None and msg_id:
-                    await get_interaction_router().update_message_ts(interaction.callback_id, "discord", msg_id)
+                    await _persist_discord_msg_id(interaction.callback_id, msg_id)
                 return "discord: webhook sent"
         except Exception as exc:
             logger.exception("Discord webhook notification failed")

@@ -22,6 +22,10 @@ _STRINGS.update(
             "ja": "この承認リクエストは期限切れです",
             "en": "This approval request has expired",
         },
+        "interactive.not_found": {
+            "ja": "この承認リクエストが見つかりません（登録に失敗した可能性があります。送信元のanimaに再送を依頼してください）",
+            "en": "This approval request was not found (it may have failed to register; ask the sending anima to resend)",
+        },
         "interactive.already_resolved": {
             "ja": "既に回答済みです",
             "en": "Already resolved",

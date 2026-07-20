@@ -779,7 +779,7 @@ class CommsToolsMixin:
         interaction_req = None
         if interactive:
             from core.config.models import load_config
-            from core.notification.interactive import InteractionRequest, get_interaction_router
+            from core.notification.interactive import create_interaction_resilient
 
             cfg = load_config()
             defaults = list(cfg.interaction.default_approver_ids)
@@ -792,28 +792,24 @@ class CommsToolsMixin:
                 opts_list = ["approve", "reject", "comment"]
             aud: dict[str, list[str]] = {"slack": merged} if merged else {}
 
-            async def _create_interaction() -> InteractionRequest:
-                return await get_interaction_router().create(
+            # Server-API-first: this handler runs inside sandboxed MCP servers
+            # where {data_dir}/run/ is read-only. A local-only write would be
+            # lost and every button would report "expired" on first click.
+            try:
+                interaction_req = create_interaction_resilient(
                     self._anima_name,
                     category,
                     opts_list,
                     allowed_users=aud or None,
                 )
-
-            try:
-                try:
-                    _loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    _loop = None
-                if _loop is not None:
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        interaction_req = pool.submit(asyncio.run, _create_interaction()).result(timeout=60)
-                else:
-                    interaction_req = asyncio.run(_create_interaction())
             except ValueError as ve:
                 return _error_result("InvalidArguments", str(ve))
+            except OSError as oe:
+                return _error_result(
+                    "InteractionPersistError",
+                    f"Failed to persist interactive request: {oe}",
+                    suggestion="Check that the AnimaWorks server is reachable from this process",
+                )
 
         try:
             coro = self._human_notifier.notify(

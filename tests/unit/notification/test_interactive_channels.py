@@ -70,14 +70,10 @@ class TestSlackInteractiveBlocks:
         with (
             patch("core.notification.channels.slack.httpx.AsyncClient", return_value=mock_client),
             patch(
-                "core.notification.interactive.get_interaction_router",
-            ) as mock_router_factory,
+                "core.notification.interactive.update_interaction_message_ts_resilient",
+            ) as mock_update_ts,
             patch("core.notification.reply_routing.save_notification_mapping"),
         ):
-            mock_router = MagicMock()
-            mock_router.update_message_ts = AsyncMock()
-            mock_router_factory.return_value = mock_router
-
             result = await channel.send(
                 "Hello",
                 "World",
@@ -91,7 +87,7 @@ class TestSlackInteractiveBlocks:
         payload = call_kw["json"]
         assert "blocks" in payload
         assert payload["blocks"][1]["type"] == "actions"
-        mock_router.update_message_ts.assert_awaited_once_with(
+        mock_update_ts.assert_called_once_with(
             req.callback_id,
             "slack",
             "1234.5678",
@@ -129,24 +125,20 @@ class TestDiscordComponents:
         with (
             patch("httpx.AsyncClient", return_value=mock_client),
             patch(
-                "core.notification.interactive.get_interaction_router",
-            ) as mock_router_factory,
+                "core.notification.interactive.update_interaction_message_ts_resilient",
+            ) as mock_update_ts,
             patch(
                 "core.tools._anima_icon_url.resolve_anima_icon_url",
                 return_value="",
             ),
         ):
-            mock_router = MagicMock()
-            mock_router.update_message_ts = AsyncMock()
-            mock_router_factory.return_value = mock_router
-
             await channel.send("Hi", "Body", anima_name="sakura", interaction=req)
 
         mock_client.post.assert_called_once()
         payload = mock_client.post.call_args.kwargs["json"]
         assert "components" in payload
         assert payload["components"][0]["components"][0]["custom_id"].endswith(":approve")
-        mock_router.update_message_ts.assert_awaited_once_with(
+        mock_update_ts.assert_called_once_with(
             req.callback_id,
             "discord",
             "999888777",

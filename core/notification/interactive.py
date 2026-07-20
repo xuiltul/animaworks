@@ -127,7 +127,12 @@ class InteractionRouter:
                 fd.write(json.dumps(data, ensure_ascii=False, indent=2))
                 fd.flush()
         except OSError:
+            # Do NOT swallow: a silently-lost entry produces Slack messages with
+            # buttons whose callback_id the server can never resolve ("ghost
+            # buttons" that look expired immediately). Callers in sandboxed
+            # processes must use the resilient helpers below instead.
             logger.exception("Failed to write interaction map to %s", path)
+            raise
 
     def _request_expired(self, req: InteractionRequest, *, now: datetime) -> bool:
         if req.created_at.tzinfo is None:
@@ -203,21 +208,31 @@ class InteractionRouter:
 
     async def lookup(self, callback_id: str) -> InteractionRequest | None:
         """Return the pending request for *callback_id* if active and not expired."""
+        req, _status = await self.lookup_verbose(callback_id)
+        return req
+
+    async def lookup_verbose(self, callback_id: str) -> tuple[InteractionRequest | None, str]:
+        """Like :meth:`lookup` but also return why the request is inactive.
+
+        Returns:
+            ``(request, "active")`` when actionable, otherwise ``(None, status)``
+            where status is ``not_found`` / ``resolved`` / ``expired``.
+        """
         async with self._lock:
             data = self._read_all_entries()
             entry = data.get("entries", {}).get(callback_id)
             if entry is None:
-                return None
+                return None, "not_found"
             if entry.get("resolved"):
-                return None
+                return None, "resolved"
             req_blob = entry.get("request")
             if not isinstance(req_blob, dict):
-                return None
+                return None, "not_found"
             req = self._parse_request(req_blob)
             now = datetime.now(UTC)
             if self._request_expired(req, now=now):
-                return None
-            return req
+                return None, "expired"
+            return req, "active"
 
     async def lookup_resolved(self, callback_id: str) -> tuple[InteractionRequest, InteractionResult] | None:
         """Return a resolved request and result, or ``None`` if it is not approved yet."""
@@ -404,6 +419,112 @@ def get_interaction_router() -> InteractionRouter:
     return _router
 
 
+# ── Resilient helpers for sandboxed processes ────────────
+#
+# Sandboxed CLIs / MCP servers cannot write {data_dir}/run/, so persistence
+# must go through the server internal API first, falling back to a local
+# write only when the server is unreachable (e.g. unit tests, CLI on host).
+
+
+def _server_base_url() -> str:
+    import os
+
+    return os.environ.get("ANIMAWORKS_SERVER_URL", "http://localhost:18500").rstrip("/")
+
+
+def _run_coro_sync(coro: Any) -> Any:
+    """Run *coro* to completion from sync code, even inside a running loop."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        return pool.submit(asyncio.run, coro).result(timeout=60)
+
+
+def create_interaction_resilient(
+    anima_name: str,
+    category: str,
+    options: list[str],
+    allowed_users: dict[str, list[str]] | None = None,
+    *,
+    callback_id: str = "",
+) -> InteractionRequest:
+    """Create an interaction record, preferring the server internal API.
+
+    Raises:
+        ValueError: If *callback_id* is already in use.
+        OSError: If both the server API and the local write fail.
+    """
+    import httpx
+
+    try:
+        resp = httpx.post(
+            f"{_server_base_url()}/api/internal/interaction/create",
+            json={
+                "anima_name": anima_name,
+                "category": category,
+                "options": options,
+                "allowed_users": allowed_users,
+                "callback_id": callback_id,
+            },
+            timeout=10.0,
+        )
+        if resp.status_code == 409:
+            raise ValueError(resp.json().get("detail", "callback_id already in use"))
+        resp.raise_for_status()
+        return InteractionRequest.model_validate(resp.json()["request"])
+    except ValueError:
+        raise
+    except Exception:
+        logger.warning(
+            "Interaction create via server API failed; falling back to local router",
+            exc_info=True,
+        )
+        return _run_coro_sync(
+            get_interaction_router().create(
+                anima_name,
+                category,
+                options,
+                allowed_users=allowed_users,
+                callback_id=callback_id or None,
+            )
+        )
+
+
+def update_interaction_message_ts_resilient(callback_id: str, platform: str, ts: str) -> None:
+    """Persist a platform message id, preferring the server internal API.
+
+    Best-effort: the ts is only used for post-resolve button invalidation, so
+    failures are logged rather than raised.
+    """
+    import httpx
+
+    try:
+        resp = httpx.post(
+            f"{_server_base_url()}/api/internal/interaction/message-ts",
+            json={"callback_id": callback_id, "platform": platform, "ts": ts},
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+        return
+    except Exception:
+        logger.warning(
+            "Interaction message-ts update via server API failed; falling back to local router",
+            exc_info=True,
+        )
+    try:
+        _run_coro_sync(get_interaction_router().update_message_ts(callback_id, platform, ts))
+    except Exception:
+        logger.warning(
+            "Local interaction message-ts update failed for callback_id=%s",
+            callback_id,
+            exc_info=True,
+        )
+
+
 def build_text_fallback(interaction: InteractionRequest, *, web_base_url: str = "") -> str:
     """Build text-based fallback for channels without native button support."""
     lines = ["\n▶ " + t("interactive.fallback_header")]
@@ -426,5 +547,7 @@ __all__ = [
     "InteractionRouter",
     "TTL_DAYS",
     "build_text_fallback",
+    "create_interaction_resilient",
     "get_interaction_router",
+    "update_interaction_message_ts_resilient",
 ]
