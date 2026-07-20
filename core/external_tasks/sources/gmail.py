@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Any
 
 from core.external_tasks.models import ExternalTask
@@ -27,6 +28,9 @@ def collect_gmail() -> list[ExternalTask]:
     """Collect unread Gmail inbox messages from the last 7 days (max 20).
 
     Task ids: ``gmail-{message_id}``.
+
+    Non-interactive: requires an existing token file before calling
+    ``search_emails`` so background jobs never trigger interactive OAuth.
     """
     # Local import avoids circular import with collector → sources.
     from core.external_tasks.collector import CredentialNotFoundError
@@ -42,6 +46,20 @@ def collect_gmail() -> list[ExternalTask]:
         client = GmailClient()
     except ImportError as exc:
         raise CredentialNotFoundError(str(exc)) from exc
+
+    # Block interactive OAuth: only proceed when a token file already exists.
+    # (core/tools/gmail.py is left unchanged; expired+unrefreshable tokens
+    # still surface via RefreshError → CredentialNotFoundError below.)
+    token_path = getattr(client, "token_path", None)
+    mcp_token_path = getattr(client, "mcp_token_path", None)
+    has_token = bool(
+        (token_path is not None and Path(token_path).exists())
+        or (mcp_token_path is not None and Path(mcp_token_path).exists())
+    )
+    if not has_token:
+        raise CredentialNotFoundError(
+            "Gmail token not found (non-interactive; run OAuth once offline)"
+        )
 
     try:
         emails = client.search_emails(_QUERY, max_results=_MAX_RESULTS)

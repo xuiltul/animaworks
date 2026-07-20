@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from core.external_tasks.store import ExternalTaskStore
 from core.paths import get_external_tasks_store_path
+from core.time_utils import ensure_aware
 
 logger = logging.getLogger("animaworks.routes.external_tasks")
 
@@ -115,6 +116,21 @@ def _load_snapshot():
     return ExternalTaskStore(get_external_tasks_store_path()).load()
 
 
+def _task_updated_since(task: dict, since_dt: datetime) -> bool:
+    """Return True if task.last_updated_at >= since_dt.
+
+    Unparseable / empty timestamps are excluded (skipped) so a single bad
+    row cannot 500 the whole endpoint. Naive/aware are aligned via ensure_aware.
+    """
+    raw = task.get("last_updated_at") or ""
+    try:
+        text = raw.replace("Z", "+00:00") if isinstance(raw, str) else str(raw)
+        updated = ensure_aware(datetime.fromisoformat(text))
+    except (TypeError, ValueError):
+        return False
+    return updated >= since_dt
+
+
 # ── Router ───────────────────────────────────────
 
 
@@ -186,7 +202,9 @@ def create_external_tasks_router() -> APIRouter:
         since_dt: datetime | None = None
         if since:
             try:
-                since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+                since_dt = ensure_aware(
+                    datetime.fromisoformat(since.replace("Z", "+00:00"))
+                )
             except ValueError:
                 return _error_response(
                     400,
@@ -205,7 +223,7 @@ def create_external_tasks_router() -> APIRouter:
         if source_filter:
             tasks = [t for t in tasks if t["source_type"] in source_filter]
         if since_dt:
-            tasks = [t for t in tasks if datetime.fromisoformat(t["last_updated_at"]) >= since_dt]
+            tasks = [t for t in tasks if _task_updated_since(t, since_dt)]
 
         # Sort
         reverse = order == "desc"

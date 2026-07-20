@@ -31,6 +31,8 @@ def _task(
     last_updated_at: str | None = None,
     priority: int = 50,
 ) -> ExternalTask:
+    # Use None sentinel for "default to created_at"; allow explicit "" for bad-ts tests.
+    resolved_updated = created_at if last_updated_at is None else last_updated_at
     return ExternalTask(
         id=id,
         title=title,
@@ -39,7 +41,7 @@ def _task(
         source_icon=source_icon or source_type,
         source_url=source_url,
         created_at=created_at,
-        last_updated_at=last_updated_at or created_at,
+        last_updated_at=resolved_updated,
         priority=priority,
     )
 
@@ -220,6 +222,75 @@ def test_filter_by_since(seeded_client: TestClient) -> None:
     assert "chatwork-1" in ids
     assert "github-2" not in ids  # updated 2 days ago
     assert "gmail-1" not in ids  # updated 5 hours before base = 07:00
+
+
+def test_filter_by_since_skips_unparseable_last_updated(
+    client: TestClient, store_path: Path
+) -> None:
+    base = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+    _save_snapshot(
+        store_path,
+        Snapshot(
+            version=1,
+            last_collected_at=base.isoformat(),
+            sources={"github": SourceHealth(status="ok", collected_at=base.isoformat())},
+            tasks=[
+                _task(
+                    id="github-ok",
+                    created_at=base.isoformat(),
+                    last_updated_at=base.isoformat(),
+                    priority=90,
+                ),
+                _task(
+                    id="github-empty-ts",
+                    created_at=base.isoformat(),
+                    last_updated_at="",
+                    priority=80,
+                ),
+                _task(
+                    id="github-bad-ts",
+                    created_at=base.isoformat(),
+                    last_updated_at="not-a-date",
+                    priority=70,
+                ),
+            ],
+        ),
+    )
+    resp = client.get(
+        "/api/external-tasks",
+        params={"since": "2026-07-20T00:00:00+00:00"},
+    )
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()["data"]}
+    assert ids == {"github-ok"}
+
+
+def test_filter_by_since_naive_param_returns_200(
+    client: TestClient, store_path: Path
+) -> None:
+    base = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+    _save_snapshot(
+        store_path,
+        Snapshot(
+            version=1,
+            last_collected_at=base.isoformat(),
+            sources={},
+            tasks=[
+                _task(
+                    id="github-1",
+                    created_at=base.isoformat(),
+                    last_updated_at=base.isoformat(),
+                )
+            ],
+        ),
+    )
+    # Naive since (no timezone) must not 500; ensure_aware aligns it.
+    resp = client.get(
+        "/api/external-tasks",
+        params={"since": "2026-07-20T00:00:00"},
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["data"]) == 1
 
 
 def test_sort_by_priority_desc(seeded_client: TestClient) -> None:

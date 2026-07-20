@@ -9,15 +9,12 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from core.exceptions import ToolConfigError
 from core.external_tasks.models import ExternalTask
-
-logger = logging.getLogger("animaworks.external_tasks.sources.slack")
 
 _PRIORITY = 80
 _LOOKBACK_DAYS = 7
@@ -31,7 +28,7 @@ def collect_slack() -> list[ExternalTask]:
     Uses :class:`~core.tools._slack_client.SlackClient` for auth / identity
     and :class:`~core.tools._slack_cache.MessageCache` for mention detection
     (same approach as the ``slack_unreplied`` tool). Does not hit the network
-    for message search; only ``auth_test`` and optional permalink lookup.
+    for message search; only ``auth_test``. Permalinks are built deterministically.
 
     Task ids: ``slack-{channel_id}-{ts}``.
     """
@@ -142,7 +139,7 @@ def _message_to_task(
     title = f"#{channel_name}: {body}"
 
     iso_ts = _ts_to_iso(ts)
-    source_url = _try_permalink(client, channel_id, ts)
+    source_url = _build_permalink(channel_id, ts)
 
     return ExternalTask(
         id=f"slack-{channel_id}-{ts}",
@@ -164,21 +161,17 @@ def _safe_channel_name(client: Any, channel_id: str) -> str:
         return channel_id
 
 
-def _try_permalink(client: Any, channel_id: str, ts: str) -> str | None:
-    """Fetch a permalink when the API allows; otherwise return None."""
-    try:
-        resp = client._call("chat_getPermalink", channel=channel_id, message_ts=ts)
-        permalink = resp.get("permalink") if isinstance(resp, dict) else None
-        if isinstance(permalink, str) and permalink.startswith("http"):
-            return permalink
-    except Exception as exc:
-        logger.debug(
-            "Slack permalink unavailable for %s/%s: %s",
-            channel_id,
-            ts,
-            exc,
-        )
-    return None
+def _build_permalink(channel_id: str, ts: str) -> str | None:
+    """Build a deterministic Slack archive URL (no API call).
+
+    Format: ``https://slack.com/archives/{channel_id}/p{ts_without_dot}``
+    """
+    if not channel_id or not ts:
+        return None
+    ts_digits = str(ts).replace(".", "")
+    if not ts_digits.isdigit():
+        return None
+    return f"https://slack.com/archives/{channel_id}/p{ts_digits}"
 
 
 def _ts_to_iso(ts: str) -> str:

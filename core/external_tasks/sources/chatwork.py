@@ -75,9 +75,10 @@ def _collect_open_tasks(client: Any) -> list[ExternalTask]:
         body = _preview_body(item.get("body") or "", strip_bracket_tags=True)
         message_id = item.get("message_id") or ""
         source_url = _chatwork_url(room_id, message_id)
-        # Chatwork tasks expose limit_time (deadline), not created_at.
-        limit_time = item.get("limit_time") or 0
-        iso_ts = _unix_to_iso(limit_time) if limit_time else datetime.now(UTC).isoformat()
+        # Prefer deadline; otherwise a registration-style field if present;
+        # fall back to a fixed epoch so missing deadlines stay deterministic
+        # across collection cycles (no "always newest" via datetime.now).
+        iso_ts = _task_timestamp(item)
         result.append(
             ExternalTask(
                 id=f"chatwork-task-{task_id}",
@@ -158,11 +159,35 @@ def _chatwork_url(room_id: Any, message_id: Any) -> str | None:
     return f"https://www.chatwork.com/#!rid{room_id}"
 
 
+_EPOCH_ISO = "1970-01-01T00:00:00+00:00"
+# Prefer deadline; Chatwork open-task payloads rarely expose creation time,
+# but accept common registration-style keys if present.
+_TASK_TS_KEYS = ("limit_time", "created", "created_at", "date", "send_time")
+
+
+def _task_timestamp(item: dict[str, Any]) -> str:
+    for key in _TASK_TS_KEYS:
+        raw = item.get(key)
+        if raw in (None, "", 0, "0"):
+            continue
+        if isinstance(raw, (int, float)):
+            return _unix_to_iso(raw)
+        if isinstance(raw, str):
+            # Numeric string → unix; otherwise treat as ISO-ish passthrough.
+            try:
+                return _unix_to_iso(float(raw))
+            except (TypeError, ValueError):
+                text = raw.strip()
+                if text:
+                    return text
+    return _EPOCH_ISO
+
+
 def _unix_to_iso(ts: int | float) -> str:
     try:
         return datetime.fromtimestamp(float(ts), tz=UTC).isoformat()
     except (TypeError, ValueError, OSError):
-        return datetime.now(UTC).isoformat()
+        return _EPOCH_ISO
 
 
 def _preview_body(

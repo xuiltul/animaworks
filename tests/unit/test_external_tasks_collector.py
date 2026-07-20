@@ -200,7 +200,9 @@ def test_collect_all_one_source_exception_keeps_previous(
 
     assert result.sources["github"].status == "ok"
     assert result.sources["slack"].status == "unavailable"
-    assert "slack API down" in (result.sources["slack"].error or "")
+    assert result.sources["slack"].error == "collection_failed"
+    # Failure keeps previous collected_at, not current cycle time.
+    assert result.sources["slack"].collected_at == "2026-07-19T00:00:00+00:00"
     ids = {t.id for t in result.tasks}
     assert "github-new" in ids
     assert "slack-old" in ids
@@ -226,7 +228,8 @@ def test_collect_all_credential_not_found_marks_unavailable(
     result = collect_all(_enabled_config(), Snapshot(), now)
 
     assert result.sources["github"].status == "unavailable"
-    assert "GITHUB_TOKEN missing" in (result.sources["github"].error or "")
+    assert result.sources["github"].error == "credential_missing"
+    assert result.sources["github"].collected_at is None
     assert result.tasks == []
 
 
@@ -350,3 +353,86 @@ def test_collect_all_javascript_url_becomes_none(
     assert by_id["github-http"].source_url == "http://example.com/a"
     assert by_id["github-https"].source_url == "https://example.com/b"
     assert by_id["github-ftp"].source_url is None
+
+
+def test_collect_all_url_sanitize_rejects_control_chars_and_overlength(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+    overlong = "https://example.com/" + ("a" * 2100)
+    with_ctrl = "https://example.com/path\x00evil"
+
+    def _github() -> list[ExternalTask]:
+        return [
+            _task(id="github-long", source_url=overlong),
+            _task(id="github-ctrl", source_url=with_ctrl),
+            _task(id="github-nohost", source_url="https:///no-host"),
+            _task(id="github-ok", source_url="https://example.com/ok"),
+        ]
+
+    def _empty() -> list[ExternalTask]:
+        return []
+
+    monkeypatch.setitem(SOURCE_REGISTRY, "github", _github)
+    monkeypatch.setitem(SOURCE_REGISTRY, "slack", _empty)
+    monkeypatch.setitem(SOURCE_REGISTRY, "chatwork", _empty)
+    monkeypatch.setitem(SOURCE_REGISTRY, "gmail", _empty)
+
+    result = collect_all(
+        _enabled_config(slack=False, chatwork=False, gmail=False),
+        Snapshot(),
+        now,
+    )
+    by_id = {t.id: t for t in result.tasks}
+    assert by_id["github-long"].source_url is None
+    assert by_id["github-ctrl"].source_url is None
+    assert by_id["github-nohost"].source_url is None
+    assert by_id["github-ok"].source_url == "https://example.com/ok"
+
+
+def test_collect_all_carry_over_does_not_reapply_priority_decay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two consecutive failures must not stack -20 priority decay."""
+    t0 = datetime(2026, 7, 20, 12, 0, 0, tzinfo=UTC)
+    old = (t0 - timedelta(days=10)).isoformat()
+    previous = Snapshot(
+        tasks=[
+            _task(
+                id="slack-old",
+                source_type="slack",
+                source_icon="slack",
+                last_updated_at=old,
+                priority=50,
+            )
+        ],
+        sources={
+            "slack": SourceHealth(
+                status="ok",
+                collected_at="2026-07-19T00:00:00+00:00",
+            )
+        },
+    )
+
+    def _slack_fail() -> list[ExternalTask]:
+        raise RuntimeError("slack down")
+
+    def _empty() -> list[ExternalTask]:
+        return []
+
+    monkeypatch.setitem(SOURCE_REGISTRY, "github", _empty)
+    monkeypatch.setitem(SOURCE_REGISTRY, "slack", _slack_fail)
+    monkeypatch.setitem(SOURCE_REGISTRY, "chatwork", _empty)
+    monkeypatch.setitem(SOURCE_REGISTRY, "gmail", _empty)
+
+    config = _enabled_config(github=False, chatwork=False, gmail=False)
+    cycle1 = collect_all(config, previous, t0)
+    assert cycle1.sources["slack"].status == "unavailable"
+    assert cycle1.tasks[0].priority == 50  # no decay on carry-over
+    assert cycle1.sources["slack"].collected_at == "2026-07-19T00:00:00+00:00"
+
+    t1 = t0 + timedelta(minutes=5)
+    cycle2 = collect_all(config, cycle1, t1)
+    assert cycle2.sources["slack"].status == "unavailable"
+    assert cycle2.tasks[0].priority == 50  # still unchanged after 2nd fail
+    assert cycle2.sources["slack"].error == "collection_failed"

@@ -764,6 +764,7 @@ async function _loadActivity() {
 const _SOURCE_ICONS = {
   github: "\u{1F4BB}",
   slack: "\u{1F4AC}",
+  chatwork: "\u{1F4AD}",
   gmail: "\u{2709}\uFE0F",
   jira: "\u{1F4CB}",
   notion: "\u{1F4D3}",
