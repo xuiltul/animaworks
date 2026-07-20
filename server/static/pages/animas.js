@@ -28,6 +28,7 @@ let _activeTabModule = null;
 const _DETAIL_TABS = [
   { id: "overview", labelKey: "animas.tab_overview" },
   { id: "process", labelKey: "animas.tab_process" },
+  { id: "schedule", labelKey: "animas.tab_schedule" },
 ];
 
 function _extractStatsCount(value) {
