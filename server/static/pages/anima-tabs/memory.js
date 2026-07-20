@@ -1,6 +1,10 @@
-// ── Memory Browser (Full Page) ──────────────
-import { api } from "../modules/api.js";
-import { escapeAttr, escapeHtml, renderMarkdown, renderSafeMarkdown } from "../modules/state.js";
+// ── Anima detail tab: Memory Browser ────────
+// Absorbed from pages/memory.js (Phase 4).
+// Sub-tabs: episodes / knowledge / procedures / graph / calendar.
+
+import { api } from "../../modules/api.js";
+import { escapeAttr, escapeHtml, renderMarkdown, renderSafeMarkdown } from "../../modules/state.js";
+import { createPageTabs } from "../../shared/page-tabs.js";
 import { basePath } from "/shared/base-path.js";
 import { getLocale, t } from "/shared/i18n.js";
 
@@ -8,12 +12,12 @@ let _selectedAnima = null;
 let _activeTab = "episodes";
 let _viewMode = "list"; // "list" | "content"
 let _container = null;
-let _animas = [];
 let _d3LoadPromise = null;
 let _graphSimulation = null;
 let _viewRequestId = 0;
 let _detailRequestId = 0;
 let _calendarCursor = _startOfMonth(new Date());
+let _subTabs = null;
 
 const _TAB_META = {
   episodes: { icon: "📝", labelKey: "chat.memory_episodes" },
@@ -45,7 +49,9 @@ function _tabLabel(tab, count = null) {
 }
 
 function _setTabLabel(tab, count = null) {
-  const btn = _container?.querySelector(`.page-tab[data-tab="${tab}"]`);
+  const btn =
+    _subTabs?.el?.querySelector(`.page-tab[data-tab="${tab}"]`) ||
+    _container?.querySelector(`.page-tab[data-tab="${tab}"]`);
   if (!btn) return;
   btn.textContent = _tabLabel(tab, count);
 }
@@ -60,9 +66,13 @@ function _startOfMonth(value) {
 
 function _setActiveTab(tab) {
   _activeTab = tab;
-  _container?.querySelectorAll(".page-tab").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.tab === tab);
-  });
+  if (_subTabs) {
+    _subTabs.setActive(tab);
+  } else {
+    _container?.querySelectorAll(".page-tab").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+  }
 }
 
 function _stopGraphSimulation() {
@@ -108,94 +118,77 @@ function _loadD3() {
   return _d3LoadPromise;
 }
 
-export function render(container) {
+/**
+ * @param {HTMLElement} container
+ * @param {{ animaName: string }} opts
+ */
+export function render(container, { animaName } = {}) {
   _container = container;
-  _selectedAnima = null;
+  _selectedAnima = animaName || null;
   _activeTab = "episodes";
   _viewMode = "list";
   _calendarCursor = _startOfMonth(new Date());
   _viewRequestId += 1;
 
+  if (_subTabs) {
+    try {
+      _subTabs.destroy();
+    } catch {
+      /* ignore */
+    }
+    _subTabs = null;
+  }
+
   container.innerHTML = `
-    <div class="page-header">
-      <h2>${t("memory.page_title")}</h2>
-    </div>
-
-    <div class="memory-page-selector">
-      <label for="memoryAnimaSelect">Anima:</label>
-      <select id="memoryAnimaSelect" class="anima-dropdown">
-        <option value="">${t("memory.select_anima")}</option>
-      </select>
-    </div>
-
-    <div class="page-tabs memory-page-tabs">
-      ${Object.keys(_TAB_META).map((tab, index) => `
-        <button class="page-tab${index === 0 ? " active" : ""}" data-tab="${tab}">${_tabLabel(tab)}</button>
-      `).join("")}
-    </div>
-
+    <div id="memorySubTabsHost"></div>
     <div class="card memory-page-card">
       <div class="card-body memory-page-content" id="memoryMainContent">
-        <div class="loading-placeholder">${t("assets.select_anima")}</div>
+        <div class="loading-placeholder">${_selectedAnima ? t("common.loading") : t("assets.select_anima")}</div>
       </div>
     </div>
   `;
 
-  _loadAnimaList();
-  _bindEvents();
+  const tabsHost = container.querySelector("#memorySubTabsHost");
+  if (tabsHost) {
+    _subTabs = createPageTabs({
+      tabs: Object.keys(_TAB_META).map((tab) => ({
+        id: tab,
+        label: _tabLabel(tab),
+      })),
+      container: tabsHost,
+      activeId: _activeTab,
+      onChange: (id) => {
+        if (_activeTab === "graph" && id !== "graph") _stopGraphSimulation();
+        _activeTab = id;
+        _viewMode = "list";
+        _loadActiveView();
+      },
+    });
+    _subTabs.el.classList.add("memory-page-tabs");
+  }
+
   _resetTabLabels();
+  _updateTabCounts();
+  _loadActiveView();
 }
 
 export function destroy() {
   _viewRequestId += 1;
   _detailRequestId += 1;
   _stopGraphSimulation();
-  _container = null;
-  _animas = [];
-}
-
-// ── Event Binding ──────────────────────────
-
-function _bindEvents() {
-  if (!_container) return;
-
-  const select = document.getElementById("memoryAnimaSelect");
-  if (select) {
-    select.addEventListener("change", event => {
-      _selectedAnima = event.target.value || null;
-      _viewMode = "list";
-      _updateTabCounts();
-      _loadActiveView();
-    });
+  if (_subTabs) {
+    try {
+      _subTabs.destroy();
+    } catch {
+      /* ignore */
+    }
+    _subTabs = null;
   }
-
-  _container.querySelectorAll(".page-tab").forEach(btn => {
-    btn.addEventListener("click", () => {
-      if (_activeTab === "graph" && btn.dataset.tab !== "graph") _stopGraphSimulation();
-      _setActiveTab(btn.dataset.tab);
-      _viewMode = "list";
-      _loadActiveView();
-    });
-  });
+  _container = null;
+  _selectedAnima = null;
 }
 
 // ── Data Loading ───────────────────────────
-
-async function _loadAnimaList() {
-  const select = document.getElementById("memoryAnimaSelect");
-  if (!select) return;
-
-  try {
-    _animas = await api("/api/animas");
-    let opts = `<option value="">${t("memory.select_anima")}</option>`;
-    for (const anima of _animas) {
-      opts += `<option value="${escapeAttr(anima.name)}">${escapeHtml(anima.name)}</option>`;
-    }
-    select.innerHTML = opts;
-  } catch {
-    select.innerHTML = `<option value="">${t("memory.fetch_failed")}</option>`;
-  }
-}
 
 async function _updateTabCounts() {
   if (!_selectedAnima) {
@@ -222,7 +215,9 @@ async function _updateTabCounts() {
       epCount = (episodes.files || []).length;
       knCount = (knowledge.files || []).length;
       prCount = (procedures.files || []).length;
-    } catch { /* keep zero counts */ }
+    } catch {
+      /* keep zero counts */
+    }
   }
   _setTabLabel("episodes", epCount);
   _setTabLabel("knowledge", knCount);
@@ -258,13 +253,17 @@ async function _loadFileList(requestId = ++_viewRequestId) {
       return;
     }
 
-    content.innerHTML = files.map(file => `
+    content.innerHTML = files
+      .map(
+        (file) => `
       <div class="memory-file-item memory-page-file" data-file="${escapeAttr(file)}">
         ${escapeHtml(file)}
       </div>
-    `).join("");
+    `,
+      )
+      .join("");
 
-    content.querySelectorAll(".memory-file-item").forEach(item => {
+    content.querySelectorAll(".memory-file-item").forEach((item) => {
       item.addEventListener("click", () => _loadFileContent(item.dataset.file));
     });
   } catch (err) {
@@ -397,13 +396,13 @@ function _drawGraph(d3, rawNodes, rawEdges, threshold) {
   _stopGraphSimulation();
   stage.replaceChildren();
 
-  const nodes = rawNodes.map(node => ({ ...node }));
-  const nodeIds = new Set(nodes.map(node => node.id));
+  const nodes = rawNodes.map((node) => ({ ...node }));
+  const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = rawEdges
-    .filter(edge => edge.link_type === "explicit" || Number(edge.similarity || 0) >= threshold)
-    .filter(edge => nodeIds.has(String(edge.source)) && nodeIds.has(String(edge.target)))
-    .map(edge => ({ ...edge, source: String(edge.source), target: String(edge.target) }));
-  const degrees = new Map(nodes.map(node => [node.id, 0]));
+    .filter((edge) => edge.link_type === "explicit" || Number(edge.similarity || 0) >= threshold)
+    .filter((edge) => nodeIds.has(String(edge.source)) && nodeIds.has(String(edge.target)))
+    .map((edge) => ({ ...edge, source: String(edge.source), target: String(edge.target) }));
+  const degrees = new Map(nodes.map((node) => [node.id, 0]));
   for (const edge of edges) {
     degrees.set(edge.source, (degrees.get(edge.source) || 0) + 1);
     degrees.set(edge.target, (degrees.get(edge.target) || 0) + 1);
@@ -412,36 +411,46 @@ function _drawGraph(d3, rawNodes, rawEdges, threshold) {
   const bounds = stage.getBoundingClientRect();
   const width = Math.max(480, Math.floor(bounds.width || 760));
   const height = Math.max(420, Math.floor(bounds.height || 520));
-  const radius = node => 7 + Math.min(12, Math.sqrt(degrees.get(node.id) || 0) * 3);
+  const radius = (node) => 7 + Math.min(12, Math.sqrt(degrees.get(node.id) || 0) * 3);
 
-  const svg = d3.select(stage)
+  const svg = d3
+    .select(stage)
     .append("svg")
     .attr("viewBox", [0, 0, width, height])
     .attr("role", "img")
     .attr("aria-label", t("memory.graph_aria"));
   const viewport = svg.append("g");
-  svg.call(d3.zoom().scaleExtent([0.25, 5]).on("zoom", event => {
-    viewport.attr("transform", event.transform);
-  }));
+  svg.call(
+    d3
+      .zoom()
+      .scaleExtent([0.25, 5])
+      .on("zoom", (event) => {
+        viewport.attr("transform", event.transform);
+      }),
+  );
 
-  const links = viewport.append("g")
+  const links = viewport
+    .append("g")
     .attr("class", "memory-graph-links")
     .selectAll("line")
     .data(edges)
     .join("line")
-    .attr("class", edge => edge.link_type === "explicit" ? "explicit" : "similarity")
-    .attr("stroke-opacity", edge => edge.link_type === "explicit"
-      ? 0.75
-      : 0.18 + Math.max(0, Math.min(1, Number(edge.similarity || 0))) * 0.62);
+    .attr("class", (edge) => (edge.link_type === "explicit" ? "explicit" : "similarity"))
+    .attr("stroke-opacity", (edge) =>
+      edge.link_type === "explicit"
+        ? 0.75
+        : 0.18 + Math.max(0, Math.min(1, Number(edge.similarity || 0))) * 0.62,
+    );
 
-  const nodeGroups = viewport.append("g")
+  const nodeGroups = viewport
+    .append("g")
     .attr("class", "memory-graph-nodes")
     .selectAll("g")
     .data(nodes)
     .join("g")
     .attr("tabindex", 0)
     .attr("role", "button")
-    .attr("aria-label", node => `${node.stem}, ${node.memory_type}`)
+    .attr("aria-label", (node) => `${node.stem}, ${node.memory_type}`)
     .on("click", (_event, node) => _showNodeDetail(node))
     .on("keydown", (event, node) => {
       if (event.key === "Enter" || event.key === " ") {
@@ -450,44 +459,53 @@ function _drawGraph(d3, rawNodes, rawEdges, threshold) {
       }
     });
 
-  nodeGroups.append("circle")
+  nodeGroups
+    .append("circle")
     .attr("r", radius)
-    .attr("fill", node => _GRAPH_NODE_COLORS[node.memory_type] || "#6b7280");
-  nodeGroups.append("text")
-    .attr("x", node => radius(node) + 4)
+    .attr("fill", (node) => _GRAPH_NODE_COLORS[node.memory_type] || "#6b7280");
+  nodeGroups
+    .append("text")
+    .attr("x", (node) => radius(node) + 4)
     .attr("y", 4)
-    .text(node => node.stem);
-  nodeGroups.append("title").text(node => node.stem);
+    .text((node) => node.stem);
+  nodeGroups.append("title").text((node) => node.stem);
 
-  const simulation = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(edges).id(node => node.id).distance(82).strength(0.35))
+  const simulation = d3
+    .forceSimulation(nodes)
+    .force("link", d3.forceLink(edges).id((node) => node.id).distance(82).strength(0.35))
     .force("charge", d3.forceManyBody().strength(-180))
     .force("center", d3.forceCenter(width / 2, height / 2))
-    .force("collision", d3.forceCollide().radius(node => radius(node) + 12))
+    .force(
+      "collision",
+      d3.forceCollide().radius((node) => radius(node) + 12),
+    )
     .on("tick", () => {
       links
-        .attr("x1", edge => edge.source.x)
-        .attr("y1", edge => edge.source.y)
-        .attr("x2", edge => edge.target.x)
-        .attr("y2", edge => edge.target.y);
-      nodeGroups.attr("transform", node => `translate(${node.x},${node.y})`);
+        .attr("x1", (edge) => edge.source.x)
+        .attr("y1", (edge) => edge.source.y)
+        .attr("x2", (edge) => edge.target.x)
+        .attr("y2", (edge) => edge.target.y);
+      nodeGroups.attr("transform", (node) => `translate(${node.x},${node.y})`);
     });
 
-  nodeGroups.call(d3.drag()
-    .on("start", (event, node) => {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
-      node.fx = node.x;
-      node.fy = node.y;
-    })
-    .on("drag", (event, node) => {
-      node.fx = event.x;
-      node.fy = event.y;
-    })
-    .on("end", (event, node) => {
-      if (!event.active) simulation.alphaTarget(0);
-      node.fx = null;
-      node.fy = null;
-    }));
+  nodeGroups.call(
+    d3
+      .drag()
+      .on("start", (event, node) => {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        node.fx = node.x;
+        node.fy = node.y;
+      })
+      .on("drag", (event, node) => {
+        node.fx = event.x;
+        node.fy = event.y;
+      })
+      .on("end", (event, node) => {
+        if (!event.active) simulation.alphaTarget(0);
+        node.fx = null;
+        node.fy = null;
+      }),
+  );
 
   _graphSimulation = simulation;
 }
@@ -504,7 +522,9 @@ function _episodeDate(value) {
 }
 
 function _withoutFrontmatter(content) {
-  return String(content || "").replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").trim();
+  return String(content || "")
+    .replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "")
+    .trim();
 }
 
 async function _showNodeDetail(node) {
@@ -530,14 +550,16 @@ async function _showNodeDetail(node) {
     <section>
       <h4>${t("memory.detail_sources")}</h4>
       <div class="memory-source-links">
-        ${sourceEpisodes.length > 0
-          ? sourceEpisodes.map(date => `<button type="button" data-episode-date="${date}">${date}</button>`).join("")
-          : `<span>${t("memory.detail_no_sources")}</span>`}
+        ${
+          sourceEpisodes.length > 0
+            ? sourceEpisodes.map((date) => `<button type="button" data-episode-date="${date}">${date}</button>`).join("")
+            : `<span>${t("memory.detail_no_sources")}</span>`
+        }
       </div>
     </section>
   `;
 
-  panel.querySelectorAll("[data-episode-date]").forEach(button => {
+  panel.querySelectorAll("[data-episode-date]").forEach((button) => {
     button.addEventListener("click", () => _openEpisodeFromGraph(button.dataset.episodeDate));
   });
 
@@ -573,8 +595,9 @@ function _openEpisodeFromGraph(date) {
 // ── Calendar View ──────────────────────────
 
 function _calendarMonthLabel(year, month) {
-  return new Intl.DateTimeFormat(getLocale(), { year: "numeric", month: "long" })
-    .format(new Date(year, month - 1, 1));
+  return new Intl.DateTimeFormat(getLocale(), { year: "numeric", month: "long" }).format(
+    new Date(year, month - 1, 1),
+  );
 }
 
 async function _loadCalendar(requestId) {
@@ -605,21 +628,30 @@ function _renderCalendar(data) {
   if (!content) return;
   const firstWeekday = new Date(data.year, data.month - 1, 1).getDay();
   const today = new Date();
-  const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+  const todayKey = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
   const weekdayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
-  const blanks = Array.from({ length: firstWeekday }, () => `<div class="memory-calendar-day blank" aria-hidden="true"></div>`).join("");
-  const days = (data.days || []).map(day => {
-    const dayNumber = Number(day.date.slice(-2));
-    const classes = ["memory-calendar-day"];
-    if (day.has_episode) classes.push("has-episode");
-    if (day.date === todayKey) classes.push("today");
-    if (day.has_episode) {
-      return `<button type="button" class="${classes.join(" ")}" data-date="${day.date}" aria-label="${escapeAttr(t("memory.calendar_open", { date: day.date }))}">
+  const blanks = Array.from(
+    { length: firstWeekday },
+    () => `<div class="memory-calendar-day blank" aria-hidden="true"></div>`,
+  ).join("");
+  const days = (data.days || [])
+    .map((day) => {
+      const dayNumber = Number(day.date.slice(-2));
+      const classes = ["memory-calendar-day"];
+      if (day.has_episode) classes.push("has-episode");
+      if (day.date === todayKey) classes.push("today");
+      if (day.has_episode) {
+        return `<button type="button" class="${classes.join(" ")}" data-date="${day.date}" aria-label="${escapeAttr(t("memory.calendar_open", { date: day.date }))}">
         <span>${dayNumber}</span><span class="memory-calendar-dot" aria-hidden="true"></span>
       </button>`;
-    }
-    return `<div class="${classes.join(" ")}"><span>${dayNumber}</span></div>`;
-  }).join("");
+      }
+      return `<div class="${classes.join(" ")}"><span>${dayNumber}</span></div>`;
+    })
+    .join("");
 
   content.innerHTML = `
     <div class="memory-calendar-view">
@@ -629,7 +661,7 @@ function _renderCalendar(data) {
         <button type="button" class="btn-secondary" id="memoryCalendarNext" aria-label="${escapeAttr(t("memory.calendar_next"))}">&rarr;</button>
       </div>
       <div class="memory-calendar-grid">
-        ${weekdayKeys.map(key => `<div class="memory-calendar-weekday">${t(`memory.weekday_${key}`)}</div>`).join("")}
+        ${weekdayKeys.map((key) => `<div class="memory-calendar-weekday">${t(`memory.weekday_${key}`)}</div>`).join("")}
         ${blanks}${days}
       </div>
     </div>
@@ -643,7 +675,7 @@ function _renderCalendar(data) {
     _calendarCursor = new Date(data.year, data.month, 1);
     _loadActiveView();
   });
-  content.querySelectorAll("[data-date]").forEach(button => {
+  content.querySelectorAll("[data-date]").forEach((button) => {
     button.addEventListener("click", () => _loadFileContent(button.dataset.date, "episodes", "calendar"));
   });
 }

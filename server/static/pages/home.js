@@ -71,6 +71,13 @@ export function render(container) {
       </div>
     </div>
 
+    <div class="card" style="margin-bottom: 1.5rem;" id="homeServerStatusCard">
+      <div class="card-header">${t("server.system_status")}</div>
+      <div class="card-body" id="homeServerStatusBody">
+        <div class="loading-placeholder">${t("common.loading")}</div>
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom: 1.5rem;">
       <div class="card-header">${t("home.anima_list")}</div>
       <div class="card-body">
@@ -143,9 +150,101 @@ export function destroy() {
 
 async function _loadAll() {
   _loadSystemStatus();
+  _loadServerStatus();
   _loadOrgChart();
   _loadActivity();
   _loadExternalTasks();
+}
+
+// ── Server status card (compact, absorbed from server-page) ──
+
+/**
+ * Normalize scheduler API payload into a flat job list.
+ * @param {object|null|undefined} data
+ * @returns {object[]}
+ */
+export function extractSchedulerJobs(data) {
+  if (!data || typeof data !== "object") return [];
+  if (Array.isArray(data.jobs)) return data.jobs;
+  return [
+    ...(Array.isArray(data.system_jobs) ? data.system_jobs : []),
+    ...(Array.isArray(data.anima_jobs) ? data.anima_jobs : []),
+  ];
+}
+
+/**
+ * Summarize server metrics for the dashboard card (pure).
+ * @param {{ statusData?: object|null, connectionsData?: object|null, schedulerData?: object|null }} input
+ * @returns {{ reachable: boolean, wsCount: number, schedulerRunning: boolean, jobCount: number }}
+ */
+export function summarizeServerStatus({ statusData, connectionsData, schedulerData } = {}) {
+  const jobs = extractSchedulerJobs(schedulerData);
+  const rawWs = connectionsData?.websocket?.connected_clients;
+  const wsCount = typeof rawWs === "number" && Number.isFinite(rawWs) ? rawWs : 0;
+  const schedulerRunning = !!(
+    statusData?.scheduler_running ??
+    schedulerData?.running
+  );
+  return {
+    reachable: statusData != null,
+    wsCount,
+    schedulerRunning,
+    jobCount: jobs.length,
+  };
+}
+
+/**
+ * Build display rows for the server status card (pure).
+ * @param {{ reachable: boolean, wsCount: number, schedulerRunning: boolean, jobCount: number }} summary
+ * @param {(key: string) => string} [translate]
+ * @returns {Array<[string, string|number]>}
+ */
+export function serverStatusDisplayRows(summary, translate = t) {
+  return [
+    [translate("server.uptime_label"), summary.reachable ? translate("server.running") : translate("server.stopped")],
+    [translate("server.connections_label"), summary.wsCount],
+    [
+      translate("server.scheduler"),
+      summary.schedulerRunning ? translate("server.running") : translate("server.stopped"),
+    ],
+    [translate("server.jobs_label"), summary.jobCount],
+  ];
+}
+
+/**
+ * @param {Array<[string, string|number]>} rows
+ * @returns {string}
+ */
+export function serverStatusTableHtml(rows) {
+  return `
+    <table class="data-table">
+      <tbody>
+        ${rows
+          .map(
+            ([k, v]) =>
+              `<tr><td style="font-weight:500;">${escapeHtml(String(k))}</td><td>${escapeHtml(String(v))}</td></tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+async function _loadServerStatus() {
+  const body = document.getElementById("homeServerStatusBody");
+  if (!body) return;
+
+  try {
+    const [statusData, connectionsData, schedulerData] = await Promise.all([
+      api("/api/system/status"),
+      api("/api/system/connections").catch(() => null),
+      api("/api/system/scheduler").catch(() => null),
+    ]);
+    const summary = summarizeServerStatus({ statusData, connectionsData, schedulerData });
+    body.innerHTML = serverStatusTableHtml(serverStatusDisplayRows(summary));
+  } catch (err) {
+    body.innerHTML = `<div class="loading-placeholder">${t("server.status_failed")}: ${escapeHtml(err.message)}</div>`;
+  }
 }
 
 // ── Usage Panel ────────────────────────────

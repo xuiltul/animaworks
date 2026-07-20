@@ -1,9 +1,12 @@
-// ── Asset Management ────────────────────────
-import { api } from "../modules/api.js";
-import { escapeHtml } from "../modules/state.js";
+// ── Anima detail tab: Assets ────────────────
+// Absorbed from pages/assets.js (Phase 5).
+// Gallery + Remake modal; animaName comes from the detail view.
+
+import { api } from "../../modules/api.js";
+import { escapeHtml } from "../../modules/state.js";
 import { t } from "/shared/i18n.js";
 import { basePath } from "/shared/base-path.js";
-import { isRealisticMode } from "../modules/avatar-resolver.js";
+import { isRealisticMode } from "../../modules/avatar-resolver.js";
 
 let _container = null;
 let _animas = [];
@@ -14,14 +17,23 @@ let _previewGenerated = false;
 let _rebuildInProgress = false;
 let _previewHistory = [];
 let _currentPreviewIdx = -1;
+let _galleryReloadTimer = null;
+let _faceDebounceTimer = null;
 
 const EXPRESSION_LIST = ["neutral", "smile", "laugh", "troubled", "surprised", "thinking", "embarrassed"];
 
 // ── Render / Destroy ────────────────────────
 
-export async function render(container) {
+/**
+ * @param {HTMLElement} container
+ * @param {{ animaName: string }} opts
+ */
+export async function render(container, { animaName } = {}) {
+  // Clean prior instance (tab/anima switch while remake may be open)
+  destroy();
+
   _container = container;
-  _selectedAnima = null;
+  _selectedAnima = animaName || null;
   _metadata = null;
   _previewBackupId = null;
   _previewGenerated = false;
@@ -32,25 +44,30 @@ export async function render(container) {
   _installWsHandler();
 
   container.innerHTML = `
-    <div class="page-header">
-      <h2>${t("assets.page_title")}</h2>
-      <p>${t("assets.page_subtitle")}</p>
-    </div>
-
-    <div class="assets-anima-selector" id="assetsAnimaSelector">
-      <div class="loading-placeholder">${t("assets.loading_list")}</div>
-    </div>
-
     <div id="assetsGalleryContent">
-      <div class="loading-placeholder">${t("assets.select_anima")}</div>
+      <div class="loading-placeholder">${_selectedAnima ? t("assets.loading") : t("assets.select_anima")}</div>
     </div>
   `;
 
+  // Style-From options in Remake modal still need the anima list (no selector UI).
   await _loadAnimaList();
+  if (_selectedAnima) {
+    await _loadGallery();
+  }
 }
 
 export function destroy() {
   _removeWsHandler();
+  if (_galleryReloadTimer) {
+    clearTimeout(_galleryReloadTimer);
+    _galleryReloadTimer = null;
+  }
+  if (_faceDebounceTimer) {
+    clearTimeout(_faceDebounceTimer);
+    _faceDebounceTimer = null;
+  }
+  // Force-close modals even mid-rebuild (client leak prevention; server job continues)
+  _forceCloseModals();
   _container = null;
   _animas = [];
   _selectedAnima = null;
@@ -60,6 +77,14 @@ export function destroy() {
   _rebuildInProgress = false;
   _previewHistory = [];
   _currentPreviewIdx = -1;
+}
+
+/** Remove remake/confirm overlays without cancelling server-side jobs. */
+function _forceCloseModals() {
+  const overlay = document.getElementById("assetsRemakeOverlay");
+  if (overlay) overlay.remove();
+  const confirmDialog = document.getElementById("assetsConfirmDialog");
+  if (confirmDialog) confirmDialog.remove();
 }
 
 // ── WebSocket Handler ───────────────────────
@@ -89,48 +114,15 @@ function _handleWsEvent(eventType, data) {
   }
 }
 
-// ── Anima Selector ─────────────────────────
+// ── Anima list (for Style-From in Remake modal) ──
 
 async function _loadAnimaList() {
-  const selector = document.getElementById("assetsAnimaSelector");
-  if (!selector) return;
-
   try {
     _animas = await api("/api/animas");
-
-    if (_animas.length === 0) {
-      selector.innerHTML = `<div class="loading-placeholder">${t("animas.not_registered")}</div>`;
-      return;
-    }
-
-    selector.innerHTML = "";
-    for (const p of _animas) {
-      const btn = document.createElement("button");
-      btn.className = "assets-anima-btn";
-      btn.dataset.name = p.name;
-      btn.textContent = p.name;
-      btn.addEventListener("click", () => _selectAnima(p.name));
-      selector.appendChild(btn);
-    }
-  } catch (err) {
-    selector.innerHTML = `<div class="loading-placeholder">${t("assets.fetch_failed")}: ${escapeHtml(err.message)}</div>`;
+    if (!Array.isArray(_animas)) _animas = [];
+  } catch {
+    _animas = [];
   }
-}
-
-function _selectAnima(name) {
-  _selectedAnima = name;
-  _metadata = null;
-  _previewBackupId = null;
-  _previewGenerated = false;
-
-  const selector = document.getElementById("assetsAnimaSelector");
-  if (selector) {
-    selector.querySelectorAll(".assets-anima-btn").forEach(btn => {
-      btn.classList.toggle("assets-anima-btn--active", btn.dataset.name === name);
-    });
-  }
-
-  _loadGallery();
 }
 
 // ── Asset Gallery ───────────────────────────
@@ -652,10 +644,10 @@ function _openRemakeModal() {
   const faceRefInput = document.getElementById("assetsFaceRefUrl");
   const faceRefPreview = document.getElementById("assetsFaceRefPreview");
   if (faceRefInput && faceRefPreview) {
-    let _faceDebounce = null;
     faceRefInput.addEventListener("input", () => {
-      clearTimeout(_faceDebounce);
-      _faceDebounce = setTimeout(() => {
+      if (_faceDebounceTimer) clearTimeout(_faceDebounceTimer);
+      _faceDebounceTimer = setTimeout(() => {
+        _faceDebounceTimer = null;
         const url = faceRefInput.value.trim();
         if (url && url.startsWith("http")) {
           faceRefPreview.src = url;
@@ -1176,7 +1168,9 @@ function _onRemakeComplete(data) {
       progressList.appendChild(msg);
     }
 
-    setTimeout(() => {
+    if (_galleryReloadTimer) clearTimeout(_galleryReloadTimer);
+    _galleryReloadTimer = setTimeout(() => {
+      _galleryReloadTimer = null;
       _loadGallery();
     }, 1500);
   } else {
