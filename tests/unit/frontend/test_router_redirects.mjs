@@ -51,6 +51,10 @@ describe("REDIRECTS table", () => {
   it("maps /memory to #/animas", () => {
     assert.equal(REDIRECTS["/memory"], "#/animas");
   });
+
+  it("maps /assets to #/animas", () => {
+    assert.equal(REDIRECTS["/assets"], "#/animas");
+  });
 });
 
 describe("resolveRedirect", () => {
@@ -75,6 +79,11 @@ describe("resolveRedirect", () => {
   it("redirects /memory and nested paths to #/animas", () => {
     assert.equal(resolveRedirect("/memory"), "#/animas");
     assert.equal(resolveRedirect("/memory/anything"), "#/animas");
+  });
+
+  it("redirects /assets and nested paths to #/animas", () => {
+    assert.equal(resolveRedirect("/assets"), "#/animas");
+    assert.equal(resolveRedirect("/assets/anything"), "#/animas");
   });
 
   it("returns null for non-redirect paths", () => {
