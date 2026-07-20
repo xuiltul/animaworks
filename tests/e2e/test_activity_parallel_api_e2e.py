@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -78,33 +79,67 @@ async def test_parallel_activity_data_through_application_router(tmp_path: Path)
         encoding="utf-8",
     )
 
-    # Match ActivityLogger partitioning / hours cutoff (app-local TZ).
-    now = now_local().isoformat()
+    # Match ActivityLogger partitioning / hours cutoff (app-local TZ) and use
+    # two genuinely overlapping task lifecycles. Partition by each event date
+    # so this remains valid when the test happens to run across midnight.
+    now = now_local()
+    activity_events = [
+        {
+            "ts": (now - timedelta(seconds=40)).isoformat(),
+            "type": "task_exec_start",
+            "summary": "Parallel task A started",
+            "ctx": "task:parallel-a",
+            "meta": {"task_id": "parallel-a", "title": "Parallel task A"},
+        },
+        {
+            "ts": (now - timedelta(seconds=30)).isoformat(),
+            "type": "task_exec_start",
+            "summary": "Parallel task B started",
+            "ctx": "task:parallel-b",
+            "meta": {"task_id": "parallel-b", "title": "Parallel task B"},
+        },
+        {
+            "ts": (now - timedelta(seconds=20)).isoformat(),
+            "type": "tool_use",
+            "summary": "Parallel task A tool",
+            "ctx": "task:parallel-a",
+        },
+        {
+            "ts": (now - timedelta(seconds=15)).isoformat(),
+            "type": "tool_use",
+            "summary": "Parallel task B tool",
+            "ctx": "task:parallel-b",
+        },
+        {
+            "ts": (now - timedelta(seconds=10)).isoformat(),
+            "type": "task_exec_end",
+            "summary": "Parallel task B ended",
+            "ctx": "task:parallel-b",
+            "meta": {"task_id": "parallel-b", "title": "Parallel task B"},
+        },
+        {
+            "ts": (now - timedelta(seconds=5)).isoformat(),
+            "type": "task_exec_end",
+            "summary": "Parallel task A ended",
+            "ctx": "task:parallel-a",
+            "meta": {"task_id": "parallel-a", "title": "Parallel task A"},
+        },
+        {
+            "ts": now.isoformat(),
+            "type": "response_sent",
+            "summary": "E2E legacy event",
+        },
+    ]
     activity_dir = anima_dir / "activity_log"
     activity_dir.mkdir()
-    activity_dir.joinpath(f"{now[:10]}.jsonl").write_text(
-        "\n".join(
-            [
-                json.dumps(
-                    {
-                        "ts": now,
-                        "type": "tool_use",
-                        "summary": "E2E context event",
-                        "ctx": "task:e2e-task",
-                    }
-                ),
-                json.dumps(
-                    {
-                        "ts": now,
-                        "type": "response_sent",
-                        "summary": "E2E legacy event",
-                    }
-                ),
-            ]
+    events_by_date: dict[str, list[dict[str, object]]] = {}
+    for event in activity_events:
+        events_by_date.setdefault(str(event["ts"])[:10], []).append(event)
+    for date, date_events in events_by_date.items():
+        activity_dir.joinpath(f"{date}.jsonl").write_text(
+            "\n".join(json.dumps(event) for event in date_events) + "\n",
+            encoding="utf-8",
         )
-        + "\n",
-        encoding="utf-8",
-    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -132,5 +167,16 @@ async def test_parallel_activity_data_through_application_router(tmp_path: Path)
     }
     assert recent.status_code == 200
     events = recent.json()["events"]
-    assert next(e for e in events if e["summary"] == "E2E context event")["ctx"] == "task:e2e-task"
+    parallel_events = [e for e in events if e.get("ctx", "").startswith("task:parallel-")]
+    assert len(parallel_events) == 6
+    assert {e["ctx"] for e in parallel_events} == {"task:parallel-a", "task:parallel-b"}
+    for task_ctx in ("task:parallel-a", "task:parallel-b"):
+        assert {e["type"] for e in parallel_events if e["ctx"] == task_ctx} == {
+            "task_exec_start",
+            "tool_use",
+            "task_exec_end",
+        }
+    starts = {e["ctx"]: e for e in parallel_events if e["type"] == "task_exec_start"}
+    assert starts["task:parallel-a"]["meta"]["title"] == "Parallel task A"
+    assert starts["task:parallel-b"]["meta"]["title"] == "Parallel task B"
     assert next(e for e in events if e["summary"] == "E2E legacy event").get("ctx", "") == ""

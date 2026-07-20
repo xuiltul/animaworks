@@ -77,10 +77,9 @@ let _interactionManager = null;
 
 // ── Internal helpers ───────────────────────────────
 
-function _makeElement(evt, parallelCount = 0) {
+function _makeElement(evt) {
   return createEventElement(evt, {
     onReplay: (e, el) => replayEvent(e, el, { interactionManager: _interactionManager }),
-    parallelCount,
   });
 }
 

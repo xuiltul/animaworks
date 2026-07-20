@@ -1,20 +1,22 @@
 /**
  * timeline-dom.js — DOM construction + rendering for the activity timeline.
  *
- * Pure DOM helpers with no module-level state other than the expand toggle.
- * All external state (events, filter, interactionManager) is received via
- * arguments or callbacks from the orchestrator (timeline.js).
+ * DOM helpers receive timeline state through arguments or callbacks from the
+ * orchestrator (timeline.js). Only resolved avatar promises are cached here.
  */
 
 import { getIcon, getDisplaySummary } from "../../shared/activity-types.js";
 import {
+  buildParallelGroups,
   createContextBadge,
   decorateContextElement,
-  getParallelTaskCounts,
 } from "../../shared/activity-context.js";
+import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 import { renderSimpleMarkdown } from "./utils.js";
 import { t } from "/shared/i18n.js";
 import { resolveEventPersons } from "./activity-normalize.js";
+
+const _avatarUrlPromises = new Map();
 
 // ── Time formatting ────────────────────────────────
 
@@ -161,6 +163,112 @@ export function buildTimelineDOM(officePanel, opts) {
 
 // ── Render helpers ─────────────────────────────────
 
+function _matchesFilter(evt, currentFilter) {
+  return currentFilter.length === 0 || currentFilter.includes(evt.type);
+}
+
+function _resolveTimelineAvatar(anima) {
+  const candidates = bustupCandidates();
+  const cacheKey = `${anima}\u0000${candidates.join("\u0000")}`;
+  if (!_avatarUrlPromises.has(cacheKey)) {
+    _avatarUrlPromises.set(
+      cacheKey,
+      resolveCachedAvatar(anima, candidates, "S").catch(() => null),
+    );
+  }
+  return _avatarUrlPromises.get(cacheKey);
+}
+
+function _createAvatarElement(anima, className = "tl-event-avatar") {
+  if (!anima) return null;
+  const avatar = document.createElement("img");
+  avatar.className = className;
+  avatar.alt = "";
+  avatar.loading = "lazy";
+  avatar.decoding = "async";
+  avatar.hidden = true;
+  avatar.addEventListener("load", () => {
+    avatar.hidden = false;
+  });
+  avatar.addEventListener("error", () => {
+    avatar.hidden = true;
+    avatar.removeAttribute("src");
+  });
+  _resolveTimelineAvatar(anima).then((url) => {
+    if (url) avatar.src = url;
+  });
+  return avatar;
+}
+
+function _visibleParallelGroup(group, currentFilter) {
+  const lanes = group.lanes.map((lane) => ({
+    ...lane,
+    events: lane.events.filter((evt) => _matchesFilter(evt, currentFilter)),
+  }));
+  const taskEventCount = lanes.reduce((count, lane) => count + lane.events.length, 0);
+  if (taskEventCount === 0) return null;
+  return {
+    anima: group.anima,
+    lanes,
+    flatEvents: group.flatEvents.filter((evt) => _matchesFilter(evt, currentFilter)),
+  };
+}
+
+function _createParallelGroupElement(group, createElementFn) {
+  const container = document.createElement("section");
+  container.className = "tl-parallel-group";
+  container.dataset.anima = group.anima;
+
+  const animaHeader = document.createElement("div");
+  animaHeader.className = "tl-parallel-anima-header";
+  const avatar = _createAvatarElement(
+    group.anima,
+    "tl-event-avatar tl-parallel-anima-avatar",
+  );
+  if (avatar) animaHeader.appendChild(avatar);
+  const animaName = document.createElement("span");
+  animaName.className = "tl-parallel-anima-name";
+  animaName.textContent = group.anima;
+  animaHeader.appendChild(animaName);
+  container.appendChild(animaHeader);
+
+  const lanes = document.createElement("div");
+  lanes.className = "tl-task-lanes";
+  for (const lane of group.lanes) {
+    const laneEl = document.createElement("div");
+    laneEl.className = "tl-task-lane";
+    laneEl.dataset.taskId = lane.taskId;
+
+    const laneHeader = document.createElement("div");
+    laneHeader.className = "tl-task-lane-header";
+    const marker = document.createElement("span");
+    marker.className = "tl-task-lane-marker";
+    marker.textContent = "⚙";
+    const title = document.createElement("span");
+    title.className = "tl-task-lane-title";
+    title.textContent = lane.title;
+    title.title = lane.title;
+    laneHeader.appendChild(marker);
+    laneHeader.appendChild(title);
+    laneEl.appendChild(laneHeader);
+
+    const laneEvents = document.createElement("div");
+    laneEvents.className = "tl-task-lane-events";
+    for (const evt of lane.events) laneEvents.appendChild(createElementFn(evt));
+    laneEl.appendChild(laneEvents);
+    lanes.appendChild(laneEl);
+  }
+  container.appendChild(lanes);
+
+  if (group.flatEvents.length > 0) {
+    const flatEvents = document.createElement("div");
+    flatEvents.className = "tl-parallel-flat-events";
+    for (const evt of group.flatEvents) flatEvents.appendChild(createElementFn(evt));
+    container.appendChild(flatEvents);
+  }
+  return container;
+}
+
 /**
  * Re-render the event list using the given events and filter.
  *
@@ -176,10 +284,26 @@ export function renderList(listEl, events, currentFilter, createElementFn) {
   const filtered = currentFilter.length === 0
     ? events
     : events.filter((e) => currentFilter.includes(e.type));
-  const parallelCounts = getParallelTaskCounts(events);
+  const parallelGroups = buildParallelGroups(events);
+  const groupByEvent = new Map();
+  for (const group of parallelGroups) {
+    const visibleGroup = _visibleParallelGroup(group, currentFilter);
+    if (!visibleGroup) continue;
+    for (const lane of group.lanes) {
+      for (const evt of lane.events) groupByEvent.set(evt, visibleGroup);
+    }
+    for (const evt of group.flatEvents) groupByEvent.set(evt, visibleGroup);
+  }
 
+  const renderedGroups = new Set();
   for (const evt of filtered) {
-    listEl.appendChild(createElementFn(evt, parallelCounts.get(evt) || 0));
+    const group = groupByEvent.get(evt);
+    if (!group) {
+      listEl.appendChild(createElementFn(evt));
+    } else if (!renderedGroups.has(group)) {
+      listEl.appendChild(_createParallelGroupElement(group, createElementFn));
+      renderedGroups.add(group);
+    }
   }
 }
 
@@ -192,7 +316,7 @@ export function renderList(listEl, events, currentFilter, createElementFn) {
  * @returns {HTMLElement}
  */
 export function createEventElement(evt, opts) {
-  const { onReplay, parallelCount = 0 } = opts;
+  const { onReplay } = opts;
 
   const detailText = (evt.content && evt.content.trim()) || (evt.summary && evt.summary.length > 80 ? evt.summary : "");
   const hasContent = !!detailText;
@@ -217,6 +341,8 @@ export function createEventElement(evt, opts) {
   iconEl.innerHTML = getIcon(evt.type);
   iconEl.style.cssText = "flex-shrink:0;";
 
+  const avatarEl = _createAvatarElement(evt.anima || "");
+
   // Anima
   const animasEl = document.createElement("span");
   animasEl.className = "tl-event-animas";
@@ -238,15 +364,10 @@ export function createEventElement(evt, opts) {
 
   el.appendChild(timeEl);
   el.appendChild(iconEl);
+  if (avatarEl) el.appendChild(avatarEl);
   el.appendChild(animasEl);
   const contextBadge = createContextBadge(evt.ctx);
   if (contextBadge) el.appendChild(contextBadge);
-  if (parallelCount > 1) {
-    const parallelBadge = document.createElement("span");
-    parallelBadge.className = "activity-parallel-badge";
-    parallelBadge.textContent = t("activity.parallel_count", { count: parallelCount });
-    el.appendChild(parallelBadge);
-  }
   el.appendChild(summaryEl);
 
   wrapper.appendChild(el);

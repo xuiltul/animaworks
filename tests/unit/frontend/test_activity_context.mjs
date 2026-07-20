@@ -1,9 +1,12 @@
-/** Unit tests for shared activity execution-context DOM helpers. */
+/** Unit tests for shared activity execution-context DOM helpers.
+ * Run with: node --test tests/unit/frontend/test_activity_context.mjs
+ */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildParallelGroups,
   createContextBadge,
   decorateContextElement,
   getContextPresentation,
@@ -160,6 +163,103 @@ describe("parallel task detection", () => {
     assert.equal(container.children[1].querySelector(".activity-parallel-badge").textContent, "Parallel 2");
     assert.equal(container.children[2].querySelector(".activity-parallel-badge"), null);
     assert.equal(container.children[3].querySelector(".activity-parallel-badge"), null);
+  });
+});
+
+describe("parallel task lane grouping", () => {
+  it("groups only the overlap window and keeps non-task activity flat", () => {
+    const events = [
+      { type: "task_exec_end", ctx: "task:one", anima: "alpha", ts: "2026-07-13T10:06:00" },
+      { type: "task_exec_end", ctx: "task:two", anima: "alpha", ts: "2026-07-13T10:05:00" },
+      { type: "tool_use", ctx: "task:one", anima: "alpha", ts: "2026-07-13T10:04:00" },
+      { type: "heartbeat", ctx: "heartbeat", anima: "alpha", ts: "2026-07-13T10:03:00" },
+      {
+        type: "task_exec_start",
+        ctx: "task:two",
+        anima: "alpha",
+        ts: "2026-07-13T10:02:00",
+        summary: "Second task summary",
+      },
+      {
+        type: "task_exec_start",
+        ctx: "task:one",
+        anima: "alpha",
+        ts: "2026-07-13T10:00:00",
+        meta: { title: "First task" },
+      },
+      { type: "task_exec_start", ctx: "task:other", anima: "beta", ts: "2026-07-13T10:01:00" },
+      { type: "task_exec_end", ctx: "task:other", anima: "beta", ts: "2026-07-13T10:04:00" },
+    ];
+
+    const groups = buildParallelGroups(events);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].anima, "alpha");
+    assert.deepEqual(groups[0].lanes.map((lane) => lane.taskId), ["one", "two"]);
+    assert.deepEqual(groups[0].lanes.map((lane) => lane.title), ["First task", "Second task summary"]);
+    assert.deepEqual(groups[0].lanes[0].events, [events[2]]);
+    assert.deepEqual(groups[0].lanes[1].events, [events[1], events[4]]);
+    assert.deepEqual(groups[0].flatEvents, [events[3]]);
+  });
+
+  it("does not group sequential task intervals", () => {
+    const events = [
+      { type: "task_exec_start", ctx: "task:one", anima: "alpha", ts: "2026-07-13T10:00:00" },
+      { type: "task_exec_end", ctx: "task:one", anima: "alpha", ts: "2026-07-13T10:01:00" },
+      { type: "task_exec_start", ctx: "task:two", anima: "alpha", ts: "2026-07-13T10:01:00" },
+      { type: "task_exec_end", ctx: "task:two", anima: "alpha", ts: "2026-07-13T10:02:00" },
+    ];
+    assert.deepEqual(buildParallelGroups(events), []);
+  });
+
+  it("uses the last task event as the end of an unfinished interval", () => {
+    const events = [
+      {
+        type: "task_exec_start",
+        ctx: "task:1234567890",
+        anima: "alpha",
+        ts: "2026-07-13T10:00:00",
+      },
+      { type: "task_exec_start", ctx: "task:two", anima: "alpha", ts: "2026-07-13T10:02:00" },
+      { type: "task_exec_end", ctx: "task:two", anima: "alpha", ts: "2026-07-13T10:03:00" },
+      { type: "tool_use", ctx: "task:1234567890", anima: "alpha", ts: "2026-07-13T10:04:00" },
+    ];
+
+    const groups = buildParallelGroups(events);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].lanes[0].title, "task:12345678");
+    assert.equal(groups[0].lanes.length, 2);
+  });
+
+  it("groups overlapping tasks across a date boundary", () => {
+    const events = [
+      { type: "task_exec_start", ctx: "task:one", anima: "alpha", ts: "2026-07-13T23:58:00+09:00" },
+      { type: "task_exec_start", ctx: "task:two", anima: "alpha", ts: "2026-07-13T23:59:30+09:00" },
+      { type: "task_exec_end", ctx: "task:one", anima: "alpha", ts: "2026-07-14T00:01:00+09:00" },
+      { type: "task_exec_end", ctx: "task:two", anima: "alpha", ts: "2026-07-14T00:02:00+09:00" },
+    ];
+
+    const groups = buildParallelGroups(events);
+    assert.equal(groups.length, 1);
+    assert.deepEqual(groups[0].lanes.map((lane) => lane.taskId), ["one", "two"]);
+  });
+
+  it("keeps a non-parallel gap out of separate overlap windows", () => {
+    const events = [
+      { type: "task_exec_start", ctx: "task:one", anima: "alpha", ts: "2026-07-13T10:00:00" },
+      { type: "task_exec_start", ctx: "task:two", anima: "alpha", ts: "2026-07-13T10:02:00" },
+      { type: "task_exec_end", ctx: "task:two", anima: "alpha", ts: "2026-07-13T10:04:00" },
+      { type: "tool_use", ctx: "task:one", anima: "alpha", ts: "2026-07-13T10:05:00" },
+      { type: "task_exec_start", ctx: "task:three", anima: "alpha", ts: "2026-07-13T10:06:00" },
+      { type: "task_exec_end", ctx: "task:three", anima: "alpha", ts: "2026-07-13T10:08:00" },
+      { type: "task_exec_end", ctx: "task:one", anima: "alpha", ts: "2026-07-13T10:10:00" },
+    ];
+
+    const groups = buildParallelGroups(events);
+    assert.equal(groups.length, 2);
+    assert.deepEqual(groups[0].lanes.map((lane) => lane.taskId), ["one", "two"]);
+    assert.deepEqual(groups[1].lanes.map((lane) => lane.taskId), ["one", "three"]);
+    const groupedEvents = groups.flatMap((group) => group.lanes.flatMap((lane) => lane.events));
+    assert.equal(groupedEvents.includes(events[3]), false);
   });
 });
 

@@ -2118,6 +2118,93 @@ html, body {
   padding-left: 13px;
 }
 
+.tl-event-avatar {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.tl-event-avatar[hidden] {
+  display: none;
+}
+
+.tl-parallel-group {
+  border-bottom: 1px solid #e5e7eb;
+  background: rgba(248, 250, 252, 0.75);
+}
+
+.tl-parallel-anima-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 16px 3px;
+  color: var(--aw-color-accent, #2563eb);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.tl-parallel-anima-avatar {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+}
+
+.tl-task-lanes {
+  margin-left: 26px;
+  border-left: 1px solid #cbd5e1;
+}
+
+.tl-task-lane {
+  position: relative;
+  padding-left: 14px;
+}
+
+.tl-task-lane-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 16px 2px 0;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.tl-task-lane-header::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -14px;
+  width: 10px;
+  border-top: 1px solid #cbd5e1;
+}
+
+.tl-task-lane-marker {
+  color: var(--activity-ctx-color, #64748b);
+  flex-shrink: 0;
+}
+
+.tl-task-lane-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-task-lane-events .tl-event {
+  padding-left: 8px;
+}
+
+.tl-task-lane-events .tl-event.has-activity-context {
+  padding-left: 5px;
+}
+
+.tl-parallel-flat-events {
+  margin-left: 26px;
+}
+
 .tl-event:hover {
   background: #f8f4ee;
 }
