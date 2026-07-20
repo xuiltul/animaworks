@@ -21,9 +21,7 @@ from pathlib import Path
 
 # Deployment-specific values come from the environment so no site-specific
 # repos, accounts, or paths are baked into the public source tree.
-SHARED_DIR = Path(
-    os.environ.get("ANIMAWORKS_SHARED_DIR", "~/.animaworks/shared")
-).expanduser()
+SHARED_DIR = Path(os.environ.get("ANIMAWORKS_SHARED_DIR", "~/.animaworks/shared")).expanduser()
 STATE_FILE = SHARED_DIR / "pr-review-dispatch-state.json"
 STATE_LOCK = STATE_FILE.with_suffix(".lock")
 LOG_FILE = SHARED_DIR / "pr-review-dispatch.log"
@@ -90,6 +88,7 @@ def default_state() -> dict:
         "last_comment_check": iso(now_utc()),
         "seen_comments": {},
         "ci_notified": {},
+        "conflict_notified": {},
         "consecutive_failures": 0,
     }
 
@@ -102,6 +101,7 @@ def load_state() -> dict:
                 state.setdefault("prs", {})
                 state.setdefault("seen_comments", {})
                 state.setdefault("ci_notified", {})
+                state.setdefault("conflict_notified", {})
                 return state
         except (json.JSONDecodeError, OSError):
             log("state file unreadable; starting fresh")
@@ -292,17 +292,76 @@ def check_ci(state: dict) -> None:
         log(f"ci dispatch -> {DISPATCHER}: {len(lines)} PR(s)")
 
 
+def check_conflicts(state: dict) -> None:
+    """Dispatch merge conflicts once per PR head; renotify after re-conflict."""
+    notified = state.setdefault("conflict_notified", {})
+    open_keys: set[str] = set()
+    lines: list[str] = []
+    for repo in REPOS:
+        prs = json.loads(
+            gh(
+                [
+                    "pr",
+                    "list",
+                    "--repo",
+                    repo,
+                    "--state",
+                    "open",
+                    "--json",
+                    "number,title,headRefName,baseRefName,headRefOid,mergeable,isDraft",
+                    "--limit",
+                    "100",
+                ]
+            )
+        )
+        for pr in prs:
+            if pr.get("isDraft"):
+                continue
+            key = f"{repo}#{pr['number']}"
+            open_keys.add(key)
+            mergeable = str(pr.get("mergeable", "")).upper()
+            if mergeable == "MERGEABLE":
+                # 解消済み: 同一headのまま再コンフリクトしても再通知できるよう記録を消す
+                notified.pop(key, None)
+                continue
+            if mergeable != "CONFLICTING":
+                # UNKNOWN はGitHub側の算出待ち。次回巡回で確定値を見る。
+                continue
+            sha = pr["headRefOid"][:8]
+            if notified.get(key) == sha:
+                continue
+            notified[key] = sha
+            lines.append(
+                f"- {key} {sha} ({pr.get('headRefName', '')} -> {pr.get('baseRefName', '')}): "
+                f"{pr.get('title', '')[:100]}"
+            )
+
+    state["conflict_notified"] = {key: value for key, value in notified.items() if key in open_keys}
+    if lines:
+        send(
+            DISPATCHER,
+            "【マージコンフリクト検知】\n\n"
+            + "\n".join(lines)
+            + "\n\n上記PRがbaseブランチとコンフリクトしています（mergeable=CONFLICTING）。"
+            "natsumeへコンフリクト解消をディスパッチしてください。"
+            "解消手順は natsume の procedures/pr-conflict-resolution.md に従うこと"
+            "（該当ブランチのworktreeで origin/base をmergeして解消・テスト通過確認・"
+            "通常push。force-push禁止）。解消pushの後は既存の静穏検知で差分レビューが"
+            "自動起動します。",
+        )
+        log(f"conflict dispatch -> {DISPATCHER}: {len(lines)} PR(s)")
+
+
 def main() -> int:
     if not REPOS:
-        sys.stderr.write(
-            "PR_DISPATCH_REPOS is not set (comma-separated owner/repo list); refusing to run.\n"
-        )
+        sys.stderr.write("PR_DISPATCH_REPOS is not set (comma-separated owner/repo list); refusing to run.\n")
         return 2
     with locked_state() as state:
         try:
             check_commits(state)
             check_comments(state)
             check_ci(state)
+            check_conflicts(state)
         except Exception as exc:
             state["consecutive_failures"] = state.get("consecutive_failures", 0) + 1
             count = state["consecutive_failures"]
