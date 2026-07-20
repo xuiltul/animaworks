@@ -85,8 +85,8 @@ def test_reconciliation_removes_newly_ragignored_source(tmp_path: Path) -> None:
         indexer.is_ragignored = MemoryIndexer.is_ragignored  # type: ignore[method-assign]
         result = indexer.index_directory(knowledge_dir, "knowledge")
 
-    index_file.assert_called_once_with(archived_file, "knowledge", force=False)
-    assert result.files_unchanged == 1
+    index_file.assert_not_called()
+    assert result.files_unchanged == 0
     assert result.files_reconciled == 1
     assert source not in indexer.index_meta
     MemoryIndexer._ragignore_cache = None

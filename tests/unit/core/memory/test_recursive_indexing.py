@@ -139,6 +139,33 @@ def test_index_directory_finds_subdirectory_files(temp_anima_dir):
     )
 
 
+def test_index_directory_excludes_archive_subtree(temp_anima_dir):
+    """Dense indexing ignores archive directories without relying on .ragignore."""
+    knowledge_dir = temp_anima_dir["anima_dir"] / "knowledge"
+    archived = knowledge_dir / "archive" / "old.md"
+    archived.parent.mkdir()
+    archived.write_text("# Archived\n\nMust not be embedded.\n", encoding="utf-8")
+
+    mock_store = MagicMock()
+    mock_store.create_collection = MagicMock()
+    mock_store.upsert = MagicMock()
+
+    with patch("core.memory.rag.indexer.MemoryIndexer._init_embedding_model"):
+        from core.memory.rag.indexer import MemoryIndexer
+
+        indexer = MemoryIndexer(mock_store, "test", temp_anima_dir["anima_dir"])
+        indexer.embedding_model = MagicMock()
+        indexer.embedding_model.encode = MagicMock(
+            side_effect=lambda texts, **kw: np.array([[0.1] * 384] * len(texts))
+        )
+        index_file = MagicMock(side_effect=indexer.index_file)
+        indexer.index_file = index_file
+        result = indexer.index_directory(knowledge_dir, "knowledge")
+
+    assert result.files_indexed == 1
+    index_file.assert_called_once_with(knowledge_dir / "topic-a.md", "knowledge", force=False)
+
+
 # ── Test: skills only index SKILL.md ────────────────────────────
 
 

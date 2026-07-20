@@ -190,6 +190,33 @@ class TestChannelFEpisodes:
         assert "デプロイ手順を確認して修正した" not in result
 
     @pytest.mark.asyncio
+    async def test_channel_f_filters_archived_episode_hits(
+        self,
+        temp_anima_dir: Path,
+    ) -> None:
+        """Priming does not surface stale dense hits from an archive subtree."""
+        engine = PrimingEngine(temp_anima_dir)
+        results = [
+            {
+                "content": "# Archived deployment",
+                "score": 0.99,
+                "source_file": "episodes/archive/old.md",
+            },
+            {
+                "content": "# Current deployment",
+                "score": 0.8,
+                "source_file": "episodes/current.md",
+            },
+        ]
+
+        patcher, _searcher = self._patch_unified_search(results)
+        with patcher, patch("core.paths.get_data_dir", return_value=temp_anima_dir.parents[1]):
+            result = await engine._channel_f_episodes(["deploy"], message="deployment")
+
+        assert "episodes/archive/old.md" not in result
+        assert 'read_memory_file(path="episodes/current.md")' in result
+
+    @pytest.mark.asyncio
     async def test_channel_f_neo4j_formats_pointer_results(
         self,
         temp_anima_dir: Path,

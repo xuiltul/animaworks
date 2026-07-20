@@ -13,7 +13,6 @@ Handles:
 - Metadata extraction (tags, importance, timestamps)
 """
 
-import fnmatch
 import hashlib
 import json
 import logging
@@ -28,6 +27,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from core.memory.rag import indexer_delete
 from core.memory.rag.contextual_header import apply_contextual_header
 from core.memory.rag.episode_time import apply_episode_heading_event_time
+from core.memory.rag.exclusion import is_archive_path, is_rag_excluded
 from core.memory.rag.facts_chunker import chunk_facts_jsonl
 from core.time_utils import ensure_aware, now_iso
 
@@ -245,13 +245,14 @@ class MemoryIndexer:
 
     @classmethod
     def is_ragignored(cls, file_path: Path) -> bool:
-        """Check if a file matches any .ragignore pattern."""
-        patterns = cls._load_ragignore()
-        if not patterns:
-            return False
-        name = file_path.name
-        rel_str = str(file_path).replace("\\", "/")
-        return any(fnmatch.fnmatch(name, p) or fnmatch.fnmatch(rel_str, p) for p in patterns)
+        """Check built-in archive and configured ``.ragignore`` exclusions."""
+        from core.paths import get_data_dir
+
+        return is_rag_excluded(
+            file_path,
+            root=get_data_dir(),
+            ragignore_patterns=cls._load_ragignore(),
+        )
 
     def _save_index_meta(self) -> None:
         """Save index metadata."""
@@ -554,7 +555,11 @@ class MemoryIndexer:
             return result
 
         patterns = {"facts": "*.jsonl", "skills": "SKILL.md", "common_skills": "SKILL.md"}
-        md_files = sorted(directory.rglob(patterns.get(memory_type, "*.md")))
+        md_files = sorted(
+            path
+            for path in directory.rglob(patterns.get(memory_type, "*.md"))
+            if not is_archive_path(path, root=directory)
+        )
         total_chunks = 0
         files_indexed = 0
         files_failed = 0

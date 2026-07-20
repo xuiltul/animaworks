@@ -60,13 +60,14 @@ def _validate_name(name: str, kind: str = "name") -> None:
 class ChannelMeta:
     """Channel metadata including ACL membership list.
 
-    If ``members`` is empty, the channel is open (all Animas can access).
+    If ``members`` is empty, the channel is open unless ``closed`` is true.
     """
 
     members: list[str]
     created_by: str = ""
     created_at: str = ""
     description: str = ""
+    closed: bool = False
     slack_sync_disabled: bool = False
     slack_deleted_at: str = ""
 
@@ -86,6 +87,7 @@ def load_channel_meta(shared_dir: Path, channel: str) -> ChannelMeta | None:
             created_by=data.get("created_by", ""),
             created_at=data.get("created_at", ""),
             description=data.get("description", ""),
+            closed=bool(data.get("closed", False)),
             slack_sync_disabled=bool(data.get("slack_sync_disabled", False)),
             slack_deleted_at=data.get("slack_deleted_at", ""),
         )
@@ -104,6 +106,7 @@ def save_channel_meta(shared_dir: Path, channel: str, meta: ChannelMeta) -> None
         "created_by": meta.created_by,
         "created_at": meta.created_at,
         "description": meta.description,
+        "closed": meta.closed,
         "slack_sync_disabled": meta.slack_sync_disabled,
         "slack_deleted_at": meta.slack_deleted_at,
     }
@@ -125,14 +128,16 @@ def is_channel_member(
     Rules:
     - ``human`` source always has access (Web UI bypass).
     - If no ``.meta.json`` exists the channel is open — everyone has access.
-    - If ``members`` list is empty the channel is open.
+    - If ``members`` list is empty the channel is open unless explicitly closed.
     - Otherwise the anima must appear in the ``members`` list.
     """
     if source == "human":
         return True
     meta = load_channel_meta(shared_dir, channel)
-    if meta is None or not meta.members:
+    if meta is None or (not meta.members and not meta.closed):
         return True
+    if meta.closed:
+        return False
     return anima_name in meta.members
 
 

@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from core.memory._io import atomic_write_text
+from core.memory.rag.exclusion import is_archive_path
 from core.time_utils import today_local
 
 logger = logging.getLogger("animaworks.memory")
@@ -370,6 +371,8 @@ def rebuild_longterm_bm25_index(
         if not base_dir.is_dir():
             continue
         for path in sorted(base_dir.rglob("*.md")):
+            if is_archive_path(path, root=base_dir):
+                continue
             docs.extend(_bm25_docs_for_file(anima_dir, path, memory_type))
 
     document_frequency: Counter[str] = Counter()

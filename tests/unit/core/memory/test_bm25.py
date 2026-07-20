@@ -323,6 +323,31 @@ def test_longterm_bm25_respects_ragignore(tmp_path: Path, monkeypatch: pytest.Mo
     assert [hit["source_file"] for hit in hits] == ["knowledge/included.md"]
 
 
+def test_longterm_bm25_excludes_archive_subtrees_without_ragignore(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _write_longterm_memory(anima_dir, "knowledge/current.md", "# Current\n\nZephyrNova current knowledge.")
+    _write_longterm_memory(anima_dir, "knowledge/archive/old.md", "# Old\n\nZephyrNova archived knowledge.")
+    _write_longterm_memory(anima_dir, "episodes/current.md", "# Current\n\nZephyrNova current episode.")
+    _write_longterm_memory(anima_dir, "episodes/archive/old.md", "# Old\n\nZephyrNova archived episode.")
+    _write_longterm_memory(anima_dir, "procedures/current.md", "# Current\n\nZephyrNova current procedure.")
+    _write_longterm_memory(anima_dir, "procedures/archive/old.md", "# Old\n\nZephyrNova archived procedure.")
+
+    result = rebuild_longterm_bm25_index(anima_dir)
+    hits = search_longterm_memory_bm25(
+        anima_dir,
+        "ZephyrNova",
+        memory_types=("knowledge", "episodes", "procedures"),
+        top_k=10,
+    )
+
+    assert result.documents == 3
+    assert {hit["source_file"] for hit in hits} == {
+        "knowledge/current.md",
+        "episodes/current.md",
+        "procedures/current.md",
+    }
+
+
 def test_longterm_bm25_uses_persisted_stats_without_runtime_bm25okapi(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

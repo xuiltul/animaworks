@@ -12,7 +12,6 @@ import pytest
 
 from core.tooling.handler import ToolHandler
 
-
 # ── Fixtures ──────────────────────────────────────────────────
 
 
@@ -33,9 +32,11 @@ def memory(anima_dir: Path) -> MagicMock:
 
 
 @pytest.fixture
-def messenger() -> MagicMock:
+def messenger(tmp_path: Path) -> MagicMock:
     m = MagicMock()
     m.anima_name = "test-anima"
+    m.shared_dir = tmp_path / "shared"
+    (m.shared_dir / "channels").mkdir(parents=True)
     msg = MagicMock()
     msg.id = "msg_001"
     msg.thread_id = "thread_001"

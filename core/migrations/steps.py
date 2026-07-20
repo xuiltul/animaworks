@@ -440,6 +440,121 @@ def step_ragignore_archive_patterns(data_dir: Path, dry_run: bool, verbose: bool
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
+def step_split_board_by_company(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Split the legacy ``board`` channel into company-scoped channels.
+
+    Company membership is deliberately resolved from every board member's
+    ``status.json`` during each invocation.  The legacy board history is never
+    copied or removed: only its metadata is closed after all successor channel
+    files and metadata have been written.
+    """
+    del verbose
+    channels_dir = data_dir / "shared" / "channels"
+    legacy_meta_path = channels_dir / "board.meta.json"
+    if not legacy_meta_path.is_file():
+        return StepResult(changed=0, skipped=1, details=["board.meta.json not found; skip"])
+
+    try:
+        from core.config.models import read_anima_company
+        from core.exceptions import RecipientNotFoundError
+        from core.messenger import _validate_name
+
+        legacy_meta = json.loads(legacy_meta_path.read_text(encoding="utf-8"))
+        if not isinstance(legacy_meta, dict):
+            raise ValueError("board.meta.json root must be an object")
+        raw_members = legacy_meta.get("members")
+        if not isinstance(raw_members, list) or not all(isinstance(member, str) for member in raw_members):
+            raise ValueError("board.meta.json members must be a list of strings")
+        if not raw_members:
+            return StepResult(changed=0, skipped=1, details=["Legacy board is already closed"])
+
+        members_by_company: dict[str, list[str]] = {}
+        unassigned_members: list[str] = []
+        for member in raw_members:
+            try:
+                _validate_name(member, "anima name")
+            except RecipientNotFoundError:
+                unassigned_members.append(member)
+                continue
+            company = read_anima_company(data_dir / "animas" / member)
+            if company is None:
+                unassigned_members.append(member)
+                continue
+            channel = f"board-{company}"
+            try:
+                _validate_name(channel, "channel name")
+            except RecipientNotFoundError as exc:
+                raise ValueError(f"Company {company!r} cannot be mapped to a board channel") from exc
+            members_by_company.setdefault(company, []).append(member)
+
+        if not members_by_company:
+            return StepResult(
+                changed=0,
+                skipped=1,
+                details=["No company-assigned legacy board members found; board left unchanged"],
+            )
+
+        # Preflight all existing successor metadata before making any changes.
+        successor_meta: dict[str, dict[str, Any]] = {}
+        for company, members in sorted(members_by_company.items()):
+            channel = f"board-{company}"
+            meta_path = channels_dir / f"{channel}.meta.json"
+            if meta_path.exists():
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                if not isinstance(meta, dict):
+                    raise ValueError(f"{meta_path.name} root must be an object")
+            else:
+                meta = dict(legacy_meta)
+            meta["members"] = members
+            meta["closed"] = False
+            successor_meta[channel] = meta
+
+        details: list[str] = []
+        changed = 0
+        for channel, meta in successor_meta.items():
+            channel_path = channels_dir / f"{channel}.jsonl"
+            meta_path = channels_dir / f"{channel}.meta.json"
+            if not channel_path.exists():
+                changed += 1
+                details.append(f"{'Would create' if dry_run else 'Created'} #{channel} channel")
+                if not dry_run:
+                    channel_path.write_text("", encoding="utf-8")
+
+            current_meta: dict[str, Any] | None = None
+            if meta_path.exists():
+                current_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if current_meta != meta:
+                changed += 1
+                details.append(f"{'Would update' if dry_run else 'Updated'} #{channel} metadata")
+                if not dry_run:
+                    meta_path.write_text(
+                        json.dumps(meta, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+
+        closed_legacy_meta = dict(legacy_meta)
+        closed_legacy_meta["members"] = []
+        closed_legacy_meta["closed"] = True
+        if closed_legacy_meta != legacy_meta:
+            changed += 1
+            details.append(f"{'Would close' if dry_run else 'Closed'} legacy #board")
+            if not dry_run:
+                legacy_meta_path.write_text(
+                    json.dumps(closed_legacy_meta, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+
+        if unassigned_members:
+            details.append(
+                "Legacy board members without company assignment were not added to successor channels: "
+                + ", ".join(unassigned_members)
+            )
+        return StepResult(changed=changed, skipped=int(changed == 0), details=details)
+    except Exception as exc:
+        logger.exception("step_split_board_by_company failed")
+        return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
 def step_legacy_flat_skill_migration(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Convert legacy flat local skill files to trusted SKILL.md bundles."""
     from core.migrations.legacy_flat_skills import migrate_legacy_flat_skills
@@ -1302,6 +1417,12 @@ def register_all_steps(runner: Any) -> None:
             "Add unified archive patterns to .ragignore",
             "structural",
             step_ragignore_archive_patterns,
+        ),
+        MigrationStep(
+            "split_board_by_company_20260720",
+            "Split legacy board into company channels",
+            "structural",
+            step_split_board_by_company,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

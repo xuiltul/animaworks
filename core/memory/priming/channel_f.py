@@ -19,6 +19,7 @@ from typing import Any
 
 from core.file_access_policy import load_denied_roots, memory_source_is_allowed
 from core.memory.priming.utils import build_queries, build_unified_searcher, normalize_trigger
+from core.memory.rag.indexer import MemoryIndexer
 from core.memory.retrieval.unified_search import UnifiedMemorySearch
 from core.time_utils import now_local
 
@@ -150,6 +151,9 @@ async def channel_f_episodes(
                         if not path:
                             logger.debug("Channel F: skipping Neo4j episode without readable path: %s", mem.source)
                             continue
+                        if MemoryIndexer.is_ragignored(anima_dir / path):
+                            logger.debug("Channel F: skipping excluded Neo4j episode: %s", path)
+                            continue
                         if not memory_source_is_allowed(anima_dir, path, denied_roots):
                             logger.debug("Channel F: skipping Neo4j episode from denied source: %s", path)
                             continue
@@ -200,6 +204,9 @@ async def channel_f_episodes(
             path = to_episode_memory_path(source)
             if not path:
                 logger.debug("Channel F: skipping episode without readable path: %s", result.get("doc_id", ""))
+                continue
+            if MemoryIndexer.is_ragignored(anima_dir / path):
+                logger.debug("Channel F: skipping excluded episode: %s", path)
                 continue
             if not memory_source_is_allowed(anima_dir, path, denied_roots):
                 logger.debug("Channel F: skipping episode from denied source: %s", path)

@@ -317,6 +317,44 @@ class CommsToolsMixin:
             logger.debug("Failed to build send feedback for %s", to, exc_info=True)
             return ""
 
+    def _cross_company_communication_error(self, peers: list[str]) -> str | None:
+        """Return the standard DM boundary error for the first cross-company peer."""
+        from core.company import get_company, get_company_display_name, is_cross_company
+
+        animas_dir = self._anima_dir.parent
+        for peer in sorted(set(peers)):
+            if not is_cross_company(self._anima_name, peer, animas_dir=animas_dir):
+                continue
+            target_company = get_company(peer, animas_dir=animas_dir)
+            display_name = get_company_display_name(
+                target_company or "",
+                data_dir=animas_dir.parent,
+            )
+            return t(
+                "handler.cross_company_message_blocked",
+                display_name=display_name,
+            )
+        return None
+
+    def _channel_company_boundary_error(self, channel: str) -> str | None:
+        """Reject restricted channels whose explicit members cross company boundaries."""
+        if not self._messenger:
+            return None
+
+        from core.messenger import load_channel_meta
+
+        meta = load_channel_meta(self._messenger.shared_dir, channel)
+        if meta is None or (not meta.members and not meta.closed):
+            animas_dir = self._anima_dir.parent
+            members = (
+                [candidate.name for candidate in animas_dir.iterdir() if candidate.is_dir()]
+                if animas_dir.is_dir()
+                else []
+            )
+        else:
+            members = meta.members
+        return self._cross_company_communication_error(members)
+
     # ── Channel tool handlers ────────────────────────────────
 
     def _handle_post_channel(self, args: dict[str, Any]) -> str:
@@ -332,6 +370,9 @@ class CommsToolsMixin:
 
         if not is_channel_member(self._messenger.shared_dir, channel, self._anima_name):
             return t("handler.channel_acl_denied", channel=channel)
+        company_error = self._channel_company_boundary_error(channel)
+        if company_error is not None:
+            return company_error
 
         current_posted = self.posted_channels_for(active_session_type.get())
         if channel in current_posted:
@@ -434,6 +475,14 @@ class CommsToolsMixin:
 
         targets = {t for t in targets if is_channel_member(self._messenger.shared_dir, channel, t)}
 
+        # Defense in depth: the post gate rejects mixed-company channels, but
+        # membership may change before mention fan-out is delivered.
+        targets = {
+            target
+            for target in targets
+            if self._cross_company_communication_error([target]) is None
+        }
+
         if not targets:
             return
 
@@ -534,6 +583,9 @@ class CommsToolsMixin:
             return _error_result("InvalidArguments", f"Invalid channel name: {channel!r}")
         if not is_channel_member(self._messenger.shared_dir, channel, self._anima_name):
             return t("handler.channel_acl_denied", channel=channel)
+        company_error = self._channel_company_boundary_error(channel)
+        if company_error is not None:
+            return company_error
 
         limit = args.get("limit", 20)
         human_only = args.get("human_only", False)
@@ -548,6 +600,9 @@ class CommsToolsMixin:
         peer = args.get("peer", "")
         if not peer:
             return _error_result("InvalidArguments", "peer is required")
+        company_error = self._cross_company_communication_error([peer])
+        if company_error is not None:
+            return company_error
         limit = args.get("limit", 20)
         direction = args.get("direction", "both")
         hours = args.get("hours")
@@ -597,6 +652,9 @@ class CommsToolsMixin:
             members = args.get("members", [])
             if self._anima_name not in members:
                 members = [self._anima_name] + members
+            company_error = self._cross_company_communication_error(members)
+            if company_error is not None:
+                return company_error
             meta = ChannelMeta(
                 members=members,
                 created_by=self._anima_name,
@@ -625,6 +683,9 @@ class CommsToolsMixin:
             # Caller must be a member of the channel
             if not is_channel_member(shared_dir, channel, self._anima_name):
                 return t("handler.channel_acl_not_member", channel=channel)
+            company_error = self._cross_company_communication_error(new_members)
+            if company_error is not None:
+                return company_error
             for m in new_members:
                 if m not in meta.members:
                     meta.members.append(m)
@@ -655,11 +716,12 @@ class CommsToolsMixin:
             if not channel_file.exists():
                 return t("handler.channel_not_found", channel=channel)
             meta = load_channel_meta(shared_dir, channel)
-            if meta is None or not meta.members:
+            if meta is None or (not meta.members and not meta.closed):
                 return t("handler.channel_open", channel=channel)
             info = {
                 "channel": channel,
                 "members": meta.members,
+                "closed": meta.closed,
                 "created_by": meta.created_by,
                 "created_at": meta.created_at,
                 "description": meta.description,
