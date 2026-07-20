@@ -202,9 +202,7 @@ def create_external_tasks_router() -> APIRouter:
         since_dt: datetime | None = None
         if since:
             try:
-                since_dt = ensure_aware(
-                    datetime.fromisoformat(since.replace("Z", "+00:00"))
-                )
+                since_dt = ensure_aware(datetime.fromisoformat(since.replace("Z", "+00:00")))
             except ValueError:
                 return _error_response(
                     400,

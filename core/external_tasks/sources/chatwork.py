@@ -45,9 +45,7 @@ def collect_chatwork() -> list[ExternalTask]:
     try:
         from core.tools._chatwork_client import ChatworkClient
     except ImportError as exc:
-        raise CredentialNotFoundError(
-            f"Chatwork dependencies unavailable: {exc}"
-        ) from exc
+        raise CredentialNotFoundError(f"Chatwork dependencies unavailable: {exc}") from exc
 
     try:
         client = ChatworkClient()

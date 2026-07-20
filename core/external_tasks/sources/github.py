@@ -53,13 +53,9 @@ def _ensure_gh() -> None:
             timeout=10,
         )
     except FileNotFoundError as exc:
-        raise CredentialNotFoundError(
-            "GitHub CLI 'gh' is not installed. See https://cli.github.com/"
-        ) from exc
+        raise CredentialNotFoundError("GitHub CLI 'gh' is not installed. See https://cli.github.com/") from exc
     except subprocess.CalledProcessError as exc:
-        raise CredentialNotFoundError(
-            "GitHub CLI 'gh' is not authenticated. Run: gh auth login"
-        ) from exc
+        raise CredentialNotFoundError("GitHub CLI 'gh' is not authenticated. Run: gh auth login") from exc
 
 
 def _run_gh_json(args: list[str]) -> list[dict[str, Any]]:

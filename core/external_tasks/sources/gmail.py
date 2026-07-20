@@ -38,9 +38,7 @@ def collect_gmail() -> list[ExternalTask]:
     try:
         from core.tools.gmail import GmailClient
     except ImportError as exc:
-        raise CredentialNotFoundError(
-            f"Gmail dependencies unavailable: {exc}"
-        ) from exc
+        raise CredentialNotFoundError(f"Gmail dependencies unavailable: {exc}") from exc
 
     try:
         client = GmailClient()
@@ -57,9 +55,7 @@ def collect_gmail() -> list[ExternalTask]:
         or (mcp_token_path is not None and Path(mcp_token_path).exists())
     )
     if not has_token:
-        raise CredentialNotFoundError(
-            "Gmail token not found (non-interactive; run OAuth once offline)"
-        )
+        raise CredentialNotFoundError("Gmail token not found (non-interactive; run OAuth once offline)")
 
     try:
         emails = client.search_emails(_QUERY, max_results=_MAX_RESULTS)

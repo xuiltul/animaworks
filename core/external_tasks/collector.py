@@ -101,9 +101,7 @@ def collect_all(
         try:
             source_tasks = collect_fn()
             for task in source_tasks:
-                new_tasks.append(
-                    _normalize_task(task, resolved_now, apply_priority_decay=True)
-                )
+                new_tasks.append(_normalize_task(task, resolved_now, apply_priority_decay=True))
             new_sources[source_name] = SourceHealth(
                 status="ok",
                 collected_at=collected_at,
@@ -114,11 +112,7 @@ def collect_all(
             prev_health = previous.sources.get(source_name)
             # Suppress repeated identical credential/source errors to avoid WARN noise
             # every collection interval (e.g. every 5 minutes).
-            same_error = (
-                prev_health is not None
-                and prev_health.error is not None
-                and prev_health.error == err_code
-            )
+            same_error = prev_health is not None and prev_health.error is not None and prev_health.error == err_code
             log_fn = logger.debug if same_error else logger.warning
             log_fn(
                 "External tasks source %s failed: %s",
@@ -128,13 +122,9 @@ def collect_all(
             )
             for task in previous_by_source.get(source_name, []):
                 # Carry-over: sanitize only; do not re-apply priority decay.
-                new_tasks.append(
-                    _normalize_task(task, resolved_now, apply_priority_decay=False)
-                )
+                new_tasks.append(_normalize_task(task, resolved_now, apply_priority_decay=False))
             # Keep previous collected_at on failure (None if never succeeded).
-            prev_collected_at = (
-                prev_health.collected_at if prev_health is not None else None
-            )
+            prev_collected_at = prev_health.collected_at if prev_health is not None else None
             new_sources[source_name] = SourceHealth(
                 status="unavailable",
                 collected_at=prev_collected_at,
@@ -162,11 +152,7 @@ def _normalize_task(
         priority = _adjust_priority(task.priority, task.last_updated_at, now)
     else:
         priority = task.priority
-    if (
-        title == task.title
-        and source_url == task.source_url
-        and priority == task.priority
-    ):
+    if title == task.title and source_url == task.source_url and priority == task.priority:
         return task
     return task.model_copy(
         update={

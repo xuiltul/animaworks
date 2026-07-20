@@ -39,9 +39,7 @@ def collect_slack() -> list[ExternalTask]:
         from core.tools._slack_cache import MessageCache
         from core.tools._slack_client import SlackClient
     except ImportError as exc:
-        raise CredentialNotFoundError(
-            f"Slack dependencies unavailable: {exc}"
-        ) from exc
+        raise CredentialNotFoundError(f"Slack dependencies unavailable: {exc}") from exc
 
     try:
         client = SlackClient()
@@ -130,11 +128,7 @@ def _message_to_task(
     if not channel_id or not ts:
         return None
 
-    channel_name = (
-        message.get("channel_name")
-        or _safe_channel_name(client, channel_id)
-        or channel_id
-    )
+    channel_name = message.get("channel_name") or _safe_channel_name(client, channel_id) or channel_id
     body = _preview_text(message.get("text") or "")
     title = f"#{channel_name}: {body}"
 
