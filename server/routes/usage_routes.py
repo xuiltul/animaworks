@@ -121,7 +121,7 @@ def _discover_claude_cred_paths() -> list[str]:
     paths = list(_CLAUDE_CRED_PATHS)
     # Scan drives/common locations for project-specific .credentials.json
     home = Path.home()
-    for base in [home, home / "OneDrive", home / "OneDriveBiz"]:
+    for base in [home, home / "OneDrive"]:
         if not base.is_dir():
             continue
         for child in base.iterdir():

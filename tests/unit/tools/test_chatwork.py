@@ -660,7 +660,7 @@ class TestResolveWriteToken:
             side_effect=mock_lookup,
         ):
             _resolve_write_token(
-                {"anima_dir": "/home/main/.animaworks/animas/sakura"}
+                {"anima_dir": "/tmp/animaworks/animas/sakura"}
             )
 
         assert calls == ["CHATWORK_API_TOKEN_WRITE__sakura"]

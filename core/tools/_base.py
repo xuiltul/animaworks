@@ -21,7 +21,10 @@ from typing import Any
 logger = logging.getLogger("animaworks.tools")
 
 
-_ABCONFIG_CNCT_ENV_PATH = Path(r"E:\OneDriveBiz\Tools\abconfig\Cnct_Env.py")
+# Optional local abconfig bridge. Set ANIMAWORKS_ABCONFIG_PATH to the
+# absolute path of Cnct_Env.py; secrets_local.py is loaded from the same dir.
+# When unset, the abconfig credential stage is skipped entirely.
+_ABCONFIG_ENV_VAR = "ANIMAWORKS_ABCONFIG_PATH"
 _ABCONFIG_KEY_MAP = {
     "SLACK_BOT_TOKEN": "slack_bot_token",
     "SLACK_APP_TOKEN": "slack_app_token",
@@ -106,11 +109,12 @@ def get_credential(
             _log_resolved(credential_name, key_name, "shared/credentials.json", val)
             return val
 
-    # 4. Local abconfig bridge (secrets_local.py)
+    # 4. Local abconfig bridge (secrets_local.py via ANIMAWORKS_ABCONFIG_PATH)
     if env_var:
         val = _lookup_abconfig_credential(env_var)
         if val:
-            _log_resolved(credential_name, key_name, str(_ABCONFIG_CNCT_ENV_PATH), val)
+            abconfig_path = os.environ.get(_ABCONFIG_ENV_VAR, "abconfig")
+            _log_resolved(credential_name, key_name, abconfig_path, val)
             return val
 
     # 5. Environment variable fallback
@@ -124,8 +128,9 @@ def get_credential(
     sources = [f"config.json credentials.{credential_name}.{key_name}"]
     if env_var:
         sources.append("vault.json")
-        if env_var in _ABCONFIG_KEY_MAP:
-            sources.append(str(_ABCONFIG_CNCT_ENV_PATH))
+        abconfig_path = os.environ.get(_ABCONFIG_ENV_VAR)
+        if abconfig_path and env_var in _ABCONFIG_KEY_MAP:
+            sources.append(abconfig_path)
         sources.append(f"environment variable {env_var}")
     raise ToolConfigError(
         f"Tool '{tool_name}' requires credential '{credential_name}'. Set it in: {' or '.join(sources)}"
@@ -207,9 +212,17 @@ def resolve_env_style_credential(key: str) -> str | None:
 
 @lru_cache(maxsize=1)
 def _load_abconfig_secrets() -> Any | None:
-    """Load ``secrets_local.py`` next to the fixed abconfig ``Cnct_Env.py``."""
-    cnct_env_path = _ABCONFIG_CNCT_ENV_PATH
+    """Load ``secrets_local.py`` next to ``ANIMAWORKS_ABCONFIG_PATH`` (Cnct_Env.py).
+
+    When ``ANIMAWORKS_ABCONFIG_PATH`` is unset, this stage is skipped entirely.
+    """
+    raw = os.environ.get(_ABCONFIG_ENV_VAR)
+    if not raw:
+        return None
+
+    cnct_env_path = Path(raw)
     if not cnct_env_path.is_file():
+        logger.debug("abconfig path not found: %s", cnct_env_path)
         return None
 
     secrets_path = cnct_env_path.with_name("secrets_local.py")
@@ -226,7 +239,7 @@ def _load_abconfig_secrets() -> Any | None:
         spec.loader.exec_module(module)
         return module
     except Exception:
-        logger.warning("Failed to load Slack tokens from %s", secrets_path, exc_info=True)
+        logger.warning("Failed to load tokens from %s", secrets_path, exc_info=True)
         return None
 
 

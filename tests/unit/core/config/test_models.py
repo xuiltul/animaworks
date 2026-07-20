@@ -191,7 +191,7 @@ class TestFormatPermissionsForPrompt:
         with pytest.raises(ValueError, match="absolute paths"):
             PermissionsConfig(file_roots_denied=["relative/private"])
 
-    @pytest.mark.parametrize("root", ["/home/main/*/private", "/home/main/private?.txt"])
+    @pytest.mark.parametrize("root", ["/home/user/*/private", "/home/user/private?.txt"])
     def test_file_roots_denied_rejects_globs(self, root: str):
         with pytest.raises(ValueError, match="glob patterns"):
             PermissionsConfig(file_roots_denied=[root])
@@ -264,8 +264,8 @@ class TestFormatPermissionsForPrompt:
     def test_windows_prompt_mentions_native_runtime(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr("core.config.schemas.sys.platform", "win32")
         config = PermissionsConfig(
-            file_roots=[r"E:\OneDriveBiz\Tools\General"],
-            file_roots_readonly=[r"E:\OneDriveBiz\Tools\abconfig\Cnct_Env.py"],
+            file_roots=[r"E:\Projects\Tools\General"],
+            file_roots_readonly=[r"E:\Projects\Tools\abconfig\Cnct_Env.py"],
             commands=CommandsPermission(allow_all=True),
             external_tools=ExternalToolsPermission(allow_all=True),
             tool_creation=ToolCreationPermission(personal=True, shared=False),

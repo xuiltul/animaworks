@@ -537,7 +537,7 @@ class TestExecutorInit:
 
     def test_default_path_env_includes_launcher_python_dir(self):
         if os.name == "nt":
-            py_exe = r"E:\OneDriveBiz\Tools\General\animaworks\.venv\Scripts\python.exe"
+            py_exe = r"E:\Projects\Tools\General\animaworks\.venv\Scripts\python.exe"
             base_path = r"C:\Windows\System32"
         else:
             py_exe = "/home/user/proj/.venv/bin/python3"
