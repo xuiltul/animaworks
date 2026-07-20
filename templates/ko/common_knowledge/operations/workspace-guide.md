@@ -20,10 +20,10 @@ Anima는 평소 "자신의 집"(`~/.animaworks/animas/{name}/`)에 있습니다.
 
 | 형식 | 예시 | 용도 |
 |------|------|------|
-| 별칭만 | `aischreiber` | 일반적인 참조 (충돌 시 해시 형식 사용 권장) |
-| 전체 형식 | `aischreiber#3af4be6e` | 충돌 없는 엄밀한 참조 |
+| 별칭만 | `myproject` | 일반적인 참조 (충돌 시 해시 형식 사용 권장) |
+| 전체 형식 | `myproject#3af4be6e` | 충돌 없는 엄밀한 참조 |
 | 해시만 | `3af4be6e` | 별칭을 모르는 경우 |
-| 절대 경로 | `/home/main/dev/AI-Schreiber` | 직접 지정 (레지스트리 미등록도 가능) |
+| 절대 경로 | `/home/user/dev/myproject` | 직접 지정 (레지스트리 미등록도 가능) |
 
 ## 도구에서의 사용
 
@@ -32,9 +32,9 @@ Anima는 평소 "자신의 집"(`~/.animaworks/animas/{name}/`)에 있습니다.
 `working_directory`에 별칭, 전체 형식, 해시 또는 절대 경로를 지정할 수 있습니다.
 
 ```bash
-animaworks-tool machine run "코드를 리팩터링해 줘" -d aischreiber
-animaworks-tool machine run "테스트를 실행해 줘" -d aischreiber#3af4be6e
-animaworks-tool machine run "빌드해 줘" -d /home/main/dev/AI-Schreiber
+animaworks-tool machine run "코드를 리팩터링해 줘" -d myproject
+animaworks-tool machine run "테스트를 실행해 줘" -d myproject#3af4be6e
+animaworks-tool machine run "빌드해 줘" -d /home/user/dev/myproject
 ```
 
 ### submit_tasks
@@ -44,7 +44,7 @@ TaskExec가 해당 워크스페이스를 작업 디렉터리로 사용합니다.
 
 ```
 submit_tasks(batch_id="build", tasks=[
-  {"task_id": "t1", "title": "Compile", "description": "...", "workspace": "aischreiber", "parallel": true}
+  {"task_id": "t1", "title": "Compile", "description": "...", "workspace": "myproject", "parallel": true}
 ])
 ```
 
@@ -54,7 +54,7 @@ submit_tasks(batch_id="build", tasks=[
 위임받은 부하가 해당 워크스페이스에서 작업합니다.
 
 ```
-delegate_task(name="aoi", instruction="API 테스트를 실행해 줘", deadline="2d", workspace="aischreiber")
+delegate_task(name="aoi", instruction="API 테스트를 실행해 줘", deadline="2d", workspace="myproject")
 ```
 
 ## 등록과 할당

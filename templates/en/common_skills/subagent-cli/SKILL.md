@@ -85,28 +85,28 @@ Specify the project path for working directory `-C`. For the main project, `$ANI
 #### Code Generation
 
 ```bash
-codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
+codex exec --full-auto --ephemeral -C /home/user/dev/myproject \
   "Implement Markdown parser in src/utils/parser.py. Do not break existing tests."
 ```
 
 #### Code Review
 
 ```bash
-codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
+codex exec --full-auto --ephemeral -C /home/user/dev/myproject \
   review
 ```
 
 #### Test Creation
 
 ```bash
-codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
+codex exec --full-auto --ephemeral -C /home/user/dev/myproject \
   "Create unit tests for src/utils/parser.py in tests/test_parser.py."
 ```
 
 #### Save Result to File
 
 ```bash
-codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
+codex exec --full-auto --ephemeral -C /home/user/dev/myproject \
   -o /tmp/codex_result.txt \
   "Analyze this project's architecture and suggest improvements."
 ```
@@ -141,7 +141,7 @@ cursor-agent -p --trust --force --workspace /path/to/workspace "prompt"
 
 ```bash
 cursor-agent -p --trust --force \
-  --workspace /home/main/dev/myproject \
+  --workspace /home/user/dev/myproject \
   "Add POST /users endpoint to src/api/routes.py. Include validation."
 ```
 
@@ -149,7 +149,7 @@ cursor-agent -p --trust --force \
 
 ```bash
 cursor-agent -p --trust --mode ask \
-  --workspace /home/main/dev/myproject \
+  --workspace /home/user/dev/myproject \
   "Are there security issues in this auth flow?"
 ```
 
@@ -157,7 +157,7 @@ cursor-agent -p --trust --mode ask \
 
 ```bash
 cursor-agent -p --trust --force \
-  --workspace /home/main/dev/myproject \
+  --workspace /home/user/dev/myproject \
   --output-format text \
   "Find modules with low test coverage and improve them" > /tmp/cursor_result.txt
 ```

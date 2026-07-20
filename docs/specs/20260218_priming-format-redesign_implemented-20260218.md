@@ -10,7 +10,7 @@
 
 ### 発生した問題
 
-mio が 00:09 に `/home/main/.animaworks/shared/aws_env/` に boto3 用仮想環境を作成。
+mio が 00:09 に `~/.animaworks/shared/aws_env/` に boto3 用仮想環境を作成。
 しかし 05:35 のハートビートで同じ問題について yuki から再度相談された際、
 mio は存在しない `/opt/venv/` をハルシネーションして案内した。
 
@@ -388,7 +388,7 @@ def _format_group(group: EntryGroup) -> str:
   ```
   [00:03-00:12] DM yuki: boto3/権限問題
     DM< boto3未インストール、PermissionDeniedエラー
-    DM> aws_env venv作成、パス=/home/main/.animaworks/shared/aws_env/
+    DM> aws_env venv作成、パス=~/.animaworks/shared/aws_env/
     DM< 了解、確認します
     -> activity_log/2026-02-18.jsonl#L2-6
   ```

@@ -19,9 +19,9 @@ Workspaces are stored in a shared registry (config.json `workspaces` section) an
 
 ## Aliases and Hashes
 
-- Alias: A short name assigned by humans (e.g., `aischreiber`)
+- Alias: A short name assigned by humans (e.g., `myproject`)
 - Hash: The first 8 hex digits of the path's SHA-256, auto-generated (e.g., `3af4be6e`)
-- Qualified form: `aischreiber#3af4be6e` — zero collision risk
+- Qualified form: `myproject#3af4be6e` — zero collision risk
 - Tool arguments accept alias only, qualified form, hash only, or absolute path
 
 ## Operations

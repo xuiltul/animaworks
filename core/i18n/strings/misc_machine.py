@@ -123,8 +123,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": ("Absolute path to the working directory. The machine tool can only write within this directory"),
     },
     "machine.schema.working_directory_with_alias": {
-        "ja": "作業ディレクトリ。絶対パスまたはワークスペースエイリアス（例: aischreiber, aischreiber#3af4be6e）を指定可能",
-        "en": ("Working directory. Accepts absolute path or workspace alias (e.g. aischreiber, aischreiber#3af4be6e)"),
+        "ja": "作業ディレクトリ。絶対パスまたはワークスペースエイリアス（例: myproject, myproject#3af4be6e）を指定可能",
+        "en": ("Working directory. Accepts absolute path or workspace alias (e.g. myproject, myproject#3af4be6e)"),
     },
     "machine.timeout": {
         "ja": "工作機械 '{engine}' が {seconds} 秒でタイムアウトしました。",

@@ -164,7 +164,7 @@ results/
 | `OPENAI_API_BASE` | No | 明示 override（未設定時は credential 解決） |
 | `OPENAI_API_KEY` | 推奨 | API キー（ローカル LiteLLM では `dummy` 可） |
 
-trserveru 標準構成（LiteLLM プロキシ）:
+litellm-proxy 標準構成（LiteLLM プロキシ）:
 
 ```bash
 # 追加設定なしで vllm-lb (localhost:4000) を使用

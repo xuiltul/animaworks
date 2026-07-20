@@ -12,8 +12,8 @@ from __future__ import annotations
 
 Animas live in their home directory (~/.animaworks/animas/{name}/) but
 *work* in project directories (workspaces).  This module manages a shared
-registry in ``config.json`` and resolves aliases like ``aischreiber`` or
-``aischreiber#3af4be6e`` to absolute paths with existence validation.
+registry in ``config.json`` and resolves aliases like ``myproject`` or
+``myproject#3af4be6e`` to absolute paths with existence validation.
 """
 
 import hashlib

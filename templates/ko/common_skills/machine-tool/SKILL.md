@@ -55,7 +55,7 @@ animaworks-tool machine run -t 300 "지시" -d /path/to/workdir
 |---------|------|------|
 | engine | YES | 엔진명 (`--help`에서 사용 가능한 엔진 확인) |
 | instruction | YES | 작업 지시. 목표, 대상, 제약, 기대 출력을 명시 |
-| working_directory | YES | 작업 디렉토리. 절대 경로 또는 워크스페이스 에일리어스 (예: `aischreiber` / `aischreiber#3af4be6e`) |
+| working_directory | YES | 작업 디렉토리. 절대 경로 또는 워크스페이스 에일리어스 (예: `myproject` / `myproject#3af4be6e`) |
 | background | no | true로 비동기 실행 (기본값: false) |
 | model | no | 모델 오버라이드 (생략 시 엔진 기본값) |
 | timeout | no | 타임아웃 초 (동기: 600, 비동기: 1800) |

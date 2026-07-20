@@ -15,7 +15,7 @@ from core.config.schemas import GitHubWebhookConfig
 from server import github_gateway
 from server.github_gateway import GitHubWebhookManager, locked_dispatch_state
 
-REPO = "FutureSync/AI-Schreiber"
+REPO = "example-org/example-repo"
 BOT_LOGIN = "example-bot"
 OTHER_REPO = "elsewhere/project"
 SHA_1 = "1" * 40

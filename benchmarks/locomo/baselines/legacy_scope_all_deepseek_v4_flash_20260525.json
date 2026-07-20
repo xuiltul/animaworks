@@ -22,5 +22,5 @@
     "overall_f1_min_delta": 0.02,
     "open_domain_f1_min_delta": 0.03
   },
-  "notes": "trserveru LiteLLM proxy (localhost:4000). Default smoke baseline for LOCOMO_ANSWER_MODEL=deepseek-v4-flash. Qwen397B baseline: legacy_scope_all_20260522.json"
+  "notes": "litellm-proxy LiteLLM proxy (localhost:4000). Default smoke baseline for LOCOMO_ANSWER_MODEL=deepseek-v4-flash. Qwen397B baseline: legacy_scope_all_20260522.json"
 }

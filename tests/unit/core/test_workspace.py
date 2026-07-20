@@ -143,9 +143,9 @@ class TestResolveWorkspace:
     ) -> None:
         """Fuzzy match suggests similar aliases when resolution fails."""
         cfg = AnimaWorksConfig()
-        cfg.workspaces = {"aischreiber": str(tmp_path)}
+        cfg.workspaces = {"myproject": str(tmp_path)}
         with patch("core.config.models.load_config", return_value=cfg), pytest.raises(ValueError) as excinfo:
-            resolve_workspace("ai-schreiber")
+            resolve_workspace("my-project")
         msg = str(excinfo.value)
         assert "もしかして" in msg or "Did you mean" in msg
 

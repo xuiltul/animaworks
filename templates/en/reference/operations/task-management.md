@@ -64,7 +64,7 @@ submit_tasks(batch_id="human-20260313", tasks=[
 | `tasks[].description` | MUST | Original instruction text (when delegating, include verbatim quotes) |
 | `tasks[].parallel` | MAY | `true` if the task may run in parallel (`true` recommended for a single task) |
 | `tasks[].depends_on` | MAY | Array of predecessor task IDs |
-| `tasks[].workspace` | MAY | Working directory. A workspace alias (e.g. `aischreiber`) makes TaskExec run in that directory. If omitted, the Anima default applies |
+| `tasks[].workspace` | MAY | Working directory. A workspace alias (e.g. `myproject`) makes TaskExec run in that directory. If omitted, the Anima default applies |
 
 - In normal chat, human instructions do not have to be registered with `submit_tasks`. Register only when the work cannot be handled directly, should run in parallel/background, or needs follow-up tracking
 - Human-origin tasks (equivalent to `source=human`) must be handled with highest priority (MUST)

@@ -64,7 +64,7 @@ submit_tasks(batch_id="human-20260313", tasks=[
 | `tasks[].description` | MUST | 元の指示文（委任時は原文引用を含める） |
 | `tasks[].parallel` | MAY | `true` で並列実行可能（単一タスクでは `true` 推奨） |
 | `tasks[].depends_on` | MAY | 先行タスクIDの配列 |
-| `tasks[].workspace` | MAY | 作業ディレクトリ。ワークスペースエイリアス（例: `aischreiber`）を指定すると TaskExec がそのディレクトリで実行する。省略時は Anima のデフォルト |
+| `tasks[].workspace` | MAY | 作業ディレクトリ。ワークスペースエイリアス（例: `myproject`）を指定すると TaskExec がそのディレクトリで実行する。省略時は Anima のデフォルト |
 
 - 通常チャットでは、人間からの指示を必ず `submit_tasks` に登録する必要はない。直接実行できない・並列化したい・後続追跡が必要な場合に登録する
 - 人間由来タスク（source=human 相当）は最優先で処理する（MUST）

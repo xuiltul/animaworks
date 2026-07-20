@@ -57,7 +57,7 @@ submit_tasks(batch_id="human-20260313", tasks=[
 | `tasks[].description` | MUST | 원본 지시문 (위임 시 원문 인용을 포함) |
 | `tasks[].parallel` | MAY | `true`로 병렬 실행 가능 (단일 태스크에서는 `true` 권장) |
 | `tasks[].depends_on` | MAY | 선행 태스크 ID의 배열 |
-| `tasks[].workspace` | MAY | 작업 디렉토리. 워크스페이스 에일리어스 (예: `aischreiber`)를 지정하면 TaskExec가 해당 디렉토리에서 실행. 생략 시 Anima 기본값 |
+| `tasks[].workspace` | MAY | 작업 디렉토리. 워크스페이스 에일리어스 (예: `myproject`)를 지정하면 TaskExec가 해당 디렉토리에서 실행. 생략 시 Anima 기본값 |
 
 - 일반 채팅에서는 사람의 지시를 반드시 `submit_tasks`에 등록할 필요가 없습니다. 직접 처리할 수 없거나 병렬/백그라운드 실행 또는 후속 추적이 필요한 경우에만 등록합니다
 - 사람 유래 태스크 (source=human 해당)는 최우선으로 처리 (MUST)

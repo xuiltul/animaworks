@@ -27,7 +27,7 @@ async def test_custom_endpoint_entity_extraction_routes_through_openai_provider(
 
     payload = {
         "entities": [
-            {"name": "FutureSync", "entity_type": "Organization", "summary": "A company"},
+            {"name": "ExampleOrg", "entity_type": "Organization", "summary": "A company"},
         ]
     }
     cfg = MagicMock()
@@ -50,9 +50,9 @@ async def test_custom_endpoint_entity_extraction_routes_through_openai_provider(
         patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion,
     ):
         mock_acompletion.return_value = _make_llm_response(json.dumps(payload, ensure_ascii=False))
-        entities = await extractor.extract_entities("FutureSyncについて")
+        entities = await extractor.extract_entities("ExampleOrgについて")
 
-    assert [entity.name for entity in entities] == ["FutureSync"]
+    assert [entity.name for entity in entities] == ["ExampleOrg"]
     kwargs = mock_acompletion.call_args.kwargs
     assert kwargs["model"] == "openai/deepseek-v4-flash"
     assert kwargs["api_base"] == "http://localhost:4000/v1"
@@ -70,8 +70,8 @@ async def test_neo4j_backend_all_scope_retrieves_and_formats_mixed_results(tmp_p
             return [
                 {
                     "uuid": "fact-1",
-                    "fact": "FutureSync uses Neo4j memory",
-                    "source_name": "FutureSync",
+                    "fact": "ExampleOrg uses Neo4j memory",
+                    "source_name": "ExampleOrg",
                     "target_name": "Neo4j",
                     "valid_at": "2026-05-14T00:00:00Z",
                 }
@@ -117,7 +117,7 @@ async def test_neo4j_backend_all_scope_retrieves_and_formats_mixed_results(tmp_p
 
     sources = {memory.source for memory in memories}
     assert {"fact:fact-1", "episode:episode-1", "entity:entity-1"} <= sources
-    assert any("FutureSync -[RELATES_TO]-> Neo4j" in memory.content for memory in memories)
+    assert any("ExampleOrg -[RELATES_TO]-> Neo4j" in memory.content for memory in memories)
     assert any(memory.content == "Recent Sakura episode about Neo4j" for memory in memories)
     assert any(memory.content == "Sakura: An Anima using Neo4j memory" for memory in memories)
 
@@ -271,14 +271,14 @@ def test_realtime_neo4j_ingest_records_user_and_assistant_turn(tmp_path) -> None
     ):
         obj._maybe_neo4j_realtime_ingest(
             "mio",
-            "What did FutureSync decide?",
-            "FutureSync decided to use Neo4j memory.",
+            "What did ExampleOrg decide?",
+            "ExampleOrg decided to use Neo4j memory.",
             thread_id="sakura-main",
             request_id="req-e2e",
         )
 
     mock_backend.ingest_text.assert_awaited_once_with(
-        "mio: What did FutureSync decide?\nsakura: FutureSync decided to use Neo4j memory.",
+        "mio: What did ExampleOrg decide?\nsakura: ExampleOrg decided to use Neo4j memory.",
         source="chat:sakura:sakura-main",
         metadata={
             "stable_key": "chat:sakura:sakura-main:req-e2e",

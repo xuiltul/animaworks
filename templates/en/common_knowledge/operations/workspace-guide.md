@@ -20,10 +20,10 @@ They can be uniquely referenced by a short name (alias) assigned by humans and t
 
 | Form | Example | Use |
 |------|---------|-----|
-| Alias only | `aischreiber` | Normal reference (use hash form if collision) |
-| Full form | `aischreiber#3af4be6e` | Strict reference with zero collision |
+| Alias only | `myproject` | Normal reference (use hash form if collision) |
+| Full form | `myproject#3af4be6e` | Strict reference with zero collision |
 | Hash only | `3af4be6e` | When alias is unknown |
-| Absolute path | `/home/main/dev/AI-Schreiber` | Direct specification (works even if unregistered) |
+| Absolute path | `/home/user/dev/myproject` | Direct specification (works even if unregistered) |
 
 ## Using with Tools
 
@@ -32,9 +32,9 @@ They can be uniquely referenced by a short name (alias) assigned by humans and t
 `working_directory` accepts alias, full form, hash, or absolute path.
 
 ```bash
-animaworks-tool machine run "Refactor the code" -d aischreiber
-animaworks-tool machine run "Run tests" -d aischreiber#3af4be6e
-animaworks-tool machine run "Build" -d /home/main/dev/AI-Schreiber
+animaworks-tool machine run "Refactor the code" -d myproject
+animaworks-tool machine run "Run tests" -d myproject#3af4be6e
+animaworks-tool machine run "Build" -d /home/user/dev/myproject
 ```
 
 ### submit_tasks
@@ -44,7 +44,7 @@ TaskExec will use that workspace as the working directory.
 
 ```
 submit_tasks(batch_id="build", tasks=[
-  {"task_id": "t1", "title": "Compile", "description": "...", "workspace": "aischreiber", "parallel": true}
+  {"task_id": "t1", "title": "Compile", "description": "...", "workspace": "myproject", "parallel": true}
 ])
 ```
 
@@ -54,7 +54,7 @@ Specify the alias in the `workspace` field.
 The delegated subordinate will work in that workspace.
 
 ```
-delegate_task(name="aoi", instruction="Run API test", deadline="2d", workspace="aischreiber")
+delegate_task(name="aoi", instruction="Run API test", deadline="2d", workspace="myproject")
 ```
 
 ## Registration and Assignment

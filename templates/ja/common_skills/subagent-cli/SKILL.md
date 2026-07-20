@@ -85,28 +85,28 @@ codex exec --full-auto -C /path/to/workspace "プロンプト"
 #### コード生成
 
 ```bash
-codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
+codex exec --full-auto --ephemeral -C /home/user/dev/myproject \
   "src/utils/parser.py にMarkdownパーサーを実装して。既存のテストを壊さないこと。"
 ```
 
 #### コードレビュー
 
 ```bash
-codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
+codex exec --full-auto --ephemeral -C /home/user/dev/myproject \
   review
 ```
 
 #### テスト作成
 
 ```bash
-codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
+codex exec --full-auto --ephemeral -C /home/user/dev/myproject \
   "src/utils/parser.py のユニットテストを tests/test_parser.py に作成して。"
 ```
 
 #### 結果をファイルに保存
 
 ```bash
-codex exec --full-auto --ephemeral -C /home/main/dev/myproject \
+codex exec --full-auto --ephemeral -C /home/user/dev/myproject \
   -o /tmp/codex_result.txt \
   "このプロジェクトのアーキテクチャを分析して改善案を出して。"
 ```
@@ -141,7 +141,7 @@ cursor-agent -p --trust --force --workspace /path/to/workspace "プロンプト"
 
 ```bash
 cursor-agent -p --trust --force \
-  --workspace /home/main/dev/myproject \
+  --workspace /home/user/dev/myproject \
   "src/api/routes.py にPOST /users エンドポイントを追加して。バリデーション付き。"
 ```
 
@@ -149,7 +149,7 @@ cursor-agent -p --trust --force \
 
 ```bash
 cursor-agent -p --trust --mode ask \
-  --workspace /home/main/dev/myproject \
+  --workspace /home/user/dev/myproject \
   "この認証フローにセキュリティ上の問題はある？"
 ```
 
@@ -157,7 +157,7 @@ cursor-agent -p --trust --mode ask \
 
 ```bash
 cursor-agent -p --trust --force \
-  --workspace /home/main/dev/myproject \
+  --workspace /home/user/dev/myproject \
   --output-format text \
   "テストカバレッジが低いモジュールを特定して改善して" > /tmp/cursor_result.txt
 ```

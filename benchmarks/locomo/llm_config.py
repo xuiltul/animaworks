@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 # AnimaWorks - Digital Anima Framework
-"""LoCoMo answer LLM resolution — LiteLLM proxy on trserveru (vllm-lb)."""
+"""LoCoMo answer LLM resolution — LiteLLM proxy (vllm-lb)."""
 
 import json
 import logging

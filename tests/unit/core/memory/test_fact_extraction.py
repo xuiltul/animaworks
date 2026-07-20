@@ -124,7 +124,7 @@ class TestFactExtractorExtractEntities:
 
         payload = {
             "entities": [
-                {"name": "FutureSync", "entity_type": "Organization", "summary": "A company"},
+                {"name": "ExampleOrg", "entity_type": "Organization", "summary": "A company"},
             ]
         }
         mock_acompletion.return_value = _make_llm_response(json.dumps(payload, ensure_ascii=False))
@@ -146,7 +146,7 @@ class TestFactExtractorExtractEntities:
             patch("core.memory._llm_utils.ensure_credentials_in_env"),
             patch("core.config.load_config", return_value=cfg),
         ):
-            entities = await ext.extract_entities("FutureSyncについて")
+            entities = await ext.extract_entities("ExampleOrgについて")
 
         assert len(entities) == 1
         kwargs = mock_acompletion.call_args.kwargs

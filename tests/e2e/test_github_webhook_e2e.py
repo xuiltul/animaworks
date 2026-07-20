@@ -49,7 +49,7 @@ def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
     manager = GitHubWebhookManager(
         config=GitHubWebhookConfig(
             enabled=True,
-            repos=["FutureSync/AI-Schreiber"],
+            repos=["example-org/example-repo"],
             reviewer_anima="sumire",
             dispatcher_anima="rin",
             quiet_seconds=0.05,
@@ -76,14 +76,14 @@ def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
         "number": 42,
         "repository": {
             "id": 1001,
-            "full_name": "FutureSync/AI-Schreiber",
+            "full_name": "example-org/example-repo",
         },
         "pull_request": {
             "id": 2002,
             "number": 42,
             "title": "Webhook-driven PR review dispatch",
             "draft": False,
-            "html_url": "https://github.com/FutureSync/AI-Schreiber/pull/42",
+            "html_url": "https://github.com/example-org/example-repo/pull/42",
             "head": {
                 "ref": "feat/webhook-dispatch",
                 "sha": sha,
@@ -127,7 +127,7 @@ def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
                 state = json.loads(state_file.read_text(encoding="utf-8"))
             except (FileNotFoundError, json.JSONDecodeError):
                 return False
-            entry = state.get("prs", {}).get("FutureSync/AI-Schreiber#42", {})
+            entry = state.get("prs", {}).get("example-org/example-repo#42", {})
             return entry.get("notified_sha") == sha
 
         _wait_until(_state_notified)
@@ -138,11 +138,11 @@ def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
         assert message.source == "system"
         assert message.intent == "report"
         assert "【PR新規コミット検出（push静穏確認済み）】" in message.content
-        assert "FutureSync/AI-Schreiber#42" in message.content
+        assert "example-org/example-repo#42" in message.content
         assert sha[:8] in message.content
 
         state = json.loads(state_file.read_text(encoding="utf-8"))
-        entry = state["prs"]["FutureSync/AI-Schreiber#42"]
+        entry = state["prs"]["example-org/example-repo#42"]
         assert entry["sha"] == sha
         assert entry["notified_sha"] == sha
 
