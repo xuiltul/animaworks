@@ -477,11 +477,7 @@ class CommsToolsMixin:
 
         # Defense in depth: the post gate rejects mixed-company channels, but
         # membership may change before mention fan-out is delivered.
-        targets = {
-            target
-            for target in targets
-            if self._cross_company_communication_error([target]) is None
-        }
+        targets = {target for target in targets if self._cross_company_communication_error([target]) is None}
 
         if not targets:
             return

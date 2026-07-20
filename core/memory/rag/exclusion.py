@@ -35,7 +35,4 @@ def is_rag_excluded(
         return True
     name = file_path.name
     path_text = file_path.as_posix()
-    return any(
-        fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(path_text, pattern)
-        for pattern in ragignore_patterns
-    )
+    return any(fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(path_text, pattern) for pattern in ragignore_patterns)
