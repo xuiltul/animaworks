@@ -233,6 +233,34 @@ _EXPECTED_FILES = [
     "prompts/task_complete_notify.md",
     "prompts/task_exec.md",
     "prompts/tool_data_interpretation.md",
+    "prompts/tool_descriptions/Bash.md",
+    "prompts/tool_descriptions/Edit.md",
+    "prompts/tool_descriptions/Glob.md",
+    "prompts/tool_descriptions/Grep.md",
+    "prompts/tool_descriptions/Read.md",
+    "prompts/tool_descriptions/WebFetch.md",
+    "prompts/tool_descriptions/WebSearch.md",
+    "prompts/tool_descriptions/Write.md",
+    "prompts/tool_descriptions/archive_memory_file.md",
+    "prompts/tool_descriptions/backlog_task.md",
+    "prompts/tool_descriptions/call_human.md",
+    "prompts/tool_descriptions/create_anima.md",
+    "prompts/tool_descriptions/list_tasks.md",
+    "prompts/tool_descriptions/post_channel.md",
+    "prompts/tool_descriptions/read_channel.md",
+    "prompts/tool_descriptions/read_dm_history.md",
+    "prompts/tool_descriptions/read_memory_file.md",
+    "prompts/tool_descriptions/refresh_tools.md",
+    "prompts/tool_descriptions/report_knowledge_outcome.md",
+    "prompts/tool_descriptions/report_procedure_outcome.md",
+    "prompts/tool_descriptions/search_memory.md",
+    "prompts/tool_descriptions/send_message.md",
+    "prompts/tool_descriptions/share_tool.md",
+    "prompts/tool_descriptions/update_task.md",
+    "prompts/tool_descriptions/write_memory_file.md",
+    "prompts/tool_guides/non_s.md",
+    "prompts/tool_guides/s_builtin.md",
+    "prompts/tool_guides/s_mcp.md",
     "prompts/unread_messages.md",
     "reference/00_index.md",
     "reference/anatomy/anima-anatomy.md",
@@ -336,6 +364,8 @@ class TestKoDirectoryStructure:
         "prompts/builder",
         "prompts/fragments",
         "prompts/memory",
+        "prompts/tool_descriptions",
+        "prompts/tool_guides",
         "common_knowledge",
         "common_knowledge/anatomy",
         "common_knowledge/communication",
@@ -396,6 +426,7 @@ _HEADING_EXEMPT = {
     "prompts/memory/knowledge_revision.md",
     "prompts/memory/procedure_revision.md",
     "prompts/memory/weekly_pattern.md",
+    "prompts/tool_guides/s_builtin.md",
 }
 
 
@@ -404,7 +435,13 @@ class TestKoTemplateHeadings:
 
     @pytest.mark.parametrize(
         "rel_path",
-        [f for f in _EXPECTED_FILES if f not in _HEADING_EXEMPT and f.endswith(".md")],
+        [
+            f
+            for f in _EXPECTED_FILES
+            if f not in _HEADING_EXEMPT
+            and not f.startswith("prompts/tool_descriptions/")
+            and f.endswith(".md")
+        ],
     )
     def test_file_has_headings(self, rel_path: str):
         full_path = _KO_DIR / rel_path

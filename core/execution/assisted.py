@@ -587,7 +587,7 @@ class AssistedExecutor(BaseExecutor):
                         _MAX_INTENT_REPROMPTS,
                         content,
                     )
-                    from core.tooling.prompt_db import _get_locale
+                    from core.paths import _get_locale
 
                     if _is_empty:
                         reprompt = msg_empty_response()
@@ -907,7 +907,7 @@ class AssistedExecutor(BaseExecutor):
                             _MAX_INTENT_REPROMPTS,
                             content,
                         )
-                        from core.tooling.prompt_db import _get_locale
+                        from core.paths import _get_locale
 
                         if _is_empty:
                             reprompt = msg_empty_response()

@@ -5,7 +5,7 @@
 
 <!-- emotion: {{"emotion": "<感情名>"}} -->
 
-使える感情名: {emotion_list}
+使える感情名: embarrassed, laugh, neutral, smile, surprised, thinking, troubled
 
 **重要**: 会話の内容に合わせて表情を積極的に変えてください。neutral以外の表情を優先的に選びましょう。
 

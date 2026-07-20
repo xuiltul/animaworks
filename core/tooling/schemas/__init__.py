@@ -10,6 +10,7 @@ to Anthropic or LiteLLM/OpenAI formats on demand.
 
 from __future__ import annotations
 
+from core.prompt.tool_content import apply_prompt_descriptions
 from core.tooling.schemas.admin import _AW_CORE_NAMES, ADMIN_TOOLS, CC_TOOLS
 from core.tooling.schemas.builder import (
     _COMPACT_COMM_TOOLS,
@@ -21,7 +22,6 @@ from core.tooling.schemas.builder import (
 from core.tooling.schemas.channel import _channel_tools
 from core.tooling.schemas.completion_gate import _completion_gate_tools
 from core.tooling.schemas.converters import (
-    apply_db_descriptions,
     to_anthropic_format,
     to_litellm_format,
     to_text_format,
@@ -87,7 +87,7 @@ __all__ = [
     "_supervisor_tools",
     "_task_tools",
     "_vault_tools",
-    "apply_db_descriptions",
+    "apply_prompt_descriptions",
     "build_tool_list",
     "build_unified_tool_list",
     "load_all_tool_schemas",

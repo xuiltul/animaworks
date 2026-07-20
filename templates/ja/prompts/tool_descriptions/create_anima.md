@@ -1,0 +1,1 @@
+キャラクターシートから新しいDigital Animaを作成する。character_sheet_contentで直接内容を渡すか、character_sheet_pathでファイルパスを指定する。ディレクトリ構造が原子的に作成され、初回起動時にbootstrapで自己設定される。

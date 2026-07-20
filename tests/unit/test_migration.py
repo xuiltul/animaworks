@@ -400,12 +400,6 @@ class TestMigrationSteps:
         assert (shortterm / "chat" / "session_state.json").exists()
         assert not (shortterm / "session_state.json").exists()
 
-    def test_step_stale_sections_cleanup_no_db(self, data_dir: Path) -> None:
-        from core.migrations.steps import step_stale_sections_cleanup
-
-        result = step_stale_sections_cleanup(data_dir, dry_run=False, verbose=True)
-        assert result.skipped == 1
-
     def test_step_update_version(self, data_dir: Path) -> None:
         from core.migrations.steps import step_update_version
 
@@ -426,9 +420,8 @@ class TestMigrationSteps:
         )
         assert ids.index("v063_behavior_rules_action_rules_skill_sync") < ids.index("update_version")
 
-    def test_step_v063_resyncs_stale_runtime_prompts_and_db(self, data_dir: Path) -> None:
+    def test_step_v063_resyncs_stale_runtime_prompts(self, data_dir: Path) -> None:
         from core.migrations.steps import step_v063_behavior_rules_action_rules_skill_sync
-        from core.tooling.prompt_db import ToolPromptStore
 
         prompts_dir = data_dir / "prompts"
         prompts_dir.mkdir(parents=True, exist_ok=True)
@@ -436,27 +429,19 @@ class TestMigrationSteps:
             "stale: human instructions must be registered with `submit_tasks`",
             encoding="utf-8",
         )
-        store = ToolPromptStore(data_dir / "tool_prompts.sqlite3")
-        store.set_section("behavior_rules", "stale behavior_rules", None)
-        store.set_guide("non_s", "stale non_s guide")
-
         result = step_v063_behavior_rules_action_rules_skill_sync(data_dir, dry_run=False, verbose=True)
 
         assert result.error is None
         behavior_rules = (data_dir / "prompts" / "behavior_rules.md").read_text(encoding="utf-8")
-        action_guide = (
-            data_dir / "common_knowledge" / "operations" / "action-rules-guide.md"
-        ).read_text(encoding="utf-8")
+        action_guide = (data_dir / "common_knowledge" / "operations" / "action-rules-guide.md").read_text(
+            encoding="utf-8"
+        )
         skill_creator = (data_dir / "common_skills" / "skill-creator" / "SKILL.md").read_text(encoding="utf-8")
-        store = ToolPromptStore(data_dir / "tool_prompts.sqlite3")
-
         assert "[ACTION-RULE]" in behavior_rules
         assert "common_skills/skill-creator/SKILL.md" in behavior_rules
         assert "gmail_draft" in action_guide
         assert "slack_post" not in action_guide
         assert "trust_level" in skill_creator
-        assert "[ACTION-RULE]" in (store.get_section("behavior_rules") or "")
-        assert "[ACTION-RULE]" in (store.get_guide("non_s") or "")
 
     def test_step_task_delegation_to_common_knowledge(self, data_dir: Path) -> None:
         from core.migrations.steps import step_task_delegation_to_common_knowledge
@@ -595,5 +580,4 @@ class TestRegisterAllSteps:
         assert "structural" in categories
         assert "per_anima" in categories
         assert "template_sync" in categories
-        assert "db_sync" in categories
         assert "version" in categories

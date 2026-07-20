@@ -15,7 +15,7 @@ from typing import Any
 
 from core.config.models import read_anima_company
 from core.file_access_policy import find_denied_root, load_denied_roots
-from core.paths import get_data_dir, load_prompt
+from core.paths import get_data_dir, load_prompt, load_prompt_text
 from core.prompt.sections import _load_fallback_strings, _load_section_strings
 
 # Modes that use MCP-style tool access (built-in + mcp__aw__*).
@@ -312,8 +312,6 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     Scans anima directories for ``status.json`` supervisor relationships
     and merges with config.json for a complete org tree.
     """
-    from core.tooling.prompt_db import get_prompt_store
-
     _fs = _load_fallback_strings()
 
     animas_dir = get_data_dir() / "animas"
@@ -343,8 +341,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
         ]
         if any(name in all_animas and name != anima_name for name in other_animas):
             cr_key = "communication_rules_s" if _is_mcp_mode(execution_mode) else "communication_rules"
-            _cr_store = get_prompt_store()
-            _cr = (_cr_store.get_section(cr_key) if _cr_store else None) or load_prompt(cr_key)
+            _cr = load_prompt_text(cr_key)
             if _cr:
                 parts.append(_cr)
         return "\n\n".join(parts)
@@ -403,8 +400,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
     # Communication rules: only when there are other animas
     if any(name in all_animas and name != anima_name for name in other_animas):
         cr_key = "communication_rules_s" if _is_mcp_mode(execution_mode) else "communication_rules"
-        _cr_store = get_prompt_store()
-        _cr = (_cr_store.get_section(cr_key) if _cr_store else None) or load_prompt(cr_key)
+        _cr = load_prompt_text(cr_key)
         if _cr:
             parts.append(_cr)
 

@@ -90,7 +90,7 @@ def get_anima_vectordb_dir(anima_name: str) -> Path:
 
 # --- Prompt templates ---
 
-# Cache loaded templates to avoid repeated disk reads
+# Compatibility mirror only; load_prompt always rereads Markdown from disk.
 _prompt_cache: dict[tuple[str, str], str] = {}
 
 
@@ -175,8 +175,18 @@ def resolve_template_path(
     raise FileNotFoundError(f"Template not found: {category}/{filename} (tried locales: {loc}, en, ja and _shared)")
 
 
+def load_prompt_text(name: str, *, locale: str | None = None) -> str:
+    """Read a locale-aware prompt Markdown file without formatting it."""
+    loc = locale or _get_locale()
+    key = (loc, name)
+    path = resolve_template_path("prompts", f"{name}.md", loc)
+    text = path.read_text(encoding="utf-8")
+    _prompt_cache[key] = text
+    return text
+
+
 def load_prompt(name: str, *, locale: str | None = None, **kwargs: object) -> str:
-    """Load a prompt template and format it with locale-aware resolution.
+    """Load and format a locale-aware prompt template.
 
     Templates use Python str.format_map() placeholders like {anima_dir}.
     Literal braces in templates should be doubled: {{ and }}.
@@ -190,10 +200,5 @@ def load_prompt(name: str, *, locale: str | None = None, **kwargs: object) -> st
         locale: Override locale. If None, uses config.locale.
         **kwargs: Values to substitute into the template placeholders.
     """
-    loc = locale or _get_locale()
-    key = (loc, name)
-    if key not in _prompt_cache:
-        path = resolve_template_path("prompts", f"{name}.md", loc)
-        _prompt_cache[key] = path.read_text(encoding="utf-8")
-    template = _prompt_cache[key]
+    template = load_prompt_text(name, locale=locale)
     return template.format_map(_SafeFormatDict(kwargs))

@@ -125,7 +125,6 @@ class TestBuildMessagingSection:
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         with (
-            patch("core.tooling.prompt_db.get_prompt_store", return_value=None),
             patch("core.prompt.messaging.load_prompt", return_value="messaging section"),
         ):
             result = _build_messaging_section(anima_dir, ["bob", "charlie"])
@@ -141,7 +140,6 @@ class TestBuildMessagingSection:
             return "messaging section"
 
         with (
-            patch("core.tooling.prompt_db.get_prompt_store", return_value=None),
             patch("core.prompt.sections.load_prompt", side_effect=_mock_lp),
             patch("core.prompt.messaging.load_prompt", side_effect=_mock_lp) as mock_lp,
         ):
@@ -154,7 +152,6 @@ class TestBuildMessagingSection:
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         with (
-            patch("core.tooling.prompt_db.get_prompt_store", return_value=None),
             patch("core.prompt.messaging.load_prompt", return_value="s messaging") as mock_lp,
         ):
             result = _build_messaging_section(anima_dir, ["bob"], execution_mode="s")
@@ -167,7 +164,6 @@ class TestBuildMessagingSection:
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         with (
-            patch("core.tooling.prompt_db.get_prompt_store", return_value=None),
             patch("core.prompt.messaging.load_prompt", return_value="a messaging") as mock_lp,
         ):
             result = _build_messaging_section(anima_dir, ["bob"], execution_mode="a")
@@ -180,7 +176,6 @@ class TestBuildMessagingSection:
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         with (
-            patch("core.tooling.prompt_db.get_prompt_store", return_value=None),
             patch("core.prompt.messaging.load_prompt", return_value="section") as mock_lp,
         ):
             _build_messaging_section(anima_dir, ["bob"])
@@ -206,7 +201,6 @@ class TestBuildMessagingSection:
             return kwargs["board_channel_guidance"]
 
         with (
-            patch("core.tooling.prompt_db.get_prompt_store", return_value=None),
             patch("core.prompt.sections.load_prompt", side_effect=_mock_lp),
             patch("core.prompt.messaging.load_prompt", side_effect=_mock_lp),
         ):
@@ -230,7 +224,6 @@ class TestBuildMessagingSection:
             return kwargs["board_channel_guidance"]
 
         with (
-            patch("core.tooling.prompt_db.get_prompt_store", return_value=None),
             patch("core.prompt.sections.load_prompt", side_effect=_mock_lp),
             patch("core.prompt.messaging.load_prompt", side_effect=_mock_lp),
         ):

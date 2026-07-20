@@ -1,21 +1,25 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Unit tests for praise-loop prevention changes.
 
-Tests cover three code changes:
+Tests cover two code changes:
 1. Messenger.send() — board_mention no longer exempt from depth limiter
 2. ToolHandler._handle_post_channel() — _suppress_board_fanout flag
-3. _migrate_praise_loop_prevention_v1() — SQLite migration for prompt DB
 """
 
-import sqlite3
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from core.messenger import Messenger
+    from core.tooling.handler import ToolHandler
 
 
 # ── Test 1: board_mention is no longer exempt from depth check ────
@@ -301,206 +305,3 @@ class TestSuppressBoardFanout:
         from core.tooling.handler import suppress_board_fanout
 
         assert suppress_board_fanout.get() is False
-
-
-# ── Test 3: SQLite migration ─────────────────────────────────────
-
-
-@pytest.mark.unit
-class TestPraiseLoopPreventionMigration:
-    """Verify _migrate_praise_loop_prevention_v1 creates migration records
-    and updates the 4 section keys correctly."""
-
-    @pytest.fixture
-    def prompts_dir(self, tmp_path: Path) -> Path:
-        """Create a prompts directory with test prompt files."""
-        d = tmp_path / "prompts"
-        d.mkdir()
-
-        # Create the 4 section files that the migration reads
-        (d / "communication_rules_s.md").write_text(
-            "# Communication Rules (A1)\nNew A1 communication rules with 1往復ルール",
-            encoding="utf-8",
-        )
-        (d / "communication_rules.md").write_text(
-            "# Communication Rules\nNew communication rules with 1往復ルール",
-            encoding="utf-8",
-        )
-        (d / "messaging_s.md").write_text(
-            "# Messaging (A1)\nNew A1 messaging with Board投稿ルール",
-            encoding="utf-8",
-        )
-        (d / "messaging.md").write_text(
-            "# Messaging\nNew messaging with Board投稿ルール",
-            encoding="utf-8",
-        )
-        return d
-
-    @pytest.fixture
-    def tool_store(self, tmp_path: Path) -> ToolPromptStore:
-        from core.tooling.prompt_db import ToolPromptStore
-
-        return ToolPromptStore(tmp_path / "prompts.sqlite3")
-
-    def test_migration_creates_migrations_table(self, tool_store: ToolPromptStore, prompts_dir: Path) -> None:
-        """Migration should create the 'migrations' table in the DB."""
-        from core.init import _migrate_praise_loop_prevention_v1
-
-        _migrate_praise_loop_prevention_v1(tool_store, prompts_dir)
-
-        conn = sqlite3.connect(str(tool_store._db_path))
-        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-        conn.close()
-        assert "migrations" in tables
-
-    def test_migration_records_key_in_migrations_table(self, tool_store: ToolPromptStore, prompts_dir: Path) -> None:
-        """Migration should insert a 'praise_loop_prevention_v1' record."""
-        from core.init import _migrate_praise_loop_prevention_v1
-
-        _migrate_praise_loop_prevention_v1(tool_store, prompts_dir)
-
-        conn = sqlite3.connect(str(tool_store._db_path))
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT key, applied_at FROM migrations WHERE key = ?",
-            ("praise_loop_prevention_v1",),
-        ).fetchone()
-        conn.close()
-
-        assert row is not None
-        assert row["key"] == "praise_loop_prevention_v1"
-        assert row["applied_at"]  # non-empty ISO timestamp
-
-    def test_migration_updates_all_four_sections(self, tool_store: ToolPromptStore, prompts_dir: Path) -> None:
-        """Migration should update communication_rules_s, communication_rules,
-        messaging_s, and messaging sections."""
-        from core.init import _migrate_praise_loop_prevention_v1
-
-        _migrate_praise_loop_prevention_v1(tool_store, prompts_dir)
-
-        for key in (
-            "communication_rules_s",
-            "communication_rules",
-            "messaging_s",
-            "messaging",
-        ):
-            content = tool_store.get_section(key)
-            assert content is not None, f"Section '{key}' should exist after migration"
-            assert len(content) > 0, f"Section '{key}' should have non-empty content"
-
-    def test_migration_sets_correct_conditions(self, tool_store: ToolPromptStore, prompts_dir: Path) -> None:
-        """Migration should set correct conditions from SECTION_CONDITIONS."""
-        from core.init import _migrate_praise_loop_prevention_v1
-        from core.tooling.prompt_db import SECTION_CONDITIONS
-
-        _migrate_praise_loop_prevention_v1(tool_store, prompts_dir)
-
-        for key in (
-            "communication_rules_s",
-            "communication_rules",
-            "messaging_s",
-            "messaging",
-        ):
-            result = tool_store.get_section_with_condition(key)
-            assert result is not None, f"Section '{key}' should exist"
-            _content, condition = result
-            expected_condition = SECTION_CONDITIONS.get(key)
-            assert condition == expected_condition, (
-                f"Section '{key}' condition: expected {expected_condition!r}, got {condition!r}"
-            )
-
-    def test_migration_content_matches_prompt_files(self, tool_store: ToolPromptStore, prompts_dir: Path) -> None:
-        """Migration should load content from the prompt files verbatim (stripped)."""
-        from core.init import _migrate_praise_loop_prevention_v1
-
-        _migrate_praise_loop_prevention_v1(tool_store, prompts_dir)
-
-        for key in (
-            "communication_rules_s",
-            "communication_rules",
-            "messaging_s",
-            "messaging",
-        ):
-            path = prompts_dir / f"{key}.md"
-            expected = path.read_text(encoding="utf-8").strip()
-            actual = tool_store.get_section(key)
-            assert actual == expected, f"Section '{key}' content mismatch"
-
-    def test_migration_is_idempotent(self, tool_store: ToolPromptStore, prompts_dir: Path) -> None:
-        """Running migration twice should not fail or re-apply changes."""
-        from core.init import _migrate_praise_loop_prevention_v1
-
-        # Apply first time
-        _migrate_praise_loop_prevention_v1(tool_store, prompts_dir)
-
-        # Record the state after first application
-        first_content = tool_store.get_section("communication_rules_s")
-
-        # Modify the prompt file to something different
-        (prompts_dir / "communication_rules_s.md").write_text(
-            "# Modified content that should NOT be applied",
-            encoding="utf-8",
-        )
-
-        # Apply again — should be a no-op
-        _migrate_praise_loop_prevention_v1(tool_store, prompts_dir)
-
-        # Content should remain unchanged from the first application
-        second_content = tool_store.get_section("communication_rules_s")
-        assert second_content == first_content
-
-    def test_migration_skips_missing_prompt_files(self, tool_store: ToolPromptStore, tmp_path: Path) -> None:
-        """Migration should gracefully handle missing prompt files."""
-        from core.init import _migrate_praise_loop_prevention_v1
-
-        # Create prompts dir with only 2 of the 4 files
-        partial_dir = tmp_path / "partial_prompts"
-        partial_dir.mkdir()
-        (partial_dir / "communication_rules_s.md").write_text(
-            "A1 rules content",
-            encoding="utf-8",
-        )
-        (partial_dir / "messaging.md").write_text(
-            "Messaging content",
-            encoding="utf-8",
-        )
-
-        _migrate_praise_loop_prevention_v1(tool_store, partial_dir)
-
-        # Present files should have their content
-        assert tool_store.get_section("communication_rules_s") == "A1 rules content"
-        assert tool_store.get_section("messaging") == "Messaging content"
-
-        # Missing files should not create sections
-        assert tool_store.get_section("communication_rules") is None
-        assert tool_store.get_section("messaging_s") is None
-
-    def test_migration_skips_empty_prompt_files(self, tool_store: ToolPromptStore, tmp_path: Path) -> None:
-        """Migration should skip prompt files that are empty or whitespace-only."""
-        from core.init import _migrate_praise_loop_prevention_v1
-
-        empty_dir = tmp_path / "empty_prompts"
-        empty_dir.mkdir()
-        (empty_dir / "communication_rules_s.md").write_text(
-            "Valid content",
-            encoding="utf-8",
-        )
-        (empty_dir / "communication_rules.md").write_text(
-            "   \n  \n  ",
-            encoding="utf-8",
-        )
-        (empty_dir / "messaging_s.md").write_text(
-            "",
-            encoding="utf-8",
-        )
-        (empty_dir / "messaging.md").write_text(
-            "Valid messaging",
-            encoding="utf-8",
-        )
-
-        _migrate_praise_loop_prevention_v1(tool_store, empty_dir)
-
-        assert tool_store.get_section("communication_rules_s") == "Valid content"
-        assert tool_store.get_section("communication_rules") is None  # whitespace-only
-        assert tool_store.get_section("messaging_s") is None  # empty
-        assert tool_store.get_section("messaging") == "Valid messaging"

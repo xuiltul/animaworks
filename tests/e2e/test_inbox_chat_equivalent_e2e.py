@@ -18,6 +18,7 @@ from core.prompt.builder import build_system_prompt
 
 # ── Helpers ────────────────────────────────────────────────────
 
+
 def _make_mock_memory(tmp_path: Path, *, specialty: str = "", current_state: str = "") -> MagicMock:
     memory = MagicMock()
     memory.anima_dir = tmp_path / "animas" / "test_anima"
@@ -35,9 +36,7 @@ def _make_mock_memory(tmp_path: Path, *, specialty: str = "", current_state: str
     memory.read_current_state.return_value = current_state
     memory.read_pending.return_value = ""
     memory.read_resolutions.return_value = []
-    memory.read_model_config.return_value = MagicMock(
-        model="claude-sonnet-4-20250514", supervisor=None, max_chains=3
-    )
+    memory.read_model_config.return_value = MagicMock(model="claude-sonnet-4-20250514", supervisor=None, max_chains=3)
     memory.list_knowledge_files.return_value = []
     memory.list_episode_files.return_value = []
     memory.list_procedure_files.return_value = []
@@ -58,8 +57,6 @@ def _build_with_trigger(tmp_path: Path, trigger: str, **kwargs) -> str:
     with (
         patch("core.prompt.builder.get_data_dir", return_value=data_dir),
         patch("core.prompt.builder._discover_other_animas", return_value=[]),
-        patch("core.tooling.prompt_db.get_prompt_store", return_value=None),
-        patch("core.tooling.prompt_db.get_default_guide", return_value=""),
     ):
         result = build_system_prompt(
             memory,

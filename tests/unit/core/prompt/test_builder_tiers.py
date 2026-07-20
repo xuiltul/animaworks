@@ -112,7 +112,10 @@ class TestBuildSystemPromptTiers:
                 return f"あなたは{anima_name}です。"
             return "section"
 
-        with patch("core.prompt.builder.load_prompt", side_effect=_load_prompt_section):
+        with (
+            patch("core.prompt.builder.load_prompt", side_effect=_load_prompt_section),
+            patch("core.prompt.builder.load_prompt_text", side_effect=_load_prompt_section),
+        ):
             return build_system_prompt(
                 memory,
                 execution_mode="a",
@@ -231,16 +234,21 @@ class TestMicroTierSectionExclusion:
         def _load_prompt_section(name: str, *args: object, **kwargs: object) -> str:
             _call_count["n"] += 1
             if name == "environment":
-                return f"[env-full] data_dir={kwargs.get('data_dir','?')}"
+                return f"[env-full] data_dir={kwargs.get('data_dir', '?')}"
             if name == "behavior_rules":
                 return "[behavior_rules content]"
             if name == "tool_data_interpretation":
                 return "[tool_data_interpretation content]"
             return "section"
 
-        with patch("core.prompt.builder.load_prompt", side_effect=_load_prompt_section):
+        with (
+            patch("core.prompt.builder.load_prompt", side_effect=_load_prompt_section),
+            patch("core.prompt.builder.load_prompt_text", side_effect=_load_prompt_section),
+        ):
             return build_system_prompt(
-                memory, execution_mode="a", context_window=context_window,
+                memory,
+                execution_mode="a",
+                context_window=context_window,
             )
 
     def test_micro_excludes_behavior_rules(self, tmp_path, data_dir):

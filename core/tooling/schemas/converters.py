@@ -7,34 +7,11 @@ from __future__ import annotations
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 
-"""Format converters and DB description overlay."""
+"""Tool-schema format converters."""
 
 from typing import Any
 
 from core.i18n import t as _t
-
-
-def apply_db_descriptions(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Override tool descriptions from DB if available.
-
-    Uses a single ``list_descriptions()`` call to avoid N+1 queries.
-    """
-    from core.tooling.prompt_db import get_prompt_store
-
-    store = get_prompt_store()
-    if store is None:
-        return tools
-    all_descs = store.list_descriptions()
-    if not all_descs:
-        return tools
-    desc_map = {d["name"]: d["description"] for d in all_descs}
-    result = []
-    for t in tools:
-        db_desc = desc_map.get(t["name"])
-        if db_desc is not None:
-            t = {**t, "description": db_desc}
-        result.append(t)
-    return result
 
 
 def to_anthropic_format(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:

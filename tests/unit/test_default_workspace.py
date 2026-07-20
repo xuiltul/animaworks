@@ -25,19 +25,16 @@ def data_dir(tmp_path, monkeypatch):
     """Create isolated data dir and redirect ANIMAWORKS_DATA_DIR."""
     from core.config import invalidate_cache
     from core.paths import _prompt_cache
-    from core.tooling.prompt_db import reset_prompt_store
 
     d = create_test_data_dir(tmp_path)
     monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(d))
     invalidate_cache()
     _prompt_cache.clear()
-    reset_prompt_store()
 
     yield d
 
     invalidate_cache()
     _prompt_cache.clear()
-    reset_prompt_store()
 
 
 def _write_status(data_dir: Path, anima_name: str, **kwargs) -> Path:

@@ -149,7 +149,7 @@ class TestLoadPrompt:
             result = load_prompt("plain", locale="ja")
             assert result == "No placeholders here."
 
-    def test_caching(self, tmp_path):
+    def test_reload_reflects_file_changes(self, tmp_path):
         prompts_dir = tmp_path / "ja" / "prompts"
         prompts_dir.mkdir(parents=True)
         (prompts_dir / "cached.md").write_text("Content", encoding="utf-8")
@@ -157,10 +157,10 @@ class TestLoadPrompt:
             mock_resolve.return_value = prompts_dir / "cached.md"
             load_prompt("cached", locale="ja")
             assert ("ja", "cached") in _prompt_cache
-            # Modify file; cached version should be returned
             (prompts_dir / "cached.md").write_text("Modified", encoding="utf-8")
             result = load_prompt("cached", locale="ja")
-            assert result == "Content"  # still cached
+            assert result == "Modified"
+            assert _prompt_cache[("ja", "cached")] == "Modified"
 
     def test_missing_template_raises(self, tmp_path):
         with patch("core.paths.resolve_template_path") as mock_resolve:

@@ -100,7 +100,7 @@ _SECTION_META: dict[str, tuple[str, str]] = {
     "org_context":              ("organization", "(computed: _build_org_context)"),
     "messaging":                ("organization", "templates/prompts/messaging_s.md"),
     "human_notification":       ("organization", "builder/human_notification.md"),
-    "tool_guides":              ("tools",        "(computed: prompt_db)"),
+    "tool_guides":              ("tools",        "(computed: prompt md)"),
     "external_tools":           ("tools",        "(computed: build_tools_guide)"),
     "skill_catalog":            ("tools",        "(computed: SkillIndex)"),
     "emotion_instruction":      ("meta",         "builder/emotion_instruction.md"),
@@ -184,7 +184,7 @@ def _identify_section_legacy(text: str, idx: int, anima_name: str) -> SectionInf
     if head.startswith("# Injection:") or head.startswith("### 役割"):
         return _make("injection.md", "injection", f"animas/{anima_name}/injection.md")
     if "## MCPツール" in head[:30]:
-        return _make("mcp_tools", "tools", "(computed: prompt_db)")
+        return _make("mcp_tools", "tools", "(computed: prompt md)")
     if "メッセージ送信" in head[:100]:
         return _make("messaging", "organization", "templates/prompts/messaging_s.md")
     if "解決済み案件" in head:

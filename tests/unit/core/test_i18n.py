@@ -20,8 +20,7 @@ from core.anima_factory import (
 )
 from core.paths import _prompt_cache, load_prompt, resolve_template_path
 from core.prompt.builder import _load_fallback_strings, _load_section_strings
-from core.tooling.prompt_db import get_default_description, get_default_guide
-
+from core.prompt.tool_content import load_guide
 
 # ── TestLoadPromptLocale ─────────────────────────────────────
 
@@ -147,9 +146,8 @@ class TestResolveTemplatePath:
 
     def test_raises_file_not_found(self, tmp_path):
         """Raises FileNotFoundError when template not found anywhere."""
-        with patch("core.paths.TEMPLATES_DIR", tmp_path):
-            with pytest.raises(FileNotFoundError) as excinfo:
-                resolve_template_path("prompts", "nonexistent_xyz.md", locale="ja")
+        with patch("core.paths.TEMPLATES_DIR", tmp_path), pytest.raises(FileNotFoundError) as excinfo:
+            resolve_template_path("prompts", "nonexistent_xyz.md", locale="ja")
         assert "nonexistent_xyz" in str(excinfo.value)
 
     def test_fallback_chain_locale_en_ja(self, tmp_path):
@@ -212,28 +210,28 @@ class TestBuilderTemplateParse:
 class TestToolDescriptionLocale:
     def test_get_default_description_ja(self):
         """get_default_description returns Japanese for ja locale."""
-        result = get_default_description("search_memory", locale="ja")
+        result = load_prompt("tool_descriptions/search_memory", locale="ja")
         assert "長期記憶" in result or "キーワード検索" in result
 
     def test_get_default_description_en(self):
         """get_default_description returns English for en locale."""
-        result = get_default_description("search_memory", locale="en")
+        result = load_prompt("tool_descriptions/search_memory", locale="en")
         assert "long-term memory" in result or "keyword" in result.lower()
 
     def test_get_default_description_fallback(self):
         """get_default_description falls back from unknown locale to en."""
-        result = get_default_description("search_memory", locale="fr")
+        result = load_prompt("tool_descriptions/search_memory", locale="fr")
         assert len(result) > 0
         assert "long-term memory" in result or "keyword" in result.lower()
 
     def test_get_default_guide_ja(self):
         """get_default_guide returns Japanese for ja locale."""
-        result = get_default_guide("s_mcp", locale="ja")
+        result = load_guide("s_mcp", locale="ja")
         assert "MCPツール" in result or "タスク" in result
 
     def test_get_default_guide_en(self):
         """get_default_guide returns English for en locale."""
-        result = get_default_guide("s_mcp", locale="en")
+        result = load_guide("s_mcp", locale="en")
         assert "MCP" in result or "task" in result.lower()
 
 
@@ -250,9 +248,7 @@ class TestAnimaFactoryFallbackChain:
         ja_dir = tmp_path / "ja" / "anima_templates"
         ja_dir.mkdir(parents=True)
 
-        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
-            "core.paths._get_locale", return_value="fr"
-        ):
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch("core.paths._get_locale", return_value="fr"):
             result = _get_anima_templates_dir(locale="fr")
         assert result == en_dir
 
@@ -261,9 +257,7 @@ class TestAnimaFactoryFallbackChain:
         ja_dir = tmp_path / "ja" / "anima_templates"
         ja_dir.mkdir(parents=True)
 
-        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
-            "core.paths._get_locale", return_value="fr"
-        ):
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch("core.paths._get_locale", return_value="fr"):
             result = _get_anima_templates_dir(locale="fr")
         assert result == ja_dir
 
@@ -276,9 +270,7 @@ class TestAnimaFactoryFallbackChain:
         ja_file.parent.mkdir(parents=True)
         ja_file.write_text("Japanese bootstrap", encoding="utf-8")
 
-        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
-            "core.paths._get_locale", return_value="fr"
-        ):
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch("core.paths._get_locale", return_value="fr"):
             result = _get_bootstrap_template(locale="fr")
         assert result == en_file
 
@@ -288,9 +280,7 @@ class TestAnimaFactoryFallbackChain:
         ja_file.parent.mkdir(parents=True)
         ja_file.write_text("Japanese bootstrap", encoding="utf-8")
 
-        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
-            "core.paths._get_locale", return_value="fr"
-        ):
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch("core.paths._get_locale", return_value="fr"):
             result = _get_bootstrap_template(locale="fr")
         assert result == ja_file
 
@@ -301,9 +291,7 @@ class TestAnimaFactoryFallbackChain:
         ja_dir = tmp_path / "ja" / "roles"
         ja_dir.mkdir(parents=True)
 
-        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
-            "core.paths._get_locale", return_value="fr"
-        ):
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch("core.paths._get_locale", return_value="fr"):
             result = _get_roles_dir(locale="fr")
         assert result == en_dir
 
@@ -312,9 +300,7 @@ class TestAnimaFactoryFallbackChain:
         ja_dir = tmp_path / "ja" / "roles"
         ja_dir.mkdir(parents=True)
 
-        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
-            "core.paths._get_locale", return_value="fr"
-        ):
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch("core.paths._get_locale", return_value="fr"):
             result = _get_roles_dir(locale="fr")
         assert result == ja_dir
 
@@ -325,9 +311,7 @@ class TestAnimaFactoryFallbackChain:
         ja_dir = tmp_path / "ja" / "anima_templates"
         ja_dir.mkdir(parents=True)
 
-        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch(
-            "core.paths._get_locale", return_value="en"
-        ):
+        with patch("core.anima_factory.TEMPLATES_DIR", tmp_path), patch("core.paths._get_locale", return_value="en"):
             result = _get_anima_templates_dir(locale="en")
         assert result == en_dir
 

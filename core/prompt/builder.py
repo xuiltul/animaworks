@@ -27,7 +27,7 @@ from typing import Any
 from core.i18n import t
 from core.memory import MemoryManager
 from core.memory.shortterm import ShortTermMemory
-from core.paths import get_data_dir, load_prompt  # noqa: F401 — tests patch core.prompt.builder.load_prompt
+from core.paths import get_data_dir, load_prompt, load_prompt_text
 from core.prompt.assembler import (
     _MIN_SYSTEM_BUDGET,  # noqa: F401
     _REFERENCE_WINDOW,
@@ -54,6 +54,7 @@ from core.prompt.sections import (
     _load_fallback_strings,
     _load_section_strings,
 )
+from core.prompt.tool_content import load_guide
 from core.time_utils import now_local
 
 logger = logging.getLogger("animaworks.prompt_builder")
@@ -155,7 +156,6 @@ def _build_group1(
     data_dir: Path,
     memory: MemoryManager,
     is_task: bool,
-    prompt_store: Any,
     _ss: dict[str, str],
     *,
     tier: str = TIER_FULL,
@@ -176,14 +176,7 @@ def _build_group1(
         if dw:
             _add(dw, "default_workspace", 2)
 
-        _env = prompt_store.get_section("environment") if prompt_store else None
-        if _env:
-            try:
-                _env = _env.format(data_dir=data_dir, anima_name=pd.name)
-            except (KeyError, IndexError):
-                pass
-        else:
-            _env = load_prompt("environment", data_dir=data_dir, anima_name=pd.name)
+        _env = load_prompt("environment", data_dir=data_dir, anima_name=pd.name)
         if _env:
             _add(_env, "environment", 2)
 
@@ -213,7 +206,7 @@ def _build_group1(
     _add(f"{_ss.get('current_time_label', '**Current time**:')} {current_time}", "current_time", 1)
 
     if tier != TIER_MICRO:
-        _br = (prompt_store.get_section("behavior_rules") if prompt_store else None) or load_prompt("behavior_rules")
+        _br = load_prompt_text("behavior_rules")
         if _br:
             _add(_br, "behavior_rules", 2)
 
@@ -450,7 +443,6 @@ def _build_group4(
     scale: float,
     execution_mode: str,
     skill_index: Any,
-    prompt_store: Any,
     is_heartbeat: bool,
     is_background_auto: bool,
     is_chat: bool,
@@ -463,8 +455,6 @@ def _build_group4(
     thread_id: str = "default",
 ) -> list[SectionEntry]:
     """Group 4: Memory guide, common knowledge, tool guides."""
-    from core.tooling.prompt_db import get_default_guide
-
     out: list[SectionEntry] = []
 
     def _add(c: str, sid: str, pri: int = 2, kind: str = "rigid") -> None:
@@ -492,8 +482,6 @@ def _build_group4(
         _add(load_prompt("builder/reference_hint"), "reference_hint", 4)
 
     # ── Tool guides ───
-    if not prompt_store:
-        logger.warning("Tool prompt DB unavailable; using hardcoded fallback guides")
     if is_heartbeat:
         try:
             hb_tool = load_prompt("builder/heartbeat_tool_instruction")
@@ -501,13 +489,13 @@ def _build_group4(
             hb_tool = t("builder.heartbeat_tool_fallback")
         _add(hb_tool, "tool_guides", 2)
     elif _is_mcp_mode(execution_mode):
-        sb = (prompt_store.get_guide("s_builtin") if prompt_store else None) or get_default_guide("s_builtin")
-        sm = (prompt_store.get_guide("s_mcp") if prompt_store else None) or get_default_guide("s_mcp")
+        sb = load_guide("s_builtin")
+        sm = load_guide("s_mcp")
         g = "\n\n".join(p for p in (sb, sm) if p)
         if g:
             _add(g, "tool_guides", 2)
     else:
-        ns = (prompt_store.get_guide("non_s") if prompt_store else None) or get_default_guide("non_s")
+        ns = load_guide("non_s")
         if ns:
             _add(ns, "tool_guides", 2)
 
@@ -632,7 +620,6 @@ def _build_group5(
     memory: MemoryManager,
     other_animas: list[str],
     execution_mode: str,
-    prompt_store: Any,
     is_background_auto: bool,
     is_inbox: bool,
     is_task: bool,
@@ -675,7 +662,6 @@ def _build_group5(
 
 def _build_group6(
     execution_mode: str,
-    prompt_store: Any,
     is_chat: bool,
     is_background_auto: bool,
     is_task: bool,
@@ -696,11 +682,11 @@ def _build_group6(
         return out
 
     if is_chat:
-        ei = (prompt_store.get_section("emotion_instruction") if prompt_store else None) or EMOTION_INSTRUCTION
+        ei = _build_emotion_instruction()
         if ei:
             _add(ei, "emotion_instruction", 4)
     if not is_background_auto and execution_mode == "a":
-        ar = (prompt_store.get_section("a_reflection") if prompt_store else None) or _load_a_reflection()
+        ar = _load_a_reflection()
         if ar:
             _add(ar, "a_reflection", 4)
     if execution_mode == "c" and not is_background_auto:
@@ -756,9 +742,6 @@ def build_system_prompt(
     is_background_auto = is_heartbeat or is_cron or is_consolidation
     is_chat = trigger_uses_chat_session(trigger)
 
-    from core.tooling.prompt_db import get_prompt_store
-
-    prompt_store = get_prompt_store()
     other_animas = _discover_other_animas(pd)
 
     from core.paths import get_common_skills_dir
@@ -773,7 +756,7 @@ def build_system_prompt(
     permissions = memory.read_permissions()
 
     # Assemble sections from all 6 groups
-    sections = _build_group1(pd, data_dir, memory, is_task, prompt_store, _ss, tier=tier)
+    sections = _build_group1(pd, data_dir, memory, is_task, _ss, tier=tier)
     sections += _build_group2(memory, permissions, is_background_auto, is_task, _ss)
     sections += _build_group3(
         pd,
@@ -795,7 +778,6 @@ def build_system_prompt(
         scale,
         execution_mode,
         skill_index,
-        prompt_store,
         is_heartbeat,
         is_background_auto,
         is_chat,
@@ -813,7 +795,6 @@ def build_system_prompt(
         memory,
         other_animas,
         execution_mode,
-        prompt_store,
         is_background_auto,
         is_inbox,
         is_task,
@@ -823,7 +804,6 @@ def build_system_prompt(
     )
     sections += _build_group6(
         execution_mode,
-        prompt_store,
         is_chat,
         is_background_auto,
         is_task,

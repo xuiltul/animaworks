@@ -1,0 +1,1 @@
+Create a new Digital Anima from a character sheet. Pass content via character_sheet_content or a path via character_sheet_path. Directory structure is created atomically; bootstrap runs on first startup.

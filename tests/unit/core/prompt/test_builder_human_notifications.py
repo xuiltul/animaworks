@@ -75,8 +75,6 @@ def _mock_memory(tmp_path: Path) -> MagicMock:
 
 def _apply_patches(stack: ExitStack, tmp_path: Path) -> None:
     stack.enter_context(patch("core.prompt.builder.get_data_dir", return_value=tmp_path))
-    stack.enter_context(patch("core.tooling.prompt_db.get_prompt_store", return_value=None))
-    stack.enter_context(patch("core.tooling.prompt_db.get_default_guide", return_value=""))
     stack.enter_context(patch("core.prompt.builder.load_prompt", side_effect=_mock_load_prompt))
     stack.enter_context(patch("core.prompt.builder._discover_other_animas", return_value=[]))
 

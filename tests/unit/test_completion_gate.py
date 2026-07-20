@@ -462,7 +462,7 @@ class TestModeALoopGate:
 
 class TestNonSGuide:
     def test_non_s_guide_mentions_completion_gate(self):
-        from core.tooling.prompt_db import get_default_guide
+        from core.prompt.tool_content import get_default_guide
 
         ja = get_default_guide("non_s", locale="ja")
         assert "completion_gate" in ja

@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from core.paths import PROJECT_DIR, load_prompt
+from core.paths import PROJECT_DIR, load_prompt, load_prompt_text
 from core.prompt.org_context import _is_mcp_mode
 from core.prompt.sections import _load_fallback_strings, _load_section_strings
 
@@ -146,28 +146,14 @@ def _build_messaging_section(
     execution_mode: str = "s",
 ) -> str:
     """Build the messaging instructions with resolved paths."""
-    from core.tooling.prompt_db import get_prompt_store
-
     _fs = _load_fallback_strings()
     self_name = anima_dir.name
     main_py = PROJECT_DIR / "main.py"
     animas_line = ", ".join(other_animas) if other_animas else _fs.get("no_other_animas", "(no other employees yet)")
 
-    db_key = "messaging_s" if _is_mcp_mode(execution_mode) else "messaging"
-    _msg_store = get_prompt_store()
-    raw = _msg_store.get_section(db_key) if _msg_store else None
-    if raw:
-        try:
-            return raw.format(
-                animas_line=animas_line,
-                board_channel_guidance=_build_board_channel_guidance(anima_dir),
-                main_py=main_py,
-                self_name=self_name,
-            )
-        except (KeyError, IndexError):
-            return raw
+    prompt_key = "messaging_s" if _is_mcp_mode(execution_mode) else "messaging"
     return load_prompt(
-        db_key,
+        prompt_key,
         animas_line=animas_line,
         board_channel_guidance=_build_board_channel_guidance(anima_dir),
         main_py=main_py,
@@ -178,7 +164,7 @@ def _build_messaging_section(
 def _load_a_reflection() -> str:
     """Load the A mode reflection/retry prompt template."""
     try:
-        return load_prompt("a_reflection")
+        return load_prompt_text("a_reflection")
     except Exception:
         logger.debug("a_reflection template not found, skipping")
         return ""

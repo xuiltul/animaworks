@@ -60,7 +60,6 @@ function registerRoutes() {
   routes["/memory"] = () => import("../pages/memory.js" + _v);
   routes["/logs"] = () => import("../pages/logs.js" + _v);
   routes["/assets"] = () => import("../pages/assets.js" + _v);
-  routes["/tool-prompts"] = () => import("../pages/tool-prompts.js" + _v);
   routes["/activity-report"] = () => import("../pages/activity-report.js" + _v);
   routes["/settings"] = () => import("../pages/settings.js" + _v);
   routes["/brainstorm"] = () => import("../pages/brainstorm.js" + _v);

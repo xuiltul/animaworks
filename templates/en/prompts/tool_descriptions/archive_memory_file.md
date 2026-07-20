@@ -1,0 +1,1 @@
+Archive memory files (knowledge, procedures) that are no longer needed. Files are moved to archive/ directory, not permanently deleted. Use for cleaning up stale knowledge, duplicates, or outdated procedures.

@@ -1,0 +1,1 @@
+他のAnimaまたは人間ユーザーにDMを送信する。人間ユーザーへのメッセージは設定された外部チャネル（Slack等）経由で自動配信される。intentは report または question のみ。タスク委譲には delegate_task を使う。1対1の報告・質問に使う。全体共有にはpost_channelを使う。
