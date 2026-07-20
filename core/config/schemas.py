@@ -562,6 +562,23 @@ class ExternalMessagingConfig(BaseModel):
     zoom: ZoomRTMSConfig = ZoomRTMSConfig()
 
 
+class ExternalTasksSourcesConfig(BaseModel):
+    """Per-source enable flags for external tasks collection."""
+
+    github: bool = True
+    slack: bool = True
+    chatwork: bool = True
+    gmail: bool = True
+
+
+class ExternalTasksConfig(BaseModel):
+    """Configuration for the external tasks dashboard widget collector."""
+
+    enabled: bool = False
+    interval_minutes: int = 5
+    sources: ExternalTasksSourcesConfig = Field(default_factory=ExternalTasksSourcesConfig)
+
+
 class MediaProxyConfig(BaseModel):
     """Configuration for external image proxy hardening."""
 
@@ -1151,6 +1168,7 @@ class AnimaWorksConfig(BaseModel):
     server: ServerConfig = ServerConfig()
     llm_rate_guard: LlmRateGuardConfig = LlmRateGuardConfig()
     external_messaging: ExternalMessagingConfig = ExternalMessagingConfig()
+    external_tasks: ExternalTasksConfig = Field(default_factory=ExternalTasksConfig)
     github_webhook: GitHubWebhookConfig = GitHubWebhookConfig()
     background_task: BackgroundTaskConfig = BackgroundTaskConfig()
     activity_log: ActivityLogConfig = ActivityLogConfig()
@@ -1195,6 +1213,8 @@ __all__ = [
     "ElevenLabsVoiceConfig",
     "ExternalMessagingChannelConfig",
     "ExternalMessagingConfig",
+    "ExternalTasksConfig",
+    "ExternalTasksSourcesConfig",
     "GatewaySystemConfig",
     "GitHubWebhookConfig",
     "GPUConfig",
