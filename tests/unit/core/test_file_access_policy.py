@@ -104,6 +104,33 @@ def test_company_denies_merge_with_config_and_follow_symlinks(tmp_path: Path) ->
     assert find_denied_root(alias / "secret.txt", denied) == foreign.resolve()
 
 
+def test_nested_deny_roots_collapse_into_outer_root(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    anima_dir = data_dir / "animas" / "agent"
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text(json.dumps({"company": "alpha"}), encoding="utf-8")
+
+    own = data_dir / "companies" / "alpha"
+    foreign = data_dir / "companies" / "beta"
+    own.mkdir(parents=True)
+    nested = foreign / "shared" / "beta"
+    nested.mkdir(parents=True)
+    # Legacy path kept as a compatibility symlink into the foreign company
+    # tree — exactly the post-split layout that produced nested deny mounts.
+    alias = data_dir / "shared-beta"
+    alias.symlink_to(nested, target_is_directory=True)
+    (anima_dir / "permissions.json").write_text(
+        json.dumps({"version": 1, "file_roots_denied": [str(alias)]}),
+        encoding="utf-8",
+    )
+
+    denied = load_denied_roots(anima_dir)
+
+    assert foreign.resolve() in denied
+    assert nested.resolve() not in denied
+    assert find_denied_root(nested / "secret.txt", denied) == foreign.resolve()
+
+
 def test_company_derived_deny_is_enforced_by_file_tools(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     anima_dir = data_dir / "animas" / "agent"

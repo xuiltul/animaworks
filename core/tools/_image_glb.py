@@ -35,6 +35,35 @@ __all__ = [
 # ── gltf-transform helpers ────────────────────────────────────
 
 
+def _npm_cache_dir() -> Path:
+    """Return a writable npm cache path for npx / npm install.
+
+    Prefer the AnimaWorks data-dir cache so a corrupted or root-owned
+    ``~/.npm`` (common after mixed-privilege installs) cannot break GLB
+    tooling.  Fall back to a process tempdir when the data dir is not
+    writable (restricted sandboxes / read-only mounts / Path mocks in tests).
+    """
+    import tempfile
+
+    try:
+        from core.paths import get_data_dir
+
+        cache = get_data_dir() / "cache" / "npm"
+        # Use os-level calls so broken Path.stat mocks in unit tests do not
+        # turn PermissionError recovery into TypeError via pathlib.is_dir().
+        os.makedirs(cache, exist_ok=True)
+        probe = cache / ".write_probe"
+        fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+        try:
+            os.write(fd, b"")
+        finally:
+            os.close(fd)
+        os.unlink(probe)
+        return cache
+    except Exception:
+        return Path(tempfile.mkdtemp(prefix="animaworks-npm-"))
+
+
 def _run_gltf_transform(args: list[str], glb_path: Path) -> bool:
     """Run gltf-transform CLI command. Returns True on success."""
     import shutil
@@ -45,9 +74,14 @@ def _run_gltf_transform(args: list[str], glb_path: Path) -> bool:
         logger.warning("npx not found; skipping gltf-transform for %s", glb_path)
         return False
 
+    env = os.environ.copy()
+    env["NPM_CONFIG_CACHE"] = str(_npm_cache_dir())
+    # Avoid inheriting FORCE_COLOR/NO_COLOR conflicts that only produce noise.
+    env.pop("FORCE_COLOR", None)
+
     cmd = [npx, "--yes", "@gltf-transform/cli", *args]
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=120)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=120, env=env)
         return True
     except FileNotFoundError:
         logger.warning("gltf-transform not available; skipping for %s", glb_path)
@@ -86,12 +120,16 @@ def _ensure_gltf_transform_modules() -> Path:
 
     if not (node_modules / "@gltf-transform" / "core").is_dir():
         cache_dir.mkdir(parents=True, exist_ok=True)
+        env = os.environ.copy()
+        env["NPM_CONFIG_CACHE"] = str(_npm_cache_dir())
+        env.pop("FORCE_COLOR", None)
         subprocess.run(
             ["npm", "install", "--save", "@gltf-transform/core", "@gltf-transform/functions"],
             cwd=str(cache_dir),
             check=True,
             capture_output=True,
             timeout=120,
+            env=env,
         )
         logger.info("Installed @gltf-transform modules to %s", cache_dir)
 

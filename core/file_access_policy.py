@@ -64,9 +64,15 @@ def resolve_effective_denied_roots(
     anima_dir: Path,
     configured_roots: Iterable[str | Path],
 ) -> tuple[Path, ...]:
-    """Merge configured and company-derived denies into canonical roots."""
-    merged = (*resolve_denied_roots(configured_roots), *company_denied_roots(anima_dir))
-    return tuple(dict.fromkeys(merged))
+    """Merge configured and company-derived denies into canonical roots.
+
+    Roots nested inside another deny root are dropped: the outer root already
+    covers them, and sandbox backends that materialize one mount per deny root
+    (bwrap) fail to create a mountpoint inside an already-denied read-only
+    subtree, aborting the whole sandbox before the command starts.
+    """
+    merged = tuple(dict.fromkeys((*resolve_denied_roots(configured_roots), *company_denied_roots(anima_dir))))
+    return tuple(root for root in merged if not any(other != root and root.is_relative_to(other) for other in merged))
 
 
 def load_denied_roots(anima_dir: Path) -> tuple[Path, ...]:

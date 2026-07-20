@@ -229,5 +229,6 @@ def _extract_detail(resp: Any) -> str:
             detail = data.get("detail", data)
             return str(detail)
     except Exception:
-        pass
+        # Non-JSON or unexpected body — fall back to raw text below.
+        logger.debug("create_anima: failed to parse error response JSON", exc_info=True)
     return resp.text or f"HTTP {resp.status_code}"
