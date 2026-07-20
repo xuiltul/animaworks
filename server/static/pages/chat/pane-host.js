@@ -13,6 +13,7 @@ import { createSidebarController } from "./sidebar-controller.js";
 import { createEventsController } from "./events-controller.js";
 import { createImageVoiceController } from "./image-voice-controller.js";
 import { createMeetingController } from "./meeting-controller.js";
+import { createWorkIndicatorController } from "./work-indicator-controller.js";
 import { initSplitter } from "./splitter.js";
 import { onEvent } from "../../modules/websocket.js";
 
@@ -79,6 +80,7 @@ function paneHtml() {
 
       <form data-chat-id="chatPageForm" class="chat-input-form">
         <div class="image-preview-bar" data-chat-id="chatPagePreviewBar" style="display:none"></div>
+        <div class="chat-work-indicator" data-chat-id="chatWorkIndicator" hidden></div>
         <div class="pending-queue-bar" data-chat-id="chatPagePending" style="display:none">
           <div class="pending-queue-header">
             <span class="pending-queue-label" data-chat-id="chatPagePendingLabel">${t("chat.queue_label")}</span>
@@ -173,6 +175,7 @@ export function createPaneHost(rootContainer) {
     ctx.controllers.events = createEventsController(ctx);
     ctx.controllers.imageVoice = createImageVoiceController(ctx);
     ctx.controllers.meeting = createMeetingController(ctx);
+    ctx.controllers.workIndicator = createWorkIndicatorController(ctx);
 
     const pane = { id, el: paneEl, ctx, intervals: [] };
     panes.push(pane);
@@ -407,6 +410,7 @@ export function createPaneHost(rootContainer) {
     }
     pane.intervals = [];
     ctx.controllers.renderer.clearBootstrapInterval();
+    ctx.controllers.workIndicator?.destroy();
 
     if (ctx.state.chatUiStateSaveTimer) {
       clearTimeout(ctx.state.chatUiStateSaveTimer);

@@ -193,6 +193,7 @@ export function createAnimaController(ctx) {
     state.selectedThreadId = state.activeThreadByAnima[name] || "default";
     clearUnreadForActiveThread(ctx, name, state.selectedThreadId);
     ctx.controllers.imageVoice.updateVoiceAnima(name);
+    ctx.controllers.workIndicator?.onAnimaChange();
 
     if (!state.threads[name]) {
       state.threads[name] = [{ id: "default", label: t("thread.default_label"), unread: false }];

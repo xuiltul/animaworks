@@ -1382,6 +1382,114 @@
   cursor: not-allowed;
 }
 
+/* ── Work Indicator (live tool / thinking / bg tasks) ── */
+
+.chat-work-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0 6px;
+  margin: 0 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  border-radius: 6px;
+  background: var(--aw-color-bg-subtle, #f5f5f5);
+  border: 1px solid var(--aw-color-border-light, #e5e5e5);
+  font-size: 0.75rem;
+  color: var(--aw-color-text-secondary, #555);
+  scrollbar-width: thin;
+}
+
+.chat-work-indicator[hidden] {
+  display: none !important;
+  height: 0;
+  min-height: 0;
+  max-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+}
+
+.chat-work-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+  max-width: 18rem;
+  height: 20px;
+  padding: 0 0.45rem;
+  border-radius: 4px;
+  background: var(--aw-color-bg-primary, #fff);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.chat-work-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.chat-work-chip-icon i[data-lucide] {
+  width: 12px;
+  height: 12px;
+}
+
+.chat-work-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-work-chip--running::before,
+.chat-work-chip--thinking::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aw-color-accent, #4a90d9);
+  flex-shrink: 0;
+  animation: chat-work-pulse 1.2s ease-in-out infinite;
+}
+
+.chat-work-chip--thinking::before {
+  background: var(--aw-color-warning-text, #c99000);
+}
+
+.chat-work-chip--done {
+  color: var(--aw-color-success-text, #2d8a4e);
+}
+
+.chat-work-chip--error {
+  color: var(--aw-color-danger-text, #c0392b);
+}
+
+.chat-work-chip--bg {
+  background: var(--aw-color-bg-tertiary, #eee);
+  color: var(--aw-color-text-muted, #777);
+}
+
+.chat-work-bg-heading {
+  font-weight: 600;
+}
+
+@keyframes chat-work-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+@media (max-width: 768px) {
+  .chat-work-indicator .chat-work-chip--bg {
+    display: none;
+  }
+}
+
 /* ── Pending Queue ──────────────────── */
 
 .pending-queue-bar {
