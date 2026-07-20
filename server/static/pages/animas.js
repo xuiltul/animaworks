@@ -2,6 +2,7 @@
 import { api } from "../modules/api.js";
 import { escapeHtml, renderMarkdown } from "../modules/state.js";
 import {
+  fetchAnimasList,
   fetchAnimasWithProcessStatus,
   healthIndicatorHtml,
   statusBadgeHtml,
@@ -29,7 +30,21 @@ const _DETAIL_TABS = [
   { id: "overview", labelKey: "animas.tab_overview" },
   { id: "process", labelKey: "animas.tab_process" },
   { id: "schedule", labelKey: "animas.tab_schedule" },
+  { id: "memory", labelKey: "animas.tab_memory" },
 ];
+
+/**
+ * Build detail-view hash for an anima (+ optional tab).
+ * Pure helper — exported for unit tests.
+ * @param {string|null|undefined} name
+ * @param {string} [tab="overview"]
+ * @returns {string}
+ */
+export function buildAnimaDetailHash(name, tab = "overview") {
+  if (!name) return "#/animas";
+  const base = `#/animas/${encodeURIComponent(name)}`;
+  return tab && tab !== "overview" ? `${base}/${encodeURIComponent(tab)}` : base;
+}
 
 function _extractStatsCount(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -72,12 +87,7 @@ function _destroyActiveTab() {
  * @param {string} [tab]
  */
 function _navigateAnimas(name, tab) {
-  if (!name) {
-    window.location.hash = "#/animas";
-    return;
-  }
-  const base = `#/animas/${encodeURIComponent(name)}`;
-  window.location.hash = tab && tab !== "overview" ? `${base}/${encodeURIComponent(tab)}` : base;
+  window.location.hash = buildAnimaDetailHash(name, tab);
 }
 
 export function render(container, { subPath } = {}) {
@@ -811,9 +821,13 @@ async function _showDetail(name, tabId = "overview") {
   _activeTab = _DETAIL_TABS.some((t) => t.id === tabId) ? tabId : "overview";
 
   _container.innerHTML = `
-    <div class="page-header" style="display:flex; align-items:center; gap:1rem;">
+    <div class="page-header" style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
       <button class="btn-secondary" id="animasBackBtn" style="font-size:0.85rem;">&larr; ${t("animas.back")}</button>
-      <h2>${escapeHtml(name)}</h2>
+      <h2 id="animasDetailTitle">${escapeHtml(name)}</h2>
+      <label for="animasSwitcher" class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;">${t("animas.switch_anima")}</label>
+      <select id="animasSwitcher" class="anima-dropdown" aria-label="${escapeHtml(t("animas.switch_anima"))}">
+        <option value="${escapeHtml(name)}" selected>${escapeHtml(name)}</option>
+      </select>
     </div>
     <div id="animasDetailTabs"></div>
     <div id="animasTabContent">
@@ -824,6 +838,8 @@ async function _showDetail(name, tabId = "overview") {
   document.getElementById("animasBackBtn")?.addEventListener("click", () => {
     _navigateAnimas(null);
   });
+
+  _populateAnimaSwitcher(name, _activeTab);
 
   const tabsHost = document.getElementById("animasDetailTabs");
   if (tabsHost) {
@@ -839,6 +855,47 @@ async function _showDetail(name, tabId = "overview") {
   }
 
   await _loadDetailTab(name, _activeTab);
+}
+
+/**
+ * Fill the detail-header Anima switcher and wire navigation
+ * that keeps the current tab when switching names.
+ * @param {string} currentName
+ * @param {string} currentTab
+ */
+async function _populateAnimaSwitcher(currentName, currentTab) {
+  const select = document.getElementById("animasSwitcher");
+  if (!select) return;
+
+  try {
+    const animas = await fetchAnimasList();
+    if (!Array.isArray(animas) || animas.length === 0) return;
+
+    select.innerHTML = animas
+      .map((a) => {
+        const n = a.name;
+        const selected = n === currentName ? " selected" : "";
+        return `<option value="${escapeHtml(n)}"${selected}>${escapeHtml(n)}</option>`;
+      })
+      .join("");
+
+    // Ensure current name is present even if not in the list
+    if (currentName && !animas.some((a) => a.name === currentName)) {
+      const opt = document.createElement("option");
+      opt.value = currentName;
+      opt.textContent = currentName;
+      opt.selected = true;
+      select.appendChild(opt);
+    }
+  } catch {
+    /* keep the single current option */
+  }
+
+  select.addEventListener("change", () => {
+    const newName = select.value;
+    if (!newName || newName === currentName) return;
+    _navigateAnimas(newName, currentTab);
+  });
 }
 
 async function _loadDetailTab(name, tabId) {
