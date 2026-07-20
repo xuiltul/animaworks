@@ -160,9 +160,29 @@ class MessagingMixin:
 
         Writes to ``shared/users/{from_person}/conversations/YYYY-MM-DD.jsonl``
         so that any Anima can search what the human discussed across all Animas.
+
+        Skips system/self senders and known anima names (exact match only) so
+        anima-to-anima traffic never creates directories under ``shared/users/``.
         """
         if from_person in ("system", "") or from_person == self.name:
             return
+        try:
+            from core.anima_roster import is_anima_name
+
+            if is_anima_name(from_person):
+                logger.info(
+                    "[%s] Skipping shared/users conversation log for anima sender '%s'",
+                    self.name,
+                    from_person,
+                )
+                return
+        except Exception:
+            logger.debug(
+                "[%s] Anima roster check failed for '%s'; proceeding with log",
+                self.name,
+                from_person,
+                exc_info=True,
+            )
         try:
             shared_dir = self.anima_dir.parent.parent / "shared" / "users" / from_person / "conversations"
             shared_dir.mkdir(parents=True, exist_ok=True)

@@ -682,6 +682,13 @@ def create_animas_router() -> APIRouter:
                 logger.warning("Partial delete for '%s': %s", name, exc)
                 return {"status": "partial", "name": name, "detail": str(exc)}
 
+        try:
+            from core.anima_roster import refresh_anima_roster
+
+            refresh_anima_roster()
+        except Exception:
+            logger.debug("Failed to refresh anima roster after delete", exc_info=True)
+
         return {"status": "deleted", "name": name}
 
     # ── Org Chart ─────────────────────────────────────────

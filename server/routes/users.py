@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.auth.manager import (
     create_session,
@@ -36,6 +37,7 @@ class AddUserRequest(BaseModel):
     display_name: str = ""
     password: str
     bio: str = ""
+    role: Literal["admin", "user"] = Field(default="user")
 
 
 class ChangePasswordRequest(BaseModel):
@@ -103,13 +105,26 @@ def create_users_router() -> APIRouter:
                 status_code=409,
             )
 
+        # Reject usernames that collide with anima names (exact match)
+        try:
+            from core.anima_roster import is_anima_name, refresh_anima_roster
+
+            refresh_anima_roster()
+            if is_anima_name(body.username):
+                return JSONResponse(
+                    {"error": f"Username '{body.username}' conflicts with an anima name"},
+                    status_code=400,
+                )
+        except Exception:
+            logger.debug("Anima roster check failed during user add", exc_info=True)
+
         # Create user
         new_user = AuthUser(
             username=body.username,
             display_name=body.display_name or body.username,
             bio=body.bio,
             password_hash=hash_password(body.password),
-            role="user",
+            role=body.role,
         )
         auth_config.users.append(new_user)
 

@@ -195,6 +195,54 @@ class TestMultiUserCrud:
         usernames = [u["username"] for u in resp.json()]
         assert "bob" not in usernames
 
+    def test_add_list_password_change_delete_flow(self, data_dir):
+        """E2E API flow: add → list → password change → delete."""
+        _setup_password_auth(data_dir)
+        app = _create_test_app(data_dir)
+        client = TestClient(app)
+
+        client.post("/api/auth/login", json={"username": "admin", "password": "secret123"})
+
+        # Add
+        resp = client.post("/api/users", json={
+            "username": "carol",
+            "display_name": "Carol",
+            "password": "carolpw1",
+            "role": "user",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["username"] == "carol"
+        assert resp.json()["role"] == "user"
+
+        # List (created_at present)
+        resp = client.get("/api/users")
+        assert resp.status_code == 200
+        users = resp.json()
+        carol = next(u for u in users if u["username"] == "carol")
+        assert "created_at" in carol
+        assert carol["role"] == "user"
+
+        # Password change (owner changes own password)
+        resp = client.put("/api/users/me/password", json={
+            "current_password": "secret123",
+            "new_password": "secret456",
+        })
+        assert resp.status_code == 200
+
+        # Re-login with new password
+        client.post("/api/auth/logout")
+        resp = client.post("/api/auth/login", json={
+            "username": "admin",
+            "password": "secret456",
+        })
+        assert resp.status_code == 200
+
+        # Delete carol
+        resp = client.delete("/api/users/carol")
+        assert resp.status_code == 200
+        usernames = [u["username"] for u in client.get("/api/users").json()]
+        assert "carol" not in usernames
+
     def test_non_owner_cannot_add_users(self, data_dir):
         _setup_multi_user_auth(data_dir)
         app = _create_test_app(data_dir)

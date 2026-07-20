@@ -155,6 +155,12 @@ def register_anima_in_config(
             anima_name,
             supervisor,
         )
+        try:
+            from core.anima_roster import refresh_anima_roster
+
+            refresh_anima_roster()
+        except Exception:
+            logger.debug("Failed to refresh anima roster after register", exc_info=True)
 
     # Ensure .env has Slack token slots for this Anima
     try:
@@ -195,6 +201,12 @@ def unregister_anima_from_config(
     del config.animas[anima_name]
     save_config(config, config_path)
     logger.debug("Unregistered anima '%s' from config", anima_name)
+    try:
+        from core.anima_roster import refresh_anima_roster
+
+        refresh_anima_roster()
+    except Exception:
+        logger.debug("Failed to refresh anima roster after unregister", exc_info=True)
     return True
 
 

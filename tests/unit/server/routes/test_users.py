@@ -94,6 +94,46 @@ class TestAddUser:
         assert resp.status_code == 200
         assert resp.json()["username"] == "newuser"
 
+    def test_add_user_rejects_anima_name_collision(self, data_dir):
+        config = AuthConfig(
+            auth_mode="password",
+            owner=AuthUser(username="admin", password_hash=hash_password("secret123"), role="owner"),
+        )
+        save_auth(config)
+        anima_dir = data_dir / "animas" / "sakura"
+        anima_dir.mkdir(parents=True, exist_ok=True)
+        (anima_dir / "identity.md").write_text("# sakura\n", encoding="utf-8")
+
+        app = _create_test_app(data_dir)
+        client = TestClient(app)
+        _login_as_owner(client)
+
+        resp = client.post("/api/users", json={
+            "username": "sakura",
+            "password": "pass1234",
+        })
+        assert resp.status_code == 400
+        assert "anima" in resp.json()["error"].lower()
+
+    def test_add_user_with_admin_role(self, data_dir):
+        config = AuthConfig(
+            auth_mode="password",
+            owner=AuthUser(username="admin", password_hash=hash_password("secret123"), role="owner"),
+        )
+        save_auth(config)
+
+        app = _create_test_app(data_dir)
+        client = TestClient(app)
+        _login_as_owner(client)
+
+        resp = client.post("/api/users", json={
+            "username": "moderator",
+            "password": "pass1234",
+            "role": "admin",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["role"] == "admin"
+
     def test_add_user_as_non_owner_rejected(self, data_dir):
         config = AuthConfig(
             auth_mode="password",
