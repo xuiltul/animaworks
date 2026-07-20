@@ -135,6 +135,51 @@ class TestFindServerPidByProcess:
         _, kwargs = mock_find.call_args
         assert all(isinstance(p, int) for p in kwargs["exclude_pids"])
 
+    @patch("cli.commands.server._read_process_cmdline", return_value=["python", "-m", "cli", "start"])
+    @patch("cli.commands.server._read_process_environ_data_dir", return_value=(True, "/tmp/other-data"))
+    @patch("cli.commands.server.find_first_matching_pid", side_effect=[12345, None])
+    def test_ignores_process_with_different_data_dir(
+        self, mock_find, mock_environ, mock_cmdline, tmp_path, monkeypatch
+    ):
+        """A matching command for another runtime is not the same server."""
+        from cli.commands.server import _find_server_pid_by_process
+
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path / "current-data"))
+
+        assert _find_server_pid_by_process(port=18500) is None
+        assert mock_find.call_count == 2
+        assert 12345 in mock_find.call_args_list[1].kwargs["exclude_pids"]
+
+    @patch(
+        "cli.commands.server._read_process_cmdline",
+        return_value=["python", "-m", "cli", "--data-dir=/tmp/other-data", "start"],
+    )
+    @patch("cli.commands.server._read_process_environ_data_dir")
+    @patch("cli.commands.server.find_first_matching_pid", side_effect=[12345, None])
+    def test_ignores_process_with_different_data_dir_argument(
+        self, mock_find, mock_environ, mock_cmdline, tmp_path, monkeypatch
+    ):
+        """An explicit candidate --data-dir takes precedence over its environment."""
+        from cli.commands.server import _find_server_pid_by_process
+
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path / "current-data"))
+
+        assert _find_server_pid_by_process(port=18500) is None
+        mock_environ.assert_not_called()
+
+    @patch(
+        "cli.commands.server._read_process_cmdline",
+        return_value=["python", "-m", "cli", "start", "--port", "18501"],
+    )
+    @patch("cli.commands.server._read_process_environ_data_dir", return_value=(False, None))
+    @patch("cli.commands.server.find_first_matching_pid", side_effect=[12345, None])
+    def test_unreadable_environ_ignores_different_port(self, mock_find, mock_environ, mock_cmdline):
+        """An unreadable environment still permits excluding another explicit port."""
+        from cli.commands.server import _find_server_pid_by_process
+
+        assert _find_server_pid_by_process(port=18500) is None
+        assert mock_find.call_count == 2
+
 
 # ── _stop_server ─────────────────────────────────────────
 
@@ -355,6 +400,7 @@ class TestCmdStart:
         with pytest.raises(SystemExit) as exc:
             cmd_start(args)
         assert exc.value.code == EXIT_ALREADY_RUNNING
+        mock_find.assert_called_once_with(port=18500)
 
     @patch("cli.commands.server._pin_native_threads")
     @patch("cli.commands.server._is_process_alive", return_value=True)
@@ -378,6 +424,7 @@ class TestCmdStart:
         with pytest.raises(SystemExit) as exc:
             cmd_start(args)
         assert exc.value.code == EXIT_ALREADY_RUNNING
+        mock_find.assert_called_once_with(port=18500)
 
     @patch("cli.commands.server._remove_pid_file")
     @patch("cli.commands.server._start_pid_watchdog")
