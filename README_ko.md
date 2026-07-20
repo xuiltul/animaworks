@@ -43,7 +43,7 @@ AI 에이전트를 일회성 도구가 아니라, 기억을 가지고 계속 일
 git clone https://github.com/xuiltul/animaworks.git
 cd animaworks/demo
 cp .env.example .env          # ANTHROPIC_API_KEY를 붙여넣기
-docker compose up              # http://localhost:18500 을 열기
+docker compose up              # http://localhost:18501 을 열기
 ```
 
 3인 팀(매니저 + 엔지니어 + 코디네이터)이 바로 실행되고, 3일치 활동 이력이 미리 로드된 상태로 시작됩니다. [데모 상세 보기 →](demo/README.md)

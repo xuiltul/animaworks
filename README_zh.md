@@ -43,7 +43,7 @@
 git clone https://github.com/xuiltul/animaworks.git
 cd animaworks/demo
 cp .env.example .env          # 粘贴你的 ANTHROPIC_API_KEY
-docker compose up              # 打开 http://localhost:18500
+docker compose up              # 打开 http://localhost:18501
 ```
 
 一个 3 人团队（经理 + 工程师 + 协调员）立即开始工作，并预加载了 3 天的活动历史。[了解更多演示详情 →](demo/README.md)

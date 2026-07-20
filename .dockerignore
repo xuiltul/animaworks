@@ -14,3 +14,4 @@ scripts/
 .pytest_cache/
 *.md
 !README.md
+!templates/**/*.md

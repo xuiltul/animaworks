@@ -14,6 +14,7 @@ from core.paths import (
     PROJECT_DIR,
     TEMPLATES_DIR,
     _prompt_cache,
+    _resolve_templates_dir,
     get_animas_dir,
     get_common_knowledge_dir,
     get_common_skills_dir,
@@ -35,6 +36,17 @@ class TestConstants:
 
     def test_templates_dir_is_under_project(self):
         assert TEMPLATES_DIR == PROJECT_DIR / "templates"
+
+    def test_templates_dir_falls_back_to_installed_package(self, tmp_path, monkeypatch):
+        installed_templates = tmp_path / "site-packages" / "templates"
+        installed_templates.mkdir(parents=True)
+        monkeypatch.delenv("ANIMAWORKS_TEMPLATES_DIR", raising=False)
+
+        with (
+            patch("core.paths.PROJECT_DIR", tmp_path / "missing-project"),
+            patch("core.paths.resources.files", return_value=installed_templates),
+        ):
+            assert _resolve_templates_dir() == installed_templates
 
 
 class TestResolveTemplatePath:

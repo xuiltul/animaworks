@@ -43,7 +43,7 @@ AIエージェントを単発の「ツール」ではなく、記憶を持って
 git clone https://github.com/xuiltul/animaworks.git
 cd animaworks/demo
 cp .env.example .env          # ANTHROPIC_API_KEY を貼り付け
-docker compose up              # http://localhost:18500 を開く
+docker compose up              # http://localhost:18501 を開く
 ```
 
 3人のチーム（マネージャー＋エンジニア＋コーディネーター）がすぐに動き出します。3日分のアクティビティ履歴付きです。[デモの詳細はこちら →](demo/README.ja.md)

@@ -43,7 +43,7 @@ Up and running in about 60 seconds. You only need an API key and Docker.
 git clone https://github.com/xuiltul/animaworks.git
 cd animaworks/demo
 cp .env.example .env          # paste your ANTHROPIC_API_KEY
-docker compose up              # open http://localhost:18500
+docker compose up              # open http://localhost:18501
 ```
 
 A three-person team (manager + engineer + coordinator) starts immediately, with three days of activity history. [Demo details →](demo/README.md)

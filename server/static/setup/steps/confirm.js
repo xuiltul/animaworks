@@ -127,7 +127,9 @@ export async function completeSetup(data) {
 
   // Add credentials from environment step
   const env = data.environment || {};
-  if (env.provider && (env.api_key || env.auth_mode === "codex_login" || env.auth_mode === "claude_code_login")) {
+  if (env.provider === "claude_code") {
+    payload.credentials.anthropic = { type: "claude_code_login" };
+  } else if (env.provider && (env.api_key || env.auth_mode === "codex_login" || env.auth_mode === "claude_code_login")) {
     payload.credentials[env.provider] = {
       type: env.auth_mode === "codex_login" ? "codex_login"
         : env.auth_mode === "claude_code_login" ? "claude_code_login"

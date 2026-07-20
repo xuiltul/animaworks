@@ -1,4 +1,5 @@
 """Tests for bootstrap UX improvements and Docker dev environment."""
+
 from __future__ import annotations
 
 import json
@@ -9,6 +10,7 @@ import yaml
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "server" / "static"
 DEMO_DIR = Path(__file__).resolve().parents[2] / "demo"
+REPO_DIR = Path(__file__).resolve().parents[2]
 
 BOOTSTRAP_I18N_KEYS = [
     "chat.anima_starting",
@@ -26,6 +28,16 @@ BOOTSTRAP_I18N_KEYS = [
 WS_BOOTSTRAP_KEYS = [
     "websocket.bootstrap_max_retries",
 ]
+
+
+class TestSetupWizardCredentials:
+    """Setup confirmation sends credentials for subscription providers."""
+
+    def test_claude_code_maps_to_anthropic_subscription(self):
+        confirm_js = (STATIC_DIR / "setup" / "steps" / "confirm.js").read_text(encoding="utf-8")
+
+        assert 'env.provider === "claude_code"' in confirm_js
+        assert 'payload.credentials.anthropic = { type: "claude_code_login" }' in confirm_js
 
 
 class TestBootstrapI18n:
@@ -99,6 +111,15 @@ class TestDockerComposeDev:
         assert len(data_mount) >= 1, "Missing animaworks-demo-data volume"
 
 
+class TestRootDockerBuild:
+    """Root Docker context preserves runtime bootstrap templates."""
+
+    def test_dockerignore_includes_markdown_templates(self):
+        dockerignore = (REPO_DIR / ".dockerignore").read_text(encoding="utf-8")
+
+        assert "!templates/**/*.md" in dockerignore.splitlines()
+
+
 class TestBootstrapCssClasses:
     """CSS file contains required bootstrap progress classes."""
 
@@ -154,7 +175,7 @@ class TestPaneHostBootstrapIntegration:
         return path.read_text(encoding="utf-8")
 
     def test_imports_on_event(self, pane_host_content):
-        assert 'import { onEvent }' in pane_host_content
+        assert "import { onEvent }" in pane_host_content
 
     def test_subscribes_to_bootstrap(self, pane_host_content):
         assert 'onEvent("anima.bootstrap"' in pane_host_content
@@ -207,16 +228,14 @@ class TestChatRendererBootstrap:
         bootstrap_check_idx = None
         empty_check_idx = None
         for i, line in enumerate(lines):
-            if "animaStatus === \"bootstrapping\"" in line:
+            if 'animaStatus === "bootstrapping"' in line:
                 bootstrap_check_idx = i
             if "hs.sessions.length === 0 && history.length === 0" in line:
                 if empty_check_idx is None:
                     empty_check_idx = i
         assert bootstrap_check_idx is not None, "Bootstrap status check not found"
         assert empty_check_idx is not None, "Empty messages check not found"
-        assert bootstrap_check_idx < empty_check_idx, (
-            "Bootstrap check must come before empty messages check"
-        )
+        assert bootstrap_check_idx < empty_check_idx, "Bootstrap check must come before empty messages check"
 
     def test_six_bootstrap_steps(self, renderer_content):
         assert "bootstrap_step_identity" in renderer_content

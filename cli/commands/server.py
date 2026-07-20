@@ -15,6 +15,8 @@ import sys
 import time
 from pathlib import Path
 
+import psutil
+
 from core.platform.process import (
     find_first_matching_pid,
     subprocess_session_kwargs,
@@ -90,8 +92,10 @@ def _is_process_alive(pid: int) -> bool:
 
 def _find_server_pid_by_process(
     extra_exclude_pids: set[int] | None = None,
+    *,
+    port: int | None = None,
 ) -> int | None:
-    """Find the animaworks server process by command pattern."""
+    """Find an AnimaWorks server for the current data directory."""
     excluded = {os.getpid(), os.getppid()}
     if extra_exclude_pids:
         excluded |= extra_exclude_pids
@@ -101,11 +105,107 @@ def _find_server_pid_by_process(
             excluded.add(int(helper_pid_str))
         except ValueError:
             pass
-    return find_first_matching_pid(
-        _SERVER_CMD_MARKERS,
-        exclude_pids=excluded,
-        require_python=True,
-    )
+
+    from core.paths import get_data_dir
+
+    current_data_dir = get_data_dir()
+    while True:
+        pid = find_first_matching_pid(
+            _SERVER_CMD_MARKERS,
+            exclude_pids=excluded,
+            require_python=True,
+        )
+        if pid is None or pid in excluded:
+            return None
+
+        cmdline = _read_process_cmdline(pid)
+        candidate_data_dir = _process_data_dir(pid, cmdline)
+        if candidate_data_dir is not None:
+            if candidate_data_dir == current_data_dir:
+                return pid
+            logger.debug(
+                "Ignoring server pid=%d for different data dir: %s",
+                pid,
+                candidate_data_dir,
+            )
+            excluded.add(pid)
+            continue
+
+        candidate_port = _command_option(cmdline, "--port")
+        if port is not None and candidate_port is not None:
+            try:
+                if int(candidate_port) != port:
+                    logger.debug(
+                        "Ignoring server pid=%d on different port: %s",
+                        pid,
+                        candidate_port,
+                    )
+                    excluded.add(pid)
+                    continue
+            except ValueError:
+                pass
+
+        # If /proc is unavailable or unreadable, retain the previous
+        # conservative behaviour unless an explicitly different port proved
+        # this is another server instance.
+        return pid
+
+
+def _read_process_cmdline(pid: int) -> list[str] | None:
+    """Read a process command line using the cross-platform process adapter."""
+    try:
+        return psutil.Process(pid).cmdline()
+    except psutil.Error:
+        return None
+
+
+def _read_process_environ_data_dir(pid: int) -> tuple[bool, str | None]:
+    """Read only ANIMAWORKS_DATA_DIR from ``/proc/<pid>/environ``.
+
+    The boolean indicates whether the environment was readable.  Other
+    environment variables may contain secrets, so they are neither decoded
+    nor retained.
+    """
+    try:
+        raw = (Path("/proc") / str(pid) / "environ").read_bytes()
+    except OSError:
+        return False, None
+    prefix = b"ANIMAWORKS_DATA_DIR="
+    for entry in raw.split(b"\0"):
+        if entry.startswith(prefix):
+            return True, os.fsdecode(entry[len(prefix) :])
+    return True, None
+
+
+def _command_option(cmdline: list[str] | None, option: str) -> str | None:
+    """Extract ``--option value`` or ``--option=value`` from a command line."""
+    if not cmdline:
+        return None
+    prefix = f"{option}="
+    for index, part in enumerate(cmdline):
+        if part.startswith(prefix):
+            return part[len(prefix) :]
+        if part == option and index + 1 < len(cmdline):
+            return cmdline[index + 1]
+    return None
+
+
+def _process_data_dir(pid: int, cmdline: list[str] | None) -> Path | None:
+    """Resolve a candidate server's data directory when process data is readable."""
+    raw_data_dir = _command_option(cmdline, "--data-dir")
+    if raw_data_dir is None:
+        environ_readable, raw_data_dir = _read_process_environ_data_dir(pid)
+        if not environ_readable:
+            return None
+        if raw_data_dir is None:
+            return Path.home() / ".animaworks"
+    try:
+        candidate = Path(raw_data_dir).expanduser()
+        if not candidate.is_absolute():
+            candidate = Path(psutil.Process(pid).cwd()) / candidate
+        return candidate.resolve()
+    except (OSError, psutil.Error):
+        return None
 
 
 def _stop_server(
@@ -268,7 +368,7 @@ def _spawn_daemon(args: argparse.Namespace) -> None:
     elif existing_pid is not None:
         _remove_pid_file()
 
-    orphan_pid = _find_server_pid_by_process()
+    orphan_pid = _find_server_pid_by_process(port=args.port)
     if orphan_pid is not None and _is_process_alive(orphan_pid):
         print(f"Error: Server is already running (pid={orphan_pid}, PID file was missing).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
@@ -512,7 +612,7 @@ def _start_foreground(args: argparse.Namespace) -> None:
         logger.info("Stale PID file found (pid=%d). Cleaning up.", existing_pid)
         _remove_pid_file()
 
-    orphan_pid = _find_server_pid_by_process()
+    orphan_pid = _find_server_pid_by_process(port=args.port)
     if orphan_pid is not None and _is_process_alive(orphan_pid):
         print(f"Error: Server is already running (pid={orphan_pid}, PID file was missing).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")

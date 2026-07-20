@@ -43,6 +43,7 @@ def make_anima(animas_dir: Path):
     def _make(name: str) -> Path:
         d = animas_dir / name
         d.mkdir(exist_ok=True)
+        (d / "status.json").write_text("{}", encoding="utf-8")
         (d / "permissions.md").write_text("", encoding="utf-8")
         return d
 

@@ -2,13 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[neo4j]"
-
+COPY pyproject.toml README.md LICENSE main.py ./
 COPY core/ core/
+COPY cli/ cli/
 COPY server/ server/
 COPY templates/ templates/
-COPY main.py .
+
+RUN pip install --no-cache-dir ".[neo4j]"
 
 EXPOSE 18500
 

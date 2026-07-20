@@ -43,6 +43,7 @@ def _make_anima_dir(tmp_path: Path, name: str) -> Path:
     (anima_dir / "identity.md").write_text(
         f"# {name}\n\nテスト用Anima。\n", encoding="utf-8",
     )
+    (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     (anima_dir / "permissions.md").write_text(
         "# Permissions\n\n## メッセージング\n- send_message: OK\n- post_channel: OK\n",
         encoding="utf-8",

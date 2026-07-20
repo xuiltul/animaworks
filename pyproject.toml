@@ -83,11 +83,12 @@ evaluation = [
 py-modules = ["main"]
 
 [tool.setuptools.packages.find]
-include = ["core*", "cli*", "server*"]
+include = ["core*", "cli*", "server*", "templates"]
 exclude = ["tests*", "archive*", "demo*", "site-docs*"]
 
 [tool.setuptools.package-data]
 server = ["static/**/*"]
+templates = ["**/*"]
 
 [project.scripts]
 animaworks = "cli:cli_main"

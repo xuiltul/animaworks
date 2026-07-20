@@ -13,6 +13,7 @@ import ipaddress
 import json
 import logging
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _TCP_LOOPBACK_HOST = "127.0.0.1"
 _TCP_METADATA_VERSION = 1
+_UNIX_SOCKET_PATH_LIMIT = 104 if sys.platform == "darwin" else 108
 _ALLOWED_LOOPBACK = frozenset({ipaddress.ip_address("127.0.0.1"), ipaddress.ip_address("::1")})
 _tcp_missing_warned: set[str] = set()  # suppress repeated warnings per socket path
 
@@ -55,6 +57,16 @@ def should_use_tcp_transport() -> bool:
     if override == "unix":
         return False
     return os.name == "nt"
+
+
+def _unix_socket_path_too_long(socket_path: Path) -> bool:
+    """Return whether ``socket_path`` cannot fit in ``sockaddr_un.sun_path``."""
+    if os.name == "nt":
+        return False
+    # Filesystem encoding matters here: non-ASCII directory names can use
+    # multiple bytes even when the displayed path looks short.  The final NUL
+    # terminator also occupies one byte in sun_path.
+    return len(os.fsencode(str(socket_path))) >= _UNIX_SOCKET_PATH_LIMIT
 
 
 def cleanup_ipc_endpoint(socket_path: Path) -> None:
@@ -136,7 +148,18 @@ async def start_ipc_server(
     socket_path.parent.mkdir(parents=True, exist_ok=True)
     cleanup_ipc_endpoint(socket_path)
 
-    if should_use_tcp_transport():
+    use_tcp = should_use_tcp_transport()
+    if not use_tcp and _unix_socket_path_too_long(socket_path):
+        path_length = len(os.fsencode(str(socket_path)))
+        logger.warning(
+            "Unix IPC socket path is too long (%d bytes; limit %d): %s; falling back to loopback TCP",
+            path_length,
+            _UNIX_SOCKET_PATH_LIMIT,
+            socket_path,
+        )
+        use_tcp = True
+
+    if use_tcp:
         server = await asyncio.start_server(
             handler,
             host=_TCP_LOOPBACK_HOST,

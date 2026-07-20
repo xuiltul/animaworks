@@ -14,6 +14,7 @@ Runtime data directory can be overridden via ANIMAWORKS_DATA_DIR environment var
 from __future__ import annotations
 
 import os
+from importlib import resources
 from pathlib import Path
 
 # Project root: where the code lives (immutable, git-tracked)
@@ -26,11 +27,19 @@ def _resolve_templates_dir() -> Path:
     Resolution order:
       1. ANIMAWORKS_TEMPLATES_DIR env var (explicit override, e.g. Docker)
       2. PROJECT_DIR / "templates" (development / editable install)
+      3. Installed ``templates`` package resources
     """
     env = os.environ.get("ANIMAWORKS_TEMPLATES_DIR")
     if env:
         return Path(env).resolve()
-    return PROJECT_DIR / "templates"
+    project_templates = PROJECT_DIR / "templates"
+    if project_templates.exists():
+        return project_templates
+    try:
+        installed_templates = Path(str(resources.files("templates")))
+    except (ModuleNotFoundError, TypeError):
+        return project_templates
+    return installed_templates if installed_templates.exists() else project_templates
 
 
 TEMPLATES_DIR = _resolve_templates_dir()
