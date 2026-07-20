@@ -58,7 +58,7 @@ export function createAnimaController(ctx) {
     if (state.animaTabAvatarLoading[name]) return state.animaTabAvatarLoading[name];
 
     state.animaTabAvatarLoading[name] = (async () => {
-      const found = await resolveCachedAvatar(name, bustupCandidates(), "S");
+      const found = await resolveCachedAvatar(name, bustupCandidates(), "M");
       state.animaTabAvatarUrls[name] = found;
       delete state.animaTabAvatarLoading[name];
       renderAnimaTabs();

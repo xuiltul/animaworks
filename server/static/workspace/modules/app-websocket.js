@@ -16,7 +16,7 @@ import { getSelectedBoard, appendBoardMessage } from "./board.js";
 import { updateAnimaStatus, updateCardActivity, showMessageLine, showExternalLine, updateAvatarExpression, isReplayMode, bufferReplayEvent, VISIBLE_TOOL_NAMES } from "./org-dashboard.js";
 import { playReveal } from "./reveal.js";
 import { createLogger } from "../../shared/logger.js";
-import { bustupCandidates, resolveAvatar, invalidateAvatarCache } from "../../modules/avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar, invalidateAvatarCache } from "../../modules/avatar-resolver.js";
 
 const logger = createLogger("ws-app");
 
@@ -345,7 +345,7 @@ export function setupWebSocket(deps) {
         (a) => a.startsWith("avatar_") || a === "icon.png" || a === "icon_realistic.png",
       );
       if (hasAvatar) {
-        const avatarUrl = await resolveAvatar(animaName, bustupCandidates());
+        const avatarUrl = await resolveCachedAvatar(animaName, bustupCandidates(), "M");
         if (avatarUrl) await playReveal({ name: animaName, avatarUrl });
       }
 

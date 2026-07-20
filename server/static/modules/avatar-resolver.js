@@ -5,7 +5,7 @@
  * If the asset doesn't exist, callers should show the initial placeholder.
  */
 
-import { getCachedImage, invalidateCache } from "./image-cache.js";
+import { invalidateCache } from "./image-cache.js";
 import { basePath } from "/shared/base-path.js";
 
 /** @type {Map<string, string|null>} animaName -> resolved URL (or null) */
@@ -79,7 +79,8 @@ export async function resolveAvatar(animaName, candidates) {
 }
 
 /**
- * Resolve avatar URL and return a cached/resized version via image-cache.
+ * Resolve avatar URL with server-side thumbnail size query.
+ * Server generates WebP thumbs at S=96 / M=192 / L=400 via ?size=.
  * @param {string} animaName
  * @param {string[]} candidates
  * @param {"S"|"M"|"L"} size
@@ -88,14 +89,8 @@ export async function resolveAvatar(animaName, candidates) {
 export async function resolveCachedAvatar(animaName, candidates, size = "S") {
   const url = await resolveAvatar(animaName, candidates);
   if (!url) return null;
-  if (url.endsWith("/icon.png") || url.endsWith("/icon_realistic.png")) {
-    return url;
-  }
-  try {
-    return await getCachedImage(url, size);
-  } catch {
-    return url;
-  }
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}size=${size}`;
 }
 
 /**

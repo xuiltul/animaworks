@@ -308,6 +308,14 @@ class TestAvatarResolverExpressionSupport:
     def test_neutral_fallback(self):
         assert re.search(r'expression\s*===\s*"neutral"', self.src)
 
+    def test_resolve_cached_avatar_appends_size_query(self):
+        """Server-side thumbs: resolveCachedAvatar returns ?size= URL (no icon exclusion)."""
+        assert "export async function resolveCachedAvatar" in self.src
+        assert "size=${size}" in self.src or 'size=" + size' in self.src or "size=${size}" in self.src
+        # Icon exclusion removed — all avatars get server-side thumbnails
+        assert "endsWith(\"/icon.png\")" not in self.src
+        assert "endsWith('/icon.png')" not in self.src
+
 
 # ── Dispose Cleanup ──────────────────────
 

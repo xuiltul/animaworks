@@ -1,5 +1,5 @@
 // ── Bustup Overlay Controller ──────────────────
-import { bustupCandidates, resolveAvatar, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 
 export function createAvatarController(ctx) {
   const $ = ctx.$;
@@ -16,7 +16,7 @@ export function createAvatarController(ctx) {
 
     state.bustupUrl = null;
     const name = state.selectedAnima;
-    const url = await resolveCachedAvatar(name, bustupCandidates(), "S");
+    const url = await resolveCachedAvatar(name, bustupCandidates(), "M");
     if (url) {
       state.bustupUrl = url;
       container.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" class="anima-avatar-img">`;
@@ -29,8 +29,10 @@ export function createAvatarController(ctx) {
 
   async function showBustupOverlay() {
     if (!state.selectedAnima) return;
-    if (!state.bustupUrl) {
-      state.bustupUrl = await resolveAvatar(state.selectedAnima, bustupCandidates());
+    // Enlarged overlay: prefer L; fall back to cached M URL from updateAvatar
+    const largeUrl = await resolveCachedAvatar(state.selectedAnima, bustupCandidates(), "L");
+    if (largeUrl) {
+      state.bustupUrl = largeUrl;
     }
     if (!state.bustupUrl) return;
     removeBustupOverlay();

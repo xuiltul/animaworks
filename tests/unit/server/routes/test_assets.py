@@ -208,6 +208,190 @@ class TestGetAsset:
         assert resp.status_code == 200
 
 
+def _write_test_png(path: Path, size: int = 256) -> Path:
+    """Write a solid-color PNG of *size*×*size* for thumbnail tests."""
+    from PIL import Image
+
+    img = Image.new("RGB", (size, size), color=(200, 100, 50))
+    img.save(path, format="PNG")
+    return path
+
+
+class TestAssetThumbnail:
+    """Server-side ?size=S|M|L WebP thumbnail generation."""
+
+    async def test_size_s_returns_96px_webp(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        assets_dir = animas_dir / "alice" / "assets"
+        assets_dir.mkdir(parents=True)
+        src = _write_test_png(assets_dir / "icon.png", size=512)
+        original_size = src.stat().st_size
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/animas/alice/assets/icon.png?size=S")
+
+        assert resp.status_code == 200
+        assert "image/webp" in resp.headers.get("content-type", "")
+        assert "max-age=3600" in resp.headers.get("cache-control", "")
+        assert "etag" in {k.lower() for k in resp.headers}
+
+        from io import BytesIO
+
+        from PIL import Image
+
+        thumb = Image.open(BytesIO(resp.content))
+        assert thumb.size == (96, 96)
+        assert thumb.format == "WEBP"
+        assert len(resp.content) < original_size
+
+        # Disk cache created
+        cache = assets_dir / ".thumbs" / "icon.png.S.webp"
+        assert cache.is_file()
+
+    async def test_cache_hit_on_second_request(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        assets_dir = animas_dir / "alice" / "assets"
+        assets_dir.mkdir(parents=True)
+        _write_test_png(assets_dir / "icon.png", size=256)
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            r1 = await client.get("/api/animas/alice/assets/icon.png?size=M")
+            cache = assets_dir / ".thumbs" / "icon.png.M.webp"
+            assert cache.is_file()
+            mtime1 = cache.stat().st_mtime_ns
+            content1 = r1.content
+
+            r2 = await client.get("/api/animas/alice/assets/icon.png?size=M")
+            mtime2 = cache.stat().st_mtime_ns
+
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r2.content == content1
+        assert mtime2 == mtime1  # cache not regenerated
+
+    async def test_regenerate_when_source_updated(self, tmp_path):
+        import os
+        import time
+
+        animas_dir = tmp_path / "animas"
+        assets_dir = animas_dir / "alice" / "assets"
+        assets_dir.mkdir(parents=True)
+        src = _write_test_png(assets_dir / "icon.png", size=200)
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            r1 = await client.get("/api/animas/alice/assets/icon.png?size=S")
+            cache = assets_dir / ".thumbs" / "icon.png.S.webp"
+            mtime1 = cache.stat().st_mtime_ns
+
+            # Update source so mtime is newer than cache
+            time.sleep(0.02)
+            _write_test_png(src, size=300)
+            # Ensure source mtime is strictly newer (some FS have coarse resolution)
+            src_stat = src.stat()
+            os.utime(src, ns=(src_stat.st_atime_ns, mtime1 + 1_000_000))
+
+            r2 = await client.get("/api/animas/alice/assets/icon.png?size=S")
+            mtime2 = cache.stat().st_mtime_ns
+
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert mtime2 > mtime1
+
+    async def test_invalid_size_falls_back_to_original(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        assets_dir = animas_dir / "alice" / "assets"
+        assets_dir.mkdir(parents=True)
+        src = _write_test_png(assets_dir / "icon.png", size=128)
+        original = src.read_bytes()
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/animas/alice/assets/icon.png?size=XL")
+
+        assert resp.status_code == 200
+        assert "image/png" in resp.headers.get("content-type", "")
+        assert resp.content == original
+        assert not (assets_dir / ".thumbs").exists()
+
+    async def test_corrupt_image_falls_back_to_original(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        assets_dir = animas_dir / "alice" / "assets"
+        assets_dir.mkdir(parents=True)
+        corrupt = b"\x89PNG\r\n\x1a\nnot-a-real-image"
+        (assets_dir / "broken.png").write_bytes(corrupt)
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/animas/alice/assets/broken.png?size=S")
+
+        assert resp.status_code == 200
+        assert "image/png" in resp.headers.get("content-type", "")
+        assert resp.content == corrupt
+
+    async def test_pillow_import_error_falls_back(self, tmp_path):
+        import sys
+
+        animas_dir = tmp_path / "animas"
+        assets_dir = animas_dir / "alice" / "assets"
+        assets_dir.mkdir(parents=True)
+        src = _write_test_png(assets_dir / "icon.png", size=128)
+        original = src.read_bytes()
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        # sys.modules[PIL]=None makes `from PIL import Image` raise ImportError
+        blocked = {k: None for k in list(sys.modules) if k == "PIL" or k.startswith("PIL.")}
+        with patch.dict(sys.modules, blocked):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/animas/alice/assets/icon.png?size=S")
+
+        assert resp.status_code == 200
+        assert "image/png" in resp.headers.get("content-type", "")
+        assert resp.content == original
+
+    async def test_omit_size_serves_original(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        assets_dir = animas_dir / "alice" / "assets"
+        assets_dir.mkdir(parents=True)
+        src = _write_test_png(assets_dir / "icon.png", size=128)
+        original = src.read_bytes()
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/animas/alice/assets/icon.png")
+
+        assert resp.status_code == 200
+        assert "image/png" in resp.headers.get("content-type", "")
+        assert resp.content == original
+
+    async def test_size_l_is_400px(self, tmp_path):
+        animas_dir = tmp_path / "animas"
+        assets_dir = animas_dir / "alice" / "assets"
+        assets_dir.mkdir(parents=True)
+        _write_test_png(assets_dir / "icon.png", size=800)
+
+        app = _make_test_app(animas_dir=animas_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/animas/alice/assets/icon.png?size=L")
+
+        from io import BytesIO
+
+        from PIL import Image
+
+        thumb = Image.open(BytesIO(resp.content))
+        assert thumb.size == (400, 400)
+
+
 class TestGetAttachment:
     async def test_serve_attachment(self, tmp_path):
         animas_dir = tmp_path / "animas"

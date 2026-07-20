@@ -99,3 +99,56 @@ class TestAssetCacheE2E:
         client = TestClient(e2e_app)
         resp = client.get("/api/animas/sakura/assets/nonexistent.glb")
         assert resp.status_code == 404
+
+
+@pytest.mark.e2e
+class TestAssetThumbnailE2E:
+    """E2E: server-side avatar thumbnail via ?size= query."""
+
+    @pytest.fixture
+    def thumb_app(self, tmp_path):
+        """App with a real large PNG icon for thumbnail generation."""
+        from PIL import Image
+
+        app = FastAPI()
+        app.state.animas_dir = tmp_path
+        anima_dir = tmp_path / "sakura"
+        assets_dir = anima_dir / "assets"
+        assets_dir.mkdir(parents=True)
+        (anima_dir / "identity.md").write_text("# サクラ\n", encoding="utf-8")
+        img = Image.new("RGB", (1024, 1024), color=(80, 160, 240))
+        img.save(assets_dir / "icon.png", format="PNG")
+
+        router = create_assets_router()
+        app.include_router(router, prefix="/api")
+        with patch("server.routes.assets.emit", new_callable=AsyncMock):
+            yield app
+
+    def test_size_s_webp_and_cache(self, thumb_app, tmp_path):
+        client = TestClient(thumb_app)
+        r1 = client.get("/api/animas/sakura/assets/icon.png?size=S")
+        assert r1.status_code == 200
+        assert "image/webp" in r1.headers["content-type"]
+        assert "max-age=3600" in r1.headers["cache-control"]
+
+        from io import BytesIO
+
+        from PIL import Image
+
+        thumb = Image.open(BytesIO(r1.content))
+        assert thumb.size == (96, 96)
+
+        cache = tmp_path / "sakura" / "assets" / ".thumbs" / "icon.png.S.webp"
+        assert cache.is_file()
+        mtime1 = cache.stat().st_mtime_ns
+
+        r2 = client.get("/api/animas/sakura/assets/icon.png?size=S")
+        assert r2.status_code == 200
+        assert r2.content == r1.content
+        assert cache.stat().st_mtime_ns == mtime1
+
+    def test_invalid_size_serves_original_png(self, thumb_app):
+        client = TestClient(thumb_app)
+        resp = client.get("/api/animas/sakura/assets/icon.png?size=huge")
+        assert resp.status_code == 200
+        assert "image/png" in resp.headers["content-type"]

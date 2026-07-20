@@ -6,7 +6,7 @@ import { escapeHtml, timeStr, statusClass } from "../modules/state.js";
 import { animaHashColor } from "../modules/animas.js";
 import { companyColor } from "../shared/avatar-utils.js";
 import { getIcon, getDisplaySummary } from "../shared/activity-types.js";
-import { bustupCandidates, resolveAvatar } from "../modules/avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar } from "../modules/avatar-resolver.js";
 
 let _refreshInterval = null;
 let _usageInterval = null;
@@ -716,7 +716,7 @@ async function _loadOrgAvatars(root) {
   const avatarEls = root.querySelectorAll("[id^='orgAvatar_']");
   for (const el of avatarEls) {
     const name = el.id.replace("orgAvatar_", "");
-    const url = await resolveAvatar(name, bustupCandidates());
+    const url = await resolveCachedAvatar(name, bustupCandidates(), "S");
     if (url) {
       el.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
     }

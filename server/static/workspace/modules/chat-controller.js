@@ -91,7 +91,7 @@ export async function openConversation(animaName) {
   await setCharacter(animaName);
   setExpression("neutral");
 
-  resolveCachedAvatar(animaName, bustupCandidates(), "S").then(url => {
+  resolveCachedAvatar(animaName, bustupCandidates(), "M").then(url => {
     const map = { ...getState().chatAvatarMap, [animaName]: url };
     setState({ chatAvatarMap: map });
     renderConvMessages();

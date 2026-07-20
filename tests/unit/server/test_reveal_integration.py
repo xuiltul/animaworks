@@ -172,4 +172,4 @@ class TestAppJSRevealIntegration:
 
     def test_constructs_avatar_url(self):
         assert "bustupCandidates" in self.app_js
-        assert "resolveAvatar" in self.app_js
+        assert "resolveCachedAvatar" in self.app_js

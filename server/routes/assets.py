@@ -75,9 +75,77 @@ _ASSET_CONTENT_TYPES = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
     ".glb": "model/gltf-binary",
     ".gltf": "model/gltf+json",
 }
+
+# Server-side avatar thumbnail sizes (matches client image-cache.js)
+_THUMB_SIZES: dict[str, int] = {"S": 96, "M": 192, "L": 400}
+_THUMB_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+def _resolve_thumbnail(file_path: Path, size_key: str) -> Path | None:
+    """Return a WebP thumbnail path for *file_path*, or None to serve original.
+
+    Cache layout: ``<assets>/.thumbs/{filename}.{S|M|L}.webp``
+    Regenerates when the source mtime is newer than the cache.
+    On any failure (invalid size, missing Pillow, corrupt image) returns None
+    so the caller falls back to the original file without raising.
+    """
+    key = (size_key or "").upper()
+    if key not in _THUMB_SIZES:
+        if size_key:
+            logger.warning(
+                "Invalid size param %r for %s; serving original",
+                size_key,
+                file_path.name,
+            )
+        return None
+
+    if file_path.suffix.lower() not in _THUMB_IMAGE_SUFFIXES:
+        return None
+
+    target_px = _THUMB_SIZES[key]
+    thumbs_dir = file_path.parent / ".thumbs"
+    thumb_path = thumbs_dir / f"{file_path.name}.{key}.webp"
+
+    try:
+        src_mtime = file_path.stat().st_mtime_ns
+        if thumb_path.is_file() and thumb_path.stat().st_mtime_ns >= src_mtime:
+            return thumb_path
+    except OSError:
+        pass
+
+    try:
+        from PIL import Image
+    except ImportError:
+        logger.warning("Pillow not available; serving original for %s", file_path.name)
+        return None
+
+    try:
+        thumbs_dir.mkdir(parents=True, exist_ok=True)
+        with Image.open(file_path) as img:
+            if img.mode in ("P", "RGBA", "LA"):
+                img = img.convert("RGBA")
+            else:
+                img = img.convert("RGB")
+            w, h = img.size
+            side = min(w, h)
+            left = (w - side) // 2
+            top = (h - side) // 2
+            img = img.crop((left, top, left + side, top + side))
+            img = img.resize((target_px, target_px), Image.Resampling.LANCZOS)
+            img.save(thumb_path, format="WEBP", quality=85)
+        logger.debug("Generated thumbnail %s size=%s", thumb_path.name, key)
+        return thumb_path
+    except Exception as exc:
+        logger.warning(
+            "Failed to generate thumbnail for %s: %s; serving original",
+            file_path.name,
+            exc,
+        )
+        return None
 
 
 class AssetGenerateRequest(BaseModel):
@@ -384,8 +452,18 @@ def create_assets_router() -> APIRouter:
         )
 
     @router.api_route("/animas/{name}/assets/{filename}", methods=["GET", "HEAD"])
-    async def get_asset(name: str, filename: str, request: Request):
-        """Serve a static asset file from a anima's assets directory."""
+    async def get_asset(
+        name: str,
+        filename: str,
+        request: Request,
+        size: str | None = None,
+    ):
+        """Serve a static asset file from a anima's assets directory.
+
+        Optional ``size`` query (``S``/``M``/``L`` = 96/192/400px) returns a
+        server-generated WebP thumbnail with disk cache under ``.thumbs/``.
+        Omitted or invalid size serves the original file unchanged.
+        """
         animas_dir = request.app.state.animas_dir
         anima_dir = animas_dir / name
         if not anima_dir.exists():
@@ -404,11 +482,18 @@ def create_assets_router() -> APIRouter:
         if not file_path.exists() or not file_path.is_file():
             raise HTTPException(status_code=404, detail="Asset not found")
 
+        serve_path = file_path
         suffix = file_path.suffix.lower()
         content_type = _ASSET_CONTENT_TYPES.get(suffix, "application/octet-stream")
 
-        stat = file_path.stat()
-        etag_src = f"{file_path}:{stat.st_size}:{stat.st_mtime_ns}"
+        if size is not None:
+            thumb = _resolve_thumbnail(file_path, size)
+            if thumb is not None:
+                serve_path = thumb
+                content_type = "image/webp"
+
+        stat = serve_path.stat()
+        etag_src = f"{serve_path}:{stat.st_size}:{stat.st_mtime_ns}"
         etag = f'"{hashlib.md5(etag_src.encode()).hexdigest()}"'  # noqa: S324
 
         if_none_match = request.headers.get("if-none-match")
@@ -419,7 +504,7 @@ def create_assets_router() -> APIRouter:
             )
 
         return FileResponse(
-            file_path,
+            serve_path,
             media_type=content_type,
             headers={"Cache-Control": "public, max-age=3600", "ETag": etag},
         )

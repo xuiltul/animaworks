@@ -2,7 +2,7 @@
 import { api } from "../modules/api.js";
 import { escapeHtml } from "../modules/state.js";
 import { t } from "/shared/i18n.js";
-import { bustupCandidates, resolveAvatar } from "../modules/avatar-resolver.js";
+import { bustupCandidates, resolveCachedAvatar } from "../modules/avatar-resolver.js";
 
 export function render(container) {
   container.innerHTML = `
@@ -76,7 +76,7 @@ async function _loadUserAvatars(users) {
   const candidates = bustupCandidates();
   for (const name of users) {
     try {
-      const url = await resolveAvatar(name, candidates);
+      const url = await resolveCachedAvatar(name, candidates, "S");
       if (!url) continue;
       const el = document.querySelector(`.anima-avatar-placeholder[data-user="${CSS.escape(name)}"]`);
       if (!el) continue;
