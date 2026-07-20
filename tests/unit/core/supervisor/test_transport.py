@@ -5,7 +5,11 @@ from __future__ import annotations
 import logging
 import os
 
+import pytest
+
 from core.supervisor.transport import cleanup_ipc_endpoint, resolve_client_endpoint, start_ipc_server
+
+pytestmark = pytest.mark.skipif(os.name == "nt", reason="AF_UNIX path limits only apply on POSIX")
 
 
 async def test_long_unix_socket_path_falls_back_to_tcp(tmp_path, monkeypatch, caplog):

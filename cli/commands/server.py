@@ -15,6 +15,8 @@ import sys
 import time
 from pathlib import Path
 
+import psutil
+
 from core.platform.process import (
     find_first_matching_pid,
     subprocess_session_kwargs,
@@ -150,12 +152,11 @@ def _find_server_pid_by_process(
 
 
 def _read_process_cmdline(pid: int) -> list[str] | None:
-    """Read a Linux process command line without retaining other process data."""
+    """Read a process command line using the cross-platform process adapter."""
     try:
-        raw = (Path("/proc") / str(pid) / "cmdline").read_bytes()
-    except OSError:
+        return psutil.Process(pid).cmdline()
+    except psutil.Error:
         return None
-    return [os.fsdecode(part) for part in raw.split(b"\0") if part]
 
 
 def _read_process_environ_data_dir(pid: int) -> tuple[bool, str | None]:

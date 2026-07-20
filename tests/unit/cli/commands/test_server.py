@@ -95,6 +95,16 @@ class TestPidHelpers:
 
 
 class TestFindServerPidByProcess:
+    @patch("cli.commands.server.psutil.Process")
+    def test_reads_process_cmdline_cross_platform(self, mock_process):
+        """Command-line fallback does not depend on Linux /proc."""
+        from cli.commands.server import _read_process_cmdline
+
+        mock_process.return_value.cmdline.return_value = ["python", "-m", "cli", "start", "--port", "18501"]
+
+        assert _read_process_cmdline(12345) == ["python", "-m", "cli", "start", "--port", "18501"]
+        mock_process.assert_called_once_with(12345)
+
     @patch("cli.commands.server.find_first_matching_pid", return_value=None)
     def test_returns_none_when_no_match(self, mock_find):
         """Returns None when no matching process is found."""
