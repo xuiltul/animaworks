@@ -8,6 +8,73 @@ const routes = {};
 let currentPage = null;
 let containerEl = null;
 
+// Permanent hash redirects (legacy paths → new destinations).
+// Keys are path prefixes (without '#'). Values are full hashes including '#'.
+// Note: /setup is handled by an explicit block in handleRoute (kept for
+// compatibility with existing structure tests) and is also listed here.
+export const REDIRECTS = {
+  "/processes": "#/animas",
+  "/setup": "#/settings",
+};
+
+/**
+ * Resolve a permanent redirect for a path (no leading '#').
+ * Matches exact path or path under a redirect prefix.
+ * @param {string} path - e.g. "/processes" or "/setup/foo"
+ * @returns {string|null} target hash (e.g. "#/animas") or null
+ */
+export function resolveRedirect(path) {
+  if (!path) return null;
+  for (const [from, to] of Object.entries(REDIRECTS)) {
+    if (path === from || path.startsWith(from + "/")) {
+      return to;
+    }
+  }
+  return null;
+}
+
+/**
+ * Match a path against registered route keys (longest prefix wins).
+ * @param {string} path - e.g. "/animas/sakura/process"
+ * @param {string[]} [routeKeys] - defaults to currently registered routes
+ * @returns {{ route: string, subPath: string, navPath: string } | null}
+ */
+export function resolveRouteMatch(path, routeKeys) {
+  const keys = routeKeys || Object.keys(routes);
+  if (keys.includes(path)) {
+    return { route: path, subPath: "", navPath: path };
+  }
+
+  let best = null;
+  for (const route of keys) {
+    if (path.startsWith(route + "/")) {
+      if (!best || route.length > best.route.length) {
+        best = {
+          route,
+          subPath: decodeURIComponent(path.slice(route.length + 1)),
+          navPath: route,
+        };
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Parse anima detail subPath into name + tab.
+ * e.g. "sakura" → { name: "sakura", tab: "overview" }
+ *      "sakura/process" → { name: "sakura", tab: "process" }
+ * @param {string} subPath
+ * @returns {{ name: string|null, tab: string }}
+ */
+export function parseAnimaSubPath(subPath) {
+  if (!subPath) return { name: null, tab: "overview" };
+  const parts = String(subPath).split("/").filter(Boolean);
+  const name = parts[0] || null;
+  const tab = parts[1] || "overview";
+  return { name, tab };
+}
+
 // ── Public API ──────────────────────────────
 
 /**
@@ -54,7 +121,7 @@ function registerRoutes() {
   routes["/task-board"] = () => import("../pages/task-board.js" + _v);
   routes["/users"] = () => import("../pages/users.js" + _v);
   routes["/animas"] = () => import("../pages/animas.js" + _v);
-  routes["/processes"] = () => import("../pages/processes.js" + _v);
+  // /processes removed — redirected to #/animas (see REDIRECTS)
   routes["/server"] = () => import("../pages/server-page.js" + _v);
   routes["/memory"] = () => import("../pages/memory.js" + _v);
   routes["/logs"] = () => import("../pages/logs.js" + _v);
@@ -75,21 +142,18 @@ async function handleRoute() {
     return;
   }
 
-  // Try exact match first, then prefix match for parameterized routes
-  let loader = routes[path];
-  let subPath = "";
-  let navPath = path;
-  if (!loader) {
-    // Find longest matching route prefix (e.g. "/animas/sakura" → "/animas" + "sakura")
-    for (const route of Object.keys(routes)) {
-      if (path.startsWith(route + "/")) {
-        loader = routes[route];
-        subPath = decodeURIComponent(path.slice(route.length + 1));
-        navPath = route;
-        break;
-      }
-    }
+  // Permanent redirects (e.g. #/processes → #/animas)
+  const redirect = resolveRedirect(path);
+  if (redirect) {
+    window.location.hash = redirect;
+    return;
   }
+
+  // Try exact match first, then longest prefix match for parameterized routes
+  const matched = resolveRouteMatch(path);
+  let loader = matched ? routes[matched.route] : null;
+  let subPath = matched ? matched.subPath : "";
+  let navPath = matched ? matched.navPath : path;
 
   if (!loader) {
     // Fallback to chat
