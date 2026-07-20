@@ -1,39 +1,68 @@
-// ── Activity Timeline Page ──────────────────
+// ── Activity Timeline Page (swimlane) ──────────────────
 import { api } from "../modules/api.js";
-import { escapeHtml, smartTimestamp, renderMarkdown } from "../modules/state.js";
-import { getIcon, getDisplaySummary, GROUP_TYPE_CATEGORIES } from "../shared/activity-types.js";
-import {
-  createContextBadge,
-  decorateContextElement,
-  getParallelTaskCounts,
-  renderRunningTasksStrip,
-} from "../shared/activity-context.js";
+import { escapeHtml } from "../modules/state.js";
+import { GROUP_TYPE_CATEGORIES } from "../shared/activity-types.js";
+import { renderRunningTasksStrip } from "../shared/activity-context.js";
 import { t } from "/shared/i18n.js";
+import { basePath } from "/shared/base-path.js";
+import { renderSwimlane } from "./activity/swimlane.js";
+import { renderGroupDetail } from "./activity/group-detail.js";
 
 let _refreshInterval = null;
+let _resizeObserver = null;
 let _groups = [];
 let _totalGroups = 0;
 let _totalEvents = 0;
 let _groupOffset = 0;
 let _hasMore = false;
-/** @type {Set<string>} */
-let _expandedGroups = new Set();
 let _selectedAnima = "";
 /** @type {string[]} selected group types (trigger-based) */
 let _selectedGroupTypes = [];
+/** @type {6|24|48} */
+let _rangeHours = 6;
+/** @type {string|null} */
+let _selectedGroupId = null;
+/** @type {string[]} */
+let _animaNames = [];
+let _d3LoadPromise = null;
 
-const GROUP_LIMIT = 50;
+const RANGE_OPTIONS = [6, 24, 48];
 
-const GROUP_ICONS = {
-  heartbeat: "💓",
-  chat: "💬",
-  dm: "✉️",
-  cron: "⏰",
-  task: "📋",
-  inbox: "📬",
-  task_exec: "🔨",
-  single: "⚙️",
-};
+function _groupLimitForHours(hours) {
+  // Prefer denser pages for shorter windows so the chart is not sparse
+  if (hours <= 24) return 200;
+  return 200;
+}
+
+// ── d3 (scaleTime only) ────────────────────
+
+function _ensureD3() {
+  if (typeof window !== "undefined" && window.d3?.scaleTime) {
+    return Promise.resolve(window.d3);
+  }
+  if (_d3LoadPromise) return _d3LoadPromise;
+  _d3LoadPromise = new Promise((resolve) => {
+    if (typeof document === "undefined") {
+      resolve(null);
+      return;
+    }
+    const existing = document.querySelector("script[data-activity-d3]");
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.d3 || null));
+      existing.addEventListener("error", () => resolve(null));
+      if (window.d3) resolve(window.d3);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = `${basePath}/vendor/d3.v7.min.js`;
+    script.dataset.activityD3 = "1";
+    script.async = true;
+    script.onload = () => resolve(window.d3 || null);
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+  return _d3LoadPromise;
+}
 
 // ── Render ─────────────────────────────────
 
@@ -43,12 +72,14 @@ export function render(container) {
   _totalEvents = 0;
   _groupOffset = 0;
   _hasMore = false;
-  _expandedGroups = new Set();
   _selectedAnima = "";
   _selectedGroupTypes = [];
+  _rangeHours = 6;
+  _selectedGroupId = null;
+  _animaNames = [];
 
   container.innerHTML = `
-    <div class="activity-page">
+    <div class="activity-page activity-page--swimlane">
       <div class="activity-header">
         <h2>${t("activity.page_title")}</h2>
         <span class="activity-count" id="activityCount"></span>
@@ -61,19 +92,31 @@ export function render(container) {
           <option value="">${t("activity.all_animas")}</option>
         </select>
         <div id="activityTypeChips" style="display:flex; gap:0.35rem; flex-wrap:wrap;"></div>
+        <div class="activity-range-chips" id="activityRangeChips" role="group" aria-label="${t("activity.swimlane_range_label")}"></div>
       </div>
 
-      <div class="activity-list" id="activityList">
-        <div class="loading-placeholder">${t("common.loading")}</div>
+      <div class="swimlane-wrap" id="activitySwimlaneWrap">
+        <div class="swimlane-scroll" id="activitySwimlaneScroll">
+          <svg class="swimlane-svg" id="activitySwimlaneSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <div class="swimlane-empty" id="activitySwimlaneEmpty" hidden>${t("activity.empty")}</div>
       </div>
 
       <div id="activityLoadMoreWrap"></div>
+
+      <div class="swimlane-detail" id="activityGroupDetail" hidden></div>
     </div>
   `;
 
   _buildAnimaSelect();
   _buildTypeChips();
-  _loadEvents(true);
+  _buildRangeChips();
+  _bindDetailClose();
+  _observeResize();
+
+  _ensureD3().finally(() => {
+    _loadEvents(true);
+  });
   _loadRunningTasks();
   _refreshInterval = setInterval(() => {
     _loadEvents(true);
@@ -86,6 +129,12 @@ export function destroy() {
     clearInterval(_refreshInterval);
     _refreshInterval = null;
   }
+  if (_resizeObserver) {
+    _resizeObserver.disconnect();
+    _resizeObserver = null;
+  }
+  _groups = [];
+  _selectedGroupId = null;
 }
 
 // ── Filter UI ──────────────────────────────
@@ -96,10 +145,11 @@ async function _buildAnimaSelect() {
 
   try {
     const animas = await api("/api/animas");
-    for (const a of animas) {
+    _animaNames = (animas || []).map((a) => a.name).filter(Boolean);
+    for (const name of _animaNames) {
       const opt = document.createElement("option");
-      opt.value = a.name;
-      opt.textContent = a.name;
+      opt.value = name;
+      opt.textContent = name;
       sel.appendChild(opt);
     }
   } catch (err) {
@@ -110,7 +160,7 @@ async function _buildAnimaSelect() {
     _selectedAnima = sel.value;
     _groupOffset = 0;
     _groups = [];
-    _expandedGroups.clear();
+    _selectedGroupId = null;
     _loadEvents(true);
     _loadRunningTasks();
   });
@@ -124,6 +174,7 @@ function _buildTypeChips() {
   for (let i = 0; i < GROUP_TYPE_CATEGORIES.length; i++) {
     const chip = GROUP_TYPE_CATEGORIES[i];
     const btn = document.createElement("button");
+    btn.type = "button";
     btn.className = "activity-type-chip" + (i === 0 ? " active" : "");
     btn.textContent = chip.i18nKey ? t(chip.i18nKey) : chip.label;
     btn.dataset.index = String(i);
@@ -156,7 +207,7 @@ function _buildTypeChips() {
 
       _groupOffset = 0;
       _groups = [];
-      _expandedGroups.clear();
+      _selectedGroupId = null;
       _loadEvents(true);
     });
 
@@ -164,16 +215,60 @@ function _buildTypeChips() {
   }
 }
 
+function _buildRangeChips() {
+  const wrap = document.getElementById("activityRangeChips");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  for (const hours of RANGE_OPTIONS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "activity-range-chip" + (hours === _rangeHours ? " active" : "");
+    btn.dataset.hours = String(hours);
+    btn.textContent = t(`activity.swimlane_range_${hours}h`);
+    btn.addEventListener("click", () => {
+      if (_rangeHours === hours) return;
+      _rangeHours = hours;
+      for (const b of wrap.querySelectorAll(".activity-range-chip")) {
+        b.classList.toggle("active", parseInt(b.dataset.hours, 10) === hours);
+      }
+      _groupOffset = 0;
+      _groups = [];
+      _selectedGroupId = null;
+      _loadEvents(true);
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+function _bindDetailClose() {
+  const detail = document.getElementById("activityGroupDetail");
+  if (!detail) return;
+  detail.addEventListener("swimlane-detail-close", () => {
+    _selectedGroupId = null;
+    _paintSwimlane();
+  });
+}
+
+function _observeResize() {
+  const wrap = document.getElementById("activitySwimlaneWrap");
+  if (!wrap || typeof ResizeObserver === "undefined") return;
+  _resizeObserver = new ResizeObserver(() => {
+    _paintSwimlane();
+  });
+  _resizeObserver.observe(wrap);
+}
+
 // ── Data Loading ───────────────────────────
 
 async function _loadEvents(reset) {
   if (reset) {
     _groupOffset = 0;
-    _groups = [];
-    _expandedGroups.clear();
+    // Keep previously selected group id for restore after redraw
   }
 
-  let url = `/api/activity/recent?hours=48&grouped=true&group_limit=${GROUP_LIMIT}&group_offset=${_groupOffset}`;
+  const limit = _groupLimitForHours(_rangeHours);
+  let url = `/api/activity/recent?hours=${_rangeHours}&grouped=true&group_limit=${limit}&group_offset=${_groupOffset}`;
   if (_selectedAnima) {
     url += `&anima=${encodeURIComponent(_selectedAnima)}`;
   }
@@ -181,7 +276,7 @@ async function _loadEvents(reset) {
     url += `&group_type=${encodeURIComponent(_selectedGroupTypes.join(","))}`;
   }
 
-  const list = document.getElementById("activityList");
+  const wrap = document.getElementById("activitySwimlaneWrap");
 
   try {
     const data = await api(url);
@@ -193,16 +288,25 @@ async function _loadEvents(reset) {
     if (reset) {
       _groups = newGroups;
     } else {
-      _groups = _groups.concat(newGroups);
+      // Append older groups (dedupe by id)
+      const seen = new Set(_groups.map((g) => g.id));
+      for (const g of newGroups) {
+        if (!seen.has(g.id)) _groups.push(g);
+      }
     }
 
     _groupOffset = _groups.length;
-    _renderList();
+    _paintSwimlane();
     _updateCount();
     _renderLoadMore();
+    _restoreDetail();
   } catch (err) {
-    if (list) {
-      list.innerHTML = `<div class="activity-empty">${t("activity.load_failed")}: ${escapeHtml(err.message)}</div>`;
+    if (wrap) {
+      const empty = document.getElementById("activitySwimlaneEmpty");
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = `${t("activity.load_failed")}: ${escapeHtml(err.message)}`;
+      }
     }
   }
 }
@@ -229,205 +333,71 @@ function _updateCount() {
   }
 }
 
-function _renderList() {
-  const list = document.getElementById("activityList");
-  if (!list) return;
+function _timeRange() {
+  const nowMs = Date.now();
+  const hours = _rangeHours;
+  return {
+    startMs: nowMs - hours * 3600_000,
+    endMs: nowMs,
+    hours,
+  };
+}
+
+function _paintSwimlane() {
+  const svg = document.getElementById("activitySwimlaneSvg");
+  const empty = document.getElementById("activitySwimlaneEmpty");
+  const scroll = document.getElementById("activitySwimlaneScroll");
+  if (!svg) return;
 
   if (_groups.length === 0) {
-    list.innerHTML = `<div class="activity-empty">${t("activity.empty")}</div>`;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    if (empty) {
+      empty.hidden = false;
+      empty.textContent = t("activity.empty");
+    }
+    if (scroll) scroll.hidden = true;
     return;
   }
 
-  list.innerHTML = "";
-  const allEvents = _groups.flatMap((grp) => grp.events || []);
-  const parallelCounts = getParallelTaskCounts(allEvents);
-  for (const grp of _groups) {
-    const header = _createGroupHeader(grp, parallelCounts);
-    list.appendChild(header);
+  if (empty) empty.hidden = true;
+  if (scroll) scroll.hidden = false;
 
-    if (_expandedGroups.has(grp.id)) {
-      const eventsContainer = _createGroupEvents(grp, parallelCounts);
-      list.appendChild(eventsContainer);
-    }
-  }
-}
+  const width = scroll?.clientWidth || svg.parentElement?.clientWidth || 800;
+  const animaOrder = _selectedAnima ? [_selectedAnima] : _animaNames;
 
-function _formatTimeRange(startTs, endTs) {
-  const start = startTs ? startTs.slice(11, 16) : "";
-  const end = endTs ? endTs.slice(11, 16) : "";
-  if (!start) return "";
-  return start === end ? `[${start}]` : `[${start}-${end}]`;
-}
-
-function _parallelBadge(count) {
-  if (count < 2) return null;
-  const badge = document.createElement("span");
-  badge.className = "activity-parallel-badge";
-  badge.textContent = t("activity.parallel_count", { count });
-  return badge;
-}
-
-function _groupParallelCount(grp, parallelCounts) {
-  let count = 0;
-  for (const evt of grp.events || []) count = Math.max(count, parallelCounts.get(evt) || 0);
-  return count;
-}
-
-function _createGroupHeader(grp, parallelCounts) {
-  const header = document.createElement("div");
-  const isExpanded = _expandedGroups.has(grp.id);
-  header.className = "activity-group-header" + (isExpanded ? " expanded" : "");
-  const parallelCount = _groupParallelCount(grp, parallelCounts);
-
-  if (grp.type === "single") {
-    const evt = grp.events[0];
-    const icon = getIcon(evt.type);
-    const time = smartTimestamp(evt.ts);
-    const anima = evt.anima || grp.anima || "";
-    const summary = getDisplaySummary(evt);
-
-    header.innerHTML =
-      `<span class="activity-row-time">${escapeHtml(time)}</span>` +
-      `<span class="activity-row-icon">${icon}</span>` +
-      `<span class="activity-row-anima">${escapeHtml(anima)}</span>` +
-      `<span class="activity-row-summary">${escapeHtml(summary)}</span>`;
-    decorateContextElement(header, evt.ctx);
-    const contextBadge = createContextBadge(evt.ctx);
-    if (contextBadge) header.querySelector(".activity-row-summary")?.before(contextBadge);
-    const parallelBadge = _parallelBadge(parallelCount);
-    if (parallelBadge) header.querySelector(".activity-row-summary")?.before(parallelBadge);
-
-    header.addEventListener("click", () => {
-      if (_expandedGroups.has(grp.id)) {
-        _expandedGroups.delete(grp.id);
-      } else {
-        _expandedGroups.add(grp.id);
+  renderSwimlane(svg, _groups, {
+    timeRange: _timeRange(),
+    nowMs: Date.now(),
+    selectedGroupId: _selectedGroupId,
+    animaOrder,
+    width,
+    onSelectGroup: (grp) => {
+      if (!grp) {
+        _selectedGroupId = null;
+        renderGroupDetail(document.getElementById("activityGroupDetail"), null);
+        _paintSwimlane();
+        return;
       }
-      _renderList();
-    });
-
-    return header;
-  }
-
-  const icon = GROUP_ICONS[grp.type] || "⚙️";
-  const timeRange = _formatTimeRange(grp.start_ts, grp.end_ts);
-  const anima = grp.anima || "";
-  const count = grp.event_count || grp.events.length;
-  const chevron = isExpanded ? "▼" : "▶";
-
-  let label = "";
-  if (grp.type === "heartbeat") label = `Heartbeat ${timeRange}`;
-  else if (grp.type === "chat") label = `${t("activity.label_user_chat")} ${timeRange}`;
-  else if (grp.type === "dm") label = `DM ${grp.summary || ""} ${timeRange}`;
-  else if (grp.type === "cron") label = `Cron ${grp.summary || ""} ${timeRange}`;
-  else if (grp.type === "task") label = `Task ${grp.summary || ""} ${timeRange}`;
-  else if (grp.type === "inbox") label = `${t("activity.label_inbox")} ${timeRange}`;
-  else if (grp.type === "task_exec") label = `${t("activity.label_task_exec")} ${grp.summary || ""} ${timeRange}`;
-  else label = `${grp.type} ${timeRange}`;
-
-  const openBadge = grp.is_open ? `<span class="activity-group-badge-open">${t("activity.badge_ongoing")}</span>` : "";
-
-  header.innerHTML =
-    `<span class="activity-group-chevron">${chevron}</span>` +
-    `<span class="activity-row-icon">${icon}</span>` +
-    `<span class="activity-row-anima">${escapeHtml(anima)}</span>` +
-    `<span class="activity-group-label">${escapeHtml(label)}</span>` +
-    openBadge +
-    `<span class="activity-group-count">${t("activity.count_items", { count })}</span>`;
-
-  const contexts = new Set((grp.events || []).map((evt) => evt.ctx).filter(Boolean));
-  if (contexts.size === 1) {
-    const ctx = contexts.values().next().value;
-    decorateContextElement(header, ctx);
-    const contextBadge = createContextBadge(ctx);
-    if (contextBadge) header.querySelector(".activity-group-label")?.after(contextBadge);
-  }
-  const parallelBadge = _parallelBadge(parallelCount);
-  if (parallelBadge) header.querySelector(".activity-group-label")?.after(parallelBadge);
-
-  header.addEventListener("click", () => {
-    if (_expandedGroups.has(grp.id)) {
-      _expandedGroups.delete(grp.id);
-    } else {
-      _expandedGroups.add(grp.id);
-    }
-    _renderList();
+      _selectedGroupId = grp.id;
+      renderGroupDetail(document.getElementById("activityGroupDetail"), grp);
+      _paintSwimlane();
+    },
   });
-
-  return header;
 }
 
-function _createGroupEvents(grp, parallelCounts) {
-  const container = document.createElement("div");
-  container.className = "activity-group-events";
-
-  const events = grp.events || [];
-  const maxInitial = 30;
-  const toShow = events.slice(0, maxInitial);
-
-  for (let i = 0; i < toShow.length; i++) {
-    const evt = toShow[i];
-    const isLast = i === toShow.length - 1 && events.length <= maxInitial;
-    const row = _createEventRow(evt, isLast, parallelCounts.get(evt) || 0);
-    container.appendChild(row);
+function _restoreDetail() {
+  const detail = document.getElementById("activityGroupDetail");
+  if (!_selectedGroupId || !detail) {
+    renderGroupDetail(detail, null);
+    return;
   }
-
-  if (events.length > maxInitial) {
-    const moreBtn = document.createElement("div");
-    moreBtn.className = "activity-group-show-more";
-    moreBtn.textContent = t("activity.show_more", { count: events.length - maxInitial });
-    moreBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      moreBtn.remove();
-      const remaining = events.slice(maxInitial);
-      for (let i = 0; i < remaining.length; i++) {
-        const evt = remaining[i];
-        const row = _createEventRow(evt, i === remaining.length - 1, parallelCounts.get(evt) || 0);
-        container.appendChild(row);
-      }
-    });
-    container.appendChild(moreBtn);
-  }
-
-  return container;
-}
-
-function _createEventRow(evt, isLast, parallelCount) {
-  const row = document.createElement("div");
-  row.className = "activity-group-event";
-
-  const connector = isLast ? "└" : "├";
-  const icon = getIcon(evt.type);
-  const time = evt.ts ? evt.ts.slice(11, 16) : "";
-
-  let summary = "";
-  if (evt.type === "tool_use") {
-    const toolName = evt.tool || "";
-    const result = evt.tool_result;
-    if (result) {
-      const resultText = result.content || "";
-      const errClass = result.is_error ? " tool-error" : "";
-      summary = `${toolName} → <span class="activity-tool-result${errClass}">${escapeHtml(resultText)}</span>`;
-    } else {
-      summary = toolName;
-    }
+  const grp = _groups.find((g) => g.id === _selectedGroupId);
+  if (grp) {
+    renderGroupDetail(detail, grp);
   } else {
-    summary = escapeHtml(getDisplaySummary(evt));
+    _selectedGroupId = null;
+    renderGroupDetail(detail, null);
   }
-
-  row.innerHTML =
-    `<span class="activity-tree-connector">${connector}</span>` +
-    `<span class="activity-row-time">${escapeHtml(time)}</span>` +
-    `<span class="activity-row-icon">${icon}</span>` +
-    `<span class="activity-row-summary">${summary}</span>`;
-
-  decorateContextElement(row, evt.ctx);
-  const contextBadge = createContextBadge(evt.ctx);
-  if (contextBadge) row.querySelector(".activity-row-summary")?.before(contextBadge);
-  const parallelBadge = _parallelBadge(parallelCount);
-  if (parallelBadge) row.querySelector(".activity-row-summary")?.before(parallelBadge);
-
-  return row;
 }
 
 function _renderLoadMore() {
@@ -435,7 +405,7 @@ function _renderLoadMore() {
   if (!wrap) return;
 
   if (_hasMore) {
-    wrap.innerHTML = `<button class="activity-load-more" id="activityLoadMoreBtn">${t("activity.load_more_btn", { current: _groups.length, total: _totalGroups })}</button>`;
+    wrap.innerHTML = `<button type="button" class="activity-load-more" id="activityLoadMoreBtn">${t("activity.swimlane_load_earlier", { current: _groups.length, total: _totalGroups })}</button>`;
     const btn = document.getElementById("activityLoadMoreBtn");
     if (btn) {
       btn.addEventListener("click", () => {

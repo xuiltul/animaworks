@@ -54,19 +54,19 @@ class TestMainIndexHTML:
 
     def test_nav_lucide_mappings(self):
         content = INDEX_HTML.read_text()
+        # Keep in sync with sidebar nav icons in index.html
         expected_icons = [
             "message-circle",
             "clipboard-list",
+            "kanban",
             "layout-dashboard",
             "activity",
-            "settings",
             "users",
             "bot",
-            "cpu",
-            "globe",
-            "brain",
             "file-text",
-            "palette",
+            "bar-chart-2",
+            "building-2",
+            "sliders-horizontal",
         ]
         for icon in expected_icons:
             assert icon in content, f"Missing Lucide icon: {icon}"

@@ -70,6 +70,25 @@ export const GROUP_TYPE_CATEGORIES = [
   { label: "⚙️", i18nKey: "activity.filter_group_other", groupTypes: ["single"] },
 ];
 
+// ── Group-type → CSS colour variables (swimlane bars) ──────
+// Aligned with activity-context presentation hues for visual consistency.
+export const GROUP_TYPE_COLORS = {
+  chat: "var(--aw-color-info)",
+  dm: "var(--aw-color-info-text-alt, var(--aw-color-info))",
+  cron: "var(--aw-color-text-muted)",
+  heartbeat: "var(--aw-color-text-faint)",
+  inbox: "var(--aw-color-success)",
+  task_exec: "var(--aw-color-warning)",
+  task: "var(--aw-color-accent)",
+  single: "var(--aw-color-slate-light, var(--aw-color-text-muted))",
+};
+
+/** Ambient (background noise) group types — drawn short/dim. */
+export const AMBIENT_GROUP_TYPES = new Set(["cron", "heartbeat"]);
+
+/** Signal (foreground) group types — drawn tall/opaque. */
+export const SIGNAL_GROUP_TYPES = new Set(["chat", "dm", "task_exec", "inbox"]);
+
 // ── Type-based default summaries (i18n keys) ────
 const TYPE_DEFAULT_KEYS = {
   message_received: "activity_types.message_received",
