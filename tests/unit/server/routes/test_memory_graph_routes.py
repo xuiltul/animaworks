@@ -57,6 +57,7 @@ class TestMemoryGraph:
         animas_dir, anima_dir = _make_anima(tmp_path)
         alpha = anima_dir / "knowledge" / "alpha.md"
         beta = anima_dir / "knowledge" / "beta.md"
+        episode = anima_dir / "episodes" / "2026-07-01.md"
         alpha.write_text(
             "---\n"
             "created_at: '2026-07-01T10:00:00+09:00'\n"
@@ -67,6 +68,7 @@ class TestMemoryGraph:
             encoding="utf-8",
         )
         beta.write_text("Beta", encoding="utf-8")
+        episode.write_text("Episode", encoding="utf-8")
 
         graph = nx.DiGraph()
         graph.add_node(
@@ -93,9 +95,18 @@ class TestMemoryGraph:
             rel_key="deleted",
             path=str(anima_dir / "knowledge" / "deleted.md"),
         )
+        graph.add_node(
+            "episodes:2026-07-01",
+            node_type="memory_file",
+            memory_type="episodes",
+            stem="2026-07-01",
+            rel_key="2026-07-01",
+            path=str(episode),
+        )
         graph.add_edge("alpha", "beta", link_type="explicit", similarity=1.0)
         graph.add_edge("beta", "alpha", link_type="implicit", similarity=0.83)
         graph.add_edge("alpha", "deleted", link_type="explicit", similarity=1.0)
+        graph.add_edge("alpha", "episodes:2026-07-01", link_type="implicit", similarity=0.9)
         _write_graph_cache(anima_dir, graph)
 
         response = await _get(

@@ -25,6 +25,7 @@ logger = logging.getLogger("animaworks.routes.memory")
 _WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
 _GRAPH_CACHE_FILE = "knowledge_graph.json"
 _SIMILARITY_EDGE_LIMIT = 500
+_GRAPH_VISIBLE_MEMORY_TYPES = frozenset({"knowledge", "procedures"})
 
 
 def _make_memory_node_id(rel_key: str, memory_type: str) -> str:
@@ -157,6 +158,8 @@ def _graph_response(anima_dir: Path, graph: nx.DiGraph, *, partial: bool) -> dic
         if path is None:
             continue
         memory_type = str(attrs.get("memory_type", "knowledge"))
+        if memory_type not in _GRAPH_VISIBLE_MEMORY_TYPES:
+            continue
         nodes.append(
             {
                 "id": node_id,

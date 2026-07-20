@@ -126,3 +126,423 @@
   border: 1px solid var(--aw-color-border-light);
   min-height: 0;
 }
+
+/* --- Full-page Memory Browser --- */
+.memory-page-selector {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.memory-page-selector label {
+  font-weight: 500;
+}
+
+.memory-page-selector .anima-dropdown {
+  flex: 1;
+  max-width: 300px;
+}
+
+.memory-page-tabs {
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.memory-page-tabs .page-tab {
+  white-space: nowrap;
+}
+
+.memory-page-card {
+  min-height: 560px;
+}
+
+.memory-page-content {
+  min-height: 560px;
+}
+
+.memory-page-file {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--aw-color-border, #eee);
+  border-radius: 0;
+}
+
+.memory-file-title {
+  margin: 0.75rem 0;
+}
+
+.memory-file-body {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: var(--aw-color-bg-secondary, #f8f9fa);
+}
+
+.memory-empty-state {
+  display: grid;
+  min-height: 500px;
+  place-items: center;
+  color: var(--aw-color-text-muted, #6b7280);
+  font-size: 1rem;
+}
+
+/* --- Knowledge Graph --- */
+.memory-graph-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 525px;
+  height: calc(100vh - 280px);
+}
+
+.memory-graph-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 40px;
+  padding-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.memory-graph-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--aw-color-text-secondary, #4b5563);
+}
+
+.memory-graph-toolbar output {
+  min-width: 2.5rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--aw-color-accent, #2563eb);
+}
+
+.memory-graph-toolbar input[type="range"] {
+  width: min(240px, 45vw);
+  accent-color: var(--aw-color-accent, #2563eb);
+}
+
+.memory-graph-badges {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.memory-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.memory-status-badge.partial {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.memory-status-badge.capped {
+  color: #1e40af;
+  background: #dbeafe;
+}
+
+.memory-graph-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--aw-color-border, #d1d5db);
+  border-radius: 8px;
+}
+
+.memory-graph-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 420px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at center, rgba(79, 124, 172, 0.08), transparent 70%),
+    var(--aw-color-bg-subtle, #fafafa);
+}
+
+.memory-graph-stage svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.memory-graph-stage svg:active {
+  cursor: grabbing;
+}
+
+.memory-graph-links line {
+  stroke: var(--aw-color-text-muted, #6b7280);
+  stroke-width: 1.5px;
+}
+
+.memory-graph-links line.similarity {
+  stroke-dasharray: 5 5;
+}
+
+.memory-graph-nodes g {
+  cursor: pointer;
+  outline: none;
+}
+
+.memory-graph-nodes circle {
+  stroke: var(--aw-color-bg-primary, #fff);
+  stroke-width: 2px;
+  transition: filter 0.15s, stroke-width 0.15s;
+}
+
+.memory-graph-nodes g:hover circle,
+.memory-graph-nodes g:active circle,
+.memory-graph-nodes g:focus-visible circle {
+  filter: brightness(1.12);
+  stroke: var(--aw-color-accent, #2563eb);
+  stroke-width: 3px;
+}
+
+.memory-graph-nodes text {
+  fill: var(--aw-color-text-primary, #111827);
+  font-size: 11px;
+  font-weight: 600;
+  paint-order: stroke;
+  pointer-events: none;
+  stroke: var(--aw-color-bg-primary, #fff);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.memory-graph-detail {
+  width: min(320px, 34%);
+  min-width: 250px;
+  padding: 1rem;
+  overflow-y: auto;
+  border-left: 1px solid var(--aw-color-border, #d1d5db);
+  background: var(--aw-color-bg-primary, #fff);
+}
+
+.memory-graph-detail h3 {
+  margin-bottom: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.memory-graph-detail h4 {
+  margin: 1rem 0 0.45rem;
+  font-size: 0.82rem;
+  color: var(--aw-color-text-secondary, #4b5563);
+}
+
+.memory-detail-placeholder {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  text-align: center;
+  color: var(--aw-color-text-muted, #6b7280);
+}
+
+.memory-detail-meta {
+  display: grid;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+}
+
+.memory-detail-meta div {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.45fr) 1fr;
+  gap: 0.5rem;
+}
+
+.memory-detail-meta dt {
+  color: var(--aw-color-text-muted, #6b7280);
+}
+
+.memory-detail-meta dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--aw-color-text-primary, #111827);
+}
+
+.memory-detail-excerpt {
+  max-height: 240px;
+  padding: 0.7rem;
+  overflow: auto;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  background: var(--aw-color-bg-subtle, #f8fafc);
+}
+
+.memory-detail-excerpt > :first-child {
+  margin-top: 0;
+}
+
+.memory-detail-excerpt > :last-child {
+  margin-bottom: 0;
+}
+
+.memory-source-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  color: var(--aw-color-text-muted, #6b7280);
+  font-size: 0.78rem;
+}
+
+.memory-source-links button {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--aw-color-accent, #2563eb);
+  border-radius: 999px;
+  color: var(--aw-color-accent, #2563eb);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.memory-source-links button:hover,
+.memory-source-links button:active,
+.memory-source-links button:focus-visible {
+  color: var(--aw-color-bg-primary, #fff);
+  background: var(--aw-color-accent, #2563eb);
+}
+
+/* --- Episode Calendar --- */
+.memory-calendar-view {
+  width: min(900px, 100%);
+  margin: 0 auto;
+}
+
+.memory-calendar-nav {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.memory-calendar-nav h3 {
+  text-align: center;
+  font-size: 1.15rem;
+}
+
+.memory-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-top: 1px solid var(--aw-color-border, #d1d5db);
+  border-left: 1px solid var(--aw-color-border, #d1d5db);
+}
+
+.memory-calendar-weekday,
+.memory-calendar-day {
+  border-right: 1px solid var(--aw-color-border, #d1d5db);
+  border-bottom: 1px solid var(--aw-color-border, #d1d5db);
+}
+
+.memory-calendar-weekday {
+  padding: 0.55rem 0.25rem;
+  text-align: center;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--aw-color-text-secondary, #4b5563);
+  background: var(--aw-color-bg-secondary, #f3f4f6);
+}
+
+.memory-calendar-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 86px;
+  padding: 0.55rem;
+  color: var(--aw-color-text-primary, #111827);
+  background: var(--aw-color-bg-primary, #fff);
+  font: inherit;
+}
+
+button.memory-calendar-day {
+  border-top: 0;
+  border-left: 0;
+  cursor: pointer;
+}
+
+.memory-calendar-day.blank {
+  background: var(--aw-color-bg-subtle, #f8fafc);
+}
+
+.memory-calendar-day.has-episode {
+  color: var(--aw-color-accent, #2563eb);
+  background: color-mix(in srgb, var(--aw-color-accent, #2563eb) 8%, var(--aw-color-bg-primary, #fff));
+  font-weight: 700;
+}
+
+.memory-calendar-day.has-episode:hover,
+.memory-calendar-day.has-episode:active,
+.memory-calendar-day.has-episode:focus-visible {
+  outline: 2px solid var(--aw-color-accent, #2563eb);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--aw-color-accent, #2563eb) 15%, var(--aw-color-bg-primary, #fff));
+}
+
+.memory-calendar-day.today > span:first-child {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--aw-color-bg-primary, #fff);
+  background: var(--aw-color-accent, #2563eb);
+}
+
+.memory-calendar-dot {
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  margin-bottom: 0.25rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+@media (max-width: 760px) {
+  .memory-page-card,
+  .memory-page-content {
+    min-height: 480px;
+  }
+
+  .memory-graph-view {
+    height: auto;
+    min-height: 0;
+  }
+
+  .memory-graph-badges {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .memory-graph-layout {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .memory-graph-stage {
+    min-height: 420px;
+  }
+
+  .memory-graph-detail {
+    width: 100%;
+    min-width: 0;
+    min-height: 220px;
+    border-top: 1px solid var(--aw-color-border, #d1d5db);
+    border-left: 0;
+  }
+
+  .memory-calendar-day {
+    min-height: 58px;
+    padding: 0.35rem;
+  }
+}
