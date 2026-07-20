@@ -7,7 +7,102 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+#### Company (first-class)
+- Company as a first-class concept: core boundary enforcement, company management CLI, and company export workflow.
+- Org-chart company grouping and company-colored avatar rings on anima icons.
+
+#### Mode X (Grok Build CLI)
+- Mode X engine (Grok Build CLI): executor, mode resolution, cycle wiring, credential family, CLI display, and available-models API.
+- Sandbox enforcement for Mode X and progress-based (sidecar) timeouts instead of pure wall-clock limits.
+
+#### Background execution
+- Background TaskExec worker pool for true parallel workers within a single anima, with sibling-worker activity exposure.
+- Parallel activity timeline visualization, including lane layout for concurrent tasks.
+
+#### Memory hygiene & retrieval
+- Memory hygiene pipeline: mechanical cleanup (episodes retention, short-term dead-thread GC, facts lock cleanup), unified archive naming with RAG reindex, hygiene reports, and an autonomous anima cleanup layer.
+- Memory search improvements: trigger fidelity through backend retrieve/get_recent_facts (P0), time-aware retrieval (P1), entity-alias associative recall (P2-A), and low-confidence iterative retrieval (P2-B).
+- Context-aware chunk indexing (date, title, and heading headers on episodes/knowledge).
+- RAG index gap-fill: cold-start catch-up, daily facts indexing, and skills sparse fallback.
+- Default `current_state.md` auto-trim (8,000 characters) and restored autonomous cleanup prompts (i18n).
+
+#### Anima merge
+- Resumable multi-phase anima merge: snapshot, attachment/index rebuild, external reference rewrite, verify/tombstone, and finalize.
+
+#### Sandbox & file policy
+- Per-anima file read deny roots with host-boundary hardening.
+- Sandbox EROFS fallbacks: `create_anima` and company-boundary checks via host internal APIs.
+
+#### Integrations & messaging
+- Zoom RTMS meeting listener (transcript ingest gateway), OAuth completion page, and `zoom-meeting-scribe` common skill (ja/en/ko).
+- GitHub webhook-driven PR review dispatch, bot FRC verdict forwarding to the dispatcher anima, and review convergence rules in the dispatch prompt.
+- External-tasks widget on real data: fault-isolated collectors for GitHub, Slack, Chatwork, and Gmail; JSON snapshot store; store-backed API job; freshness/health UI with XSS-safe links and i18n.
+- Plain-text `@anima` mentions in Slack channels delivered directly to the inbox.
+
+#### Credentials, vault & models
+- Config credentials vault references/migration and vault restoration CLI; Neo4j extraction uses the hardened legacy resolver with trusted credentials.
+- Skill promotion auto-path wiring and Curator report consumption loop.
+- `background_thinking_effort` for HB/cron; Codex gpt-5.6 effort passthrough with longer idle timeouts; Mode A entries for qwen3.6-27b/35b.
+
+#### UI, auth & observability
+- Memory graph and calendar APIs with matching browser UI; server-side anima avatar thumbnails (`?size=S|M|L`).
+- AuthUser-centric user management UI and guards against shared/users anima contamination.
+- SPA `#/setup` removed into `#/settings`; prompt configuration unified as markdown files.
+- Cycle-correlated logging, dedicated `errors.log`, and secret redaction (including frontend pass-through).
+- LLM error classifier with fleet-wide rate guards; Mode A/B loop hardening (in-loop retry, empty-response recovery, runaway guards).
+
+### Changed
+
+- Removed experimental AI brainstorm and team-builder features.
+- Consolidation uses fewer LLM calls and improved sleep/dormancy decisions; merge-candidate MUST language relaxed to autonomous judgment.
+- Board Slack outbound sync empty whitelist is deny-by-default; GitHub webhook site-specific values externalized.
+- Internal host/org names anonymized; environment-specific paths removed from deploy templates and scripts; packages/Docker ship runtime templates.
+- Parallel timeline lane construction performance improved.
+
+### Fixed
+
+#### Streaming & chat UI
+- Streaming responses no longer vanish when an orphaned `</think>` tag appears mid-stream.
+- Frontend no longer drops message body when inline tool-call JSON is mixed into content.
+- Streaming hang detection is progress-aware instead of pure wall-clock.
+
+#### Sandbox, deny policy & company boundaries
+- Nested deny roots folded/aggregated; file deny bypasses closed; trusted memory archival and cached/primed deny sources protected; npm cache isolation.
+- `call_human` notification mapping preserved inside the sandbox (Slack replies were ignored); Codex engine runnable under sandbox EROFS.
+- Board company boundary enforcement and archive paths excluded from indexing.
+
+#### Memory, RAG & consolidation
+- Over-compression mitigations: hygiene summary compression disabled; superseded archive deletion uses move time (`max(mtime, ctime)`).
+- Vector self-heal and write path: break transient reset storms, defer writes during repair, avoid false-positive rebuilds that disconnect chat, escalate repeated failures, preserve shared index hashes, aggregate failure logs, throttle/backoff after worker 503/500.
+- Memory-system audit fixes across consolidation, priming, retrieval, short-term, and FileWatcher (supersede penalty, reconsolidation, min_score-on-rerank, dense/sparse split, BM25 dirty, finalize cursor, abandoned-session episodes, and more).
+- Memory leaks fixed (thread leaks, permanent background-task result retention, unbounded vector-worker queues); full rebuilds include facts; continuous upsert failures quarantine the bad file.
+
+#### Supervisor lifecycle
+- Per-anima lifecycle lock (concurrent `stop_anima` no longer raises `KeyError`); disabled animas blocked from start/wake/respawn and inbox processing.
+- Shutdown hardening: refuse start while shutting down, barrier for in-flight starts, skip failure/restart machinery during shutdown, 409 when `/start` does not register, defensive non-dict `status.json`.
+
+#### Credentials, vault & merge verification
+- Vault encryption restored with guarded migration; zero-byte post-migration `credentials.json` treated as empty; no-op Slack board mapping saves skipped.
+- Anima-merge VERIFY probes hardened; Grok ACP StreamReader limit 16 MiB; `mcpServers` env uses EnvVariable form.
+
+#### Runtime pressure, bootstrap & distribution
+- Fleet memory pressure: MCP subprocess model-explosion OOM controlled on three routes; duplicate background task execution guarded.
+- Bootstrap guidance and Claude Code credentials corrected; runtime templates in packaged installs; data-dir-scoped duplicate server detection; long IPC paths fall back to TCP; hard-coded OneDriveBiz path replaced with `ANIMAWORKS_ABCONFIG_PATH`.
+- Inbox/send reliability: unknown-sender quarantine, empty task-completion notifications skipped, human sender resolution for `send`.
+- Neo4j extraction endpoints not trusted from `status.json`; Max auth route and engine allowlist after cc-router/Gemini cleanup; machine input validated before engine availability.
+- Shared template incremental sync restored; webhook receive paths excluded from auth middleware; stale e2e/unit tests updated for current config.
+
+### Security
+
+- Per-anima file deny roots and nested-deny aggregation reduce cross-anima filesystem exposure.
+- Company boundary enforcement in core, Board, and sandbox host-side fallbacks.
+- Credential vault migration/restoration path hardened; Neo4j extraction endpoints not taken from untrusted status fields.
+- Log and UI secret redaction; internal hostnames, org names, and environment-specific paths removed from the public tree.
+
 ## [0.9.2] - 2026-06-19
+
 
 ### Fixed
 
