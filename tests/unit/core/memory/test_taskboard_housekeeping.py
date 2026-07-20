@@ -285,3 +285,134 @@ def test_current_state_archive_skips_if_file_changed_after_read(tmp_path: Path) 
     assert outcome == "changed"
     assert state_path.read_text(encoding="utf-8") == "status: working\nfresh"
     assert not list((anima_dir / "episodes").glob("*.md"))
+
+
+def _stale_iso(hours: float) -> str:
+    return (now_local() - timedelta(hours=hours)).isoformat()
+
+
+def test_orphan_metadata_without_queue_entry_is_archived(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    _anima_dir(data_dir)
+    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
+    store.upsert_metadata(
+        anima_name="sakura",
+        task_id="ghost-task",
+        actor="test",
+        visibility="active",
+        column="todo",
+        updated_at=_stale_iso(25),
+    )
+
+    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30, 24)
+
+    assert result["orphan_archived"] == 1
+    meta = store.get_metadata("sakura", "ghost-task")
+    assert meta is not None
+    assert meta.visibility.value == "archived"
+    assert meta.column.value == "done"
+    assert meta.tombstone_reason == "queue_missing_reconciled"
+    assert meta.updated_by == "housekeeping"
+    events = store.list_events(anima_name="sakura", task_id="ghost-task")
+    assert any(event["event_type"] == "archived" for event in events)
+
+
+def test_orphan_metadata_with_queue_entry_is_left_alone(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    anima_dir = _anima_dir(data_dir)
+    TaskQueueManager(anima_dir).add_task(
+        source="human",
+        original_instruction="still live",
+        assignee="sakura",
+        summary="still live",
+        task_id="live-task",
+    )
+    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
+    store.upsert_metadata(
+        anima_name="sakura",
+        task_id="live-task",
+        actor="test",
+        visibility="active",
+        column="todo",
+        updated_at=_stale_iso(25),
+    )
+
+    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30, 24)
+
+    assert result["orphan_archived"] == 0
+    meta = store.get_metadata("sakura", "live-task")
+    assert meta is not None
+    assert meta.visibility.value == "active"
+    assert meta.column.value == "todo"
+
+
+def test_recent_orphan_metadata_is_not_archived_within_grace(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    _anima_dir(data_dir)
+    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
+    store.upsert_metadata(
+        anima_name="sakura",
+        task_id="fresh-ghost",
+        actor="test",
+        visibility="active",
+        column="todo",
+        updated_at=_stale_iso(1),
+    )
+
+    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30, 24)
+
+    assert result["orphan_archived"] == 0
+    meta = store.get_metadata("sakura", "fresh-ghost")
+    assert meta is not None
+    assert meta.visibility.value == "active"
+
+
+def test_orphan_metadata_for_missing_anima_dir_is_archived(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    # Ensure animas/ exists so cleanup runs, but the named anima dir is absent.
+    (data_dir / "animas").mkdir(parents=True, exist_ok=True)
+    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
+    store.upsert_metadata(
+        anima_name="vanished",
+        task_id="orphan-after-merge",
+        actor="test",
+        visibility="snoozed",
+        column="waiting",
+        updated_at=_stale_iso(48),
+    )
+
+    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30, 24)
+
+    assert result["orphan_archived"] == 1
+    meta = store.get_metadata("vanished", "orphan-after-merge")
+    assert meta is not None
+    assert meta.visibility.value == "archived"
+    assert meta.tombstone_reason == "queue_missing_reconciled"
+
+
+def test_stale_archived_metadata_is_purged_after_retention(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    _anima_dir(data_dir)
+    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
+    store.upsert_metadata(
+        anima_name="sakura",
+        task_id="old-archived",
+        actor="test",
+        visibility="archived",
+        column="done",
+        updated_at=_stale_iso(31 * 24),
+    )
+    store.upsert_metadata(
+        anima_name="sakura",
+        task_id="recent-archived",
+        actor="test",
+        visibility="archived",
+        column="done",
+        updated_at=_stale_iso(5),
+    )
+
+    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30, 24)
+
+    assert result["purged_deleted"] == 1
+    assert store.get_metadata("sakura", "old-archived") is None
+    assert store.get_metadata("sakura", "recent-archived") is not None

@@ -64,6 +64,7 @@ async def run_housekeeping(
     background_running_stale_hours: int = 48,
     current_state_stale_hours: int = 24,
     taskboard_suppressed_retention_days: int = 30,
+    taskboard_orphan_metadata_stale_hours: int = 24,
     suppressed_messages_max_size_mb: int = 10,
     suppressed_messages_keep_generations: int = 5,
     archive_superseded_retention_days: int = 7,
@@ -316,6 +317,7 @@ async def run_housekeeping(
             background_running_stale_hours,
             current_state_stale_hours,
             taskboard_suppressed_retention_days,
+            taskboard_orphan_metadata_stale_hours,
         )
         results["taskboard_stale"] = r
     except Exception:

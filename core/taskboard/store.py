@@ -330,6 +330,21 @@ class TaskBoardStore:
             )
             return metadata
 
+    def delete_metadata(self, anima_name: str, task_id: str) -> bool:
+        """Physically delete a metadata row. Does not append an audit event.
+
+        Returns True if a row was deleted, False if no matching row existed.
+        """
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM taskboard_metadata
+                WHERE anima_name = ? AND task_id = ?
+                """,
+                (anima_name, task_id),
+            )
+            return cursor.rowcount > 0
+
     def list_events(
         self,
         *,

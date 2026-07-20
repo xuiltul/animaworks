@@ -25,6 +25,7 @@ def cleanup_taskboard_stale_artifacts(
     background_running_stale_hours: int,
     current_state_stale_hours: int,
     taskboard_suppressed_retention_days: int,
+    taskboard_orphan_metadata_stale_hours: int = 24,
 ) -> dict[str, Any]:
     """Clean runtime artifacts that can resurface stale TaskBoard work."""
     animas_dir = data_dir / "animas"
@@ -48,6 +49,12 @@ def cleanup_taskboard_stale_artifacts(
 
     current_state = _cleanup_current_state(animas_dir, current_state_stale_hours, store)
     results.update({f"current_state_{key}": value for key, value in current_state.items()})
+
+    orphan = _cleanup_orphan_metadata(animas_dir, store, taskboard_orphan_metadata_stale_hours)
+    results.update({f"orphan_{key}": value for key, value in orphan.items()})
+
+    purged = _purge_stale_metadata(store, taskboard_suppressed_retention_days)
+    results.update({f"purged_{key}": value for key, value in purged.items()})
 
     return results
 
@@ -269,6 +276,136 @@ def _cleanup_current_state(
         "changed": changed,
         "errors": errors,
     }
+
+
+_ORPHAN_VISIBILITIES = frozenset({"active", "snoozed"})
+_PURGE_VISIBILITIES = frozenset({"archived", "expired", "tombstoned"})
+
+
+def _cleanup_orphan_metadata(
+    animas_dir: Path,
+    store: Any | None,
+    stale_hours: int,
+) -> dict[str, int]:
+    """Archive active/snoozed metadata rows whose live queue entry is gone."""
+    archived = 0
+    errors = 0
+    if store is None:
+        return {"archived": archived, "errors": errors}
+
+    now = now_local()
+    cutoff = now.timestamp() - (stale_hours * 3600)
+    live_task_ids_cache: dict[str, set[str] | None] = {}
+
+    try:
+        rows = store.list_metadata()
+    except Exception:
+        logger.warning("Failed to list TaskBoard metadata for orphan cleanup", exc_info=True)
+        return {"archived": 0, "errors": 1}
+
+    for meta in rows:
+        try:
+            visibility = getattr(meta.visibility, "value", meta.visibility)
+            if visibility not in _ORPHAN_VISIBILITIES:
+                continue
+
+            updated_at = _parse_datetime_value(getattr(meta, "updated_at", None))
+            if updated_at is None or updated_at.timestamp() >= cutoff:
+                continue
+
+            anima_name = meta.anima_name
+            task_id = meta.task_id
+            anima_dir = animas_dir / anima_name
+
+            if not anima_dir.is_dir():
+                missing_from_queue = True
+            else:
+                if anima_name not in live_task_ids_cache:
+                    live_task_ids_cache[anima_name] = _live_queue_task_ids(anima_dir)
+                live_ids = live_task_ids_cache[anima_name]
+                if live_ids is None:
+                    # Queue unreadable — skip this anima rather than mass-archive.
+                    continue
+                missing_from_queue = task_id not in live_ids
+
+            if not missing_from_queue:
+                continue
+
+            store.upsert_metadata(
+                anima_name=anima_name,
+                task_id=task_id,
+                actor="housekeeping",
+                event_type="archived",
+                visibility="archived",
+                column="done",
+                tombstone_reason="queue_missing_reconciled",
+            )
+            archived += 1
+        except Exception:
+            errors += 1
+            logger.warning(
+                "Failed to archive orphan TaskBoard metadata: %s/%s",
+                getattr(meta, "anima_name", "?"),
+                getattr(meta, "task_id", "?"),
+                exc_info=True,
+            )
+
+    if archived:
+        logger.info("TaskBoard orphan metadata cleanup: archived %d rows", archived)
+    return {"archived": archived, "errors": errors}
+
+
+def _purge_stale_metadata(store: Any | None, retention_days: int) -> dict[str, int]:
+    """Physically delete archived/expired/tombstoned metadata past retention."""
+    deleted = 0
+    errors = 0
+    if store is None:
+        return {"deleted": deleted, "errors": errors}
+
+    now = now_local()
+    cutoff = now.timestamp() - (retention_days * 86400)
+
+    try:
+        rows = store.list_metadata()
+    except Exception:
+        logger.warning("Failed to list TaskBoard metadata for purge", exc_info=True)
+        return {"deleted": 0, "errors": 1}
+
+    for meta in rows:
+        try:
+            visibility = getattr(meta.visibility, "value", meta.visibility)
+            if visibility not in _PURGE_VISIBILITIES:
+                continue
+
+            updated_at = _parse_datetime_value(getattr(meta, "updated_at", None))
+            if updated_at is None or updated_at.timestamp() >= cutoff:
+                continue
+
+            if store.delete_metadata(meta.anima_name, meta.task_id):
+                deleted += 1
+        except Exception:
+            errors += 1
+            logger.warning(
+                "Failed to purge stale TaskBoard metadata: %s/%s",
+                getattr(meta, "anima_name", "?"),
+                getattr(meta, "task_id", "?"),
+                exc_info=True,
+            )
+
+    if deleted:
+        logger.info("TaskBoard metadata purge: deleted %d rows", deleted)
+    return {"deleted": deleted, "errors": errors}
+
+
+def _live_queue_task_ids(anima_dir: Path) -> set[str] | None:
+    """Return task_ids present in the live queue, or None if unreadable."""
+    try:
+        from core.memory.task_queue import TaskQueueManager
+
+        return set(TaskQueueManager(anima_dir)._load_all().keys())
+    except Exception:
+        logger.debug("Failed to load live queue for %s", anima_dir.name, exc_info=True)
+        return None
 
 
 def _iter_anima_dirs(animas_dir: Path) -> list[Path]:

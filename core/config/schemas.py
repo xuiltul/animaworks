@@ -793,6 +793,7 @@ class HousekeepingConfig(BaseModel):
     background_running_stale_hours: int = Field(default=48, ge=1)
     current_state_stale_hours: int = Field(default=24, ge=1)
     taskboard_suppressed_retention_days: int = Field(default=30, ge=1)
+    taskboard_orphan_metadata_stale_hours: int = Field(default=24, ge=1)
     suppressed_messages_max_size_mb: int = Field(default=10, ge=1)
     suppressed_messages_keep_generations: int = Field(default=5, ge=1)
     archive_superseded_retention_days: int = Field(default=7, ge=1)
