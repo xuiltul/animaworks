@@ -335,3 +335,47 @@
   color: var(--aw-color-error, #dc2626);
   border: 1px solid var(--aw-color-error-border, #fecaca);
 }
+
+/* ── API & Authentication ───────────────────── */
+
+.settings-subsection-title {
+  font-size: 0.98rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--aw-color-text-primary);
+}
+
+.settings-auth-block {
+  margin-bottom: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: var(--aw-color-bg-secondary, #f9fafb);
+  border: 1px solid var(--aw-color-border, #e5e7eb);
+  border-radius: 8px;
+}
+
+.settings-auth-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--aw-color-border, #eee);
+}
+
+.settings-auth-row:last-child {
+  border-bottom: none;
+}
+
+.settings-auth-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.settings-auth-label {
+  font-weight: 500;
+}
+
+.settings-auth-value {
+  margin-left: auto;
+  color: var(--aw-color-text-muted, #666);
+  font-size: 0.85rem;
+}

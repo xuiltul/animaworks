@@ -52,7 +52,6 @@ function registerRoutes() {
   routes["/chat"] = () => import("../pages/chat.js" + _v);
   routes["/board"] = () => import("../pages/board.js" + _v);
   routes["/task-board"] = () => import("../pages/task-board.js" + _v);
-  routes["/setup"] = () => import("../pages/setup.js" + _v);
   routes["/users"] = () => import("../pages/users.js" + _v);
   routes["/animas"] = () => import("../pages/animas.js" + _v);
   routes["/processes"] = () => import("../pages/processes.js" + _v);
@@ -70,6 +69,12 @@ function registerRoutes() {
 async function handleRoute() {
   const hash = window.location.hash || "#/chat";
   const path = hash.slice(1) || "/chat"; // Remove leading '#'
+
+  // Legacy SPA #/setup was merged into #/settings (API & Authentication)
+  if (path === "/setup" || path.startsWith("/setup/")) {
+    window.location.hash = "#/settings";
+    return;
+  }
 
   // Try exact match first, then prefix match for parameterized routes
   let loader = routes[path];

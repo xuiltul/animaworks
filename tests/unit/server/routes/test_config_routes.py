@@ -148,6 +148,76 @@ class TestGetConfig:
         assert "Invalid config JSON" in resp.json()["detail"]
 
 
+class TestAnthropicAuthSettings:
+    """API-level checks for settings-page Anthropic auth (migrated from SPA #/setup)."""
+
+    async def test_get_anthropic_auth_uses_config_and_runtime_status(self, monkeypatch):
+        config = AnimaWorksConfig(
+            credentials={
+                "anthropic": CredentialConfig(type="claude_code_login"),
+            }
+        )
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        with (
+            patch("server.routes.config_routes.load_config", return_value=config),
+            patch("server.routes.config_routes.is_claude_code_available", return_value=True),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/api/settings/anthropic-auth")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["auth_mode"] == "claude_code_login"
+        assert data["config_present"] is True
+        assert data["claude_code_available"] is True
+        assert data["configured"] is True
+        assert data["env_api_key_configured"] is False
+
+    async def test_put_anthropic_auth_saves_api_key(self):
+        config = AnimaWorksConfig()
+        saved = {}
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        def _save_config(updated):
+            saved["config"] = updated
+
+        with (
+            patch("server.routes.config_routes.load_config", return_value=config),
+            patch("server.routes.config_routes.save_config", side_effect=_save_config),
+            patch("server.routes.config_routes.is_claude_code_available", return_value=False),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.put(
+                    "/api/settings/anthropic-auth",
+                    json={"auth_mode": "api_key", "api_key": "sk-ant-test-key"},
+                )
+
+        assert resp.status_code == 200
+        saved_config = saved["config"]
+        assert saved_config.credentials["anthropic"].type == "api_key"
+        assert saved_config.credentials["anthropic"].api_key == "sk-ant-test-key"
+
+    async def test_put_anthropic_auth_rejects_missing_api_key(self):
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        with (
+            patch("server.routes.config_routes.load_config", return_value=AnimaWorksConfig()),
+            patch("server.routes.config_routes.is_claude_code_available", return_value=False),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.put(
+                    "/api/settings/anthropic-auth",
+                    json={"auth_mode": "api_key", "api_key": ""},
+                )
+
+        assert resp.status_code == 400
+
+
 class TestOpenAIAuthSettings:
     async def test_get_openai_auth_uses_config_and_runtime_status(self, monkeypatch):
         config = AnimaWorksConfig(
