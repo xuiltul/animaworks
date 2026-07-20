@@ -41,11 +41,18 @@ def crop_face_center_square(
 
 
 def main() -> None:
-    src = Path("/home/main/Downloads/avatar_bustup_realistic.png")
+    if len(sys.argv) < 2:
+        print(
+            f"Usage: {sys.argv[0]} <src_image> [dest_image]",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    src = Path(sys.argv[1])
+    dest = Path(sys.argv[2]) if len(sys.argv) > 2 else None
     if not src.exists():
         print(f"Not found: {src}", file=sys.stderr)
         sys.exit(1)
-    out = crop_face_center_square(src)
+    out = crop_face_center_square(src, dest)
     print(f"Saved: {out}")
 
 

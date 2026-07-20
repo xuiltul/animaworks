@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /home/main/dev/animaworks-bak
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
-LOG="/home/main/dev/animaworks-bak/benchmarks/locomo/results/bench_$(date +%Y%m%d_%H%M%S).log"
+LOG="$ROOT/benchmarks/locomo/results/bench_$(date +%Y%m%d_%H%M%S).log"
 exec > >(tee -a "$LOG") 2>&1
 
 echo "========== STEP 1: LoCoMo dataset stats =========="

@@ -13,7 +13,9 @@ IPC_BUFFER_LIMIT = 16 * 1024 * 1024
 
 
 async def main(anima_name: str, message: str) -> None:
-    socket_path = f"/home/main/.animaworks/run/sockets/{anima_name}.sock"
+    from core.paths import get_data_dir
+
+    socket_path = str(get_data_dir() / "run" / "sockets" / f"{anima_name}.sock")
     print(f"=== Direct IPC Debug: {anima_name} ===")
     print(f"Socket: {socket_path}")
     print(f"Message: {message}")

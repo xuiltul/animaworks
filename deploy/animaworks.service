@@ -1,3 +1,7 @@
+# AnimaWorks systemd user/service unit template.
+# Edit the paths below to match your environment before installing.
+# Typical install: copy to ~/.config/systemd/user/animaworks.service and run systemctl --user daemon-reload.
+
 [Unit]
 Description=AnimaWorks - Digital Anima Framework
 After=network-online.target
@@ -7,15 +11,15 @@ StartLimitBurst=20
 
 [Service]
 Type=simple
-WorkingDirectory=/home/main/dev/animaworks-bak
-ExecStart=/home/main/dev/animaworks-bak/.venv/bin/animaworks start --foreground
-ExecStop=/home/main/dev/animaworks-bak/.venv/bin/animaworks stop
+WorkingDirectory=/path/to/animaworks
+ExecStart=/path/to/animaworks/.venv/bin/animaworks start --foreground
+ExecStop=/path/to/animaworks/.venv/bin/animaworks stop
 Restart=on-failure
 RestartSec=10
 RestartPreventExitStatus=3
 LimitNOFILE=524288
-Environment=HOME=/home/main
-Environment=PATH=/home/main/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/path/to/home
+Environment=PATH=/path/to/home/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=TOKENIZERS_PARALLELISM=false
 
 [Install]
