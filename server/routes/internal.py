@@ -123,6 +123,20 @@ class AnimaCreateRequest(BaseModel):
     calling_anima: str = ""  # supervisor fallback when status.json has none
 
 
+class DelegateTaskPersistRequest(BaseModel):
+    delegator: str  # source anima name
+    target: str  # destination anima name
+    instruction: str  # full delegation text
+    summary: str
+    deadline: str  # relative ('30m','2h','1d') or ISO8601
+    sub_task_id: str  # client-assigned 12hex id
+    tracking_task_id: str  # client-assigned 12hex id
+    workspace: str = ""  # resolve_workspace absolute path string
+    persist_sub: bool = True  # write to subordinate queue
+    persist_tracking: bool = True  # write delegated entry on delegator queue
+    persist_pending: bool = True  # create state/pending/<id>.json
+
+
 def create_internal_router() -> APIRouter:
     router = APIRouter()
 
@@ -453,6 +467,141 @@ def create_internal_router() -> APIRouter:
             return JSONResponse(status_code=500, content={"detail": str(exc)})
 
         return {"status": "ok", "anima_dir": str(anima_dir)}
+
+    @router.post("/internal/delegate-task")
+    async def internal_delegate_task(body: DelegateTaskPersistRequest):
+        """Persist a delegated task outside sandbox EROFS constraints.
+
+        Sandboxed ``delegate_task`` cannot append to another anima's
+        ``task_queue.jsonl`` or write ``state/pending/``.  Mode C handlers
+        fall back here so host-side TaskQueueManager / TaskBoard writes succeed.
+        """
+        from core.anima_factory import validate_anima_name
+        from core.company import check_company_boundary
+        from core.i18n import t
+        from core.memory._io import atomic_write_text
+        from core.memory.task_queue import TaskQueueManager
+        from core.paths import get_animas_dir
+        from core.tooling.handler_delegation import _record_taskboard_delegation
+
+        if validate_anima_name(body.delegator) or validate_anima_name(body.target):
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid anima name"},
+            )
+
+        animas_dir = get_animas_dir()
+        target_dir = animas_dir / body.target
+        delegator_dir = animas_dir / body.delegator
+        if not target_dir.is_dir() or not delegator_dir.is_dir():
+            missing = body.target if not target_dir.is_dir() else body.delegator
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Anima directory not found: {missing}"},
+            )
+
+        boundary = check_company_boundary(
+            body.delegator,
+            body.target,
+            animas_dir=animas_dir,
+        )
+        if boundary.cross_company:
+            if boundary.resolved_via == "fail_closed":
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "Company membership unreadable"},
+                )
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": (
+                        f"Cross-company delegation blocked: "
+                        f"{body.delegator} -> {body.target} "
+                        f"({boundary.display_name})"
+                    ),
+                },
+            )
+
+        def _persist() -> dict[str, str]:
+            from datetime import UTC, datetime
+
+            if body.persist_sub:
+                TaskQueueManager(target_dir).add_task(
+                    source="anima",
+                    original_instruction=body.instruction,
+                    assignee=body.target,
+                    summary=body.summary,
+                    deadline=body.deadline,
+                    relay_chain=[body.delegator],
+                    task_id=body.sub_task_id,
+                )
+            if body.persist_tracking:
+                TaskQueueManager(delegator_dir).add_delegated_task(
+                    original_instruction=body.instruction,
+                    assignee=body.target,
+                    summary=t("handler.delegation_summary", summary=body.summary),
+                    deadline=body.deadline,
+                    relay_chain=[body.delegator, body.target],
+                    task_id=body.tracking_task_id,
+                    meta={
+                        "delegated_to": body.target,
+                        "delegated_task_id": body.sub_task_id,
+                    },
+                )
+            if body.persist_pending:
+                task_desc = {
+                    "task_type": "llm",
+                    "task_id": body.sub_task_id,
+                    "title": body.summary,
+                    "description": body.instruction,
+                    "context": "",
+                    "acceptance_criteria": [],
+                    "constraints": [],
+                    "file_paths": [],
+                    "submitted_by": body.delegator,
+                    "submitted_at": datetime.now(UTC).isoformat(),
+                    "reply_to": body.delegator,
+                    "source": "delegation",
+                    "working_directory": body.workspace,
+                }
+                pending_dir = target_dir / "state" / "pending"
+                pending_dir.mkdir(parents=True, exist_ok=True)
+                atomic_write_text(
+                    pending_dir / f"{body.sub_task_id}.json",
+                    json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
+                )
+            try:
+                _record_taskboard_delegation(
+                    delegated_to=body.target,
+                    delegated_task_id=body.sub_task_id,
+                    delegator=body.delegator,
+                    tracking_task_id=(body.tracking_task_id if body.persist_tracking else None),
+                )
+            except Exception:
+                logger.warning(
+                    "TaskBoard write failed in internal delegate-task; "
+                    "queue entries remain authoritative",
+                    exc_info=True,
+                )
+            return {
+                "sub_task_id": body.sub_task_id,
+                "tracking_task_id": body.tracking_task_id,
+            }
+
+        try:
+            loop = asyncio.get_running_loop()
+            ids = await loop.run_in_executor(_native_executor, _persist)
+        except ValueError as exc:
+            return JSONResponse(status_code=422, content={"detail": str(exc)})
+        except Exception as exc:
+            logger.exception("internal delegate-task failed")
+            return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+        return {
+            "ok": True,
+            "sub_task_id": ids["sub_task_id"],
+            "tracking_task_id": ids["tracking_task_id"],
+        }
 
     @router.post("/internal/vector/reset-store")
     async def vector_reset_store(body: VectorListCollectionsRequest, request: Request):
