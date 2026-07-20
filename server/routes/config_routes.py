@@ -385,41 +385,6 @@ def create_config_router() -> APIRouter:
             tools = []
         return {"tools": tools}
 
-    @router.get("/system/org-info")
-    async def get_org_info(request: Request):
-        """Return existing departments, titles, and anima names for team builder."""
-        animas_dir = get_animas_dir()
-        departments: set[str] = set()
-        titles: set[str] = set()
-        animas: list[dict[str, str]] = []
-
-        if animas_dir.exists():
-            for d in sorted(animas_dir.iterdir()):
-                if not d.is_dir() or not (d / "identity.md").exists():
-                    continue
-                name = d.name
-                status_path = d / "status.json"
-                dept = ""
-                title = ""
-                if status_path.exists():
-                    try:
-                        sdata = json.loads(status_path.read_text(encoding="utf-8"))
-                        dept = sdata.get("department", "")
-                        title = sdata.get("title", "")
-                    except Exception:
-                        pass
-                if dept:
-                    departments.add(dept)
-                if title:
-                    titles.add(title)
-                animas.append({"name": name, "department": dept, "title": title})
-
-        return {
-            "departments": sorted(departments),
-            "titles": sorted(titles),
-            "animas": animas,
-        }
-
     @router.put("/settings/anthropic-auth")
     async def update_anthropic_auth(body: UpdateAnthropicAuthRequest, request: Request):
         """Persist Anthropic auth mode in config.json for the settings UI."""

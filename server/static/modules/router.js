@@ -63,9 +63,6 @@ function registerRoutes() {
   routes["/tool-prompts"] = () => import("../pages/tool-prompts.js" + _v);
   routes["/activity-report"] = () => import("../pages/activity-report.js" + _v);
   routes["/settings"] = () => import("../pages/settings.js" + _v);
-  routes["/brainstorm"] = () => import("../pages/brainstorm.js" + _v);
-  routes["/team-builder"] = () => import("../pages/team-builder.js" + _v);
-  routes["/team-edit"] = () => import("../pages/team-edit.js" + _v);
 }
 
 // ── Route Handler ───────────────────────────

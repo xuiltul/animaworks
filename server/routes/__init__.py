@@ -10,7 +10,6 @@ from server.routes.animas import create_animas_router
 from server.routes.approve import create_approve_router
 from server.routes.assets import create_assets_router
 from server.routes.auth import create_auth_router
-from server.routes.brainstorm import create_brainstorm_router
 from server.routes.channels import create_channels_router
 from server.routes.chat import create_chat_router
 from server.routes.chat_ui_state import create_chat_ui_state_router
@@ -24,7 +23,6 @@ from server.routes.sessions import create_sessions_router
 from server.routes.skills import create_skills_router
 from server.routes.system import create_system_router
 from server.routes.taskboard import create_taskboard_router
-from server.routes.team_presets import create_team_presets_router
 from server.routes.tool_prompts import create_tool_prompts_router
 from server.routes.usage_routes import create_usage_router
 from server.routes.users import create_users_router
@@ -56,9 +54,7 @@ def create_router() -> APIRouter:
     api.include_router(create_tool_prompts_router())
     api.include_router(create_users_router())
     api.include_router(create_activity_report_router())
-    api.include_router(create_brainstorm_router())
     api.include_router(create_external_tasks_router())
-    api.include_router(create_team_presets_router())
     api.include_router(create_usage_router())
     api.include_router(create_webhooks_router())
 
