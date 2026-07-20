@@ -1007,6 +1007,85 @@ Get a saved message.
 
 ---
 
+## External Tasks
+
+### GET `/api/external-tasks`
+
+List external tasks collected from integrated tools (GitHub, Slack, Gmail, etc.) for the home dashboard widget. Reads from the on-disk snapshot store (not live remote APIs).
+
+| Query Parameter | Type | Default | Description |
+|----------------|------|---------|-------------|
+| `limit` | int | 20 | Max items (1–100) |
+| `offset` | int | 0 | Pagination offset |
+| `status` | string | null | Comma-separated statuses: `open`, `in_progress`, `done`, `cancelled` |
+| `source_type` | string | null | Comma-separated sources: `github`, `slack`, `gmail`, `chatwork`, `jira`, `notion`, `other` |
+| `since` | string | null | ISO 8601 timestamp — only tasks with `last_updated_at` ≥ this value |
+| `sort` | string | `priority` | Sort key: `priority`, `created_at`, `last_updated_at` |
+| `order` | string | `desc` | Sort order: `asc` or `desc` |
+
+**Response:** `200 OK`
+
+```json
+{
+  "data": [
+    {
+      "id": "github:123",
+      "title": "Fix login bug",
+      "status": "open",
+      "source_type": "github",
+      "source_icon": "github",
+      "source_url": "https://github.com/org/repo/issues/123",
+      "created_at": "2026-07-20T10:00:00+00:00",
+      "last_updated_at": "2026-07-20T12:00:00+00:00",
+      "priority": 80
+    }
+  ],
+  "meta": {
+    "total_count": 1,
+    "limit": 20,
+    "offset": 0,
+    "has_more": false,
+    "last_collected_at": "2026-07-20T12:05:00+00:00",
+    "sources": {
+      "github": {
+        "status": "ok",
+        "collected_at": "2026-07-20T12:05:00+00:00",
+        "error": null
+      },
+      "gmail": {
+        "status": "unavailable",
+        "collected_at": null,
+        "error": "credentials not configured"
+      }
+    }
+  }
+}
+```
+
+- `meta.last_collected_at` — overall collection timestamp, or `null` if never collected.
+- `meta.sources` — per-source health; `status` is `"ok"` or `"unavailable"`.
+
+**Errors:**
+
+| Status | Code | When |
+|--------|------|------|
+| `400` | `INVALID_PARAMETER` | Invalid `sort`, `order`, or `since` (must be ISO 8601) |
+| `422` | `INVALID_FILTER` | Unknown value in `status` or `source_type` |
+
+```json
+{
+  "error": {
+    "code": "INVALID_PARAMETER",
+    "message": "Invalid value for 'sort': must be one of priority, created_at, last_updated_at.",
+    "details": [
+      { "field": "sort", "value": "foo", "allowed": ["priority", "created_at", "last_updated_at"] }
+    ]
+  }
+}
+```
+
+---
+
 ## Chat UI State
 
 ### GET `/api/chat/ui-state`

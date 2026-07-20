@@ -109,7 +109,6 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/tools/_slack_cli.py": 1,
     # mock task data with Japanese titles
     "server/routes/animas.py": 0,
-    "server/routes/external_tasks.py": 8,
     # meeting/room feature — Japanese meeting prompts and labels
     "server/room_manager.py": 12,
     "server/routes/room.py": 4,

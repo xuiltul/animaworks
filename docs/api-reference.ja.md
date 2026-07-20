@@ -1221,6 +1221,85 @@ CLI から送信されたメッセージの通知（UI 更新用）。
 
 ---
 
+## 外部タスク (External Tasks)
+
+### GET `/api/external-tasks`
+
+統合ツール（GitHub / Slack / Gmail 等）から収集した外部タスク一覧を返す（ホームダッシュボードウィジェット用）。オンディスクのスナップショットストアを読む（リモート API へのライブ問い合わせではない）。
+
+| クエリパラメータ | 型 | デフォルト | 説明 |
+|----------------|-----|-----------|------|
+| `limit` | int | 20 | 最大件数（1–100） |
+| `offset` | int | 0 | ページネーションオフセット |
+| `status` | string | null | カンマ区切りステータス: `open`, `in_progress`, `done`, `cancelled` |
+| `source_type` | string | null | カンマ区切りソース: `github`, `slack`, `gmail`, `chatwork`, `jira`, `notion`, `other` |
+| `since` | string | null | ISO 8601 日時 — `last_updated_at` がこの値以上のタスクのみ |
+| `sort` | string | `priority` | ソートキー: `priority`, `created_at`, `last_updated_at` |
+| `order` | string | `desc` | ソート順: `asc` または `desc` |
+
+**レスポンス:** `200 OK`
+
+```json
+{
+  "data": [
+    {
+      "id": "github:123",
+      "title": "Fix login bug",
+      "status": "open",
+      "source_type": "github",
+      "source_icon": "github",
+      "source_url": "https://github.com/org/repo/issues/123",
+      "created_at": "2026-07-20T10:00:00+00:00",
+      "last_updated_at": "2026-07-20T12:00:00+00:00",
+      "priority": 80
+    }
+  ],
+  "meta": {
+    "total_count": 1,
+    "limit": 20,
+    "offset": 0,
+    "has_more": false,
+    "last_collected_at": "2026-07-20T12:05:00+00:00",
+    "sources": {
+      "github": {
+        "status": "ok",
+        "collected_at": "2026-07-20T12:05:00+00:00",
+        "error": null
+      },
+      "gmail": {
+        "status": "unavailable",
+        "collected_at": null,
+        "error": "credentials not configured"
+      }
+    }
+  }
+}
+```
+
+- `meta.last_collected_at` — 全体の最終収集時刻。未収集なら `null`。
+- `meta.sources` — ソース別の健全性。`status` は `"ok"` または `"unavailable"`。
+
+**エラー:**
+
+| ステータス | コード | 条件 |
+|-----------|--------|------|
+| `400` | `INVALID_PARAMETER` | `sort` / `order` / `since`（ISO 8601 必須）が不正 |
+| `422` | `INVALID_FILTER` | `status` または `source_type` に未知の値 |
+
+```json
+{
+  "error": {
+    "code": "INVALID_PARAMETER",
+    "message": "Invalid value for 'sort': must be one of priority, created_at, last_updated_at.",
+    "details": [
+      { "field": "sort", "value": "foo", "allowed": ["priority", "created_at", "last_updated_at"] }
+    ]
+  }
+}
+```
+
+---
+
 ## チャット UI 状態
 
 ### GET `/api/chat/ui-state`

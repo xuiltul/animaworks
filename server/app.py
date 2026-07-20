@@ -867,6 +867,50 @@ async def lifespan(app: FastAPI):
             replace_existing=True,
         )
 
+        # ── External tasks collection (optional) ──────
+        try:
+            from core.config.models import load_config as _load_cfg_ext_tasks
+
+            _ext_tasks_cfg = _load_cfg_ext_tasks().external_tasks
+        except Exception:
+            _ext_tasks_cfg = None
+            logger.debug("Failed to load external_tasks config; collection disabled", exc_info=True)
+
+        if _ext_tasks_cfg is not None and _ext_tasks_cfg.enabled:
+            _ext_interval = max(1, int(_ext_tasks_cfg.interval_minutes))
+
+            def _run_external_tasks_collection() -> None:
+                from datetime import UTC, datetime
+
+                from core.config.models import load_config as _lc
+                from core.external_tasks.collector import collect_all
+                from core.external_tasks.store import ExternalTaskStore
+                from core.paths import get_external_tasks_store_path
+
+                store = ExternalTaskStore(get_external_tasks_store_path())
+                previous = store.load()
+                cfg = _lc().external_tasks
+                snapshot = collect_all(cfg, previous, datetime.now(UTC))
+                store.save(snapshot)
+
+            async def _external_tasks_collection() -> None:
+                try:
+                    await asyncio.to_thread(_run_external_tasks_collection)
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    logger.exception("External tasks collection failed")
+
+            msg_log_scheduler.add_job(
+                _external_tasks_collection,
+                IntervalTrigger(minutes=_ext_interval),
+                id="external_tasks_collection",
+                name="System: External Tasks Collection",
+                replace_existing=True,
+            )
+            # Immediate non-blocking run on startup
+            asyncio.create_task(_external_tasks_collection())
+
         msg_log_scheduler.start()
         app.state.msg_log_scheduler = msg_log_scheduler
 
