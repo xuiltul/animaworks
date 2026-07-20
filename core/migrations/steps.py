@@ -1277,6 +1277,35 @@ def step_v063_behavior_rules_action_rules_skill_sync(
     return StepResult(changed=total, skipped=skipped, details=details, error=error)
 
 
+# ── Category 4: Database sync ────────────────────────────────────
+
+
+def step_tool_prompts_db_to_md(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Write legacy tool prompt DB customizations to active templates."""
+    db_path = data_dir / "tool_prompts.sqlite3"
+    if not db_path.is_file():
+        return StepResult(changed=0, skipped=1, details=["tool_prompts.sqlite3 not found; skip"])
+
+    details: list[str] = []
+    try:
+        from core.migrations.tool_prompts import migrate_tool_prompts
+        from core.paths import TEMPLATES_DIR
+
+        written, skipped = migrate_tool_prompts(
+            db_path,
+            TEMPLATES_DIR,
+            dry_run=dry_run,
+            output=details.append,
+        )
+        if written == 0 and skipped == 0:
+            details.append("No tool prompt rows found; skip")
+            return StepResult(changed=0, skipped=1, details=details)
+        return StepResult(changed=written, skipped=skipped, details=details)
+    except Exception as exc:
+        logger.exception("step_tool_prompts_db_to_md failed")
+        return StepResult(changed=0, skipped=0, details=details, error=str(exc))
+
+
 # ── Category 5: Version tracking ────────────────────────────────
 
 
@@ -1423,6 +1452,12 @@ def register_all_steps(runner: Any) -> None:
             "Split legacy board into company channels",
             "structural",
             step_split_board_by_company,
+        ),
+        MigrationStep(
+            "tool_prompts_db_to_md",
+            "Write legacy tool prompt DB to Markdown templates",
+            "db_sync",
+            step_tool_prompts_db_to_md,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]
