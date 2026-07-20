@@ -31,6 +31,7 @@ const _DETAIL_TABS = [
   { id: "process", labelKey: "animas.tab_process" },
   { id: "schedule", labelKey: "animas.tab_schedule" },
   { id: "memory", labelKey: "animas.tab_memory" },
+  { id: "assets", labelKey: "animas.tab_assets" },
 ];
 
 /**
