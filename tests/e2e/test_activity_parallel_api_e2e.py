@@ -168,12 +168,14 @@ async def test_parallel_activity_data_through_application_router(tmp_path: Path)
     assert recent.status_code == 200
     events = recent.json()["events"]
     parallel_events = [e for e in events if e.get("ctx", "").startswith("task:parallel-")]
+    assert len(parallel_events) == 6
     assert {e["ctx"] for e in parallel_events} == {"task:parallel-a", "task:parallel-b"}
-    assert {e["type"] for e in parallel_events} == {
-        "task_exec_start",
-        "tool_use",
-        "task_exec_end",
-    }
+    for task_ctx in ("task:parallel-a", "task:parallel-b"):
+        assert {e["type"] for e in parallel_events if e["ctx"] == task_ctx} == {
+            "task_exec_start",
+            "tool_use",
+            "task_exec_end",
+        }
     starts = {e["ctx"]: e for e in parallel_events if e["type"] == "task_exec_start"}
     assert starts["task:parallel-a"]["meta"]["title"] == "Parallel task A"
     assert starts["task:parallel-b"]["meta"]["title"] == "Parallel task B"

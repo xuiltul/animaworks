@@ -1,9 +1,8 @@
 /**
  * timeline-dom.js — DOM construction + rendering for the activity timeline.
  *
- * Pure DOM helpers with no module-level state other than the expand toggle.
- * All external state (events, filter, interactionManager) is received via
- * arguments or callbacks from the orchestrator (timeline.js).
+ * DOM helpers receive timeline state through arguments or callbacks from the
+ * orchestrator (timeline.js). Only resolved avatar promises are cached here.
  */
 
 import { getIcon, getDisplaySummary } from "../../shared/activity-types.js";

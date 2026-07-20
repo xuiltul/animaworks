@@ -184,7 +184,7 @@ function _parallelWindows(intervals) {
   boundaries.sort((a, b) => a.time - b.time);
   if (boundaries.length === 0) return [];
 
-  const active = new Set();
+  const activeByTask = new Map();
   const windows = [];
   let previousTime = boundaries[0].time;
   let cursor = 0;
@@ -192,17 +192,15 @@ function _parallelWindows(intervals) {
   while (cursor < boundaries.length) {
     const time = boundaries[cursor].time;
     if (time > previousTime) {
-      const taskIds = new Set(Array.from(active, (interval) => interval.taskId));
-      if (taskIds.size >= 2) {
+      if (activeByTask.size >= 2) {
         const last = windows[windows.length - 1];
         if (last && last.end === previousTime) {
           last.end = time;
-          for (const interval of active) last.intervals.add(interval);
         } else {
           windows.push({
             start: previousTime,
             end: time,
-            intervals: new Set(active),
+            intervals: new Set(),
           });
         }
       }
@@ -214,12 +212,34 @@ function _parallelWindows(intervals) {
       cursor += 1;
     }
     for (const boundary of atTime) {
-      if (boundary.kind === "end") active.delete(boundary.interval);
+      if (boundary.kind !== "end") continue;
+      const count = activeByTask.get(boundary.interval.taskId) || 0;
+      if (count <= 1) activeByTask.delete(boundary.interval.taskId);
+      else activeByTask.set(boundary.interval.taskId, count - 1);
     }
     for (const boundary of atTime) {
-      if (boundary.kind === "start") active.add(boundary.interval);
+      if (boundary.kind !== "start") continue;
+      activeByTask.set(
+        boundary.interval.taskId,
+        (activeByTask.get(boundary.interval.taskId) || 0) + 1,
+      );
     }
     previousTime = time;
+  }
+
+  for (const interval of intervals) {
+    let low = 0;
+    let high = windows.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (windows[middle].end <= interval.start) low = middle + 1;
+      else high = middle;
+    }
+    for (let index = low; index < windows.length; index++) {
+      const window = windows[index];
+      if (window.start >= interval.end) break;
+      window.intervals.add(interval);
+    }
   }
 
   return windows;

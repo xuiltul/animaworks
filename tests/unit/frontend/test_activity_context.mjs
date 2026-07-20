@@ -187,6 +187,8 @@ describe("parallel task lane grouping", () => {
         ts: "2026-07-13T10:00:00",
         meta: { title: "First task" },
       },
+      { type: "task_exec_start", ctx: "task:other", anima: "beta", ts: "2026-07-13T10:01:00" },
+      { type: "task_exec_end", ctx: "task:other", anima: "beta", ts: "2026-07-13T10:04:00" },
     ];
 
     const groups = buildParallelGroups(events);
