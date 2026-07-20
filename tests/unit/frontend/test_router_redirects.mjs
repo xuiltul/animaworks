@@ -40,6 +40,10 @@ describe("REDIRECTS table", () => {
     assert.equal(REDIRECTS["/processes"], "#/animas");
   });
 
+  it("maps /server to #/ (dashboard)", () => {
+    assert.equal(REDIRECTS["/server"], "#/");
+  });
+
   it("maps /setup to #/settings (legacy)", () => {
     assert.equal(REDIRECTS["/setup"], "#/settings");
   });
@@ -52,6 +56,11 @@ describe("resolveRedirect", () => {
 
   it("redirects nested /processes/* paths to #/animas", () => {
     assert.equal(resolveRedirect("/processes/anything"), "#/animas");
+  });
+
+  it("redirects /server and nested paths to #/", () => {
+    assert.equal(resolveRedirect("/server"), "#/");
+    assert.equal(resolveRedirect("/server/anything"), "#/");
   });
 
   it("redirects /setup and nested paths to #/settings", () => {
