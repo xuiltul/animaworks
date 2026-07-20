@@ -409,6 +409,7 @@ describe("animas.js page structure (source contract)", () => {
     assert.match(pageSource, /anima-tabs\//);
     assert.match(pageSource, /tab_overview|overview/);
     assert.match(pageSource, /process/);
+    assert.match(pageSource, /memory/);
   });
 
   it("integrates process columns and 10s list polling", () => {
@@ -422,6 +423,62 @@ describe("animas.js page structure (source contract)", () => {
   it("navigates with #/animas/<name>/<tab> hash", () => {
     assert.match(pageSource, /#\/animas\//);
     assert.match(pageSource, /_navigateAnimas/);
+    assert.match(pageSource, /buildAnimaDetailHash/);
+  });
+
+  it("has anima switcher that keeps current tab", () => {
+    assert.match(pageSource, /animasSwitcher/);
+    assert.match(pageSource, /_populateAnimaSwitcher/);
+    assert.match(pageSource, /fetchAnimasList/);
+  });
+});
+
+describe("buildAnimaDetailHash", () => {
+  function loadBuildHash() {
+    const path = resolve(STATIC, "pages/animas.js");
+    let source = readFileSync(path, "utf8");
+    source = source.replace(/^import\s+.+;?\s*$/gm, "");
+    // Keep only the pure helper (avoid side-effectful module body needing DOM)
+    const match = source.match(
+      /export function buildAnimaDetailHash\([\s\S]*?\n\}/,
+    );
+    assert.ok(match, "buildAnimaDetailHash not found");
+    const body =
+      match[0].replace(/^export /, "") +
+      "\nexport { buildAnimaDetailHash };\n";
+    const url =
+      "data:text/javascript;base64," +
+      Buffer.from(body, "utf8").toString("base64");
+    return import(url + "#hash-" + Math.random());
+  }
+
+  it("returns list hash when name is empty", async () => {
+    const { buildAnimaDetailHash } = await loadBuildHash();
+    assert.equal(buildAnimaDetailHash(null), "#/animas");
+    assert.equal(buildAnimaDetailHash(""), "#/animas");
+    assert.equal(buildAnimaDetailHash(undefined), "#/animas");
+  });
+
+  it("omits overview tab segment", async () => {
+    const { buildAnimaDetailHash } = await loadBuildHash();
+    assert.equal(buildAnimaDetailHash("sakura"), "#/animas/sakura");
+    assert.equal(buildAnimaDetailHash("sakura", "overview"), "#/animas/sakura");
+  });
+
+  it("keeps non-overview tab and encodes name", async () => {
+    const { buildAnimaDetailHash } = await loadBuildHash();
+    assert.equal(
+      buildAnimaDetailHash("sakura", "memory"),
+      "#/animas/sakura/memory",
+    );
+    assert.equal(
+      buildAnimaDetailHash("sakura", "process"),
+      "#/animas/sakura/process",
+    );
+    assert.equal(
+      buildAnimaDetailHash("さくら", "schedule"),
+      `#/animas/${encodeURIComponent("さくら")}/schedule`,
+    );
   });
 });
 

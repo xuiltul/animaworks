@@ -47,6 +47,10 @@ describe("REDIRECTS table", () => {
   it("maps /setup to #/settings (legacy)", () => {
     assert.equal(REDIRECTS["/setup"], "#/settings");
   });
+
+  it("maps /memory to #/animas", () => {
+    assert.equal(REDIRECTS["/memory"], "#/animas");
+  });
 });
 
 describe("resolveRedirect", () => {
@@ -68,6 +72,11 @@ describe("resolveRedirect", () => {
     assert.equal(resolveRedirect("/setup/foo"), "#/settings");
   });
 
+  it("redirects /memory and nested paths to #/animas", () => {
+    assert.equal(resolveRedirect("/memory"), "#/animas");
+    assert.equal(resolveRedirect("/memory/anything"), "#/animas");
+  });
+
   it("returns null for non-redirect paths", () => {
     assert.equal(resolveRedirect("/animas"), null);
     assert.equal(resolveRedirect("/chat"), null);
@@ -76,7 +85,7 @@ describe("resolveRedirect", () => {
 });
 
 describe("resolveRouteMatch (subPath decomposition)", () => {
-  const keys = ["/", "/chat", "/animas", "/settings", "/memory"];
+  const keys = ["/", "/chat", "/animas", "/settings", "/logs"];
 
   it("exact match yields empty subPath", () => {
     const m = resolveRouteMatch("/animas", keys);
