@@ -123,3 +123,57 @@ def test_heartbeat_disable_removes_existing_periodic_job() -> None:
         harness._setup_heartbeat(anima)
 
     assert harness.scheduler.get_job("alice_heartbeat") is None
+
+
+# ── Supervisor-mode scheduler (core/supervisor/scheduler_manager.py) ─────────
+
+
+def _supervisor_mgr(tmp_path, *, heartbeat_enabled: bool):
+    from core.supervisor.scheduler_manager import SchedulerManager
+
+    anima = MagicMock()
+    anima.memory.read_model_config.return_value = ModelConfig(heartbeat_enabled=heartbeat_enabled)
+    anima.memory.read_heartbeat_config.return_value = "# heartbeat"
+    mgr = SchedulerManager(anima, "alice", tmp_path, lambda _e, _d: None)
+    mgr.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
+    return mgr, anima
+
+
+def test_supervisor_heartbeat_disable_skips_periodic_job(tmp_path) -> None:
+    mgr, _ = _supervisor_mgr(tmp_path, heartbeat_enabled=False)
+
+    with patch(
+        "core.supervisor.scheduler_manager.load_config",
+        return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30), activity_level=100),
+    ):
+        mgr._setup_heartbeat()
+
+    assert mgr.scheduler.get_job("alice_heartbeat") is None
+
+
+def test_supervisor_heartbeat_enabled_registers_periodic_job(tmp_path) -> None:
+    mgr, _ = _supervisor_mgr(tmp_path, heartbeat_enabled=True)
+
+    with patch(
+        "core.supervisor.scheduler_manager.load_config",
+        return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30), activity_level=100),
+    ):
+        mgr._setup_heartbeat()
+
+    assert mgr.scheduler.get_job("alice_heartbeat") is not None
+
+
+def test_supervisor_heartbeat_disable_removes_existing_periodic_job(tmp_path) -> None:
+    mgr, anima = _supervisor_mgr(tmp_path, heartbeat_enabled=True)
+
+    with patch(
+        "core.supervisor.scheduler_manager.load_config",
+        return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30), activity_level=100),
+    ):
+        mgr._setup_heartbeat()
+        assert mgr.scheduler.get_job("alice_heartbeat") is not None
+
+        anima.memory.read_model_config.return_value = ModelConfig(heartbeat_enabled=False)
+        mgr._setup_heartbeat()
+
+    assert mgr.scheduler.get_job("alice_heartbeat") is None

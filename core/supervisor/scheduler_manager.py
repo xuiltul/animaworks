@@ -143,6 +143,13 @@ class SchedulerManager:
         if not self._anima or not self.scheduler:
             return
 
+        job_id = f"{self._anima_name}_heartbeat"
+        if not self._anima.memory.read_model_config().heartbeat_enabled:
+            if self.scheduler.get_job(job_id) is not None:
+                self.scheduler.remove_job(job_id)
+            logger.info("Heartbeat disabled for '%s'", self._anima_name)
+            return
+
         hb_content = self._anima.memory.read_heartbeat_config()
         if not hb_content:
             return
