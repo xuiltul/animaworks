@@ -5,11 +5,13 @@ import {
   fetchAnimasList,
   fetchAnimasWithProcessStatus,
   healthIndicatorHtml,
-  statusBadgeHtml,
   formatUptime,
   processActionButtonsHtml,
   bindProcessActionButtons,
+  animaHashColor,
 } from "../modules/animas.js";
+import { companyColor, shortModel } from "../shared/avatar-utils.js";
+import { bustupCandidates, resolveCachedAvatar } from "../modules/avatar-resolver.js";
 import { createPageTabs } from "../shared/page-tabs.js";
 import { parseAnimaSubPath } from "../modules/router.js";
 import { t } from "/shared/i18n.js";
@@ -113,6 +115,7 @@ export function render(container, { subPath } = {}) {
 export function destroy() {
   _clearListPolling();
   _destroyActiveTab();
+  document.removeEventListener("click", _onDocumentClickCloseKebab);
   _container = null;
   _viewMode = "list";
   _selectedName = null;
@@ -120,6 +123,178 @@ export function destroy() {
 }
 
 // ── List View ──────────────────────────────
+
+/**
+ * Build subtext for an anima list row: company · speciality|role · short model.
+ * Pure helper — exported for unit tests.
+ * @param {object} p
+ * @returns {string}
+ */
+export function buildAnimaListSubtext(p) {
+  const specialty = p.speciality || p.role || "";
+  const model = shortModel(p.model);
+  return [p.company, specialty, model].filter(Boolean).join(" · ");
+}
+
+/**
+ * Integrated status HTML: health dot + status + uptime; PID in title tooltip.
+ * Pure helper — exported for unit tests.
+ * @param {object} p
+ * @returns {string}
+ */
+export function buildAnimaListStatusHtml(p) {
+  const status = p.status || "offline";
+  const missedPings = p.missed_pings || 0;
+  const health = healthIndicatorHtml(status, missedPings);
+  const uptime = p.uptime_sec ? formatUptime(p.uptime_sec) : "";
+  const parts = [status];
+  if (uptime && uptime !== "--") parts.push(uptime);
+
+  let tone = "neutral";
+  if (status === "error" || status === "down") tone = "error";
+  else if (missedPings > 0) tone = "warning";
+  else if (status === "running" || status === "idle") tone = "success";
+  else if (status === "stopped" || status === "not_found" || status === "offline") tone = "neutral";
+  else tone = "warning";
+
+  const pidTitle = p.pid != null && p.pid !== "" ? `PID: ${p.pid}` : "";
+  return `<span class="anima-list-status anima-list-status--${tone}" title="${escapeHtml(pidTitle)}">${health}<span class="anima-list-status-text">${escapeHtml(parts.join(" · "))}</span></span>`;
+}
+
+/**
+ * Split processActionButtonsHtml into exposed Heartbeat vs kebab menu content.
+ * Pure helper — exported for unit tests.
+ * @param {string} name
+ * @param {string} status
+ * @returns {{ triggerHtml: string, menuHtml: string, hasMenu: boolean }}
+ */
+export function splitProcessActionButtons(name, status) {
+  const full = processActionButtonsHtml(name, status);
+  const triggerRe = /<button\b[^>]*\bprocess-trigger-btn\b[^>]*>[\s\S]*?<\/button>/i;
+  const triggerMatch = full.match(triggerRe);
+  const triggerHtml = triggerMatch ? triggerMatch[0].trim() : "";
+  const menuHtml = full.replace(triggerRe, "").trim();
+  // Menu is useful when it contains buttons (destructive ops / start)
+  const hasMenu = /<button\b/i.test(menuHtml);
+  return { triggerHtml, menuHtml, hasMenu };
+}
+
+/**
+ * Anima cell HTML: 40px circular avatar (initial fallback) + name + subtext.
+ * Pure helper — exported for unit tests.
+ * @param {object} p
+ * @returns {string}
+ */
+export function buildAnimaListIdentityHtml(p) {
+  const name = p.name || "";
+  const initial = escapeHtml(name.charAt(0).toUpperCase());
+  const color = animaHashColor(name);
+  const ring = companyColor(p.company);
+  const ringStyle = ring ? `box-shadow:0 0 0 2px ${ring};` : "";
+  const sub = buildAnimaListSubtext(p);
+  const subHtml = sub
+    ? `<div class="anima-list-sub">${escapeHtml(sub)}</div>`
+    : "";
+  return `
+    <div class="anima-list-identity">
+      <div class="anima-list-avatar" id="listAvatar_${escapeHtml(name)}" style="background:${color};${ringStyle}" data-anima-avatar="${escapeHtml(name)}">${initial}</div>
+      <div class="anima-list-meta">
+        <div class="anima-list-name">${escapeHtml(name)}</div>
+        ${subHtml}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Actions cell: exposed Heartbeat + kebab menu for destructive ops.
+ * Pure helper — exported for unit tests.
+ * @param {object} p
+ * @returns {string}
+ */
+export function buildAnimaListActionsHtml(p) {
+  const status = p.status || "offline";
+  const { triggerHtml, menuHtml, hasMenu } = splitProcessActionButtons(p.name, status);
+
+  if (!triggerHtml && !hasMenu) {
+    // starting / restarting / unknown — keep processActionButtonsHtml output as-is
+    return `<div class="anima-list-actions process-actions">${processActionButtonsHtml(p.name, status)}</div>`;
+  }
+
+  const kebab = hasMenu
+    ? `
+      <div class="anima-list-kebab-wrap">
+        <button type="button" class="anima-list-kebab-btn" aria-label="${escapeHtml(t("animas.actions_menu"))}" aria-haspopup="true" aria-expanded="false" data-name="${escapeHtml(p.name)}">⋮</button>
+        <div class="anima-list-kebab-menu process-actions" hidden>
+          ${menuHtml}
+        </div>
+      </div>
+    `
+    : "";
+
+  return `
+    <div class="anima-list-actions">
+      ${triggerHtml ? `<div class="process-actions anima-list-primary-actions">${triggerHtml}</div>` : ""}
+      ${kebab}
+    </div>
+  `;
+}
+
+function _bindKebabMenus(root) {
+  if (!root) return;
+
+  root.querySelectorAll(".anima-list-kebab-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wrap = btn.closest(".anima-list-kebab-wrap");
+      if (!wrap) return;
+      const wasOpen = wrap.classList.contains("open");
+      // Close others first
+      root.querySelectorAll(".anima-list-kebab-wrap.open").forEach((w) => {
+        w.classList.remove("open");
+        const menu = w.querySelector(".anima-list-kebab-menu");
+        if (menu) menu.hidden = true;
+        const b = w.querySelector(".anima-list-kebab-btn");
+        if (b) b.setAttribute("aria-expanded", "false");
+      });
+      if (!wasOpen) {
+        wrap.classList.add("open");
+        const menu = wrap.querySelector(".anima-list-kebab-menu");
+        if (menu) menu.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+  });
+
+  // Prevent row navigation when interacting with menu contents
+  root.querySelectorAll(".anima-list-kebab-menu").forEach((menu) => {
+    menu.addEventListener("click", (e) => e.stopPropagation());
+  });
+}
+
+function _onDocumentClickCloseKebab(e) {
+  if (e.target.closest && e.target.closest(".anima-list-kebab-wrap")) return;
+  document.querySelectorAll(".anima-list-kebab-wrap.open").forEach((w) => {
+    w.classList.remove("open");
+    const menu = w.querySelector(".anima-list-kebab-menu");
+    if (menu) menu.hidden = true;
+    const b = w.querySelector(".anima-list-kebab-btn");
+    if (b) b.setAttribute("aria-expanded", "false");
+  });
+}
+
+async function _loadListAvatars(root) {
+  if (!root) return;
+  const avatarEls = root.querySelectorAll("[id^='listAvatar_']");
+  const candidates = bustupCandidates();
+  for (const el of avatarEls) {
+    const name = el.id.replace("listAvatar_", "");
+    const url = await resolveCachedAvatar(name, candidates, "S");
+    if (url) {
+      el.innerHTML = `<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}">`;
+    }
+  }
+}
 
 async function _renderList() {
   if (!_container) return;
@@ -151,14 +326,11 @@ async function _loadListContent() {
     }
 
     content.innerHTML = `
-      <table class="data-table">
+      <table class="data-table anima-list-table">
         <thead>
           <tr>
-            <th>${t("processes.table_health")}</th>
             <th>${t("animas.table_name")}</th>
             <th>${t("animas.table_status")}</th>
-            <th>${t("animas.table_pid")}</th>
-            <th>${t("animas.table_uptime")}</th>
             <th>${t("animas.table_actions")}</th>
           </tr>
         </thead>
@@ -168,53 +340,42 @@ async function _loadListContent() {
 
     const tbody = document.getElementById("animasTableBody");
     for (const p of animas) {
-      const status = p.status || "offline";
-      const missedPings = p.missed_pings || 0;
-      const health = healthIndicatorHtml(status, missedPings);
-      const uptime = p.uptime_sec ? formatUptime(p.uptime_sec) : "--";
-      const pid = p.pid || "--";
-
-      let stateClass = "anima-item";
+      let stateClass = "anima-item anima-list-row";
       if (p.status === "bootstrapping" || p.bootstrapping) {
-        stateClass = "anima-item anima-item--loading";
+        stateClass = "anima-item anima-item--loading anima-list-row";
       } else if (p.status === "not_found" || p.status === "stopped") {
-        stateClass = "anima-item anima-item--sleeping";
+        stateClass = "anima-item anima-item--sleeping anima-list-row";
       }
 
       const tr = document.createElement("tr");
       tr.className = stateClass;
       tr.dataset.anima = p.name;
-      tr.style.cursor = "pointer";
       tr.innerHTML = `
-        <td>${health}</td>
-        <td style="font-weight:600;">${escapeHtml(p.name)}</td>
-        <td>${statusBadgeHtml(status)}</td>
-        <td>${escapeHtml(String(pid))}</td>
-        <td>${escapeHtml(uptime)}</td>
-        <td>
-          <button class="btn-secondary anima-detail-btn" data-name="${escapeHtml(p.name)}" style="font-size:0.8rem; padding:0.25rem 0.5rem;">${t("animas.detail")}</button>
-          <div class="process-actions" style="display:inline-flex; flex-wrap:wrap; gap:0.25rem; vertical-align:middle;">
-            ${processActionButtonsHtml(p.name, status)}
-          </div>
-        </td>
+        <td>${buildAnimaListIdentityHtml(p)}</td>
+        <td>${buildAnimaListStatusHtml(p)}</td>
+        <td>${buildAnimaListActionsHtml(p)}</td>
       `;
 
       tr.addEventListener("click", (e) => {
-        if (e.target.closest("button") || e.target.closest(".process-actions")) return;
+        if (
+          e.target.closest("button") ||
+          e.target.closest(".process-actions") ||
+          e.target.closest(".anima-list-kebab-wrap")
+        ) {
+          return;
+        }
         _navigateAnimas(p.name);
       });
 
       tbody.appendChild(tr);
     }
 
-    content.querySelectorAll(".anima-detail-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        _navigateAnimas(btn.dataset.name);
-      });
-    });
+    _bindKebabMenus(content);
+    document.removeEventListener("click", _onDocumentClickCloseKebab);
+    document.addEventListener("click", _onDocumentClickCloseKebab);
 
     bindProcessActionButtons(content, { onReload: _loadListContent });
+    _loadListAvatars(content);
   } catch (err) {
     content.innerHTML = `<div class="loading-placeholder">${t("common.load_failed")}: ${escapeHtml(err.message)}</div>`;
   }

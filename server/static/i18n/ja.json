@@ -63,6 +63,7 @@
   "activity_types.response_sent": "応答送信",
   "activity_types.tool_result": "ツール結果",
   "activity_types.tool_use": "ツール実行",
+  "animas.actions_menu": "操作メニュー",
   "animas.aliases": "別名（エイリアス）",
   "animas.aliases_add": "追加",
   "animas.aliases_add_placeholder": "別名を入力（例：さくら）",

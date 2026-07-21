@@ -41,3 +41,17 @@ export function companyColor(company) {
   }
   return COMPANY_PALETTE[Math.abs(hash) % COMPANY_PALETTE.length];
 }
+
+/**
+ * Shorten a model id for compact UI display.
+ * e.g. "anthropic.claude-opus-4-8" → "claude-opus-4-8", "openai/gpt-4o" → "gpt-4o"
+ * @param {string|null|undefined} model
+ * @returns {string}
+ */
+export function shortModel(model) {
+  if (!model) return "";
+  return String(model)
+    .replace(/^(openai|google|vertex_ai|azure|ollama|bedrock)\//, "")
+    .replace(/^jp\.anthropic\./, "")
+    .replace(/^anthropic\./, "");
+}
