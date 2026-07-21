@@ -55,6 +55,18 @@ describe("REDIRECTS table", () => {
   it("maps /assets to #/animas", () => {
     assert.equal(REDIRECTS["/assets"], "#/animas");
   });
+
+  it("maps /activity-report to #/activity", () => {
+    assert.equal(REDIRECTS["/activity-report"], "#/activity");
+  });
+
+  it("maps /logs to #/activity/logs", () => {
+    assert.equal(REDIRECTS["/logs"], "#/activity/logs");
+  });
+
+  it("maps /users to #/settings/users", () => {
+    assert.equal(REDIRECTS["/users"], "#/settings/users");
+  });
 });
 
 describe("resolveRedirect", () => {
@@ -86,15 +98,31 @@ describe("resolveRedirect", () => {
     assert.equal(resolveRedirect("/assets/anything"), "#/animas");
   });
 
+  it("redirects /activity-report to #/activity", () => {
+    assert.equal(resolveRedirect("/activity-report"), "#/activity");
+  });
+
+  it("redirects /logs and nested paths to #/activity/logs", () => {
+    assert.equal(resolveRedirect("/logs"), "#/activity/logs");
+    assert.equal(resolveRedirect("/logs/anything"), "#/activity/logs");
+  });
+
+  it("redirects /users and nested paths to #/settings/users", () => {
+    assert.equal(resolveRedirect("/users"), "#/settings/users");
+    assert.equal(resolveRedirect("/users/anything"), "#/settings/users");
+  });
+
   it("returns null for non-redirect paths", () => {
     assert.equal(resolveRedirect("/animas"), null);
     assert.equal(resolveRedirect("/chat"), null);
+    assert.equal(resolveRedirect("/activity"), null);
+    assert.equal(resolveRedirect("/settings"), null);
     assert.equal(resolveRedirect("/animas/sakura/process"), null);
   });
 });
 
 describe("resolveRouteMatch (subPath decomposition)", () => {
-  const keys = ["/", "/chat", "/animas", "/settings", "/logs"];
+  const keys = ["/", "/chat", "/animas", "/activity", "/settings"];
 
   it("exact match yields empty subPath", () => {
     const m = resolveRouteMatch("/animas", keys);

@@ -505,8 +505,11 @@ class TestStaticFileServing:
         body = resp.text
         assert "sidebar-nav" in body
         assert 'data-route="/chat"' in body
-        assert 'data-route="/logs"' in body
-        assert 'data-route="/memory"' in body
+        assert 'data-route="/activity"' in body
+        assert 'data-route="/settings"' in body
+        assert 'data-route="/logs"' not in body
+        assert 'data-route="/users"' not in body
+        assert 'data-route="/activity-report"' not in body
 
     async def test_new_css_files_exist(self, tmp_path):
         """All new SPA CSS files should be servable."""
