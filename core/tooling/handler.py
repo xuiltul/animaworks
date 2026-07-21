@@ -731,6 +731,7 @@ class ToolHandler(
 
             is_error = result.startswith("Error") or result.startswith("error")
             meta["result_status"] = "fail" if is_error else "ok"
+            meta["is_error"] = is_error
             meta["result_bytes"] = len(result.encode("utf-8", errors="replace"))
 
             if not is_error:

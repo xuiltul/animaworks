@@ -2,16 +2,18 @@
 // Loaded as the default tab of activity.js tab host.
 
 import { api } from "../modules/api.js";
-import { escapeHtml } from "../modules/state.js";
+import { escapeHtml, smartTimestamp } from "../modules/state.js";
+import { onEvent } from "../modules/websocket.js";
 import { GROUP_TYPE_CATEGORIES } from "../shared/activity-types.js";
-import { renderRunningTasksStrip } from "../shared/activity-context.js";
 import { t } from "/shared/i18n.js";
 import { basePath } from "/shared/base-path.js";
+import { renderNowBoard } from "./activity/now-board.js";
 import { renderSwimlane } from "./activity/swimlane.js";
 import { renderGroupDetail } from "./activity/group-detail.js";
 
 let _refreshInterval = null;
 let _resizeObserver = null;
+let _nowBoard = null;
 let _groups = [];
 let _totalGroups = 0;
 let _totalEvents = 0;
@@ -87,7 +89,7 @@ export function render(container) {
         <span class="activity-count" id="activityCount"></span>
       </div>
 
-      <div class="running-tasks-strip" id="activityRunningTasks" hidden></div>
+      <section id="activityNowBoard" aria-label="${t("activity.now_title")}"></section>
 
       <div class="activity-filters">
         <select class="activity-anima-select" id="activityAnimaSelect">
@@ -115,14 +117,19 @@ export function render(container) {
   _buildRangeChips();
   _bindDetailClose();
   _observeResize();
+  _nowBoard = renderNowBoard(document.getElementById("activityNowBoard"), {
+    api,
+    onEvent,
+    smartTimestamp,
+    t,
+  });
 
   _ensureD3().finally(() => {
     _loadEvents(true);
   });
-  _loadRunningTasks();
   _refreshInterval = setInterval(() => {
     _loadEvents(true);
-    _loadRunningTasks();
+    _nowBoard?.refresh();
   }, 30000);
 }
 
@@ -135,6 +142,8 @@ export function destroy() {
     _resizeObserver.disconnect();
     _resizeObserver = null;
   }
+  _nowBoard?.destroy();
+  _nowBoard = null;
   _groups = [];
   _selectedGroupId = null;
 }
@@ -164,7 +173,6 @@ async function _buildAnimaSelect() {
     _groups = [];
     _selectedGroupId = null;
     _loadEvents(true);
-    _loadRunningTasks();
   });
 }
 
@@ -310,19 +318,6 @@ async function _loadEvents(reset) {
         empty.textContent = `${t("activity.load_failed")}: ${escapeHtml(err.message)}`;
       }
     }
-  }
-}
-
-async function _loadRunningTasks() {
-  const strip = document.getElementById("activityRunningTasks");
-  if (!strip) return;
-  let url = "/api/activity/running-tasks";
-  if (_selectedAnima) url += `?anima=${encodeURIComponent(_selectedAnima)}`;
-  try {
-    const data = await api(url);
-    renderRunningTasksStrip(strip, data, t);
-  } catch (err) {
-    console.error("Failed to load running activity tasks:", err);
   }
 }
 

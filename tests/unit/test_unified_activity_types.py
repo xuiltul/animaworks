@@ -23,7 +23,8 @@ _STATIC = _WORKTREE / "server" / "static"
 _SHARED_MODULE = _STATIC / "shared" / "activity-types.js"
 
 _CONSUMER_FILES = [
-    _STATIC / "pages" / "activity.js",
+    _STATIC / "pages" / "activity" / "group-detail.js",
+    _STATIC / "pages" / "activity" / "swimlane.js",
     _STATIC / "pages" / "home.js",
     _STATIC / "pages" / "chat" / "ctx.js",
     _STATIC / "modules" / "activity.js",
@@ -34,6 +35,7 @@ _CONSUMER_FILES = [
 
 
 # ── Shared Module Tests ──────────────────────────────────
+
 
 class TestSharedActivityTypesModule:
     """Verify server/static/shared/activity-types.js structure."""
@@ -65,10 +67,20 @@ class TestSharedActivityTypesModule:
         """All 14 API event types must be present."""
         content = _SHARED_MODULE.read_text(encoding="utf-8")
         api_types = [
-            "message_received", "response_sent", "channel_read", "channel_post",
-            "dm_received", "dm_sent", "human_notify", "tool_use",
-            "heartbeat_start", "heartbeat_end", "cron_executed", "memory_write",
-            "error", "issue_resolved",
+            "message_received",
+            "response_sent",
+            "channel_read",
+            "channel_post",
+            "dm_received",
+            "dm_sent",
+            "human_notify",
+            "tool_use",
+            "heartbeat_start",
+            "heartbeat_end",
+            "cron_executed",
+            "memory_write",
+            "error",
+            "issue_resolved",
         ]
         for t in api_types:
             assert f"{t}:" in content, f"API type '{t}' missing from TYPE_ICONS"
@@ -77,14 +89,20 @@ class TestSharedActivityTypesModule:
         """WebSocket simplified types must be present."""
         content = _SHARED_MODULE.read_text(encoding="utf-8")
         ws_types = [
-            "message:", "heartbeat:", "cron:", "chat:", "board:",
-            "notification:", "status:", "system:", "session:",
+            "message:",
+            "heartbeat:",
+            "cron:",
+            "chat:",
+            "board:",
+            "notification:",
+            "status:",
+            "system:",
+            "session:",
         ]
         for t in ws_types:
             # Match as key in TYPE_ICONS (not as substring of API types)
-            pattern = rf'^\s+{re.escape(t)}'
-            assert re.search(pattern, content, re.MULTILINE), \
-                f"WebSocket type '{t}' missing from TYPE_ICONS"
+            pattern = rf"^\s+{re.escape(t)}"
+            assert re.search(pattern, content, re.MULTILINE), f"WebSocket type '{t}' missing from TYPE_ICONS"
 
     def test_type_categories_count(self) -> None:
         """TYPE_CATEGORIES (9) + GROUP_TYPE_CATEGORIES (9) = 18 total entries."""
@@ -106,6 +124,7 @@ class TestSharedActivityTypesModule:
 
 # ── Consumer File Tests ──────────────────────────────────
 
+
 class TestConsumerFilesNoLocalTypeIcons:
     """Verify local TYPE_ICONS definitions removed from consumer files."""
 
@@ -114,11 +133,9 @@ class TestConsumerFilesNoLocalTypeIcons:
         """Consumer files must NOT declare their own TYPE_ICONS constant."""
         content = filepath.read_text(encoding="utf-8")
         # Match 'const TYPE_ICONS = {' or 'const _TYPE_ICONS = {'
-        pattern = r'^\s*const\s+_?TYPE_ICONS\s*='
+        pattern = r"^\s*const\s+_?TYPE_ICONS\s*="
         matches = re.findall(pattern, content, re.MULTILINE)
-        assert len(matches) == 0, (
-            f"{filepath.name} still has local TYPE_ICONS declaration: {matches}"
-        )
+        assert len(matches) == 0, f"{filepath.name} still has local TYPE_ICONS declaration: {matches}"
 
 
 class TestConsumerFilesImportShared:
@@ -127,9 +144,7 @@ class TestConsumerFilesImportShared:
     @pytest.mark.parametrize("filepath", _CONSUMER_FILES, ids=[p.name for p in _CONSUMER_FILES])
     def test_imports_from_shared_module(self, filepath: Path) -> None:
         content = filepath.read_text(encoding="utf-8")
-        assert "activity-types.js" in content, (
-            f"{filepath.name} does not import from shared/activity-types.js"
-        )
+        assert "activity-types.js" in content, f"{filepath.name} does not import from shared/activity-types.js"
 
 
 class TestConsumerFilesUseSharedFunctions:
@@ -148,9 +163,7 @@ class TestConsumerFilesUseSharedFunctions:
     @pytest.mark.parametrize("filepath", _FILES_USING_GET_ICON, ids=[p.name for p in _FILES_USING_GET_ICON])
     def test_uses_get_icon(self, filepath: Path) -> None:
         content = filepath.read_text(encoding="utf-8")
-        assert "getIcon(" in content, (
-            f"{filepath.name} should use getIcon() function"
-        )
+        assert "getIcon(" in content, f"{filepath.name} should use getIcon() function"
 
     def test_activity_page_uses_get_display_summary(self) -> None:
         # Summaries render in group-detail + swimlane tooltip/label helpers
@@ -174,6 +187,7 @@ class TestConsumerFilesUseSharedFunctions:
 
 # ── WebSocket Default Case Test ──────────────────────────
 
+
 class TestWebSocketDefaultCase:
     """Verify websocket.js default case no longer uses JSON.stringify."""
 
@@ -182,21 +196,18 @@ class TestWebSocketDefaultCase:
         # Find the default case section
         default_idx = content.rfind("default:")
         assert default_idx >= 0, "default: case not found"
-        default_section = content[default_idx:default_idx + 300]
-        assert "JSON.stringify" not in default_section, (
-            "default case should not use JSON.stringify"
-        )
+        default_section = content[default_idx : default_idx + 300]
+        assert "JSON.stringify" not in default_section, "default case should not use JSON.stringify"
 
     def test_uses_summary_fallback(self) -> None:
         content = (_STATIC / "modules" / "websocket.js").read_text(encoding="utf-8")
         default_idx = content.rfind("default:")
-        default_section = content[default_idx:default_idx + 300]
-        assert "data.summary" in default_section, (
-            "default case should use data.summary fallback"
-        )
+        default_section = content[default_idx : default_idx + 300]
+        assert "data.summary" in default_section, "default case should use data.summary fallback"
 
 
 # ── Backend Summary Tests ────────────────────────────────
+
 
 class TestBackendActivityLogSummary:
     """Verify anima modules' activity.log() calls include summary.
@@ -222,9 +233,7 @@ class TestBackendActivityLogSummary:
         content = self._read_all()
         pattern = r'activity\.log\(\s*"message_received",\s*content=content,\s*summary=content\[:100\]'
         matches = re.findall(pattern, content)
-        assert len(matches) == 2, (
-            f"Expected 2 message_received calls with summary, found {len(matches)}"
-        )
+        assert len(matches) == 2, f"Expected 2 message_received calls with summary, found {len(matches)}"
 
     def test_message_received_from_anima_has_summary(self) -> None:
         content = self._read_all()
@@ -236,6 +245,7 @@ class TestBackendActivityLogSummary:
 
 # ── Workspace Timeline Filter Tests ─────────────────────
 
+
 class TestTimelineFilterStructure:
     """Verify timeline.js filter structure changed to types-based."""
 
@@ -244,20 +254,14 @@ class TestTimelineFilterStructure:
     def test_filter_uses_types_array(self) -> None:
         """filterDefs should use 'types' arrays, not 'value' strings."""
         content = self._TIMELINE.read_text(encoding="utf-8")
-        assert '"types":' in content or "types:" in content, (
-            "filterDefs should use types arrays"
-        )
+        assert '"types":' in content or "types:" in content, "filterDefs should use types arrays"
         # Should NOT have the old value-based format
-        assert 'value: "all"' not in content, (
-            "Old value-based filter format should be removed"
-        )
+        assert 'value: "all"' not in content, "Old value-based filter format should be removed"
 
     def test_current_filter_is_array(self) -> None:
         """_currentFilter should be initialized as empty array."""
         content = self._TIMELINE.read_text(encoding="utf-8")
-        assert "let _currentFilter = []" in content, (
-            "_currentFilter should be initialized as empty array"
-        )
+        assert "let _currentFilter = []" in content, "_currentFilter should be initialized as empty array"
 
     def test_filter_includes_detailed_types(self) -> None:
         """Filters should include detailed API types."""
@@ -267,6 +271,7 @@ class TestTimelineFilterStructure:
 
 
 # ── Workspace App.js Field Name Tests ────────────────────
+
 
 class TestAppJsFieldNames:
     """Verify app.js addTimelineEvent calls use correct field names."""
@@ -278,26 +283,20 @@ class TestAppJsFieldNames:
         content = self._APP_JS.read_text(encoding="utf-8")
         # Find addTimelineEvent calls and check for animas (should be absent)
         # Look for 'animas:' within addTimelineEvent context
-        pattern = r'addTimelineEvent\(\{[^}]*animas:'
+        pattern = r"addTimelineEvent\(\{[^}]*animas:"
         matches = re.findall(pattern, content, re.DOTALL)
-        assert len(matches) == 0, (
-            f"Found {len(matches)} addTimelineEvent calls still using 'animas:'"
-        )
+        assert len(matches) == 0, f"Found {len(matches)} addTimelineEvent calls still using 'animas:'"
 
     def test_uses_ts_not_timestamp(self) -> None:
         """addTimelineEvent calls should use 'ts' not 'timestamp'."""
         content = self._APP_JS.read_text(encoding="utf-8")
-        pattern = r'addTimelineEvent\(\{[^}]*\btimestamp:'
+        pattern = r"addTimelineEvent\(\{[^}]*\btimestamp:"
         matches = re.findall(pattern, content, re.DOTALL)
-        assert len(matches) == 0, (
-            f"Found {len(matches)} addTimelineEvent calls still using 'timestamp:'"
-        )
+        assert len(matches) == 0, f"Found {len(matches)} addTimelineEvent calls still using 'timestamp:'"
 
     def test_uses_meta_not_metadata(self) -> None:
         """addTimelineEvent calls should use 'meta' not 'metadata'."""
         content = self._APP_JS.read_text(encoding="utf-8")
-        pattern = r'addTimelineEvent\(\{[^}]*\bmetadata:'
+        pattern = r"addTimelineEvent\(\{[^}]*\bmetadata:"
         matches = re.findall(pattern, content, re.DOTALL)
-        assert len(matches) == 0, (
-            f"Found {len(matches)} addTimelineEvent calls still using 'metadata:'"
-        )
+        assert len(matches) == 0, f"Found {len(matches)} addTimelineEvent calls still using 'metadata:'"

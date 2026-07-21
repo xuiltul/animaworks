@@ -7,21 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-
-INDEX_HTML = (
-    Path(__file__).resolve().parents[2]
-    / "server"
-    / "static"
-    / "index.html"
-)
-WS_INDEX_HTML = (
-    Path(__file__).resolve().parents[2]
-    / "server"
-    / "static"
-    / "workspace"
-    / "index.html"
-)
+INDEX_HTML = Path(__file__).resolve().parents[2] / "server" / "static" / "index.html"
+WS_INDEX_HTML = Path(__file__).resolve().parents[2] / "server" / "static" / "workspace" / "index.html"
 
 
 class TestMainIndexHTML:

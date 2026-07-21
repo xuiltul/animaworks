@@ -17,6 +17,7 @@ SWIMLANE_JS = REPO_ROOT / "server" / "static" / "pages" / "activity" / "swimlane
 SWIMLANE_LAYOUT_JS = REPO_ROOT / "server" / "static" / "pages" / "activity" / "swimlane-layout.js"
 GROUP_DETAIL_JS = REPO_ROOT / "server" / "static" / "pages" / "activity" / "group-detail.js"
 ACTIVITY_JS = REPO_ROOT / "server" / "static" / "pages" / "activity.js"
+ACTIVITY_TIMELINE_JS = REPO_ROOT / "server" / "static" / "pages" / "activity-timeline.js"
 ACTIVITY_TYPES_JS = REPO_ROOT / "server" / "static" / "shared" / "activity-types.js"
 ACTIVITY_CSS = REPO_ROOT / "server" / "static" / "styles" / "activity.css"
 I18N_DIR = REPO_ROOT / "server" / "static" / "i18n"
@@ -24,6 +25,8 @@ NODE_TEST = REPO_ROOT / "tests" / "unit" / "frontend" / "test_activity_swimlane.
 
 SWIMLANE_I18N_KEYS = (
     "activity.swimlane_range_label",
+    "activity.swimlane_range_1h",
+    "activity.swimlane_range_3h",
     "activity.swimlane_range_6h",
     "activity.swimlane_range_24h",
     "activity.swimlane_range_48h",
@@ -44,6 +47,7 @@ class TestSwimlaneModuleStructure:
         assert SWIMLANE_LAYOUT_JS.is_file()
         assert GROUP_DETAIL_JS.is_file()
         assert ACTIVITY_JS.is_file()
+        assert ACTIVITY_TIMELINE_JS.is_file()
 
     def test_exports_pure_helpers(self) -> None:
         layout = _read(SWIMLANE_LAYOUT_JS)
@@ -76,7 +80,7 @@ class TestSwimlaneModuleStructure:
         assert "activity-group-events" in src
 
     def test_activity_page_uses_swimlane_and_ranges(self) -> None:
-        src = _read(ACTIVITY_JS)
+        src = _read(ACTIVITY_TIMELINE_JS)
         assert "renderSwimlane" in src
         assert "renderGroupDetail" in src
         assert "RANGE_OPTIONS" in src
@@ -84,6 +88,11 @@ class TestSwimlaneModuleStructure:
         assert "export function destroy" in src
         assert "group_limit" in src
         assert "30000" in src
+
+    def test_activity_host_loads_timeline_tab(self) -> None:
+        src = _read(ACTIVITY_JS)
+        assert "activity-timeline.js" in src
+        assert "activityTabLoader" in src
 
     def test_group_type_colors_map(self) -> None:
         src = _read(ACTIVITY_TYPES_JS)
@@ -125,8 +134,4 @@ class TestSwimlanePureHelpersNode:
             check=False,
         )
         if result.returncode != 0:
-            pytest.fail(
-                "node swimlane suite failed\n"
-                f"stdout:\n{result.stdout}\n"
-                f"stderr:\n{result.stderr}"
-            )
+            pytest.fail(f"node swimlane suite failed\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}")

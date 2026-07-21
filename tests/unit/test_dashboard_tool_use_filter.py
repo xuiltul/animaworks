@@ -6,7 +6,7 @@ Verifies:
 - app-websocket.js: VISIBLE_TOOL_NAMES import, isStreamingTool check,
   conditional guard before updateCardActivity
 - core/memory/activity.py: _LIVE_EVENT_TYPES excludes tool_use,
-  _VISIBLE_TOOL_NAMES frozenset, log() conditional for tool_use
+  the legacy dashboard tool set remains defined, and log() streams all tools
 """
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
@@ -143,7 +143,7 @@ class TestAppWebSocketFiltering:
         assert guard_pos < update_pos
 
 
-# ── core/memory/activity.py: Backend Changes ──────────────────────
+# ── core/memory/activity.py: Backend live stream ──────────────────
 
 
 class TestActivityBackendLiveEventTypes:
@@ -157,7 +157,7 @@ class TestActivityBackendLiveEventTypes:
         assert "_LIVE_EVENT_TYPES" in self.src
 
     def test_live_event_types_excludes_tool_use(self):
-        # _LIVE_EVENT_TYPES should not include "tool_use" (handled via _VISIBLE_TOOL_NAMES)
+        # Tool activity is handled by log()'s explicit tool_use/tool_result branch.
         live_pos = self.src.find("_LIVE_EVENT_TYPES")
         visible_pos = self.src.find("_VISIBLE_TOOL_NAMES")
         assert live_pos >= 0 and visible_pos >= 0
@@ -190,19 +190,19 @@ class TestActivityBackendVisibleToolNames:
 
 
 class TestActivityLogMethodConditional:
-    """log() method has conditional for tool_use and _VISIBLE_TOOL_NAMES."""
+    """log() sends all tool uses and results through the limiter."""
 
     @pytest.fixture(autouse=True)
     def _load(self):
         self.src = ACTIVITY_PY.read_text(encoding="utf-8")
 
     def test_log_has_tool_use_conditional(self):
-        assert 'event_type == "tool_use"' in self.src
+        assert 'event_type in ("tool_use", "tool_result")' in self.src
 
-    def test_log_has_visible_tool_names_check(self):
-        assert "entry.tool in self._VISIBLE_TOOL_NAMES" in self.src
+    def test_log_has_rate_limiter_check(self):
+        assert "_live_rate_limiter.allow" in self.src
 
-    def test_log_emits_live_event_for_visible_tool_use(self):
+    def test_log_emits_live_event_for_all_tool_activity(self):
         assert "_emit_live_event" in self.src
         assert "tool_use" in self.src
-        assert "_VISIBLE_TOOL_NAMES" in self.src
+        assert "tool_result" in self.src
