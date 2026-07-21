@@ -18,7 +18,7 @@ let _hasMore = false;
 let _selectedAnima = "";
 /** @type {string[]} selected group types (trigger-based) */
 let _selectedGroupTypes = [];
-/** @type {6|24|48} */
+/** @type {1|3|6|24|48} */
 let _rangeHours = 6;
 /** @type {string|null} */
 let _selectedGroupId = null;
@@ -26,7 +26,7 @@ let _selectedGroupId = null;
 let _animaNames = [];
 let _d3LoadPromise = null;
 
-const RANGE_OPTIONS = [6, 24, 48];
+const RANGE_OPTIONS = [1, 3, 6, 24, 48];
 
 function _groupLimitForHours(hours) {
   // Prefer denser pages for shorter windows so the chart is not sparse

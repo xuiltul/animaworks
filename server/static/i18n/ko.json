@@ -39,6 +39,8 @@
   "activity.swimlane_now": "현재",
   "activity.swimlane_range_24h": "24시간",
   "activity.swimlane_range_48h": "48시간",
+  "activity.swimlane_range_1h": "1시간",
+  "activity.swimlane_range_3h": "3시간",
   "activity.swimlane_range_6h": "6시간",
   "activity.swimlane_range_label": "시간 범위",
   "activity.swimlane_tooltip_events": "{count}건",

@@ -39,6 +39,8 @@
   "activity.swimlane_now": "now",
   "activity.swimlane_range_24h": "24h",
   "activity.swimlane_range_48h": "48h",
+  "activity.swimlane_range_1h": "1h",
+  "activity.swimlane_range_3h": "3h",
   "activity.swimlane_range_6h": "6h",
   "activity.swimlane_range_label": "Time range",
   "activity.swimlane_tooltip_events": "{count} events",
