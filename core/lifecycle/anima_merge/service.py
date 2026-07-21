@@ -1337,7 +1337,7 @@ class AnimaMergeService:
             selected = [
                 str(path)
                 for path in conversation_paths
-                if isinstance(path, str) and "merged_conversation_" in Path(path).name
+                if isinstance(path, str) and "merged-conversation-" in Path(path).name
             ][:3]
             for target in selected:
                 probes.append(
@@ -1664,7 +1664,10 @@ class AnimaMergeService:
     def _write_generated_episode(self, kind: str, source_path: Path, content: str) -> str:
         identity = f"{_safe_relative(source_path, self.source_dir)}\0{content}".encode()
         digest = hashlib.sha256(identity).hexdigest()[:12]
-        destination = self.target_dir / "episodes" / f"merged_{kind}_from_{self.source}_{digest}.md"
+        date = now_local().strftime("%Y-%m-%d")
+        destination = (
+            self.target_dir / "episodes" / f"{date}_merged-{kind}-from-{self.source}-{digest}.md"
+        )
         destination.parent.mkdir(parents=True, exist_ok=True)
         if not destination.exists():
             destination.write_text(content, encoding="utf-8")

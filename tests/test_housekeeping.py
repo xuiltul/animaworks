@@ -995,6 +995,7 @@ class TestMemoryHygieneFallback:
             "mdc_files": [{"path": "knowledge/legacy.mdc", "first_seen": "2026-06-01"}],
             "oversized_knowledge": [],
             "noncanonical_archive_dirs": [],
+            "noncanonical_episodes": [],
         }
         (state / "memory_hygiene.json").write_text(json.dumps(report), encoding="utf-8")
 
@@ -1083,6 +1084,155 @@ class TestMemoryHygieneFallback:
         assert result["moved_items"] == 1
         assert existing.read_text(encoding="utf-8") == "existing"
         assert (archive / "_merged_stale-1.md").read_text(encoding="utf-8") == "new"
+        assert not source.exists()
+
+    def test_archives_stale_noncanonical_episodes_and_keeps_recent(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from datetime import date
+        from unittest.mock import MagicMock, patch
+
+        from core.memory.housekeeping import _archive_stale_merge_leftovers
+
+        fixed_today = date(2026, 7, 18)
+        monkeypatch.setattr("core.memory.hygiene.today_local", lambda: fixed_today)
+        monkeypatch.setattr("core.memory.housekeeping.today_local", lambda: fixed_today)
+
+        anima_dir = tmp_path / "animas" / "alice"
+        episodes = anima_dir / "episodes"
+        episodes.mkdir(parents=True)
+        stale = episodes / "recovered_2026-06-19_081003.md"
+        stale.write_text("stale recovery", encoding="utf-8")
+        recent = episodes / "inbox-recent.md"
+        recent.write_text("recent inbox", encoding="utf-8")
+        canonical = episodes / "2026-07-18.md"
+        canonical.write_text("canonical", encoding="utf-8")
+
+        state = anima_dir / "state"
+        state.mkdir()
+        report = {
+            "merged_leftovers": [],
+            "inherited_dirs": [],
+            "mdc_files": [],
+            "oversized_knowledge": [],
+            "noncanonical_archive_dirs": [],
+            "noncanonical_episodes": [
+                {"path": "episodes/recovered_2026-06-19_081003.md", "first_seen": "2026-06-26"},
+                {"path": "episodes/inbox-recent.md", "first_seen": "2026-06-28"},
+            ],
+        }
+        (state / "memory_hygiene.json").write_text(json.dumps(report), encoding="utf-8")
+
+        mock_store = MagicMock()
+        mock_result = MagicMock()
+        mock_result.document.id = "chunk-1"
+        mock_store.get_by_metadata.return_value = [mock_result]
+        mock_store.delete_documents.return_value = True
+
+        with patch("core.memory.rag.singleton.get_vector_store", return_value=mock_store):
+            result = _archive_stale_merge_leftovers(tmp_path / "animas", hygiene_grace_days=21)
+
+        assert result["moved_items"] == 1
+        archive = episodes / "archive"
+        assert (archive / "recovered_2026-06-19_081003.md").read_text(encoding="utf-8") == "stale recovery"
+        assert not stale.exists()
+        assert recent.read_text(encoding="utf-8") == "recent inbox"
+        assert canonical.read_text(encoding="utf-8") == "canonical"
+
+        mock_store.get_by_metadata.assert_called_once_with(
+            "alice_episodes",
+            {"source_file": "episodes/recovered_2026-06-19_081003.md"},
+            limit=10_000,
+        )
+        mock_store.delete_documents.assert_called_once_with("alice_episodes", ["chunk-1"])
+
+        refreshed = json.loads((state / "memory_hygiene.json").read_text(encoding="utf-8"))
+        assert [item["path"] for item in refreshed["noncanonical_episodes"]] == [
+            "episodes/inbox-recent.md"
+        ]
+
+    def test_noncanonical_episode_move_succeeds_when_index_delete_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        from datetime import date
+        from unittest.mock import patch
+
+        from core.memory.housekeeping import _archive_stale_merge_leftovers
+
+        fixed_today = date(2026, 7, 18)
+        monkeypatch.setattr("core.memory.hygiene.today_local", lambda: fixed_today)
+        monkeypatch.setattr("core.memory.housekeeping.today_local", lambda: fixed_today)
+
+        anima_dir = tmp_path / "animas" / "bob"
+        episodes = anima_dir / "episodes"
+        episodes.mkdir(parents=True)
+        source = episodes / "recovered_old.md"
+        source.write_text("content", encoding="utf-8")
+        state = anima_dir / "state"
+        state.mkdir()
+        (state / "memory_hygiene.json").write_text(
+            json.dumps(
+                {
+                    "noncanonical_episodes": [
+                        {"path": "episodes/recovered_old.md", "first_seen": "2026-06-26"}
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch(
+            "core.memory.rag.singleton.get_vector_store",
+            side_effect=RuntimeError("vector unavailable"),
+        ):
+            result = _archive_stale_merge_leftovers(tmp_path / "animas", hygiene_grace_days=21)
+
+        assert result["moved_items"] == 1
+        assert not source.exists()
+        assert (episodes / "archive" / "recovered_old.md").read_text(encoding="utf-8") == "content"
+
+    def test_suffixes_episode_archive_when_name_exists(self, tmp_path: Path, monkeypatch) -> None:
+        from datetime import date
+        from unittest.mock import patch
+
+        from core.memory.housekeeping import _archive_stale_merge_leftovers
+
+        fixed_today = date(2026, 7, 18)
+        monkeypatch.setattr("core.memory.hygiene.today_local", lambda: fixed_today)
+        monkeypatch.setattr("core.memory.housekeeping.today_local", lambda: fixed_today)
+
+        anima_dir = tmp_path / "animas" / "alice"
+        episodes = anima_dir / "episodes"
+        episodes.mkdir(parents=True)
+        source = episodes / "inbox-note.md"
+        source.write_text("new", encoding="utf-8")
+        archive = episodes / "archive"
+        archive.mkdir()
+        existing = archive / "inbox-note.md"
+        existing.write_text("existing", encoding="utf-8")
+        state = anima_dir / "state"
+        state.mkdir()
+        (state / "memory_hygiene.json").write_text(
+            json.dumps(
+                {
+                    "noncanonical_episodes": [
+                        {"path": "episodes/inbox-note.md", "first_seen": "2026-06-26"}
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        with patch("core.memory.rag.singleton.get_vector_store", return_value=None):
+            result = _archive_stale_merge_leftovers(tmp_path / "animas", hygiene_grace_days=21)
+
+        assert result["moved_items"] == 1
+        assert existing.read_text(encoding="utf-8") == "existing"
+        assert (archive / "inbox-note-1.md").read_text(encoding="utf-8") == "new"
         assert not source.exists()
 
 

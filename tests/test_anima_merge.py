@@ -458,9 +458,12 @@ def test_anima_merge_execute_merges_canonical_memory_and_journals_mappings(
     assert shared.source_episode == "episodes/2026-07-01.md"
     source_only = next(fact for fact in facts if fact.text == "Source-only fact")
     assert source_only.source_episode == "episodes/2026-07-01_source.md"
-    generated = list((target / "episodes").glob("merged_*_from_source_*.md"))
+    generated = list((target / "episodes").glob("*_merged-*-from-source-*.md"))
+    assert generated, "date-prefixed merged episode files should be generated"
     assert any("conversation" in path.name for path in generated)
     assert any("transcript" in path.name for path in generated)
+    for path in generated:
+        assert path.name[:10].count("-") == 2  # YYYY-MM-DD prefix
     generated_content = "\n".join(path.read_text(encoding="utf-8") for path in generated)
     assert "Source summary" in generated_content
     assert "Recovered stream text" in generated_content

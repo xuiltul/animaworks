@@ -112,6 +112,38 @@ class TestCrashRecovery:
         StreamingJournal.confirm_recovery(anima_dir)
         assert not journal_path.exists(), "Journal file should be deleted after confirm_recovery()"
 
+    def test_persist_recovery_uses_date_prefixed_filename(
+        self,
+        journal: StreamingJournal,
+        anima_dir: Path,
+        monkeypatch,
+    ):
+        """Orphan recovery files use YYYY-MM-DD_recovered-HHMMSS.md naming."""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        fixed = datetime(2026, 7, 21, 9, 30, 15, tzinfo=ZoneInfo("Asia/Tokyo"))
+        monkeypatch.setattr("core.memory.streaming_journal.now_local", lambda: fixed)
+
+        recovery = JournalRecovery(
+            recovered_text="orphan body",
+            trigger="chat",
+            from_person="tester",
+            session_id="s-1",
+            started_at="2026-07-21T09:00:00",
+            last_event_at="2026-07-21T09:30:00",
+            is_complete=False,
+        )
+        journal._persist_recovery(recovery)
+
+        expected = anima_dir / "episodes" / "2026-07-21_recovered-093015.md"
+        assert expected.is_file()
+        content = expected.read_text(encoding="utf-8")
+        assert "orphan body" in content
+        assert "Recovered Streaming Journal" in content
+        # Legacy prefix form must not be used
+        assert not list((anima_dir / "episodes").glob("recovered_*.md"))
+
 
 # ── Tool Events Recovery ────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -23,9 +24,12 @@ _REPORT_CATEGORIES = (
     "mdc_files",
     "oversized_knowledge",
     "noncanonical_archive_dirs",
+    "noncanonical_episodes",
 )
 _NONCANONICAL_ARCHIVE_NAMES = ("archived", "_archived", ".archive")
 _OVERSIZED_KNOWLEDGE_BYTES = 32 * 1024
+# Canonical episode names: YYYY-MM-DD.md or YYYY-MM-DD_<suffix>.md
+_CANONICAL_EPISODE_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}(_[A-Za-z0-9._-]+)?\.md$")
 
 
 def scan_memory_hygiene(anima_dir: Path) -> dict[str, list[dict[str, Any]]]:
@@ -37,6 +41,7 @@ def scan_memory_hygiene(anima_dir: Path) -> dict[str, list[dict[str, Any]]]:
     """
     anima_dir = Path(anima_dir)
     knowledge_dir = anima_dir / "knowledge"
+    episodes_dir = anima_dir / "episodes"
     report_path = anima_dir / "state" / "memory_hygiene.json"
     today_date = today_local()
     today = today_date.isoformat()
@@ -76,6 +81,17 @@ def scan_memory_hygiene(anima_dir: Path) -> dict[str, list[dict[str, Any]]]:
                 report["noncanonical_archive_dirs"].append(
                     _entry(relative, previous["noncanonical_archive_dirs"], today)
                 )
+
+    if episodes_dir.is_dir():
+        for path in sorted(episodes_dir.iterdir()):
+            if not path.is_file():
+                continue
+            if _CANONICAL_EPISODE_NAME.match(path.name):
+                continue
+            relative = path.relative_to(anima_dir).as_posix()
+            report["noncanonical_episodes"].append(
+                _entry(relative, previous["noncanonical_episodes"], today)
+            )
 
     atomic_write_text(report_path, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     return report

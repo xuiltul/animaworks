@@ -442,7 +442,119 @@ def _archive_stale_hygiene_entries(
                 logger.info("Archived stale memory hygiene item: %s -> %s", source, destination)
             except (OSError, RuntimeError):
                 logger.exception("Failed to archive stale memory hygiene item: %s", source)
+
+    moved += _archive_stale_noncanonical_episodes(anima_dir, report, hygiene_grace_days)
     return moved
+
+
+def _archive_stale_noncanonical_episodes(
+    anima_dir: Path,
+    report: dict[str, list[dict[str, Any]]],
+    hygiene_grace_days: int,
+) -> int:
+    """Move stale non-canonical episode files into ``episodes/archive/``."""
+    episodes_dir = anima_dir / "episodes"
+    archive_dir = episodes_dir / "archive"
+    moved = 0
+
+    for entry in report.get("noncanonical_episodes", []):
+        if not _hygiene_entry_is_stale(entry, hygiene_grace_days):
+            continue
+        source = _validated_noncanonical_episode_source(anima_dir, episodes_dir, entry)
+        if source is None or not source.exists():
+            continue
+        try:
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            if not _prepare_episode_archive_destination(episodes_dir, archive_dir):
+                continue
+            destination = _unique_hygiene_destination(archive_dir / source.name)
+            relative_source = source.relative_to(anima_dir).as_posix()
+            shutil.move(str(source), str(destination))
+            moved += 1
+            logger.info("Archived stale noncanonical episode: %s -> %s", source, destination)
+            # Index deletion is best-effort; file move already succeeded.
+            _delete_episode_index_entry(anima_dir, relative_source)
+        except (OSError, RuntimeError):
+            logger.exception("Failed to archive stale noncanonical episode: %s", source)
+    return moved
+
+
+def _validated_noncanonical_episode_source(
+    anima_dir: Path,
+    episodes_dir: Path,
+    entry: dict[str, Any],
+) -> Path | None:
+    """Validate a hygiene entry path is a file directly under episodes/."""
+    raw_path = entry.get("path")
+    if not isinstance(raw_path, str):
+        return None
+    relative = Path(raw_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        return None
+    source = anima_dir / relative
+    try:
+        resolved = source.resolve()
+        resolved.relative_to(episodes_dir.resolve())
+    except (OSError, ValueError):
+        return None
+    # Only direct children of episodes/ (not archive/ or nested dirs).
+    if source.parent != episodes_dir or not source.is_file():
+        return None
+    if source.name == "archive":
+        return None
+    return source
+
+
+def _prepare_episode_archive_destination(episodes_dir: Path, archive_dir: Path) -> bool:
+    """Validate ``episodes/archive`` is a real directory (no symlink escape)."""
+    try:
+        if archive_dir.is_symlink():
+            logger.warning("Skipping episode archive through symlink: %s", archive_dir)
+            return False
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        if archive_dir.is_symlink():
+            logger.warning("Skipping episode archive through symlink: %s", archive_dir)
+            return False
+        resolved_episodes = episodes_dir.resolve(strict=True)
+        resolved_archive = archive_dir.resolve(strict=True)
+        resolved_archive.relative_to(resolved_episodes)
+    except (OSError, ValueError):
+        logger.warning("Skipping unsafe episode archive destination: %s", archive_dir)
+        return False
+    return True
+
+
+def _delete_episode_index_entry(anima_dir: Path, source_file: str) -> None:
+    """Best-effort removal of vector-index chunks for an archived episode file.
+
+    Failures are logged as warnings and never raise — the file has already
+    been moved successfully.
+    """
+    anima_name = anima_dir.name
+    collection_name = f"{anima_name}_episodes"
+    try:
+        from core.memory.rag.singleton import get_vector_store
+
+        store = get_vector_store(anima_name)
+        if store is None:
+            return
+        results = store.get_by_metadata(collection_name, {"source_file": source_file}, limit=10_000)
+        ids = [result.document.id for result in results]
+        if not ids:
+            return
+        if not store.delete_documents(collection_name, ids):
+            logger.warning(
+                "Failed to delete indexed episode chunks for %s/%s",
+                collection_name,
+                source_file,
+            )
+    except Exception:
+        logger.warning(
+            "Failed to delete indexed episode chunks for %s/%s",
+            collection_name,
+            source_file,
+            exc_info=True,
+        )
 
 
 def _hygiene_entry_is_stale(entry: dict[str, Any], hygiene_grace_days: int) -> bool:

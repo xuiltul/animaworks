@@ -411,13 +411,16 @@ class StreamingJournal:
     def _persist_recovery(self, recovery: JournalRecovery) -> None:
         """Persist recovered orphan content to an episode file.
 
-        Saves the recovered text to ``episodes/recovered_{timestamp}.md``
-        so the data is not permanently lost.
+        Saves the recovered text to ``episodes/{date}_recovered-{hhmmss}.md``
+        (date-prefixed so daily consolidation can glob it) so the data is
+        not permanently lost.
         """
         episodes_dir = self._anima_dir / "episodes"
         episodes_dir.mkdir(parents=True, exist_ok=True)
-        ts = now_local().strftime("%Y-%m-%d_%H%M%S")
-        recovery_file = episodes_dir / f"recovered_{ts}.md"
+        now = now_local()
+        date = now.strftime("%Y-%m-%d")
+        hhmmss = now.strftime("%H%M%S")
+        recovery_file = episodes_dir / f"{date}_recovered-{hhmmss}.md"
         content_lines = [
             f"# Recovered Streaming Journal ({recovery.trigger})",
             f"- from: {recovery.from_person}",

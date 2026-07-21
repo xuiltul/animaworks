@@ -49,8 +49,56 @@ def test_scan_detects_all_categories_and_excludes_canonical_archive(
         "knowledge/_archived",
         "knowledge/.archive",
     ]
+    assert _paths(report, "noncanonical_episodes") == []
     assert all(entry["first_seen"] == "2026-07-18" for entries in report.values() for entry in entries)
     assert json.loads((anima_dir / "state" / "memory_hygiene.json").read_text()) == report
+
+
+def test_scan_detects_noncanonical_episodes(tmp_path: Path, monkeypatch) -> None:
+    """Date-prefixed episodes are clean; legacy recovered_/inbox/jsonl are flagged.
+
+    Files under episodes/archive/ are excluded (not scanned).
+    """
+    anima_dir = tmp_path / "alice"
+    episodes = anima_dir / "episodes"
+    archive = episodes / "archive"
+    archive.mkdir(parents=True)
+
+    (episodes / "2026-07-18.md").write_text("canonical day", encoding="utf-8")
+    (episodes / "2026-07-18_suffix.md").write_text("canonical with suffix", encoding="utf-8")
+    (episodes / "2026-07-18_recovered-093015.md").write_text("new recovery form", encoding="utf-8")
+    (episodes / "recovered_2026-06-19_081003.md").write_text("legacy recovery", encoding="utf-8")
+    (episodes / "inbox-note.md").write_text("inbox", encoding="utf-8")
+    (episodes / "events.jsonl").write_text("{}\n", encoding="utf-8")
+    (episodes / "notes.json").write_text("{}", encoding="utf-8")
+    (archive / "recovered_old.md").write_text("archived legacy", encoding="utf-8")
+
+    monkeypatch.setattr("core.memory.hygiene.today_local", lambda: date(2026, 7, 18))
+    report = scan_memory_hygiene(anima_dir)
+
+    assert set(_paths(report, "noncanonical_episodes")) == {
+        "episodes/recovered_2026-06-19_081003.md",
+        "episodes/inbox-note.md",
+        "episodes/events.jsonl",
+        "episodes/notes.json",
+    }
+    assert all(entry["first_seen"] == "2026-07-18" for entry in report["noncanonical_episodes"])
+
+
+def test_scan_retains_first_seen_for_noncanonical_episodes(tmp_path: Path, monkeypatch) -> None:
+    anima_dir = tmp_path / "alice"
+    episodes = anima_dir / "episodes"
+    episodes.mkdir(parents=True)
+    legacy = episodes / "recovered_old.md"
+    legacy.write_text("old", encoding="utf-8")
+
+    monkeypatch.setattr("core.memory.hygiene.today_local", lambda: date(2026, 7, 1))
+    first = scan_memory_hygiene(anima_dir)
+    assert first["noncanonical_episodes"][0]["first_seen"] == "2026-07-01"
+
+    monkeypatch.setattr("core.memory.hygiene.today_local", lambda: date(2026, 7, 18))
+    second = scan_memory_hygiene(anima_dir)
+    assert second["noncanonical_episodes"][0]["first_seen"] == "2026-07-01"
 
 
 def test_scan_retains_first_seen_and_removes_resolved_items(tmp_path: Path, monkeypatch) -> None:
@@ -144,6 +192,7 @@ def test_hygiene_prompt_section_lists_items_caps_at_twenty_and_localizes() -> No
             }
         ],
         "noncanonical_archive_dirs": [],
+        "noncanonical_episodes": [],
     }
 
     section = _format_hygiene_section(report, locale="en")
