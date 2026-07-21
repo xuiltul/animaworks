@@ -1,11 +1,10 @@
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-"""E2E tests for dashboard tool_use filtering via ActivityLogger live events.
+"""E2E tests for dashboard tool activity events via ActivityLogger.
 
 Verifies that:
-- Visible tools (delegate_task, update_task, etc.) emit live event files
-- Non-visible tools (search_memory, Read, Bash, etc.) do NOT emit live events
+- All tools emit rate-limited live event files
 - Non-tool_use event types in _LIVE_EVENT_TYPES still emit
 - All tool_use entries are written to activity_log JSONL regardless of visibility
 """
@@ -33,6 +32,7 @@ def anima_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def activity_logger(anima_dir: Path) -> ActivityLogger:
+    ActivityLogger._live_rate_limiter.reset()
     return ActivityLogger(anima_dir)
 
 
@@ -88,14 +88,13 @@ class TestVisibleToolEmitsLiveEvent:
         assert events[0]["data"]["name"] == "testanima"
 
 
-# ── Test 2: Non-visible tool does NOT emit ────────────────
+# ── Test 2: Previously hidden tools now emit ──────────────
 
 
-class TestNonVisibleToolDoesNotEmit:
-    """ActivityLogger non-visible tool does NOT emit live event."""
+class TestAnyToolEmits:
+    """ActivityLogger emits arbitrary tool calls for the Now board."""
 
-    def test_search_memory_does_not_emit(self, activity_logger: ActivityLogger, tmp_path: Path) -> None:
-        """Log tool_use with tool=search_memory and verify NO event file is created."""
+    def test_search_memory_emits(self, activity_logger: ActivityLogger, tmp_path: Path) -> None:
         with patch("core.memory.activity.get_data_dir", return_value=tmp_path):
             activity_logger.log(
                 "tool_use",
@@ -105,7 +104,8 @@ class TestNonVisibleToolDoesNotEmit:
             )
 
         events = _read_event_files(tmp_path)
-        assert len(events) == 0
+        assert len(events) == 1
+        assert events[0]["data"]["kind"] == "tool_use"
 
 
 # ── Test 3: All visible tools emit ────────────────────────
@@ -145,11 +145,11 @@ class TestAllVisibleToolsEmit:
         assert events[0]["data"]["tool"] == tool_name
 
 
-# ── Test 4: Non-visible tools do NOT emit ─────────────────
+# ── Test 4: Formerly non-visible tools emit ───────────────
 
 
-class TestNonVisibleToolsDoNotEmit:
-    """Common internal tools do NOT emit live events."""
+class TestInternalToolsEmit:
+    """Common internal tools emit live events for observability."""
 
     @pytest.mark.parametrize(
         "tool_name",
@@ -168,13 +168,13 @@ class TestNonVisibleToolsDoNotEmit:
             "github",
         ],
     )
-    def test_non_visible_tool_does_not_emit(
+    def test_internal_tool_emits(
         self,
         activity_logger: ActivityLogger,
         tmp_path: Path,
         tool_name: str,
     ) -> None:
-        """Each non-visible tool should NOT create an event file."""
+        """Each tool should create a live event file."""
         with patch("core.memory.activity.get_data_dir", return_value=tmp_path):
             activity_logger.log(
                 "tool_use",
@@ -183,7 +183,8 @@ class TestNonVisibleToolsDoNotEmit:
             )
 
         events = _read_event_files(tmp_path)
-        assert len(events) == 0, f"Expected 0 events for {tool_name}, got {len(events)}"
+        assert len(events) == 1, f"Expected 1 event for {tool_name}, got {len(events)}"
+        assert events[0]["data"]["tool"] == tool_name
 
 
 # ── Test 5: Non-tool_use events still emit ─────────────────

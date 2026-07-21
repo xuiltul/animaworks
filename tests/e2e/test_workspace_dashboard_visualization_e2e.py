@@ -286,6 +286,7 @@ class TestLiveEventEmissionForDashboard:
 
     @pytest.fixture()
     def activity_logger(self, tmp_path: Path) -> ActivityLogger:
+        ActivityLogger._live_rate_limiter.reset()
         anima_dir = tmp_path / "animas" / "sakura"
         anima_dir.mkdir(parents=True)
         return ActivityLogger(anima_dir)

@@ -7,9 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-
 from core.memory.activity import ActivityEntry, ActivityLogger
-
 
 # ── Helpers ───────────────────────────────────────────────
 
@@ -106,11 +104,13 @@ class TestCronGrouping:
         """2 cron_executed with same task_name -> 1 cron group."""
         entries = [
             _make_entry(
-                "cron_executed", _ts(BASE_TS, 0),
+                "cron_executed",
+                _ts(BASE_TS, 0),
                 meta={"task_name": "daily-report"},
             ),
             _make_entry(
-                "cron_executed", _ts(BASE_TS, 1),
+                "cron_executed",
+                _ts(BASE_TS, 1),
                 meta={"task_name": "daily-report"},
             ),
         ]
@@ -137,7 +137,8 @@ class TestMixedGrouping:
             _make_entry("heartbeat_end", _ts(BASE_TS, 12), summary="ok"),
             # CRON (1 group)
             _make_entry(
-                "cron_executed", _ts(BASE_TS, 15),
+                "cron_executed",
+                _ts(BASE_TS, 15),
                 meta={"task_name": "backup"},
             ),
         ]
@@ -145,6 +146,29 @@ class TestMixedGrouping:
         assert len(groups) == 4
         types = [g.type for g in groups]
         assert types == ["dm", "single", "hb", "cron"]
+
+
+class TestToolResultPairing:
+    def test_legacy_failed_result_status_is_exposed_as_error(self) -> None:
+        use = _make_entry(
+            "tool_use",
+            _ts(BASE_TS),
+            tool="Bash",
+            meta={"tool_use_id": "tool-1"},
+        )
+        result = _make_entry(
+            "tool_result",
+            _ts(BASE_TS, 1),
+            tool="Bash",
+            content="failed",
+            meta={"tool_use_id": "tool-1", "result_status": "fail"},
+        )
+
+        paired = ActivityLogger._pair_tool_results([use, result])
+
+        assert paired == [use]
+        assert use._tool_result_data is not None
+        assert use._tool_result_data["is_error"] is True
 
 
 # ── Source lines ──────────────────────────────────────────
@@ -214,7 +238,8 @@ class TestFormatGroup:
         entries = [
             _make_entry("heartbeat_start", "2026-02-18T10:00:00"),
             _make_entry(
-                "heartbeat_end", "2026-02-18T10:05:00",
+                "heartbeat_end",
+                "2026-02-18T10:05:00",
                 summary="channels checked, no issues",
             ),
         ]
@@ -228,8 +253,10 @@ class TestFormatGroup:
     def test_format_group_single(self) -> None:
         """Single-entry group formatting must match _format_entry output."""
         entry = _make_entry(
-            "message_received", "2026-02-18T10:00:00",
-            content="hello", from_person="user",
+            "message_received",
+            "2026-02-18T10:00:00",
+            content="hello",
+            from_person="user",
         )
         # Create a single-entry group via _group_entries
         groups = ActivityLogger._group_entries([entry])

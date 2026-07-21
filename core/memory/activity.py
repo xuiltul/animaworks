@@ -26,6 +26,8 @@ import json  # noqa: F401  — kept at module level for mock.patch compat
 import logging
 import math
 import os  # noqa: F401  — kept at module level for mock.patch compat
+import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -87,6 +89,36 @@ if TYPE_CHECKING:
     from core.execution.session_context import RuntimeSessionContext
 
 
+class _LiveEventRateLimiter:
+    """Per-Anima token bucket for best-effort live activity events."""
+
+    def __init__(self, rate: float = 3.0, capacity: float = 5.0) -> None:
+        self.rate = rate
+        self.capacity = capacity
+        self._buckets: dict[str, tuple[float, float, int]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, anima_name: str) -> tuple[bool, int]:
+        """Consume a token and return any drops accumulated since last emit."""
+        now = time.monotonic()
+        with self._lock:
+            tokens, updated_at, dropped = self._buckets.get(
+                anima_name,
+                (self.capacity, now, 0),
+            )
+            tokens = min(self.capacity, tokens + max(0.0, now - updated_at) * self.rate)
+            if tokens < 1.0:
+                self._buckets[anima_name] = (tokens, now, dropped + 1)
+                return False, 0
+            self._buckets[anima_name] = (tokens - 1.0, now, 0)
+            return True, dropped
+
+    def reset(self) -> None:
+        """Clear all buckets (primarily useful for isolated test lifecycles)."""
+        with self._lock:
+            self._buckets.clear()
+
+
 def activity_context_from_trigger(trigger: str, session_type: str = "") -> str:
     """Return the stable activity context label for a runtime session."""
     trigger = (trigger or "").strip()
@@ -121,6 +153,7 @@ class ActivityLogger(
     """
 
     _MAX_CONTENT_CHARS = 20_000
+    _live_rate_limiter = _LiveEventRateLimiter(rate=3.0, capacity=5.0)
 
     _LIVE_EVENT_TYPES = frozenset(
         {
@@ -235,8 +268,10 @@ class ActivityLogger(
             origin_chain=origin_chain or [],
         )
         self._append(entry, safe=safe)
-        if event_type in self._LIVE_EVENT_TYPES or event_type == "tool_use" and entry.tool in self._VISIBLE_TOOL_NAMES:
-            self._emit_live_event(entry)
+        if event_type in self._LIVE_EVENT_TYPES or event_type in ("tool_use", "tool_result"):
+            allowed, dropped = self._live_rate_limiter.allow(self._anima_name)
+            if allowed:
+                self._emit_live_event(entry, dropped=dropped)
         return entry
 
     def _append(self, entry: ActivityEntry, *, safe: bool = False) -> None:
@@ -261,7 +296,7 @@ class ActivityLogger(
                 return
             raise MemoryWriteError(f"Activity log write failed: {exc}") from exc
 
-    def _emit_live_event(self, entry: ActivityEntry) -> None:
+    def _emit_live_event(self, entry: ActivityEntry, *, dropped: int = 0) -> None:
         """Write event file for ProcessSupervisor to broadcast via WebSocket."""
         try:
             event_dir = get_data_dir() / "run" / "events" / self._anima_name
@@ -271,8 +306,10 @@ class ActivityLogger(
                 "data": {
                     "name": self._anima_name,
                     "type": entry.type,
+                    "kind": entry.type if entry.type in ("tool_use", "tool_result") else "",
                     "tool": entry.tool,
-                    "summary": entry.summary,
+                    "is_error": bool(entry.meta.get("is_error", False) or entry.meta.get("result_status") == "fail"),
+                    "summary": entry.summary[:200] if entry.summary else "",
                     "content": entry.content[:200] if entry.content else "",
                     "from_person": entry.from_person,
                     "to_person": entry.to_person,
@@ -282,6 +319,8 @@ class ActivityLogger(
                     "meta": entry.meta,
                 },
             }
+            if dropped:
+                payload["data"]["dropped"] = dropped
             event_file = event_dir / f"ta_{uuid4().hex[:8]}.json"
             event_file.write_text(
                 json.dumps(payload, ensure_ascii=False),

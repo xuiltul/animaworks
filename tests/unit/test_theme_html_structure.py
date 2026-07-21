@@ -7,21 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
-
-INDEX_HTML = (
-    Path(__file__).resolve().parents[2]
-    / "server"
-    / "static"
-    / "index.html"
-)
-WS_INDEX_HTML = (
-    Path(__file__).resolve().parents[2]
-    / "server"
-    / "static"
-    / "workspace"
-    / "index.html"
-)
+INDEX_HTML = Path(__file__).resolve().parents[2] / "server" / "static" / "index.html"
+WS_INDEX_HTML = Path(__file__).resolve().parents[2] / "server" / "static" / "workspace" / "index.html"
 
 
 class TestMainIndexHTML:
@@ -57,16 +44,15 @@ class TestMainIndexHTML:
         expected_icons = [
             "message-circle",
             "clipboard-list",
+            "kanban",
             "layout-dashboard",
             "activity",
-            "settings",
             "users",
             "bot",
-            "cpu",
-            "globe",
-            "brain",
             "file-text",
-            "palette",
+            "bar-chart-2",
+            "building-2",
+            "sliders-horizontal",
         ]
         for icon in expected_icons:
             assert icon in content, f"Missing Lucide icon: {icon}"

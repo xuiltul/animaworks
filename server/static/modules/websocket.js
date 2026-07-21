@@ -295,7 +295,15 @@ function handleWsMessage(raw) {
         addActivity("tool", animaName, `${data.summary || evtType}`, data.ctx);
       }
       document.dispatchEvent(
-        new CustomEvent("anima-tool-activity", { detail: { ...data, event: evtType, tool_name: toolName } })
+        new CustomEvent("anima-tool-activity", {
+          detail: {
+            ...data,
+            event: evtType,
+            kind: data.kind || (evtType === "tool_use" || evtType === "tool_result" ? evtType : ""),
+            tool_name: toolName,
+            is_error: Boolean(data.is_error || data.meta?.is_error || data.meta?.result_status === "fail"),
+          },
+        })
       );
       break;
     }
