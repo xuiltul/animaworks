@@ -13,6 +13,7 @@ from core.config.models import (
     AnimaModelConfig,
     AnimaWorksConfig,
     CredentialConfig,
+    CronGuardConfig,
     GatewaySystemConfig,
     GPUConfig,
     MemoryConfig,

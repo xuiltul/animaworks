@@ -871,6 +871,15 @@ class HeartbeatConfig(BaseModel):
     )
 
 
+class CronGuardConfig(BaseModel):
+    """Detection and optional auto-disable thresholds for cron tasks."""
+
+    mode: Literal["off", "warn", "disable"] = "warn"
+    max_fires_per_window: int = Field(default=60, ge=1)
+    window_minutes: int = Field(default=60, ge=1)
+    max_consecutive_failures: int = Field(default=5, ge=1)
+
+
 # ── Voice Chat Config ───────────────────────────────────────────────────────
 
 
@@ -1181,6 +1190,7 @@ class AnimaWorksConfig(BaseModel):
     activity_log: ActivityLogConfig = ActivityLogConfig()
     logging: LoggingConfig = LoggingConfig()
     heartbeat: HeartbeatConfig = HeartbeatConfig()
+    cron_guard: CronGuardConfig = CronGuardConfig()
     voice: VoiceConfig = VoiceConfig()
     housekeeping: HousekeepingConfig = HousekeepingConfig()
     inbox: InboxConfig = InboxConfig()
@@ -1210,6 +1220,7 @@ __all__ = [
     "BackgroundTaskConfig",
     "BackgroundToolConfig",
     "ConsolidationConfig",
+    "CronGuardConfig",
     "CredentialConfig",
     "DEFAULT_ANIMA_MODEL",
     "DEFAULT_CONSOLIDATION_MODEL",

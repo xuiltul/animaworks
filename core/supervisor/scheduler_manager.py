@@ -35,6 +35,8 @@ _INDENTED_SCHEDULE_RE = re.compile(r"^\s+schedule:", re.MULTILINE)
 #   (widened to avoid false positives for low-frequency crons)
 _HEALTH_CHECK_INTERVAL_HOURS = 3
 _HEALTH_CHECK_WINDOW_HOURS = 24
+_CRON_RUN_HISTORY_LIMIT = 10
+_CRON_WARNING_SUPPRESS_HOURS = 24
 
 if TYPE_CHECKING:
     from core.anima import DigitalAnima
@@ -348,8 +350,28 @@ class SchedulerManager:
             return
 
         tasks = parse_cron_md(config)
+        disabled_tasks = self._read_cron_state(self._anima_dir / "state" / "cron_disabled.json")
         registered = 0
+        skipped_disabled = 0
         for i, task in enumerate(tasks):
+            if task.name in disabled_tasks:
+                skipped_disabled += 1
+                logger.info(
+                    "Cron registration skipped (auto-disabled): %s -> %s",
+                    self._anima_name,
+                    task.name,
+                )
+                try:
+                    self._anima._activity.log(
+                        "cron_guard_skipped",
+                        summary=f"Auto-disabled cron skipped: {task.name}",
+                        meta={"task_name": task.name},
+                        safe=True,
+                    )
+                except Exception:
+                    logger.debug("Failed to record cron guard skip", exc_info=True)
+                continue
+
             trigger = parse_schedule(task.schedule)
             if not trigger:
                 logger.warning(
@@ -378,7 +400,212 @@ class SchedulerManager:
                 task.type,
             )
 
-        self._check_cron_parse_health(config, tasks, registered)
+        self._check_cron_parse_health(config, tasks, registered + skipped_disabled)
+
+    # ── Cron Guard ───────────────────────────────────────────────
+
+    @staticmethod
+    def _read_cron_state(path: Path) -> dict[str, Any]:
+        """Read a cron guard JSON object, returning empty state on corruption."""
+        try:
+            if not path.is_file():
+                return {}
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            logger.debug("Ignoring unreadable cron guard state: %s", path, exc_info=True)
+            return {}
+
+    @staticmethod
+    def _write_cron_state(path: Path, data: dict[str, Any]) -> None:
+        """Atomically persist cron guard state."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+        tmp_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        tmp_path.replace(path)
+
+    @staticmethod
+    def _parse_cron_guard_timestamp(value: object, now: datetime) -> datetime | None:
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None and now.tzinfo is not None:
+            parsed = parsed.replace(tzinfo=now.tzinfo)
+        return parsed
+
+    @staticmethod
+    def _cron_usage(result: object) -> dict[str, int] | None:
+        """Return serializable token usage from a cron result when available."""
+        raw_usage = getattr(result, "usage", None)
+        if not isinstance(raw_usage, dict):
+            return None
+        usage = {
+            str(key): int(value)
+            for key, value in raw_usage.items()
+            if isinstance(value, int) and not isinstance(value, bool)
+        }
+        return usage or None
+
+    @staticmethod
+    def _cron_result_succeeded(result: object) -> bool:
+        action = getattr(result, "action", "")
+        return not isinstance(action, str) or action.lower() not in {"cancelled", "error", "failed"}
+
+    def _record_cron_result(
+        self,
+        task_name: str,
+        *,
+        success: bool,
+        usage: dict[str, int] | None = None,
+    ) -> None:
+        """Persist one completion and apply cron guard policy without raising."""
+        try:
+            guard = load_config().cron_guard
+            now = now_local()
+            now_iso = now.isoformat()
+            stats_path = self._anima_dir / "state" / "cron_stats.json"
+            all_stats = self._read_cron_state(stats_path)
+            raw_task_stats = all_stats.get(task_name)
+            task_stats = raw_task_stats if isinstance(raw_task_stats, dict) else {}
+
+            cutoff = now - timedelta(minutes=guard.window_minutes)
+            fire_timestamps: list[str] = []
+            raw_fires = task_stats.get("fire_timestamps", [])
+            if isinstance(raw_fires, list):
+                for value in raw_fires:
+                    parsed = self._parse_cron_guard_timestamp(value, now)
+                    if parsed is not None and parsed >= cutoff:
+                        fire_timestamps.append(parsed.isoformat())
+            fire_timestamps.append(now_iso)
+
+            previous_failures = task_stats.get("consecutive_failures", 0)
+            if not isinstance(previous_failures, int) or isinstance(previous_failures, bool):
+                previous_failures = 0
+            consecutive_failures = 0 if success else previous_failures + 1
+
+            recent_runs = task_stats.get("recent_runs", [])
+            if not isinstance(recent_runs, list):
+                recent_runs = []
+            run: dict[str, Any] = {"timestamp": now_iso, "success": success}
+            if usage:
+                run["usage"] = usage
+            recent_runs = [item for item in recent_runs if isinstance(item, dict)]
+            recent_runs.append(run)
+            recent_runs = recent_runs[-_CRON_RUN_HISTORY_LIMIT:]
+
+            task_stats = {
+                "fire_timestamps": fire_timestamps,
+                "consecutive_failures": consecutive_failures,
+                "recent_runs": recent_runs,
+                **(
+                    {"last_warning_at": task_stats["last_warning_at"]}
+                    if isinstance(task_stats.get("last_warning_at"), str)
+                    else {}
+                ),
+            }
+            all_stats[task_name] = task_stats
+            self._write_cron_state(stats_path, all_stats)
+
+            if guard.mode == "off":
+                return
+
+            reasons: list[str] = []
+            if len(fire_timestamps) > guard.max_fires_per_window:
+                reasons.append(
+                    f"{len(fire_timestamps)} fires in {guard.window_minutes} minutes "
+                    f"(maximum {guard.max_fires_per_window})"
+                )
+            if consecutive_failures >= guard.max_consecutive_failures:
+                reasons.append(
+                    f"{consecutive_failures} consecutive failures (threshold {guard.max_consecutive_failures})"
+                )
+            if not reasons:
+                return
+
+            reason = "; ".join(reasons)
+            snapshot = {
+                "fire_timestamps": list(fire_timestamps),
+                "consecutive_failures": consecutive_failures,
+                "recent_runs": list(recent_runs),
+            }
+            if guard.mode == "warn":
+                last_warning = self._parse_cron_guard_timestamp(task_stats.get("last_warning_at"), now)
+                if last_warning is not None and now - last_warning < timedelta(hours=_CRON_WARNING_SUPPRESS_HOURS):
+                    return
+                task_stats["last_warning_at"] = now_iso
+                self._write_cron_state(stats_path, all_stats)
+                self._log_cron_guard_event("cron_guard_warning", task_name, reason, snapshot)
+                self._write_cron_guard_notification(task_name, reason, disabled=False)
+                return
+
+            disabled_path = self._anima_dir / "state" / "cron_disabled.json"
+            disabled_tasks = self._read_cron_state(disabled_path)
+            disabled_tasks[task_name] = {
+                "reason": reason,
+                "stats": snapshot,
+                "disabled_at": now_iso,
+            }
+            self._write_cron_state(disabled_path, disabled_tasks)
+            self._remove_cron_job(task_name)
+            self._log_cron_guard_event("cron_auto_disabled", task_name, reason, snapshot)
+            self._write_cron_guard_notification(task_name, reason, disabled=True)
+        except Exception:
+            logger.debug(
+                "Cron guard failed open for %s -> %s",
+                self._anima_name,
+                task_name,
+                exc_info=True,
+            )
+
+    def _log_cron_guard_event(
+        self,
+        event_type: str,
+        task_name: str,
+        reason: str,
+        stats: dict[str, Any],
+    ) -> None:
+        self._anima._activity.log(
+            event_type,
+            summary=f"Cron guard: {task_name}: {reason}",
+            meta={"task_name": task_name, "reason": reason, "stats": stats},
+            safe=True,
+        )
+
+    def _write_cron_guard_notification(self, task_name: str, reason: str, *, disabled: bool) -> None:
+        notif_dir = self._anima_dir / "state" / "background_notifications"
+        notif_dir.mkdir(parents=True, exist_ok=True)
+        ts = now_local().strftime("%Y%m%d_%H%M%S")
+        suffix = zlib.crc32(task_name.encode("utf-8")) & 0xFFFFFFFF
+        notif_path = notif_dir / f"cron_guard_{ts}_{suffix:08x}.md"
+        action = "automatically disabled" if disabled else "warning only"
+        notif_path.write_text(
+            f"# Cron guard alert\n\n- Task: {task_name}\n- Action: {action}\n- Reason: {reason}\n",
+            encoding="utf-8",
+        )
+        logger.warning("[%s] Cron guard alert for %s: %s", self._anima_name, task_name, reason)
+
+    def _remove_cron_job(self, task_name: str) -> None:
+        if not self.scheduler:
+            return
+        prefix = f"{self._anima_name}_cron_"
+        for job in self.scheduler.get_jobs():
+            args = getattr(job, "args", ())
+            scheduled_task = args[0] if isinstance(args, (list, tuple)) and args else None
+            if (
+                getattr(job, "id", "").startswith(prefix)
+                and isinstance(scheduled_task, CronTask)
+                and scheduled_task.name == task_name
+            ):
+                try:
+                    self.scheduler.remove_job(job.id)
+                except Exception:
+                    logger.debug("Failed to remove auto-disabled cron job %s", job.id, exc_info=True)
 
     # ── Cron Health Check ──────────────────────────────────────────
 
@@ -653,10 +880,14 @@ class SchedulerManager:
         if not self._anima:
             return
         self._cron_running.add(task.name)
+        success = False
+        usage: dict[str, int] | None = None
         try:
             if task.type == "llm":
                 skill_kwargs = {"skills": task.skills} if task.skills else {}
                 result = await self._anima.run_cron_task(task.name, task.description, **skill_kwargs)
+                success = self._cron_result_succeeded(result)
+                usage = self._cron_usage(result)
                 self._emit_event(
                     "anima.cron",
                     {
@@ -673,6 +904,7 @@ class SchedulerManager:
                     tool=task.tool,
                     args=task.args,
                 )
+                success = result.get("exit_code", 1) == 0
                 self._emit_event(
                     "anima.cron",
                     {
@@ -719,12 +951,14 @@ class SchedulerManager:
                         task.name,
                         self._anima_name,
                     )
-                    await self._anima.run_cron_task(
+                    followup_result = await self._anima.run_cron_task(
                         task.name,
                         task.description or f"cron.mdの「{task.name}」の指示に従って処理してください。",
                         command_output=stdout,
                         **({"skills": task.skills} if task.skills else {}),
                     )
+                    success = success and self._cron_result_succeeded(followup_result)
+                    usage = self._cron_usage(followup_result)
             else:
                 logger.warning("Unknown cron type '%s' for task '%s'", task.type, task.name)
         except asyncio.CancelledError:
@@ -735,6 +969,7 @@ class SchedulerManager:
         except Exception:
             logger.exception("Cron task failed: %s -> %s", self._anima_name, task.name)
         finally:
+            self._record_cron_result(task.name, success=success, usage=usage)
             self._cron_running.discard(task.name)
 
     # ── Reload ───────────────────────────────────────────────────
