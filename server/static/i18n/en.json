@@ -63,6 +63,7 @@
   "activity_types.response_sent": "Response sent",
   "activity_types.tool_result": "Tool result",
   "activity_types.tool_use": "Tool execution",
+  "animas.actions_menu": "Actions menu",
   "animas.aliases": "Aliases",
   "animas.aliases_add": "Add",
   "animas.aliases_add_placeholder": "Enter alias (e.g. Sakura)",

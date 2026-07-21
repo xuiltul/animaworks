@@ -63,6 +63,7 @@
   "activity_types.response_sent": "응답 전송",
   "activity_types.tool_result": "도구 결과",
   "activity_types.tool_use": "도구 실행",
+  "animas.actions_menu": "작업 메뉴",
   "animas.back": "목록으로 돌아가기",
   "animas.bootstrapping": "생성 중...",
   "animas.detail": "상세",
