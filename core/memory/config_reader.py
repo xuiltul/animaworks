@@ -71,6 +71,7 @@ class ConfigReader:
                 thinking=resolved.thinking,
                 thinking_effort=resolved.thinking_effort,
                 background_thinking_effort=resolved.background_thinking_effort,
+                heartbeat_enabled=resolved.heartbeat_enabled,
                 llm_timeout=resolved.llm_timeout,
                 extra_keys=credential.keys or {},
                 mode_s_auth=resolved.mode_s_auth,

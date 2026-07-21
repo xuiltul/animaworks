@@ -80,6 +80,14 @@ class SchedulerMixin:
         return False
 
     def _setup_heartbeat(self, anima: DigitalAnima) -> None:
+        job_id = f"{anima.name}_heartbeat"
+        heartbeat_enabled = anima.memory.read_model_config().heartbeat_enabled
+        if not heartbeat_enabled:
+            if self.scheduler.get_job(job_id) is not None:
+                self.scheduler.remove_job(job_id)
+            logger.info("Heartbeat disabled for '%s'", anima.name)
+            return
+
         hb_content = anima.memory.read_heartbeat_config()
 
         # Interval from config.json (not parsed from heartbeat.md)
@@ -124,7 +132,7 @@ class SchedulerMixin:
                 minute=minute_spec,
                 hour=hour_spec,
             ),
-            id=f"{anima.name}_heartbeat",
+            id=job_id,
             name=f"{anima.name} heartbeat",
             args=[anima.name],
             replace_existing=True,

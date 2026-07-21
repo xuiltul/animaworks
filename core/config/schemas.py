@@ -65,6 +65,7 @@ class AnimaModelConfig(BaseModel):
     company: str | None = None
     speciality: str | None = None
     model: str | None = None
+    heartbeat_enabled: bool | None = None
     aliases: list[str] = []
     """Alternative names (e.g. Japanese) that resolve to this anima's canonical name."""
 
@@ -101,6 +102,7 @@ class AnimaDefaults(BaseModel):
     max_recipients_per_run: int | None = None
     default_workspace: str = ""
     consolidation_enabled: bool = True
+    heartbeat_enabled: bool = True  # 既定true。falseで定期heartbeatのみ無効化。メッセージ起因HB・cronは影響なし
 
 
 # ── Local LLM defaults ───────────────────────────────────────────────────────

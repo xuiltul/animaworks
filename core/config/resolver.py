@@ -60,6 +60,7 @@ def _load_status_json(anima_dir: Path) -> dict[str, Any]:
         "max_recipients_per_run": "max_recipients_per_run",
         "default_workspace": "default_workspace",
         "consolidation_enabled": "consolidation_enabled",
+        "heartbeat_enabled": "heartbeat_enabled",
         "extra_mcp_servers": "extra_mcp_servers",
     }
     # Fields where None is a valid explicit value (e.g. supervisor=null
@@ -99,7 +100,7 @@ def resolve_anima_config(
 
       1. ``status.json`` in *anima_dir* (SSoT for all fields including org)
       2. ``config.json`` per-anima (``config.animas``) — fallback for
-         ``supervisor`` and ``speciality`` only
+         ``supervisor``, ``speciality``, and ``heartbeat_enabled`` only
       3. ``config.json`` anima_defaults (global defaults)
 
     For ``supervisor`` and ``speciality``, explicit ``null`` in status.json
@@ -122,7 +123,7 @@ def resolve_anima_config(
 
     # Merge priority (strongest first):
     #   1. status.json (including explicit null for supervisor/speciality)
-    #   2. config.animas (fallback for supervisor/speciality only)
+    #   2. config.animas (fallback for supervisor/speciality/heartbeat_enabled only)
     #   3. anima_defaults (global defaults)
     resolved: dict[str, Any] = {}
     for field_name in AnimaDefaults.model_fields:
@@ -132,8 +133,8 @@ def resolve_anima_config(
             resolved[field_name] = resolve_local_llm_role_model(config.local_llm, role)
         elif field_name == "credential" and is_local_llm_default(config):
             resolved[field_name] = "ollama"
-        elif field_name in ("supervisor", "speciality"):
-            # Fallback to config.animas for org structure fields
+        elif field_name in ("supervisor", "speciality", "heartbeat_enabled"):
+            # Fallback to config.animas for fields exposed as per-Anima config
             anima_value = getattr(anima_entry, field_name)
             if anima_value is not None:
                 resolved[field_name] = anima_value
