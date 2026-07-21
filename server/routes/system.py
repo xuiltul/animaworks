@@ -538,6 +538,31 @@ def create_system_router() -> APIRouter:
         total = sum(len(item["tasks"]) for item in running)
         return {"animas": running, "total": total}
 
+    @router.get("/activity/group")
+    async def get_activity_group(
+        request: Request,
+        anima: str,
+        id: str,
+    ):
+        """Return one complete trigger-based activity group by stable ID."""
+        from core.memory.activity import ActivityLogger
+
+        anima_names = request.app.state.anima_names
+        if anima not in anima_names:
+            return JSONResponse(
+                {"error": f"Anima not found: {anima}"},
+                status_code=404,
+            )
+
+        logger = ActivityLogger(request.app.state.animas_dir / anima)
+        group = logger.find_group_by_id(id)
+        if group is None:
+            return JSONResponse(
+                {"error": "Activity group not found"},
+                status_code=404,
+            )
+        return {"group": group}
+
     @router.get("/activity/recent")
     async def get_recent_activity(
         request: Request,

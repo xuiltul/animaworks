@@ -12,6 +12,7 @@ from __future__ import annotations
 Internal module — import from :mod:`core.memory.activity` instead.
 """
 
+from datetime import datetime, timedelta
 from typing import Any
 
 from core.memory._activity_models import ActivityEntry, find_tool_result_fallback
@@ -19,6 +20,19 @@ from core.memory._activity_models import ActivityEntry, find_tool_result_fallbac
 
 class TimelineMixin:
     """Mixin providing trigger-based grouping for timeline UI."""
+
+    _GROUP_TYPES = frozenset(
+        {
+            "heartbeat",
+            "chat",
+            "dm",
+            "cron",
+            "task",
+            "inbox",
+            "task_exec",
+            "single",
+        }
+    )
 
     _TRIGGER_TYPES = frozenset(
         {
@@ -38,6 +52,58 @@ class TimelineMixin:
         "dm": frozenset({"response_sent", "message_sent", "dm_sent"}),
         "inbox": frozenset({"inbox_processing_end"}),
     }
+
+    def find_group_by_id(
+        self,
+        group_id: str,
+        hours_window: int = 24,
+    ) -> dict[str, Any] | None:
+        """Rebuild and return one trigger group identified by ``group_id``.
+
+        Group IDs contain an ISO timestamp, so splitting on every colon would
+        corrupt the timestamp.  The logger already identifies the target
+        Anima; validate that prefix first, then split only the group type from
+        the right.  Loading is restricted to the timestamp's surrounding
+        window so old groups remain addressable without scanning all logs.
+        """
+        if not isinstance(group_id, str) or not group_id.startswith("grp-"):
+            return None
+        if hours_window < 0:
+            return None
+
+        try:
+            identity, group_type = group_id.removeprefix("grp-").rsplit(":", 1)
+        except ValueError:
+            return None
+
+        anima_prefix = f"{self._anima_name}:"
+        if not identity.startswith(anima_prefix) or group_type not in self._GROUP_TYPES:
+            return None
+
+        start_ts = identity[len(anima_prefix) :]
+        try:
+            start = datetime.fromisoformat(start_ts)
+        except (TypeError, ValueError):
+            return None
+
+        # Avoid making _load_entries walk from an attacker-controlled ancient
+        # date to today when the referenced log cannot possibly exist.
+        target_log = self._log_dir / f"{start.date().isoformat()}.jsonl"
+        if not target_log.exists():
+            return None
+
+        window = timedelta(hours=hours_window)
+        entries = self._load_entries(
+            since=start - window,
+            until=start + window,
+        )
+        for entry in entries:
+            entry._anima_name = self._anima_name
+
+        for group in self.group_by_trigger(entries):
+            if group["id"] == group_id:
+                return group
+        return None
 
     @staticmethod
     def group_by_trigger(
@@ -159,9 +225,13 @@ class TimelineMixin:
                 if result_entry:
                     e._tool_result_data = {
                         "id": result_entry.to_api_dict().get("id", ""),
+                        "ts": result_entry.ts,
                         "type": result_entry.type,
                         "content": result_entry.content or result_entry.summary,
-                        "is_error": result_entry.meta.get("is_error", False),
+                        "is_error": (
+                            result_entry.meta.get("is_error", False)
+                            or result_entry.meta.get("result_status") == "fail"
+                        ),
                     }
                     paired_ids.add(id(result_entry))
 

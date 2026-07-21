@@ -10,17 +10,7 @@ import {
 } from "../../shared/activity-context.js";
 import { t } from "/shared/i18n.js";
 import { isGroupInProgress } from "./swimlane-layout.js";
-
-const GROUP_ICONS = {
-  heartbeat: "💓",
-  chat: "💬",
-  dm: "✉️",
-  cron: "⏰",
-  task: "📋",
-  inbox: "📬",
-  task_exec: "🔨",
-  single: "⚙️",
-};
+import { destroySessionReplay, renderSessionReplay } from "./session-replay.js";
 
 function _formatTimeRange(startTs, endTs) {
   const start = startTs ? startTs.slice(11, 16) : "";
@@ -41,6 +31,17 @@ function _groupParallelCount(grp, parallelCounts) {
   let count = 0;
   for (const evt of grp.events || []) count = Math.max(count, parallelCounts.get(evt) || 0);
   return count;
+}
+
+function _groupIcon(type) {
+  const iconType = {
+    dm: "dm_received",
+    task: "board",
+    inbox: "message",
+    task_exec: "tool",
+    single: "system",
+  }[type] || type;
+  return getIcon(iconType);
 }
 
 function _createEventRow(evt, isLast, parallelCount) {
@@ -142,6 +143,7 @@ function _headerLabel(grp) {
  */
 export function renderGroupDetail(container, group, opts = {}) {
   if (!container) return;
+  destroySessionReplay();
   container.innerHTML = "";
   if (!group) {
     container.hidden = true;
@@ -175,7 +177,7 @@ export function renderGroupDetail(container, group, opts = {}) {
     const contextBadge = createContextBadge(evt.ctx);
     if (contextBadge) header.querySelector(".activity-row-summary")?.before(contextBadge);
   } else {
-    const icon = GROUP_ICONS[group.type] || "⚙️";
+    const icon = _groupIcon(group.type);
     const anima = group.anima || "";
     const count = group.event_count || group.events?.length || 0;
     const openBadge = ongoing
@@ -215,7 +217,69 @@ export function renderGroupDetail(container, group, opts = {}) {
   header.appendChild(closeBtn);
 
   container.appendChild(header);
-  container.appendChild(_createGroupEvents(group, parallelCounts));
+
+  const viewTabs = document.createElement("div");
+  viewTabs.className = "replay-view-tabs";
+  viewTabs.setAttribute("role", "tablist");
+  viewTabs.setAttribute("aria-label", t("activity.replay_view_label"));
+
+  const conversationBtn = document.createElement("button");
+  conversationBtn.type = "button";
+  conversationBtn.className = "replay-view-tab active";
+  conversationBtn.setAttribute("role", "tab");
+  conversationBtn.setAttribute("aria-selected", "true");
+  conversationBtn.innerHTML = `${getIcon("chat")}<span>${escapeHtml(t("activity.replay_conversation_view"))}</span>`;
+
+  const rawBtn = document.createElement("button");
+  rawBtn.type = "button";
+  rawBtn.className = "replay-view-tab";
+  rawBtn.setAttribute("role", "tab");
+  rawBtn.setAttribute("aria-selected", "false");
+  rawBtn.innerHTML = `${getIcon("session")}<span>${escapeHtml(t("activity.replay_raw_view"))}</span>`;
+
+  viewTabs.append(conversationBtn, rawBtn);
+  container.appendChild(viewTabs);
+
+  const replayPanel = document.createElement("div");
+  replayPanel.className = "replay-panel";
+  replayPanel.setAttribute("role", "tabpanel");
+
+  const rawPanel = document.createElement("div");
+  rawPanel.className = "replay-raw-panel";
+  rawPanel.setAttribute("role", "tabpanel");
+  rawPanel.hidden = true;
+  rawPanel.appendChild(_createGroupEvents(group, parallelCounts));
+
+  const selectView = (raw) => {
+    conversationBtn.classList.toggle("active", !raw);
+    rawBtn.classList.toggle("active", raw);
+    conversationBtn.setAttribute("aria-selected", String(!raw));
+    rawBtn.setAttribute("aria-selected", String(raw));
+    replayPanel.hidden = raw;
+    rawPanel.hidden = !raw;
+  };
+  conversationBtn.addEventListener("click", () => selectView(false));
+  rawBtn.addEventListener("click", () => selectView(true));
+
+  container.append(replayPanel, rawPanel);
+
+  renderSessionReplay(replayPanel, {
+    anima: group.anima || group.events?.[0]?.anima || "",
+    groupId: group.id || "",
+    onGroupUpdate: (updatedGroup, { changed } = {}) => {
+      if (!updatedGroup || !container.isConnected) return;
+      if (changed) {
+        const updatedCounts = getParallelTaskCounts(updatedGroup.events || []);
+        rawPanel.innerHTML = "";
+        rawPanel.appendChild(_createGroupEvents(updatedGroup, updatedCounts));
+      }
+      const count = updatedGroup.event_count || updatedGroup.events?.length || 0;
+      const countEl = header.querySelector(".activity-group-count");
+      if (countEl) countEl.textContent = t("activity.count_items", { count });
+      const openBadge = header.querySelector(".activity-group-badge-open");
+      if (openBadge && !isGroupInProgress(updatedGroup, Date.now())) openBadge.remove();
+    },
+  });
 
   if (typeof window !== "undefined" && window.lucide) {
     window.lucide.createIcons({ nodes: [container] });
