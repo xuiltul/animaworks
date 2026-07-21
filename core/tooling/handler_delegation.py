@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.exceptions import TaskPersistenceError
 from core.i18n import t
 from core.memory._io import atomic_write_text
 from core.tooling.handler_base import _error_result, build_outgoing_origin_chain
@@ -240,8 +241,10 @@ class DelegationMixin(OrgHelpersMixin):
             persisted_pending = True
         except ValueError as e:
             return _error_result("InvalidArguments", str(e))
-        except OSError as e:
-            # sandbox EROFS/EACCES: fall back to server internal API
+        except (OSError, TaskPersistenceError) as e:
+            # sandbox EROFS/EACCES: fall back to server internal API.
+            # TaskQueueManager wraps OSError in TaskPersistenceError (not an
+            # OSError subclass), so both must be caught here.
             fb_err = self._persist_delegation_via_server(
                 target_name=target_name,
                 instruction=instruction,

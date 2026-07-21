@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from core.exceptions import TaskPersistenceError
 from core.tooling.handler import ToolHandler
 
 
@@ -108,6 +109,46 @@ class TestDelegateTaskErofsFallback:
         assert payload["sub_task_id"] in result
         assert payload["tracking_task_id"] in result
         # Server already recorded TaskBoard; local call skipped
+        mock_tb.assert_not_called()
+
+    def test_add_task_persistence_error_falls_back(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TaskQueueManager wraps OSError in TaskPersistenceError (not an
+        OSError subclass); the fallback must fire for it too. Regression for
+        the 2026-07-22 production incident where EROFS delegations kept
+        failing despite the deployed fallback."""
+        handler = _make_handler(tmp_path)
+        _setup_target(tmp_path)
+        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ok": True}
+
+        with (
+            patch.object(handler, "_check_subordinate", return_value=None),
+            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
+            patch(
+                "core.memory.task_queue.TaskQueueManager.add_task",
+                side_effect=TaskPersistenceError(
+                    "[Errno 30] Read-only file system: 'task_queue.jsonl'"
+                ),
+            ),
+            patch("httpx.post", return_value=mock_resp) as mock_post,
+            patch(
+                "core.tooling.handler_delegation._record_taskboard_delegation"
+            ) as mock_tb,
+        ):
+            result = handler.handle("delegate_task", _delegate_args())
+
+        assert not result.strip().startswith("{")
+        assert "natsume" in result
+        mock_post.assert_called_once()
+        payload = mock_post.call_args[1]["json"]
+        assert payload["persist_sub"] is True
+        assert payload["persist_tracking"] is True
+        assert payload["persist_pending"] is True
         mock_tb.assert_not_called()
 
     def test_tracking_oserror_skips_already_persisted_sub(
