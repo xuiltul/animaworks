@@ -19,7 +19,7 @@ let _selectedAnima = "";
 /** @type {string[]} selected group types (trigger-based) */
 let _selectedGroupTypes = [];
 /** @type {1|3|6|24|48} */
-let _rangeHours = 6;
+let _rangeHours = 1;
 /** @type {string|null} */
 let _selectedGroupId = null;
 /** @type {string[]} */
@@ -74,7 +74,7 @@ export function render(container) {
   _hasMore = false;
   _selectedAnima = "";
   _selectedGroupTypes = [];
-  _rangeHours = 6;
+  _rangeHours = 1;
   _selectedGroupId = null;
   _animaNames = [];
 
