@@ -469,16 +469,30 @@ class InboxMixin:
                 self._mark_busy_start()
                 self._status_slots["inbox"] = "processing"
 
-                self._activity.log(
-                    "inbox_processing_start",
-                    summary=t("anima.inbox_start"),
-                    meta={"session_type": "inbox", "thread_id": _INBOX_THREAD_ID},
-                )
-
                 inbox_result: InboxResult | None = None
                 try:
+                    # Resolve the gate before inbox preprocessing so blocked
+                    # messages do not advance retry counters.  Framework-only
+                    # handlers and fast replies still run below because they do
+                    # not start an LLM session.
+                    agent = self._agent_for_lane("inbox") if hasattr(self, "_agent_for_lane") else self.agent
+                    inbox_budget = getattr(agent.model_config, "token_budget_monthly", None)
+                    budget_result = None
+                    if isinstance(inbox_budget, int) and not isinstance(inbox_budget, bool):
+                        budget_result = agent._check_monthly_token_budget(
+                            trigger="inbox",
+                            model_config=agent.model_config,
+                        )
+
+                    self._activity.log(
+                        "inbox_processing_start",
+                        summary=t("anima.inbox_start"),
+                        meta={"session_type": "inbox", "thread_id": _INBOX_THREAD_ID},
+                    )
+
                     inbox_result = await self._process_inbox_messages(
                         cascade_suppressed_senders,
+                        track_retries=budget_result is None,
                     )
 
                     if inbox_result.unread_count == 0:
@@ -502,6 +516,20 @@ class InboxMixin:
                     if fast_result is not None:
                         return fast_result
 
+                    if budget_result is not None:
+                        self._activity.log(
+                            "inbox_processing_end",
+                            summary=budget_result.summary,
+                            meta={
+                                "senders": list(inbox_result.senders),
+                                "count": inbox_result.unread_count,
+                                "trigger": "inbox",
+                                "session_type": "inbox",
+                                "thread_id": _INBOX_THREAD_ID,
+                            },
+                        )
+                        return budget_result
+
                     messages_text = "\n\n".join(inbox_result.prompt_parts)
                     prompt = load_prompt(
                         "inbox_message",
@@ -512,7 +540,6 @@ class InboxMixin:
                     has_board_mention = any(item.msg.type == "board_mention" for item in inbox_result.inbox_items)
                     from core.tooling.handler import active_session_type, suppress_board_fanout
 
-                    agent = self._agent_for_lane("inbox") if hasattr(self, "_agent_for_lane") else self.agent
                     agent_session_acquired = False
                     agent_session_lock = None
                     agent_session_context = None
@@ -853,6 +880,8 @@ class InboxMixin:
     async def _process_inbox_messages(
         self,
         cascade_suppressed_senders: set[str] | None = None,
+        *,
+        track_retries: bool = True,
     ) -> InboxResult:
         """Read, filter, deduplicate, format, and record inbox messages.
 
@@ -883,27 +912,28 @@ class InboxMixin:
             unread_count = len(messages)
 
         # ── Message overflow handling ──
-        try:
-            from core.memory.dedup import MessageDeduplicator
+        if track_retries:
+            try:
+                from core.memory.dedup import MessageDeduplicator
 
-            dedup = MessageDeduplicator(self.anima_dir)
+                dedup = MessageDeduplicator(self.anima_dir)
 
-            critical, non_critical = dedup.split_critical(messages)
-            non_critical, overflow_count = dedup.overflow_to_files(non_critical)
+                critical, non_critical = dedup.split_critical(messages)
+                non_critical, overflow_count = dedup.overflow_to_files(non_critical)
 
-            messages = critical + non_critical
+                messages = critical + non_critical
 
-            if overflow_count:
-                logger.info(
-                    "[%s] %d messages overflowed to state/overflow_inbox/",
-                    self.name,
-                    overflow_count,
-                )
+                if overflow_count:
+                    logger.info(
+                        "[%s] %d messages overflowed to state/overflow_inbox/",
+                        self.name,
+                        overflow_count,
+                    )
 
-            unread_count = len(messages)
-            senders = {m.from_person for m in messages}
-        except Exception:
-            logger.debug("[%s] Message dedup failed, using original messages", self.name, exc_info=True)
+                unread_count = len(messages)
+                senders = {m.from_person for m in messages}
+            except Exception:
+                logger.debug("[%s] Message dedup failed, using original messages", self.name, exc_info=True)
 
         logger.info(
             "[%s] Processing %d unread messages in heartbeat (senders: %s)",
@@ -943,26 +973,27 @@ class InboxMixin:
         # ── Retry counter: track how many times each inbox message is presented ──
         _read_counts_path = self.anima_dir / "state" / "inbox_read_counts.json"
         _read_counts: dict[str, int] = {}
-        try:
-            if _read_counts_path.exists():
-                _read_counts = json.loads(_read_counts_path.read_text(encoding="utf-8"))
-        except Exception:
-            _read_counts = {}
+        if track_retries:
+            try:
+                if _read_counts_path.exists():
+                    _read_counts = json.loads(_read_counts_path.read_text(encoding="utf-8"))
+            except Exception:
+                _read_counts = {}
 
-        for item in inbox_items:
-            key = item.path.name
-            _read_counts[key] = _read_counts.get(key, 0) + 1
+            for item in inbox_items:
+                key = item.path.name
+                _read_counts[key] = _read_counts.get(key, 0) + 1
 
-        # Prune entries for inbox files that no longer exist
-        inbox_dir = self.anima_dir.parent.parent / "shared" / "inbox" / self.name
-        _read_counts = {k: v for k, v in _read_counts.items() if (inbox_dir / k).exists()}
+            # Prune entries for inbox files that no longer exist
+            inbox_dir = self.anima_dir.parent.parent / "shared" / "inbox" / self.name
+            _read_counts = {k: v for k, v in _read_counts.items() if (inbox_dir / k).exists()}
 
         # ── Force-archive messages that exceeded retry limit ──
         _stale_items: list[InboxItem] = []
         _kept_items: list[InboxItem] = []
         for item in inbox_items:
             key = item.path.name
-            if _read_counts.get(key, 0) > _MAX_INBOX_RETRIES:
+            if track_retries and _read_counts.get(key, 0) > _MAX_INBOX_RETRIES:
                 _stale_items.append(item)
                 _read_counts.pop(key, None)
             else:
@@ -993,13 +1024,22 @@ class InboxMixin:
             unread_count = len(messages)
             senders = {m.from_person for m in messages}
 
-        try:
-            _read_counts_path.write_text(
-                json.dumps(_read_counts, ensure_ascii=False),
-                encoding="utf-8",
+        if track_retries:
+            try:
+                _read_counts_path.write_text(
+                    json.dumps(_read_counts, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception:
+                logger.debug("[%s] Failed to write inbox_read_counts", self.name, exc_info=True)
+
+        if not track_retries:
+            return InboxResult(
+                inbox_items=inbox_items,
+                messages=messages,
+                senders=senders,
+                unread_count=unread_count,
             )
-        except Exception:
-            logger.debug("[%s] Failed to write inbox_read_counts", self.name, exc_info=True)
 
         # Format messages with retry annotations
         prompt_parts: list[str] = []
