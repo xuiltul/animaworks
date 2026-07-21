@@ -18,6 +18,9 @@ export const REDIRECTS = {
   "/setup": "#/settings",
   "/memory": "#/animas",
   "/assets": "#/animas",
+  "/activity-report": "#/activity/report",
+  "/logs": "#/activity/logs",
+  "/users": "#/settings/users",
 };
 
 /**
@@ -122,14 +125,14 @@ function registerRoutes() {
   routes["/chat"] = () => import("../pages/chat.js" + _v);
   routes["/board"] = () => import("../pages/board.js" + _v);
   routes["/task-board"] = () => import("../pages/task-board.js" + _v);
-  routes["/users"] = () => import("../pages/users.js" + _v);
+  // /users removed — redirected to #/settings/users (see REDIRECTS)
   routes["/animas"] = () => import("../pages/animas.js" + _v);
   // /processes removed — redirected to #/animas (see REDIRECTS)
   // /server removed — redirected to #/ (see REDIRECTS)
   // /memory removed — redirected to #/animas (see REDIRECTS)
   // /assets removed — redirected to #/animas (see REDIRECTS)
-  routes["/logs"] = () => import("../pages/logs.js" + _v);
-  routes["/activity-report"] = () => import("../pages/activity-report.js" + _v);
+  // /logs removed — redirected to #/activity/logs (see REDIRECTS)
+  // /activity-report removed — redirected to #/activity/report (see REDIRECTS)
   routes["/settings"] = () => import("../pages/settings.js" + _v);
 }
 

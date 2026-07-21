@@ -1,6 +1,7 @@
-// ── Settings Page ────────────────────────────
+// ── Settings Page (tab host: general | users) ─
 import { api } from "../modules/api.js";
 import { escapeHtml } from "../modules/state.js";
+import { createPageTabs } from "../shared/page-tabs.js";
 import { t } from "/shared/i18n.js";
 import { basePath } from "/shared/base-path.js";
 import { applyTheme, applyDisplayMode, getDisplayMode, applyFontSize, getFontSize } from "../modules/app.js";
@@ -8,6 +9,54 @@ import { applyTheme, applyDisplayMode, getDisplayMode, applyFontSize, getFontSiz
 const _LS_ACTIVITY  = "aw-activity-level";
 const _LS_SCHEDULE  = "aw-activity-schedule";
 const _LS_ENTER_SEND = "aw-enter-to-send";
+
+let _pageTabs = null;
+let _activeTabModule = null;
+let _activeTab = "general";
+
+const _TABS = [
+  { id: "general", labelKey: "settings.tab_general" },
+  { id: "users", labelKey: "settings.tab_users" },
+];
+
+/**
+ * Resolve settings tab from router subPath.
+ * @param {string} [subPath]
+ * @returns {"general"|"users"}
+ */
+export function resolveSettingsTab(subPath) {
+  const head = String(subPath || "")
+    .split("/")
+    .filter(Boolean)[0] || "";
+  return head === "users" ? "users" : "general";
+}
+
+/**
+ * @param {string} tabId
+ * @returns {string}
+ */
+export function buildSettingsTabHash(tabId) {
+  return tabId === "users" ? "#/settings/users" : "#/settings";
+}
+
+function _destroyActiveTab() {
+  if (_activeTabModule && typeof _activeTabModule.destroy === "function") {
+    try {
+      _activeTabModule.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  _activeTabModule = null;
+  if (_pageTabs) {
+    try {
+      _pageTabs.destroy();
+    } catch {
+      /* ignore */
+    }
+    _pageTabs = null;
+  }
+}
 
 const THEMES = [
   { id: "default",   label: "Default",   colors: ["#374151", "#f5f5f5", "#fff"] },
@@ -24,15 +73,63 @@ const THEMES = [
   { id: "business",  label: "Business",  colors: ["#1e40af", "#f8fafc", "#fff"] },
 ];
 
-export function render(container) {
-  const currentMode = getDisplayMode();
-  const currentTheme = localStorage.getItem("aw-theme") || "default";
+/**
+ * @param {HTMLElement} container
+ * @param {{ subPath?: string }} [opts]
+ */
+export async function render(container, { subPath } = {}) {
+  _destroyActiveTab();
+  _activeTab = resolveSettingsTab(subPath);
 
   container.innerHTML = `
     <div class="page-header">
       <h2>${t("settings.title")}</h2>
     </div>
+    <div id="settingsPageTabs"></div>
+    <div id="settingsTabContent">
+      <div class="loading-placeholder">${t("common.loading")}</div>
+    </div>
+  `;
 
+  const tabsHost = document.getElementById("settingsPageTabs");
+  if (tabsHost) {
+    _pageTabs = createPageTabs({
+      tabs: _TABS.map((tab) => ({ id: tab.id, label: t(tab.labelKey) })),
+      container: tabsHost,
+      activeId: _activeTab,
+      onChange: (id) => {
+        if (id === _activeTab) return;
+        window.location.hash = buildSettingsTabHash(id);
+      },
+    });
+  }
+
+  const content = document.getElementById("settingsTabContent");
+  if (!content) return;
+
+  if (_activeTab === "users") {
+    try {
+      const mod = await import("./users.js");
+      _activeTabModule = mod;
+      content.innerHTML = "";
+      if (typeof mod.render === "function") {
+        await mod.render(content);
+      }
+    } catch (err) {
+      console.error("[Settings] Failed to load users tab:", err);
+      content.innerHTML = `<div class="page-error">${t("router.page_load_failed")}</div>`;
+    }
+    return;
+  }
+
+  _renderGeneral(content);
+}
+
+function _renderGeneral(container) {
+  const currentMode = getDisplayMode();
+  const currentTheme = localStorage.getItem("aw-theme") || "default";
+
+  container.innerHTML = `
     <section class="settings-section" id="settingsApiAuthSection">
       <h3 class="settings-section-title">${t("settings.api_auth.title")}</h3>
       <p class="settings-section-desc">${t("settings.api_auth.desc")}</p>
@@ -205,7 +302,10 @@ export function render(container) {
   _loadAuthSettings();
 }
 
-export function destroy() {}
+export function destroy() {
+  _destroyActiveTab();
+  _activeTab = "general";
+}
 
 // ── Time Options Builder ────────────────────
 
