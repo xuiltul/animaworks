@@ -250,6 +250,7 @@
 }
 
 .home-chip:hover,
+.home-chip:active,
 .home-chip:focus-visible {
   background: var(--aw-color-bg-secondary, #eef2ff);
   border-color: var(--aw-color-accent, #2563eb);
@@ -265,6 +266,7 @@
 }
 
 .home-chip--danger:hover,
+.home-chip--danger:active,
 .home-chip--danger:focus-visible {
   background: #fee2e2;
   border-color: var(--aw-color-error, #dc2626);
@@ -797,6 +799,7 @@
 }
 
 .usage-panel--compact .usage-row:hover .usage-row-details,
+.usage-panel--compact .usage-row:active .usage-row-details,
 .usage-panel--compact .usage-row:focus-within .usage-row-details {
   display: block;
 }
@@ -1128,6 +1131,7 @@
 }
 
 .anima-list-kebab-btn:hover,
+.anima-list-kebab-btn:active,
 .anima-list-kebab-btn:focus-visible {
   background: var(--aw-color-bg-subtle, var(--aw-color-bg-hover, #f3f4f6));
   color: var(--aw-color-text-primary, inherit);

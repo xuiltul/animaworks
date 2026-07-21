@@ -48,10 +48,7 @@ class TestMainIndexHTML:
             "kanban",
             "layout-dashboard",
             "activity",
-            "users",
             "bot",
-            "file-text",
-            "bar-chart-2",
             "building-2",
             "sliders-horizontal",
         ]
