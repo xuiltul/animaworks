@@ -61,11 +61,12 @@ def _load_status_json(anima_dir: Path) -> dict[str, Any]:
         "default_workspace": "default_workspace",
         "consolidation_enabled": "consolidation_enabled",
         "heartbeat_enabled": "heartbeat_enabled",
+        "token_budget_monthly": "token_budget_monthly",
         "extra_mcp_servers": "extra_mcp_servers",
     }
     # Fields where None is a valid explicit value (e.g. supervisor=null
     # means "top-level / no supervisor").  Empty string is still "not set".
-    _nullable_fields = frozenset({"supervisor", "speciality"})
+    _nullable_fields = frozenset({"supervisor", "speciality", "token_budget_monthly"})
     for status_key, config_key in field_mapping.items():
         if status_key in data:
             value = data[status_key]
@@ -100,11 +101,12 @@ def resolve_anima_config(
 
       1. ``status.json`` in *anima_dir* (SSoT for all fields including org)
       2. ``config.json`` per-anima (``config.animas``) — fallback for
-         ``supervisor``, ``speciality``, and ``heartbeat_enabled`` only
+         ``supervisor``, ``speciality``, ``heartbeat_enabled``, and
+         ``token_budget_monthly`` only
       3. ``config.json`` anima_defaults (global defaults)
 
-    For ``supervisor`` and ``speciality``, explicit ``null`` in status.json
-    is respected (means "top-level / no supervisor").
+    For ``supervisor``, ``speciality``, and ``token_budget_monthly``, explicit
+    ``null`` in status.json is respected.
 
     When *anima_dir* is ``None``, layer 1 is skipped (no status.json).
 
@@ -123,7 +125,7 @@ def resolve_anima_config(
 
     # Merge priority (strongest first):
     #   1. status.json (including explicit null for supervisor/speciality)
-    #   2. config.animas (fallback for supervisor/speciality/heartbeat_enabled only)
+    #   2. config.animas (fallback for selected per-Anima fields only)
     #   3. anima_defaults (global defaults)
     resolved: dict[str, Any] = {}
     for field_name in AnimaDefaults.model_fields:
@@ -133,7 +135,7 @@ def resolve_anima_config(
             resolved[field_name] = resolve_local_llm_role_model(config.local_llm, role)
         elif field_name == "credential" and is_local_llm_default(config):
             resolved[field_name] = "ollama"
-        elif field_name in ("supervisor", "speciality", "heartbeat_enabled"):
+        elif field_name in ("supervisor", "speciality", "heartbeat_enabled", "token_budget_monthly"):
             # Fallback to config.animas for fields exposed as per-Anima config
             anima_value = getattr(anima_entry, field_name)
             if anima_value is not None:

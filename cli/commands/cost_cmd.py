@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -29,7 +30,7 @@ def cmd_cost(args: argparse.Namespace) -> None:
             sys.exit(1)
         _show_anima_cost(args.anima, anima_dir, days, args.json_output)
     else:
-        anima_dirs = sorted(p for p in animas_dir.iterdir() if p.is_dir() and (p / "token_usage").is_dir())
+        anima_dirs = sorted(p for p in animas_dir.iterdir() if p.is_dir() and _has_usage_or_budget(p))
         if not anima_dirs:
             print("No token usage data found. Start the server and send some messages.")
             return
@@ -38,7 +39,9 @@ def cmd_cost(args: argparse.Namespace) -> None:
             result: dict = {}
             for ad in anima_dirs:
                 logger = TokenUsageLogger(ad)
-                result[ad.name] = logger.summarize(days)
+                summary = logger.summarize(days)
+                summary.update(_read_budget_fields(ad))
+                result[ad.name] = summary
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             grand_total_cost = 0.0
@@ -51,7 +54,8 @@ def cmd_cost(args: argparse.Namespace) -> None:
             for ad in anima_dirs:
                 logger = TokenUsageLogger(ad)
                 summary = logger.summarize(days)
-                if summary["total_sessions"] == 0:
+                budget_fields = _read_budget_fields(ad)
+                if summary["total_sessions"] == 0 and budget_fields["budget"] is None:
                     continue
                 grand_total_cost += summary["total_estimated_cost_usd"]
                 grand_total_input += summary["total_input_tokens"]
@@ -59,7 +63,7 @@ def cmd_cost(args: argparse.Namespace) -> None:
                 grand_total_cache_read += summary.get("total_cache_read_tokens", 0)
                 grand_total_cache_write += summary.get("total_cache_write_tokens", 0)
                 grand_total_sessions += summary["total_sessions"]
-                _print_anima_summary(ad.name, summary)
+                _print_anima_summary(ad.name, summary, budget_fields)
 
             if grand_total_sessions > 0:
                 print("=" * 60)
@@ -79,16 +83,19 @@ def _show_anima_cost(name: str, anima_dir: Path, days: int, json_output: bool) -
 
     logger = TokenUsageLogger(anima_dir)
     summary = logger.summarize(days)
+    budget_fields = _read_budget_fields(anima_dir)
 
     if json_output:
+        summary.update(budget_fields)
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return
 
     if summary["total_sessions"] == 0:
         print(f"No token usage data for '{name}' in the last {days} day(s).")
+        _print_budget_summary(budget_fields)
         return
 
-    _print_anima_summary(name, summary)
+    _print_anima_summary(name, summary, budget_fields)
 
     by_model = summary.get("by_model", {})
     if by_model:
@@ -145,7 +152,48 @@ def _show_anima_cost(name: str, anima_dir: Path, days: int, json_output: bool) -
         print()
 
 
-def _print_anima_summary(name: str, summary: dict) -> None:
+def _read_budget_fields(anima_dir: Path, *, now: datetime | None = None) -> dict[str, object]:
+    """Return JSON-ready current-month budget fields for one Anima."""
+    from core.memory.token_budget import read_token_budget_status
+    from core.time_utils import now_local
+
+    current = now or now_local()
+    status = read_token_budget_status(anima_dir, now=current)
+    return {
+        "month": current.strftime("%Y-%m"),
+        "budget": status.budget,
+        "consumed": status.consumed,
+        "remaining": status.remaining,
+        "exceeded": status.exceeded,
+    }
+
+
+def _has_usage_or_budget(anima_dir: Path) -> bool:
+    """Keep legacy usage rows while including configured zero-usage budgets."""
+    if (anima_dir / "token_usage").is_dir():
+        return True
+    try:
+        from core.config.model_config import load_model_config
+
+        return load_model_config(anima_dir).token_budget_monthly is not None
+    except Exception:
+        return False
+
+
+def _print_budget_summary(budget_fields: dict[str, object]) -> None:
+    budget = budget_fields["budget"]
+    remaining = budget_fields["remaining"]
+    budget_text = "-" if budget is None else _fmt_tokens(int(budget))
+    remaining_text = "-" if remaining is None else _fmt_tokens(int(remaining))
+    exceeded_text = "yes" if budget_fields["exceeded"] else "no"
+    print(
+        f"  Monthly budget: {budget_text}   "
+        f"Consumed: {_fmt_tokens(int(budget_fields['consumed']))}   "
+        f"Remaining: {remaining_text}   Exceeded: {exceeded_text}"
+    )
+
+
+def _print_anima_summary(name: str, summary: dict, budget_fields: dict[str, object]) -> None:
     print(f"\n  {name}")
     print(f"  {'─' * 56}")
     cache_r = summary.get("total_cache_read_tokens", 0)
@@ -158,6 +206,7 @@ def _print_anima_summary(name: str, summary: dict) -> None:
         f"Output: {_fmt_tokens(summary['total_output_tokens'])}"
     )
     print(f"  Estimated cost: ${summary['total_estimated_cost_usd']:.4f}")
+    _print_budget_summary(budget_fields)
 
 
 def _fmt_tokens(n: int) -> str:

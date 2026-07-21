@@ -240,6 +240,7 @@ class TestReadModelConfig:
         mock_resolved.background_credential = None
         mock_resolved.background_thinking_effort = None
         mock_resolved.heartbeat_enabled = True
+        mock_resolved.token_budget_monthly = 100_000
         mock_resolved.mode_s_auth = None
         mock_resolved.extra_mcp_servers = {}
 
@@ -265,6 +266,7 @@ class TestReadModelConfig:
         assert mc.credential == "openai"
         assert mc.credential_type == "api_key"
         assert mc.resolved_mode == "A2"
+        assert mc.token_budget_monthly == 100_000
 
     def test_falls_back_to_config_md(
         self, reader: ConfigReader, anima_dir: Path,
@@ -311,6 +313,7 @@ class TestReadModelConfig:
         mock_resolved.background_credential = None
         mock_resolved.background_thinking_effort = None
         mock_resolved.heartbeat_enabled = True
+        mock_resolved.token_budget_monthly = None
         mock_resolved.mode_s_auth = None
         mock_resolved.extra_mcp_servers = {}
 

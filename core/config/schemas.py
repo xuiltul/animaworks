@@ -66,6 +66,7 @@ class AnimaModelConfig(BaseModel):
     speciality: str | None = None
     model: str | None = None
     heartbeat_enabled: bool | None = None
+    token_budget_monthly: int | None = None
     aliases: list[str] = []
     """Alternative names (e.g. Japanese) that resolve to this anima's canonical name."""
 
@@ -103,6 +104,7 @@ class AnimaDefaults(BaseModel):
     default_workspace: str = ""
     consolidation_enabled: bool = True
     heartbeat_enabled: bool = True  # 既定true。falseで定期heartbeatのみ無効化。メッセージ起因HB・cronは影響なし
+    token_budget_monthly: int | None = None  # None = monthly token usage is unlimited
 
 
 # ── Local LLM defaults ───────────────────────────────────────────────────────

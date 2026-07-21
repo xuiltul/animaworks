@@ -13,10 +13,11 @@ one execution cycle (chat, heartbeat, cron, inbox, task).
 import json
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.memory._io import atomic_write_text
 from core.memory.fact_observability import warn_rate_limited
 from core.time_utils import now_local, today_local
 
@@ -276,6 +277,93 @@ class TokenUsageLogger:
                 except json.JSONDecodeError:
                     pass
         return entries
+
+    def monthly_total(self, now: datetime) -> int:
+        """Return total tokens consumed in the month containing *now*.
+
+        Completed days are cached as daily totals in ``rollup.json``.  The
+        current day's JSONL remains mutable, so it is always read directly.
+        JSONL files are authoritative: a missing, malformed, or incomplete
+        rollup is rebuilt from the corresponding completed-day logs.
+        """
+        current_day = now.date()
+        month_prefix = current_day.strftime("%Y-%m-")
+        rollup_path = self._dir / "rollup.json"
+
+        past_logs: dict[str, Path] = {}
+        for path in self._dir.glob(f"{month_prefix}*.jsonl"):
+            try:
+                log_day = date.fromisoformat(path.stem)
+            except ValueError:
+                continue
+            if log_day < current_day and log_day.year == current_day.year and log_day.month == current_day.month:
+                past_logs[log_day.isoformat()] = path
+
+        cached = self._read_rollup(rollup_path)
+        rollup: dict[str, int] = {}
+        if cached is not None:
+            rollup = {day: cached[day] for day in past_logs if day in cached}
+
+        for day, path in past_logs.items():
+            if day not in rollup:
+                rollup[day] = self._read_daily_total(path)
+
+        if cached is None or rollup != cached:
+            self._write_rollup(rollup_path, rollup)
+
+        today_total = self._read_daily_total(self._dir / f"{current_day.isoformat()}.jsonl")
+        return sum(rollup.values()) + today_total
+
+    @staticmethod
+    def _read_daily_total(path: Path) -> int:
+        """Read the ``total_tokens`` sum from one daily JSONL file."""
+        if not path.is_file():
+            return 0
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            logger.warning("Failed to read %s", path, exc_info=True)
+            raise
+
+        total = 0
+        for line in raw.splitlines():
+            line = line.strip().strip("\x00")
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            value = entry.get("total_tokens", 0) if isinstance(entry, dict) else 0
+            if isinstance(value, int) and not isinstance(value, bool):
+                total += value
+        return total
+
+    @staticmethod
+    def _read_rollup(path: Path) -> dict[str, int] | None:
+        """Load a valid rollup, returning ``None`` when it needs rebuilding."""
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        if any(
+            not isinstance(day, str) or not isinstance(value, int) or isinstance(value, bool)
+            for day, value in data.items()
+        ):
+            return None
+        return data
+
+    @staticmethod
+    def _write_rollup(path: Path, rollup: dict[str, int]) -> None:
+        """Persist daily totals without allowing cache I/O to break callers."""
+        try:
+            atomic_write_text(path, json.dumps(dict(sorted(rollup.items())), ensure_ascii=False, indent=2) + "\n")
+        except Exception:
+            logger.warning("Failed to write token usage rollup", exc_info=True)
 
     def summarize(
         self,
