@@ -71,15 +71,21 @@ def test_generated_profile_denies_direct_and_symlink_reads(
     runtime_root = Path.cwd() / f".e2e-read-deny-{tmp_path.name}"
     request.addfinalizer(lambda: shutil.rmtree(runtime_root, ignore_errors=True))
     anima_dir = runtime_root / "animas" / "kotoha"
+    own_company = runtime_root / "companies" / "fs"
+    foreign_company = runtime_root / "companies" / "other"
     allowed_dir = tmp_path / "allowed"
     denied_dir = tmp_path / "denied"
     anima_dir.mkdir(parents=True)
+    (own_company / "knowledge").mkdir(parents=True)
+    foreign_company.mkdir(parents=True)
     (anima_dir / "state").mkdir()
     allowed_dir.mkdir()
     denied_dir.mkdir()
     (allowed_dir / "visible.txt").write_text("ALLOWED_DATA\n", encoding="utf-8")
     (denied_dir / "secret.txt").write_text("DENIED_SECRET\n", encoding="utf-8")
+    (foreign_company / "secret.txt").write_text("FOREIGN_SECRET\n", encoding="utf-8")
     (allowed_dir / "secret-link").symlink_to(denied_dir / "secret.txt")
+    (anima_dir / "status.json").write_text(json.dumps({"company": "fs"}), encoding="utf-8")
     (anima_dir / "permissions.json").write_text(
         json.dumps(
             {
@@ -122,6 +128,10 @@ test ! -s "$1/symlink-leak.txt"
 ! cat "$5" > "$1/codex-home-leak.txt" 2>/dev/null
 test ! -s "$1/codex-home-leak.txt"
 ! ln -sfn "$2/secret.txt" "$6" 2>/dev/null
+printf 'SHARED_WRITE_OK\n' > "$7/monitor.txt"
+! printf 'POISON\n' > "$8/poison.txt" 2>/dev/null
+! cat "$9/secret.txt" > "$1/foreign-leak.txt" 2>/dev/null
+test ! -s "$1/foreign-leak.txt"
 """
     env = os.environ.copy()
     env["CODEX_HOME"] = str(anima_dir / ".codex_home")
@@ -142,6 +152,9 @@ test ! -s "$1/codex-home-leak.txt"
             str(anima_dir / "permissions.json"),
             str(codex_secret),
             str(current_state),
+            str(own_company / "shared"),
+            str(own_company / "knowledge"),
+            str(foreign_company),
         ],
         cwd=anima_dir,
         env=env,
@@ -153,6 +166,8 @@ test ! -s "$1/codex-home-leak.txt"
 
     assert result.returncode == 0, result.stderr
     assert (allowed_dir / "writable.txt").read_text(encoding="utf-8") == "WRITE_OK\n"
+    assert (own_company / "shared" / "monitor.txt").read_text(encoding="utf-8") == "SHARED_WRITE_OK\n"
+    assert not (own_company / "knowledge" / "poison.txt").exists()
     persisted_permissions = json.loads((anima_dir / "permissions.json").read_text(encoding="utf-8"))
     assert persisted_permissions["file_roots_denied"] == [str(denied_dir), str(anima_dir / ".codex_home")]
     assert not current_state.is_symlink()

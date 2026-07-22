@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 from core.execution._sdk_security import _check_a1_file_access
 from core.file_access_policy import (
+    company_shared_write_root,
     find_denied_root,
     find_internal_cache_root,
     load_denied_roots,
@@ -88,8 +89,9 @@ def test_company_denies_merge_with_config_and_follow_symlinks(tmp_path: Path) ->
     foreign = data_dir / "companies" / "beta"
     own.mkdir(parents=True)
     foreign.mkdir()
-    own_file = own / "own.txt"
+    own_file = own / "shared" / "own.txt"
     foreign_file = foreign / "secret.txt"
+    own_file.parent.mkdir()
     own_file.write_text("own", encoding="utf-8")
     foreign_file.write_text("secret", encoding="utf-8")
     alias = tmp_path / "foreign-alias"
@@ -160,3 +162,58 @@ def test_company_derived_deny_is_enforced_by_file_tools(tmp_path: Path) -> None:
     (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     assert handler._check_file_permission(str(foreign_file)) is None
     assert _check_a1_file_access(str(foreign_file), anima_dir, write=False) is None
+
+
+def test_company_shared_is_writable_with_restricted_file_roots(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    anima_dir = data_dir / "animas" / "agent"
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text(json.dumps({"company": "alpha"}), encoding="utf-8")
+    (anima_dir / "permissions.json").write_text(
+        json.dumps({"version": 1, "file_roots": []}),
+        encoding="utf-8",
+    )
+    own_company = data_dir / "companies" / "alpha"
+    foreign_company = data_dir / "companies" / "beta"
+    own_company.mkdir(parents=True)
+    foreign_company.mkdir()
+    own_shared_file = own_company / "shared" / "monitor.py"
+    own_knowledge_file = own_company / "knowledge" / "trusted.md"
+    foreign_shared_file = foreign_company / "shared" / "foreign.py"
+
+    handler = ToolHandler(anima_dir=anima_dir, memory=MagicMock(), tool_registry=[])
+
+    result = handler.handle(
+        "write_file",
+        {"path": str(own_shared_file), "content": "print('ok')\n"},
+    )
+    assert result == f"Written to {own_shared_file}"
+    assert own_shared_file.read_text(encoding="utf-8") == "print('ok')\n"
+    assert handler._check_file_permission(str(own_knowledge_file), write=True) is not None
+    assert handler._check_file_permission(str(foreign_shared_file), write=True) is not None
+
+    # SDK-native Write/Edit already permits paths outside animas/ while the
+    # common company deny policy still blocks every foreign company root.
+    assert _check_a1_file_access(str(own_shared_file), anima_dir, write=True) is None
+    assert _check_a1_file_access(str(foreign_shared_file), anima_dir, write=True) is not None
+
+
+def test_company_shared_write_root_rejects_symlink_redirects(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    anima_dir = data_dir / "animas" / "agent"
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text(json.dumps({"company": "alpha"}), encoding="utf-8")
+    own_company = data_dir / "companies" / "alpha"
+    foreign_company = data_dir / "companies" / "beta"
+    own_knowledge = own_company / "knowledge"
+    own_knowledge.mkdir(parents=True)
+    foreign_company.mkdir()
+
+    (own_company / "shared").symlink_to(own_knowledge, target_is_directory=True)
+    assert company_shared_write_root(anima_dir) is None
+
+    (own_company / "shared").unlink()
+    own_knowledge.rmdir()
+    own_company.rmdir()
+    own_company.symlink_to(foreign_company, target_is_directory=True)
+    assert company_shared_write_root(anima_dir) is None

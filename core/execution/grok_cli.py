@@ -230,7 +230,7 @@ class GrokCLIExecutor(BaseExecutor):
             return False
 
         from core.config.models import load_permissions
-        from core.file_access_policy import resolve_effective_denied_roots
+        from core.file_access_policy import company_shared_write_root, resolve_effective_denied_roots
 
         permissions_config = load_permissions(self._anima_dir)
         denied_roots = list(
@@ -239,6 +239,9 @@ class GrokCLIExecutor(BaseExecutor):
                 getattr(permissions_config, "file_roots_denied", []),
             )
         )
+        company_shared = company_shared_write_root(self._anima_dir)
+        if company_shared is not None:
+            company_shared.mkdir(parents=True, exist_ok=True)
         if not denied_roots and "/" in permissions_config.file_roots:
             return False
 
@@ -247,6 +250,10 @@ class GrokCLIExecutor(BaseExecutor):
             resolved = str(Path(root).resolve())
             if resolved != "/" and resolved not in read_write:
                 read_write.append(resolved)
+        if company_shared is not None:
+            shared_root = str(company_shared.resolve())
+            if shared_root not in read_write:
+                read_write.append(shared_root)
 
         deny = [str(Path(root).resolve()) for root in denied_roots]
 

@@ -29,6 +29,40 @@ def resolve_denied_roots(roots: Iterable[str | Path]) -> tuple[Path, ...]:
     return tuple(Path(root).resolve() for root in roots)
 
 
+def company_shared_write_root(anima_dir: Path) -> Path | None:
+    """Return the assigned company's canonical writable ``shared`` root.
+
+    Membership is resolved through :func:`core.company.get_company`, matching
+    the company deny policy.  Both the company directory and ``shared`` itself
+    must remain direct children of their expected roots so a malformed
+    membership or symlink cannot turn this narrow grant into an arbitrary
+    filesystem write.
+    """
+    from core.company import get_company
+
+    anima_dir = Path(anima_dir)
+    company = get_company(anima_dir.name, animas_dir=anima_dir.parent)
+    if company is None:
+        return None
+
+    data_dir = anima_dir.resolve().parent.parent
+    companies_dir = (data_dir / "companies").resolve()
+    company_root = companies_dir / company
+    if company_root.parent != companies_dir or company_root.is_symlink():
+        return None
+    company_root = company_root.resolve()
+    if company_root.parent != companies_dir:
+        return None
+
+    shared_root = company_root / "shared"
+    if shared_root.is_symlink():
+        return None
+    shared_root = shared_root.resolve()
+    if shared_root.parent != company_root:
+        return None
+    return shared_root
+
+
 def company_denied_roots(anima_dir: Path) -> tuple[Path, ...]:
     """Return canonical roots for every company other than the Anima's own.
 
