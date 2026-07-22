@@ -226,6 +226,15 @@ class RAGConfig(BaseModel):
     )
     embedding_query_prefix: str = "query: "
     embedding_document_prefix: str = "passage: "
+    embedding_max_seq_length: int = Field(
+        default=2048,
+        ge=0,
+        description=(
+            "Cap on the embedding model's max sequence length (tokens). "
+            "Long-context models like ruri-v3 default to 8192, which blows up "
+            "GPU activation memory during bulk encode. 0 = use model default."
+        ),
+    )
     use_gpu: bool = False
     enable_spreading_activation: bool = True
     max_graph_hops: int = 2

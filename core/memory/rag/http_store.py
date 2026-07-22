@@ -79,7 +79,9 @@ class HttpVectorStore(VectorStore):
         if self._client is None:
             import httpx
 
-            self._client = httpx.Client(base_url=self._base_url, timeout=30.0)
+            # Upserts during bulk reindex can stall behind worker queue
+            # pressure; 30s was too tight on a busy fleet.
+            self._client = httpx.Client(base_url=self._base_url, timeout=120.0)
         return self._client
 
     def _write_circuit_open(self, collection: str) -> bool:

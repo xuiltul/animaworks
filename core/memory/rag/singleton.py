@@ -256,6 +256,15 @@ def _load_embedding_model_on_device(resolved_name: str, device: str) -> Sentence
     cache_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Loading embedding model (singleton): %s on %s", resolved_name, device)
     _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device=device)
+    try:
+        from core.config import load_config
+
+        max_seq = int(getattr(load_config().rag, "embedding_max_seq_length", 2048))
+    except Exception:
+        max_seq = 2048
+    if max_seq > 0 and getattr(_embedding_model, "max_seq_length", 0) > max_seq:
+        _embedding_model.max_seq_length = max_seq
+        logger.info("Embedding max_seq_length capped to %d", max_seq)
     _embedding_model_name = resolved_name
     _embedding_model_device = device
     record_component_device("embedding", device)
@@ -621,7 +630,9 @@ def _generate_embeddings_http(
         resp = httpx.post(
             embed_url,
             json={"texts": batch, "purpose": purpose, "priority": priority},
-            timeout=30.0,
+            # Bulk indexing batches can queue behind interactive embeds on a
+            # busy GPU (e.g. right after a fleet restart); 30s was too tight.
+            timeout=180.0,
         )
         resp.raise_for_status()
         all_embeddings.extend(resp.json()["embeddings"])
