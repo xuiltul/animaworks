@@ -34,6 +34,7 @@ QUIET_SECONDS = float(os.environ.get("PR_DISPATCH_QUIET_SECONDS", "180"))
 BOT_LOGIN = os.environ.get("PR_DISPATCH_BOT_LOGIN", "")
 REVIEWER = os.environ.get("PR_DISPATCH_REVIEWER", "sumire")
 DISPATCHER = os.environ.get("PR_DISPATCH_DISPATCHER", "rin")
+FIXER = os.environ.get("PR_DISPATCH_FIXER", "natsume")
 ALERT_EVERY = 5
 
 sys.path.insert(
@@ -242,7 +243,7 @@ def check_comments(state: dict) -> None:
             "【外部レビューコメント検知】\n\n"
             f"{detail}{more}\n\n"
             "bot以外による新規コメントです。ACTION_REQUIRED判定と"
-            "natsumeへの修正ディスパッチを procedures/pr-event-detection-patrol.md "
+            f"{FIXER}への修正ディスパッチを procedures/pr-event-detection-patrol.md "
             "に従って実施してください。",
         )
         log(f"comment dispatch -> {DISPATCHER}: {len(lines)} comment(s)")
@@ -287,7 +288,9 @@ def check_ci(state: dict) -> None:
     if lines:
         send(
             DISPATCHER,
-            "【CI FAILURE検知】\n\n" + "\n".join(lines) + "\n\n修正担当（natsume）へのディスパッチをお願いします。",
+            "【CI FAILURE検知】\n\n"
+            + "\n".join(lines)
+            + f"\n\n修正担当（{FIXER}）へのディスパッチをお願いします。",
         )
         log(f"ci dispatch -> {DISPATCHER}: {len(lines)} PR(s)")
 
@@ -343,8 +346,8 @@ def check_conflicts(state: dict) -> None:
             "【マージコンフリクト検知】\n\n"
             + "\n".join(lines)
             + "\n\n上記PRがbaseブランチとコンフリクトしています（mergeable=CONFLICTING）。"
-            "natsumeへコンフリクト解消をディスパッチしてください。"
-            "解消手順は natsume の procedures/pr-conflict-resolution.md に従うこと"
+            f"{FIXER}へコンフリクト解消をディスパッチしてください。"
+            f"解消手順は {FIXER} の procedures/pr-conflict-resolution.md に従うこと"
             "（該当ブランチのworktreeで origin/base をmergeして解消・テスト通過確認・"
             "通常push。force-push禁止）。解消pushの後は既存の静穏検知で差分レビューが"
             "自動起動します。",

@@ -147,25 +147,14 @@ animaworks start
 
 Use the left sidebar to move between main screens (hash router `#/…`).
 
-- **Chat** — Real-time conversation with any Anima. Streaming responses (SSE), image attachments, multi-thread history, full archive. **Meeting mode** gathers multiple Animas in one room with a designated facilitator (up to five participants, dedicated API)
+- **Dashboard (home)** — Organization overview, status, and org chart
+- **Animas** — Avatar-rich list; open an Anima for detail tabs (overview, process, schedule, memory, assets). Standalone Process / Server / Memory / Assets pages redirect here (or to Dashboard)
+- **Activity** — SVG swimlane timeline, Now board with live tool ticker, and session replay for the whole organization (logs under `#/activity/logs`)
+- **Tasks (TaskBoard)** — A work board for tasks, processing, deferred, suppressed, background work, and results. It also feeds priming so only relevant tasks surface in conversation
+- **Chat** — Real-time conversation with any Anima. Streaming responses (SSE), image attachments, multi-thread history, full archive. Working mini-indicator above the input while tools run. **Meeting mode** gathers multiple Animas in one room with a designated facilitator (up to five participants, dedicated API)
 - **Voice chat** — Voice in the browser only (push-to-talk or hands-free). WebSocket-based. VOICEVOX / SBV2 / ElevenLabs
 - **Board** — Slack-style shared channels where Animas discuss and coordinate
-- **TaskBoard** — A work board for tasks, processing, deferred, suppressed, background work, and results. It also feeds priming so only relevant tasks surface in conversation
-- **Dashboard (home)** — Organization overview and status
-- **Activity** — Real-time feed for the whole organization
-- **Setup** — First run uses the wizard at `http://HOST/setup/`. After setup, `/setup` in the browser redirects to the top level, but you can open the same items (language, auth, etc.) from `#/setup` inside the dashboard
-- **Users** — Owner and user profile management
-- **Anima management** — Enable/disable, model, and metadata per Anima
-- **Process monitoring** — Child process health
-- **Server** — Server-side state and settings
-- **Memory** — Browse each Anima’s episodes, knowledge, procedures, and more
-- **Logs** — Log viewer
-- **Assets** — Character images, 3D, and other assets
-- **Activity report** — Cross-org auditing and daily LLM-generated narratives from activity data (cached)
-- **Prompt settings** — Tune prompts around tool execution
-- **AI brainstorm** — LLM sessions with multiple viewpoint presets (realist, challenger, etc.)
-- **Team builder / team edit** — Build and adjust multi-Anima role layouts from industry- and goal-oriented presets
-- **Settings** — Server, authentication, locale, and more
+- **Settings** — Four tabs (general, activity, API/auth, users): server, authentication, locale, prompts, and user management. First run uses the wizard at `http://HOST/setup/`; after setup, open the same items from `#/settings`
 - **Workspace** — 3D office in a separate tab at `/workspace/` (chat, Board, org tree, etc.); static app split from the main dashboard
 - **Multilingual** — **First-run setup wizard** UI copy in 17 languages. **Main dashboard** ships `ja` / `en` / `ko` JSON translations (missing keys fall back to Japanese). Anima-facing templates deploy with Japanese, English, and Korean
 

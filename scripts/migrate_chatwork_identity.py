@@ -9,40 +9,34 @@ from __future__ import annotations
 
 Idempotent deploy-time helper. Never prints token values.
 
+With no extra options the script is dry-run and only applies the generic
+default vault key copy (``CHATWORK_API_TOKEN`` → ``CHATWORK_API_TOKEN__owner``).
+Site-specific copies, grants, and token-file registration are opt-in via CLI.
+
 Usage::
 
     python scripts/migrate_chatwork_identity.py            # dry-run (default)
     python scripts/migrate_chatwork_identity.py --apply
     python scripts/migrate_chatwork_identity.py --apply --finalize
+    python scripts/migrate_chatwork_identity.py --apply \\
+        --copy-key CHATWORK_API_TOKEN_WRITE=CHATWORK_API_TOKEN__alice \\
+        --grant bob=owner:read \\
+        --register-token-file bot=credentials/bot-token
 """
 
 import argparse
 import hashlib
 import json
 import shutil
-import sys
 from pathlib import Path
 from typing import Any
 
 # Vault key renames (source → destination). Old keys are kept unless --finalize.
-_VAULT_KEY_COPIES: tuple[tuple[str, str], ...] = (
-    ("CHATWORK_API_TOKEN", "CHATWORK_API_TOKEN__owner"),
-    ("CHATWORK_API_TOKEN_WRITE", "CHATWORK_API_TOKEN__kotoha"),
-    ("CHATWORK_API_TOKEN_WRITE__mei", "CHATWORK_API_TOKEN__mei"),
-)
+# Generic default only; add more with --copy-key SRC=DST.
+_VAULT_KEY_COPIES: tuple[tuple[str, str], ...] = (("CHATWORK_API_TOKEN", "CHATWORK_API_TOKEN__owner"),)
 
-_LEGACY_KEYS_TO_DELETE: tuple[str, ...] = (
-    "CHATWORK_API_TOKEN",
-    "CHATWORK_API_TOKEN_WRITE",
-    "CHATWORK_API_TOKEN_WRITE__mei",
-)
-
-_DEFAULT_GRANTS: dict[str, dict[str, str]] = {
-    "mei": {"owner": "read"},
-    "aoi": {"haato_ai": "readwrite"},
-}
-
-_HAATO_TOKEN_REL = Path("credentials") / "hhc-chatwork-bot-token"
+# Empty by default; pass --grant ANIMA=TARGET:LEVEL to configure.
+_DEFAULT_GRANTS: dict[str, dict[str, str]] = {}
 
 
 def _print(msg: str) -> None:
@@ -53,9 +47,27 @@ def _vault_has(vault: Any, key: str) -> bool:
     return vault.get("shared", key) is not None
 
 
-def step_vault_key_copies(*, vault: Any, data_dir: Path, apply: bool) -> None:
-    """(a) Copy legacy vault keys to identity-style keys (no overwrite)."""
-    for src, dst in _VAULT_KEY_COPIES:
+def _legacy_keys_from_copies(copies: tuple[tuple[str, str], ...]) -> tuple[str, ...]:
+    """Derive finalize-delete keys from copy sources (order-preserving unique)."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for src, _dst in copies:
+        if src not in seen:
+            seen.add(src)
+            result.append(src)
+    return tuple(result)
+
+
+def step_vault_key_copies(
+    *,
+    vault: Any,
+    data_dir: Path,
+    apply: bool,
+    copies: tuple[tuple[str, str], ...],
+    token_files: tuple[tuple[str, str], ...],
+) -> None:
+    """(a) Copy legacy vault keys and optionally register tokens from files."""
+    for src, dst in copies:
         if _vault_has(vault, dst):
             _print(f"SKIP vault copy {src} → {dst}: destination already exists")
             continue
@@ -69,56 +81,57 @@ def step_vault_key_copies(*, vault: Any, data_dir: Path, apply: bool) -> None:
         else:
             _print(f"DRY-RUN vault copy {src} → {dst}")
 
-    # haato_ai bot token from file (if present and destination empty)
-    haato_dst = "CHATWORK_API_TOKEN__haato_ai"
-    if _vault_has(vault, haato_dst):
-        _print(f"SKIP vault register {haato_dst}: destination already exists")
+    for name, rel in token_files:
+        dst = f"CHATWORK_API_TOKEN__{name}"
+        rel_path = Path(rel)
+        if _vault_has(vault, dst):
+            _print(f"SKIP vault register {dst}: destination already exists")
+            continue
+
+        token_path = data_dir / rel_path
+        if not token_path.is_file():
+            _print(f"SKIP vault register {dst}: file not found ({rel_path.as_posix()})")
+            continue
+
+        try:
+            raw = token_path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            _print(f"SKIP vault register {dst}: cannot read file ({exc})")
+            continue
+
+        if not raw:
+            _print(f"SKIP vault register {dst}: file is empty")
+            continue
+
+        if apply:
+            vault.store("shared", dst, raw)
+            _print(f"APPLY vault register {dst} from {rel_path.as_posix()}")
+        else:
+            _print(f"DRY-RUN vault register {dst} from {rel_path.as_posix()}")
+
+
+def step_config_grants(
+    *,
+    config_path: Path,
+    apply: bool,
+    grants: dict[str, dict[str, str]],
+) -> None:
+    """(b) Write chatwork_tool.grants when unset and grants are provided."""
+    if not grants:
+        _print("SKIP config.json grants: no grants configured (pass --grant)")
         return
 
-    token_path = data_dir / _HAATO_TOKEN_REL
-    if not token_path.is_file():
-        _print(
-            f"SKIP vault register {haato_dst}: "
-            f"file not found ({_HAATO_TOKEN_REL.as_posix()})"
-        )
-        return
-
-    try:
-        raw = token_path.read_text(encoding="utf-8").strip()
-    except OSError as exc:
-        _print(f"SKIP vault register {haato_dst}: cannot read file ({exc})")
-        return
-
-    if not raw:
-        _print(f"SKIP vault register {haato_dst}: file is empty")
-        return
-
-    if apply:
-        vault.store("shared", haato_dst, raw)
-        _print(f"APPLY vault register {haato_dst} from {_HAATO_TOKEN_REL.as_posix()}")
-    else:
-        _print(f"DRY-RUN vault register {haato_dst} from {_HAATO_TOKEN_REL.as_posix()}")
-
-
-def step_config_grants(*, config_path: Path, apply: bool) -> None:
-    """(b) Write default chatwork_tool.grants when unset."""
     if not config_path.is_file():
         if apply:
-            payload = {"version": 1, "chatwork_tool": {"grants": _DEFAULT_GRANTS}}
+            payload = {"version": 1, "chatwork_tool": {"grants": grants}}
             config_path.parent.mkdir(parents=True, exist_ok=True)
             config_path.write_text(
                 json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
-            _print(
-                f"APPLY config.json: created with chatwork_tool.grants "
-                f"defaults at {config_path}"
-            )
+            _print(f"APPLY config.json: created with chatwork_tool.grants at {config_path}")
         else:
-            _print(
-                f"DRY-RUN config.json: would create with chatwork_tool.grants "
-                f"defaults at {config_path}"
-            )
+            _print(f"DRY-RUN config.json: would create with chatwork_tool.grants at {config_path}")
         return
 
     try:
@@ -133,26 +146,26 @@ def step_config_grants(*, config_path: Path, apply: bool) -> None:
 
     tool_cfg = raw.get("chatwork_tool")
     if isinstance(tool_cfg, dict):
-        grants = tool_cfg.get("grants")
-        if isinstance(grants, dict) and grants:
+        existing = tool_cfg.get("grants")
+        if isinstance(existing, dict) and existing:
             _print("SKIP config.json grants: already configured")
             return
 
     if not apply:
-        _print("DRY-RUN config.json: write default chatwork_tool.grants")
+        _print("DRY-RUN config.json: write chatwork_tool.grants")
         return
 
     if not isinstance(tool_cfg, dict):
-        raw["chatwork_tool"] = {"grants": dict(_DEFAULT_GRANTS)}
+        raw["chatwork_tool"] = {"grants": dict(grants)}
     else:
-        tool_cfg["grants"] = dict(_DEFAULT_GRANTS)
+        tool_cfg["grants"] = dict(grants)
         raw["chatwork_tool"] = tool_cfg
 
     config_path.write_text(
         json.dumps(raw, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    _print("APPLY config.json: wrote default chatwork_tool.grants")
+    _print("APPLY config.json: wrote chatwork_tool.grants")
 
 
 def _token_fingerprint(token: str) -> str:
@@ -191,10 +204,7 @@ def step_cache_migrate(*, vault: Any, cache_dir: Path, apply: bool) -> None:
         # After vault copies, dry-run may not have written yet — also check legacy
         owner_token = vault.get("shared", "CHATWORK_API_TOKEN")
     if not owner_token:
-        _print(
-            "SKIP cache migrate: CHATWORK_API_TOKEN__owner "
-            "(and legacy CHATWORK_API_TOKEN) not in vault"
-        )
+        _print("SKIP cache migrate: CHATWORK_API_TOKEN__owner (and legacy CHATWORK_API_TOKEN) not in vault")
         return
 
     if not apply:
@@ -211,10 +221,7 @@ def step_cache_migrate(*, vault: Any, cache_dir: Path, apply: bool) -> None:
     dest_dir = cache_dir / account_id
     dest_db = dest_dir / "messages.db"
     if dest_db.exists():
-        _print(
-            f"SKIP cache migrate: destination already exists at {dest_db} "
-            f"(leaving legacy {old_db} in place)"
-        )
+        _print(f"SKIP cache migrate: destination already exists at {dest_db} (leaving legacy {old_db} in place)")
         # Still ensure identity_map entry if missing.
     else:
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -238,21 +245,26 @@ def step_cache_migrate(*, vault: Any, cache_dir: Path, apply: bool) -> None:
         identity_map[fp] = account_id
         tmp = map_path.with_suffix(".json.tmp")
         tmp.write_text(
-            json.dumps(identity_map, ensure_ascii=False, indent=2, sort_keys=True)
-            + "\n",
+            json.dumps(identity_map, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         tmp.replace(map_path)
         _print(f"APPLY identity_map: registered token fingerprint → {account_id}")
 
 
-def step_finalize(*, vault: Any, apply: bool, finalize: bool) -> None:
+def step_finalize(
+    *,
+    vault: Any,
+    apply: bool,
+    finalize: bool,
+    legacy_keys: tuple[str, ...],
+) -> None:
     """(d) Optionally delete legacy vault keys after verification."""
     if not finalize:
         _print("SKIP finalize: pass --finalize to delete legacy vault keys")
         return
 
-    for key in _LEGACY_KEYS_TO_DELETE:
+    for key in legacy_keys:
         if not _vault_has(vault, key):
             _print(f"SKIP finalize delete {key}: not present")
             continue
@@ -270,6 +282,9 @@ def run_migration(
     apply: bool = False,
     finalize: bool = False,
     vault: Any | None = None,
+    copies: tuple[tuple[str, str], ...] | None = None,
+    grants: dict[str, dict[str, str]] | None = None,
+    token_files: tuple[tuple[str, str], ...] | None = None,
 ) -> int:
     """Execute migration steps. Returns process exit code (always 0 on soft skips)."""
     if vault is None:
@@ -282,22 +297,75 @@ def run_migration(
 
         cache_dir = DEFAULT_CACHE_DIR
 
+    if copies is None:
+        copies = _VAULT_KEY_COPIES
+    if grants is None:
+        grants = dict(_DEFAULT_GRANTS)
+    if token_files is None:
+        token_files = ()
+
     mode = "APPLY" if apply else "DRY-RUN"
     _print(f"=== migrate_chatwork_identity ({mode}) data_dir={data_dir} ===")
 
-    step_vault_key_copies(vault=vault, data_dir=data_dir, apply=apply)
-    step_config_grants(config_path=data_dir / "config.json", apply=apply)
+    step_vault_key_copies(
+        vault=vault,
+        data_dir=data_dir,
+        apply=apply,
+        copies=copies,
+        token_files=token_files,
+    )
+    step_config_grants(
+        config_path=data_dir / "config.json",
+        apply=apply,
+        grants=grants,
+    )
     step_cache_migrate(vault=vault, cache_dir=cache_dir, apply=apply)
-    step_finalize(vault=vault, apply=apply, finalize=finalize)
+    step_finalize(
+        vault=vault,
+        apply=apply,
+        finalize=finalize,
+        legacy_keys=_legacy_keys_from_copies(copies),
+    )
 
     _print("=== done ===")
     return 0
 
 
+def _parse_copy_key(value: str) -> tuple[str, str]:
+    if "=" not in value:
+        raise argparse.ArgumentTypeError(f"--copy-key expects SRC=DST, got {value!r}")
+    src, dst = value.split("=", 1)
+    if not src or not dst:
+        raise argparse.ArgumentTypeError(f"--copy-key expects non-empty SRC=DST, got {value!r}")
+    return src, dst
+
+
+def _parse_grant(value: str) -> tuple[str, str, str]:
+    if "=" not in value:
+        raise argparse.ArgumentTypeError(f"--grant expects ANIMA=TARGET:LEVEL, got {value!r}")
+    anima, rest = value.split("=", 1)
+    if ":" not in rest:
+        raise argparse.ArgumentTypeError(f"--grant expects ANIMA=TARGET:LEVEL, got {value!r}")
+    target, level = rest.split(":", 1)
+    if not anima or not target:
+        raise argparse.ArgumentTypeError(f"--grant expects non-empty ANIMA and TARGET, got {value!r}")
+    if level not in ("read", "readwrite"):
+        raise argparse.ArgumentTypeError(f"--grant LEVEL must be 'read' or 'readwrite', got {level!r}")
+    return anima, target, level
+
+
+def _parse_register_token_file(value: str) -> tuple[str, str]:
+    if "=" not in value:
+        raise argparse.ArgumentTypeError(f"--register-token-file expects NAME=RELPATH, got {value!r}")
+    name, rel = value.split("=", 1)
+    if not name or not rel:
+        raise argparse.ArgumentTypeError(f"--register-token-file expects non-empty NAME=RELPATH, got {value!r}")
+    return name, rel
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Migrate Chatwork vault keys, config grants, and message cache "
-        "to the identity model (idempotent)."
+        description="Migrate Chatwork vault keys, config grants, and message cache to the identity model (idempotent)."
     )
     parser.add_argument(
         "--apply",
@@ -324,10 +392,46 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--cache-dir",
         type=Path,
         default=None,
-        help="Override Chatwork cache directory "
-        "(default: core.tools._chatwork_cache.DEFAULT_CACHE_DIR)",
+        help="Override Chatwork cache directory (default: core.tools._chatwork_cache.DEFAULT_CACHE_DIR)",
+    )
+    parser.add_argument(
+        "--copy-key",
+        action="append",
+        type=_parse_copy_key,
+        default=None,
+        metavar="SRC=DST",
+        help="Additional vault key copy (repeatable). "
+        "Default already includes CHATWORK_API_TOKEN→CHATWORK_API_TOKEN__owner",
+    )
+    parser.add_argument(
+        "--grant",
+        action="append",
+        type=_parse_grant,
+        default=None,
+        metavar="ANIMA=TARGET:LEVEL",
+        help="Grant mapping for chatwork_tool.grants (repeatable). "
+        "LEVEL is read or readwrite. Default is empty (no grants written)",
+    )
+    parser.add_argument(
+        "--register-token-file",
+        action="append",
+        type=_parse_register_token_file,
+        default=None,
+        metavar="NAME=RELPATH",
+        help="Register file contents at data_dir/RELPATH as CHATWORK_API_TOKEN__NAME (repeatable)",
     )
     return parser.parse_args(argv)
+
+
+def _build_grants(
+    grant_args: list[tuple[str, str, str]] | None,
+) -> dict[str, dict[str, str]]:
+    grants: dict[str, dict[str, str]] = dict(_DEFAULT_GRANTS)
+    if not grant_args:
+        return grants
+    for anima, target, level in grant_args:
+        grants.setdefault(anima, {})[target] = level
+    return grants
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -350,12 +454,22 @@ def main(argv: list[str] | None = None) -> int:
 
         vault = VaultManager(data_dir)
 
+    copies: list[tuple[str, str]] = list(_VAULT_KEY_COPIES)
+    if args.copy_key:
+        copies.extend(args.copy_key)
+
+    grants = _build_grants(args.grant)
+    token_files: tuple[tuple[str, str], ...] = tuple(args.register_token_file or ())
+
     return run_migration(
         data_dir=data_dir,
         cache_dir=args.cache_dir,
         apply=apply,
         finalize=bool(args.finalize),
         vault=vault,
+        copies=tuple(copies),
+        grants=grants,
+        token_files=token_files,
     )
 
 

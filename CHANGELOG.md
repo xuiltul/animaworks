@@ -52,6 +52,34 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - SPA `#/setup` removed into `#/settings`; prompt configuration unified as markdown files.
 - Cycle-correlated logging, dedicated `errors.log`, and secret redaction (including frontend pass-through).
 - LLM error classifier with fleet-wide rate guards; Mode A/B loop hardening (in-loop retry, empty-response recovery, runaway guards).
+- Menu consolidation and dashboard restructure; Anima list upgraded to an avatar-rich layout.
+- Anima detail tabs for process, schedule, memory, and assets (standalone Process / Server / Memory / Assets pages redirect into Anima detail or Dashboard).
+- Settings page split into four tabs (general, activity, API/auth, users).
+- Activity SVG swimlane timeline (1h/3h ranges), Now board with live tool ticker, and session replay view (chat-style group playback with live follow).
+- Chat working mini-indicator above the input while tools run.
+
+#### Runtime controls & budgets
+- Per-anima monthly token budget (`token_budget_monthly`).
+- Frequent-cron auto-disable guard (`cron_guard`).
+- Activity and token-usage webhook event export (`event_export`).
+- Per-anima `heartbeat_enabled` for event-driven mode (periodic HB only; applied in supervisor scheduler as well).
+
+#### Messaging & identity
+- Chatwork identity: per-anima identity model with grants-based token delegation (no shared token reuse).
+- Messenger rejects posts to nonexistent channels (no implicit channel create).
+
+#### Sandbox & delegation
+- Sandbox EROFS fallback for `delegate-task` via host internal API (`/internal/delegate-task`), including TaskPersistenceError trigger path.
+- Model write access allowed under own-company `companies/<company>/shared` for in-company shared workspaces.
+- Sandboxed approval requests persisted through the server API (MCP interactive path).
+
+#### Memory, RAG & housekeeping
+- Episode memory naming unified to date-prefix form; hygiene auto-archives non-conforming files.
+- `embedding_max_seq_length` config and longer embedding HTTP timeouts for ruri-v3-class models.
+- Tool-prompt DB automatic migration on startup.
+- TaskBoard orphan-metadata reconcile/housekeeping (auto-archive orphans, purge stale metadata, sync on terminal status).
+- PR-merge conflict auto-detection in pr-review-dispatch.
+- External-tasks collection enabled by default.
 
 ### Changed
 
@@ -60,6 +88,10 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Board Slack outbound sync empty whitelist is deny-by-default; GitHub webhook site-specific values externalized.
 - Internal host/org names anonymized; environment-specific paths removed from deploy templates and scripts; packages/Docker ship runtime templates.
 - Parallel timeline lane construction performance improved.
+
+### Removed
+
+- Activity Report page and daily LLM narrative generation (superseded by the swimlane timeline / Activity views).
 
 ### Fixed
 
