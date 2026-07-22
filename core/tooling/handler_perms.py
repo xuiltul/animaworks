@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from core.config.models import PermissionsConfig, load_permissions
 from core.file_access_policy import (
+    company_shared_write_root,
     find_denied_root,
     find_internal_cache_root,
     resolve_effective_denied_roots,
@@ -231,6 +232,12 @@ class PermissionsMixin:
                     "permission_denied anima=%s path=%s reason=global_permissions_protected", self._anima_name, path
                 )
                 return gp_err
+
+        # The company's dedicated shared area is model-writable independent
+        # of file_roots, matching the sandboxed Mode C/X grant.
+        company_shared = company_shared_write_root(self._anima_dir)
+        if company_shared is not None and resolved.is_relative_to(company_shared):
+            return None
 
         # Own anima_dir
         if resolved.is_relative_to(self._anima_dir.resolve()):

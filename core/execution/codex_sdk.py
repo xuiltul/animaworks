@@ -1087,7 +1087,7 @@ class CodexSDKExecutor(BaseExecutor):
         esc = _escape_toml_string
 
         from core.config.models import load_permissions
-        from core.file_access_policy import resolve_effective_denied_roots
+        from core.file_access_policy import company_shared_write_root, resolve_effective_denied_roots
 
         permissions_config = load_permissions(self._anima_dir)
 
@@ -1141,6 +1141,16 @@ class CodexSDKExecutor(BaseExecutor):
                 resolved_root = str(Path(root).resolve())
                 shell_filesystem_rules[resolved_root] = "deny"
                 mcp_filesystem_rules[resolved_root] = "deny"
+
+            # Company-owned shared files are deliberately model-managed.  Add
+            # this narrow grant after the broader company deny rules so the
+            # permission profile can select the more-specific path.
+            company_shared = company_shared_write_root(self._anima_dir)
+            if company_shared is not None:
+                company_shared.mkdir(parents=True, exist_ok=True)
+                shared_root = str(company_shared.resolve())
+                shell_filesystem_rules[shared_root] = "write"
+                mcp_filesystem_rules[shared_root] = "write"
 
             # Authentication and all runtime state/cache copies must never be
             # directly readable from the model shell.  The MCP profile keeps

@@ -293,6 +293,22 @@ class TestSandboxConfiguration:
         assert executor._write_sandbox_config() is False
         assert not (executor._workspace / ".grok" / "sandbox.toml").exists()
 
+    def test_company_shared_is_created_before_full_access_disables_sandbox(
+        self,
+        executor: GrokCLIExecutor,
+        anima_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        own_company = tmp_path / "companies" / "fs"
+        own_company.mkdir(parents=True)
+        (anima_dir / "status.json").write_text(json.dumps({"company": "fs"}), encoding="utf-8")
+        self._write_permissions(anima_dir, file_roots=["/"])
+
+        assert executor._write_sandbox_config() is False
+
+        assert (own_company / "shared").is_dir()
+        assert not (executor._workspace / ".grok" / "sandbox.toml").exists()
+
     def test_normal_roots_without_denied_roots_generate_profile(
         self,
         executor: GrokCLIExecutor,
@@ -301,6 +317,7 @@ class TestSandboxConfiguration:
     ) -> None:
         allowed = tmp_path / "normal-root"
         allowed.mkdir()
+        (tmp_path / "companies" / "fs" / "shared").mkdir(parents=True)
         self._write_permissions(anima_dir, file_roots=[str(allowed)])
 
         assert executor._write_sandbox_config() is True
@@ -309,6 +326,35 @@ class TestSandboxConfiguration:
         ]["animaworks"]
         assert profile["read_write"] == [str(anima_dir.resolve()), str(allowed.resolve())]
         assert profile["deny"] == []
+
+    def test_company_shared_is_created_and_added_independent_of_file_roots(
+        self,
+        executor: GrokCLIExecutor,
+        anima_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        own_company = tmp_path / "companies" / "fs"
+        foreign_company = tmp_path / "companies" / "other"
+        own_company.mkdir(parents=True)
+        foreign_company.mkdir(parents=True)
+        for name in ("knowledge", "skills", "credentials"):
+            (own_company / name).mkdir()
+        for name in ("vision.md", "company.json"):
+            (own_company / name).write_text("{}", encoding="utf-8")
+        (anima_dir / "status.json").write_text(json.dumps({"company": "fs"}), encoding="utf-8")
+        self._write_permissions(anima_dir, file_roots=[])
+
+        assert executor._write_sandbox_config() is True
+
+        own_shared = own_company / "shared"
+        assert own_shared.is_dir()
+        profile = tomllib.loads((executor._workspace / ".grok" / "sandbox.toml").read_text(encoding="utf-8"))[
+            "profiles"
+        ]["animaworks"]
+        assert profile["read_write"] == [str(anima_dir.resolve()), str(own_shared.resolve())]
+        assert profile["deny"] == [str(foreign_company.resolve())]
+        for name in ("knowledge", "skills", "vision.md", "company.json", "credentials"):
+            assert str((own_company / name).resolve()) not in profile["read_write"]
 
     def test_model_escape_hatch_disables_sandbox(
         self,

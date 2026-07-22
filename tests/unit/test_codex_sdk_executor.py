@@ -9,6 +9,7 @@ All tests use mocks — no Codex CLI binary or API key required.
 """
 
 import asyncio
+import json
 import logging
 import os
 import subprocess
@@ -671,6 +672,8 @@ class TestConfigWriting:
         )
         exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
         exc.set_task_cwd(task_cwd)
+        unassigned_company_shared = tmp_path / "companies" / "fs" / "shared"
+        unassigned_company_shared.mkdir(parents=True)
         (anima_dir / "vectordb.staging-123").mkdir()
         (anima_dir / "vectordb-corrupt-old").mkdir()
 
@@ -695,6 +698,7 @@ class TestConfigWriting:
         assert str(anima_dir.resolve()) not in filesystem
         assert filesystem[str(writable_root.resolve())] == "write"
         assert filesystem[str(task_cwd.resolve())] == "write"
+        assert str(unassigned_company_shared.resolve()) not in filesystem
         assert filesystem[str(denied_root.resolve())] == "deny"
         assert filesystem[str((anima_dir / ".codex_home").resolve())] == "deny"
         assert filesystem[str((anima_dir / "state").resolve())] == "deny"
@@ -711,6 +715,7 @@ class TestConfigWriting:
         assert mcp_filesystem[str(anima_dir.resolve())] == "write"
         assert mcp_filesystem[str(writable_root.resolve())] == "write"
         assert mcp_filesystem[str(task_cwd.resolve())] == "write"
+        assert str(unassigned_company_shared.resolve()) not in mcp_filesystem
         assert mcp_filesystem[str(denied_root.resolve())] == "deny"
         assert mcp_filesystem[str((anima_dir / "permissions.json").resolve())] == "read"
         assert str((anima_dir / "state").resolve()) not in mcp_filesystem
@@ -729,6 +734,54 @@ class TestConfigWriting:
         ]
         assert parsed["mcp_servers"]["aw"]["env"]["CODEX_HOME"] == str(anima_dir / ".codex_home")
         assert parsed["mcp_servers"]["aw"]["env"]["ANIMAWORKS_FILE_DENY_ACTIVE"] == "1"
+
+    def test_write_codex_config_grants_only_own_company_shared(
+        self,
+        model_config,
+        anima_dir,
+    ):
+        data_dir = anima_dir.parent.parent
+        own_company = data_dir / "companies" / "fs"
+        foreign_company = data_dir / "companies" / "a"
+        own_company.mkdir(parents=True)
+        foreign_company.mkdir(parents=True)
+        for name in ("knowledge", "skills", "credentials"):
+            (own_company / name).mkdir()
+        for name in ("vision.md", "company.json"):
+            (own_company / name).write_text("{}", encoding="utf-8")
+        (anima_dir / "status.json").write_text(json.dumps({"company": "fs"}), encoding="utf-8")
+        permissions = SimpleNamespace(
+            file_roots=[str(anima_dir)],
+            file_roots_denied=[],
+        )
+        exc = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+
+        with (
+            patch("core.config.models.load_permissions", return_value=permissions),
+            patch("core.execution.codex_sdk.get_codex_executable", return_value="/opt/codex/bin/codex"),
+        ):
+            exc._write_codex_config("prompt")
+
+        own_shared = own_company / "shared"
+        assert own_shared.is_dir()
+        parsed = tomllib.loads((anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8"))
+        shell_filesystem = parsed["permissions"]["animaworks"]["filesystem"]
+        mcp_filesystem = parsed["permissions"]["animaworks_mcp"]["filesystem"]
+        assert shell_filesystem[str(own_shared.resolve())] == "write"
+        assert mcp_filesystem[str(own_shared.resolve())] == "write"
+        assert shell_filesystem[str(foreign_company.resolve())] == "deny"
+        assert mcp_filesystem[str(foreign_company.resolve())] == "deny"
+
+        protected = [
+            own_company / "knowledge",
+            own_company / "skills",
+            own_company / "vision.md",
+            own_company / "company.json",
+            own_company / "credentials",
+        ]
+        for path in protected:
+            assert shell_filesystem.get(str(path.resolve())) != "write"
+            assert mcp_filesystem.get(str(path.resolve())) != "write"
 
     def test_write_codex_config_root_write_profile_keeps_specific_deny(self, model_config, anima_dir, tmp_path):
         denied_root = tmp_path / "private"
