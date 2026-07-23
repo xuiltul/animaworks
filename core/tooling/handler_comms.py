@@ -342,23 +342,49 @@ class CommsToolsMixin:
         return None
 
     def _channel_company_boundary_error(self, channel: str) -> str | None:
-        """Reject restricted channels whose explicit members cross company boundaries."""
+        """Enforce company scope for channel post/read access.
+
+        Decision order:
+        1. Restricted channels (non-empty members) → pair-check against members
+        2. Company-scoped open channels (meta.company set) → same-company only
+        3. Legacy open channels (no meta / empty members & company) → deny
+           company-assigned animas until company is configured; unassigned
+           animas keep legacy unrestricted access
+        """
         if not self._messenger:
             return None
 
+        from core.company import get_company, get_company_display_name
         from core.messenger import load_channel_meta
 
         meta = load_channel_meta(self._messenger.shared_dir, channel)
-        if meta is None or (not meta.members and not meta.closed):
-            animas_dir = self._anima_dir.parent
-            members = (
-                [candidate.name for candidate in animas_dir.iterdir() if candidate.is_dir()]
-                if animas_dir.is_dir()
-                else []
+        animas_dir = self._anima_dir.parent
+        data_dir = animas_dir.parent
+
+        # Restricted channel: keep existing member pair-check.
+        if meta is not None and meta.members:
+            return self._cross_company_communication_error(meta.members)
+
+        # Company-scoped open channel.
+        company = (meta.company if meta is not None else "") or ""
+        if company:
+            poster_company = get_company(self._anima_name, animas_dir=animas_dir)
+            if poster_company is None:
+                return None  # unassigned anima: legacy unrestricted
+            if poster_company == company:
+                return None
+            display_name = get_company_display_name(company, data_dir=data_dir)
+            return t(
+                "handler.cross_company_message_blocked",
+                display_name=display_name,
             )
-        else:
-            members = meta.members
-        return self._cross_company_communication_error(members)
+
+        # Legacy open channel without company attribution.
+        # closed channels are already denied by ACL; leave boundary alone.
+        poster_company = get_company(self._anima_name, animas_dir=animas_dir)
+        if poster_company is None:
+            return None  # unassigned anima: legacy unrestricted
+        return t("handler.channel_company_unset", channel=channel)
 
     # ── Channel tool handlers ────────────────────────────────
 
@@ -664,11 +690,15 @@ class CommsToolsMixin:
             company_error = self._cross_company_communication_error(members)
             if company_error is not None:
                 return company_error
+            from core.company import get_company
+
+            creator_company = get_company(self._anima_name, animas_dir=self._anima_dir.parent) or ""
             meta = ChannelMeta(
                 members=members,
                 created_by=self._anima_name,
                 created_at=now_iso(),
                 description=args.get("description", ""),
+                company=creator_company,
             )
             channels_dir = shared_dir / "channels"
             channels_dir.mkdir(parents=True, exist_ok=True)

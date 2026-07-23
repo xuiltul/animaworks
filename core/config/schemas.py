@@ -546,6 +546,7 @@ class ExternalMessagingChannelConfig(BaseModel):
     board_outbound_sync_all: bool = False  # when whitelist is empty, opt in to syncing all mapped boards
     guild_id: str = ""  # Discord guild snowflake ID (Discord only)
     channel_members: dict[str, list[str]] = {}  # channel_id → [anima_name, ...] (Discord only)
+    default_channel_company: str = ""  # company for auto-created boards (empty = no attribution)
 
 
 class ZoomRTMSConfig(BaseModel):
@@ -1231,6 +1232,8 @@ class AnimaWorksConfig(BaseModel):
     machine: MachineConfig = MachineConfig()
     local_llm: LocalLLMConfig = LocalLLMConfig()
     workspaces: dict[str, str] = {}  # alias → absolute path
+    # channel name → company name for open-channel company attribution migration
+    channel_company_defaults: dict[str, str] = Field(default_factory=dict)
     activity_level: int = Field(
         default=100,
         ge=10,

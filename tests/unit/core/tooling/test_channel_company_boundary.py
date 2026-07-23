@@ -104,7 +104,8 @@ def test_read_channel_rejects_mixed_company_members(tmp_path: Path) -> None:
     assert "secret" not in result
 
 
-def test_open_channel_treats_all_animas_as_implicit_members(tmp_path: Path) -> None:
+def test_open_channel_without_company_rejects_assigned_anima(tmp_path: Path) -> None:
+    """Legacy open channels no longer expand to all animas; require company attr."""
     _make_anima(tmp_path, "alice", "alpha")
     _make_anima(tmp_path, "bob", "beta")
     _write_company(tmp_path, "beta", "Beta Corporation")
@@ -116,8 +117,207 @@ def test_open_channel_treats_all_animas_as_implicit_members(tmp_path: Path) -> N
 
     result = handler._handle_post_channel({"channel": "general", "text": "hello"})
 
+    assert "会社帰属が未設定" in result
+    assert "Beta Corporation" not in result  # must not be the all-animas expansion error
+    assert channel_file.read_text(encoding="utf-8") == ""
+
+
+def test_company_scoped_open_channel_same_company_allows_post(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    _make_anima(tmp_path, "bob", "beta")
+    _write_company(tmp_path, "alpha", "Alpha Co")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    channel_file = channels_dir / "general.jsonl"
+    channel_file.write_text("", encoding="utf-8")
+    save_channel_meta(tmp_path / "shared", "general", ChannelMeta(members=[], company="alpha"))
+    handler = _make_handler(tmp_path)
+
+    limiter = MagicMock()
+    limiter.check_global_outbound.return_value = True
+    with patch("core.cascade_limiter.get_depth_limiter", return_value=limiter):
+        result = handler._handle_post_channel({"channel": "general", "text": "hello"})
+
+    assert result == "Posted to #general"
+    assert len(channel_file.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_company_scoped_open_channel_other_company_rejects(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    _write_company(tmp_path, "beta", "Beta Corporation")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    channel_file = channels_dir / "ops.jsonl"
+    channel_file.write_text("", encoding="utf-8")
+    save_channel_meta(tmp_path / "shared", "ops", ChannelMeta(members=[], company="beta"))
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_post_channel({"channel": "ops", "text": "hello"})
+
     assert "Beta Corporation" in result
     assert channel_file.read_text(encoding="utf-8") == ""
+
+
+def test_company_scoped_open_channel_unassigned_legacy_allows(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "legacy", None)
+    _write_company(tmp_path, "alpha", "Alpha Co")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    channel_file = channels_dir / "ops.jsonl"
+    channel_file.write_text("", encoding="utf-8")
+    save_channel_meta(tmp_path / "shared", "ops", ChannelMeta(members=[], company="alpha"))
+    handler = _make_handler(tmp_path, "legacy")
+
+    limiter = MagicMock()
+    limiter.check_global_outbound.return_value = True
+    with patch("core.cascade_limiter.get_depth_limiter", return_value=limiter):
+        result = handler._handle_post_channel({"channel": "ops", "text": "hello"})
+
+    assert result == "Posted to #ops"
+    assert len(channel_file.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_unassigned_open_channel_allows_unassigned_anima(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "legacy", None)
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    channel_file = channels_dir / "general.jsonl"
+    channel_file.write_text("", encoding="utf-8")
+    handler = _make_handler(tmp_path, "legacy")
+
+    limiter = MagicMock()
+    limiter.check_global_outbound.return_value = True
+    with patch("core.cascade_limiter.get_depth_limiter", return_value=limiter):
+        result = handler._handle_post_channel({"channel": "general", "text": "hello"})
+
+    assert result == "Posted to #general"
+    assert len(channel_file.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_company_scoped_open_channel_read_same_company_ok(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    channel_file = channels_dir / "general.jsonl"
+    channel_file.write_text(
+        json.dumps({"ts": "2026-07-20T00:00:00+09:00", "from": "alice", "text": "secret"}) + "\n",
+        encoding="utf-8",
+    )
+    save_channel_meta(tmp_path / "shared", "general", ChannelMeta(members=[], company="alpha"))
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_read_channel({"channel": "general"})
+
+    assert "secret" in result
+
+
+def test_company_scoped_open_channel_read_other_company_rejects(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    _write_company(tmp_path, "beta", "Beta Corporation")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    channel_file = channels_dir / "general.jsonl"
+    channel_file.write_text(
+        json.dumps({"ts": "2026-07-20T00:00:00+09:00", "from": "other", "text": "secret"}) + "\n",
+        encoding="utf-8",
+    )
+    save_channel_meta(tmp_path / "shared", "general", ChannelMeta(members=[], company="beta"))
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_read_channel({"channel": "general"})
+
+    assert "Beta Corporation" in result
+    assert "secret" not in result
+
+
+def test_unassigned_anima_can_read_scoped_and_unattributed_open_channels(
+    tmp_path: Path,
+) -> None:
+    _make_anima(tmp_path, "legacy", None)
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    for channel in ("scoped", "unattributed"):
+        (channels_dir / f"{channel}.jsonl").write_text(
+            json.dumps(
+                {
+                    "ts": "2026-07-20T00:00:00+09:00",
+                    "from": "other",
+                    "text": f"{channel}-content",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    save_channel_meta(
+        tmp_path / "shared",
+        "scoped",
+        ChannelMeta(members=[], company="alpha"),
+    )
+    handler = _make_handler(tmp_path, "legacy")
+
+    assert "scoped-content" in handler._handle_read_channel({"channel": "scoped"})
+    assert "unattributed-content" in handler._handle_read_channel(
+        {"channel": "unattributed"}
+    )
+
+
+def test_restricted_channel_members_take_precedence_over_company(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    (channels_dir / "team.jsonl").write_text(
+        json.dumps(
+            {
+                "ts": "2026-07-20T00:00:00+09:00",
+                "from": "alice",
+                "text": "member-content",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    save_channel_meta(
+        tmp_path / "shared",
+        "team",
+        ChannelMeta(members=["alice"], company="beta"),
+    )
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_read_channel({"channel": "team"})
+
+    assert "member-content" in result
+
+
+def test_create_channel_auto_assigns_creator_company(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    _make_anima(tmp_path, "same", "alpha")
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_manage_channel(
+        {"action": "create", "channel": "alpha-room", "members": ["same"]}
+    )
+
+    assert "alpha-room" in result
+    meta = load_channel_meta(tmp_path / "shared", "alpha-room")
+    assert meta is not None
+    assert meta.company == "alpha"
+    assert "alice" in meta.members
+    assert "same" in meta.members
+
+
+def test_channel_meta_company_roundtrip(tmp_path: Path) -> None:
+    shared = tmp_path / "shared"
+    save_channel_meta(shared, "ops", ChannelMeta(members=[], company="alpha"))
+    loaded = load_channel_meta(shared, "ops")
+    assert loaded is not None
+    assert loaded.company == "alpha"
+    # Missing company field in older files defaults to empty string
+    meta_path = shared / "channels" / "legacy.meta.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps({"members": []}), encoding="utf-8")
+    legacy = load_channel_meta(shared, "legacy")
+    assert legacy is not None
+    assert legacy.company == ""
 
 
 def test_read_dm_history_rejects_cross_company_peer(tmp_path: Path) -> None:

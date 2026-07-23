@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.messenger import ChannelMeta, load_channel_meta, save_channel_meta
-from server.slack_channel_sync import SlackChannelSync
+from server.slack_channel_sync import SlackChannelSync, _ensure_board
 
 
 class _FakeSlackManager:
@@ -17,7 +17,11 @@ class _FakeSlackManager:
 def _mock_config() -> SimpleNamespace:
     return SimpleNamespace(
         external_messaging=SimpleNamespace(
-            slack=SimpleNamespace(default_anima="sakura", board_mapping={}),
+            slack=SimpleNamespace(
+                default_anima="sakura",
+                board_mapping={},
+                default_channel_company="",
+            ),
         ),
     )
 
@@ -201,6 +205,39 @@ async def test_sync_falls_back_to_available_bot_when_default_missing(
     assert "falling back to 'sakura' for channel discovery" in caplog.text
 
 
+def test_ensure_board_applies_default_channel_company(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shared_dir = tmp_path / "shared"
+    cfg = _mock_config()
+    cfg.external_messaging.slack.default_channel_company = "alpha"
+    monkeypatch.setattr("core.config.models.load_config", lambda: cfg)
+
+    created = _ensure_board(shared_dir, "dev-room", "dev-room")
+    assert created is True
+    meta = load_channel_meta(shared_dir, "dev-room")
+    assert meta is not None
+    assert meta.company == "alpha"
+    assert meta.members == []
+    # second call is no-op
+    assert _ensure_board(shared_dir, "dev-room", "dev-room") is False
+
+
+def test_ensure_board_empty_company_when_unset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shared_dir = tmp_path / "shared"
+    cfg = _mock_config()
+    monkeypatch.setattr("core.config.models.load_config", lambda: cfg)
+
+    assert _ensure_board(shared_dir, "open-room", "open-room") is True
+    meta = load_channel_meta(shared_dir, "open-room")
+    assert meta is not None
+    assert meta.company == ""
+
+
 @pytest.mark.asyncio
 async def test_sync_returns_empty_when_no_bots_available(
     tmp_path: Path,
@@ -214,7 +251,11 @@ async def test_sync_returns_empty_when_no_bots_available(
 
     cfg = SimpleNamespace(
         external_messaging=SimpleNamespace(
-            slack=SimpleNamespace(default_anima="kotoha", board_mapping={}),
+            slack=SimpleNamespace(
+                default_anima="kotoha",
+                board_mapping={},
+                default_channel_company="",
+            ),
         ),
     )
 

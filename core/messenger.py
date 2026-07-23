@@ -63,6 +63,7 @@ class ChannelMeta:
     """Channel metadata including ACL membership list.
 
     If ``members`` is empty, the channel is open unless ``closed`` is true.
+    When ``company`` is set, open channels are scoped to that company.
     """
 
     members: list[str]
@@ -72,6 +73,7 @@ class ChannelMeta:
     closed: bool = False
     slack_sync_disabled: bool = False
     slack_deleted_at: str = ""
+    company: str = ""
 
 
 def load_channel_meta(shared_dir: Path, channel: str) -> ChannelMeta | None:
@@ -92,6 +94,7 @@ def load_channel_meta(shared_dir: Path, channel: str) -> ChannelMeta | None:
             closed=bool(data.get("closed", False)),
             slack_sync_disabled=bool(data.get("slack_sync_disabled", False)),
             slack_deleted_at=data.get("slack_deleted_at", ""),
+            company=data.get("company", "") or "",
         )
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Failed to load channel meta for %s: %s", channel, exc)
@@ -111,6 +114,7 @@ def save_channel_meta(shared_dir: Path, channel: str, meta: ChannelMeta) -> None
         "closed": meta.closed,
         "slack_sync_disabled": meta.slack_sync_disabled,
         "slack_deleted_at": meta.slack_deleted_at,
+        "company": meta.company,
     }
     meta_path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2),

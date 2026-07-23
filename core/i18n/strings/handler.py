@@ -246,6 +246,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "#{channel} はオープンチャネルです（全Animaがアクセス可能）",
         "en": "#{channel} is an open channel (all Animas can access)",
     },
+    "handler.channel_company_unset": {
+        "ja": (
+            "Error: チャネル #{channel} は会社帰属が未設定です。"
+            "manage_channelで会社帰属を設定するか、自社チャンネルを利用してください。"
+        ),
+        "en": (
+            "Error: Channel #{channel} has no company attribution set. "
+            "Set company attribution via manage_channel or use a company-scoped channel."
+        ),
+        "zh": (
+            "错误：频道 #{channel} 尚未设置公司归属。"
+            "请通过 manage_channel 设置公司归属，或使用本公司频道。"
+        ),
+        "ko": (
+            "오류: 채널 #{channel} 에 회사 귀속이 설정되어 있지 않습니다. "
+            "manage_channel로 회사 귀속을 설정하거나 자사 채널을 이용하세요."
+        ),
+    },
     "handler.cmd_denied": {
         "ja": "{cmd} 禁止",
         "en": "{cmd} blocked",

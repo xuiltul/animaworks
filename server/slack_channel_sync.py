@@ -198,12 +198,22 @@ def _ensure_board(shared_dir: Path, board_name: str, slack_channel_name: str) ->
     # Create empty board file
     board_file.touch()
 
+    # Optional company attribution from config (site-specific; never hardcode).
+    company = ""
+    try:
+        from core.config.models import load_config
+
+        company = (load_config().external_messaging.slack.default_channel_company or "").strip()
+    except Exception:
+        logger.debug("Could not load slack.default_channel_company; leaving board unattributed")
+
     # Create metadata
     meta = ChannelMeta(
         members=[],
         created_by="slack_channel_sync",
         created_at=datetime.now(UTC).isoformat(),
         description=f"Auto-synced from Slack channel #{slack_channel_name}",
+        company=company,
     )
     save_channel_meta(shared_dir, board_name, meta)
 

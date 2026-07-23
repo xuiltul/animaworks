@@ -555,6 +555,136 @@ def step_split_board_by_company(data_dir: Path, dry_run: bool, verbose: bool) ->
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
+def step_channel_company_defaults(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Ensure open-channel meta exists and apply ``channel_company_defaults``.
+
+    For every open channel (empty members, not closed — including meta-less
+    legacy channels such as general/ops/legal):
+
+    * create/update ``*.meta.json`` so the channel is explicit
+    * set ``company`` from ``config.json`` → ``channel_company_defaults`` when
+      present; otherwise leave company empty (no auto-inference)
+    * skip when company is already set (idempotent)
+    * never touch restricted (non-empty members) or closed channels
+    * never modify jsonl history
+    """
+    del verbose
+    channels_dir = data_dir / "shared" / "channels"
+    if not channels_dir.is_dir():
+        return StepResult(changed=0, skipped=1, details=["shared/channels/ not found; skip"])
+
+    try:
+        defaults: dict[str, str] = {}
+        config_path = data_dir / "config.json"
+        if config_path.is_file():
+            raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+            if isinstance(raw_config, dict):
+                raw_defaults = raw_config.get("channel_company_defaults") or {}
+                if isinstance(raw_defaults, dict):
+                    defaults = {
+                        str(k): str(v).strip()
+                        for k, v in raw_defaults.items()
+                        if isinstance(k, str) and isinstance(v, str) and str(v).strip()
+                    }
+
+        channel_names: set[str] = set()
+        for path in channels_dir.iterdir():
+            if not path.is_file():
+                continue
+            if path.name.endswith(".jsonl"):
+                channel_names.add(path.name[: -len(".jsonl")])
+            elif path.name.endswith(".meta.json"):
+                channel_names.add(path.name[: -len(".meta.json")])
+
+        details: list[str] = []
+        changed = 0
+        skipped = 0
+
+        for channel in sorted(channel_names):
+            meta_path = channels_dir / f"{channel}.meta.json"
+            desired_company = defaults.get(channel, "")
+
+            if meta_path.exists():
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                if not isinstance(meta, dict):
+                    details.append(f"#{channel}: invalid meta root; skip")
+                    skipped += 1
+                    continue
+                members = meta.get("members", [])
+                closed = bool(meta.get("closed", False))
+                # Preserve malformed metadata rather than risking a destructive
+                # rewrite.  Only an actual empty list is an open channel.
+                if not isinstance(members, list):
+                    details.append(f"#{channel}: invalid members field; skip")
+                    skipped += 1
+                    continue
+                # Restricted or closed channels: never touch.
+                if members or closed:
+                    skipped += 1
+                    continue
+                existing_company = (
+                    (meta.get("company") or "").strip() if isinstance(meta.get("company"), str) else ""
+                )
+                if existing_company:
+                    skipped += 1
+                    continue
+                new_meta = dict(meta)
+                new_meta["company"] = desired_company
+                if "members" not in new_meta:
+                    new_meta["members"] = []
+                if new_meta == meta:
+                    skipped += 1
+                    continue
+                changed += 1
+                if desired_company:
+                    details.append(
+                        f"{'Would set' if dry_run else 'Set'} #{channel} company={desired_company!r}"
+                    )
+                else:
+                    details.append(
+                        f"{'Would update' if dry_run else 'Updated'} #{channel} meta "
+                        "(company unset)"
+                    )
+                if not dry_run:
+                    meta_path.write_text(
+                        json.dumps(new_meta, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+            else:
+                # meta-less open channel (legacy): create meta (company from defaults or empty).
+                new_meta = {
+                    "members": [],
+                    "created_by": "",
+                    "created_at": "",
+                    "description": "",
+                    "closed": False,
+                    "company": desired_company,
+                }
+                changed += 1
+                if desired_company:
+                    details.append(
+                        f"{'Would create' if dry_run else 'Created'} #{channel} meta "
+                        f"with company={desired_company!r}"
+                    )
+                else:
+                    details.append(
+                        f"{'Would create' if dry_run else 'Created'} #{channel} meta "
+                        "(company unset)"
+                    )
+                if not dry_run:
+                    meta_path.write_text(
+                        json.dumps(new_meta, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+
+        if changed == 0 and not details:
+            details.append("No open channels needed company defaults")
+        return StepResult(changed=changed, skipped=skipped, details=details)
+    except Exception as exc:
+        logger.exception("step_channel_company_defaults failed")
+        return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
 def step_legacy_flat_skill_migration(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Convert legacy flat local skill files to trusted SKILL.md bundles."""
     from core.migrations.legacy_flat_skills import migrate_legacy_flat_skills
@@ -1452,6 +1582,12 @@ def register_all_steps(runner: Any) -> None:
             "Split legacy board into company channels",
             "structural",
             step_split_board_by_company,
+        ),
+        MigrationStep(
+            "channel_company_defaults_20260723",
+            "Apply channel_company_defaults to open channels",
+            "structural",
+            step_channel_company_defaults,
         ),
         MigrationStep(
             "tool_prompts_db_to_md",
