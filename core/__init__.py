@@ -6,7 +6,5 @@
 # See LICENSE for the full license text.
 
 
-
-
-def _autofix_smoke_test(  ):
-    return {  "key"   :   "value"  }
+def _autofix_smoke_test():
+    return {"key": "value"}
