@@ -265,9 +265,7 @@ def _load_state(anima_dir: Path, session_key: str | None = None) -> dict[str, An
         return {
             "read_paths": [str(p) for p in read_paths] if isinstance(read_paths, list) else [],
             "shown_rules": [str(r) for r in shown_rules] if isinstance(shown_rules, list) else [],
-            "no_rule_allows": (
-                [str(t) for t in no_rule_allows] if isinstance(no_rule_allows, list) else []
-            ),
+            "no_rule_allows": ([str(t) for t in no_rule_allows] if isinstance(no_rule_allows, list) else []),
         }
     except Exception:
         logger.debug("Failed to load action gate state: %s", path, exc_info=True)
@@ -406,8 +404,7 @@ def _log_soft_fail(
 ) -> None:
     """Emit structured observability for soft-fail cases (always, all modes)."""
     logger.warning(
-        "action_gate_soft_fail anima=%s tool=%s fail_kind=%s fail_mode=%s "
-        "would_block=%s blocked=%s score=%.4f %s",
+        "action_gate_soft_fail anima=%s tool=%s fail_kind=%s fail_mode=%s would_block=%s blocked=%s score=%.4f %s",
         anima_name,
         tool,
         fail_kind,
