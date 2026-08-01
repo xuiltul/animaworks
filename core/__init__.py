@@ -5,3 +5,8 @@
 # This file is part of AnimaWorks core/server, licensed under Apache-2.0.
 # See LICENSE for the full license text.
 
+
+
+
+def _autofix_smoke_test(  ):
+    return {  "key"   :   "value"  }
