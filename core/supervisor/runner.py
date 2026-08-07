@@ -889,11 +889,7 @@ class AnimaRunner:
         consolidation_type = params.get("consolidation_type", "daily")
 
         # background lane isolation: run consolidation inside a task-runner child.
-        supervisor = (
-            self._scheduler_mgr._task_runner_supervisor
-            if self._scheduler_mgr is not None
-            else None
-        )
+        supervisor = self._scheduler_mgr._task_runner_supervisor if self._scheduler_mgr is not None else None
         background_isolated = bool(
             self._scheduler_mgr is not None and getattr(self._scheduler_mgr, "_background_isolated", False)
         )

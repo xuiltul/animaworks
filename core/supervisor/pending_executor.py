@@ -2125,9 +2125,7 @@ class PendingTaskExecutor:
                 task_id,
                 exc,
             )
-            raise RuntimeError(
-                "INTERRUPTED: background task runner child exited without a result."
-            ) from exc
+            raise RuntimeError("INTERRUPTED: background task runner child exited without a result.") from exc
 
     async def _execute_llm_task(
         self,
@@ -2168,9 +2166,7 @@ class PendingTaskExecutor:
                     keepalive_task = asyncio.ensure_future(keepalive_result)
             self._anima._status_slots["background"] = "task_exec"
             self._anima._task_slots["background"] = task_id
-            if pool_capable or (
-                self._task_isolated and self._task_runner_supervisor is not None
-            ):
+            if pool_capable or (self._task_isolated and self._task_runner_supervisor is not None):
                 # Worker lease also gates concurrent isolated children (pool size).
                 result = await self._run_task_in_worker(
                     task_desc,
